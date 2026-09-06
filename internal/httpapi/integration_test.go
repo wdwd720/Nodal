@@ -402,17 +402,38 @@ func TestIntegration_KillSwitchReaderUsesTheDomainMatrix(t *testing.T) {
 	_, accountID := seedAccount(t, d)
 	ctx := t.Context()
 
-	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO kill_switches (id, kind, scope_id, active, severity, reason, activated_at)
-			VALUES ($1, 'GLOBAL_NEW_RISK_KILL', '*', true, 'SEVERE', 'incident 42', now())
-			ON CONFLICT (kind, scope_id) DO UPDATE SET active = true`, id.New[id.Any]())
-		return err
-	}))
-	t.Cleanup(func() {
-		_, _ = d.Exec(context.Background(),
-			`UPDATE kill_switches SET active = false WHERE kind = 'GLOBAL_NEW_RISK_KILL'`)
-	})
+	// Every change to kill_switches.active must carry a matching
+	// kill_switch_transitions row in the same transaction, or migration 00603's
+	// constraint trigger raises AU001 at COMMIT. An earlier version of this
+	// fixture wrote the flag directly and swallowed the cleanup's error with
+	// `_, _ =`, so it passed only on a database where the row did not yet exist
+	// or was already active, and failed on any database where it existed and
+	// was inactive — including a re-run against the same database. Silently, in
+	// the cleanup's case.
+	setActive := func(t *testing.T, active bool) {
+		t.Helper()
+		require.NoError(t, d.InTx(context.Background(), db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			var switchID string
+			if err := tx.QueryRow(ctx, `
+				INSERT INTO kill_switches (id, kind, scope_id, active, severity, reason, activated_at)
+				VALUES ($1, 'GLOBAL_NEW_RISK_KILL', '*', $2, 'SEVERE', 'incident 42', now())
+				ON CONFLICT (kind, scope_id) DO UPDATE SET active = EXCLUDED.active
+				RETURNING id`, id.New[id.Any](), active).Scan(&switchID); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `
+				INSERT INTO kill_switch_transitions
+					(id, switch_id, kind, scope_id, to_active, actor_type, actor_id, reason)
+				VALUES ($1, $2, 'GLOBAL_NEW_RISK_KILL', '*', $3, 'SYSTEM', 'test-fixture', 'incident 42')`,
+				id.New[id.Any](), switchID, active)
+			return err
+		}))
+	}
+	setActive(t, true)
+	// The cleanup asserts rather than discarding: a fixture that cannot undo
+	// itself leaves the next test on this database facing an active global kill
+	// switch, and the failure would surface somewhere unrelated.
+	t.Cleanup(func() { setActive(t, false) })
 
 	controller, err := killswitch.NewController(clock.System(), noopKillAudit{},
 		NewApprovalVerifier(admin.NewService(clock.System(), audit.NewWriter())))

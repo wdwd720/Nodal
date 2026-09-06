@@ -43,7 +43,10 @@
 //     which posts a reason-coded compensating journal transaction (PART 129).
 //   - Let the proposer approve their own action, or let one principal both
 //     propose and approve a dual-control kind (approver ≠ proposer, enforced
-//     in code and by the database CHECK).
+//     in code and by the database CHECK), or — for a kind whose target_id
+//     names a person, which today is only BREAK_GLASS_GRANT — let that person
+//     approve it (KindSpec.ApproverIsNotTarget): approving your own elevation
+//     is granting yourself one, whoever proposed it.
 //   - Serve an AGENT principal: every entry point returns FORBIDDEN before
 //     touching the database.
 //   - Execute an action whose stored params no longer hash to params_hash,
