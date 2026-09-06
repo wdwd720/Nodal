@@ -236,17 +236,53 @@ jobs:
         # the same way rather than a way that only CI uses.
         run: |
           set -euo pipefail
-          pkgs="$(go list -tags=integration ./test/integration/... | grep -v '/test/integration/migrations$' || true)"
-          if [ -z "$pkgs" ]; then
-            echo "::notice::no integration packages outside the migration suite yet"
-            exit 0
+          # ./test/integration/... contains ONLY the migration suite, so after
+          # excluding it this list was EMPTY and the job passed in under a
+          # tenth of a second while proving nothing. The database-backed proof
+          # of the financial core -- ledger, capital, settlement, execution,
+          # reconciliation, signing -- lives in *_test.go files behind
+          # //go:build integration inside internal/ and cmd/: 40 packages that
+          # no CI job ran. They are enumerated from the build tag itself, so a
+          # new one is picked up without editing this file.
+          {
+            grep -rl '^//go:build integration' --include='*_test.go' internal cmd |
+              sed 's|/[^/]*$||' | sort -u | sed 's|^|./|'
+            go list -tags=integration ./test/integration/... | grep -v '/test/integration/migrations$' || true
+          } | sort -u > /tmp/intpkgs.txt
+          count="$(wc -l < /tmp/intpkgs.txt)"
+          if [ "$count" -lt 2 ]; then
+            echo "::error::found only $count integration packages; the enumeration is broken, not the tree"
+            exit 1
           fi
+          echo "integration packages: $count"
+
           fails=0
-          for pkg in $pkgs; do
+          while read -r pkg; do
             name="ci_$(echo "$pkg" | tr '/.-' '___' | tail -c 40)"
             echo "::group::$pkg (database controlplane_test_$name)"
             eval "$(go run ./scripts/testdb -name "$name" -export)"
             if ! go test -count=1 -timeout=30m -tags=integration "$pkg"; then
+              fails=$((fails+1))
+            fi
+            echo "::endgroup::"
+          done < /tmp/intpkgs.txt
+          exit "$fails"
+      - name: Race detector over the financial core, WITH the integration tag
+        # `make race` runs the same packages without -tags=integration, so it
+        # only ever raced the in-memory tests. Every database-backed
+        # concurrency property in this system — the capital reservation lock,
+        # the ledger's balanced-per-asset triggers, settlement's resumable
+        # executor, the outbox claim under SKIP LOCKED — had never been run
+        # under the race detector at all. Those are exactly the paths where a
+        # race costs money.
+        run: |
+          set -euo pipefail
+          fails=0
+          for pkg in ./internal/capital/... ./internal/ledger/... ./internal/execution/...                      ./internal/reconciliation/... ./internal/event/... ./internal/settlement/...                      ./internal/signing/...; do
+            name="race_$(echo "$pkg" | tr '/.-' '___' | tail -c 30)"
+            echo "::group::race $pkg"
+            eval "$(go run ./scripts/testdb -name "$name" -export)"
+            if ! go test -count=1 -race -timeout=30m -tags=integration "$pkg"; then
               fails=$((fails+1))
             fi
             echo "::endgroup::"
@@ -556,6 +592,13 @@ jobs:
           {
             echo "CP_TEST_DATABASE_URL=$CP_TEST_DATABASE_URL"
             echo "CP_TEST_MIGRATE_DATABASE_URL=$CP_TEST_MIGRATE_DATABASE_URL"
+            # Without these two, broker_stall_test and archive_refused_test
+            # t.Skip() silently and the job finishes in under half a second
+            # while reporting success. The broker-stall test is the one that
+            # found D-034, where a stalled broker made publishing look
+            # successful — precisely the case that must not go unexercised.
+            echo "CP_TEST_REDPANDA_BROKERS=127.0.0.1:19092"
+            echo "CP_TEST_ARCHIVE_ENDPOINT=http://127.0.0.1:9100"
           } >> "$GITHUB_ENV"
       - run: make chaos
       - name: Infra logs

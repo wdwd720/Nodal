@@ -328,6 +328,18 @@ The gosec triage found that ~45 findings already carried written justifications 
 
 The settlement one is the sharpest. `TestExecutor_SubmitTimeoutLost_ProvenAbsent_NewAttemptOnce` — the PART 48 unknown-submission test — failed in a way that looked exactly like a real ordering bug in recovery. It was not: `MemAttempts.All()` iterates a map and sorted only on `CreatedAt`, and two attempts of one plan are routinely created in the same tick, so the tie was broken by Go's randomized map iteration. **A non-deterministic fake in the most safety-critical test in the package is its own hazard**: it spends a reviewer's attention on logic that was never wrong, and trains people to re-run until green.
 
+### CORRECTION: "18 jobs green" did not mean what the integrator said it meant
+
+The Stage 19 readiness work checked the CI jobs against what they actually execute, and found the green run was hollow in the place that matters most. Verified independently:
+
+- **The `integration` job ran ZERO packages.** Its list is `./test/integration/...` minus the migration suite, and that directory contains *only* the migration suite. `go list` returns an empty set, the loop body never executed, and the job exited 0 in under a tenth of a second.
+- **All 40 `//go:build integration` packages under `internal/` and `cmd/` ran in no CI job at all** — ledger, capital, settlement, execution, reconciliation, signing among them. The entire database-backed proof of the financial core existed only as manual local runs.
+- **`make race` omits `-tags=integration`**, so no database-backed concurrency test had ever been run under the race detector. That is precisely where a race costs money: the capital reservation lock, the ledger's balanced-per-asset triggers, settlement's resumable executor, the outbox claim under `SKIP LOCKED`.
+- **The chaos job finished in 0.427s against 28.5s locally**, because `CP_TEST_REDPANDA_BROKERS` and `CP_TEST_ARCHIVE_ENDPOINT` are never set and the broker-stall and archive-refusal tests `t.Skip()` silently. The broker-stall test is the one that found D-034, where a stalled broker made publishing look successful.
+- **Branch protection is unavailable on this repository's plan**, so nothing enforces CI even when it is red.
+
+**The integrator reported condition 9 met on the strength of a green badge and was wrong to.** A job that runs nothing passes, and passing is not the same as checking. Fixed: the integration job now enumerates packages from the build tag itself (so a new one is picked up without editing the workflow) and fails loudly if the enumeration returns fewer than two; a new step races the seven financial-core packages *with* the integration tag; and the chaos job sets the two variables its fault-injection tests need. Verified locally before pushing — capital 95.2s, ledger 3.2s, settlement 75.3s under `-race -tags=integration`, no data races.
+
 ### Stopping criteria — 12 of 13 met
 
 | # | Condition | State |
@@ -340,7 +352,7 @@ The settlement one is the sharpest. `TestExecutor_SubmitTimeoutLost_ProvenAbsent
 | 6 | critical failure scenarios exercised | YES |
 | 7 | the web application is complete | YES |
 | 8 | infrastructure exists | YES |
-| 9 | CI/CD exists | **YES — green, all 18 jobs.** `release.yml` still unverified (tag-triggered, no tag pushed) |
+| 9 | CI/CD exists | **PARTIAL — the green run was hollow and the integrator said otherwise; corrected below** |
 | 10 | observability exists | YES |
 | 11 | operator tooling exists | YES |
 | 12 | documentation reflects reality | YES |
