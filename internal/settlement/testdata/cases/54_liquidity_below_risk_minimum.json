@@ -1,0 +1,16 @@
+{
+  "input_base": "base",
+  "patch": {
+    "risk": {
+      "resulting_constraints": {
+        "min_liquidity_usd": "10000000.00"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "LIQUIDITY_INSUFFICIENT"
+    ]
+  }
+}

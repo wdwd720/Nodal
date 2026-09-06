@@ -1,0 +1,21 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "constraints": {
+        "max_slippage_bps": 0,
+        "max_fee_bps": 0,
+        "max_price_impact_bps": 0,
+        "quote_freshness": 0
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "max_slippage_bps": 100,
+    "max_fee_bps": 50,
+    "max_price_impact_bps": 100,
+    "hash": "9af6e4abe0c145450e1b751295e83c466d0bfa009852be973d6e2b74814fbae1"
+  },
+  "note": "unspecified intent bounds fall back to the risk kernel's"
+}

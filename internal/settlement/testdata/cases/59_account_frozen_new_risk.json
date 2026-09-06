@@ -1,0 +1,14 @@
+{
+  "input_base": "base",
+  "patch": {
+    "account": {
+      "status": "FROZEN"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "ELIGIBILITY_FAILED"
+    ]
+  }
+}

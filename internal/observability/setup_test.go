@@ -108,7 +108,7 @@ func TestParseSampleRatio(t *testing.T) {
 		"1":     {1, true},
 		"0":     {0, true},
 		"0.25":  {0.25, true},
-		" 0.5 ": {0.5, true},
+		" 0.5 ": {0.5, true}, //nolint:gocritic // mapKey: intentional whitespace; parseSampleRatio trims its input
 		"1.5":   {0, false},
 		"-1":    {0, false},
 		"NaN":   {0, false},

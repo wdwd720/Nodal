@@ -1,0 +1,16 @@
+{
+  "input_base": "base",
+  "patch": {
+    "listings": {
+      "0": {
+        "Status": "DISABLED"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "VENUE_DISABLED"
+    ]
+  }
+}

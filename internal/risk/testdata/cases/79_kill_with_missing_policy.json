@@ -1,0 +1,1 @@
+{"policy":"MISSING","input_base":"new_risk","input":{"kill_switches":[{"kind":"GLOBAL_NEW_RISK_KILL","scope":"*"}]},"expect":{"decision":"REJECT","reason_codes":["RISK_KILL_SWITCH","RISK_POLICY_MISSING"]}}

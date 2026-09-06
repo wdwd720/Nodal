@@ -1,0 +1,18 @@
+{
+  "input_base": "base",
+  "patch": {},
+  "expect": {
+    "result": "PLAN",
+    "side": "BUY",
+    "input_quantity": "100000000",
+    "max_slippage_bps": 50,
+    "max_fee_bps": 50,
+    "max_price_impact_bps": 100,
+    "max_notional_usd": "100.00",
+    "notional_usd": "100.00",
+    "venue": "JUPITER",
+    "platform_fee": "100000",
+    "hash": "16dff510d0fe58444873d7f7693f2aa3a2c30039c10c4082748a725fda976151"
+  },
+  "note": "ACQUIRE_NOTIONAL 100 USD on a NORMAL stablecoin: 100 USDC at face; platform fee 10 bps = 0.10 USDC"
+}

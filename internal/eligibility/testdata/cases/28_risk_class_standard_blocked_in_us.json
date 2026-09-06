@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"instrument_risk_class":"STANDARD"},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_INSTRUMENT_RISK_CLASS"]}}

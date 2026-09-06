@@ -1,0 +1,23 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "REDUCE_NOTIONAL",
+      "notional_usd": "1000.00"
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK",
+      "resulting_constraints": {
+        "max_notional_usd": "5000.00"
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "input_quantity": "2000000000",
+    "notional_usd": "300.00",
+    "hash": "0284d734372b11176e2fa23177552ffdcf4c0454008a9869679eb5912403ffee"
+  },
+  "note": "a reduction larger than the position sells what exists"
+}

@@ -1,0 +1,335 @@
+package identity
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/netip"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/audit"
+	"github.com/nodal/controlplane/internal/auth"
+	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/security"
+)
+
+// DefaultAttemptTTL bounds how long a login redirect stays redeemable.
+const DefaultAttemptTTL = 10 * time.Minute
+
+// Deps are the collaborators of the login service.
+type Deps struct {
+	IdP        auth.IdentityProvider
+	DB         *db.DB
+	Accounts   *accounts.Repository
+	Sessions   *auth.Manager
+	Audit      audit.Writer
+	Clock      clock.Clock
+	AttemptTTL time.Duration
+}
+
+// Service implements login/logout.
+type Service struct{ d Deps }
+
+// New validates the dependencies and returns a Service.
+func New(d Deps) (*Service, error) {
+	switch {
+	case d.IdP == nil, d.DB == nil, d.Accounts == nil, d.Sessions == nil, d.Audit == nil, d.Clock == nil:
+		return nil, errors.New("identity: missing dependency")
+	}
+	if d.AttemptTTL <= 0 {
+		d.AttemptTTL = DefaultAttemptTTL
+	}
+	return &Service{d: d}, nil
+}
+
+// BeginRequest describes a login start.
+type BeginRequest struct {
+	StepUp    bool
+	ReturnTo  string // relative path the UI wants to return to; validated to be a local path
+	IP        string
+	UserAgent string
+}
+
+// BeginResult is what the API redirects the browser to.
+type BeginResult struct {
+	RedirectURL string
+	State       string
+	ExpiresAt   time.Time
+}
+
+// Begin creates a single-use login attempt and returns the provider redirect.
+func (s *Service) Begin(ctx context.Context, req BeginRequest) (BeginResult, error) {
+	if req.ReturnTo != "" && (!strings.HasPrefix(req.ReturnTo, "/") || strings.HasPrefix(req.ReturnTo, "//")) {
+		return BeginResult{}, errs.New(errs.CodeValidationFailed, "return_to must be a local path")
+	}
+	state, err := randomToken(32)
+	if err != nil {
+		return BeginResult{}, err
+	}
+	nonce, err := randomToken(32)
+	if err != nil {
+		return BeginResult{}, err
+	}
+	verifier, err := randomToken(64) // 86 chars, within RFC 7636's 43..128
+	if err != nil {
+		return BeginResult{}, err
+	}
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+	now := s.d.Clock.Now()
+	expires := now.Add(s.d.AttemptTTL)
+	if _, err := s.d.DB.Pool().Exec(ctx, `INSERT INTO login_attempts (state, nonce, code_verifier, step_up, return_to, ip, user_agent, created_at, expires_at)
+		VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,NULLIF($7,''),$8,$9)`,
+		state, nonce, verifier, req.StepUp, req.ReturnTo, parseIP(req.IP), req.UserAgent, now, expires); err != nil {
+		return BeginResult{}, fmt.Errorf("identity: record login attempt: %w", err)
+	}
+	return BeginResult{RedirectURL: s.d.IdP.AuthCodeURL(state, nonce, challenge, req.StepUp), State: state, ExpiresAt: expires}, nil
+}
+
+// CompleteRequest is the provider callback.
+type CompleteRequest struct {
+	Code      string
+	State     string
+	IP        string
+	UserAgent string
+	RequestID string
+}
+
+// Completed is a successful login.
+type Completed struct {
+	Issued   auth.Issued
+	User     accounts.User
+	Accounts []accounts.Account
+	Created  bool // first login: user and first account were created
+	StepUp   bool
+	ReturnTo string
+}
+
+type attempt struct {
+	nonce, verifier, returnTo string
+	stepUp                    bool
+}
+
+// Complete consumes the login attempt, exchanges the code, maps the identity
+// to a user, decides roles from the operator directory, and issues a session.
+func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed, error) {
+	if req.Code == "" || req.State == "" {
+		return Completed{}, errs.New(errs.CodeValidationFailed, "code and state required")
+	}
+	now := s.d.Clock.Now()
+
+	// 1. Claim the attempt exactly once.
+	var at attempt
+	err := s.d.DB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		var consumedAt *time.Time
+		var expiresAt time.Time
+		var returnTo *string
+		err := tx.QueryRow(ctx, `SELECT nonce, code_verifier, step_up, return_to, expires_at, consumed_at FROM login_attempts WHERE state = $1 FOR UPDATE`, req.State).
+			Scan(&at.nonce, &at.verifier, &at.stepUp, &returnTo, &expiresAt, &consumedAt)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return errs.New(errs.CodeUnauthenticated, "unknown login state")
+			}
+			return err
+		}
+		if consumedAt != nil {
+			return errs.New(errs.CodeUnauthenticated, "login state already used")
+		}
+		if !now.Before(expiresAt) {
+			return errs.New(errs.CodeUnauthenticated, "login attempt expired")
+		}
+		if returnTo != nil {
+			at.returnTo = *returnTo
+		}
+		_, err = tx.Exec(ctx, `UPDATE login_attempts SET consumed_at = $2 WHERE state = $1`, req.State, now)
+		return err
+	})
+	if err != nil {
+		s.recordSecurityEvent(ctx, "login_failed", "WARN", nil, nil, req, map[string]any{"reason": errs.CodeOf(err)})
+		return Completed{}, err
+	}
+
+	fail := func(cause error, reason string) (Completed, error) {
+		_, _ = s.d.DB.Pool().Exec(ctx, `UPDATE login_attempts SET outcome = 'FAILED' WHERE state = $1`, req.State)
+		s.recordSecurityEvent(ctx, "login_failed", "WARN", nil, nil, req, map[string]any{"reason": reason})
+		return Completed{}, cause
+	}
+
+	// 2. Exchange the code (network call outside any transaction).
+	ident, err := s.d.IdP.Exchange(ctx, req.Code, at.verifier, at.nonce)
+	if err != nil {
+		return fail(errs.Wrap(err, errs.CodeUnauthenticated, "identity provider rejected the login"), "exchange_failed")
+	}
+	if err := ident.Validate(); err != nil {
+		return fail(errs.Wrap(err, errs.CodeUnauthenticated, "invalid identity"), "invalid_identity")
+	}
+	if at.stepUp && !security.HasStrongAMR(ident.AMR) {
+		return fail(auth.ErrStepUpNotSatisfied, "step_up_not_satisfied")
+	}
+
+	// 3. Map to a user, decide roles, issue the session.
+	var out Completed
+	err = s.d.DB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		issuer := s.d.IdP.Name()
+		user, err := s.d.Accounts.GetUserBySubject(ctx, tx, issuer, ident.Subject)
+		created := false
+		if errs.CodeOf(err) == errs.CodeNotFound {
+			var emailHash []byte
+			if ident.EmailVerified && ident.Email != "" {
+				h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(ident.Email))))
+				emailHash = h[:]
+			}
+			if user, err = s.d.Accounts.CreateUser(ctx, tx, issuer, ident.Subject, emailHash); err != nil {
+				return err
+			}
+			if _, err := s.d.Accounts.CreateAccount(ctx, tx, user.ID, accounts.KindCustomer); err != nil {
+				return err
+			}
+			created = true
+		} else if err != nil {
+			return err
+		}
+		if user.Status != "ACTIVE" {
+			return errs.New(errs.CodeForbidden, "user is not active").WithField("status", user.Status)
+		}
+		owned, err := s.d.Accounts.ListByOwner(ctx, tx, user.ID)
+		if err != nil {
+			return err
+		}
+		accountIDs := make([]string, 0, len(owned))
+		for _, a := range owned {
+			if a.Status != accounts.StatusClosed {
+				accountIDs = append(accountIDs, a.ID.String())
+			}
+		}
+		roles, err := operatorRoles(ctx, tx, user.ID, now)
+		if err != nil {
+			return err
+		}
+		actor := security.ActorUser
+		if len(roles) > 0 {
+			actor = security.ActorOperator
+		} else {
+			roles = []security.Role{security.RoleCustomer}
+		}
+		issued, err := s.d.Sessions.Issue(ctx, tx, auth.IssueParams{
+			SubjectID: user.ID.String(), ActorType: actor, Roles: roles, AccountIDs: accountIDs,
+			AuthTime: ident.AuthTime, AMR: ident.AMR, IP: req.IP, UserAgent: req.UserAgent,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE login_attempts SET outcome = 'SUCCESS' WHERE state = $1`, req.State); err != nil {
+			return err
+		}
+		stream := audit.SystemStream
+		if len(accountIDs) > 0 {
+			stream = audit.AccountStream(accountIDs[0])
+		}
+		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created})
+		if _, err := s.d.Audit.Append(ctx, tx, audit.Event{
+			Stream: stream, ActorType: string(actor), ActorID: user.ID.String(), Action: "auth.login",
+			ResourceType: "session", ResourceID: issued.Session.ID, RequestID: req.RequestID, SourceIP: req.IP, Device: req.UserAgent,
+			Payload: payload, OccurredAt: now,
+		}); err != nil {
+			return err
+		}
+		if err := insertSecurityEvent(ctx, tx, "login", "INFO", &user.ID, &issued.Session.ID, req, map[string]any{"actor_type": actor, "step_up": at.stepUp, "created": created}, now); err != nil {
+			return err
+		}
+		out = Completed{Issued: issued, User: user, Accounts: owned, Created: created, StepUp: at.stepUp, ReturnTo: at.returnTo}
+		return nil
+	})
+	if err != nil {
+		return fail(err, "session_issue_failed")
+	}
+	return out, nil
+}
+
+// Logout revokes the session and records the security event.
+func (s *Service) Logout(ctx context.Context, sess auth.Session, req CompleteRequest) error {
+	now := s.d.Clock.Now()
+	return s.d.DB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		if err := s.d.Sessions.Revoke(ctx, tx, sess.ID); err != nil {
+			return err
+		}
+		uid, err := accounts.ParseUserID(sess.SubjectID)
+		if err != nil {
+			return errs.Wrap(err, errs.CodeInternal, "session subject is not a user id")
+		}
+		if _, err := s.d.Audit.Append(ctx, tx, audit.Event{
+			Stream: audit.SystemStream, ActorType: string(sess.ActorType), ActorID: sess.SubjectID, Action: "auth.logout",
+			ResourceType: "session", ResourceID: sess.ID, RequestID: req.RequestID, SourceIP: req.IP, Device: req.UserAgent, OccurredAt: now,
+		}); err != nil {
+			return err
+		}
+		return insertSecurityEvent(ctx, tx, "session_revoked", "INFO", &uid, &sess.ID, req, map[string]any{"by": "logout"}, now)
+	})
+}
+
+// operatorRoles returns active, unexpired operator roles for the user.
+func operatorRoles(ctx context.Context, q db.Querier, userID accounts.UserID, now time.Time) ([]security.Role, error) {
+	rows, err := q.Query(ctx, `SELECT role FROM operator_roles WHERE user_id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > $2) ORDER BY role`, userID, now)
+	if err != nil {
+		return nil, fmt.Errorf("identity: operator roles: %w", err)
+	}
+	defer rows.Close()
+	var roles []security.Role
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+		roles = append(roles, security.Role(r))
+	}
+	return roles, rows.Err()
+}
+
+func insertSecurityEvent(ctx context.Context, q db.Querier, kind, severity string, userID *accounts.UserID, sessionID *string, req CompleteRequest, detail map[string]any, now time.Time) error {
+	b, _ := json.Marshal(detail)
+	var sid any
+	if sessionID != nil {
+		sid = *sessionID
+	}
+	_, err := q.Exec(ctx, `INSERT INTO security_events (id, kind, severity, user_id, session_id, detail, ip, user_agent, request_id, occurred_at)
+		VALUES ($1,$2,$3,$4,$5::uuid,$6,$7,NULLIF($8,''),NULLIF($9,''),$10)`,
+		id.New[id.Any](), kind, severity, userID, sid, b, parseIP(req.IP), req.UserAgent, req.RequestID, now)
+	if err != nil {
+		return fmt.Errorf("identity: security event: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) recordSecurityEvent(ctx context.Context, kind, severity string, userID *accounts.UserID, sessionID *string, req CompleteRequest, detail map[string]any) {
+	_ = insertSecurityEvent(ctx, s.d.DB.Pool(), kind, severity, userID, sessionID, req, detail, s.d.Clock.Now())
+}
+
+func parseIP(s string) *netip.Addr {
+	if s == "" {
+		return nil
+	}
+	a, err := netip.ParseAddr(s)
+	if err != nil {
+		return nil
+	}
+	return &a
+}
+
+func randomToken(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("identity: random: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}

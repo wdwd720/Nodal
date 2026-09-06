@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{},"expect":{"decision":"ALLOW","reason_codes":[],"action_class":"NEW_RISK","effective_notional_usd":"500.00","max_notional_usd":"1000.00","max_slippage_bps":100}}

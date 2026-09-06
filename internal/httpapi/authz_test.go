@@ -1,0 +1,356 @@
+package httpapi
+
+import (
+	"net/http"
+	"reflect"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/gen/api"
+	"github.com/nodal/controlplane/internal/security"
+)
+
+// generatedOperations returns every operation the generated strict server
+// declares. The method names of api.StrictServerInterface are the operation
+// ids the strict middleware receives, so this is the authoritative list.
+func generatedOperations() []string {
+	t := reflect.TypeOf((*api.StrictServerInterface)(nil)).Elem()
+	out := make([]string, 0, t.NumMethod())
+	for i := 0; i < t.NumMethod(); i++ {
+		out = append(out, t.Method(i).Name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestEveryGeneratedOperationHasAnExplicitPolicy is the deny-by-default proof.
+// Authorization is a table keyed by operation id; an operation with no entry is
+// refused at runtime, and this test makes that refusal visible at build time.
+// Regenerating the server with a new route fails here until someone writes the
+// route's permission requirement down.
+func TestEveryGeneratedOperationHasAnExplicitPolicy(t *testing.T) {
+	t.Parallel()
+	ops := generatedOperations()
+	require.NotEmpty(t, ops)
+
+	var missing []string
+	for _, op := range ops {
+		if _, ok := policyFor(op); !ok {
+			missing = append(missing, op)
+		}
+	}
+	assert.Empty(t, missing,
+		"every generated operation needs an entry in operationPolicies; missing: %v", missing)
+
+	known := make(map[string]struct{}, len(ops))
+	for _, op := range ops {
+		known[op] = struct{}{}
+	}
+	var stale []string
+	for op := range operationPolicies {
+		if _, ok := known[op]; !ok {
+			stale = append(stale, op)
+		}
+	}
+	sort.Strings(stale)
+	assert.Empty(t, stale, "operationPolicies names operations the server does not declare: %v", stale)
+}
+
+// TestNonPublicOperationsDeclareAPermission: a route that is not explicitly
+// public must name at least one permission. authorize refuses an empty
+// requirement at runtime as well; this catches it earlier.
+func TestNonPublicOperationsDeclareAPermission(t *testing.T) {
+	t.Parallel()
+	for _, op := range generatedOperations() {
+		pol, ok := policyFor(op)
+		require.True(t, ok, op)
+		if pol.Public {
+			continue
+		}
+		assert.NotEmpty(t, pol.AnyOf, "%s is not public and must name a permission", op)
+		for _, p := range pol.AnyOf {
+			assert.True(t, p.Valid(), "%s names an unknown permission %q", op, p)
+		}
+	}
+}
+
+// TestPublicOperationsAreExactlyTheExpectedSet freezes the unauthenticated
+// surface. Anything added to it has to be added here too, deliberately.
+func TestPublicOperationsAreExactlyTheExpectedSet(t *testing.T) {
+	t.Parallel()
+	want := []string{
+		"GetAuthCallback",      // OIDC callback; the state row is the credential
+		"GetAuthLogin",         // OIDC entry point
+		"GetHealthz",           // liveness
+		"GetReadyz",            // readiness
+		"GetVersion",           // build version and non-secret config hash
+		"PostWebhooksProvider", // authority is the provider signature over raw bytes
+	}
+	var got []string
+	for op, pol := range operationPolicies {
+		if pol.Public {
+			got = append(got, op)
+		}
+	}
+	sort.Strings(got)
+	assert.Equal(t, want, got)
+}
+
+// TestNoOperationAdmitsAnAgent: the REST surface is for humans and operators.
+// An agent proposes intents through internal/intent, never over HTTP, and can
+// never reach signing, withdrawal, capital or risk here.
+func TestNoOperationAdmitsAnAgent(t *testing.T) {
+	t.Parallel()
+	for op, pol := range operationPolicies {
+		assert.False(t, pol.AllowAgent, "%s must not admit AGENT principals", op)
+	}
+}
+
+// TestNoOperationGrantsADualControlPermissionAlone: an approve-side permission
+// is never a standing role's, so a route floor built only from approve-side
+// permissions would be unreachable. Every mutating route must therefore also
+// admit a propose-side or standing permission.
+func TestMutatingOperationsAreReachableByAStandingRole(t *testing.T) {
+	t.Parallel()
+	for op, pol := range operationPolicies {
+		if pol.Public || !pol.Mutating {
+			continue
+		}
+		reachable := false
+		for _, perm := range pol.AnyOf {
+			if !security.IsDualControl(perm) {
+				reachable = true
+				break
+			}
+		}
+		assert.True(t, reachable,
+			"%s only admits dual-control permissions, which no standing role holds", op)
+	}
+}
+
+// routeProbe is one mounted route with a concrete, well-formed path.
+type routeProbe struct {
+	method string
+	path   string
+}
+
+// mountedRoutes walks the real router and returns a well-formed request for
+// every mounted route. Path parameters are filled with valid values so the
+// generated binder succeeds and the request reaches the authorization gate.
+func mountedRoutes(t *testing.T, s *Server) []routeProbe {
+	t.Helper()
+	routes, ok := s.Router().(chi.Routes)
+	require.True(t, ok, "the router must be walkable")
+
+	replacements := map[string]string{
+		"{accountId}":    testAccountID.String(),
+		"{instrumentId}": testInstrument.String(),
+		"{intentId}":     testIntentID.String(),
+		"{orderId}":      testOrderID.String(),
+		"{depositId}":    testDepositID.String(),
+		"{sessionId}":    testSessionID,
+		"{actionId}":     testSessionID,
+		"{recordId}":     testSessionID,
+		"{capability}":   "LIVE_FUNDING",
+		"{action}":       "propose",
+		"{decision}":     "approve",
+		"{provider}":     "stripe",
+	}
+
+	requiredQuery := map[string]string{
+		"/v1/intents":          "account_id=" + testAccountID.String(),
+		"/v1/orders":           "account_id=" + testAccountID.String(),
+		"/v1/funding/deposits": "account_id=" + testAccountID.String(),
+	}
+
+	var out []routeProbe
+	err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		path := route
+		for placeholder, value := range replacements {
+			path = strings.ReplaceAll(path, placeholder, value)
+		}
+		require.NotContains(t, path, "{", "route %s has an unmapped path parameter", route)
+		// Routes with a required query parameter are probed with it, so the
+		// generated binder succeeds and the request reaches the
+		// authorization gate rather than stopping at VALIDATION_FAILED.
+		if q, ok := requiredQuery[route]; ok {
+			path += "?" + q
+		}
+		out = append(out, routeProbe{method: method, path: path})
+		return nil
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+	return out
+}
+
+// publicPaths are the concrete paths of the operations declared public.
+func publicPaths() map[string]struct{} {
+	return map[string]struct{}{
+		"GET /v1/auth/login":       {},
+		"GET /v1/auth/callback":    {},
+		"GET /v1/healthz":          {},
+		"GET /v1/readyz":           {},
+		"GET /v1/version":          {},
+		"POST /v1/webhooks/stripe": {},
+	}
+}
+
+// TestNoRouteIsUnintentionallyUnauthenticated walks every route the generated
+// server mounts and proves that an anonymous, otherwise well-formed request is
+// refused with UNAUTHENTICATED unless the route is on the explicit public list.
+// A newly generated route that nobody wrote a policy for lands in the default
+// branch and fails here.
+func TestNoRouteIsUnintentionallyUnauthenticated(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	public := publicPaths()
+
+	for _, probe := range mountedRoutes(t, h.server) {
+		name := probe.method + " " + probe.path
+		t.Run(name, func(t *testing.T) {
+			hh := newHarness(t)
+			hh.as(nil)
+			res := hh.do(probe.method, probe.path, anonymousBody(probe.method),
+				"Idempotency-Key", "probe-key-000000")
+
+			key := probe.method + " " + routeKeyFor(probe)
+			if _, isPublic := public[key]; isPublic {
+				assert.NotEqual(t, http.StatusUnauthorized, res.Code,
+					"%s is declared public but refused anonymous access", key)
+				return
+			}
+			require.Equal(t, http.StatusUnauthorized, res.Code,
+				"%s must refuse an anonymous request; body=%s", key, res.Body.String())
+			p := res.problem()
+			assert.Equal(t, errs.CodeUnauthenticated, p.Code)
+		})
+	}
+}
+
+// routeKeyFor renders the probe back to its templated form for the public-set
+// lookup (only the webhook route has a concrete segment in the public set).
+func routeKeyFor(p routeProbe) string {
+	path := p.path
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	path = strings.Replace(path, testAccountID.String(), "{accountId}", 1)
+	path = strings.Replace(path, testInstrument.String(), "{instrumentId}", 1)
+	path = strings.Replace(path, testIntentID.String(), "{intentId}", 1)
+	path = strings.Replace(path, testOrderID.String(), "{orderId}", 1)
+	path = strings.Replace(path, testDepositID.String(), "{depositId}", 1)
+	path = strings.Replace(path, testSessionID, "{sessionId}", 1)
+	return path
+}
+
+func anonymousBody(method string) any {
+	if method == http.MethodPost {
+		return "{}"
+	}
+	return nil
+}
+
+// TestEveryRouteRefusesAPrincipalWithoutPermissions is the per-route
+// authorization-denial test: a fully authenticated principal that holds no
+// permission at all is refused everywhere that is not public.
+func TestEveryRouteRefusesAPrincipalWithoutPermissions(t *testing.T) {
+	t.Parallel()
+	public := publicPaths()
+	powerless := security.Principal{
+		SubjectID: testUserID.String(),
+		ActorType: security.ActorUser,
+		Roles:     nil, // no role, therefore no permission
+		SessionID: testSessionID,
+		AuthTime:  testNow,
+		AMR:       []string{"pwd", "mfa"},
+	}
+
+	h := newHarness(t)
+	for _, probe := range mountedRoutes(t, h.server) {
+		key := probe.method + " " + routeKeyFor(probe)
+		if _, isPublic := public[key]; isPublic {
+			continue
+		}
+		t.Run(key, func(t *testing.T) {
+			hh := newHarness(t)
+			hh.as(&powerless)
+			res := hh.do(probe.method, probe.path, anonymousBody(probe.method),
+				"Idempotency-Key", "probe-key-000000")
+			require.Equal(t, http.StatusForbidden, res.Code,
+				"%s must refuse a principal with no permissions; body=%s", key, res.Body.String())
+			assert.Equal(t, errs.CodeForbidden, res.problem().Code)
+		})
+	}
+}
+
+// TestAgentPrincipalsAreRefusedEverywhere proves the containment rule at the
+// transport: an AGENT principal cannot reach any authenticated route, so no
+// endpoint lets an agent sign, withdraw, hold a key, or change risk or capital.
+func TestAgentPrincipalsAreRefusedEverywhere(t *testing.T) {
+	t.Parallel()
+	public := publicPaths()
+	agent := agentPrincipal()
+
+	h := newHarness(t)
+	for _, probe := range mountedRoutes(t, h.server) {
+		key := probe.method + " " + routeKeyFor(probe)
+		if _, isPublic := public[key]; isPublic {
+			continue
+		}
+		t.Run(key, func(t *testing.T) {
+			hh := newHarness(t)
+			hh.as(&agent)
+			res := hh.do(probe.method, probe.path, anonymousBody(probe.method),
+				"Idempotency-Key", "probe-key-000000")
+			require.Equal(t, http.StatusForbidden, res.Code,
+				"%s must refuse an AGENT principal; body=%s", key, res.Body.String())
+			p := res.problem()
+			assert.Equal(t, errs.CodeForbidden, p.Code)
+			assert.Contains(t, p.Detail, "agents")
+		})
+	}
+}
+
+// TestAuthorizeFailsClosedForAnUnknownOperation: the runtime half of
+// deny-by-default. An operation id with no policy is refused even though the
+// principal is a full administrator.
+func TestAuthorizeFailsClosedForAnUnknownOperation(t *testing.T) {
+	t.Parallel()
+	p := operatorPrincipal()
+	ctx := security.WithPrincipal(t.Context(), p)
+	err := authorize(ctx, "SomeOperationNobodyWroteAPolicyFor", func() time.Time { return testNow })
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+}
+
+// TestStepUpIsRequiredWhereDeclared: an operation that demands recent strong
+// authentication refuses a stale session even when the permission is held.
+func TestStepUpIsRequiredWhereDeclared(t *testing.T) {
+	t.Parallel()
+	stale := operatorPrincipal()
+	stale.AuthTime = testNow.Add(-2 * stepUpMaxAge)
+
+	h := newHarness(t)
+	h.as(&stale)
+	res := h.do(http.MethodPost, "/v1/admin/accounts/"+testAccountID.String()+"/status",
+		map[string]any{"to": "FROZEN", "reason": "compliance hold"},
+		"Idempotency-Key", "step-up-key-0001")
+	require.Equal(t, http.StatusForbidden, res.Code)
+	assert.Equal(t, errs.CodeStepUpRequired, res.problem().Code)
+}
+
+func TestOperationPolicyCountMatchesRouteCount(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	assert.Equal(t, len(generatedOperations()), len(mountedRoutes(t, h.server)),
+		"every generated operation must be mounted exactly once")
+	assert.Equal(t, len(generatedOperations()), len(operationPolicies))
+}

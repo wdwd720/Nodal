@@ -1,0 +1,557 @@
+# CI for the Universal Financial Control Plane (PART 104, 142, 212–216).
+# Every check that developers can run locally is invoked through the same `make`
+# targets; tool versions come from scripts/tool/main.go (one pinned table).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local # the toolchain from go.mod, never an auto-downloaded one
+
+jobs:
+  # Probes for optional parts of the monorepo (web app, generated clients) so
+  # their jobs are skipped cleanly until those parts exist. hashFiles() cannot be
+  # used in a job-level `if` (it runs before checkout), hence this tiny job.
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.probe.outputs.web }}
+      webe2e: ${{ steps.probe.outputs.webe2e }}
+      client: ${{ steps.probe.outputs.client }}
+      sqlc: ${{ steps.probe.outputs.sqlc }}
+      proto: ${{ steps.probe.outputs.proto }}
+      openapi: ${{ steps.probe.outputs.openapi }}
+      property: ${{ steps.probe.outputs.property }}
+      e2e: ${{ steps.probe.outputs.e2e }}
+      chaos: ${{ steps.probe.outputs.chaos }}
+      load: ${{ steps.probe.outputs.load }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: probe
+        # A Go package pattern whose directory does not exist is a hard error,
+        # not an empty run ("pattern ./test/property/...: directory not found",
+        # exit 1), so every optional suite is probed before its target is
+        # invoked. test/e2e, test/chaos and apps/web are being written now.
+        run: |
+          web=false; webe2e=false; client=false; sqlc=false; proto=false; openapi=false
+          property=false; e2e=false; chaos=false; load=false
+          [ -f apps/web/package.json ] && web=true
+          { [ -f apps/web/playwright.config.ts ] || [ -f apps/web/playwright.config.js ]; } && webe2e=true
+          [ -f packages/generated-client/package.json ] && client=true
+          { [ -f sqlc.yaml ] || [ -f sqlc.yml ] || [ -f sqlc.json ]; } && sqlc=true
+          [ -f proto/buf.gen.yaml ] && proto=true
+          [ -f openapi/oapi-codegen.yaml ] && openapi=true
+          [ -d test/property ] && property=true
+          [ -d test/e2e ] && e2e=true
+          [ -d test/chaos ] && chaos=true
+          [ -d test/load ] && load=true
+          {
+            echo "web=$web"
+            echo "webe2e=$webe2e"
+            echo "client=$client"
+            echo "sqlc=$sqlc"
+            echo "proto=$proto"
+            echo "openapi=$openapi"
+            echo "property=$property"
+            echo "e2e=$e2e"
+            echo "chaos=$chaos"
+            echo "load=$load"
+          } >> "$GITHUB_OUTPUT"
+
+  go:
+    needs: detect
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cache pinned tools
+        uses: actions/cache@v6
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ hashFiles('scripts/tool/main.go') }}
+      - name: Install pinned tools
+        run: go run ./scripts/tool install -only gofumpt,staticcheck,govulncheck,gosec,golangci-lint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: make vet
+      - name: Format check
+        # `gofumpt -l` exits 0 even when it lists files, so the check is on its output
+        # (see the note on `make fmt-check` in the tooling report).
+        run: |
+          dirs=""
+          for d in ./cmd ./internal ./scripts ./test ./packages; do
+            [ -d "$d" ] && dirs="$dirs $d"
+          done
+          out="$(go run ./scripts/tool gofumpt -l $dirs)"
+          if [ -n "$out" ]; then
+            echo "::error::unformatted Go files (run: make fmt)"
+            echo "$out"
+            exit 1
+          fi
+      - name: staticcheck
+        run: make staticcheck
+      - name: golangci-lint
+        run: go run ./scripts/tool golangci-lint run ./...
+      - name: Financial invariants (lintfin)
+        run: go run ./scripts/lintfin
+      - name: Unit tests
+        run: make unit
+      - name: Property tests
+        # `make property` also names ./test/property/..., which does not exist
+        # yet; the in-package Prop/Property tests still run either way.
+        run: |
+          if [ "${{ needs.detect.outputs.property }}" = "true" ]; then
+            make property
+          else
+            echo "::notice::test/property does not exist yet; running the in-package property tests only"
+            go test -count=1 -timeout=20m -run 'Prop|Property' ./internal/...
+          fi
+      - name: Race detector (critical packages)
+        run: make race
+      - name: govulncheck
+        run: make vuln
+      - name: gosec
+        run: make sast
+
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Fuzz every target briefly
+        run: make fuzz FUZZTIME=10s
+
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Provider contract tests (recorded fixtures)
+        run: make contract
+
+  # The dev host is Windows; scripts must behave identically everywhere (D-013).
+  scripts-crossplatform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go vet ./scripts/...
+      - run: go test -count=1 -short ./scripts/...
+      - run: go run ./scripts/tool list
+      - run: go run ./scripts/maketargets Makefile
+      - run: go run ./scripts/fuzzall -list
+
+  # The migration suite applies from empty, verifies checksums and rolls back to
+  # the ledger-protected version. It owns the schema for the length of its run,
+  # so it gets its own runner and its own database: sharing a `go test`
+  # invocation with other integration packages would let them run concurrently
+  # (go test parallelises across packages) against a schema being torn down.
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+      CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start Postgres (docker compose, same as `make infra-up`)
+        run: docker compose up -d --wait postgres
+      - name: Migration tests
+        run: make migrate-test
+      - name: Postgres logs
+        if: failure()
+        run: docker compose logs postgres
+      - name: Stop infra
+        if: always()
+        run: docker compose down -v
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Same DSNs as docker-compose / CONVENTIONS.md; the compose file publishes 5433.
+      CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+      CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      # GitHub `services:` cannot bind-mount docker/postgres/init/001_roles.sql and
+      # cannot pass the server flags compose sets (wal_level, pg_stat_statements,
+      # which the init script requires). Starting the compose service instead runs
+      # the identical image, flags, roles and databases developers use locally.
+      - name: Start Postgres (docker compose, same as `make infra-up`)
+        run: docker compose up -d --wait postgres
+      - name: Integration tests (migration suite excluded, see the migrations job)
+        # `make integration` is ./test/integration/..., which still includes the
+        # migration suite; until that target takes a package list, the exclusion
+        # lives here. Keep the two in step if the Makefile gains an override.
+        run: |
+          set -euo pipefail
+          pkgs="$(go list -tags=integration ./test/integration/... | grep -v '/test/integration/migrations$' || true)"
+          if [ -z "$pkgs" ]; then
+            echo "::notice::no integration packages outside the migration suite yet"
+            exit 0
+          fi
+          echo "$pkgs"
+          # shellcheck disable=SC2086
+          go test -count=1 -timeout=30m -tags=integration $pkgs
+      - name: Security tests
+        run: make security
+      - name: Backup/restore drill (pg_dump → pg_restore → verify → ledger consistency)
+        run: make restore-drill
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: restore-drill-${{ github.sha }}
+          path: dist/restore-drill.json
+          if-no-files-found: ignore
+      - name: Postgres logs
+        if: failure()
+        run: docker compose logs postgres
+      - name: Stop infra
+        if: always()
+        run: docker compose down -v
+
+  security-scans:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks scans history
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Organisation repositories need a license: set the GITLEAKS_LICENSE secret.
+          # GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cache pinned tools
+        uses: actions/cache@v6
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ hashFiles('scripts/tool/main.go') }}
+      - name: Install pinned scanners
+        run: go run ./scripts/tool install -only trivy,syft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Cache Trivy DB
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      - name: Dependency vulnerability scan (trivy fs)
+        run: go run ./scripts/tool trivy fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --scanners vuln,misconfig .
+      - name: IaC scan (trivy config infra/)
+        run: make iac-scan
+      - name: SBOM (syft)
+        run: |
+          mkdir -p dist
+          make sbom
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom-${{ github.sha }}
+          path: dist/sbom.spdx.json
+          if-no-files-found: error
+
+  web:
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Frontend dependency audit
+        run: pnpm audit --audit-level=high
+      - run: make lint-web
+      - run: make typecheck-web
+      - run: make test-web
+      - run: make build-web
+
+  openapi-drift:
+    needs: detect
+    if: needs.detect.outputs.client == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate the TypeScript client schema
+        run: make openapi-client
+      - name: Typecheck and test the client
+        run: |
+          pnpm --filter @controlplane/generated-client typecheck
+          pnpm --filter @controlplane/generated-client test
+      - name: Fail if the generated client is stale
+        run: git diff --exit-code -- packages/generated-client
+
+  generated-code-drift:
+    needs: detect
+    if: needs.detect.outputs.sqlc == 'true' || needs.detect.outputs.proto == 'true' || needs.detect.outputs.openapi == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cache pinned tools
+        uses: actions/cache@v6
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ hashFiles('scripts/tool/main.go') }}
+      - run: go run ./scripts/tool install -only sqlc,buf,oapi-codegen,protoc-gen-go,protoc-gen-go-grpc
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - if: needs.detect.outputs.sqlc == 'true'
+        run: make sqlc
+      - if: needs.detect.outputs.proto == 'true'
+        run: make proto
+      - if: needs.detect.outputs.openapi == 'true'
+        run: make openapi-server
+      - name: Fail if generated code is stale
+        run: git diff --exit-code
+
+  # Every workspace package that is not apps/web: the generated client and the
+  # strategy SDK both ship lint/typecheck/test scripts and had no job.
+  workspace-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Lint, typecheck and test packages/*
+        # A recursive filtered run skips a package that does not define the
+        # script, so a new package without tests does not break the job.
+        run: |
+          pnpm --filter "./packages/*" run lint
+          pnpm --filter "./packages/*" run typecheck
+          pnpm --filter "./packages/*" run test
+
+  # Playwright critical-path UI tests. apps/web owns the Playwright config,
+  # including whether it starts the app itself through `webServer`; this job
+  # only installs the browsers and runs `make e2e-web`.
+  web-e2e:
+    needs: detect
+    if: needs.detect.outputs.webe2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Start Postgres (the app under test needs a database)
+        run: docker compose up -d --wait postgres
+      - run: make e2e-web
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-report-${{ github.sha }}
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          if-no-files-found: ignore
+      - name: Stop infra
+        if: always()
+        run: docker compose down -v
+
+  # API-level end-to-end tests (Go, build tags integration,e2e).
+  e2e:
+    needs: detect
+    if: needs.detect.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+      CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start local infra
+        run: make infra-up
+      - run: make e2e
+      - name: Infra logs
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Stop infra
+        if: always()
+        run: docker compose down -v
+
+  # Fault injection. Chaos tests kill and partition the local infrastructure,
+  # so they get their own runner and never share it with another suite.
+  chaos:
+    needs: detect
+    if: needs.detect.outputs.chaos == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+      CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start local infra
+        run: make infra-up
+      - run: make chaos
+      - name: Infra logs
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Stop infra
+        if: always()
+        run: docker compose down -v
+
+  # k6 scripts are parsed and their options validated on every change. Running
+  # them needs a deployed target with a session (test/load/README.md), so CI
+  # checks that they are valid, not that a service met a threshold.
+  load-scripts:
+    needs: detect
+    if: needs.detect.outputs.load == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cache pinned tools
+        uses: actions/cache@v6
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ hashFiles('scripts/tool/main.go') }}
+      - name: Install k6
+        run: go run ./scripts/tool install -only k6
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: make load-inspect
+
+  # One required check to point branch protection at, so a job that is skipped
+  # because its directory does not exist yet cannot be mistaken for a pass, and
+  # a job that fails cannot be merged past.
+  ci:
+    if: always()
+    needs:
+      - go
+      - fuzz
+      - contract
+      - scripts-crossplatform
+      - migrations
+      - integration
+      - security-scans
+      - workspace-packages
+      - web
+      - web-e2e
+      - e2e
+      - chaos
+      - load-scripts
+      - openapi-drift
+      - generated-code-drift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed, was cancelled, or was skipped when it should not be
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          # Skipping is legitimate only for the suites whose directory does not
+          # exist yet (web, web-e2e, e2e, chaos, load-scripts, the drift jobs).
+          REQUIRED: go fuzz contract scripts-crossplatform migrations integration security-scans workspace-packages
+        run: |
+          set -euo pipefail
+          echo "$RESULTS"
+          fail=0
+          if printf '%s' "$RESULTS" | grep -qE '"result": *"(failure|cancelled)"'; then
+            echo "::error::at least one job failed or was cancelled"
+            fail=1
+          fi
+          for job in $REQUIRED; do
+            if ! printf '%s' "$RESULTS" | tr -d ' \n' | grep -q "\"$job\":{\"result\":\"success\""; then
+              echo "::error::required job $job did not succeed"
+              fail=1
+            fi
+          done
+          exit "$fail"

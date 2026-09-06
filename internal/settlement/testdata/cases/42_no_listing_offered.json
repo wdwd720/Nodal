@@ -1,0 +1,12 @@
+{
+  "input_base": "base",
+  "patch": {
+    "listings": []
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "NO_ELIGIBLE_LISTING"
+    ]
+  }
+}

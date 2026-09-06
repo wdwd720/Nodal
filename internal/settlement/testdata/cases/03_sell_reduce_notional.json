@@ -1,0 +1,19 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "REDUCE_NOTIONAL"
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "input_quantity": "666666666",
+    "notional_usd": "100.00",
+    "hash": "dbc9bf28ed6f1fc099605c2f75cd759dfbf0295e4768dadc8d91548ff611ccfe"
+  },
+  "note": "REDUCE_NOTIONAL 100 USD of SOL at 150 → 0.666666666 SOL from the open 2 SOL"
+}

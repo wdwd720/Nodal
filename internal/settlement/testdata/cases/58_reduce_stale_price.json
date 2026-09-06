@@ -1,0 +1,23 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "REDUCE_NOTIONAL"
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    },
+    "prices": {
+      "01920000-0000-7000-8000-000000000002": {
+        "At": "2026-09-05T11:00:00Z"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "PROVIDER_DEGRADED"
+    ]
+  },
+  "note": "a stale base price cannot size a reduction"
+}

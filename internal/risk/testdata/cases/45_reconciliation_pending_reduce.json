@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"action":"REDUCE_NOTIONAL"},"account":{"unresolved_material_mismatches":2}},"expect":{"decision":"REJECT","reason_codes":["RISK_RECONCILIATION_PENDING"]}}

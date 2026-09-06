@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"account":{"positions_usd":{"019917c0-0000-7000-8000-000000000101":"4800.00"},"portfolio_value_usd":"20000.00","total_exposure_usd":"6300.00","asset_class_exposure_usd":{"CRYPTO_SPOT":"6300.00"}}},"expect":{"decision":"REJECT","reason_codes":["RISK_MAX_POSITION"],"max_notional_usd":"200.00"}}

@@ -1,0 +1,1 @@
+{"jsonrpc": "2.0", "error": {"code": -32005, "message": "Node is unhealthy", "data": {"numSlotsBehind": 120}}, "id": 1}

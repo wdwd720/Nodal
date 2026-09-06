@@ -1,0 +1,8 @@
+{
+  "error": {
+    "type": "invalid_request_error",
+    "code": "crypto_onramp_invalid_source_amount",
+    "message": "source_amount must be a positive decimal.",
+    "param": "source_amount"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "input_base": "base",
+  "patch": {
+    "instrument": {
+      "Status": "CLOSE_ONLY"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "INSTRUMENT_STATUS"
+    ]
+  },
+  "note": "CLOSE_ONLY blocks buys"
+}

@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"provider":"HELIUS"},"kill_switches":[{"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope":"JUPITER_API"}]},"expect":{"decision":"REJECT","reason_codes":["RISK_KILL_SWITCH"]}}

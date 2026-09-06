@@ -1,0 +1,1 @@
+{"policy":"DEFAULT","input_base":"trade_us","input":{},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_ASSET_CLASS","ELIGIBILITY_INSTRUMENT_RISK_CLASS","ELIGIBILITY_JURISDICTION","ELIGIBILITY_RESIDENCY","ELIGIBILITY_VENUE"]}}

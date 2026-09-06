@@ -1,0 +1,11 @@
+# Provider binaries and module cache (re-created by terraform init). Lock files are committed.
+**/.terraform/
+# State never lives in git (S3 backend); crash logs and plans may contain secrets.
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# Real per-environment inputs; only the .example files are committed.
+backend.hcl
+terraform.tfvars
+*.auto.tfvars

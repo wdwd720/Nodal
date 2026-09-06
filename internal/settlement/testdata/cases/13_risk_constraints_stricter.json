@@ -1,0 +1,27 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "constraints": {
+        "max_slippage_bps": 300,
+        "max_fee_bps": 300,
+        "max_price_impact_bps": 300
+      }
+    },
+    "risk": {
+      "resulting_constraints": {
+        "max_slippage_bps": 25,
+        "max_fee_bps": 45,
+        "max_price_impact_bps": 60
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "max_slippage_bps": 25,
+    "max_fee_bps": 45,
+    "max_price_impact_bps": 60,
+    "hash": "28abeee7ba8fee0f1e0532241808db39636dd31fc8bee6c29bab74d3bfe181f0"
+  },
+  "note": "the risk kernel's tighter bounds win"
+}

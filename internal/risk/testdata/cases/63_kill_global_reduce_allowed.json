@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"action":"REDUCE_NOTIONAL"},"kill_switches":[{"kind":"GLOBAL_NEW_RISK_KILL","scope":"*"}]},"expect":{"decision":"ALLOW","reason_codes":[],"action_class":"REDUCE_RISK"}}

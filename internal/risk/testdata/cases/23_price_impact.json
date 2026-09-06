@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"quote":{"price_impact_bps":200}}},"expect":{"decision":"REJECT","reason_codes":["RISK_PRICE_IMPACT"]}}

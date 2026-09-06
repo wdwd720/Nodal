@@ -1,0 +1,61 @@
+# STAGING example values. Separate account, database, secrets and provider
+# configuration from production (PART 144). Sandbox providers only where the
+# vendor officially supports a sandbox; never fake.
+
+aws_region     = "us-east-1"
+aws_account_id = "234567890123" # staging account, never the prod account
+image_tag      = "0123456789abcdef0123456789abcdef01234567"
+
+acm_certificate_arn = "arn:aws:acm:us-east-1:234567890123:certificate/00000000-0000-0000-0000-000000000000"
+public_product_name = "Control Plane (staging)"
+public_base_url     = "https://staging.api.example.com"
+cors_origins        = ["https://staging.app.example.com"]
+
+auth = {
+  issuer       = "https://login.example.com"
+  client_id    = "cp-staging"
+  redirect_url = "https://staging.api.example.com/v1/auth/callback"
+}
+
+provider_slots = {
+  funding                 = { mode = "sandbox", name = "stripe-onramp", base_url = "https://api.stripe.com" }
+  wallet                  = { mode = "sandbox", name = "privy" }
+  signing                 = { mode = "sandbox", name = "privy" }
+  execution               = { mode = "sandbox", name = "jupiter", base_url = "https://api.jup.ag" }
+  market_data             = { mode = "sandbox", name = "helius" }
+  chain_observer          = { mode = "sandbox", name = "helius" }
+  chain_observer_fallback = { mode = "sandbox", name = "solana-rpc" }
+  model                   = { mode = "sandbox", name = "anthropic" }
+  event_bus               = { mode = "sandbox", name = "redpanda" }
+  workflow                = { mode = "sandbox", name = "temporal" }
+  archive                 = { mode = "sandbox", name = "s3" }
+  notification            = { mode = "sandbox", name = "ses" }
+}
+
+redpanda   = { brokers = "seed-xxxx.staging.cloud.redpanda.com:9092" }
+clickhouse = { addr = "xxxx.us-east-1.aws.clickhouse.cloud:8443" }
+temporal   = { host_port = "cp-staging.xxxx.tmprl.cloud:7233", namespace = "cp-staging.xxxx" }
+
+github_org  = "nodal"
+github_repo = "controlplane"
+
+auditor_principal_arns      = ["arn:aws:iam::234567890123:role/cp-staging-auditor"]
+secret_admin_principal_arns = ["arn:aws:iam::234567890123:role/cp-staging-secrets-admin"]
+
+sev1_https_endpoints = ["https://events.pagerduty.com/integration/xxxx/enqueue"]
+sev2_email_endpoints = ["staging-alerts@example.com"]
+
+# --- per-binary configuration (modules/app-config service_env) --------------
+# Required outside DEV: cmd/api refuses to start without the settlement asset.
+api = {
+  settlement_chain     = "solana"
+  settlement_mint      = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  enabled_capabilities = [] # condition 1 of five; the dual-approved gate row decides
+}
+
+relay_worker     = { batch_size = 200 }
+execution_worker = { concurrency = 4 }
+workflow_worker  = {}
+
+api_autoscaling      = { min_capacity = 2, max_capacity = 4 }
+relay_lag_thresholds = { sev2_seconds = 180, sev1_seconds = 900 }

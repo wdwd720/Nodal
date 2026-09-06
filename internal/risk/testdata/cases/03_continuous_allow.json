@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"stage":"CONTINUOUS"},"expect":{"decision":"ALLOW","reason_codes":[],"action_class":"NEW_RISK","effective_notional_usd":"0.00"}}

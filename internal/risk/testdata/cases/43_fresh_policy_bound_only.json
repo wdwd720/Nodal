@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"data_freshness":{"wallet_event":{"age_ms":1500,"declared_max_age_ms":0}}}},"expect":{"decision":"ALLOW","reason_codes":[]}}

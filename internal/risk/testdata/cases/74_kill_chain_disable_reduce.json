@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"action":"REDUCE_NOTIONAL"},"kill_switches":[{"kind":"CHAIN_DISABLE_NEW_ACTIONS","scope":"solana"}]},"expect":{"decision":"REJECT","reason_codes":["RISK_KILL_SWITCH"]}}

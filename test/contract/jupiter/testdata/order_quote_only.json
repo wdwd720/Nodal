@@ -1,0 +1,18 @@
+{
+  "mode": "manual",
+  "inAmount": "1000000",
+  "outAmount": "6500000",
+  "otherAmountThreshold": "6467500",
+  "priceImpact": 0.0123,
+  "slippageBps": 50,
+  "feeBps": 10,
+  "platformFee": null,
+  "routePlan": [
+    { "swapInfo": { "ammKey": "FakeAmm1111111111111111111111111111111111111", "label": "FakeAMM", "inputMint": "2iSWRKeTHcaRToYkQiQzxkFiujq5ALX8KmNkGWzGRmBF", "outputMint": "So11111111111111111111111111111111111111112", "inAmount": "1000000", "outAmount": "6500000" }, "percent": 100, "bps": 10000 }
+  ],
+  "router": "metis",
+  "transaction": null,
+  "lastValidBlockHeight": "250000150",
+  "requestId": "contract-order-quote-only",
+  "totalTime": 120
+}

@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "total": 3,
+    "limit": 1000,
+    "page": 1,
+    "cursor": null,
+    "token_accounts": [
+      {"address": "4kJ3Uc9BwYpKcgZfN1VzT8n7mQ6xR2aS5dF7gH9jK2mZ", "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "owner": "9aE476sH92Vz7DMPyq5WLPkrKWivxnuXaMLh3Gvy8Bev", "amount": 1000000, "delegated_amount": 0, "frozen": false},
+      {"address": "7pL2mN4qR6sT8vX1cV3bN5mK7jH9gF2dS4aP6oL8iU1y", "mint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", "owner": "9aE476sH92Vz7DMPyq5WLPkrKWivxnuXaMLh3Gvy8Bev", "amount": 123456789, "delegated_amount": 0, "frozen": false},
+      {"address": "2nZ8vB6mK4jH2gF9dS7aP5oL3iU1yT9eR7wQ5vX3cV1b", "mint": "So11111111111111111111111111111111111111112", "owner": "9aE476sH92Vz7DMPyq5WLPkrKWivxnuXaMLh3Gvy8Bev", "amount": 18446744073709551617, "delegated_amount": 0, "frozen": true}
+    ]
+  },
+  "id": 1
+}

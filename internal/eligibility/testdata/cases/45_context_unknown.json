@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"context":"BOGUS"},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_ASSET_CLASS","ELIGIBILITY_POLICY_UNKNOWN","ELIGIBILITY_VENUE"]}}

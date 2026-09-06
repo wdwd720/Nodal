@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"kill_switches":[{"kind":"FUNDING_DISABLE","scope":"*"},{"kind":"WITHDRAWALS_DISABLE","scope":"*"}]},"expect":{"decision":"ALLOW","reason_codes":[]}}

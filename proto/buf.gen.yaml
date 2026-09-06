@@ -1,0 +1,13 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/nodal/controlplane/internal/gen/proto
+plugins:
+  - local: protoc-gen-go
+    out: ../internal/gen/proto
+    opt: paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: ../internal/gen/proto
+    opt: paths=source_relative

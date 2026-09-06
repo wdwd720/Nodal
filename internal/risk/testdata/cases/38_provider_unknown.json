@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"provider_health":{"$replace":true,"HELIUS":"HEALTHY"}}},"expect":{"decision":"REJECT","reason_codes":["RISK_PROVIDER_HEALTH"]}}

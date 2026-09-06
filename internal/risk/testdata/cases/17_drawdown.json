@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"account":{"drawdown_usd":"1000.00"}},"expect":{"decision":"REJECT","reason_codes":["RISK_MAX_DRAWDOWN"]}}

@@ -1,0 +1,19 @@
+{
+  "input_base": "base",
+  "patch": {
+    "asset_policies": {
+      "01920000-0000-7000-8000-000000000001": {
+        "StablecoinStatus": "DEGRADED"
+      }
+    },
+    "prices": {
+      "01920000-0000-7000-8000-000000000001": null
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "SETTLEMENT_ASSET_UNAVAILABLE"
+    ]
+  }
+}

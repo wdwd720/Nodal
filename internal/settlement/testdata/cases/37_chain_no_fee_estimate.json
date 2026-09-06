@@ -1,0 +1,19 @@
+{
+  "input_base": "base",
+  "patch": {
+    "health": {
+      "chains": {
+        "solana-devnet": {
+          "estimated_network_fee": "0"
+        }
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "PROVIDER_DEGRADED"
+    ]
+  },
+  "note": "no network fee estimate: the chain observer is not trustworthy"
+}

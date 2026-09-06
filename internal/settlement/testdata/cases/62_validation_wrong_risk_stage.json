@@ -1,0 +1,11 @@
+{
+  "input_base": "base",
+  "patch": {
+    "risk": {
+      "stage": "FINAL"
+    }
+  },
+  "expect": {
+    "result": "VALIDATION_FAILED"
+  }
+}

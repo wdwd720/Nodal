@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"jurisdiction_country":"KR","jurisdiction_region":"11","residency_country":"KR"},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_AGE"]}}

@@ -1,0 +1,61 @@
+{
+  "name": "minimal",
+  "description": "Minimal normalized document: proves both languages agree on which keys exist when nothing is set.",
+  "expected_hash": "ef3b219c7c611a37788a8496fe91c54c27267ca850033f53ca0537683198cc1f",
+  "ir": {
+    "schema_version": 1,
+    "strategy_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+    "version": 0,
+    "hash": "",
+    "owner": {
+      "account_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e10",
+      "user_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e11"
+    },
+    "instruments": [],
+    "triggers": [],
+    "dependencies": [],
+    "signals": [],
+    "conditions": [],
+    "actions": [],
+    "risk_policy": {
+      "version": "",
+      "hash": ""
+    },
+    "model_budget": {
+      "required": false,
+      "providers": [],
+      "max_calls_per_run": 0,
+      "max_calls_per_day": 0,
+      "max_input_tokens": 0,
+      "max_output_tokens": 0,
+      "max_spend_per_day": "0.00"
+    },
+    "data_budget": {
+      "max_tool_calls_per_run": 0,
+      "max_tool_calls_per_day": 0,
+      "max_spend_per_day": "0.00",
+      "max_lookback_ms": 0
+    },
+    "envelope": {
+      "min_allocation": "0.00",
+      "max_single_trade": "0.00",
+      "max_position": "0.00",
+      "max_daily_loss": "0.00",
+      "instruments": [],
+      "asset_classes": [],
+      "venues": [],
+      "max_intents_per_hour": 0,
+      "max_runs_per_minute": 0
+    },
+    "effects": [],
+    "lineage": {
+      "source": "",
+      "source_hash": "",
+      "compile_attempt_id": "",
+      "parent_version_id": "",
+      "compiler_version": "",
+      "sdk_version": ""
+    },
+    "built_at": "0001-01-01T00:00:00Z"
+  }
+}

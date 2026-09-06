@@ -87,7 +87,7 @@ func ContextAttrs(ctx context.Context) []slog.Attr {
 		return nil
 	}
 	var attrs []slog.Attr
-	add := func(key string, v string) {
+	add := func(key, v string) {
 		if v != "" {
 			attrs = append(attrs, slog.String(key, v))
 		}

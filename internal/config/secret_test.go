@@ -43,7 +43,7 @@ func TestParseSecretRef(t *testing.T) {
 		{"plain word", "hunter2", ParsedSecretRef{SecretSchemePlain, "hunter2"}, nil},
 		{"plain with colon", "user:pass", ParsedSecretRef{SecretSchemePlain, "user:pass"}, nil},
 		{"plain slashes", "a//b", ParsedSecretRef{SecretSchemePlain, "a//b"}, nil},
-		{"unrecognised prefix is plain", "vault://kv/db", ParsedSecretRef{SecretSchemePlain, "vault://kv/db"}, nil},
+		{"unrecognized prefix is plain", "vault://kv/db", ParsedSecretRef{SecretSchemePlain, "vault://kv/db"}, nil},
 		{"near miss prefix is plain", "envs://X", ParsedSecretRef{SecretSchemePlain, "envs://X"}, nil},
 		{"nul", "abc\x00def", ParsedSecretRef{}, ErrInvalidSecretRef},
 		{"too long", strings.Repeat("x", maxSecretRefLen+1), ParsedSecretRef{}, ErrInvalidSecretRef},

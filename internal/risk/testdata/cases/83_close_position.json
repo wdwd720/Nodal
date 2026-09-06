@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"action":"CLOSE_POSITION","notional_usd":"0.00"}},"expect":{"decision":"ALLOW","reason_codes":[],"action_class":"REDUCE_RISK","effective_notional_usd":"1000.00"}}

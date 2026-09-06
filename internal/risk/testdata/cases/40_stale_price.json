@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"data_freshness":{"price":{"age_ms":600,"declared_max_age_ms":500}}}},"expect":{"decision":"REJECT","reason_codes":["RISK_STALE_DATA"]}}

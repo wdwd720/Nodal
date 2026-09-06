@@ -1,0 +1,295 @@
+{
+  "intent": {
+    "id": "01920000-0000-7000-8000-000000000050",
+    "account_id": "01920000-0000-7000-8000-000000000040",
+    "actor_type": "USER",
+    "actor_id": "user-1",
+    "action": "ACQUIRE_NOTIONAL",
+    "instrument_id": "01920000-0000-7000-8000-000000000010",
+    "notional_usd": "100.00",
+    "constraints": {
+      "max_slippage_bps": 50,
+      "max_fee_bps": 0,
+      "max_price_impact_bps": 0,
+      "quote_freshness": 5000000000,
+      "execution_deadline": "0001-01-01T00:00:00Z"
+    },
+    "deadline": "2026-09-05T12:10:00Z",
+    "requested_at": "2026-09-05T12:00:00Z",
+    "idempotency_key": "idem-1",
+    "correlation_id": "corr-1",
+    "mode": "LIVE"
+  },
+  "account": {
+    "id": "01920000-0000-7000-8000-000000000040",
+    "status": "ACTIVE",
+    "mode": "LIVE",
+    "wallet_id": "01920000-0000-7000-8000-000000000060",
+    "wallet_address": "wallet-1",
+    "wallet_chain": "solana-devnet",
+    "cost_basis_method": "FIFO"
+  },
+  "buying_power": {
+    "portfolio_value": "1750.00",
+    "buying_power": "1600.00",
+    "available_now": "1000.00",
+    "reserved": "0.00",
+    "pending": "0.00",
+    "withdrawable": "0.00",
+    "underlying_balances": null,
+    "haircuts": null,
+    "restrictions": null,
+    "policy_version": "bp-v1",
+    "as_of": "2026-09-05T12:00:00Z",
+    "purpose": "TRADE"
+  },
+  "instrument": {
+    "ID": "01920000-0000-7000-8000-000000000010",
+    "Type": "SPOT_PAIR",
+    "CanonicalName": "SOL/USDC",
+    "ExposureID": "01920000-0000-7000-8000-000000000011",
+    "BaseAssetID": "01920000-0000-7000-8000-000000000002",
+    "QuoteAssetID": "01920000-0000-7000-8000-000000000001",
+    "SettlementAssetID": "01920000-0000-7000-8000-000000000001",
+    "RiskClass": "MAJOR",
+    "Status": "ACTIVE",
+    "ActiveFrom": "2026-09-05T11:00:00Z",
+    "ActiveUntil": null,
+    "PolicyRef": "",
+    "MetadataVersion": 3,
+    "CreatedAt": "0001-01-01T00:00:00Z",
+    "UpdatedAt": "0001-01-01T00:00:00Z"
+  },
+  "listings": [
+    {
+      "ID": "01920000-0000-7000-8000-000000000030",
+      "VenueID": "01920000-0000-7000-8000-000000000020",
+      "InstrumentID": "01920000-0000-7000-8000-000000000010",
+      "VenueNativeID": "SOL-USDC",
+      "Network": "solana-devnet",
+      "BaseMint": "native",
+      "QuoteMint": "USDC-mint",
+      "TickSize": null,
+      "BasePrecision": 9,
+      "QuotePrecision": 6,
+      "MinNotionalQuote": "1000000",
+      "MaxNotionalQuote": null,
+      "Status": "ACTIVE",
+      "SettlementRules": null,
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "UpdatedAt": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "venues": [
+    {
+      "venue": {
+        "ID": "01920000-0000-7000-8000-000000000020",
+        "Code": "JUPITER",
+        "Name": "Jupiter",
+        "Kind": "DEX_AGGREGATOR",
+        "Chain": "solana-devnet",
+        "Status": "ACTIVE",
+        "SettlementRules": null,
+        "CreatedAt": "0001-01-01T00:00:00Z",
+        "UpdatedAt": "0001-01-01T00:00:00Z"
+      },
+      "provider": "jupiter",
+      "fee_bps": 0,
+      "program_ids": [
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+      ],
+      "fee_accounts": [
+        "JupFeeAcc111111111111111111111111111111111"
+      ]
+    },
+    {
+      "venue": {
+        "ID": "01920000-0000-7000-8000-000000000021",
+        "Code": "RAYDIUM",
+        "Name": "Raydium",
+        "Kind": "DEX",
+        "Chain": "solana-devnet",
+        "Status": "DEGRADED",
+        "SettlementRules": null,
+        "CreatedAt": "0001-01-01T00:00:00Z",
+        "UpdatedAt": "0001-01-01T00:00:00Z"
+      },
+      "provider": "raydium",
+      "fee_bps": 25
+    }
+  ],
+  "assets": {
+    "01920000-0000-7000-8000-000000000001": {
+      "ID": "01920000-0000-7000-8000-000000000001",
+      "Chain": "solana-devnet",
+      "MintAddress": "USDC-mint",
+      "Kind": "SPL_TOKEN",
+      "Symbol": "USDC",
+      "Name": "USD Coin",
+      "Decimals": 6,
+      "IsStablecoin": true,
+      "PegCurrency": "USD",
+      "RiskClass": "SETTLEMENT",
+      "Status": "ACTIVE",
+      "MetadataVersion": 1,
+      "PolicyRef": "",
+      "TokenExtensions": null,
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "UpdatedAt": "0001-01-01T00:00:00Z"
+    },
+    "01920000-0000-7000-8000-000000000002": {
+      "ID": "01920000-0000-7000-8000-000000000002",
+      "Chain": "solana-devnet",
+      "MintAddress": "native",
+      "Kind": "NATIVE",
+      "Symbol": "SOL",
+      "Name": "Solana",
+      "Decimals": 9,
+      "IsStablecoin": false,
+      "PegCurrency": "",
+      "RiskClass": "MAJOR",
+      "Status": "ACTIVE",
+      "MetadataVersion": 1,
+      "PolicyRef": "",
+      "TokenExtensions": null,
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "UpdatedAt": "0001-01-01T00:00:00Z"
+    }
+  },
+  "asset_policies": {
+    "01920000-0000-7000-8000-000000000001": {
+      "ID": "00000000-0000-0000-0000-000000000000",
+      "AssetID": "01920000-0000-7000-8000-000000000001",
+      "Status": "ACTIVE",
+      "CollateralFactor": 10000,
+      "StablecoinStatus": "NORMAL",
+      "MaxPriceAge": 60000000000,
+      "PolicyVersion": "usdc-v1",
+      "EffectiveAt": "0001-01-01T00:00:00Z",
+      "ExpiresAt": null,
+      "ActorType": "",
+      "ActorID": "",
+      "Reason": "",
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "PolicyMissing": false
+    },
+    "01920000-0000-7000-8000-000000000002": {
+      "ID": "00000000-0000-0000-0000-000000000000",
+      "AssetID": "01920000-0000-7000-8000-000000000002",
+      "Status": "ACTIVE",
+      "CollateralFactor": 8000,
+      "StablecoinStatus": "",
+      "MaxPriceAge": 60000000000,
+      "PolicyVersion": "sol-v1",
+      "EffectiveAt": "0001-01-01T00:00:00Z",
+      "ExpiresAt": null,
+      "ActorType": "",
+      "ActorID": "",
+      "Reason": "",
+      "CreatedAt": "0001-01-01T00:00:00Z",
+      "PolicyMissing": false
+    }
+  },
+  "prices": {
+    "01920000-0000-7000-8000-000000000001": {
+      "Mantissa": "1",
+      "Scale": 0,
+      "QuoteAsset": "USD",
+      "Source": "pyth",
+      "At": "2026-09-05T11:59:59Z"
+    },
+    "01920000-0000-7000-8000-000000000002": {
+      "Mantissa": "150",
+      "Scale": 0,
+      "QuoteAsset": "USD",
+      "Source": "pyth",
+      "At": "2026-09-05T11:59:59Z"
+    }
+  },
+  "holdings": [
+    {
+      "AssetID": "01920000-0000-7000-8000-000000000002",
+      "Symbol": "SOL",
+      "Decimals": 9,
+      "Quantity": "2000000000",
+      "CostBasis": "280.00",
+      "AverageBasis": "",
+      "LotCount": 1,
+      "OldestAcquiredAt": "2026-09-04T12:00:00Z"
+    }
+  ],
+  "liquidity": {
+    "01920000-0000-7000-8000-000000000030": "5000000.00"
+  },
+  "health": {
+    "providers": {
+      "jupiter": "HEALTHY",
+      "raydium": "DEGRADED"
+    },
+    "chains": {
+      "solana-devnet": {
+        "health": "HEALTHY",
+        "height": 1000,
+        "estimated_network_fee": "5000",
+        "network_fee_asset": "01920000-0000-7000-8000-000000000002",
+        "observed_at": "2026-09-05T12:00:00Z"
+      }
+    },
+    "active_kill_switches": null,
+    "kill_switch_policy": {
+      "AccountFreezeBlocksRiskReduction": false
+    },
+    "reconciliation_blocks_new_risk": false
+  },
+  "eligibility": {
+    "eligible": true,
+    "policy_version": "elig-v1",
+    "policy_hash": "elig-hash",
+    "reason_codes": [],
+    "evaluated_at": "2026-09-05T12:00:00Z",
+    "context_hash": "ctx-hash",
+    "hash": "elig-decision-hash"
+  },
+  "risk": {
+    "decision": "ALLOW",
+    "stage": "PRE_TRADE",
+    "action_class": "NEW_RISK",
+    "effective_notional_usd": "100.00",
+    "policy_version": "risk-v1",
+    "policy_hash": "risk-hash",
+    "evaluator_version": "risk-kernel/1",
+    "reason_codes": [],
+    "matched_kill_switches": [],
+    "resulting_constraints": {
+      "max_notional_usd": "1000.00",
+      "max_slippage_bps": 100,
+      "max_fee_bps": 50,
+      "max_price_impact_bps": 100,
+      "max_quote_age_ms": 3000,
+      "min_liquidity_usd": "0.00"
+    },
+    "input_hash": "input-hash",
+    "evaluated_at": "2026-09-05T12:00:00Z",
+    "hash": "risk-decision-hash"
+  },
+  "fee_policy": {
+    "Version": "fees-v1",
+    "PlatformFeeBPS": 10,
+    "MinFee": "0",
+    "MaxFee": "0",
+    "FeeAsset": "01920000-0000-7000-8000-000000000001",
+    "Rounding": 3
+  },
+  "finality_policy": {
+    "Version": "finality/1",
+    "UIProvisional": "OBSERVED",
+    "PositionProvisional": "CONFIRMED",
+    "LedgerPosting": "CONFIRMED",
+    "FundingAvailability": "FINALIZED",
+    "Withdrawal": "FINALIZED"
+  },
+  "now": "2026-09-05T12:00:00Z",
+  "planner_version": "settlement-planner/1",
+  "dry_run": false,
+  "version": 1
+}

@@ -1,0 +1,32 @@
+{
+  "input_base": "base",
+  "patch": {
+    "listings": [
+      {
+        "ID": "01920000-0000-7000-8000-000000000031",
+        "VenueID": "01920000-0000-7000-8000-000000000021",
+        "InstrumentID": "01920000-0000-7000-8000-000000000010",
+        "VenueNativeID": "SOL-USDC-RAY",
+        "Network": "solana-devnet",
+        "BaseMint": "native",
+        "QuoteMint": "USDC-mint",
+        "TickSize": null,
+        "BasePrecision": 9,
+        "QuotePrecision": 6,
+        "MinNotionalQuote": "1000000",
+        "MaxNotionalQuote": null,
+        "Status": "ACTIVE",
+        "SettlementRules": null,
+        "CreatedAt": "0001-01-01T00:00:00Z",
+        "UpdatedAt": "0001-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "expect": {
+    "result": "PLAN",
+    "max_fee_bps": 50,
+    "venue": "RAYDIUM",
+    "hash": "974433de898ac20d307b47854894b7ef4f29943dbba8caf54b3e8f40820a7a15"
+  },
+  "note": "an ACTIVE listing on a DEGRADED venue with a DEGRADED provider is still eligible"
+}

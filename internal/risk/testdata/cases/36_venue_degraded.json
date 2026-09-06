@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"venue_status":"DEGRADED"}},"expect":{"decision":"REJECT","reason_codes":["RISK_VENUE_STATUS"]}}

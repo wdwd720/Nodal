@@ -1,0 +1,15 @@
+{
+  "input_base": "base",
+  "patch": {
+    "account": {
+      "wallet_chain": "solana-mainnet"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "SETTLEMENT_ASSET_UNAVAILABLE"
+    ]
+  },
+  "note": "money on the wrong rail"
+}

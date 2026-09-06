@@ -1,0 +1,16 @@
+{
+  "input_base": "base",
+  "patch": {
+    "health": {
+      "providers": {
+        "jupiter": "UNHEALTHY"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "PROVIDER_DEGRADED"
+    ]
+  }
+}

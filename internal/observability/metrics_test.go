@@ -208,7 +208,8 @@ func TestSafeAttrs(t *testing.T) {
 	require.NoError(t, err)
 	fm.RiskRejections.Add(context.Background(), 1, WithSafeAttrs(attribute.String("account_id", "acc"), attribute.String("reason", "limit")))
 	m := collect(t, reader)["risk_rejections"]
-	sum := m.Data.(metricdata.Sum[int64])
+	sum, ok := m.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "%T", m.Data)
 	require.Len(t, sum.DataPoints, 1)
 	keys := []string{}
 	for _, kv := range sum.DataPoints[0].Attributes.ToSlice() {

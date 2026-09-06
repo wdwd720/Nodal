@@ -1,0 +1,12 @@
+{
+  "input_base": "base",
+  "patch": {
+    "fee_policy": {
+      "FeeAsset": "01920000-0000-7000-8000-000000000002"
+    }
+  },
+  "expect": {
+    "result": "VALIDATION_FAILED"
+  },
+  "note": "the platform fee is charged on the quote leg"
+}

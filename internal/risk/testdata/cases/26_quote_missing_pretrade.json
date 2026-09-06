@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"quote":null}},"expect":{"decision":"ALLOW","reason_codes":[]}}

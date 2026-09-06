@@ -1,0 +1,238 @@
+{
+  "name": "tricky",
+  "description": "Escaping and ordering torture case: unicode, quotes, backslashes, unsorted keys, nested arithmetic.",
+  "expected_hash": "2023c0211513122c4a80d85c3d072a1ecb61316c620b69ced4aefdbb79dd4837",
+  "ir": {
+    "schema_version": 1,
+    "strategy_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+    "version": 1,
+    "hash": "",
+    "owner": {
+      "account_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e10",
+      "user_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e11"
+    },
+    "instruments": [
+      {
+        "name": "sol_usdc",
+        "instrument_id": "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e12"
+      }
+    ],
+    "triggers": [
+      {
+        "name": "tick",
+        "kind": "ON_INTERVAL",
+        "every_ms": 5000,
+        "dedup_window_ms": 5000
+      }
+    ],
+    "dependencies": [
+      {
+        "name": "price",
+        "kind": "PRICE",
+        "tool_code": "price_spot",
+        "tool_version": 1,
+        "dependency_version": 1,
+        "params": {
+          "alpha": "first by key",
+          "backslash": "a\\b\\c",
+          "digits_key": "12345",
+          "emoji": "🚀📈",
+          "empty": "",
+          "quote": "he said \"hi\"",
+          "slash": "a/b/c",
+          "tab_free": "no control characters allowed",
+          "unicode": "café — naïve ☕",
+          "zeta": "last by key"
+        },
+        "max_age_ms": 500,
+        "required": true
+      }
+    ],
+    "signals": [
+      {
+        "name": "ret_5m",
+        "expr": {
+          "window": {
+            "fn": "RETURN",
+            "dependency": "price",
+            "path": "mid",
+            "lookback_ms": 300000,
+            "scale": 4,
+            "rounding": "half_even"
+          }
+        },
+        "scale": 4,
+        "rounding": "half_even"
+      },
+      {
+        "name": "nested",
+        "expr": {
+          "bin": {
+            "op": "ADD",
+            "l": {
+              "bin": {
+                "op": "MUL",
+                "l": {
+                  "signal": "ret_5m"
+                },
+                "r": {
+                  "const": {
+                    "m": "-25000",
+                    "s": 4
+                  }
+                },
+                "scale": 4,
+                "rounding": "half_even"
+              }
+            },
+            "r": {
+              "const": {
+                "m": "1",
+                "s": 4
+              }
+            },
+            "scale": 4,
+            "rounding": "half_even"
+          }
+        },
+        "scale": 4,
+        "rounding": "half_even"
+      }
+    ],
+    "conditions": [
+      {
+        "name": "momentum_up",
+        "expr": {
+          "cmp": {
+            "op": "GT",
+            "l": {
+              "signal": "ret_5m"
+            },
+            "r": {
+              "const": {
+                "m": "200",
+                "s": 4
+              }
+            }
+          }
+        }
+      }
+    ],
+    "actions": [
+      {
+        "name": "predict",
+        "kind": "COMMIT_PREDICTION",
+        "when": "momentum_up",
+        "prediction": {
+          "instrument": "sol_usdc",
+          "horizon_ms": 900000,
+          "direction": "UP",
+          "probability": {
+            "const": {
+              "m": "6500",
+              "s": 4
+            }
+          },
+          "expected_return_bps": {
+            "const": {
+              "m": "150",
+              "s": 0
+            }
+          },
+          "downside_probability": {
+            "const": {
+              "m": "3500",
+              "s": 4
+            }
+          },
+          "max_downside_bps": {
+            "const": {
+              "m": "300",
+              "s": 0
+            }
+          },
+          "confidence": {
+            "const": {
+              "m": "6000",
+              "s": 4
+            }
+          }
+        }
+      },
+      {
+        "name": "buy",
+        "kind": "CREATE_TRADE_INTENT",
+        "when": "momentum_up",
+        "intent": {
+          "action": "ACQUIRE_NOTIONAL",
+          "instrument": "sol_usdc",
+          "sizing": {
+            "kind": "FIXED_NOTIONAL",
+            "notional_usd": "50.00"
+          },
+          "constraints": {
+            "max_slippage_bps": 50,
+            "max_fee_bps": 30,
+            "max_price_impact_bps": 50,
+            "quote_freshness_ms": 500,
+            "allowed_venues": [
+              "JUPITER"
+            ]
+          },
+          "deadline_ms": 30000,
+          "prediction": "predict"
+        }
+      }
+    ],
+    "risk_policy": {
+      "version": "risk-v1",
+      "hash": "010203"
+    },
+    "model_budget": {
+      "required": false,
+      "providers": [],
+      "max_calls_per_run": 0,
+      "max_calls_per_day": 0,
+      "max_input_tokens": 0,
+      "max_output_tokens": 0,
+      "max_spend_per_day": "0.00"
+    },
+    "data_budget": {
+      "max_tool_calls_per_run": 4,
+      "max_tool_calls_per_day": 500,
+      "max_spend_per_day": "5.00",
+      "max_lookback_ms": 3600000
+    },
+    "envelope": {
+      "min_allocation": "100.00",
+      "max_single_trade": "50.00",
+      "max_position": "200.00",
+      "max_daily_loss": "30.00",
+      "instruments": [
+        "0192b8e0-1a2b-7c3d-8e4f-5a6b7c8d9e12"
+      ],
+      "asset_classes": [
+        "CRYPTO"
+      ],
+      "venues": [
+        "JUPITER"
+      ],
+      "max_intents_per_hour": 6,
+      "max_runs_per_minute": 12
+    },
+    "effects": [
+      "COMMIT_PREDICTION",
+      "CREATE_TRADE_INTENT",
+      "READ_MARKET_DATA"
+    ],
+    "lineage": {
+      "source": "TYPESCRIPT_SDK",
+      "source_hash": "aabb",
+      "compile_attempt_id": "",
+      "parent_version_id": "",
+      "compiler_version": "stage9-test",
+      "sdk_version": "0.1.0"
+    },
+    "built_at": "2026-09-05T12:00:00.123456789Z"
+  }
+}

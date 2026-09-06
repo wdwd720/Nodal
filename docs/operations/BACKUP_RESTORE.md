@@ -1,0 +1,45 @@
+# BACKUP AND RESTORE
+
+Status: local drill implemented and passing (2026-09-06); production procedure designed, not yet exercised (no AWS environment exists, see BLOCKERS EB-012). A backup that was never restored is not a proven backup (PART 141); this document separates what has been proven from what is planned.
+
+## 1. What is proven today (LOCAL)
+
+`make restore-drill` (`scripts/restoredrill`) runs against the docker-compose Postgres:
+
+1. provisions a fresh, fully migrated database and seeds a balanced ledger fixture as the application role;
+2. backs it up with `pg_dump -Fc` through `docker exec`, recording size and SHA-256;
+3. restores the archive into a new, empty database with `pg_restore --exit-on-error`;
+4. "boots" the restored copy: `migrate verify` (embedded-file checksums vs applied rows) and version equality with the source;
+5. reconciliation dry-run: recomputes every ledger balance from journal entries on the restored copy (expects zero drift), compares row counts of every table with the source, and compares a deterministic hash of all journal transactions and entries on both sides;
+6. writes `dist/restore-drill.json` and exits non-zero on any mismatch.
+
+Latest local run (2026-09-06): 89 tables, row counts identical, 0 accounts with balance drift, journal hashes equal, version 604 on both sides, 7.8 s.
+
+The drill runs only against `127.0.0.1`/`localhost` and refuses any other host (`internal/testkit/localdb`).
+
+## 2. Production design (AWS, pending Terraform)
+
+| Concern | Design | Evidence required before claiming |
+|---|---|---|
+| Primary database | RDS PostgreSQL Multi-AZ, encryption at rest (KMS), automated backups with PITR (retention ≥ 35 days), deletion protection | Terraform plan/apply output; RDS console screenshot in evidence archive |
+| Committed-transaction durability (RPO) | synchronous standby in Multi-AZ; design objective RPO 0 for primary failure; PITR covers broader disaster recovery | failover drill report |
+| Restore drill (staging, quarterly) | restore the latest automated snapshot **and** a PITR point into a new instance; run `cmd/migrate verify`; point a staging API/reconciliation-worker at it; run `reconciliation.RunFull` in dry-run against the staging chain observers; compare with the source | signed drill report with timings (RTO measurement) |
+| Ledger integrity after restore | `ledger.VerifyBalances`, `positions.VerifyAgainstLedger`, `capital.VerifyReservationTotals`, `audit.VerifyAll` must all report zero drift on the restored copy | job output archived |
+| Evidence archive | S3 with Object Lock (compliance mode) for audit archives; versioning + replication for raw evidence; restore drill includes fetching and re-hashing a sample of archived objects | archive verification job output |
+| Secrets | restored instance receives new credentials from Secrets Manager; old credentials rotated | rotation log |
+
+RTO/RPO are **not** claimed until a staging drill has been run and measured (PART 205).
+
+## 3. Runbook: restoring production (procedure, unexercised)
+
+1. Declare the incident; activate `GLOBAL_NEW_RISK_KILL` (new risk stops; reconciliation and settlement continue against the surviving database or are paused if the database is the failure).
+2. Choose the restore point: latest snapshot or PITR timestamp just before corruption. Record the choice and rationale in the incident log.
+3. Restore into a **new** RDS instance (never overwrite the original); apply the production parameter group and security groups; do not expose publicly.
+4. Run `cmd/migrate verify` against the restored instance with the migration role. A checksum mismatch means the restore point predates a deployed migration: stop and escalate.
+5. Point a single reconciliation-worker at the restored instance in read-only mode and run full reconciliation against external truth (chain observers, providers). Every unknown external transaction since the restore point becomes a reconciliation record.
+6. Compare the reconciliation outcome with the incident timeline; obtain dual approval (FINANCE + SECURITY) to promote the restored instance.
+7. Rotate database credentials, repoint services, release the kill switch under the documented re-enable approval, and keep the original instance for forensics until the incident is closed.
+
+## 4. Related
+
+`scripts/restoredrill`, `internal/testkit/localdb`, `docs/operations/DISASTER_RECOVERY.md` (pending), `docs/runbooks/database-corruption.md` (pending), BLOCKERS EB-012.

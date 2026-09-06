@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"data_freshness":{"social":{"age_ms":100,"declared_max_age_ms":0}}}},"expect":{"decision":"REJECT","reason_codes":["RISK_STALE_DATA"]}}

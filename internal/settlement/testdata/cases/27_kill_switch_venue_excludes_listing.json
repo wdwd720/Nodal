@@ -1,0 +1,26 @@
+{
+  "input_base": "base",
+  "patch": {
+    "health": {
+      "active_kill_switches": [
+        {
+          "ID": "01920000-0000-7000-8000-0000000000aa",
+          "Kind": "VENUE_DISABLE",
+          "ScopeID": "JUPITER",
+          "Active": true,
+          "Severity": "STANDARD",
+          "Reason": "test",
+          "Version": 1,
+          "UpdatedAt": "2026-09-05T12:00:00Z"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "KILL_SWITCH"
+    ]
+  },
+  "note": "the only listing is on a disabled venue"
+}

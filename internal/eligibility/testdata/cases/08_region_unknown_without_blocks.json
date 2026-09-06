@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"jurisdiction_country":"CA","jurisdiction_region":"","residency_country":"CA"},"expect":{"eligible":true,"reason_codes":[]}}

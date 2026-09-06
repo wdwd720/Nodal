@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"context":"WITHDRAWAL","provider":"SOLANA_RPC","instrument_risk_class":"","instrument_status":"","asset_class":"","venue":"","capabilities":{"WITHDRAWALS":false}},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_CAPABILITY"]}}

@@ -1,0 +1,1 @@
+{"jsonrpc": "2.0", "error": {"code": -32602, "message": "transactionSubscribe is not available on this plan"}, "id": 1}

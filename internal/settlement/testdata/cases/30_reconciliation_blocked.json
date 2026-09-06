@@ -1,0 +1,14 @@
+{
+  "input_base": "base",
+  "patch": {
+    "health": {
+      "reconciliation_blocks_new_risk": true
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "RECONCILIATION_BLOCKED"
+    ]
+  }
+}

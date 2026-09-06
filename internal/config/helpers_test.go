@@ -103,7 +103,7 @@ func prodEnv() map[string]string {
 	return m
 }
 
-func withVars(base map[string]string, overrides map[string]string) map[string]string {
+func withVars(base, overrides map[string]string) map[string]string {
 	m := maps.Clone(base)
 	maps.Copy(m, overrides)
 	return m

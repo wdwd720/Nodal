@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"notional_usd":"6000.00"},"market":{"quote":{"slippage_bps":200,"fee_bps":80},"venue_status":"DEGRADED"}},"expect":{"decision":"REJECT","reason_codes":["RISK_CONCENTRATION","RISK_FEE","RISK_MAX_POSITION","RISK_MAX_SINGLE_TRADE","RISK_SLIPPAGE","RISK_VENUE_STATUS"]}}

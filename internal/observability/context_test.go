@@ -110,7 +110,7 @@ func TestContextHandler_InjectsAttrs(t *testing.T) {
 	m = nil
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &m), buf.String())
 	assert.Equal(t, float64(1), m["static"])
-	g := m["g"].(map[string]any)
+	g := jsonObject(t, m, "g")
 	assert.Equal(t, "y", g["x"])
 	assert.Equal(t, "req-9", g[AttrRequestID], "attrs land at the current group level")
 }

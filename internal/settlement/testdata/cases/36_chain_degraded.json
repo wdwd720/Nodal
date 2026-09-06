@@ -1,0 +1,18 @@
+{
+  "input_base": "base",
+  "patch": {
+    "health": {
+      "chains": {
+        "solana-devnet": {
+          "health": "UNHEALTHY"
+        }
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "PROVIDER_DEGRADED"
+    ]
+  }
+}

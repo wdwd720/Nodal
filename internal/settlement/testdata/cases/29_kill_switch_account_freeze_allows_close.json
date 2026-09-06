@@ -1,0 +1,32 @@
+{
+  "input_base": "base",
+  "patch": {
+    "health": {
+      "active_kill_switches": [
+        {
+          "ID": "01920000-0000-7000-8000-0000000000aa",
+          "Kind": "ACCOUNT_FREEZE",
+          "ScopeID": "01920000-0000-7000-8000-000000000040",
+          "Active": true,
+          "Severity": "STANDARD",
+          "Reason": "test",
+          "Version": 1,
+          "UpdatedAt": "2026-09-05T12:00:00Z"
+        }
+      ]
+    },
+    "intent": {
+      "action": "CLOSE_POSITION",
+      "notional_usd": null
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "hash": "57ded6c057c189636f4add8d548fe420fd4cff482abb7a9f46f2e4b03afeb466"
+  },
+  "note": "ACCOUNT_FREEZE does not block risk reduction by default"
+}

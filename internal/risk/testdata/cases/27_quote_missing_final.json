@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"stage":"FINAL","market":{"quote":null}},"expect":{"decision":"REJECT","reason_codes":["RISK_QUOTE_AGE"]}}

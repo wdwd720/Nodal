@@ -1,0 +1,1 @@
+{"jsonrpc": "2.0", "error": {"code": 429, "message": "Rate limit exceeded: 10 RPS on the Free plan"}, "id": 1}

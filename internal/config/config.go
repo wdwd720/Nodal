@@ -228,7 +228,7 @@ type TelemetryConfig struct {
 	MetricsInterval  time.Duration
 }
 
-// SeedConfig controls seeding of clearly-labelled fake data.
+// SeedConfig controls seeding of clearly-labeled fake data.
 type SeedConfig struct {
 	Enabled bool
 }
@@ -273,7 +273,7 @@ var secretRefType = reflect.TypeOf(SecretRef(""))
 // convention: adding a SecretRef field anywhere is enough.
 func forEachSecretRef(v reflect.Value, path string, fn func(path string, ref *SecretRef)) {
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if !v.IsNil() {
 			forEachSecretRef(v.Elem(), path, fn)
 		}
@@ -290,7 +290,8 @@ func forEachSecretRef(v reflect.Value, path string, fn func(path string, ref *Se
 			}
 			fv := v.Field(i)
 			if fv.Type() == secretRefType {
-				fn(p, fv.Addr().Interface().(*SecretRef))
+				ref, _ := fv.Addr().Interface().(*SecretRef) // exact: the type was compared above
+				fn(p, ref)
 				continue
 			}
 			forEachSecretRef(fv, p, fn)

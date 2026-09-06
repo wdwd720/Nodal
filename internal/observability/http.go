@@ -34,9 +34,9 @@ func ValidRequestID(id string) bool { return requestIDRe.MatchString(id) }
 
 // HTTPMiddleware returns middleware that wraps the handler in an otelhttp
 // server span named operation and propagates identifiers: the X-Request-Id
-// header is honoured when well-formed, generated otherwise, always echoed on
+// header is honored when well-formed, generated otherwise, always echoed on
 // the response and placed in the context (RequestID); X-Correlation-Id is
-// honoured when well-formed and defaults to the request id (CorrelationID).
+// honored when well-formed and defaults to the request id (CorrelationID).
 // Both are attached to the active span. Extra otelhttp options (for example
 // WithSpanNameFormatter for route-based names) are passed through.
 func HTTPMiddleware(operation string, opts ...otelhttp.Option) func(http.Handler) http.Handler {

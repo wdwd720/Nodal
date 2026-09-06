@@ -1,0 +1,1 @@
+{"policy":"MISSING","input_base":"new_risk","input":{},"expect":{"decision":"REJECT","reason_codes":["RISK_POLICY_MISSING"]}}

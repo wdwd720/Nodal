@@ -33,6 +33,14 @@ func capture(t *testing.T, env config.Environment, fn func(*slog.Logger)) (map[s
 	return m, raw
 }
 
+// jsonObject returns m[key] as a JSON object, failing the test when it is not one.
+func jsonObject(t *testing.T, m map[string]any, key string) map[string]any {
+	t.Helper()
+	o, ok := m[key].(map[string]any)
+	require.True(t, ok, "%q is not a JSON object: %T", key, m[key])
+	return o
+}
+
 func TestNewLogger_FormatByEnvironment(t *testing.T) {
 	t.Parallel()
 	_, jsonOut := capture(t, config.EnvTest, func(l *slog.Logger) { l.Info("hello", "password", sensitive, "k", "v") })
@@ -96,10 +104,10 @@ func TestRedaction_NestedGroups(t *testing.T) {
 			l.Info("x", slog.Group("db", slog.String("password", sensitive), slog.String("host", "h"),
 				slog.Group("inner", slog.String("api_key", sensitive), slog.Int("port", 5))))
 		})
-		db := m["db"].(map[string]any)
+		db := jsonObject(t, m, "db")
 		assert.Equal(t, RedactedMarker, db["password"])
 		assert.Equal(t, "h", db["host"])
-		inner := db["inner"].(map[string]any)
+		inner := jsonObject(t, db, "inner")
 		assert.Equal(t, RedactedMarker, inner["api_key"])
 		assert.Equal(t, float64(5), inner["port"])
 		assert.NotContains(t, raw, sensitive)
@@ -109,7 +117,7 @@ func TestRedaction_NestedGroups(t *testing.T) {
 		m, raw := capture(t, config.EnvTest, func(l *slog.Logger) {
 			l.WithGroup("auth").WithGroup("session").Info("x", "token", sensitive, "id", "s1")
 		})
-		session := m["auth"].(map[string]any)["session"].(map[string]any)
+		session := jsonObject(t, jsonObject(t, m, "auth"), "session")
 		assert.Equal(t, RedactedMarker, session["token"])
 		assert.Equal(t, "s1", session["id"])
 		assert.NotContains(t, raw, sensitive)
@@ -119,7 +127,7 @@ func TestRedaction_NestedGroups(t *testing.T) {
 		m, raw := capture(t, config.EnvTest, func(l *slog.Logger) {
 			l.WithGroup("secret").Info("x", "anything", sensitive, "other", "also hidden")
 		})
-		g := m["secret"].(map[string]any)
+		g := jsonObject(t, m, "secret")
 		assert.Equal(t, RedactedMarker, g["anything"])
 		assert.Equal(t, RedactedMarker, g["other"])
 		assert.NotContains(t, raw, sensitive)
@@ -139,7 +147,7 @@ func TestRedaction_NestedGroups(t *testing.T) {
 		})
 		assert.Equal(t, RedactedMarker, m["api_key"])
 		assert.Equal(t, "eu", m["region"])
-		assert.Equal(t, RedactedMarker, m["g"].(map[string]any)["password"])
+		assert.Equal(t, RedactedMarker, jsonObject(t, m, "g")["password"])
 		assert.NotContains(t, raw, sensitive)
 	})
 }
@@ -168,6 +176,24 @@ func TestRedaction_ValuePatterns(t *testing.T) {
 		{"pem block", "cert: " + pemBlock + " end", true, "end"},
 		{"pem truncated", "partial " + pemPartial, true, "partial"},
 		{"plain text", "nothing to see here at all", false, "nothing to see here at all"},
+
+		// Connection strings. The password goes; the host, port and database
+		// stay, because those are what an operator reads a connection log line
+		// for. Adversarial security testing found that nothing covered these:
+		// not exploitable today, since config holds every DSN as a SecretRef and
+		// neither internal/db nor pgconn echoes one, but that is three separate
+		// behaviors all having to keep holding, and one stray
+		// log.Info("connecting", "dsn", url) would print a live credential.
+		{
+			"postgres dsn", "postgres://cp_app:s3cr3t-pgpass-9f2a@db.internal.example:5432/controlplane?sslmode=require",
+			true, "@db.internal.example:5432/controlplane?sslmode=require",
+		},
+		{"dsn inside a sentence", "connecting to redis://user:hunter2hunter2@cache.internal:6379/0 now", true, "@cache.internal:6379/0 now"},
+		{"dsn keeps the username", "amqps://svc_ingest:pa55word-long@broker.internal:5671/vhost", true, "amqps://svc_ingest:"},
+		// A URL with no credential is not a secret and must survive intact,
+		// or every logged endpoint becomes unreadable.
+		{"url without userinfo", "https://api.example.com/v1/health?probe=1", false, "https://api.example.com/v1/health?probe=1"},
+		{"url with user but no password", "postgres://cp_app@db.internal.example:5432/controlplane", false, "postgres://cp_app@db.internal.example:5432/controlplane"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

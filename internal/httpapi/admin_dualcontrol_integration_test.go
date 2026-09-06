@@ -286,7 +286,7 @@ func TestIntegration_ExpiredBreakGlassElevationIsNotHonoured(t *testing.T) {
 			h.as(&stale)
 			res := decide(h, action.ID, "approve", "approving on a dead elevation")
 			require.Equal(t, http.StatusForbidden, res.Code,
-				"an expired elevation must not be honoured; body=%s", res.Body.String())
+				"an expired elevation must not be honored; body=%s", res.Body.String())
 			assert.Equal(t, errs.CodeForbidden, res.problem().Code)
 
 			status, approvedBy := storedStatus(t, d, action.ID)
@@ -402,7 +402,7 @@ func TestIntegration_ReleaseApprovalCannotBeReplayedAgainstAnotherSwitch(t *test
 }
 
 // TestIntegration_AgentPrincipalIsRefusedByTheDomainNotOnlyTheBoundary is
-// defence in depth for the containment rule.
+// defense in depth for the containment rule.
 //
 // authz_test.go already proves the boundary refuses every AGENT principal on
 // every route. That check is one `if` in one middleware, and an agent that

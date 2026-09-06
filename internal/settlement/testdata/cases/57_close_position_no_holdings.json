@@ -1,0 +1,19 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "CLOSE_POSITION",
+      "notional_usd": null
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    },
+    "holdings": []
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "NOTIONAL_BELOW_MINIMUM"
+    ]
+  }
+}

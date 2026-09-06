@@ -1,0 +1,19 @@
+{
+  "mode": "manual",
+  "inAmount": "1000000",
+  "outAmount": "6500000",
+  "otherAmountThreshold": "6467500",
+  "priceImpact": 0,
+  "slippageBps": 50,
+  "feeBps": 0,
+  "routePlan": [
+    { "swapInfo": { "ammKey": "JupiterZMaker111111111111111111111111111111", "label": "JupiterZ", "inputMint": "2iSWRKeTHcaRToYkQiQzxkFiujq5ALX8KmNkGWzGRmBF", "outputMint": "So11111111111111111111111111111111111111112", "inAmount": "1000000", "outAmount": "6500000" }, "percent": 100, "bps": 10000 }
+  ],
+  "router": "jupiterz",
+  "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAHCm+oDkoKIUb152KFgkyVqeXjLny+iAge0vE6vqwzKgaeIiZHA1ZGrf+etZUMWKTEC2YDpdkZ5AqE3lpJXF3fvdHz1AGT0En7CpzWDIBWLJbVg10i3eqFleoicP9Lx0SWqQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkZeVdZ4gynOdnABNDcuAAROcAPzfQ+p+5ZUUgQ5KqckoyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZybCZuOh4aWGd9sufKkRkB9lYS1RxG/yWdH5OcCXwLZQEBAAFAkANAwAEAAkD6AMAAAAAAAAJBgABAAYDBwEBBQYHAAIBCAYf5RfLl3rjrSoAAAAAQEIPAAAAAACgLmMAAAAAADIAAAA=",
+  "lastValidBlockHeight": "249999990",
+  "expireAt": "1788609590",
+  "quoteId": "rfq-quote-42",
+  "maker": "JupiterZMaker111111111111111111111111111111",
+  "requestId": "contract-order-rfq-expired"
+}

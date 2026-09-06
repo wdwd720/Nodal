@@ -18,7 +18,7 @@ import (
 //	<plain value>       the literal value (LOCAL and TEST only)
 //
 // A SecretRef is never included in Config.Hash and plain values are masked by
-// Config.Redacted. Only the three reference prefixes above are recognised
+// Config.Redacted. Only the three reference prefixes above are recognized
 // (case-insensitively); any other value, including URLs such as
 // postgres://..., is a plain value, and plain values are rejected outside
 // LOCAL/TEST so a mistyped reference can never reach a deployed environment.

@@ -1,0 +1,1 @@
+{"policy":"DEFAULT","input_base":"new_risk","input":{},"expect":{"decision":"REJECT","reason_codes":["RISK_VENUE_NOT_ALLOWED"]}}

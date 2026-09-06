@@ -119,7 +119,7 @@ func NewExecutionMetrics(meter metric.Meter) (*ExecutionMetrics, error) {
 		SubmitLatency:       b.histogram("submit_latency", "Time to submit the transaction.", UnitMilliseconds, latencyBucketsMS),
 		ConfirmationLatency: b.histogram("confirmation_latency", "Time from submit to confirmation.", UnitMilliseconds, latencyBucketsMS),
 		FinalityLatency:     b.histogram("finality_latency", "Time from submit to finality.", UnitMilliseconds, latencyBucketsMS),
-		Slippage:            b.histogram("slippage", "Realised slippage versus quote, basis points.", UnitBasisPoints, bpsBuckets),
+		Slippage:            b.histogram("slippage", "Realized slippage versus quote, basis points.", UnitBasisPoints, bpsBuckets),
 		PriceImpact:         b.histogram("price_impact", "Quoted price impact, basis points.", UnitBasisPoints, bpsBuckets),
 		ExecutionFailureRate: RatePair{
 			Denominator: b.counter("execution_failure_rate_attempts", "Execution attempts (denominator of execution_failure_rate)."),

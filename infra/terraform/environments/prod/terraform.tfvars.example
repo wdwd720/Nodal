@@ -1,0 +1,81 @@
+# PROD example values. Dedicated account. No fake providers, no insecure OTLP,
+# seven-year Object Lock retention; all enforced by validation blocks in
+# variables.tf and again by config.Validate at service start.
+
+aws_region     = "us-east-1"
+aws_account_id = "345678901234" # production account
+image_tag      = "0123456789abcdef0123456789abcdef01234567" # signed + attested release SHA
+
+acm_certificate_arn = "arn:aws:acm:us-east-1:345678901234:certificate/00000000-0000-0000-0000-000000000000"
+public_product_name = "Control Plane"
+public_base_url     = "https://api.example.com"
+cors_origins        = ["https://app.example.com"]
+
+auth = {
+  issuer       = "https://login.example.com"
+  client_id    = "cp-prod"
+  redirect_url = "https://api.example.com/v1/auth/callback"
+}
+
+# live where a contract exists (BLOCKERS EB-001..EB-016); capability gates stay
+# DISABLED until dual-approved evidence exists regardless of these modes.
+provider_slots = {
+  funding                 = { mode = "live", name = "stripe-onramp", base_url = "https://api.stripe.com" }
+  wallet                  = { mode = "live", name = "privy" }
+  signing                 = { mode = "live", name = "privy" }
+  execution               = { mode = "live", name = "jupiter", base_url = "https://api.jup.ag" }
+  market_data             = { mode = "live", name = "helius" }
+  chain_observer          = { mode = "live", name = "helius" }
+  chain_observer_fallback = { mode = "live", name = "solana-rpc" }
+  model                   = { mode = "live", name = "anthropic" }
+  event_bus               = { mode = "live", name = "redpanda" }
+  workflow                = { mode = "live", name = "temporal" }
+  archive                 = { mode = "live", name = "s3" }
+  notification            = { mode = "live", name = "ses" }
+}
+
+redpanda   = { brokers = "seed-xxxx.prod.cloud.redpanda.com:9092" }
+clickhouse = { addr = "xxxx.us-east-1.aws.clickhouse.cloud:8443" }
+temporal   = { host_port = "cp-prod.xxxx.tmprl.cloud:7233", namespace = "cp-prod.xxxx" }
+
+# TLS collector (no sidecar in PROD: NO_INSECURE_OTLP).
+otlp_endpoint = "otel.observability.example.com:4317"
+
+db_bootstrap_image = "public.ecr.aws/docker/library/postgres:16-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+cloudfront_enabled             = true
+cloudfront_acm_certificate_arn = "arn:aws:acm:us-east-1:345678901234:certificate/11111111-1111-1111-1111-111111111111"
+cloudfront_aliases             = ["api.example.com"]
+cloudfront_origin_domain_name  = "origin.api.example.com" # CNAME to the ALB, covered by acm_certificate_arn
+# cloudfront_origin_secret is set via TF_VAR_cloudfront_origin_secret, never in this file.
+
+github_org  = "nodal"
+github_repo = "controlplane"
+
+auditor_principal_arns      = ["arn:aws:iam::345678901234:role/cp-prod-auditor"]
+key_admin_principal_arns    = ["arn:aws:iam::345678901234:role/cp-prod-kms-admin"]
+secret_admin_principal_arns = ["arn:aws:iam::345678901234:role/cp-prod-secrets-admin"]
+
+sev1_https_endpoints = ["https://events.pagerduty.com/integration/xxxx/enqueue"]
+sev2_https_endpoints = ["https://events.pagerduty.com/integration/yyyy/enqueue"]
+sev1_email_endpoints = ["sev1@example.com"]
+
+# --- per-binary configuration (modules/app-config service_env) --------------
+# Required: cmd/api refuses to start without the settlement asset, and the
+# variable is validated here so that is a plan-time error, not a crash loop.
+api = {
+  settlement_chain = "solana"
+  settlement_mint  = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  # Naming a capability here satisfies condition 1 of the five-condition gate
+  # check and activates nothing: activation needs a persisted, dual-approved,
+  # in-window gate row with evidence hashes (PART 54, PRODUCTION_GATES.md).
+  # It stays empty until that procedure has been completed for a capability.
+  enabled_capabilities = []
+}
+
+relay_worker     = { batch_size = 200 }
+execution_worker = { concurrency = 4, lease_ttl = "60s" }
+workflow_worker  = { max_activities = 32, max_workflows = 32 }
+
+api_autoscaling      = { min_capacity = 3, max_capacity = 12 }
+relay_lag_thresholds = { sev2_seconds = 120, sev1_seconds = 900 }

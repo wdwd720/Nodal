@@ -1,0 +1,18 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "notional_usd": "0.50"
+    },
+    "risk": {
+      "effective_notional_usd": "0.50"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "NOTIONAL_BELOW_MINIMUM"
+    ]
+  },
+  "note": "0.50 USDC is below the 1 USDC listing minimum"
+}

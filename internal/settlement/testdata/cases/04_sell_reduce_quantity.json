@@ -1,0 +1,21 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "REDUCE_NOTIONAL",
+      "notional_usd": null,
+      "quantity": "500000000"
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "input_quantity": "500000000",
+    "notional_usd": "75.00",
+    "hash": "3c325e1f0b73442924ae9597ece7470457242a853562be3977a37c354ad4f880"
+  },
+  "note": "REDUCE_NOTIONAL by quantity: 0.5 SOL worth 75 USD"
+}

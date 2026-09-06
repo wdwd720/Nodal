@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"context":"FUNDING","provider":"STRIPE","jurisdiction_country":"CA","jurisdiction_region":"ON","residency_country":"CA","instrument_risk_class":"","instrument_status":"","asset_class":"","venue":""},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_PROVIDER"]}}

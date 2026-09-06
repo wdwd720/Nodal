@@ -1,0 +1,16 @@
+{
+  "input_base": "base",
+  "patch": {
+    "risk": {
+      "resulting_constraints": {
+        "max_notional_usd": "100.00"
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "max_notional_usd": "100.00",
+    "hash": "396915c87397102a3c69cd0b05682f2a90c74125e34524dc5d7833225358d156"
+  },
+  "note": "risk maximum equal to the notional is fine"
+}

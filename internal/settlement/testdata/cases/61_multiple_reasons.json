@@ -1,0 +1,31 @@
+{
+  "input_base": "base",
+  "patch": {
+    "eligibility": {
+      "eligible": false
+    },
+    "risk": {
+      "decision": "REJECT"
+    },
+    "health": {
+      "reconciliation_blocks_new_risk": true,
+      "providers": {
+        "jupiter": "UNHEALTHY"
+      }
+    },
+    "intent": {
+      "deadline": "2026-09-05T11:00:00Z"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "DEADLINE_IMPOSSIBLE",
+      "ELIGIBILITY_FAILED",
+      "PROVIDER_DEGRADED",
+      "RECONCILIATION_BLOCKED",
+      "RISK_REJECTED"
+    ]
+  },
+  "note": "every applicable reason is reported, sorted"
+}

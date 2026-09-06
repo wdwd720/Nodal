@@ -1,0 +1,12 @@
+# oapi-codegen configuration for the Go server side of openapi/openapi.yaml.
+# Regenerate with `make openapi-server`; CI checks that the committed output is current.
+package: api
+output: ../internal/gen/api/api.gen.go
+generate:
+  models: true
+  strict-server: true
+  chi-server: true
+  embedded-spec: true
+output-options:
+  skip-prune: false
+  nullable-type: true

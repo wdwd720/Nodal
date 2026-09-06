@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"quote":{"received_at":"2026-09-05T11:59:55Z"}}},"expect":{"decision":"REJECT","reason_codes":["RISK_QUOTE_AGE"]}}

@@ -1,0 +1,44 @@
+{
+  "mode": "manual",
+  "inAmount": "1000000",
+  "outAmount": "6500000",
+  "otherAmountThreshold": "6467500",
+  "inUsdValue": 1.0,
+  "outUsdValue": 0.998,
+  "swapUsdValue": 0.998,
+  "priceImpact": 0.0123,
+  "priceImpactPct": "0.000123",
+  "slippageBps": 50,
+  "feeBps": 10,
+  "platformFee": { "amount": "6500", "feeBps": 10, "feeMint": "So11111111111111111111111111111111111111112" },
+  "routePlan": [
+    {
+      "swapInfo": {
+        "ammKey": "FakeAmm1111111111111111111111111111111111111",
+        "label": "FakeAMM",
+        "inputMint": "2iSWRKeTHcaRToYkQiQzxkFiujq5ALX8KmNkGWzGRmBF",
+        "outputMint": "So11111111111111111111111111111111111111112",
+        "inAmount": "1000000",
+        "outAmount": "6500000"
+      },
+      "percent": 100,
+      "bps": 10000,
+      "usdValue": 1.0
+    }
+  ],
+  "router": "metis",
+  "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAHCm+oDkoKIUb152KFgkyVqeXjLny+iAge0vE6vqwzKgaeIiZHA1ZGrf+etZUMWKTEC2YDpdkZ5AqE3lpJXF3fvdHz1AGT0En7CpzWDIBWLJbVg10i3eqFleoicP9Lx0SWqQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABBt324ddloZPZy+FGzut5rBy0he1fWzeROoz1hX7/AKkZeVdZ4gynOdnABNDcuAAROcAPzfQ+p+5ZUUgQ5KqckoyXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZybCZuOh4aWGd9sufKkRkB9lYS1RxG/yWdH5OcCXwLZQEBAAFAkANAwAEAAkD6AMAAAAAAAAJBgABAAYDBwEBBQYHAAIBCAYf5RfLl3rjrSoAAAAAQEIPAAAAAACgLmMAAAAAADIAAAA=",
+  "lastValidBlockHeight": "250000150",
+  "signatureFeeLamports": 5000,
+  "prioritizationFeeLamports": 12345,
+  "rentFeeLamports": 2039280,
+  "signatureFeePayer": null,
+  "prioritizationFeePayer": null,
+  "rentFeePayer": null,
+  "gasless": false,
+  "requestId": "contract-order-0001",
+  "totalTime": 312,
+  "errorCode": null,
+  "errorMessage": null,
+  "error": null
+}

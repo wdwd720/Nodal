@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"now":"0001-01-01T00:00:00Z"},"expect":{"decision":"REJECT","reason_codes":["RISK_INPUT_INVALID","RISK_QUOTE_AGE"]}}

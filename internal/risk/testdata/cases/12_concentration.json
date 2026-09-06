@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"account":{"portfolio_value_usd":"2000.00"}},"expect":{"decision":"REJECT","reason_codes":["RISK_CONCENTRATION"],"max_notional_usd":"0.00"}}

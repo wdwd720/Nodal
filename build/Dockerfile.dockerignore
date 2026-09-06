@@ -1,0 +1,28 @@
+# BuildKit reads <Dockerfile>.dockerignore next to the Dockerfile. Keep the
+# build context to what `go build ./cmd/<name>` needs.
+**/.git
+.github
+bin
+dist
+apps
+packages
+docs
+research
+infra
+docker
+test
+tmp
+node_modules
+**/node_modules
+**/*_test.go
+**/testdata
+*.md
+.env
+.env.*
+*.pem
+*.key
+*.tfstate
+*.tfstate.*
+.data
+docker-compose.yml
+Makefile

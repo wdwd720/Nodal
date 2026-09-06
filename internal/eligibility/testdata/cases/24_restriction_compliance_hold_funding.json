@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"context":"FUNDING","provider":"STRIPE","instrument_risk_class":"","instrument_status":"","asset_class":"","venue":"","restrictions":["COMPLIANCE_HOLD"]},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_ACCOUNT_RESTRICTION"]}}

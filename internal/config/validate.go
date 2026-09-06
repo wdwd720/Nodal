@@ -20,7 +20,7 @@ const (
 	RuleField Rule = "FIELD"
 	// RuleSecretRefScheme rejects SecretRef schemes not permitted in the
 	// environment (plain outside LOCAL/TEST, file:// outside LOCAL/TEST/DEV).
-	RuleSecretRefScheme Rule = "SECRET_REF_SCHEME"
+	RuleSecretRefScheme Rule = "SECRET_REF_SCHEME" //nolint:gosec // G101: rule name, not a credential
 	// RuleOIDCConfigured requires issuer, client id, client secret and
 	// redirect URL when auth mode is oidc (https in STAGING/PROD).
 	RuleOIDCConfigured Rule = "OIDC_CONFIGURED"

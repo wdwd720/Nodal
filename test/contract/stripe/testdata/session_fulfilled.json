@@ -1,0 +1,25 @@
+{
+  "id": "cos_1ABC2DEF3ghi4jkl5",
+  "object": "crypto.onramp_session",
+  "client_secret": "cos_1ABC2DEF3ghi4jkl5_secret_contracttest",
+  "created": 1757073600,
+  "kyc_details_provided": true,
+  "livemode": false,
+  "metadata": {"deposit_id": "dep-1"},
+  "redirect_url": "https://crypto.link.com/?session_id=cos_1ABC2DEF3ghi4jkl5",
+  "status": "fulfillment_complete",
+  "transaction_details": {
+    "destination_amount": "95.890000",
+    "destination_currency": "usdc",
+    "destination_network": "solana",
+    "destination_currencies": ["usdc"],
+    "destination_networks": ["solana"],
+    "fees": {"network_fee_monetary": "0.07", "transaction_fee_monetary": "4.04"},
+    "lock_wallet_address": true,
+    "source_amount": "100.00",
+    "source_currency": "usd",
+    "transaction_id": "cxt_1ABC2DEF3ghi4jkl5",
+    "wallet_address": "So11111111111111111111111111111111111111112",
+    "wallet_addresses": {"solana": "So11111111111111111111111111111111111111112"}
+  }
+}

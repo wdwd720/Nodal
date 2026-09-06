@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"constraints":{"max_slippage_bps":10}}},"expect":{"decision":"REJECT","reason_codes":["RISK_SLIPPAGE"],"max_slippage_bps":10}}

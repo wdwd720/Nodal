@@ -1,0 +1,14 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "deadline": "2026-09-05T11:59:00Z"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "DEADLINE_IMPOSSIBLE"
+    ]
+  }
+}

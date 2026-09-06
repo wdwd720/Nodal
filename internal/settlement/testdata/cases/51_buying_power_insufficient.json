@@ -1,0 +1,15 @@
+{
+  "input_base": "base",
+  "patch": {
+    "buying_power": {
+      "available_now": "99.99"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "SETTLEMENT_ASSET_UNAVAILABLE"
+    ]
+  },
+  "note": "available settlement value below the notional"
+}

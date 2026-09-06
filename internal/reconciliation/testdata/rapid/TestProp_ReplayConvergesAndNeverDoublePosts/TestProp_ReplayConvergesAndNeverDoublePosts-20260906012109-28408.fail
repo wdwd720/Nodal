@@ -1,0 +1,16 @@
+# 2026/09/06 01:21:09.571955 [TestProp_ReplayConvergesAndNeverDoublePosts] [rapid] draw deliveries: 3
+# 2026/09/06 01:21:09.786089 [TestProp_ReplayConvergesAndNeverDoublePosts] 
+# 	Error Trace:	C:/Dev/Nodal/internal/reconciliation/property_integration_test.go:48
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:458
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:467
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:292
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:207
+# 	            				C:/Dev/Nodal/internal/reconciliation/property_integration_test.go:31
+# 	Error:      	Expected value not to be nil.
+# 	Test:       	TestProp_ReplayConvergesAndNeverDoublePosts
+# 	Messages:   	delivery 1 discovered no fill
+# 
+v0.4.8#4609209718822525421
+0x0
+0x38e38e38e38e4
+0x2

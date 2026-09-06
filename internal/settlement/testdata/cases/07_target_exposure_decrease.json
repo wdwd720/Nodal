@@ -1,0 +1,21 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "TARGET_EXPOSURE",
+      "notional_usd": null,
+      "target_exposure_usd": "200.00"
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "input_quantity": "666666666",
+    "notional_usd": "100.00",
+    "hash": "77a503c5826497f938cfd22f94e6ef7ff2e8e104e2cc0b729b65b72dfc4704c9"
+  },
+  "note": "TARGET_EXPOSURE 200 with 300 marked → reduce 100"
+}

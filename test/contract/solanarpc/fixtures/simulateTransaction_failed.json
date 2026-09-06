@@ -1,0 +1,8 @@
+{"jsonrpc": "2.0", "result": {"context": {"slot": 250000170, "apiVersion": "2.1.0"}, "value": {
+  "err": {"InstructionError": [0, {"Custom": 6001}]},
+  "logs": ["Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 invoke [1]", "Program log: Error: SlippageToleranceExceeded", "Program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4 failed: custom program error: 0x1771"],
+  "accounts": null,
+  "unitsConsumed": 30000,
+  "returnData": null,
+  "innerInstructions": null
+}}, "id": 1}

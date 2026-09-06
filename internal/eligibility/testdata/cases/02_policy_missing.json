@@ -1,0 +1,1 @@
+{"policy":"MISSING","input_base":"trade_us","input":{},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_POLICY_MISSING"]}}

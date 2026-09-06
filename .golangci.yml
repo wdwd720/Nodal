@@ -1,0 +1,215 @@
+# golangci-lint v2 configuration. Run via `make lint` (go run ./scripts/tool golangci-lint run ./...).
+# Financial invariants that need type-aware or structural checks beyond what these
+# linters express live in scripts/lintfin (run separately: go run ./scripts/lintfin).
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+  # Lint the tagged test trees too so integration/e2e/chaos code is held to the same bar.
+  build-tags:
+    - integration
+    - e2e
+    - chaos
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gosec
+    - revive
+    - unused
+    - ineffassign
+    - misspell
+    - bodyclose
+    - noctx
+    - gocritic
+    - sqlclosecheck
+    - rowserrcheck
+    - forbidigo
+    - depguard
+
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # readability over packing in domain structs
+        - shadow # flags the idiomatic `if _, err := f(); err != nil` inside functions with an outer err
+
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003"] # ST1000 package comments (doc.go enforced by review); ST1003 initialisms (we use ID, USD, BPS freely)
+
+    errcheck:
+      check-type-assertions: true
+      check-blank: false # an explicit `_ =` is a reviewed decision; implicit drops are not
+      exclude-functions:
+        # Formatted writes to arbitrary writers: failures surface through the
+        # writer's own Flush/Close, which stay checked.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+    gosec:
+      excludes:
+        - G104 # unhandled errors: errcheck reports these with better positions
+
+    revive:
+      # Minimal, opinion-free subset; naming/comment rules are left to review.
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: unreachable-code
+        - name: superfluous-else
+        - name: empty-block
+        - name: defer
+        - name: atomic
+        - name: waitgroup-by-value
+        - name: datarace
+        - name: unconditional-recursion
+
+    misspell:
+      locale: US
+      # State names fixed by the goal document and DB CHECK constraints.
+      ignore-rules:
+        - cancelled
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+      disabled-checks:
+        - commentedOutCode
+
+    forbidigo:
+      analyze-types: true
+      exclude-godoc-examples: true
+      forbid:
+        # No floating point in financial packages (CONVENTIONS non-negotiable #1).
+        # Scoped to internal/{money,ledger,capital,risk,positions,valuation,quote,settlement}
+        # by the exclusion rules below; scripts/lintfin enforces the same rule structurally.
+        - pattern: '^float(32|64)$'
+          msg: "floating-point types are forbidden in financial packages; use money.USD, money.BPS, money.Quantity or money.Price"
+        - pattern: '^strconv\.(ParseFloat|FormatFloat)$'
+          msg: "floating-point parsing is forbidden in financial packages; parse decimals exactly"
+        - pattern: '^big\.(NewFloat|ParseFloat)$'
+          msg: "big.Float is forbidden in financial packages; use big.Int-backed money.Quantity"
+        # Logging goes through slog via observability.Logger everywhere.
+        - pattern: '^fmt\.Print(|f|ln)$'
+          msg: "use slog via observability.Logger, not fmt.Print* (scripts/ and cmd/ CLIs are exempt)"
+        - pattern: '^(print|println)$'
+          msg: "use slog via observability.Logger"
+
+    depguard:
+      rules:
+        # CONVENTIONS "Agent authority": agent-facing packages import only read tools,
+        # prediction and intent creation.
+        # Every tree an agent's reasoning can reach. test/security's import scan
+        # covers these too, but only depguard forbids internal/capital and
+        # internal/risk/policy, so the two guards are not interchangeable and
+        # this list must track the agent trees as they are added.
+        # cmd/agent-worker is included deliberately: it is a composition root,
+        # but an agent worker that could reach signing or capital directly would
+        # defeat the whole boundary, and it wires those concerns through
+        # interfaces declared at the consumer instead. Verified at the time of
+        # widening: none of these three trees imports any denied package.
+        agent-authority:
+          list-mode: lax
+          files:
+            - "**/internal/agent/**"
+            - "**/internal/strategy/**"
+            - "**/internal/prediction/**"
+            - "**/internal/model/**"
+            - "**/cmd/agent-worker/**"
+          deny:
+            - pkg: github.com/nodal/controlplane/internal/signing
+              desc: agents never touch signing
+            - pkg: github.com/nodal/controlplane/internal/wallet
+              desc: agents never touch wallets
+            - pkg: github.com/nodal/controlplane/internal/admin
+              desc: agents never reach admin
+            - pkg: github.com/nodal/controlplane/internal/capital
+              desc: agents never mutate capital
+            - pkg: github.com/nodal/controlplane/internal/risk/policy
+              desc: agents never mutate risk policy
+        # Test-only fakes are never wired into production packages. depguard matches
+        # package prefixes only, so <pkg>test packages are enumerated here and the
+        # generic "<pkg>/<pkg>test" rule is enforced by scripts/lintfin.
+        no-test-fakes-in-production:
+          list-mode: lax
+          files:
+            - "**/internal/**"
+            - "**/cmd/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/nodal/controlplane/internal/testkit
+              desc: test-only helpers must not be imported by production code
+            - pkg: github.com/nodal/controlplane/internal/event/eventtest
+              desc: in-memory bus is test-only
+            - pkg: github.com/nodal/controlplane/internal/auth/devidp
+              desc: dev identity provider is wired only by config in LOCAL/TEST/DEV via cmd/api; see CONVENTIONS
+            - pkg: github.com/nodal/controlplane/internal/db/dbtest
+              desc: test-only
+            - pkg: github.com/nodal/controlplane/internal/clock/clocktest
+              desc: test-only
+            - pkg: github.com/nodal/controlplane/internal/providers/providertest
+              desc: test-only
+
+  exclusions:
+    generated: lax
+    rules:
+      # forbidigo float rules apply only to the financial packages, non-test files.
+      - linters: [forbidigo]
+        text: "floating-point"
+        path-except: '^internal/(money|ledger|capital|risk|positions|valuation|quote|settlement)/'
+      - linters: [forbidigo]
+        text: "floating-point"
+        path: '_test\.go$'
+      # CLIs and scripts legitimately print to stdout.
+      - linters: [forbidigo]
+        text: "slog via observability.Logger"
+        path: '^(scripts|cmd)/'
+      - linters: [forbidigo]
+        text: "slog via observability.Logger"
+        path: '_test\.go$'
+      # cmd/api is the composition root allowed to construct the dev IdP (constructor refuses PROD).
+      - linters: [depguard]
+        text: "devidp"
+        path: '^cmd/api/'
+      # Tests use math/rand, fixed permissions, and context-free helpers freely.
+      - linters: [gosec, noctx]
+        path: '_test\.go$'
+      - linters: [gosec]
+        path: '^scripts/'
+        text: "G204" # scripts intentionally exec go/docker with computed arguments
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false # never hide a second finding on the same line
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/nodal/controlplane
+    gofumpt:
+      module-path: github.com/nodal/controlplane
+      extra:
+        group-params: true

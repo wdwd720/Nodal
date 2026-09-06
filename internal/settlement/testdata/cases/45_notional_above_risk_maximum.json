@@ -1,0 +1,16 @@
+{
+  "input_base": "base",
+  "patch": {
+    "risk": {
+      "resulting_constraints": {
+        "max_notional_usd": "99.99"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "NOTIONAL_ABOVE_MAXIMUM"
+    ]
+  }
+}

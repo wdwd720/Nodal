@@ -1,0 +1,21 @@
+{
+  "input_base": "base",
+  "patch": {
+    "buying_power": {
+      "restrictions": [
+        {
+          "code": "KILL_SWITCH",
+          "detail": "GLOBAL_NEW_RISK_KILL",
+          "scope": "ACCOUNT",
+          "blocking": true
+        }
+      ]
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "KILL_SWITCH"
+    ]
+  }
+}

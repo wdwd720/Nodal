@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"intent":{"agent_id":"019917c0-0000-7000-8000-000000000a01"},"kill_switches":[{"kind":"AGENT_PAUSE","scope":"019917c0-0000-7000-8000-000000000a01"}]},"expect":{"decision":"REJECT","reason_codes":["RISK_KILL_SWITCH"]}}

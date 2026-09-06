@@ -247,7 +247,7 @@ const (
 	secHTTP       = "HTTP"
 	secDatabase   = "Database (Postgres)"
 	secRedis      = "Redis"
-	secRedpanda   = "Redpanda (event bus)"
+	secRedpanda   = "Redpanda (event bus)" //nolint:gosec // G101: section heading, not a credential
 	secClickHouse = "ClickHouse (analytics)"
 	secTemporal   = "Temporal (workflows)"
 	secArchive    = "Archive (S3-compatible evidence/audit storage)"
@@ -256,7 +256,7 @@ const (
 	secProviders  = "Providers"
 	secTelemetry  = "Telemetry"
 	secSeed       = "Seed"
-	secRetention  = "Retention (days per retention class)"
+	secRetention  = "Retention (days per retention class)" //nolint:gosec // G101: section heading, not a credential
 )
 
 func specs() []varSpec {
@@ -430,7 +430,7 @@ func specs() []varSpec {
 		req("CP_TELEMETRY_METRICS_INTERVAL", secTelemetry, "Metric export interval (Go duration).", "30s",
 			setDuration(func(c *Config) *time.Duration { return &c.Telemetry.MetricsInterval })),
 
-		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labelled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
+		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
 
 		req("CP_RETENTION_FINANCIAL_RECORD_DAYS", secRetention, "Retention of the FINANCIAL_RECORD class. Must be > 0 in STAGING/PROD.", "2555",

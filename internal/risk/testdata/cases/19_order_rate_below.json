@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"account":{"orders_in_window":29}},"expect":{"decision":"ALLOW","reason_codes":[]}}

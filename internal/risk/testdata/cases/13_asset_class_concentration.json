@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"account":{"asset_class_exposure_usd":{"CRYPTO_SPOT":"7800.00"},"total_exposure_usd":"7800.00"}},"expect":{"decision":"REJECT","reason_codes":["RISK_CONCENTRATION"]}}

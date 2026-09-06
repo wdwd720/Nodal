@@ -1,0 +1,1286 @@
+openapi: 3.1.0
+info:
+  title: Financial Control Plane API
+  version: 1.0.0-alpha
+  description: |
+    Versioned REST API (PART 108). Commands are POST with an `Idempotency-Key` header (PART 36);
+    queries are GET with cursor pagination. Errors are `application/problem+json` with a stable
+    machine-readable `code` (PART 37). Every money field is a decimal string in USD (`"1234.56"`) or an
+    exact base-unit integer string for asset quantities; no JSON numbers carry financial values.
+    Timestamps are RFC 3339 UTC. Realtime updates are delivered over SSE and are never authoritative
+    (PART 109): clients refetch canonical REST state after a stream gap.
+servers:
+  - url: /v1
+tags:
+  - name: auth
+  - name: accounts
+  - name: markets
+  - name: trading
+  - name: funding
+  - name: withdrawals
+  - name: activity
+  - name: admin
+  - name: system
+
+security:
+  - sessionCookie: []
+
+paths:
+  /auth/login:
+    get:
+      tags: [auth]
+      security: []
+      summary: Begin OIDC login (authorization-code + PKCE); redirects to the identity provider
+      parameters:
+        - in: query
+          name: step_up
+          schema: { type: boolean }
+          description: Request strong authentication (MFA/passkey) for a sensitive action
+      responses:
+        "302": { description: Redirect to the identity provider }
+        "503": { $ref: "#/components/responses/Problem" }
+  /auth/callback:
+    get:
+      tags: [auth]
+      security: []
+      summary: OIDC callback; establishes a server-side session cookie
+      parameters:
+        - { in: query, name: code, required: true, schema: { type: string } }
+        - { in: query, name: state, required: true, schema: { type: string } }
+      responses:
+        "302": { description: Redirect to the application }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current session
+      responses:
+        "204": { description: Session revoked }
+  /me:
+    get:
+      tags: [auth]
+      summary: Current principal and the accounts it may act on
+      responses:
+        "200":
+          description: Principal
+          content: { application/json: { schema: { $ref: "#/components/schemas/Principal" } } }
+        "401": { $ref: "#/components/responses/Problem" }
+  /sessions:
+    get:
+      tags: [auth]
+      summary: List the caller's sessions (device listing)
+      responses:
+        "200":
+          description: Sessions
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/SessionSummary" } } } }
+  /sessions/{sessionId}:
+    delete:
+      tags: [auth]
+      summary: Revoke one of the caller's sessions
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /accounts:
+    get:
+      tags: [accounts]
+      summary: Accounts owned by the caller
+      responses:
+        "200":
+          description: Accounts
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Account" } } } }
+  /accounts/{accountId}:
+    get:
+      tags: [accounts]
+      parameters: [{ $ref: "#/components/parameters/AccountId" }]
+      responses:
+        "200":
+          description: Account
+          content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /accounts/{accountId}/buying-power:
+    get:
+      tags: [accounts]
+      summary: Buying power computed now by the backend (PART 25); never cached as truth
+      parameters:
+        - { $ref: "#/components/parameters/AccountId" }
+        - in: query
+          name: purpose
+          schema: { type: string, enum: [DISPLAY, TRADE, WITHDRAWAL] }
+          description: Which restrictions are blocking; figures are identical for every purpose
+      responses:
+        "200":
+          description: Buying power
+          content: { application/json: { schema: { $ref: "#/components/schemas/BuyingPower" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /accounts/{accountId}/holdings:
+    get:
+      tags: [accounts]
+      summary: Holdings with units, USD mark, basis and unrealized P&L
+      parameters: [{ $ref: "#/components/parameters/AccountId" }]
+      responses:
+        "200":
+          description: Holdings
+          content: { application/json: { schema: { $ref: "#/components/schemas/HoldingsResponse" } } }
+  /accounts/{accountId}/ledger/transactions:
+    get:
+      tags: [accounts]
+      summary: Journal transactions for the account (append-only history), newest first
+      parameters:
+        - { $ref: "#/components/parameters/AccountId" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of journal transactions
+          content: { application/json: { schema: { $ref: "#/components/schemas/JournalTransactionPage" } } }
+  /accounts/{accountId}/activity:
+    get:
+      tags: [activity]
+      summary: Activity timeline (event → prediction → intent → eligibility → risk → execution → fill → reconciliation)
+      parameters:
+        - { $ref: "#/components/parameters/AccountId" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of activity items
+          content: { application/json: { schema: { $ref: "#/components/schemas/ActivityPage" } } }
+  /accounts/{accountId}/export:
+    get:
+      tags: [activity]
+      summary: Export journal transactions and fills as CSV or JSON (PART 202)
+      parameters:
+        - { $ref: "#/components/parameters/AccountId" }
+        - { in: query, name: format, schema: { type: string, enum: [csv, json], default: json } }
+        - { in: query, name: from, schema: { type: string, format: date-time } }
+        - { in: query, name: to, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: Export document
+          content:
+            application/json: { schema: { type: object } }
+            text/csv: { schema: { type: string } }
+
+  /assets:
+    get:
+      tags: [markets]
+      summary: Registered assets with chain, mint, decimals and safety status
+      responses:
+        "200":
+          description: Assets
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Asset" } } } }
+  /instruments:
+    get:
+      tags: [markets]
+      summary: Tradable instruments (V1 spot pairs) with status
+      responses:
+        "200":
+          description: Instruments
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Instrument" } } } }
+  /instruments/{instrumentId}:
+    get:
+      tags: [markets]
+      parameters: [{ $ref: "#/components/parameters/InstrumentId" }]
+      responses:
+        "200":
+          description: Instrument with venue listings
+          content: { application/json: { schema: { $ref: "#/components/schemas/InstrumentDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /quotes/preview:
+    post:
+      tags: [trading]
+      summary: Non-binding quote preview with full fee disclosure (no money moves, no reservation)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/QuotePreviewRequest" } } }
+      responses:
+        "200":
+          description: Quote disclosure
+          content: { application/json: { schema: { $ref: "#/components/schemas/QuoteDisclosure" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /intents:
+    post:
+      tags: [trading]
+      summary: Submit a typed trade intent (manual trading entry point; PART 35)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SubmitIntentRequest" } } }
+      responses:
+        "202":
+          description: Intent accepted and processing
+          content: { application/json: { schema: { $ref: "#/components/schemas/TradeIntent" } } }
+        "200":
+          description: Idempotent replay of a previously accepted intent
+          content: { application/json: { schema: { $ref: "#/components/schemas/TradeIntent" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [trading]
+      summary: Intents for an account, newest first
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of intents
+          content: { application/json: { schema: { $ref: "#/components/schemas/TradeIntentPage" } } }
+  /intents/{intentId}:
+    get:
+      tags: [trading]
+      parameters: [{ $ref: "#/components/parameters/IntentId" }]
+      responses:
+        "200":
+          description: Intent with its decisions, plan, order and fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/TradeIntentDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /intents/{intentId}/cancel:
+    post:
+      tags: [trading]
+      summary: Request cancellation (CANCEL_REQUESTED; only external confirmation yields CANCELLED — PART 227)
+      parameters:
+        - { $ref: "#/components/parameters/IntentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "202":
+          description: Cancellation requested
+          content: { application/json: { schema: { $ref: "#/components/schemas/TradeIntent" } } }
+        "409": { $ref: "#/components/responses/Problem" }
+  /orders:
+    get:
+      tags: [trading]
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of orders
+          content: { application/json: { schema: { $ref: "#/components/schemas/OrderPage" } } }
+  /orders/{orderId}:
+    get:
+      tags: [trading]
+      parameters: [{ $ref: "#/components/parameters/OrderId" }]
+      responses:
+        "200":
+          description: Order with attempts and fills
+          content: { application/json: { schema: { $ref: "#/components/schemas/OrderDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /funding/deposits:
+    post:
+      tags: [funding]
+      summary: Start a fiat-to-USDC funding session (redirect success never credits money — PART 162)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StartDepositRequest" } } }
+      responses:
+        "202":
+          description: Deposit created with provider session
+          content: { application/json: { schema: { $ref: "#/components/schemas/Deposit" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/Deposit" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [funding]
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of deposits
+          content: { application/json: { schema: { $ref: "#/components/schemas/DepositPage" } } }
+  /funding/deposits/{depositId}:
+    get:
+      tags: [funding]
+      parameters: [{ $ref: "#/components/parameters/DepositId" }]
+      responses:
+        "200":
+          description: Deposit with transition history
+          content: { application/json: { schema: { $ref: "#/components/schemas/DepositDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /withdrawals:
+    post:
+      tags: [withdrawals]
+      summary: Request a withdrawal (requires step-up; the WITHDRAWALS capability is DISABLED in V1 — PART 94)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/WithdrawalRequest" } } }
+      responses:
+        "202":
+          description: Withdrawal requested
+          content: { application/json: { schema: { $ref: "#/components/schemas/Withdrawal" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422":
+          description: CAPABILITY_NOT_APPROVED while the gate is disabled
+          content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } }
+
+  /events/stream:
+    get:
+      tags: [activity]
+      summary: Server-sent events for balances, orders, deposits and agent state (not authoritative)
+      parameters:
+        - in: header
+          name: Last-Event-ID
+          schema: { type: string }
+          description: Resume cursor; on a gap the server sends a `resync` event and the client must refetch REST state
+      responses:
+        "200":
+          description: text/event-stream of `Event` objects (`id`, `event`, `data` = JSON `StreamEvent`)
+          content: { text/event-stream: { schema: { type: string } } }
+
+  /webhooks/{provider}:
+    post:
+      tags: [system]
+      security: []
+      summary: Provider webhook ingestion (signature-verified, persisted before processing, idempotent — PART 30)
+      parameters:
+        - { in: path, name: provider, required: true, schema: { type: string, enum: [stripe] } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        "200": { description: Acknowledged (including duplicates) }
+        "400": { description: Signature or replay validation failed }
+
+  /admin/accounts:
+    get:
+      tags: [admin]
+      summary: Search accounts (operator roles)
+      parameters:
+        - { in: query, name: q, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Accounts
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccountPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /admin/accounts/{accountId}/status:
+    post:
+      tags: [admin]
+      summary: Freeze / restrict / reactivate an account (reason required; audited; no balance editing exists)
+      parameters:
+        - { $ref: "#/components/parameters/AccountId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AccountStatusChange" } } }
+      responses:
+        "200":
+          description: Updated account
+          content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /admin/gates:
+    get:
+      tags: [admin]
+      summary: Production capability gates for this environment
+      responses:
+        "200":
+          description: Gates
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CapabilityGate" } } } }
+  /admin/gates/{capability}/{action}:
+    post:
+      tags: [admin]
+      summary: Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up)
+      parameters:
+        - { in: path, name: capability, required: true, schema: { $ref: "#/components/schemas/Capability" } }
+        - { in: path, name: action, required: true, schema: { type: string, enum: [propose, approve, activate, suspend, resume, revoke] } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/GateActionRequest" } } }
+      responses:
+        "200":
+          description: Gate after the transition
+          content: { application/json: { schema: { $ref: "#/components/schemas/CapabilityGate" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /admin/kill-switches:
+    get:
+      tags: [admin]
+      responses:
+        "200":
+          description: Active and inactive switches
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/KillSwitch" } } } }
+    post:
+      tags: [admin]
+      summary: Activate (fast, single operator) or release (step-up; SEVERE needs an approved admin action) a kill switch
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/KillSwitchRequest" } } }
+      responses:
+        "200":
+          description: Switch state
+          content: { application/json: { schema: { $ref: "#/components/schemas/KillSwitch" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /admin/actions:
+    get:
+      tags: [admin]
+      summary: Pending and recent controlled administrative actions
+      parameters:
+        - { in: query, name: status, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Actions
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminActionPage" } } }
+    post:
+      tags: [admin]
+      summary: Propose a controlled action (reason required; step-up)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdminActionProposal" } } }
+      responses:
+        "201":
+          description: Proposed
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminAction" } } }
+  /admin/actions/{actionId}/{decision}:
+    post:
+      tags: [admin]
+      summary: Approve or reject a proposed action (approver ≠ proposer; step-up)
+      parameters:
+        - { in: path, name: actionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: path, name: decision, required: true, schema: { type: string, enum: [approve, reject, execute] } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { note: { type: string } } } } }
+      responses:
+        "200":
+          description: Action after the decision
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminAction" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /admin/reconciliation/records:
+    get:
+      tags: [admin]
+      parameters:
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: account_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Reconciliation records
+          content: { application/json: { schema: { $ref: "#/components/schemas/ReconciliationRecordPage" } } }
+  /admin/reconciliation/records/{recordId}/resolve:
+    post:
+      tags: [admin]
+      summary: Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
+      parameters:
+        - { in: path, name: recordId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReconciliationResolution" } } }
+      responses:
+        "200":
+          description: Record after resolution
+          content: { application/json: { schema: { $ref: "#/components/schemas/ReconciliationRecord" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /admin/instruments/{instrumentId}/status:
+    post:
+      tags: [admin]
+      summary: Change instrument status (ACTIVE / CLOSE_ONLY / RESTRICTED / HALTED / DELISTING / DELISTED)
+      parameters:
+        - { $ref: "#/components/parameters/InstrumentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StatusChange" } } }
+      responses:
+        "200":
+          description: Instrument
+          content: { application/json: { schema: { $ref: "#/components/schemas/Instrument" } } }
+  /admin/providers:
+    get:
+      tags: [admin]
+      summary: Provider health and verification labels
+      responses:
+        "200":
+          description: Providers
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ProviderStatus" } } } }
+
+  /healthz:
+    get:
+      tags: [system]
+      security: []
+      responses:
+        "200": { description: Process is alive }
+  /readyz:
+    get:
+      tags: [system]
+      security: []
+      summary: Ready when the database is reachable and configuration validated; never reports provider liveness as readiness
+      responses:
+        "200": { description: Ready }
+        "503": { description: Not ready }
+  /version:
+    get:
+      tags: [system]
+      security: []
+      summary: Build version and non-secret configuration hash (PART 222)
+      responses:
+        "200":
+          description: Version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [build_version, config_hash, environment]
+                properties:
+                  build_version: { type: string }
+                  config_hash: { type: string }
+                  environment: { type: string }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-cp_session
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._:-]+$'
+      description: >-
+        Same key + same body replays the original result; same key + different
+        body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but
+        constrained to an unambiguous charset: it becomes part of a primary key,
+        is echoed in responses, and is written to logs and audit records, so
+        control characters and quoting metacharacters are refused at the edge
+        rather than escaped correctly at every one of those sinks forever. Every
+        legitimate key already satisfies this — newIdempotencyKey() returns a
+        UUID.
+    Cursor:
+      in: query
+      name: cursor
+      schema: { type: string }
+    Limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    AccountId: { in: path, name: accountId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    InstrumentId: { in: path, name: instrumentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    IntentId: { in: path, name: intentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    OrderId: { in: path, name: orderId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    DepositId: { in: path, name: depositId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    SessionId: { in: path, name: sessionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+  responses:
+    Problem:
+      description: Structured error
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      description: UUIDv7 in canonical form
+    USD:
+      type: string
+      pattern: '^-?[0-9]+\.[0-9]{2}$'
+      description: USD as a decimal string with exactly two fraction digits
+      examples: ["1234.56"]
+    Quantity:
+      type: string
+      pattern: '^-?[0-9]+$'
+      description: Exact asset base units as an integer string
+      examples: ["1500000000"]
+    BPS:
+      type: integer
+      minimum: 0
+      maximum: 10000
+      description: Basis points; 10000 == 100%
+    Timestamp:
+      type: string
+      format: date-time
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          description: Stable machine-readable code (INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …)
+        fields: { type: object, additionalProperties: true }
+        request_id: { type: string }
+    Page:
+      type: object
+      required: [next_cursor]
+      properties:
+        next_cursor: { type: [string, "null"] }
+    Principal:
+      type: object
+      required: [subject_id, actor_type, roles, account_ids, auth_time, amr]
+      properties:
+        subject_id: { $ref: "#/components/schemas/UUID" }
+        actor_type: { type: string, enum: [USER, OPERATOR] }
+        roles: { type: array, items: { type: string } }
+        account_ids: { type: array, items: { $ref: "#/components/schemas/UUID" } }
+        auth_time: { $ref: "#/components/schemas/Timestamp" }
+        amr: { type: array, items: { type: string } }
+        step_up_valid_until: { $ref: "#/components/schemas/Timestamp" }
+    SessionSummary:
+      type: object
+      required: [id, created_at, last_seen_at, expires_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        last_seen_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        ip: { type: string }
+        user_agent: { type: string }
+        device_label: { type: string }
+        revoked_at: { $ref: "#/components/schemas/Timestamp" }
+        current: { type: boolean }
+    Account:
+      type: object
+      required: [id, kind, status, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, enum: [CUSTOMER, CANARY, PLATFORM] }
+        status: { type: string, enum: [ACTIVE, RESTRICTED, FROZEN, CLOSED] }
+        status_reason: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    AccountPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Account" } }
+    AccountStatusChange:
+      type: object
+      required: [to, reason]
+      properties:
+        to: { type: string, enum: [ACTIVE, RESTRICTED, FROZEN, CLOSED] }
+        reason: { type: string, minLength: 8 }
+    BuyingPower:
+      type: object
+      required: [portfolio_value, buying_power, available_now, reserved, pending, withdrawable, underlying_balances, haircuts, restrictions, policy_version, as_of, purpose]
+      properties:
+        portfolio_value: { $ref: "#/components/schemas/USD" }
+        buying_power: { $ref: "#/components/schemas/USD" }
+        available_now: { $ref: "#/components/schemas/USD" }
+        reserved: { $ref: "#/components/schemas/USD" }
+        pending: { $ref: "#/components/schemas/USD" }
+        withdrawable: { $ref: "#/components/schemas/USD" }
+        underlying_balances:
+          type: array
+          items:
+            type: object
+            required: [asset, symbol, decimals, quantity, usd_value, price_ref, status]
+            properties:
+              asset: { $ref: "#/components/schemas/UUID" }
+              symbol: { type: string }
+              decimals: { type: integer }
+              quantity: { $ref: "#/components/schemas/Quantity" }
+              usd_value: { $ref: "#/components/schemas/USD" }
+              price_ref: { type: string }
+              status: { type: string }
+        haircuts:
+          type: array
+          items:
+            type: object
+            required: [asset, factor_bps, reason]
+            properties:
+              asset: { $ref: "#/components/schemas/UUID" }
+              factor_bps: { $ref: "#/components/schemas/BPS" }
+              reason: { type: string }
+        restrictions:
+          type: array
+          items:
+            type: object
+            required: [code, detail, scope, blocking]
+            properties:
+              code: { type: string }
+              detail: { type: string }
+              asset: { $ref: "#/components/schemas/UUID" }
+              scope: { type: string, enum: [ACCOUNT, WITHDRAWAL, ASSET] }
+              blocking: { type: boolean }
+        policy_version: { type: string }
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        purpose: { type: string, enum: [DISPLAY, TRADE, WITHDRAWAL, AGENT_DEPLOY] }
+    HoldingsResponse:
+      type: object
+      required: [holdings, as_of]
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        holdings:
+          type: array
+          items:
+            type: object
+            required: [asset, symbol, decimals, quantity, usd_mark, cost_basis_usd, unrealized_pnl_usd, location]
+            properties:
+              asset: { $ref: "#/components/schemas/UUID" }
+              symbol: { type: string }
+              chain: { type: string }
+              mint_address: { type: string }
+              decimals: { type: integer }
+              quantity: { $ref: "#/components/schemas/Quantity" }
+              usd_mark: { $ref: "#/components/schemas/USD" }
+              price_ref: { type: string }
+              cost_basis_usd: { $ref: "#/components/schemas/USD" }
+              unrealized_pnl_usd: { $ref: "#/components/schemas/USD" }
+              realized_pnl_usd: { $ref: "#/components/schemas/USD" }
+              location: { type: string, description: "custody location, e.g. embedded wallet address" }
+    JournalTransaction:
+      type: object
+      required: [id, kind, reference, effective_at, posted_at, entries, content_hash]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        reference: { type: object, required: [type, id], properties: { type: { type: string }, id: { type: string } } }
+        reversal_of: { $ref: "#/components/schemas/UUID" }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+        posted_at: { $ref: "#/components/schemas/Timestamp" }
+        description: { type: string }
+        reason_code: { type: string }
+        content_hash: { type: string }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [seq, account_code, asset, side, quantity]
+            properties:
+              seq: { type: integer }
+              account_code: { type: string }
+              asset: { $ref: "#/components/schemas/UUID" }
+              side: { type: string, enum: [DEBIT, CREDIT] }
+              quantity: { $ref: "#/components/schemas/Quantity" }
+              usd_value: { $ref: "#/components/schemas/USD" }
+    JournalTransactionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/JournalTransaction" } }
+    ActivityItem:
+      type: object
+      required: [id, kind, occurred_at, summary]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [DATA_EVENT, PREDICTION, INTENT, ELIGIBILITY, RISK, PLAN, EXECUTION, FILL, RECONCILIATION, LEDGER, FUNDING, SECURITY] }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        summary: { type: string }
+        correlation_id: { type: string }
+        references: { type: object, additionalProperties: { type: string } }
+        detail: { type: object, additionalProperties: true }
+    ActivityPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ActivityItem" } }
+    Asset:
+      type: object
+      required: [id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, risk_class, status]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        chain: { type: string }
+        mint_address: { type: string }
+        kind: { type: string, enum: [NATIVE, SPL_TOKEN, SPL_TOKEN_2022, FIAT] }
+        symbol: { type: string }
+        name: { type: string }
+        decimals: { type: integer }
+        is_stablecoin: { type: boolean }
+        peg_currency: { type: string }
+        risk_class: { type: string }
+        status: { type: string, enum: [ACTIVE, CLOSE_ONLY, RESTRICTED, HALTED, DELISTING, DELISTED] }
+        token_extensions: { type: array, items: { type: string } }
+    Instrument:
+      type: object
+      required: [id, type, canonical_name, settlement_asset, risk_class, status, active_from]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        type: { type: string, enum: [SPOT_PAIR, EVENT_OUTCOME] }
+        canonical_name: { type: string }
+        base_asset: { $ref: "#/components/schemas/UUID" }
+        quote_asset: { $ref: "#/components/schemas/UUID" }
+        settlement_asset: { $ref: "#/components/schemas/UUID" }
+        risk_class: { type: string }
+        status: { type: string, enum: [ACTIVE, CLOSE_ONLY, RESTRICTED, HALTED, DELISTING, DELISTED] }
+        active_from: { $ref: "#/components/schemas/Timestamp" }
+        active_until: { $ref: "#/components/schemas/Timestamp" }
+    VenueListing:
+      type: object
+      required: [id, venue, venue_status, status, network, base_precision, quote_precision, min_notional_quote]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        venue: { type: string }
+        venue_status: { type: string, enum: [ACTIVE, DEGRADED, DISABLED] }
+        status: { type: string, enum: [ACTIVE, DEGRADED, DISABLED] }
+        network: { type: string }
+        base_mint: { type: string }
+        quote_mint: { type: string }
+        base_precision: { type: integer }
+        quote_precision: { type: integer }
+        min_notional_quote: { $ref: "#/components/schemas/Quantity" }
+        max_notional_quote: { $ref: "#/components/schemas/Quantity" }
+    InstrumentDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Instrument" }
+        - type: object
+          required: [base, quote, listings]
+          properties:
+            base: { $ref: "#/components/schemas/Asset" }
+            quote: { $ref: "#/components/schemas/Asset" }
+            listings: { type: array, items: { $ref: "#/components/schemas/VenueListing" } }
+    IntentAction:
+      type: string
+      enum: [ACQUIRE_NOTIONAL, REDUCE_NOTIONAL, CLOSE_POSITION, TARGET_EXPOSURE]
+    IntentConstraints:
+      type: object
+      properties:
+        max_slippage_bps: { $ref: "#/components/schemas/BPS" }
+        max_fee_bps: { $ref: "#/components/schemas/BPS" }
+        max_price_impact_bps: { $ref: "#/components/schemas/BPS" }
+        min_receive: { $ref: "#/components/schemas/Quantity" }
+        allowed_venues: { type: array, items: { type: string } }
+        quote_freshness_ms: { type: integer, minimum: 100 }
+        execution_deadline: { $ref: "#/components/schemas/Timestamp" }
+    QuotePreviewRequest:
+      type: object
+      required: [account_id, instrument_id, action]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/IntentAction" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        constraints: { $ref: "#/components/schemas/IntentConstraints" }
+    QuoteDisclosure:
+      type: object
+      required: [quote_id, provider, venue, input_asset, input_quantity, output_asset, expected_output, minimum_output, price_impact_bps, slippage_bps, venue_fee, network_fee_estimate, platform_fee, platform_fee_bps, total_estimated_cost_usd, received_at, expires_at, route]
+      properties:
+        quote_id: { $ref: "#/components/schemas/UUID" }
+        provider: { type: string }
+        venue: { type: string }
+        input_asset: { $ref: "#/components/schemas/UUID" }
+        input_quantity: { $ref: "#/components/schemas/Quantity" }
+        output_asset: { $ref: "#/components/schemas/UUID" }
+        expected_output: { $ref: "#/components/schemas/Quantity" }
+        minimum_output: { $ref: "#/components/schemas/Quantity" }
+        effective_price: { type: string, description: "decimal string, quote per base" }
+        price_impact_bps: { $ref: "#/components/schemas/BPS" }
+        slippage_bps: { $ref: "#/components/schemas/BPS" }
+        venue_fee: { $ref: "#/components/schemas/Quantity" }
+        venue_fee_asset: { $ref: "#/components/schemas/UUID" }
+        network_fee_estimate: { $ref: "#/components/schemas/Quantity" }
+        network_fee_asset: { $ref: "#/components/schemas/UUID" }
+        platform_fee: { $ref: "#/components/schemas/Quantity" }
+        platform_fee_bps: { $ref: "#/components/schemas/BPS" }
+        fee_policy_version: { type: string }
+        total_estimated_cost_usd: { $ref: "#/components/schemas/USD" }
+        received_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        route: { type: array, items: { type: object, additionalProperties: true } }
+    SubmitIntentRequest:
+      type: object
+      required: [account_id, instrument_id, action, mode]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/IntentAction" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        target_exposure_usd: { $ref: "#/components/schemas/USD" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        constraints: { $ref: "#/components/schemas/IntentConstraints" }
+        deadline: { $ref: "#/components/schemas/Timestamp" }
+        mode: { type: string, enum: [PAPER, LIVE], description: "Manual trades are PAPER until LIVE_MANUAL_TRADING is ACTIVE" }
+        quote_id: { $ref: "#/components/schemas/UUID", description: "Preview quote the user saw; the planner re-quotes and validates freshness" }
+    TradeIntent:
+      type: object
+      required: [id, account_id, actor_type, action, instrument_id, status, mode, requested_at, received_at, correlation_id]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        actor_type: { type: string, enum: [USER, AGENT, OPERATOR] }
+        agent_id: { $ref: "#/components/schemas/UUID" }
+        action: { $ref: "#/components/schemas/IntentAction" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        notional_usd: { $ref: "#/components/schemas/USD" }
+        target_exposure_usd: { $ref: "#/components/schemas/USD" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        constraints: { $ref: "#/components/schemas/IntentConstraints" }
+        status: { type: string, enum: [RECEIVED, ELIGIBILITY_CHECKED, RISK_CHECKED, RESERVED, PLANNED, EXECUTING, COMPLETED, REJECTED, EXPIRED, CANCELLED, FAILED, NO_VALID_PLAN] }
+        rejection_code: { type: string }
+        mode: { type: string, enum: [BACKTEST, PAPER, SHADOW, CANARY, LIMITED, LIVE] }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        received_at: { $ref: "#/components/schemas/Timestamp" }
+        deadline: { $ref: "#/components/schemas/Timestamp" }
+        terminal_at: { $ref: "#/components/schemas/Timestamp" }
+        correlation_id: { type: string }
+        order_id: { $ref: "#/components/schemas/UUID" }
+        plan_id: { $ref: "#/components/schemas/UUID" }
+    TradeIntentPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/TradeIntent" } }
+    Decision:
+      type: object
+      required: [id, decision, policy_version, reason_codes, evaluated_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        decision: { type: string }
+        policy_version: { type: string }
+        reason_codes: { type: array, items: { type: string } }
+        evaluated_at: { $ref: "#/components/schemas/Timestamp" }
+    TradeIntentDetail:
+      allOf:
+        - { $ref: "#/components/schemas/TradeIntent" }
+        - type: object
+          properties:
+            eligibility: { $ref: "#/components/schemas/Decision" }
+            risk: { $ref: "#/components/schemas/Decision" }
+            reservation: { type: object, additionalProperties: true }
+            plan: { type: object, additionalProperties: true }
+            order: { $ref: "#/components/schemas/Order" }
+            transitions:
+              type: array
+              items:
+                type: object
+                required: [from, to, occurred_at]
+                properties:
+                  from: { type: string }
+                  to: { type: string }
+                  reason: { type: string }
+                  occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    Order:
+      type: object
+      required: [id, intent_id, account_id, instrument_id, side, mode, status, input_asset, input_quantity, output_asset, min_output_quantity, filled_input_quantity, filled_output_quantity, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        intent_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        instrument_id: { $ref: "#/components/schemas/UUID" }
+        side: { type: string, enum: [BUY, SELL] }
+        mode: { type: string }
+        status: { type: string, enum: [CREATED, VALIDATED, CAPITAL_RESERVED, PLANNED, SUBMITTING, SUBMITTED, ACKNOWLEDGED, PARTIALLY_FILLED, FILLED, SETTLING, SETTLED, REJECTED, EXPIRED, CANCEL_REQUESTED, CANCELLED, SUBMISSION_UNKNOWN, RECONCILIATION_REQUIRED, FAILED_FINAL] }
+        input_asset: { $ref: "#/components/schemas/UUID" }
+        input_quantity: { $ref: "#/components/schemas/Quantity" }
+        output_asset: { $ref: "#/components/schemas/UUID" }
+        min_output_quantity: { $ref: "#/components/schemas/Quantity" }
+        filled_input_quantity: { $ref: "#/components/schemas/Quantity" }
+        filled_output_quantity: { $ref: "#/components/schemas/Quantity" }
+        rejection_code: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        terminal_at: { $ref: "#/components/schemas/Timestamp" }
+    OrderPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Order" } }
+    Fill:
+      type: object
+      required: [id, venue, external_fill_id, input_quantity, output_quantity, finality, observed_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        venue: { type: string }
+        external_fill_id: { type: string }
+        tx_signature: { type: string }
+        slot: { type: integer }
+        input_quantity: { $ref: "#/components/schemas/Quantity" }
+        output_quantity: { $ref: "#/components/schemas/Quantity" }
+        network_fee_quantity: { $ref: "#/components/schemas/Quantity" }
+        venue_fee_quantity: { $ref: "#/components/schemas/Quantity" }
+        platform_fee_quantity: { $ref: "#/components/schemas/Quantity" }
+        finality: { type: string, enum: [OBSERVED, CONFIRMED, FINALIZED] }
+        observed_at: { $ref: "#/components/schemas/Timestamp" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+    OrderDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Order" }
+        - type: object
+          properties:
+            attempts:
+              type: array
+              items:
+                type: object
+                required: [id, attempt_no, status, created_at]
+                properties:
+                  id: { $ref: "#/components/schemas/UUID" }
+                  attempt_no: { type: integer }
+                  status: { type: string }
+                  finality: { type: string }
+                  tx_signature: { type: string }
+                  submitted_at: { $ref: "#/components/schemas/Timestamp" }
+                  confirmed_at: { $ref: "#/components/schemas/Timestamp" }
+                  finalized_at: { $ref: "#/components/schemas/Timestamp" }
+                  created_at: { $ref: "#/components/schemas/Timestamp" }
+            fills: { type: array, items: { $ref: "#/components/schemas/Fill" } }
+    StartDepositRequest:
+      type: object
+      required: [account_id, fiat_amount, fiat_currency]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        fiat_amount: { type: string, pattern: '^[0-9]+\.[0-9]{2}$' }
+        fiat_currency: { type: string, enum: [USD] }
+        funding_source_id: { $ref: "#/components/schemas/UUID" }
+    Deposit:
+      type: object
+      required: [id, account_id, provider, status, expected_asset, buying_power_eligible, withdrawal_eligible, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        provider: { type: string }
+        provider_session_id: { type: string }
+        client_secret_ref: { type: string, description: "Provider client secret for the embedded/hosted onramp UI, returned once at creation" }
+        status: { type: string, enum: [CREATED, SESSION_CREATED, CUSTOMER_ACTION_REQUIRED, PROVIDER_PROCESSING, PROVIDER_CONFIRMED, SETTLEMENT_OBSERVED, RECONCILED, AVAILABLE, FAILED, EXPIRED, CANCELLED, REVERSED, REVIEW_REQUIRED] }
+        fiat_amount: { type: string }
+        fiat_currency: { type: string }
+        expected_asset: { $ref: "#/components/schemas/UUID" }
+        expected_quantity: { $ref: "#/components/schemas/Quantity" }
+        observed_quantity: { $ref: "#/components/schemas/Quantity" }
+        tx_signature: { type: string }
+        buying_power_eligible: { type: boolean }
+        withdrawal_eligible: { type: boolean }
+        reversible_until: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        available_at: { $ref: "#/components/schemas/Timestamp" }
+    DepositPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Deposit" } }
+    DepositDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Deposit" }
+        - type: object
+          properties:
+            transitions:
+              type: array
+              items:
+                type: object
+                required: [from, to, occurred_at]
+                properties:
+                  from: { type: string }
+                  to: { type: string }
+                  reason: { type: string }
+                  occurred_at: { $ref: "#/components/schemas/Timestamp" }
+            journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+    WithdrawalRequest:
+      type: object
+      required: [account_id, asset_id, quantity, destination_address]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        destination_address: { type: string }
+    Withdrawal:
+      type: object
+      required: [id, account_id, asset_id, quantity, destination_address, status, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        destination_address: { type: string }
+        status: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    StreamEvent:
+      type: object
+      required: [id, type, occurred_at]
+      properties:
+        id: { type: string, description: "cursor; monotonically increasing per connection" }
+        type: { type: string, enum: [buying_power.changed, order.transitioned, intent.transitioned, deposit.transitioned, agent.state, resync] }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        resource_id: { type: string }
+        data: { type: object, additionalProperties: true }
+    Capability:
+      type: string
+      enum: [LIVE_FUNDING, LIVE_MANUAL_TRADING, LIVE_AGENT_TRADING, WITHDRAWALS, SOCIAL_DATA_PERSISTENCE, MARKETPLACE, CROSS_CHAIN, PREDICTION_MARKETS, SECURITIES, CEX_TRADING]
+    CapabilityGate:
+      type: object
+      required: [capability, environment, state, approval_version, active]
+      properties:
+        capability: { $ref: "#/components/schemas/Capability" }
+        environment: { type: string }
+        state: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED] }
+        active: { type: boolean, description: "Result of the five-condition activation check, not just the row state" }
+        inactive_reason: { type: string }
+        approval_version: { type: integer }
+        legal_review_ref: { type: string }
+        provider_contract_ref: { type: string }
+        risk_approval_ref: { type: string }
+        security_approval_ref: { type: string }
+        approvers: { type: array, items: { type: object, additionalProperties: true } }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+    GateActionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 8 }
+        legal_review_ref: { type: string }
+        provider_contract_ref: { type: string }
+        risk_approval_ref: { type: string }
+        security_approval_ref: { type: string }
+        evidence_hashes: { type: array, items: { type: string } }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        note: { type: string }
+    KillSwitch:
+      type: object
+      required: [kind, scope_id, active, severity]
+      properties:
+        kind: { type: string, enum: [GLOBAL_NEW_RISK_KILL, ACCOUNT_FREEZE, AGENT_PAUSE, STRATEGY_VERSION_DISABLE, VENUE_DISABLE, INSTRUMENT_CLOSE_ONLY, INSTRUMENT_HALT, CHAIN_DISABLE_NEW_ACTIONS, PROVIDER_DISABLE_NEW_ACTIONS, FUNDING_DISABLE, WITHDRAWALS_DISABLE, MODEL_DISABLE] }
+        scope_id: { type: string }
+        active: { type: boolean }
+        severity: { type: string, enum: [STANDARD, SEVERE] }
+        reason: { type: string }
+        activated_at: { $ref: "#/components/schemas/Timestamp" }
+        released_at: { $ref: "#/components/schemas/Timestamp" }
+    KillSwitchRequest:
+      type: object
+      required: [kind, action, reason]
+      properties:
+        kind: { type: string }
+        scope_id: { type: string, default: "*" }
+        action: { type: string, enum: [activate, release] }
+        reason: { type: string, minLength: 8 }
+        approval_id: { $ref: "#/components/schemas/UUID", description: "Required to release a SEVERE switch" }
+    AdminActionProposal:
+      type: object
+      required: [kind, target_type, target_id, reason]
+      properties:
+        kind: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        params: { type: object, additionalProperties: true }
+        reason: { type: string, minLength: 8 }
+    AdminAction:
+      type: object
+      required: [id, kind, target_type, target_id, status, requires_dual, proposed_by, proposed_at, expires_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        params: { type: object, additionalProperties: true }
+        params_hash: { type: string }
+        reason: { type: string }
+        requires_dual: { type: boolean }
+        status: { type: string, enum: [PROPOSED, APPROVED, REJECTED, EXECUTED, FAILED, EXPIRED, CANCELLED] }
+        proposed_by: { $ref: "#/components/schemas/UUID" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        approved_by: { $ref: "#/components/schemas/UUID" }
+        approved_at: { $ref: "#/components/schemas/Timestamp" }
+        executed_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+    AdminActionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/AdminAction" } }
+    ReconciliationRecord:
+      type: object
+      required: [id, kind, mode, scope_type, scope_id, status, material, blocks_new_risk, opened_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, enum: [EXECUTION, WALLET_BALANCE, FUNDING, LEDGER_INTERNAL, POSITION_LEDGER, SUBMISSION_UNKNOWN] }
+        mode: { type: string, enum: [EVENT_DRIVEN, PERIODIC, FULL] }
+        scope_type: { type: string }
+        scope_id: { type: string }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        expected: { type: object, additionalProperties: true }
+        observed: { type: object, additionalProperties: true }
+        difference: { type: object, additionalProperties: true }
+        status: { type: string, enum: [OPEN, MATCHED, MISMATCH, INVESTIGATING, RESOLVED_AUTOMATIC, RESOLVED_MANUAL, ESCALATED] }
+        material: { type: boolean }
+        blocks_new_risk: { type: boolean }
+        opened_at: { $ref: "#/components/schemas/Timestamp" }
+        resolved_at: { $ref: "#/components/schemas/Timestamp" }
+        resolution_reason: { type: string }
+        resolution_evidence_ref: { type: string }
+        compensating_journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+    ReconciliationRecordPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ReconciliationRecord" } }
+    ReconciliationResolution:
+      type: object
+      required: [reason, evidence_ref]
+      properties:
+        reason: { type: string, minLength: 8 }
+        evidence_ref: { type: string }
+        approval_id: { $ref: "#/components/schemas/UUID" }
+        compensation:
+          type: object
+          description: Reason-coded compensating posting; never a balance edit
+          properties:
+            reason_code: { type: string }
+            entries:
+              type: array
+              items:
+                type: object
+                required: [account_code, asset, side, quantity]
+                properties:
+                  account_code: { type: string }
+                  asset: { $ref: "#/components/schemas/UUID" }
+                  side: { type: string, enum: [DEBIT, CREDIT] }
+                  quantity: { $ref: "#/components/schemas/Quantity" }
+    StatusChange:
+      type: object
+      required: [to, reason]
+      properties:
+        to: { type: string }
+        reason: { type: string, minLength: 8 }
+        policy_version: { type: string }
+    ProviderStatus:
+      type: object
+      required: [name, role, health, verification]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        health: { type: string, enum: [HEALTHY, DEGRADED, UNHEALTHY, DISABLED] }
+        verification: { type: string, enum: [CODE_COMPLETE, CONTRACT_TESTED, SANDBOX_VERIFIED, CANARY_VERIFIED, LIVE_VERIFIED, BLOCKED_EXTERNAL] }
+        mode: { type: string, enum: [fake, sandbox, live] }
+        error_rate_bps: { type: integer }
+        p95_ms: { type: integer }
+        last_success_at: { $ref: "#/components/schemas/Timestamp" }
+        disable_reason: { type: string }

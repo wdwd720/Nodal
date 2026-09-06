@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"jurisdiction_country":"DE","jurisdiction_region":"BE","residency_country":"DE"},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_JURISDICTION","ELIGIBILITY_RESIDENCY"]}}

@@ -1,0 +1,15 @@
+{
+  "mode": "manual",
+  "inAmount": "1000000",
+  "outAmount": "6500000",
+  "otherAmountThreshold": "6467500",
+  "slippageBps": 50,
+  "routePlan": [],
+  "router": "metis",
+  "transaction": "",
+  "lastValidBlockHeight": "250000150",
+  "requestId": "contract-order-build-error",
+  "errorCode": 2,
+  "errorMessage": "insufficient SOL for gas",
+  "error": null
+}

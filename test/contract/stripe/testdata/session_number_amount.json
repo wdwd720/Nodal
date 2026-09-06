@@ -1,0 +1,8 @@
+{
+  "id": "cos_1ABC2DEF3ghi4jkl5",
+  "object": "crypto.onramp_session",
+  "created": 1757073600,
+  "livemode": false,
+  "status": "fulfillment_complete",
+  "transaction_details": {"destination_amount": 95.89, "destination_currency": "usdc", "destination_network": "solana"}
+}

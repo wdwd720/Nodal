@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"restrictions":["NO_WITHDRAWALS","NO_WITHDRAWALS"]},"expect":{"eligible":true,"reason_codes":[]}}

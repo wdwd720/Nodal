@@ -1,0 +1,57 @@
+# Gitleaks configuration (make secrets / CI security-scans).
+# Extends the built-in ruleset; only documented LOCAL-ONLY credentials are allowlisted.
+title = "controlplane"
+
+[extend]
+useDefault = true
+
+# Local development infrastructure ships with fixed throwaway passwords that are
+# never used outside docker-compose on a developer machine. Production roles and
+# secrets are created by Terraform and Secrets Manager (PART 101, CONVENTIONS).
+[[allowlists]]
+description = "Local-only development credentials in checked-in dev infrastructure"
+paths = [
+  '''^docker/postgres/init/001_roles\.sql$''',
+  '''^docker-compose\.yml$''',
+  '''^\.env\.example$''',
+]
+
+[[allowlists]]
+description = "Local-only *_local placeholder passwords referenced in docs and fixtures"
+regexTarget = "match"
+regexes = [
+  '''cp_[a-z_]+_local''',
+]
+
+[[allowlists]]
+description = "Non-secret files that trip entropy rules"
+paths = [
+  '''go\.sum$''',
+  '''pnpm-lock\.yaml$''',
+  '''(^|/)testdata/.*\.golden$''',
+]
+
+# Deliberately fake credential material in tests and fixtures.
+#
+# Several suites exist precisely to prove that credentials are refused, masked
+# or never logged, and they can only do that by containing credential-shaped
+# strings: AWS's documented AKIAIOSFODNN7EXAMPLE, the canonical jwt.io example
+# token, truncated PEM stubs, and recorded provider responses. Without this
+# entry `make secrets` is permanently red, and a scanner that is always red is
+# one people learn to ignore — the failure mode this repository has already hit
+# once with a container healthcheck that reported a healthy service unhealthy
+# 3,471 times.
+#
+# THE BLIND SPOT, stated because it is real: a genuine secret pasted into a
+# _test.go file or a fixture would not be reported. Compensating controls are
+# that CONVENTIONS.md forbids real credentials anywhere in the tree, every
+# production secret is a config.SecretRef resolved at runtime, and
+# test/security/leakage_test.go asserts that no secret reaches a log or an error
+# body. Narrow this entry rather than widen it.
+[[allowlists]]
+description = "Fake credential material in test files and recorded fixtures"
+paths = [
+  '''_test\.go$''',
+  '''(^|/)testdata/''',
+  '''(^|/)fixtures/''',
+]

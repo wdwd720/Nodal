@@ -1,0 +1,16 @@
+{
+  "input_base": "base",
+  "patch": {
+    "listings": {
+      "0": {
+        "MaxNotionalQuote": "50000000"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "NOTIONAL_ABOVE_MAXIMUM"
+    ]
+  }
+}

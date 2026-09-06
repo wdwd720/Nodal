@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"quote":{"fee_bps":60}}},"expect":{"decision":"REJECT","reason_codes":["RISK_FEE"]}}

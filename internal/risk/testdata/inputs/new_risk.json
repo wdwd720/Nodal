@@ -1,0 +1,57 @@
+{
+  "stage": "PRE_TRADE",
+  "intent": {
+    "id": "019917c0-0000-7000-8000-000000000001",
+    "account_id": "019917c0-0000-7000-8000-0000000000aa",
+    "agent_id": "",
+    "strategy_version_id": "",
+    "model_id": "",
+    "action": "ACQUIRE_NOTIONAL",
+    "notional_usd": "500.00",
+    "target_exposure_usd": "0.00",
+    "instrument_id": "019917c0-0000-7000-8000-000000000101",
+    "asset_class": "CRYPTO_SPOT",
+    "asset_risk_class": "MAJOR",
+    "asset_status": "ACTIVE",
+    "venue": "JUPITER",
+    "chain": "solana",
+    "provider": "JUPITER_API",
+    "constraints": {"max_slippage_bps": 0, "max_fee_bps": 0, "max_price_impact_bps": 0}
+  },
+  "account": {
+    "status": "ACTIVE",
+    "portfolio_value_usd": "10000.00",
+    "buying_power_usd": "8000.00",
+    "available_now_usd": "8000.00",
+    "reserved_usd": "0.00",
+    "pending_usd": "0.00",
+    "withdrawable_usd": "8000.00",
+    "buying_power_policy_version": "bp-v1",
+    "as_of": "2026-09-05T12:00:00Z",
+    "positions_usd": {"019917c0-0000-7000-8000-000000000101": "1000.00"},
+    "asset_class_exposure_usd": {"CRYPTO_SPOT": "1500.00"},
+    "total_exposure_usd": "1500.00",
+    "daily_realized_loss_usd": "0.00",
+    "drawdown_usd": "0.00",
+    "orders_in_window": 3,
+    "unresolved_material_mismatches": 0
+  },
+  "envelope": null,
+  "market": {
+    "quote": {
+      "id": "019917c0-0000-7000-8000-000000000201",
+      "provider": "JUPITER_API",
+      "price_impact_bps": 10,
+      "slippage_bps": 20,
+      "fee_bps": 5,
+      "received_at": "2026-09-05T11:59:59Z",
+      "expires_at": "2026-09-05T12:00:30Z"
+    },
+    "venue_status": "ACTIVE",
+    "liquidity_usd": "250000.00",
+    "provider_health": {"JUPITER_API": "HEALTHY", "HELIUS": "HEALTHY"},
+    "data_freshness": {"price": {"age_ms": 200, "declared_max_age_ms": 500}}
+  },
+  "kill_switches": [],
+  "now": "2026-09-05T12:00:00Z"
+}

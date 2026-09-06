@@ -1,0 +1,49 @@
+{
+  "input_base": "base",
+  "patch": {
+    "listings": [
+      {
+        "ID": "01920000-0000-7000-8000-000000000030",
+        "VenueID": "01920000-0000-7000-8000-000000000020",
+        "InstrumentID": "01920000-0000-7000-8000-000000000010",
+        "VenueNativeID": "SOL-USDC",
+        "Network": "solana-devnet",
+        "BaseMint": "native",
+        "QuoteMint": "USDC-mint",
+        "TickSize": null,
+        "BasePrecision": 9,
+        "QuotePrecision": 6,
+        "MinNotionalQuote": "1000000",
+        "MaxNotionalQuote": null,
+        "Status": "ACTIVE",
+        "SettlementRules": null,
+        "CreatedAt": "0001-01-01T00:00:00Z",
+        "UpdatedAt": "0001-01-01T00:00:00Z"
+      },
+      {
+        "ID": "01920000-0000-7000-8000-000000000031",
+        "VenueID": "01920000-0000-7000-8000-000000000021",
+        "InstrumentID": "01920000-0000-7000-8000-000000000010",
+        "VenueNativeID": "SOL-USDC-RAY",
+        "Network": "solana-devnet",
+        "BaseMint": "native",
+        "QuoteMint": "USDC-mint",
+        "TickSize": null,
+        "BasePrecision": 9,
+        "QuotePrecision": 6,
+        "MinNotionalQuote": "1000000",
+        "MaxNotionalQuote": null,
+        "Status": "ACTIVE",
+        "SettlementRules": null,
+        "CreatedAt": "0001-01-01T00:00:00Z",
+        "UpdatedAt": "0001-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "expect": {
+    "result": "PLAN",
+    "venue": "JUPITER",
+    "hash": "16dff510d0fe58444873d7f7693f2aa3a2c30039c10c4082748a725fda976151"
+  },
+  "note": "ACTIVE venue with a healthy provider beats a DEGRADED one"
+}

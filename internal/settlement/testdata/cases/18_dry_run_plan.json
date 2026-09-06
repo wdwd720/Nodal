@@ -1,0 +1,12 @@
+{
+  "input_base": "base",
+  "patch": {
+    "dry_run": true
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "BUY",
+    "hash": "360c6594dde7cda5f6f7f866db49d72a733e014117cbc263bf67bea17bc74bc4"
+  },
+  "note": "dry-run flag is carried on the plan and in its hash"
+}

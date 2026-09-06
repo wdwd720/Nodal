@@ -1,0 +1,11 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "instrument_id": "01920000-0000-7000-8000-0000000000ff"
+    }
+  },
+  "expect": {
+    "result": "VALIDATION_FAILED"
+  }
+}

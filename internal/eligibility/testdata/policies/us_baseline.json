@@ -1,0 +1,47 @@
+{
+  "version": "us-baseline-v1",
+  "rules": {
+    "allowed_countries": ["US", "CA", "KR"],
+    "blocked_regions": {"US": ["NY", "TX"]},
+    "allowed_residency_countries": [],
+    "minimum_age": 18,
+    "minimum_age_by_country": {"KR": 19},
+    "age_verification_attests": 18,
+    "identity_states": ["VERIFIED"],
+    "sanctions_states": ["CLEAR"],
+    "account_statuses": ["ACTIVE"],
+    "blocking_restrictions": ["COMPLIANCE_HOLD"],
+    "contexts": {
+      "TRADE": {
+        "required_capabilities": ["LIVE_MANUAL_TRADING"],
+        "blocking_restrictions": ["NO_TRADING"],
+        "asset_classes": ["CRYPTO_SPOT"],
+        "venues": ["JUPITER"]
+      },
+      "FUNDING": {
+        "identity_states": ["PENDING", "VERIFIED"],
+        "required_capabilities": ["LIVE_FUNDING"],
+        "blocking_restrictions": ["NO_FUNDING"]
+      },
+      "WITHDRAWAL": {
+        "identity_states": ["VERIFIED"],
+        "sanctions_states": ["CLEAR"],
+        "required_capabilities": ["WITHDRAWALS"],
+        "blocking_restrictions": ["NO_WITHDRAWALS"]
+      },
+      "AGENT_RUN": {
+        "account_statuses": ["ACTIVE"],
+        "required_capabilities": ["LIVE_AGENT_TRADING"],
+        "blocking_restrictions": ["NO_AGENTS", "NO_TRADING"]
+      }
+    },
+    "providers": {
+      "STRIPE": {"contexts": ["FUNDING"], "blocked_countries": ["CA"], "blocked_regions": {"US": ["HI"]}},
+      "SOLANA_RPC": {"contexts": ["WITHDRAWAL"], "blocked_countries": [], "blocked_regions": {}}
+    },
+    "instruments": {
+      "risk_classes_by_country": {"*": ["SETTLEMENT", "MAJOR"], "CA": ["SETTLEMENT", "MAJOR", "STANDARD"]},
+      "statuses": ["ACTIVE"]
+    }
+  }
+}

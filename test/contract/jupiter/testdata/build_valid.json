@@ -1,0 +1,32 @@
+{
+  "inAmount": "1000000",
+  "outAmount": "6500000",
+  "otherAmountThreshold": "6467500",
+  "slippageBps": 50,
+  "priceImpactPct": "0.000123",
+  "routePlan": [
+    { "swapInfo": { "ammKey": "FakeAmm1111111111111111111111111111111111111", "label": "FakeAMM", "inputMint": "2iSWRKeTHcaRToYkQiQzxkFiujq5ALX8KmNkGWzGRmBF", "outputMint": "So11111111111111111111111111111111111111112", "inAmount": "1000000", "outAmount": "6500000" }, "percent": 100, "bps": 10000 }
+  ],
+  "computeBudgetInstructions": [
+    { "programId": "ComputeBudget111111111111111111111111111111", "accounts": [], "data": "AkANAwA=" },
+    { "programId": "ComputeBudget111111111111111111111111111111", "accounts": [], "data": "A+gDAAAAAAAA" }
+  ],
+  "setupInstructions": [],
+  "swapInstruction": {
+    "programId": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    "accounts": [
+      { "pubkey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "isSigner": false, "isWritable": false },
+      { "pubkey": "8WrtGLJ9CqssHJzG7s9fbaFEa1A4xafiFhNTSKtXPLHb", "isSigner": true, "isWritable": false }
+    ],
+    "data": "5RfLl3rjrSoAAAAAQEIPAAAAAACgLmMAAAAAADIAAAA="
+  },
+  "cleanupInstruction": null,
+  "otherInstructions": [],
+  "tipInstruction": null,
+  "addressesByLookupTableAddress": { "AddressLookupTab1e1111111111111111111111111": [ "11111111111111111111111111111111" ] },
+  "blockhashWithMetadata": {
+    "blockhash": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32],
+    "lastValidBlockHeight": 250000150,
+    "fetchedAt": { "secs_since_epoch": 1788609600, "nanos_since_epoch": 0 }
+  }
+}

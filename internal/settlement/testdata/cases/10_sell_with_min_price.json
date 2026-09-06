@@ -1,0 +1,28 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "REDUCE_NOTIONAL",
+      "constraints": {
+        "max_price": {
+          "Mantissa": "140",
+          "Scale": 0,
+          "QuoteAsset": "USDC",
+          "Source": "user",
+          "At": "2026-09-05T12:00:00Z"
+        }
+      }
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "input_quantity": "666666666",
+    "min_output_quantity": "93333333",
+    "hash": "77cf0b8937878322e939192856a062652893a9f7e049bf8012ff81c81916d1a5"
+  },
+  "note": "on a sell the limit price is the least received per unit: 0.666666666 × 140 = 93.333333 USDC"
+}

@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"context":"FUNDING","identity_state":"PENDING","provider":"STRIPE","instrument_risk_class":"","instrument_status":"","asset_class":"","venue":""},"expect":{"eligible":true,"reason_codes":[]}}

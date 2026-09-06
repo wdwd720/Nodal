@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"account":{"daily_realized_loss_usd":"499.99"}},"expect":{"decision":"ALLOW","reason_codes":[]}}

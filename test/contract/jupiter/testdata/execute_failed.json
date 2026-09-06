@@ -1,0 +1,12 @@
+{
+  "status": "Failed",
+  "signature": "DK4E9eUKdCdQhq4G4uusBtHEVA9CmsBVXfEZYeH6VeaZtHawz64HpA63eEZkHjfmjiYYPb5AwMf3Nxd4VpKMLAm",
+  "slot": "0",
+  "error": "Transaction failed: aggregator failure",
+  "code": -1001,
+  "totalInputAmount": "1000000",
+  "totalOutputAmount": "0",
+  "inputAmountResult": "0",
+  "outputAmountResult": "0",
+  "swapEvents": []
+}

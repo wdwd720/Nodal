@@ -1,0 +1,18 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "action": "TARGET_EXPOSURE",
+      "notional_usd": null,
+      "target_exposure_usd": "350.00"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "BUY",
+    "input_quantity": "50000000",
+    "notional_usd": "50.00",
+    "hash": "360c1ee5cd7628f6c7cfb137e3c48be0dd7bd0c13b0aa3125f486fdd29ad7210"
+  },
+  "note": "TARGET_EXPOSURE 350 with 300 marked → acquire 50"
+}

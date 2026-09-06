@@ -1,0 +1,22 @@
+{
+  "input_base": "base",
+  "patch": {
+    "instrument": {
+      "Status": "HALTED"
+    },
+    "intent": {
+      "action": "CLOSE_POSITION",
+      "notional_usd": null
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "INSTRUMENT_STATUS"
+    ]
+  },
+  "note": "HALTED blocks every transaction, even a close"
+}

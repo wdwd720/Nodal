@@ -1,0 +1,23 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "constraints": {
+        "max_price": {
+          "Mantissa": "160",
+          "Scale": 0,
+          "QuoteAsset": "USDC",
+          "Source": "user",
+          "At": "2026-09-05T12:00:00Z"
+        }
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "BUY",
+    "min_output_quantity": "625000000",
+    "hash": "373db62c4ede569acdf04ec6dc99a563aecee2b8851cc2f54f334ed96690725e"
+  },
+  "note": "limit price 160 USDC/SOL floors the output at 100/160 = 0.625 SOL"
+}

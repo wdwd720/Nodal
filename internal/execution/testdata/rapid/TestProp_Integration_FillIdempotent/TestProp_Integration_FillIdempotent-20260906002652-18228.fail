@@ -1,0 +1,18 @@
+# 2026/09/06 00:26:53.382708 [TestProp_Integration_FillIdempotent] [rapid] draw deliveries: 2
+# 2026/09/06 00:26:53.382708 [TestProp_Integration_FillIdempotent] [rapid] draw parallel: true
+# 2026/09/06 00:26:53.530796 [TestProp_Integration_FillIdempotent] 
+# 	Error Trace:	C:/Dev/Nodal/internal/execution/integration_test.go:324
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:458
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:467
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:292
+# 	            				C:/Users/Mihir Modi/go/pkg/mod/pgregory.net/rapid@v1.3.0/engine.go:207
+# 	            				C:/Dev/Nodal/internal/execution/integration_test.go:295
+# 	Error:      	Received unexpected error:
+# 	            	RECONCILIATION_REQUIRED: execution: fill for an order that does not accept fills: INVALID_STATE_TRANSITION: order is FILLED and does not accept fills
+# 	Test:       	TestProp_Integration_FillIdempotent
+# 
+v0.4.8#2099115105350142152
+0x0
+0x0
+0x0
+0x1

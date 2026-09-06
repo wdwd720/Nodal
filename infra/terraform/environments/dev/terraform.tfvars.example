@@ -1,0 +1,60 @@
+# DEV example values. Copy to terraform.tfvars (git-ignored). No secrets here:
+# every credential is populated directly in Secrets Manager (DEPLOYMENT.md section 4).
+
+aws_region     = "us-east-1"
+aws_account_id = "123456789012"
+image_tag      = "0123456789abcdef0123456789abcdef01234567" # git SHA from release.yml
+
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+public_product_name = "Control Plane (dev)"
+public_base_url     = "https://dev.api.example.com"
+cors_origins        = ["https://dev.app.example.com"]
+
+auth = {
+  issuer       = "https://login.example.com"
+  client_id    = "cp-dev"
+  redirect_url = "https://dev.api.example.com/v1/auth/callback"
+}
+
+# DEV is the only AWS environment where fake adapters are accepted (config.Validate
+# rejects them in STAGING/PROD). Use sandbox modes as soon as sandbox credentials exist.
+provider_slots = {
+  funding                 = { mode = "fake", name = "" }
+  wallet                  = { mode = "fake", name = "" }
+  signing                 = { mode = "fake", name = "" }
+  execution               = { mode = "fake", name = "" }
+  market_data             = { mode = "fake", name = "" }
+  chain_observer          = { mode = "fake", name = "" }
+  chain_observer_fallback = { mode = "fake", name = "" }
+  model                   = { mode = "fake", name = "" }
+  event_bus               = { mode = "sandbox", name = "redpanda" }
+  workflow                = { mode = "sandbox", name = "temporal" }
+  archive                 = { mode = "sandbox", name = "s3" }
+  notification            = { mode = "fake", name = "" }
+}
+
+redpanda   = { brokers = "seed-xxxx.dev.cloud.redpanda.com:9092" }
+clickhouse = { addr = "xxxx.us-east-1.aws.clickhouse.cloud:8443" }
+temporal   = { host_port = "cp-dev.xxxx.tmprl.cloud:7233", namespace = "cp-dev.xxxx" }
+
+github_org  = "nodal"
+github_repo = "controlplane"
+
+sev2_email_endpoints = ["dev-alerts@example.com"]
+
+# --- per-binary configuration (modules/app-config service_env) --------------
+# DEV may leave the settlement asset unset: the endpoints that need it answer
+# UNSUPPORTED instead of guessing (cmd/api resolveSettlementAsset).
+api = {
+  # settlement_chain = "solana"
+  # settlement_mint  = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  enabled_capabilities = [] # never enough on its own: the gate row decides
+  rate_limit_general   = "1200/1m"
+}
+
+relay_worker     = { batch_size = 100, poll_interval = "250ms" }
+execution_worker = { concurrency = 2 }
+workflow_worker  = { max_activities = 8, max_workflows = 8 }
+
+api_autoscaling      = { min_capacity = 1, max_capacity = 2 }
+relay_lag_thresholds = { sev2_seconds = 300, sev1_seconds = 1800 }

@@ -1,0 +1,1 @@
+{"policy":"strict_kill","input_base":"new_risk","input":{"intent":{"action":"REDUCE_NOTIONAL"},"kill_switches":[{"kind":"GLOBAL_NEW_RISK_KILL","scope":"*"}]},"expect":{"decision":"REJECT","reason_codes":["RISK_KILL_SWITCH"]}}

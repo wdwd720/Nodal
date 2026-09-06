@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "total": 1,
+    "limit": 1000,
+    "page": 1,
+    "cursor": null,
+    "token_accounts": [
+      {"address": "4kJ3Uc9BwYpKcgZfN1VzT8n7mQ6xR2aS5dF7gH9jK2mZ", "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "owner": "9aE476sH92Vz7DMPyq5WLPkrKWivxnuXaMLh3Gvy8Bev", "amount": 1.0, "delegated_amount": 0, "frozen": false}
+    ]
+  },
+  "id": 1
+}

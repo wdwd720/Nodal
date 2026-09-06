@@ -1,0 +1,25 @@
+{
+  "input_base": "base",
+  "patch": {
+    "asset_policies": {
+      "01920000-0000-7000-8000-000000000001": {
+        "StablecoinStatus": "DEGRADED",
+        "CollateralFactor": 9500
+      }
+    },
+    "prices": {
+      "01920000-0000-7000-8000-000000000001": {
+        "Mantissa": "98",
+        "Scale": 2
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "BUY",
+    "input_quantity": "107411386",
+    "notional_usd": "100.00",
+    "hash": "c8ff703a41ff60915bb93116b4fce95c39f30fea52c9ec4efc42d011899c2852"
+  },
+  "note": "DEGRADED stablecoin: market price 0.98 with a 95% haircut → 100 / (0.98 × 0.95) = 107.411386 USDC (rounded up)"
+}

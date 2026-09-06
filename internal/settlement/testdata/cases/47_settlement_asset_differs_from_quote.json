@@ -1,0 +1,35 @@
+{
+  "input_base": "base",
+  "patch": {
+    "instrument": {
+      "SettlementAssetID": "01920000-0000-7000-8000-000000000003"
+    },
+    "assets": {
+      "01920000-0000-7000-8000-000000000003": {
+        "ID": "01920000-0000-7000-8000-000000000003",
+        "Chain": "solana-devnet",
+        "MintAddress": "USDT-mint",
+        "Kind": "SPL_TOKEN",
+        "Symbol": "USDT",
+        "Name": "Tether",
+        "Decimals": 6,
+        "IsStablecoin": true,
+        "PegCurrency": "USD",
+        "RiskClass": "SETTLEMENT",
+        "Status": "ACTIVE",
+        "MetadataVersion": 1,
+        "PolicyRef": "",
+        "TokenExtensions": null,
+        "CreatedAt": "0001-01-01T00:00:00Z",
+        "UpdatedAt": "0001-01-01T00:00:00Z"
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "SETTLEMENT_ASSET_UNAVAILABLE"
+    ]
+  },
+  "note": "would need the reserved CONVERT step"
+}

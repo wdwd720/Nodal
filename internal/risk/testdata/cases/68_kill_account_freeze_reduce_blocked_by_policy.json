@@ -1,0 +1,1 @@
+{"policy":"block_freeze","input_base":"new_risk","input":{"intent":{"action":"REDUCE_NOTIONAL"},"kill_switches":[{"kind":"ACCOUNT_FREEZE","scope":"019917c0-0000-7000-8000-0000000000aa"}]},"expect":{"decision":"REJECT","reason_codes":["RISK_KILL_SWITCH"]}}

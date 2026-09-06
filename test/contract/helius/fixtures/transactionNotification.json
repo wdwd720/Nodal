@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "transactionNotification",
+  "params": {
+    "subscription": 4242,
+    "result": {
+      "transaction": {
+        "transaction": {
+          "signatures": ["5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW"],
+          "message": {"accountKeys": [{"pubkey": "9aE476sH92Vz7DMPyq5WLPkrKWivxnuXaMLh3Gvy8Bev", "signer": true, "writable": true, "source": "transaction"}]}
+        },
+        "meta": {"err": null, "fee": 5000}
+      },
+      "signature": "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW",
+      "slot": 250000123
+    }
+  }
+}

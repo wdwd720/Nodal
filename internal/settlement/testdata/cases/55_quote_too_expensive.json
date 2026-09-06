@@ -1,0 +1,22 @@
+{
+  "input_base": "base",
+  "patch": {
+    "venues": {
+      "0": {
+        "fee_bps": 60
+      }
+    },
+    "intent": {
+      "constraints": {
+        "max_fee_bps": 50
+      }
+    }
+  },
+  "expect": {
+    "result": "NO_VALID_PLAN",
+    "reasons": [
+      "QUOTE_TOO_EXPENSIVE"
+    ]
+  },
+  "note": "venue 60 bps + platform 10 bps exceed 50"
+}

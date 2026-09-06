@@ -1,0 +1,48 @@
+# PART 214: pinned versions, deliberate updates. Dependabot opens grouped PRs that
+# must pass the full CI (unit, property, race, fuzz, integration) before merge.
+# Tool pins in scripts/tool/main.go are reviewed by hand (not covered here).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      go-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /build
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Provider pins live in each environment's versions.tf and .terraform.lock.hcl.
+  # A provider update changes what `terraform plan` will do to live financial
+  # infrastructure, so these are deliberately one PR per environment.
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform/environments/dev
+      - /infra/terraform/environments/staging
+      - /infra/terraform/environments/prod
+      - /infra/terraform/modules/*
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

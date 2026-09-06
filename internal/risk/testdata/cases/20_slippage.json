@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"market":{"quote":{"slippage_bps":150}}},"expect":{"decision":"REJECT","reason_codes":["RISK_SLIPPAGE"]}}

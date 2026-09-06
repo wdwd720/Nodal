@@ -1,0 +1,1 @@
+{"policy":"us_baseline","input_base":"trade_us","input":{"capabilities":{"LIVE_MANUAL_TRADING":false}},"expect":{"eligible":false,"reason_codes":["ELIGIBILITY_CAPABILITY"]}}

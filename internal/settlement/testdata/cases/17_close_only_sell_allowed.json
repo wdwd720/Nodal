@@ -1,0 +1,21 @@
+{
+  "input_base": "base",
+  "patch": {
+    "instrument": {
+      "Status": "CLOSE_ONLY"
+    },
+    "intent": {
+      "action": "CLOSE_POSITION",
+      "notional_usd": null
+    },
+    "risk": {
+      "action_class": "REDUCE_RISK"
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "side": "SELL",
+    "hash": "57ded6c057c189636f4add8d548fe420fd4cff482abb7a9f46f2e4b03afeb466"
+  },
+  "note": "CLOSE_ONLY permits reducing exposure"
+}

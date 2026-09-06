@@ -1,0 +1,22 @@
+{
+  "account_id": "",
+  "user_id": "",
+  "intent_id": "",
+  "context": "TRADE",
+  "identity_state": "VERIFIED",
+  "age_verified": true,
+  "jurisdiction_country": "US",
+  "jurisdiction_region": "CA",
+  "residency_country": "US",
+  "sanctions_state": "CLEAR",
+  "account_status": "ACTIVE",
+  "restrictions": [],
+  "instrument_id": "",
+  "instrument_risk_class": "MAJOR",
+  "instrument_status": "ACTIVE",
+  "asset_class": "CRYPTO_SPOT",
+  "venue": "JUPITER",
+  "provider": "",
+  "capabilities": {"LIVE_MANUAL_TRADING": true, "LIVE_FUNDING": true, "WITHDRAWALS": true, "LIVE_AGENT_TRADING": true},
+  "now": "2026-09-05T12:00:00Z"
+}

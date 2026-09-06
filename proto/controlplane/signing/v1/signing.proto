@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+// Bounded signing boundary (goal PARTS 34, 95, 96).
+//
+// The signing service is the only component allowed to talk to the wallet
+// SigningProvider. It receives a request that references an approved intent,
+// plan, risk decision, and wallet; it independently reloads those records,
+// rebuilds the expectations from persisted state, inspects the transaction,
+// records a signing decision, and only then signs. Callers can never pass
+// authority in the request: identifiers only, plus the exact unsigned bytes
+// they expect to be signed.
+//
+// In V1 the service runs in-process inside the execution worker; this
+// contract exists so it can move behind a process boundary with a separate
+// IAM task role without changing callers.
+package controlplane.signing.v1;
+
+option go_package = "github.com/nodal/controlplane/internal/gen/proto/controlplane/signing/v1;signingv1";
+
+// SigningService signs approved Solana transactions after independent inspection.
+service SigningService {
+  // Sign inspects and, if every check passes, signs the transaction.
+  // A rejection is a successful RPC with approved=false; transport or
+  // provider failures are gRPC errors. Never retry a Sign blindly: the
+  // request's attempt_id makes it idempotent — a repeated call returns the
+  // recorded decision.
+  rpc Sign(SignRequest) returns (SignResponse);
+
+  // GetDecision returns a previously recorded signing decision.
+  rpc GetDecision(GetDecisionRequest) returns (GetDecisionResponse);
+}
+
+message SignRequest {
+  // Execution attempt this request belongs to (UUIDv7, canonical form).
+  string attempt_id = 1;
+  string plan_id = 2;
+  string intent_id = 3;
+  string risk_decision_id = 4;
+  string wallet_id = 5;
+  // Unsigned transaction bytes (versioned or legacy), base64-free raw bytes.
+  bytes unsigned_transaction = 6;
+  // SHA-256 of unsigned_transaction as computed by the caller; the service
+  // recomputes it and rejects on mismatch.
+  bytes expected_transaction_hash = 7;
+  // Address-lookup-table contents needed to resolve v0 transactions, keyed by
+  // table address; the service verifies them against its own observer when
+  // configured to do so.
+  repeated LookupTable lookup_tables = 8;
+  // Caller-observed simulation result reference (evidence only).
+  string simulation_ref = 9;
+  string correlation_id = 10;
+}
+
+message LookupTable {
+  string address = 1;
+  repeated string account_keys = 2;
+}
+
+message SignResponse {
+  string decision_id = 1;
+  bool approved = 2;
+  // Sorted, stable reason codes when rejected (empty when approved).
+  repeated string reason_codes = 3;
+  repeated Check checks = 4;
+  string inspector_version = 5;
+  // Signed transaction bytes; empty unless approved.
+  bytes signed_transaction = 6;
+  // Provider reference for the signing operation (evidence only).
+  string provider_sign_ref = 7;
+  // RFC 3339 UTC.
+  string decided_at = 8;
+  // True when the decision was previously recorded for this attempt_id.
+  bool replayed = 9;
+}
+
+message Check {
+  string name = 1;
+  bool passed = 2;
+  string detail = 3;
+}
+
+message GetDecisionRequest {
+  string decision_id = 1;
+}
+
+message GetDecisionResponse {
+  SignResponse decision = 1;
+}

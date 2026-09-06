@@ -1,0 +1,1 @@
+{"policy":"global_test","input_base":"new_risk","input":{"stage":"CONTINUOUS","account":{"daily_realized_loss_usd":"500.00"}},"expect":{"decision":"REJECT","reason_codes":["RISK_DAILY_LOSS"]}}

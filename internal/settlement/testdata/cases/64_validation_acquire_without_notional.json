@@ -1,0 +1,11 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "notional_usd": null
+    }
+  },
+  "expect": {
+    "result": "VALIDATION_FAILED"
+  }
+}

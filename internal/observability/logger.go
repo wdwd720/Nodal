@@ -81,6 +81,14 @@ var deniedKeys = []string{
 	"access_token", "refresh_token", "id_token", "authorization", "cookie", "set-cookie",
 	"password", "passwd", "api_key", "apikey", "card", "pan", "cvv", "ssn", "signing_token",
 	"webhook_secret",
+	// Connection strings. PART 190 does not name them, but a DSN carries a
+	// password inline, so a single `log.Info("connecting", "dsn", url)` anywhere
+	// would print a live database credential. Nothing does that today —
+	// internal/config holds every DSN as a SecretRef, internal/db never echoes
+	// the URL into an error, and pgconn redacts the password in its own parse
+	// error — but that is three separate behaviors all continuing to hold, and
+	// the denial costs nothing.
+	"dsn", "database_url", "connection_string", "conn_string", "conninfo",
 }
 
 var deniedSequences = func() [][]string {
@@ -156,10 +164,23 @@ var (
 	solanaKeyRe = regexp.MustCompile(`\b[1-9A-HJ-NP-Za-km-z]{87,88}\b`)
 	// pemRe matches a PEM block, terminated or truncated.
 	pemRe = regexp.MustCompile(`-----BEGIN [A-Z0-9 ]+-----[\s\S]*?(?:-----END [A-Z0-9 ]+-----|\z)`)
+
+	// dsnUserinfoRe matches the "user:password@" of a URL, capturing any
+	// leading text and the scheme+user so only the password is replaced. The
+	// password class excludes "/" and "@" so it cannot run past the host into
+	// a path, and the host must be non-empty so "http://x" is left alone.
+	dsnUserinfoRe = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^:/@\s]+):[^@/\s]+@`)
 )
 
 // MaskString masks values that look like secrets regardless of key: bearer
-// tokens, Solana private keys and PEM blocks.
+// tokens, Solana private keys, PEM blocks, and the userinfo credential of a
+// connection string.
+//
+// The key-based denylist above is not sufficient on its own for a DSN: the
+// credential travels inside a value that may be logged under any key at all,
+// or embedded in a longer message. Masking the userinfo keeps the host, port
+// and database name — which are what an operator actually needs to read from a
+// log line — while removing the password.
 func MaskString(s string) string {
 	if len(s) < 16 {
 		return s
@@ -172,6 +193,9 @@ func MaskString(s string) string {
 	}
 	if strings.Contains(s, "-----BEGIN ") {
 		s = pemRe.ReplaceAllString(s, RedactedMarker)
+	}
+	if strings.Contains(s, "://") {
+		s = dsnUserinfoRe.ReplaceAllString(s, "${1}${2}:"+RedactedMarker+"@")
 	}
 	return s
 }

@@ -1,0 +1,21 @@
+{
+  "input_base": "base",
+  "patch": {
+    "intent": {
+      "constraints": {
+        "max_slippage_bps": 20,
+        "max_fee_bps": 30,
+        "max_price_impact_bps": 40,
+        "quote_freshness": 1000000000
+      }
+    }
+  },
+  "expect": {
+    "result": "PLAN",
+    "max_slippage_bps": 20,
+    "max_fee_bps": 30,
+    "max_price_impact_bps": 40,
+    "hash": "61fc4b065df75825867dcd5efe6f26ce5695409244c01853d19d05f84a6f8e59"
+  },
+  "note": "the intent's tighter bounds win"
+}
