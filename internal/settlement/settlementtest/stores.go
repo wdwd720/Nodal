@@ -548,7 +548,24 @@ func (m *MemAttempts) All() []execution.Attempt {
 	for _, a := range m.attempts {
 		out = append(out, *a)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	// Ties break on AttemptNo, and that is not a nicety. m.attempts is a map,
+	// so the input order is randomized per process, and two attempts of one
+	// plan are routinely created inside the same clock tick — sorting on
+	// CreatedAt alone then returns them in either order.
+	//
+	// This produced a flake in the most safety-critical test in the package:
+	// TestExecutor_SubmitTimeoutLost_ProvenAbsent_NewAttemptOnce asserts that
+	// attempts[0] is the EXPIRED first attempt, and intermittently got the
+	// CONFIRMED second one instead. It passed when the whole package ran and
+	// failed when run alone, which reads exactly like a real ordering bug in
+	// PART 48 recovery and is not one. AttemptNo is the meaningful order
+	// anyway: it is what the domain uses to say which attempt came first.
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].AttemptNo < out[j].AttemptNo
+	})
 	return out
 }
 

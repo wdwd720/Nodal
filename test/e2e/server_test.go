@@ -147,14 +147,28 @@ func (s *apiServer) stop(t *testing.T) {
 			t.Errorf("api child (pid %d) was reaped without a process state", s.pid())
 			return
 		}
-		if !s.cmd.ProcessState.Exited() {
-			t.Errorf("api child (pid %d) was reaped but reports Exited()==false: %v",
-				s.pid(), s.cmd.ProcessState)
-		}
+		// Deliberately NOT asserting ProcessState.Exited() here.
+		//
+		// The property under test is that the child is GONE, not how the
+		// operating system chose to describe its ending. On Unix a process
+		// killed by a signal reports Exited()==false — only a normal exit sets
+		// it — while on Windows there are no signals, so Kill terminates with
+		// an exit code and Exited() is true. Asserting it therefore passed on
+		// the developer's Windows machine and failed on Linux against identical,
+		// correct behavior, which is exactly what happened the first time this
+		// suite ran in CI:
+		//
+		//   api child (pid 10417) was reaped but reports Exited()==false: signal: killed
+		//
+		// ProcessState being non-nil above already proves the child was reaped,
+		// and the port check below is what proves it actually let go of the
+		// listener. Those two are the real assertions; the exit description is
+		// only worth reporting, so it goes in the message when the port check
+		// fails rather than being a condition of its own.
 		// A reaped PID is not proof the listener is gone; ask the port.
 		if s.healthy(2 * time.Second) {
-			t.Errorf("api child (pid %d) was reaped but %s/v1/healthz still answers 200",
-				s.pid(), s.baseURL)
+			t.Errorf("api child (pid %d, %v) was reaped but %s/v1/healthz still answers 200",
+				s.pid(), s.cmd.ProcessState, s.baseURL)
 		}
 	})
 }
