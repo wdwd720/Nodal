@@ -449,17 +449,28 @@ jobs:
           CP_ENV: LOCAL
           CP_AUTH_MODE: dev
           CP_HTTP_ADDR: 127.0.0.1:18099
-          CP_DATABASE_APP_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_e2e?sslmode=disable
-          CP_DATABASE_MIGRATE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_e2e?sslmode=disable
         run: |
           set -euo pipefail
-          go run ./scripts/testdb -name e2e >/dev/null
+          # The DSNs come from testdb itself rather than being written out by
+          # hand: it names the database controlplane_test_<name>, and an earlier
+          # version of this step hardcoded controlplane_e2e without the prefix,
+          # so seeding failed with `database "controlplane_e2e" does not exist`.
+          # Deriving them removes the chance of the two disagreeing again.
+          eval "$(go run ./scripts/testdb -name web_e2e -export)"
+          export CP_DATABASE_APP_URL="$CP_TEST_DATABASE_URL"
+          export CP_DATABASE_MIGRATE_URL="$CP_TEST_MIGRATE_DATABASE_URL"
           go run ./scripts/seed
           # Settlement asset: buying power and holdings answer 422 UNSUPPORTED
           # without it, and the specs assert real figures.
-          asset="$(docker compose exec -T postgres psql -U cp_migrate -d controlplane_test_e2e -tAc             "SELECT chain||' '||mint_address FROM assets WHERE symbol='USDC' LIMIT 1")"
-          echo "CP_API_SETTLEMENT_CHAIN=${asset% *}" >> "$GITHUB_ENV"
-          echo "CP_API_SETTLEMENT_MINT=${asset#* }" >> "$GITHUB_ENV"
+          db="${CP_TEST_DATABASE_URL##*/}"; db="${db%%\?*}"
+          asset="$(docker compose exec -T postgres psql -U cp_migrate -d "$db" -tAc             "SELECT chain||' '||mint_address FROM assets WHERE symbol='USDC' LIMIT 1")"
+          test -n "$asset" || { echo "::error::no USDC asset in $db after seeding"; exit 1; }
+          {
+            echo "CP_DATABASE_APP_URL=$CP_DATABASE_APP_URL"
+            echo "CP_DATABASE_MIGRATE_URL=$CP_DATABASE_MIGRATE_URL"
+            echo "CP_API_SETTLEMENT_CHAIN=${asset% *}"
+            echo "CP_API_SETTLEMENT_MINT=${asset#* }"
+          } >> "$GITHUB_ENV"
           go build -o bin/api ./cmd/api
           CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             ./bin/api > api.log 2>&1 &
           for i in $(seq 1 40); do
