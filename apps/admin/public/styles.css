@@ -1,0 +1,180 @@
+/*
+ * Operator console styling.
+ *
+ * Two rules earn their place here rather than being taste:
+ *
+ *   - a refused control looks refused and *is* refused. `.button.refused` is
+ *     only ever applied to an element that also carries the `disabled`
+ *     attribute, so appearance and behaviour cannot drift apart;
+ *   - a value that did not arrive in the exact wire form the API promises is
+ *     marked (`.inexact`), because a figure that looks like every other figure
+ *     will be read as exact.
+ */
+
+:root {
+  color-scheme: light dark;
+  --bg: #0f1115;
+  --panel: #161a21;
+  --panel-2: #1c212a;
+  --line: #2a3140;
+  --ink: #e6e9ef;
+  --muted: #9aa4b5;
+  --accent: #4c8dff;
+  --danger: #ff6b6b;
+  --warn: #ffb454;
+  --ok: #4bd08b;
+  --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 var(--sans);
+}
+
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+pre { overflow-x: auto; background: var(--panel-2); padding: 8px 10px; border-radius: 6px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 4px; }
+h3 { font-size: 14px; margin: 0 0 6px; }
+h4 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+p { margin: 0 0 8px; }
+.muted { color: var(--muted); }
+.loading, .fatal { padding: 32px; max-width: 720px; }
+
+/* --- identity ------------------------------------------------------------ */
+
+.identity {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.identity .brand { font-weight: 600; letter-spacing: .01em; }
+.identity .subject { color: var(--muted); }
+.identity .roles { display: flex; gap: 4px; flex-wrap: wrap; }
+.identity .signin { margin-left: auto; color: var(--accent); text-decoration: none; }
+.identity .signin:hover { text-decoration: underline; }
+
+/* --- navigation ---------------------------------------------------------- */
+
+.nav { display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.nav-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 13px;
+}
+.nav-item:hover { background: var(--panel); }
+.nav-item.on { background: var(--accent); color: #06101f; font-weight: 600; }
+.nav-item.unavailable { color: var(--muted); }
+
+/* --- layout -------------------------------------------------------------- */
+
+.outlet { padding: 16px; max-width: 1400px; }
+.page-head { margin-bottom: 12px; }
+.page-body { display: flex; flex-direction: column; gap: 14px; }
+.report:not(:empty) { padding: 12px 16px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.panel > .panel { background: var(--panel-2); margin-top: 10px; }
+
+/* --- tables -------------------------------------------------------------- */
+
+.table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.table th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); font-weight: 600;
+}
+.table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table tr.detail > td { background: var(--panel-2); }
+.table tr.mine > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.table tr.material > td:first-child,
+.table tr.blocking > td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+
+/* --- fields -------------------------------------------------------------- */
+
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 18px; margin: 8px 0; }
+.field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.field dt { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.field dd { margin: 0; overflow-wrap: anywhere; }
+.field dd.inexact { color: var(--warn); }
+.field dd.inexact::after { content: " (not an exact decimal string)"; font-size: 11px; color: var(--muted); }
+
+.evidence-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.evidence { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+
+/* --- pills --------------------------------------------------------------- */
+
+.pill {
+  display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); white-space: nowrap;
+}
+.pill[data-state="proposed"], .pill[data-state="dual"] { color: var(--accent); border-color: var(--accent); }
+.pill[data-state="approved"], .pill[data-state="active"], .pill[data-state="executed"] { color: var(--ok); border-color: var(--ok); }
+.pill[data-state="rejected"], .pill[data-state="failed"], .pill[data-state="blocking"],
+.pill[data-state="severe"], .pill[data-state="frozen"], .pill[data-state="unhealthy"] { color: var(--danger); border-color: var(--danger); }
+.pill[data-state="expired"], .pill[data-state="cancelled"], .pill[data-state="inactive"],
+.pill[data-state="disabled"], .pill[data-state="degraded"] { color: var(--warn); border-color: var(--warn); }
+.pill[data-state="you"] { color: #06101f; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.pill[data-state="material"] { color: var(--warn); border-color: var(--warn); }
+
+/* --- controls ------------------------------------------------------------ */
+
+.controls { display: flex; flex-wrap: wrap; gap: 4px; }
+.button {
+  font: inherit; font-size: 12.5px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+}
+.button:hover:not(:disabled) { border-color: var(--accent); }
+.button.primary { background: var(--accent); border-color: var(--accent); color: #06101f; font-weight: 600; }
+.button.danger { border-color: var(--danger); color: var(--danger); }
+.button:disabled { cursor: not-allowed; opacity: .45; }
+/*
+ * A refused control is struck through as well as dimmed, so it cannot be read
+ * as merely "not yet loaded". It is always also `disabled`.
+ */
+.button.refused { text-decoration: line-through; }
+.linky { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-align: left; }
+.linky:hover { text-decoration: underline; }
+
+.chip {
+  font: inherit; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: #06101f; font-weight: 600; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; }
+
+/* --- forms --------------------------------------------------------------- */
+
+.command-form { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 10px; }
+.command-form.refused { opacity: .8; }
+.form-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+.form-field label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.form-field input, .form-field textarea, .form-field select {
+  font: inherit; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.form-field textarea { resize: vertical; min-height: 60px; }
+.form-actions { display: flex; gap: 8px; }
+.form-error:not(:empty) { margin-bottom: 8px; }
+.search { display: flex; gap: 6px; margin-bottom: 10px; }
+.search input { flex: 1; max-width: 480px; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+
+/* --- notices ------------------------------------------------------------- */
+
+.notice { border-radius: 6px; padding: 10px 12px; border: 1px solid var(--line); background: var(--panel-2); margin: 8px 0; }
+.notice.info { border-left: 3px solid var(--accent); }
+.notice.warn { border-left: 3px solid var(--warn); }
+.notice.error { border-left: 3px solid var(--danger); }
+.notice p:last-child { margin-bottom: 0; }
+.empty { color: var(--muted); font-style: italic; padding: 10px 0; }
+.reasons { margin: 4px 0 0 18px; padding: 0; color: var(--muted); }
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f6; --line: #d7dce5;
+    --ink: #131720; --muted: #5c6675; --accent: #1f5fd0;
+  }
+  .button.primary, .chip.on, .pill[data-state="you"], .nav-item.on { color: #ffffff; }
+}

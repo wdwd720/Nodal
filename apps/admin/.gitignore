@@ -1,0 +1,2 @@
+# Build output of `node build.mjs`. Regenerate with `pnpm --filter @controlplane/admin build`.
+dist/

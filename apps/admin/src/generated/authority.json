@@ -1,0 +1,754 @@
+{
+  "version": 1,
+  "source": "internal/adminplane (generated; do not edit by hand)",
+  "min_reason_length": 8,
+  "permissions": [
+    "account:freeze",
+    "account:read",
+    "account:read_any",
+    "admin:audit_read",
+    "agent:pause",
+    "agent:promote",
+    "agent:promote_approve",
+    "agent:run",
+    "break_glass:approve",
+    "break_glass:request",
+    "envelope:approve",
+    "envelope:authority_write",
+    "funding:create",
+    "funding:read",
+    "gate:approve",
+    "gate:propose",
+    "gate:read",
+    "instrument:status_write",
+    "intent:create_agent",
+    "kill:activate",
+    "kill:release",
+    "ledger:approve_correction",
+    "ledger:post_correction",
+    "ledger:read",
+    "prediction:commit",
+    "provider:disable",
+    "provider:enable",
+    "reconciliation:approve",
+    "reconciliation:read",
+    "reconciliation:resolve",
+    "risk:policy_write",
+    "risk:read",
+    "session:list_own",
+    "session:revoke_any",
+    "session:revoke_own",
+    "strategy:read",
+    "strategy:write",
+    "trade:create",
+    "trade:read",
+    "withdrawal:approve",
+    "withdrawal:create",
+    "withdrawal:review"
+  ],
+  "dual_control_permissions": [
+    "agent:promote_approve",
+    "envelope:approve",
+    "gate:approve",
+    "kill:release",
+    "ledger:approve_correction",
+    "reconciliation:approve",
+    "withdrawal:approve"
+  ],
+  "agent_permissions": [
+    "account:read",
+    "agent:run",
+    "intent:create_agent",
+    "prediction:commit",
+    "strategy:read",
+    "trade:read"
+  ],
+  "roles": [
+    {
+      "role": "CUSTOMER",
+      "permissions": [
+        "account:read",
+        "agent:pause",
+        "funding:create",
+        "funding:read",
+        "session:list_own",
+        "session:revoke_own",
+        "strategy:read",
+        "strategy:write",
+        "trade:create",
+        "trade:read",
+        "withdrawal:create"
+      ],
+      "standing": true
+    },
+    {
+      "role": "SUPPORT_READ_ONLY",
+      "permissions": [
+        "account:read",
+        "account:read_any",
+        "funding:read",
+        "gate:read",
+        "ledger:read",
+        "reconciliation:read",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_own",
+        "strategy:read",
+        "trade:read"
+      ],
+      "standing": true
+    },
+    {
+      "role": "OPERATIONS",
+      "permissions": [
+        "account:read",
+        "account:read_any",
+        "agent:pause",
+        "agent:promote",
+        "funding:read",
+        "gate:read",
+        "instrument:status_write",
+        "kill:activate",
+        "ledger:read",
+        "provider:disable",
+        "reconciliation:read",
+        "reconciliation:resolve",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_own",
+        "strategy:read",
+        "trade:read"
+      ],
+      "standing": true
+    },
+    {
+      "role": "RISK",
+      "permissions": [
+        "account:read",
+        "account:read_any",
+        "agent:promote",
+        "envelope:authority_write",
+        "funding:read",
+        "gate:propose",
+        "gate:read",
+        "instrument:status_write",
+        "kill:activate",
+        "ledger:read",
+        "reconciliation:read",
+        "risk:policy_write",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_own",
+        "strategy:read",
+        "trade:read"
+      ],
+      "standing": true
+    },
+    {
+      "role": "COMPLIANCE",
+      "permissions": [
+        "account:freeze",
+        "account:read",
+        "account:read_any",
+        "funding:read",
+        "gate:propose",
+        "gate:read",
+        "ledger:read",
+        "reconciliation:read",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_own",
+        "strategy:read",
+        "trade:read",
+        "withdrawal:review"
+      ],
+      "standing": true
+    },
+    {
+      "role": "FINANCE",
+      "permissions": [
+        "account:read",
+        "account:read_any",
+        "funding:read",
+        "gate:read",
+        "ledger:post_correction",
+        "ledger:read",
+        "reconciliation:read",
+        "reconciliation:resolve",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_own",
+        "strategy:read",
+        "trade:read",
+        "withdrawal:review"
+      ],
+      "standing": true
+    },
+    {
+      "role": "SECURITY",
+      "permissions": [
+        "account:read",
+        "account:read_any",
+        "break_glass:approve",
+        "funding:read",
+        "gate:read",
+        "kill:activate",
+        "ledger:read",
+        "provider:disable",
+        "reconciliation:read",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_any",
+        "session:revoke_own",
+        "strategy:read",
+        "trade:read"
+      ],
+      "standing": true
+    },
+    {
+      "role": "ADMIN",
+      "permissions": [
+        "account:freeze",
+        "account:read",
+        "account:read_any",
+        "admin:audit_read",
+        "agent:pause",
+        "agent:promote",
+        "break_glass:approve",
+        "break_glass:request",
+        "envelope:authority_write",
+        "funding:create",
+        "funding:read",
+        "gate:propose",
+        "gate:read",
+        "instrument:status_write",
+        "kill:activate",
+        "ledger:post_correction",
+        "ledger:read",
+        "provider:disable",
+        "provider:enable",
+        "reconciliation:read",
+        "reconciliation:resolve",
+        "risk:policy_write",
+        "risk:read",
+        "session:list_own",
+        "session:revoke_any",
+        "session:revoke_own",
+        "strategy:read",
+        "strategy:write",
+        "trade:create",
+        "trade:read",
+        "withdrawal:create",
+        "withdrawal:review"
+      ],
+      "standing": true
+    },
+    {
+      "role": "BREAK_GLASS",
+      "permissions": [
+        "agent:promote_approve",
+        "envelope:approve",
+        "gate:approve",
+        "kill:release",
+        "ledger:approve_correction",
+        "reconciliation:approve",
+        "withdrawal:approve"
+      ],
+      "standing": false
+    }
+  ],
+  "action_kinds": [
+    {
+      "kind": "ACCOUNT_UNFREEZE",
+      "requires_dual": false,
+      "propose_permission": "account:freeze",
+      "step_up_max_age_seconds": 900,
+      "expiry_seconds": 3600,
+      "requires_break_glass_approval": false
+    },
+    {
+      "kind": "AGENT_PROMOTE",
+      "requires_dual": true,
+      "propose_permission": "agent:promote",
+      "approve_permission": "agent:promote_approve",
+      "step_up_max_age_seconds": 900,
+      "expiry_seconds": 86400,
+      "requires_break_glass_approval": true
+    },
+    {
+      "kind": "BREAK_GLASS_GRANT",
+      "requires_dual": true,
+      "propose_permission": "break_glass:request",
+      "approve_permission": "break_glass:approve",
+      "step_up_max_age_seconds": 300,
+      "expiry_seconds": 1800,
+      "requires_break_glass_approval": false
+    },
+    {
+      "kind": "CAPABILITY_GATE_APPROVE",
+      "requires_dual": true,
+      "propose_permission": "gate:propose",
+      "approve_permission": "gate:approve",
+      "step_up_max_age_seconds": 900,
+      "expiry_seconds": 86400,
+      "requires_break_glass_approval": true
+    },
+    {
+      "kind": "ENVELOPE_AUTHORITY_CHANGE",
+      "requires_dual": true,
+      "propose_permission": "envelope:authority_write",
+      "approve_permission": "envelope:approve",
+      "step_up_max_age_seconds": 900,
+      "expiry_seconds": 86400,
+      "requires_break_glass_approval": true
+    },
+    {
+      "kind": "KILL_SWITCH_RELEASE",
+      "requires_dual": true,
+      "propose_permission": "kill:activate",
+      "approve_permission": "kill:release",
+      "step_up_max_age_seconds": 900,
+      "expiry_seconds": 3600,
+      "requires_break_glass_approval": true
+    },
+    {
+      "kind": "LEDGER_CORRECTION",
+      "requires_dual": true,
+      "propose_permission": "ledger:post_correction",
+      "approve_permission": "ledger:approve_correction",
+      "step_up_max_age_seconds": 300,
+      "expiry_seconds": 14400,
+      "requires_break_glass_approval": true
+    },
+    {
+      "kind": "RECONCILIATION_RESOLVE_MATERIAL",
+      "requires_dual": true,
+      "propose_permission": "reconciliation:resolve",
+      "approve_permission": "reconciliation:approve",
+      "step_up_max_age_seconds": 900,
+      "expiry_seconds": 14400,
+      "requires_break_glass_approval": true
+    },
+    {
+      "kind": "WITHDRAWAL_APPROVE",
+      "requires_dual": true,
+      "propose_permission": "withdrawal:review",
+      "approve_permission": "withdrawal:approve",
+      "step_up_max_age_seconds": 300,
+      "expiry_seconds": 3600,
+      "requires_break_glass_approval": true
+    }
+  ],
+  "action_statuses": [
+    "PROPOSED",
+    "APPROVED",
+    "REJECTED",
+    "EXECUTED",
+    "FAILED",
+    "EXPIRED",
+    "CANCELLED"
+  ],
+  "action_transitions": {
+    "APPROVED": [
+      "EXECUTED",
+      "FAILED",
+      "EXPIRED"
+    ],
+    "CANCELLED": [],
+    "EXECUTED": [],
+    "EXPIRED": [],
+    "FAILED": [],
+    "PROPOSED": [
+      "APPROVED",
+      "REJECTED",
+      "EXECUTED",
+      "FAILED",
+      "EXPIRED",
+      "CANCELLED"
+    ],
+    "REJECTED": []
+  },
+  "verbs": [
+    "propose",
+    "approve",
+    "reject",
+    "execute",
+    "cancel"
+  ],
+  "reasons": [
+    "ALLOWED",
+    "UNAUTHENTICATED",
+    "AGENT_PRINCIPAL",
+    "INVALID_PRINCIPAL",
+    "SUBJECT_NOT_A_USER",
+    "UNKNOWN_KIND",
+    "MISSING_PERMISSION",
+    "STEP_UP_REQUIRED",
+    "SELF_APPROVAL",
+    "NOT_PROPOSER",
+    "KIND_TAKES_NO_APPROVAL",
+    "EXPIRED",
+    "WRONG_STATUS",
+    "AWAITING_APPROVAL",
+    "APPROVER_NOT_DISTINCT"
+  ],
+  "gate_actions": [
+    {
+      "action": "propose",
+      "permission": "gate:propose",
+      "step_up_max_age_seconds": 900
+    },
+    {
+      "action": "approve",
+      "permission": "gate:approve",
+      "step_up_max_age_seconds": 900
+    },
+    {
+      "action": "activate",
+      "permission": "gate:approve",
+      "step_up_max_age_seconds": 900
+    },
+    {
+      "action": "suspend",
+      "permission": "kill:activate",
+      "step_up_max_age_seconds": 900
+    },
+    {
+      "action": "resume",
+      "permission": "gate:approve",
+      "step_up_max_age_seconds": 900
+    },
+    {
+      "action": "revoke",
+      "permission": "gate:approve",
+      "step_up_max_age_seconds": 900
+    }
+  ],
+  "capabilities": [
+    "LIVE_FUNDING",
+    "LIVE_MANUAL_TRADING",
+    "LIVE_AGENT_TRADING",
+    "WITHDRAWALS",
+    "SOCIAL_DATA_PERSISTENCE",
+    "MARKETPLACE",
+    "CROSS_CHAIN",
+    "PREDICTION_MARKETS",
+    "SECURITIES",
+    "CEX_TRADING"
+  ],
+  "kill_switch_kinds": [
+    {
+      "kind": "ACCOUNT_FREEZE",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "AGENT_PAUSE",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "CHAIN_DISABLE_NEW_ACTIONS",
+      "severity": "SEVERE",
+      "release_needs_approval": true
+    },
+    {
+      "kind": "FUNDING_DISABLE",
+      "severity": "SEVERE",
+      "release_needs_approval": true
+    },
+    {
+      "kind": "GLOBAL_NEW_RISK_KILL",
+      "severity": "SEVERE",
+      "release_needs_approval": true
+    },
+    {
+      "kind": "INSTRUMENT_CLOSE_ONLY",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "INSTRUMENT_HALT",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "MODEL_DISABLE",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "PROVIDER_DISABLE_NEW_ACTIONS",
+      "severity": "SEVERE",
+      "release_needs_approval": true
+    },
+    {
+      "kind": "STRATEGY_VERSION_DISABLE",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "VENUE_DISABLE",
+      "severity": "STANDARD",
+      "release_needs_approval": false
+    },
+    {
+      "kind": "WITHDRAWALS_DISABLE",
+      "severity": "SEVERE",
+      "release_needs_approval": true
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "accounts",
+      "read_any_of": [
+        "account:read_any"
+      ],
+      "writes": [
+        {
+          "id": "account.status",
+          "any_of": [
+            "account:freeze"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        }
+      ],
+      "action_kinds": [
+        "ACCOUNT_UNFREEZE"
+      ]
+    },
+    {
+      "id": "reconciliation",
+      "read_any_of": [
+        "reconciliation:read"
+      ],
+      "writes": [
+        {
+          "id": "reconciliation.resolve",
+          "any_of": [
+            "reconciliation:resolve"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "requires_evidence": true,
+          "approval_kind": "RECONCILIATION_RESOLVE_MATERIAL",
+          "approval_condition": "record.material",
+          "never_for_agent": true
+        }
+      ],
+      "action_kinds": [
+        "RECONCILIATION_RESOLVE_MATERIAL",
+        "LEDGER_CORRECTION"
+      ]
+    },
+    {
+      "id": "gates",
+      "read_any_of": [
+        "gate:read"
+      ],
+      "writes": [
+        {
+          "id": "gate.propose",
+          "any_of": [
+            "gate:propose"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        },
+        {
+          "id": "gate.approve",
+          "any_of": [
+            "gate:approve"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        },
+        {
+          "id": "gate.activate",
+          "any_of": [
+            "gate:approve"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        },
+        {
+          "id": "gate.suspend",
+          "any_of": [
+            "kill:activate"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        },
+        {
+          "id": "gate.resume",
+          "any_of": [
+            "gate:approve"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        },
+        {
+          "id": "gate.revoke",
+          "any_of": [
+            "gate:approve"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        }
+      ],
+      "action_kinds": [
+        "CAPABILITY_GATE_APPROVE"
+      ]
+    },
+    {
+      "id": "kill_switches",
+      "read_any_of": [
+        "risk:read",
+        "gate:read"
+      ],
+      "writes": [
+        {
+          "id": "kill.activate",
+          "any_of": [
+            "kill:activate"
+          ],
+          "requires_reason": true,
+          "never_for_agent": true
+        },
+        {
+          "id": "kill.release",
+          "any_of": [
+            "kill:release"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "approval_kind": "KILL_SWITCH_RELEASE",
+          "approval_condition": "switch.severity == SEVERE",
+          "never_for_agent": true
+        }
+      ],
+      "action_kinds": [
+        "KILL_SWITCH_RELEASE"
+      ]
+    },
+    {
+      "id": "actions",
+      "read_any_of": [
+        "account:freeze",
+        "admin:audit_read",
+        "agent:promote",
+        "agent:promote_approve",
+        "break_glass:approve",
+        "break_glass:request",
+        "envelope:approve",
+        "envelope:authority_write",
+        "gate:approve",
+        "gate:propose",
+        "kill:activate",
+        "kill:release",
+        "ledger:approve_correction",
+        "ledger:post_correction",
+        "reconciliation:approve",
+        "reconciliation:resolve",
+        "withdrawal:approve",
+        "withdrawal:review"
+      ],
+      "action_kinds": [
+        "ACCOUNT_UNFREEZE",
+        "AGENT_PROMOTE",
+        "BREAK_GLASS_GRANT",
+        "CAPABILITY_GATE_APPROVE",
+        "ENVELOPE_AUTHORITY_CHANGE",
+        "KILL_SWITCH_RELEASE",
+        "LEDGER_CORRECTION",
+        "RECONCILIATION_RESOLVE_MATERIAL",
+        "WITHDRAWAL_APPROVE"
+      ]
+    },
+    {
+      "id": "withdrawals",
+      "read_any_of": [
+        "withdrawal:review",
+        "withdrawal:approve"
+      ],
+      "action_kinds": [
+        "WITHDRAWAL_APPROVE"
+      ]
+    },
+    {
+      "id": "envelopes",
+      "read_any_of": [
+        "envelope:authority_write",
+        "envelope:approve"
+      ],
+      "action_kinds": [
+        "ENVELOPE_AUTHORITY_CHANGE"
+      ]
+    },
+    {
+      "id": "agent_promotion",
+      "read_any_of": [
+        "agent:promote",
+        "agent:promote_approve"
+      ],
+      "action_kinds": [
+        "AGENT_PROMOTE"
+      ]
+    },
+    {
+      "id": "break_glass",
+      "read_any_of": [
+        "break_glass:request",
+        "break_glass:approve"
+      ],
+      "action_kinds": [
+        "BREAK_GLASS_GRANT"
+      ]
+    },
+    {
+      "id": "providers",
+      "read_any_of": [
+        "admin:audit_read"
+      ]
+    },
+    {
+      "id": "instruments",
+      "read_any_of": [
+        "account:read_any"
+      ],
+      "writes": [
+        {
+          "id": "instrument.status",
+          "any_of": [
+            "instrument:status_write"
+          ],
+          "step_up_max_age_seconds": 900,
+          "requires_reason": true,
+          "never_for_agent": true
+        }
+      ]
+    }
+  ],
+  "break_glass": {
+    "role": "BREAK_GLASS",
+    "kind": "BREAK_GLASS_GRANT",
+    "max_duration_seconds": 14400,
+    "grants": [
+      "agent:promote_approve",
+      "envelope:approve",
+      "gate:approve",
+      "kill:release",
+      "ledger:approve_correction",
+      "reconciliation:approve",
+      "withdrawal:approve"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@controlplane/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Operator console for the control plane: accounts, reconciliation, capability gates, kill switches, the dual-control action queue and break-glass.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types \"src/**/*.test.ts\"",
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "serve": "node server.mjs",
+    "start": "node build.mjs && node server.mjs"
+  },
+  "dependencies": {
+    "@controlplane/generated-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3"
+  }
+}
