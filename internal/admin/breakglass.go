@@ -55,8 +55,9 @@ type BreakGlass struct {
 func NewBreakGlass(svc *Service) *BreakGlass { return &BreakGlass{svc: svc} }
 
 // Grant executes the approved BREAK_GLASS_GRANT action and returns the
-// resulting time-boxed grant. The session layer then rotates the grantee's
-// session with PrincipalWithBreakGlass.
+// resulting time-boxed grant. The session layer then applies it with
+// PrincipalWithBreakGlass or auth.Manager.Elevate; nothing here touches a
+// session.
 func (b *BreakGlass) Grant(ctx context.Context, tx pgx.Tx, actionID string) (Grant, error) {
 	current, err := b.svc.Get(ctx, tx, actionID)
 	if err != nil {
@@ -66,14 +67,53 @@ func (b *BreakGlass) Grant(ctx context.Context, tx pgx.Tx, actionID string) (Gra
 		return Grant{}, errs.Newf(errs.CodeInvalidStateTransition, "admin: action %s is not a break-glass grant", current.Kind)
 	}
 	var grant Grant
-	executed, err := b.svc.Execute(ctx, tx, actionID, func(ctx context.Context, tx pgx.Tx, params json.RawMessage) (json.RawMessage, error) {
+	executed, err := b.svc.Execute(ctx, tx, actionID, b.executor(&grant))
+	if err != nil {
+		return Grant{}, err
+	}
+	if executed.Status != StatusExecuted {
+		return Grant{}, errs.Newf(errs.CodeInternal, "admin: grant ended in status %s", executed.Status)
+	}
+	return grant, nil
+}
+
+// Executor returns the ExecFunc that turns an approved BREAK_GLASS_GRANT
+// into a Grant, for registration in an executor table keyed by kind. It
+// reads the action being applied from the context (ExecutingAction), so it
+// runs only inside Service.Execute and refuses any other kind.
+//
+// The elevation itself is not applied here: a Grant is a record, and the
+// composition root wraps this executor with the step that writes the expiry
+// onto the grantee's sessions, inside the same savepoint, so a grant that
+// cannot be applied is not recorded as if it had been.
+func (b *BreakGlass) Executor() ExecFunc { return b.executor(nil) }
+
+// executor is Executor, optionally publishing the grant it built to out.
+func (b *BreakGlass) executor(out *Grant) ExecFunc {
+	return func(ctx context.Context, tx pgx.Tx, params json.RawMessage) (json.RawMessage, error) {
+		current, ok := ExecutingAction(ctx)
+		if !ok {
+			return nil, errs.New(errs.CodeInternal, "admin: the break-glass executor runs only inside Execute")
+		}
+		if current.Kind != KindBreakGlassGrant {
+			return nil, errs.Newf(errs.CodeInvalidStateTransition, "admin: action %s is not a break-glass grant", current.Kind)
+		}
 		p, err := ParseBreakGlassParams(params)
 		if err != nil {
 			return nil, err
 		}
+		// target_id is what an approver read, what the audit trail names and
+		// what VerifyApproved compares; params.user_id is who would actually
+		// be elevated. A proposal where they disagree shows one person and
+		// elevates another, so it is refused rather than resolved.
+		if !sameUser(p.UserID, current.TargetID) {
+			return nil, errs.New(errs.CodeValidationFailed,
+				"admin: the break-glass params elevate someone other than the action's target").
+				WithField("field", "params.user_id")
+		}
 		now := b.svc.now()
-		grant = Grant{ActionID: current.ID.String(), UserID: p.UserID, Scope: p.Scope, ExpiresAt: now.Add(time.Duration(p.DurationSeconds) * time.Second)}
-		out, err := json.Marshal(grant)
+		grant := Grant{ActionID: current.ID.String(), UserID: p.UserID, Scope: p.Scope, ExpiresAt: now.Add(time.Duration(p.DurationSeconds) * time.Second)}
+		encoded, err := json.Marshal(grant)
 		if err != nil {
 			return nil, errs.Wrap(err, errs.CodeInternal, "admin: encode grant")
 		}
@@ -85,25 +125,21 @@ func (b *BreakGlass) Grant(ctx context.Context, tx pgx.Tx, actionID string) (Gra
 			Action:        AuditBreakGlassGranted,
 			ResourceType:  "user",
 			ResourceID:    grant.UserID,
-			AfterHash:     hashBytes(out),
+			AfterHash:     hashBytes(encoded),
 			RequestID:     observability.RequestID(ctx),
 			CorrelationID: deref(current.CorrelationID),
 			Reason:        current.Reason,
 			EvidenceRef:   current.ID.String(),
-			Payload:       out,
+			Payload:       encoded,
 			OccurredAt:    now,
 		}); err != nil {
 			return nil, err
 		}
-		return out, nil
-	})
-	if err != nil {
-		return Grant{}, err
+		if out != nil {
+			*out = grant
+		}
+		return encoded, nil
 	}
-	if executed.Status != StatusExecuted {
-		return Grant{}, errs.Newf(errs.CodeInternal, "admin: grant ended in status %s", executed.Status)
-	}
-	return grant, nil
 }
 
 // ParseBreakGlassParams decodes and validates the typed params. Unknown

@@ -24,7 +24,30 @@ import (
 // whose hash was verified and runs inside a savepoint on the caller's
 // transaction; its writes are rolled back when it returns an error. The
 // returned JSON (nil allowed) is stored as execution_result.
+//
+// An executor registered by kind (rather than closed over one action) reads
+// the action it is applying from the context with ExecutingAction.
 type ExecFunc func(ctx context.Context, tx pgx.Tx, params json.RawMessage) (json.RawMessage, error)
+
+// execCtxKey carries the action Execute is applying into its ExecFunc.
+type execCtxKey struct{}
+
+// ExecutingAction returns the action Execute is applying. It is set only for
+// the duration of the ExecFunc call, and only by Execute, so an executor
+// registered against a kind can name the record that authorized it — as an
+// approval id, an evidence reference or an audit subject — without a second,
+// unlocked read of a row Execute already holds FOR UPDATE.
+//
+// It is absent outside Execute, and an executor that needs it must fail
+// rather than guess.
+func ExecutingAction(ctx context.Context) (Action, bool) {
+	a, ok := ctx.Value(execCtxKey{}).(Action)
+	return a, ok
+}
+
+func withExecutingAction(ctx context.Context, a Action) context.Context {
+	return context.WithValue(ctx, execCtxKey{}, a)
+}
 
 // Actions is the fixed contract (POLICY_AUTHORITY §7). Every method rejects
 // AGENT principals before any query and requires the caller's transaction.
@@ -290,6 +313,10 @@ func (s *Service) Approve(ctx context.Context, tx pgx.Tx, actionID, note string)
 	if uid == a.ProposedBy {
 		return Action{}, errs.Wrap(security.ErrSelfApproval, errs.CodeForbidden, "admin: the approver must differ from the proposer")
 	}
+	if spec.ApproverIsNotTarget && sameUser(uid, a.TargetID) {
+		return Action{}, errs.Wrap(security.ErrSelfApproval, errs.CodeForbidden,
+			"admin: the approver must not be the person this action elevates")
+	}
 	now := s.now()
 	if err := checkPending(a, StatusApproved, now); err != nil {
 		return Action{}, err
@@ -453,7 +480,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, actionID string, exec 
 		return Action{}, ErrParamsTampered.WithField("action_id", a.ID.String())
 	}
 
-	result, execErr := runExec(ctx, tx, exec, params)
+	result, execErr := runExec(withExecutingAction(ctx, a), tx, exec, params)
 
 	before := a
 	a.ExecutedAt = &now

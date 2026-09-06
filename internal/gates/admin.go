@@ -152,18 +152,15 @@ func (a *Admin) load(ctx context.Context, tx pgx.Tx, c Capability) (*Gate, error
 	return g, nil
 }
 
-// commit persists the mutated gate, its transition and the audit event.
+// commit persists the mutated gate, its transition and the audit event. The
+// row and its transition go through cp_gate_transition (migration 00701),
+// which re-derives the state machine, dual control and the five activation
+// conditions in the database and writes both in one statement; *g is replaced
+// by the row it wrote. verb doubles as the operation name.
 func (a *Admin) commit(ctx context.Context, tx pgx.Tx, p security.Principal, g *Gate, from GateState, verb, reason string, now time.Time) error {
-	if err := saveGate(ctx, tx, g); err != nil {
-		return err
-	}
 	digest := g.EvidenceDigest()
-	t := Transition{
-		ID: NewTransitionID(), GateID: g.ID, From: from, To: g.State,
-		ActorType: p.ActorType, ActorID: p.SubjectID, Reason: reason,
-		EvidenceHash: digest[:], OccurredAt: now,
-	}
-	if err := insertTransition(ctx, tx, t); err != nil {
+	tid := NewTransitionID()
+	if err := applyTransition(ctx, tx, g, verb, p, reason, tid, digest[:], now); err != nil {
 		return err
 	}
 	payload, err := json.Marshal(struct {
@@ -174,7 +171,7 @@ func (a *Admin) commit(ctx context.Context, tx pgx.Tx, p security.Principal, g *
 		ApprovalVersion int        `json:"approval_version"`
 		TransitionID    string     `json:"transition_id"`
 		Approvers       []string   `json:"approvers"`
-	}{g.Capability, g.Environment, from, g.State, g.ApprovalVersion, t.ID.String(), g.DistinctApprovers()})
+	}{g.Capability, g.Environment, from, g.State, g.ApprovalVersion, tid.String(), g.DistinctApprovers()})
 	if err != nil {
 		return fmt.Errorf("gates: encode audit payload: %w", err)
 	}
@@ -251,7 +248,7 @@ func (a *Admin) Propose(ctx context.Context, tx pgx.Tx, c Capability, req Propos
 		UserID: p.SubjectID, Role: rolesOf(p), At: now, Step: StepPropose,
 		EvidenceHash: g.EvidenceDigestHex(), Note: req.Reason,
 	}}
-	if err := a.commit(ctx, tx, p, g, from, "propose", req.Reason, now); err != nil {
+	if err := a.commit(ctx, tx, p, g, from, opPropose, req.Reason, now); err != nil {
 		return Gate{}, err
 	}
 	return *g, nil
@@ -297,7 +294,7 @@ func activateRule(g *Gate, subject string) error {
 // gate:approve (a live BREAK_GLASS elevation), a step-up within
 // StepUpMaxAge, and a principal other than the proposer.
 func (a *Admin) Approve(ctx context.Context, tx pgx.Tx, c Capability, note string) (Gate, error) {
-	return a.approveStep(ctx, tx, c, note, StateApproved, StepApprove, "approve")
+	return a.approveStep(ctx, tx, c, note, StateApproved, StepApprove, opApprove)
 }
 
 // Resume returns a SUSPENDED gate to APPROVED. It never re-activates by
@@ -305,7 +302,7 @@ func (a *Admin) Approve(ctx context.Context, tx pgx.Tx, c Capability, note strin
 // re-enabling after an emergency is again dual-authorized. Same
 // requirements as Approve.
 func (a *Admin) Resume(ctx context.Context, tx pgx.Tx, c Capability, note string) (Gate, error) {
-	return a.approveStep(ctx, tx, c, note, StateApproved, StepResume, "resume")
+	return a.approveStep(ctx, tx, c, note, StateApproved, StepResume, opResume)
 }
 
 func (a *Admin) approveStep(ctx context.Context, tx pgx.Tx, c Capability, note string, to GateState, step, verb string) (Gate, error) {
@@ -407,7 +404,7 @@ func (a *Admin) Activate(ctx context.Context, tx pgx.Tx, c Capability, note stri
 		UserID: p.SubjectID, Role: rolesOf(p), At: now, Step: StepActivate,
 		EvidenceHash: g.EvidenceDigestHex(), Note: note,
 	})
-	if err := a.commit(ctx, tx, p, g, from, "activate", note, now); err != nil {
+	if err := a.commit(ctx, tx, p, g, from, opActivate, note, now); err != nil {
 		return Gate{}, err
 	}
 	return *g, nil
@@ -441,7 +438,7 @@ func (a *Admin) Suspend(ctx context.Context, tx pgx.Tx, c Capability, reason str
 	now := a.clk.Now()
 	from := g.State
 	g.State = StateSuspended
-	if err := a.commit(ctx, tx, p, g, from, "suspend", reason, now); err != nil {
+	if err := a.commit(ctx, tx, p, g, from, opSuspend, reason, now); err != nil {
 		return Gate{}, err
 	}
 	return *g, nil
@@ -478,7 +475,7 @@ func (a *Admin) Revoke(ctx context.Context, tx pgx.Tx, c Capability, reason stri
 	t := now
 	g.RevokedAt = &t
 	g.RevokeReason = reason
-	if err := a.commit(ctx, tx, p, g, from, "revoke", reason, now); err != nil {
+	if err := a.commit(ctx, tx, p, g, from, opRevoke, reason, now); err != nil {
 		return Gate{}, err
 	}
 	return *g, nil
@@ -527,7 +524,7 @@ func (a *Admin) ExpireDue(ctx context.Context, tx pgx.Tx, now time.Time) ([]Gate
 		from := g.State
 		g.State = StateExpired
 		reason := fmt.Sprintf("expires_at %s reached", g.ExpiresAt.UTC().Format(time.RFC3339Nano))
-		if err := a.commit(ctx, tx, p, g, from, "expire", reason, now); err != nil {
+		if err := a.commit(ctx, tx, p, g, from, opExpire, reason, now); err != nil {
 			return nil, err
 		}
 		out = append(out, *g)

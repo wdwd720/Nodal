@@ -254,8 +254,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// The reconciliation engine is owned by its own binary; the API
 		// exposes no resolution path until it is wired.
 		Reconcile: nil,
-		// No admin action kind is executable over HTTP in this deployment.
-		AdminExecutors: map[admin.Kind]admin.ExecFunc{},
+		// Executable kinds are BREAK_GLASS_GRANT (which is what makes any
+		// approve-side permission obtainable at all) and KILL_SWITCH_RELEASE.
+		// Every other kind answers 422 UNSUPPORTED here: its effect belongs
+		// to the domain endpoint that quotes the approval, not to a second
+		// path through the action table.
+		AdminExecutors: httpapi.AdminExecutors(adminSvc, sessionMgr, killController),
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,
 	})
 	if err != nil {

@@ -40,7 +40,13 @@ type Session struct {
 	// RotatedFrom is the ID of the session this one replaced, if any.
 	RotatedFrom string
 	// BreakGlassUntil is the expiry of a break-glass elevation carried by
-	// this session (PART 93); the session must be rotated to obtain one.
+	// this session (PART 93). A session obtains one either by rotation
+	// (Rotate, when the holder's own privileges change) or from an executed
+	// BREAK_GLASS_GRANT admin action applied with Manager.Elevate — a grant
+	// is issued to someone else by two other people, who cannot hand the
+	// grantee a rotated token, so that path writes the expiry onto the
+	// sessions the grantee already holds. Liveness is judged against the
+	// clock at every use, never at issue time.
 	BreakGlassUntil *time.Time
 }
 
@@ -159,4 +165,13 @@ type SessionStore interface {
 	Revoke(ctx context.Context, q Querier, id string) error
 	RevokeAllForSubject(ctx context.Context, q Querier, subjectID string) (int, error)
 	ListForSubject(ctx context.Context, q Querier, subjectID string) ([]Session, error)
+	// Elevate stamps a break-glass elevation on every session of subjectID
+	// that is usable at now — an OPERATOR session, not revoked, not past
+	// its absolute expiry — setting BreakGlassUntil to until and adding the
+	// BREAK_GLASS role, and returns how many rows it changed. It replaces
+	// any elevation already on those rows rather than extending it, and it
+	// never touches a session belonging to anyone else, a USER session or a
+	// revoked one. It is the only write that changes a live session's
+	// privileges; see Manager.Elevate for the bounds it is checked against.
+	Elevate(ctx context.Context, q Querier, subjectID string, until, now time.Time) (int, error)
 }

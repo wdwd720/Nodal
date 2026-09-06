@@ -390,3 +390,49 @@ func TestSession_Validate(t *testing.T) {
 		})
 	}
 }
+
+// TestElevate_BoundsAndScope pins what Manager.Elevate refuses. The store
+// enforces *which* sessions are eligible; the manager enforces that the
+// deadline is a real, bounded one, because an unbounded or already-past
+// elevation is either a permanent privilege or a silent no-op, and both read
+// as "granted" to anything that only checks the error.
+func TestElevate_BoundsAndScope(t *testing.T) {
+	f := newFixture(t, auth.ManagerConfig{TTL: 12 * time.Hour, IdleTimeout: time.Hour})
+	ctx := context.Background()
+
+	op := auth.IssueParams{
+		SubjectID: "op-1", ActorType: security.ActorOperator,
+		Roles: []security.Role{security.RoleAdmin}, AuthTime: t0, AMR: []string{"pwd", "mfa"},
+	}
+	if _, err := f.mgr.Issue(ctx, nil, op); err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+
+	for name, until := range map[string]time.Time{
+		"already past":       t0.Add(-time.Second),
+		"exactly now":        t0,
+		"beyond the ceiling": t0.Add(auth.MaxBreakGlassElevation + time.Second),
+	} {
+		if n, err := f.mgr.Elevate(ctx, nil, "op-1", until); err == nil {
+			t.Fatalf("%s: elevation accepted (n=%d)", name, n)
+		}
+	}
+	if _, err := f.mgr.Elevate(ctx, nil, "", t0.Add(time.Minute)); err == nil {
+		t.Fatal("empty subject accepted")
+	}
+
+	// The ceiling itself is allowed, and the elevation lands on the session.
+	n, err := f.mgr.Elevate(ctx, nil, "op-1", t0.Add(auth.MaxBreakGlassElevation))
+	if err != nil {
+		t.Fatalf("elevate: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("elevated %d sessions, want 1", n)
+	}
+
+	// A subject with no session is not an error, and elevates nothing: the
+	// caller decides whether that is acceptable.
+	if n, err := f.mgr.Elevate(ctx, nil, "op-2", t0.Add(time.Minute)); err != nil || n != 0 {
+		t.Fatalf("unknown subject: n=%d err=%v", n, err)
+	}
+}

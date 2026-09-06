@@ -244,6 +244,49 @@ func (m *Manager) Rotate(ctx context.Context, tx pgx.Tx, current Session, r Rota
 	return m.create(ctx, tx, next)
 }
 
+// MaxBreakGlassElevation bounds a single elevation Elevate will write. It
+// mirrors admin.MaxBreakGlassDuration, which validates the same bound when
+// the grant is proposed; this package does not import internal/admin, so the
+// two are pinned equal by a test at the composition root. An elevation
+// longer than this is a configuration error, not an emergency.
+const MaxBreakGlassElevation = 4 * time.Hour
+
+// Elevate applies an executed BREAK_GLASS_GRANT to the grantee's live
+// sessions: it stamps BreakGlassUntil and adds the BREAK_GLASS role, and
+// returns how many sessions were elevated (0 when the grantee is not signed
+// in). It is deliberately not "log this person in with more authority": it
+// grants nothing to a subject with no live operator session, and the
+// elevation dies of the clock at until, whatever the session does.
+//
+// Rotate is the right call when the *holder's* own privileges change,
+// because it can hand them the replacement token. A break-glass grant is
+// issued to someone else by two other people, who have no way to deliver a
+// rotated token to the grantee, so this writes onto the sessions they hold.
+//
+// The caller must already have enforced dual control: this is the mechanism,
+// not the control. It refuses an expiry that is not in the future or is
+// further away than MaxBreakGlassElevation.
+func (m *Manager) Elevate(ctx context.Context, q Querier, subjectID string, until time.Time) (int, error) {
+	if subjectID == "" {
+		return 0, errors.New("auth: elevate requires a subject")
+	}
+	now := m.Now()
+	until = until.UTC()
+	if !until.After(now) {
+		return 0, fmt.Errorf("auth: break-glass elevation must expire in the future, got %s at %s",
+			until.Format(time.RFC3339), now.Format(time.RFC3339))
+	}
+	if until.Sub(now) > MaxBreakGlassElevation {
+		return 0, fmt.Errorf("auth: break-glass elevation of %s exceeds the %s maximum",
+			until.Sub(now), MaxBreakGlassElevation)
+	}
+	n, err := m.store.Elevate(ctx, q, subjectID, until, now)
+	if err != nil {
+		return 0, fmt.Errorf("auth: elevate sessions: %w", err)
+	}
+	return n, nil
+}
+
 // Revoke invalidates one session (logout, or session:revoke_own /
 // session:revoke_any after the caller has authorized it).
 func (m *Manager) Revoke(ctx context.Context, q Querier, id string) error {

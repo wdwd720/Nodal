@@ -567,3 +567,204 @@ func TestIntegration_ProposeCreatesMissingRow(t *testing.T) {
 	})
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 }
+
+// forgedChain is an approval chain that satisfies every check in Evaluate: a
+// proposer and two distinct approvers, none of whom is the proposer.
+const forgedChain = `[{"user_id":"mallory","step":"PROPOSE"},` +
+	`{"user_id":"accomplice-1","step":"APPROVE"},{"user_id":"accomplice-2","step":"ACTIVATE"}]`
+
+// execAsApp runs sql on the application pool (role cp_app), bypassing this
+// package's repository functions, and returns the error verbatim.
+func execAsApp(t *testing.T, sql string, args ...any) error {
+	t.Helper()
+	_, err := testDB.Exec(context.Background(), sql, args...)
+	return err
+}
+
+// callGateTransition invokes cp_gate_transition as cp_app with a forged
+// request. Only the fields the forgeries vary are parameters; the rest are
+// the well-formed values a real call would carry.
+func callGateTransition(t *testing.T, gateID GateID, version int64, op, actorID, approver string) error {
+	t.Helper()
+	_, err := testDB.Exec(context.Background(), `SELECT * FROM cp_gate_transition(
+		$1::uuid, $2::bigint, $3::text, 'OPERATOR'::text, $4::text, 'forged'::text, $5::uuid,
+		NULL::bytea, now()::timestamptz, $6::jsonb,
+		NULL::text, NULL::text, NULL::text, NULL::text, NULL::jsonb, NULL::timestamptz, NULL::timestamptz)`,
+		gateID, version, op, actorID, NewTransitionID(), approver)
+	return err
+}
+
+// TestIntegration_DatabaseRefusesForgedActivation is the adversarial control
+// for migration 00701. Every case here is what an attacker holding the
+// application's database credential would try: raw SQL issued as cp_app,
+// bypassing internal/gates entirely. Before 00701, cases 3 and 4 succeeded and
+// a live-money capability came out ACTIVE with one actor and no approval,
+// because gates.Evaluate re-derives all five conditions from the same row the
+// forgery had just written.
+//
+// Every case must be refused by the database, and after every case the
+// capability must still evaluate inactive with deployment configuration fully
+// permissive (the fixture's checker enables everything, so only conditions 2-5
+// are doing the work).
+func TestIntegration_DatabaseRefusesForgedActivation(t *testing.T) {
+	f := newFixture(t, "LOCAL")
+	const c = CEXTrading // used by no other test, in an environment no other test writes
+	ctx := context.Background()
+	f.reset(t, c)
+	g := f.get(t, c)
+	require.NotEqual(t, StateActive, g.State, "fixture must not start ACTIVE")
+
+	stillInactive := func(what string) {
+		t.Helper()
+		row := f.get(t, c)
+		assert.NotEqual(t, StateActive, row.State, "%s: row reached ACTIVE", what)
+		// Evaluate the stored row directly, with deployment configuration
+		// enabled and a clock past any effective_at a forgery could have
+		// written, so the verdict turns on conditions 2-5 and not on the
+		// fixture's fake clock happening to sit before the forged instant.
+		v := Evaluate(&row, true, time.Now().UTC().Add(time.Minute))
+		assert.False(t, v.Active, "%s: the forged row evaluates ACTIVE (%+v)", what, v)
+		assert.False(t, f.verdict(t, c).Active, "%s: the checker reports ACTIVE", what)
+	}
+
+	// 1. cp_app holds no UPDATE privilege on any column that decides anything.
+	//    Only `version` is granted, and only so SELECT ... FOR UPDATE can take
+	//    a row lock; it appears in none of the five conditions.
+	for _, col := range []string{
+		"state", "approval_version", "approvers", "proposed_by_user_id", "evidence_hashes",
+		"legal_review_ref", "provider_contract_ref", "risk_approval_ref", "security_approval_ref",
+		"effective_at", "expires_at", "revoked_at", "revoke_reason",
+	} {
+		var granted bool
+		require.NoError(t, testDB.QueryRow(ctx,
+			`SELECT has_column_privilege(current_user, 'capability_gates', $1, 'UPDATE')`, col).Scan(&granted))
+		assert.False(t, granted, "cp_app must not be able to UPDATE capability_gates.%s", col)
+	}
+	var canDelete, canInsertHistory, isMigrate bool
+	require.NoError(t, testDB.QueryRow(ctx, `SELECT
+		has_table_privilege(current_user, 'capability_gates', 'DELETE'),
+		has_table_privilege(current_user, 'capability_gate_transitions', 'INSERT'),
+		pg_has_role(current_user, 'cp_migrate', 'USAGE')`).Scan(&canDelete, &canInsertHistory, &isMigrate))
+	assert.False(t, canDelete, "cp_app must not DELETE a gate row")
+	assert.False(t, canInsertHistory, "cp_app must not write gate history directly")
+	assert.False(t, isMigrate, "cp_app must not be able to become the owner of cp_gate_transition")
+
+	// 2. The bare rewrite of the row every condition is read from. Before
+	//    00701 this was refused only by 00603's AU001 binding, which case 3
+	//    then satisfied; now the privilege is simply absent.
+	err := execAsApp(t, `UPDATE capability_gates SET state = 'ACTIVE', proposed_by_user_id = 'mallory',
+		approvers = $2::jsonb, legal_review_ref = 'L', provider_contract_ref = 'P',
+		risk_approval_ref = 'R', security_approval_ref = 'S', effective_at = now(), expires_at = NULL, revoked_at = NULL
+		WHERE id = $1`, g.ID, forgedChain)
+	assert.Error(t, err, "raw UPDATE of capability_gates must be refused")
+	assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+	t.Logf("raw UPDATE refused: %v", err)
+	stillInactive("raw UPDATE")
+
+	// 3. THE DEFECT: the same UPDATE paired with its own transition row in one
+	//    transaction, which is what satisfied AU001. cp_app no longer holds
+	//    INSERT on the immutable history table, so it cannot write its own
+	//    permission slip.
+	err = testDB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO capability_gate_transitions
+			(id, gate_id, from_state, to_state, actor_type, actor_id, reason)
+			VALUES ($1, $2, $3, 'ACTIVE', 'OPERATOR', 'mallory', 'self-signed')`,
+			NewTransitionID(), g.ID, string(g.State)); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE capability_gates SET state = 'ACTIVE', proposed_by_user_id = 'mallory',
+			approvers = $2::jsonb, legal_review_ref = 'L', provider_contract_ref = 'P',
+			risk_approval_ref = 'R', security_approval_ref = 'S', effective_at = now()
+			WHERE id = $1`, g.ID, forgedChain)
+		return err
+	})
+	assert.Error(t, err, "self-signed transition + UPDATE must be refused")
+	assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+	t.Logf("self-signed transition + UPDATE refused: %v", err)
+	stillInactive("self-signed transition + UPDATE")
+
+	// 4. THE DEFECT, second path: a fresh deployment has no gate rows at all
+	//    (gates.Bootstrap has no callers), so UNIQUE (capability, environment)
+	//    was no obstacle and a single INSERT could create a gate already
+	//    ACTIVE. PART 244 is now a database fact: a gate is born DISABLED.
+	err = execAsApp(t, `INSERT INTO capability_gates (id, capability, environment, state, approval_version,
+		legal_review_ref, provider_contract_ref, risk_approval_ref, security_approval_ref,
+		proposed_by_user_id, approvers, evidence_hashes, effective_at)
+		VALUES ($1, 'SECURITIES', 'PROD', 'ACTIVE', 1, 'L', 'P', 'R', 'S', 'mallory', $2::jsonb, '[]'::jsonb, now())`,
+		NewGateID(), forgedChain)
+	assert.Error(t, err, "a gate row born ACTIVE must be refused")
+	assert.Equal(t, "GT005", db.SQLState(err), "got %v", err)
+	t.Logf("INSERT of a gate born ACTIVE refused: %v", err)
+	var born int
+	require.NoError(t, testDB.QueryRow(ctx,
+		`SELECT count(*) FROM capability_gates WHERE capability = 'SECURITIES' AND environment = 'PROD'`).Scan(&born))
+	assert.Zero(t, born, "no SECURITIES/PROD row may exist")
+
+	// 5. The gate authority itself cannot be talked into a transition the
+	//    state machine forbids: DISABLED does not reach ACTIVE, whatever the
+	//    caller claims about approvals.
+	err = callGateTransition(t, g.ID, g.Version, opActivate, "mallory", `{"user_id":"mallory","step":"ACTIVATE"}`)
+	assert.Error(t, err)
+	assert.Equal(t, "GT002", db.SQLState(err), "got %v", err)
+	t.Logf("cp_gate_transition(activate) from %s refused: %v", g.State, err)
+	stillInactive("direct activate from " + string(g.State))
+
+	// 6. Dual control is the database's rule too, not only the Go layer's.
+	//    Drive the gate legitimately to APPROVED, then try to close the last
+	//    step with a principal that is not entitled to.
+	proposer, bob := f.op("risk-alice", security.RoleRisk), f.bg("bg-bob")
+	_, err = f.do(t, proposer, func(ctx context.Context, tx pgx.Tx) (Gate, error) {
+		return f.admin.Propose(ctx, tx, c, highRiskProposal("cex pilot"))
+	})
+	require.NoError(t, err)
+	_, err = f.do(t, bob, func(ctx context.Context, tx pgx.Tx) (Gate, error) {
+		return f.admin.Approve(ctx, tx, c, "reviewed")
+	})
+	require.NoError(t, err)
+	g = f.get(t, c)
+	require.Equal(t, StateApproved, g.State)
+
+	// The approver activating their own approval.
+	err = callGateTransition(t, g.ID, g.Version, opActivate, "bg-bob", `{"user_id":"bg-bob","step":"ACTIVATE"}`)
+	assert.Error(t, err)
+	assert.Equal(t, "GT004", db.SQLState(err), "got %v", err)
+	t.Logf("cp_gate_transition(activate) by the approver refused: %v", err)
+	stillInactive("approver self-activation")
+
+	// The proposer activating their own proposal.
+	err = callGateTransition(t, g.ID, g.Version, opActivate, "risk-alice", `{"user_id":"risk-alice","step":"ACTIVATE"}`)
+	assert.Error(t, err)
+	assert.Equal(t, "GT004", db.SQLState(err), "got %v", err)
+	stillInactive("proposer self-activation")
+
+	// A chain entry naming someone other than the acting principal, so one
+	// actor could pose as two: the entry must be the actor's own.
+	err = callGateTransition(t, g.ID, g.Version, opActivate, "bg-bob", `{"user_id":"bg-carol","step":"ACTIVATE"}`)
+	assert.Error(t, err)
+	assert.Equal(t, "GT001", db.SQLState(err), "got %v", err)
+	t.Logf("cp_gate_transition with a chain entry naming another principal refused: %v", err)
+	stillInactive("impersonated chain entry")
+
+	// 7. The approved path still works: the control refuses forgeries, not
+	//    legitimate activation by a distinct third principal.
+	f.clk.Advance(time.Minute)
+	got, err := f.do(t, f.bg("bg-carol"), func(ctx context.Context, tx pgx.Tx) (Gate, error) {
+		return f.admin.Activate(ctx, tx, c, "second approval")
+	})
+	require.NoError(t, err)
+	assert.Equal(t, StateActive, got.State)
+	assert.True(t, f.verdict(t, c).Active)
+
+	// 8. An ACTIVE gate's validity window cannot be widened behind the state
+	//    machine's back either.
+	err = execAsApp(t, `UPDATE capability_gates SET expires_at = now() + interval '100 years' WHERE id = $1`, got.ID)
+	assert.Error(t, err)
+	assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+
+	// Leave the fixture where the next run expects it.
+	_, err = f.do(t, f.bg("bg-bob"), func(ctx context.Context, tx pgx.Tx) (Gate, error) {
+		return f.admin.Revoke(ctx, tx, c, "end of adversarial control")
+	})
+	require.NoError(t, err)
+	assert.False(t, f.verdict(t, c).Active)
+}

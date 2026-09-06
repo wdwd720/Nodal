@@ -553,3 +553,43 @@ func TestConstructors_Validate(t *testing.T) {
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(cc.PreCheck(context.Background(), Action{Class: "X"})))
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(inner.Check(context.Background(), nil, Action{Class: "X"})))
 }
+
+// TestParseReleaseTargetID: an executor releases the switch the stored
+// approval names, so the parse has to be the exact inverse of the format the
+// proposal was written in — and has to refuse anything it does not
+// understand rather than fall back to a global scope.
+func TestParseReleaseTargetID(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		kind  Kind
+		scope string
+	}{
+		{GlobalNewRiskKill, "*"},
+		{FundingDisable, "*"},
+		{WithdrawalsDisable, "*"},
+		{ChainDisableNewActions, "solana"},
+		{AccountFreeze, "0193b2e0-0000-7000-8000-000000000001"},
+		{ProviderDisableNewActions, "stripe"},
+		{ModelDisable, "*"},
+		{VenueDisable, "jupiter:v6"}, // a scope may itself contain a colon
+	} {
+		kind, scope, err := ParseReleaseTargetID(ReleaseTargetID(tc.kind, tc.scope))
+		require.NoError(t, err, "%s/%s", tc.kind, tc.scope)
+		assert.Equal(t, tc.kind, kind)
+		assert.Equal(t, tc.scope, scope)
+	}
+
+	for name, target := range map[string]string{
+		"no separator":            "GLOBAL_NEW_RISK_KILL",
+		"unknown kind":            "TOTALLY_MADE_UP:*",
+		"empty":                   "",
+		"scope on a global kind":  ReleaseTargetID(FundingDisable, "some-scope"),
+		"global on a scoped kind": ReleaseTargetID(ChainDisableNewActions, "*"),
+		"whitespace in scope":     "CHAIN_DISABLE_NEW_ACTIONS:so lana",
+		"lower-cased kind":        "chain_disable_new_actions:solana",
+	} {
+		_, _, err := ParseReleaseTargetID(target)
+		require.Error(t, err, name)
+		assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err), name)
+	}
+}

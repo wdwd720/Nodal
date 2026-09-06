@@ -53,17 +53,54 @@ func TestKindTable_Complete(t *testing.T) {
 func TestKindTable_Golden(t *testing.T) {
 	t.Parallel()
 	want := map[Kind]KindSpec{
-		KindCapabilityGateApprove:         {true, security.PermGatePropose, security.PermGateApprove, 15 * time.Minute, 24 * time.Hour},
-		KindKillSwitchRelease:             {true, security.PermKillActivate, security.PermKillRelease, 15 * time.Minute, time.Hour},
-		KindLedgerCorrection:              {true, security.PermLedgerPostCorrection, security.PermLedgerApproveCorrection, 5 * time.Minute, 4 * time.Hour},
-		KindReconciliationResolveMaterial: {true, security.PermReconciliationResolve, security.PermReconciliationApprove, 15 * time.Minute, 4 * time.Hour},
-		KindEnvelopeAuthorityChange:       {true, security.PermEnvelopeAuthorityWrite, security.PermEnvelopeApprove, 15 * time.Minute, 24 * time.Hour},
-		KindAccountUnfreeze:               {false, security.PermAccountFreeze, "", 15 * time.Minute, time.Hour},
-		KindWithdrawalApprove:             {true, security.PermWithdrawalReview, security.PermWithdrawalApprove, 5 * time.Minute, time.Hour},
-		KindBreakGlassGrant:               {true, security.PermBreakGlassRequest, security.PermBreakGlassApprove, 5 * time.Minute, 30 * time.Minute},
-		KindAgentPromote:                  {true, security.PermAgentPromote, security.PermAgentPromoteApprove, 15 * time.Minute, 24 * time.Hour},
+		KindCapabilityGateApprove: {
+			RequiresDual: true, ProposePermission: security.PermGatePropose, ApprovePermission: security.PermGateApprove,
+			StepUpMaxAge: 15 * time.Minute, Expiry: 24 * time.Hour,
+		},
+		KindKillSwitchRelease: {
+			RequiresDual: true, ProposePermission: security.PermKillActivate, ApprovePermission: security.PermKillRelease,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindLedgerCorrection: {
+			RequiresDual: true, ProposePermission: security.PermLedgerPostCorrection, ApprovePermission: security.PermLedgerApproveCorrection,
+			StepUpMaxAge: 5 * time.Minute, Expiry: 4 * time.Hour,
+		},
+		KindReconciliationResolveMaterial: {
+			RequiresDual: true, ProposePermission: security.PermReconciliationResolve, ApprovePermission: security.PermReconciliationApprove,
+			StepUpMaxAge: 15 * time.Minute, Expiry: 4 * time.Hour,
+		},
+		KindEnvelopeAuthorityChange: {
+			RequiresDual: true, ProposePermission: security.PermEnvelopeAuthorityWrite, ApprovePermission: security.PermEnvelopeApprove,
+			StepUpMaxAge: 15 * time.Minute, Expiry: 24 * time.Hour,
+		},
+		KindAccountUnfreeze: {
+			RequiresDual: false, ProposePermission: security.PermAccountFreeze,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindWithdrawalApprove: {
+			RequiresDual: true, ProposePermission: security.PermWithdrawalReview, ApprovePermission: security.PermWithdrawalApprove,
+			StepUpMaxAge: 5 * time.Minute, Expiry: time.Hour,
+		},
+		KindBreakGlassGrant: {
+			RequiresDual: true, ProposePermission: security.PermBreakGlassRequest, ApprovePermission: security.PermBreakGlassApprove,
+			StepUpMaxAge: 5 * time.Minute, Expiry: 30 * time.Minute, ApproverIsNotTarget: true,
+		},
+		KindAgentPromote: {
+			RequiresDual: true, ProposePermission: security.PermAgentPromote, ApprovePermission: security.PermAgentPromoteApprove,
+			StepUpMaxAge: 15 * time.Minute, Expiry: 24 * time.Hour,
+		},
 	}
 	assert.Equal(t, want, kindSpecs, "the kind policy table changed; review dual-control consequences before updating this golden")
+
+	// ApproverIsNotTarget belongs to exactly the kind whose target_id names a
+	// person. Setting it on a kind whose target is a gate, a switch or an
+	// account would compare a user id against something that is not one, which
+	// is a silent no-op rather than a control.
+	for _, k := range Kinds() {
+		spec, _ := Spec(k)
+		assert.Equal(t, k == KindBreakGlassGrant, spec.ApproverIsNotTarget,
+			"%s: only the kind that elevates a principal refuses the target as approver", k)
+	}
 }
 
 func TestNoBalanceEditKindExists(t *testing.T) {

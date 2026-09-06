@@ -62,6 +62,14 @@ type KindSpec struct {
 	// Expiry is how long after proposal the action can still be approved
 	// and executed.
 	Expiry time.Duration
+	// ApproverIsNotTarget marks a kind whose target_id names a person who
+	// *gains* something from the action, so that person must not be the one
+	// who approves it. Approver ≠ proposer alone is not enough there: an
+	// operator who talks a colleague into proposing an elevation for them
+	// and then approves it themselves has granted themselves the elevation,
+	// with the second signature supplied by the beneficiary. It is set only
+	// for BREAK_GLASS_GRANT, the one kind whose target is a principal.
+	ApproverIsNotTarget bool
 }
 
 // Step-up freshness and expiry defaults, by sensitivity.
@@ -103,9 +111,10 @@ var kindSpecs = map[Kind]KindSpec{
 	KindBreakGlassGrant: {
 		// An ADMIN requests; a distinct SECURITY or ADMIN principal approves
 		// (break_glass:approve is a standing permission so the first elevation
-		// remains possible; Approve still refuses the proposer).
+		// remains possible; Approve still refuses the proposer, and refuses
+		// the grantee named by target_id).
 		RequiresDual: true, ProposePermission: security.PermBreakGlassRequest, ApprovePermission: security.PermBreakGlassApprove,
-		StepUpMaxAge: stepUpSensitive, Expiry: 30 * time.Minute,
+		StepUpMaxAge: stepUpSensitive, Expiry: 30 * time.Minute, ApproverIsNotTarget: true,
 	},
 	KindAgentPromote: {
 		RequiresDual: true, ProposePermission: security.PermAgentPromote, ApprovePermission: security.PermAgentPromoteApprove,

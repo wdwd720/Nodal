@@ -148,6 +148,26 @@ func (st *Store) Revoke(ctx context.Context, q auth.Querier, id string) error {
 	return nil
 }
 
+// Elevate implements auth.SessionStore. The WHERE clause is the whole
+// control: only the named user's own sessions, only OPERATOR ones (the
+// sessions_break_glass_operator_only CHECK refuses the rest anyway), only
+// while they are neither revoked nor past their absolute expiry. The role is
+// added at most once so a repeated grant cannot accumulate duplicates.
+func (st *Store) Elevate(ctx context.Context, q auth.Querier, subjectID string, until, now time.Time) (int, error) {
+	tag, err := q.Exec(ctx, `UPDATE sessions
+		   SET break_glass_until = $2,
+		       roles = CASE WHEN $4 = ANY(roles) THEN roles ELSE array_append(roles, $4) END
+		 WHERE user_id = $1::uuid
+		   AND actor_type = 'OPERATOR'
+		   AND revoked_at IS NULL
+		   AND expires_at > $3`,
+		subjectID, until.UTC(), now.UTC(), string(security.RoleBreakGlass))
+	if err != nil {
+		return 0, fmt.Errorf("pgstore: elevate: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // RevokeAllForSubject revokes every active session of a user.
 func (st *Store) RevokeAllForSubject(ctx context.Context, q auth.Querier, subjectID string) (int, error) {
 	tag, err := q.Exec(ctx, `UPDATE sessions SET revoked_at = now(), revoke_reason = 'revoke_all' WHERE user_id = $1::uuid AND revoked_at IS NULL`, subjectID)

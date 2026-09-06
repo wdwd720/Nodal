@@ -254,6 +254,11 @@ func decideApprove(a Actor, action admin.Action, now time.Time) Decision {
 	case a.UserID == action.ProposedBy:
 		// The whole point of dual control. Never rendered as a live button.
 		d.Reason, d.Code = ReasonSelfApproval, errs.CodeForbidden
+	case spec.ApproverIsNotTarget && a.UserID == canonicalUserID(action.TargetID):
+		// The other shape of self-approval: for a kind whose target_id names
+		// a person (BREAK_GLASS_GRANT), approving it is granting yourself the
+		// thing it grants, however many other people were involved.
+		d.Reason, d.Code = ReasonSelfApproval, errs.CodeForbidden
 	case action.Expired(now):
 		d.Reason, d.Code = ReasonExpired, errs.CodeInvalidStateTransition
 	case !admin.CanTransition(action.Status, admin.StatusApproved):

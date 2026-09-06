@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/auth"
+	"github.com/nodal/controlplane/internal/security"
 )
 
 // MemorySessionStore is an in-memory auth.SessionStore keyed by token hash.
@@ -161,6 +162,42 @@ func (s *MemorySessionStore) RevokeAllForSubject(_ context.Context, _ auth.Queri
 		}
 	}
 	return n, nil
+}
+
+// Elevate implements auth.SessionStore: it stamps the elevation on every
+// live OPERATOR session of the subject, mirroring the Postgres WHERE clause.
+func (s *MemorySessionStore) Elevate(_ context.Context, _ auth.Querier, subjectID string, until, now time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.injected(); err != nil {
+		return 0, err
+	}
+	n := 0
+	for h, sess := range s.byHash {
+		if sess.SubjectID != subjectID || sess.ActorType != security.ActorOperator {
+			continue
+		}
+		if sess.RevokedAt != nil || !sess.ExpiresAt.After(now) {
+			continue
+		}
+		t := until.UTC()
+		sess.BreakGlassUntil = &t
+		if !hasRole(sess.Roles, security.RoleBreakGlass) {
+			sess.Roles = append(append([]security.Role(nil), sess.Roles...), security.RoleBreakGlass)
+		}
+		s.byHash[h] = sess
+		n++
+	}
+	return n, nil
+}
+
+func hasRole(roles []security.Role, want security.Role) bool {
+	for _, r := range roles {
+		if r == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ListForSubject implements auth.SessionStore: newest first.

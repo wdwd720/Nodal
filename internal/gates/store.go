@@ -11,7 +11,6 @@ import (
 
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
-	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -84,58 +83,89 @@ func insertDisabled(ctx context.Context, q db.Querier, c Capability, env string)
 	return tag.RowsAffected() == 1, nil
 }
 
-// saveGate writes every mutable column of g under optimistic concurrency on
-// version, then refreshes g.Version and g.UpdatedAt.
-func saveGate(ctx context.Context, tx pgx.Tx, g *Gate) error {
-	approvers := g.Approvers
-	if approvers == nil {
-		approvers = []Approver{}
-	}
-	hashes := g.EvidenceHashes
-	if hashes == nil {
-		hashes = []string{}
-	}
-	approversJSON, err := json.Marshal(approvers)
-	if err != nil {
-		return fmt.Errorf("gates: encode approvers: %w", err)
-	}
-	hashesJSON, err := json.Marshal(hashes)
-	if err != nil {
-		return fmt.Errorf("gates: encode evidence hashes: %w", err)
-	}
-	var proposedBy *string
-	if g.ProposedBy != "" {
-		// The column is uuid; subjects that are not canonical UUIDs are
-		// recorded only in the approval chain (see the package report).
-		if _, perr := id.ParseAny(g.ProposedBy); perr == nil {
-			s := g.ProposedBy
-			proposedBy = &s
+// Operations understood by cp_gate_transition (migration 00701). The values
+// are the database's contract and double as the audit verb.
+const (
+	opPropose  = "propose"
+	opApprove  = "approve"
+	opResume   = "resume"
+	opActivate = "activate"
+	opSuspend  = "suspend"
+	opRevoke   = "revoke"
+	opExpire   = "expire"
+)
+
+// applyTransition moves the gate through cp_gate_transition, the only
+// database path that may change capability_gates.state: cp_app holds no
+// UPDATE privilege on that table and no INSERT on capability_gate_transitions
+// (migration 00701), so the row and its history can only be written together,
+// by a SECURITY DEFINER function that re-derives the legal-transition table,
+// the dual-control rules and the five activation conditions from the *stored*
+// row.
+//
+// g carries the transition this package intends: the last entry of its
+// approval chain is the one to append, and on a propose its evidence columns
+// and validity window are the new approval version's. Columns an operation
+// does not own are ignored — the database keeps what it has stored — so this
+// call cannot smuggle a rewritten chain or a cleared revoked_at past the
+// checks. The row the function wrote replaces *g, which is therefore always
+// exactly what the database holds.
+//
+// The checks in this package run first and produce the operator-facing
+// errors; a GT0xx failure here means a caller reached the database by some
+// other route, and is deliberately reported as an internal error.
+func applyTransition(ctx context.Context, tx pgx.Tx, g *Gate, op string, p security.Principal, reason string, tid TransitionID, evidenceHash []byte, at time.Time) error {
+	var approverJSON []byte
+	switch op {
+	case opPropose, opApprove, opResume, opActivate:
+		if len(g.Approvers) == 0 {
+			return fmt.Errorf("gates: %s recorded no approval chain entry", op)
 		}
+		b, err := json.Marshal(g.Approvers[len(g.Approvers)-1])
+		if err != nil {
+			return fmt.Errorf("gates: encode approver: %w", err)
+		}
+		approverJSON = b
 	}
-	err = tx.QueryRow(ctx, `UPDATE capability_gates SET
-			state = $2, approval_version = $3,
-			legal_review_ref = nullif($4,''), provider_contract_ref = nullif($5,''),
-			risk_approval_ref = nullif($6,''), security_approval_ref = nullif($7,''),
-			proposed_by_user_id = $8::uuid, approvers = $9::jsonb, evidence_hashes = $10::jsonb,
-			effective_at = $11, expires_at = $12, revoked_at = $13, revoke_reason = nullif($14,''),
-			version = version + 1
-		WHERE id = $1 AND version = $15
-		RETURNING version, updated_at`,
-		g.ID, string(g.State), g.ApprovalVersion,
-		g.LegalReviewRef, g.ProviderContractRef, g.RiskApprovalRef, g.SecurityApprovalRef,
-		proposedBy, approversJSON, hashesJSON,
-		g.EffectiveAt, g.ExpiresAt, g.RevokedAt, g.RevokeReason,
-		g.Version).Scan(&g.Version, &g.UpdatedAt)
+	// Only a propose opens a new approval version, so only a propose carries
+	// evidence; every other operation leaves these NULL and the function keeps
+	// the stored values.
+	var (
+		legal, provider, risk, sec *string
+		hashesJSON                 []byte
+		effectiveAt, expiresAt     *time.Time
+	)
+	if op == opPropose {
+		hashes := g.EvidenceHashes
+		if hashes == nil {
+			hashes = []string{}
+		}
+		b, err := json.Marshal(hashes)
+		if err != nil {
+			return fmt.Errorf("gates: encode evidence hashes: %w", err)
+		}
+		hashesJSON = b
+		legal, provider, risk, sec = &g.LegalReviewRef, &g.ProviderContractRef, &g.RiskApprovalRef, &g.SecurityApprovalRef
+		effectiveAt, expiresAt = g.EffectiveAt, g.ExpiresAt
+	}
+	out, err := scanGate(tx.QueryRow(ctx, `SELECT `+gateColumns+` FROM cp_gate_transition(
+			$1::uuid, $2::bigint, $3::text, $4::text, $5::text, $6::text, $7::uuid, $8::bytea, $9::timestamptz,
+			$10::jsonb, $11::text, $12::text, $13::text, $14::text, $15::jsonb, $16::timestamptz, $17::timestamptz) AS g`,
+		g.ID, g.Version, op, string(p.ActorType), p.SubjectID, reason, tid, evidenceHash, at,
+		approverJSON, legal, provider, risk, sec, hashesJSON, effectiveAt, expiresAt))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errs.New(errs.CodeConflict, "gate was modified concurrently").WithField("capability", string(g.Capability))
 		}
-		return fmt.Errorf("gates: save %s/%s: %w", g.Capability, g.Environment, err)
+		return fmt.Errorf("gates: %s %s/%s: %w", op, g.Capability, g.Environment, err)
 	}
+	*g = out
 	return nil
 }
 
-// Transition is a capability_gate_transitions row.
+// Transition is a capability_gate_transitions row. It is written only by
+// cp_gate_transition, in the same statement as the state change it records
+// (migration 00701); this package reads it back with Transitions.
 type Transition struct {
 	ID           TransitionID
 	GateID       GateID
@@ -146,17 +176,6 @@ type Transition struct {
 	Reason       string
 	EvidenceHash []byte
 	OccurredAt   time.Time
-}
-
-func insertTransition(ctx context.Context, tx pgx.Tx, t Transition) error {
-	_, err := tx.Exec(ctx, `INSERT INTO capability_gate_transitions
-		(id, gate_id, from_state, to_state, actor_type, actor_id, reason, approval_id, evidence_hash, occurred_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9)`,
-		t.ID, t.GateID, string(t.From), string(t.To), string(t.ActorType), t.ActorID, t.Reason, t.EvidenceHash, t.OccurredAt)
-	if err != nil {
-		return fmt.Errorf("gates: insert transition: %w", err)
-	}
-	return nil
 }
 
 // Transitions lists the recorded transitions of a gate, oldest first.

@@ -29,6 +29,30 @@ const ApprovalKindRelease = "KILL_SWITCH_RELEASE"
 // ReleaseTargetID is the admin_actions target_id for releasing (kind, scope).
 func ReleaseTargetID(kind Kind, scope string) string { return string(kind) + ":" + scope }
 
+// ParseReleaseTargetID is the inverse of ReleaseTargetID: it recovers the
+// (kind, scope) an approved KILL_SWITCH_RELEASE action names, so an executor
+// can release exactly the switch the two approvers agreed on rather than one
+// the request repeats. No kind contains a colon, so the first one separates
+// them; the scope is normalized for the kind, which refuses a global scope
+// where a specific id is required and vice versa.
+func ParseReleaseTargetID(target string) (Kind, string, error) {
+	name, scope, found := strings.Cut(target, ":")
+	if !found {
+		return "", "", errs.New(errs.CodeValidationFailed, `kill switch target must be "KIND:scope"`).
+			WithField("target_id", target)
+	}
+	kind := Kind(name)
+	if !kind.Valid() {
+		return "", "", errs.Newf(errs.CodeValidationFailed, "unknown kill switch kind %q", name).
+			WithField("target_id", target)
+	}
+	scope, err := kind.NormalizeScope(scope)
+	if err != nil {
+		return "", "", err
+	}
+	return kind, scope, nil
+}
+
 // Approval is what ApprovalVerifier returns for an approved admin action.
 type Approval struct {
 	ID         string
