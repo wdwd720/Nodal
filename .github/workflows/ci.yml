@@ -435,10 +435,44 @@ jobs:
           cache: true
       - run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
-        run: pnpm --filter web exec playwright install --with-deps chromium
+        run: pnpm --filter @controlplane/web exec playwright install --with-deps chromium
       - name: Start Postgres (the app under test needs a database)
         run: docker compose up -d --wait postgres
+      # playwright.config.ts starts the WEB app itself through `webServer`, but
+      # nothing starts the API it talks to (CP_WEB_API_TARGET, default
+      # 127.0.0.1:18099). The suite signs in through the dev identity provider
+      # and reads real balances, so without a migrated, seeded API every spec
+      # fails on the first navigation. See test/load/README.md for the same
+      # setup done by hand.
+      - name: Migrate, seed and start the API under test
+        env:
+          CP_ENV: LOCAL
+          CP_AUTH_MODE: dev
+          CP_HTTP_ADDR: 127.0.0.1:18099
+          CP_DATABASE_APP_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_e2e?sslmode=disable
+          CP_DATABASE_MIGRATE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_e2e?sslmode=disable
+        run: |
+          set -euo pipefail
+          go run ./scripts/testdb -name e2e >/dev/null
+          go run ./scripts/seed
+          # Settlement asset: buying power and holdings answer 422 UNSUPPORTED
+          # without it, and the specs assert real figures.
+          asset="$(docker compose exec -T postgres psql -U cp_migrate -d controlplane_test_e2e -tAc             "SELECT chain||' '||mint_address FROM assets WHERE symbol='USDC' LIMIT 1")"
+          echo "CP_API_SETTLEMENT_CHAIN=${asset% *}" >> "$GITHUB_ENV"
+          echo "CP_API_SETTLEMENT_MINT=${asset#* }" >> "$GITHUB_ENV"
+          go build -o bin/api ./cmd/api
+          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             ./bin/api > api.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -sf -m 2 http://127.0.0.1:18099/v1/healthz >/dev/null; then
+              echo "api up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the API under test never became healthy"; cat api.log; exit 1
       - run: make e2e-web
+      - name: API log
+        if: failure()
+        run: cat api.log || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -457,9 +491,10 @@ jobs:
     if: needs.detect.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
-      CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+    # No CP_TEST_DATABASE_URL here on purpose: test/e2e refuses the shared
+    # controlplane_test for the same reason the chaos and security suites do —
+    # it drives the real API binary end to end and must own its data. It gets
+    # its own below.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -468,6 +503,14 @@ jobs:
           cache: true
       - name: Start local infra
         run: make infra-up
+      - name: Provision an isolated database for the e2e suite
+        run: |
+          set -euo pipefail
+          eval "$(go run ./scripts/testdb -name ci_e2e -export)"
+          {
+            echo "CP_TEST_DATABASE_URL=$CP_TEST_DATABASE_URL"
+            echo "CP_TEST_MIGRATE_DATABASE_URL=$CP_TEST_MIGRATE_DATABASE_URL"
+          } >> "$GITHUB_ENV"
       - run: make e2e
       - name: Infra logs
         if: failure()
@@ -483,9 +526,10 @@ jobs:
     if: needs.detect.outputs.chaos == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
-      CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+    # No CP_TEST_DATABASE_URL here on purpose: the chaos suite refuses the
+    # shared controlplane_test by design, because it pauses containers and
+    # kills processes mid-transaction and must never do that to a database
+    # another suite is using. It gets its own below.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -494,6 +538,14 @@ jobs:
           cache: true
       - name: Start local infra
         run: make infra-up
+      - name: Provision an isolated database for the chaos suite
+        run: |
+          set -euo pipefail
+          eval "$(go run ./scripts/testdb -name ci_chaos -export)"
+          {
+            echo "CP_TEST_DATABASE_URL=$CP_TEST_DATABASE_URL"
+            echo "CP_TEST_MIGRATE_DATABASE_URL=$CP_TEST_MIGRATE_DATABASE_URL"
+          } >> "$GITHUB_ENV"
       - run: make chaos
       - name: Infra logs
         if: failure()
