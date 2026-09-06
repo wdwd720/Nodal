@@ -291,6 +291,25 @@ The SQL control deserves naming: it is a **constant-derivation analysis, not a g
 
 **One environment hazard worth keeping:** the agent's scratchpad environment file was overwritten mid-session by another process, silently repointing its test DSN at `controlplane_test_adminplane`, so some exploratory runs wrote into a database it did not own. It caught this, switched to inline DSNs, and re-ran everything against its own database with the DSN echoed. **The integrator's verification was unaffected because every verification run in this session provisions its own fresh database** — which is exactly why that rule exists.
 
+### Traceability refreshed against the repository — and it found real gaps (2026-09-06)
+
+`docs/build/REQUIREMENTS_TRACEABILITY.md` now reflects reality: **NOT_STARTED 102→14, IN_PROGRESS 139→59, VERIFIED 81→226, BLOCKED_EXTERNAL 0→13.** 274 of 389 rows had a cell corrected and 203 changed state, **every one upward and none lowered**, which is what you would expect when the document had simply stopped being updated rather than been wrong. Method was mechanical, not narrative: an index of all 1,887 `func Test*`/`func Fuzz*` declarations was built and every row machine-checked, and **all 609 Go test references in the file resolve to a declaration that exists.** The header rule — never VERIFIED without named evidence — was already holding; the staleness was entirely `planned:` prefixes and states.
+
+**Gaps it found that nothing else had surfaced.** These matter more than the tally:
+- **No `ExecutionAdapter` implementation exists at all.** `bindProviders` errors for every provider mode and the Jupiter client is never wrapped, so the only implementation is a test fake. This is why quotes answer 503, and it is the reason the execution path cannot be exercised end to end against a venue.
+- **SB-007 defeats its own guard.** `TestLayout_JupiterDiscriminators` pins exactly the layout SB-007 declares unverified, so the test cannot detect the error it exists to catch. A guard that encodes the assumption it is guarding is worse than no guard, because it reads as coverage.
+- **Nothing persists a strategy.** `internal/strategy` has no database code, nothing writes `compile_attempts`, and the OpenAPI contract has no strategy route — a compiled strategy cannot be saved, versioned or deployed.
+- **Two undocumented deviations from recorded decisions:** `apps/web` is Vite + React Router, not the Next.js App Router D-011 chose, and there is no zod validation at the API boundary; and although `make sqlc` exists, there is no `sqlc.yaml` and every repository is hand-written SQL. Neither deviation was in the decision register — the register is supposed to be where a departure from a decision gets argued, not where it goes unmentioned.
+- `internal/notification` has no emitters, so no notification is ever produced. Stage 12 (`internal/backtest`, `internal/performance`) is genuinely unbuilt. `cmd/agent-worker` has no tests. Only 4 of PART 130's 11 security-event kinds are emitted. There is no completeness sweep proving every fill eventually maps.
+
+**BLOCKED_EXTERNAL was granted narrowly**, only where BLOCKERS.md states the software is complete: 13 rows across EB-003, EB-005, EB-010 and EB-012. It was deliberately withheld from R-043-1, because EB-011 itself says the adapter wrapping is still pending — which is the distinction between "waiting on someone else" and "not finished".
+
+### The repository is now on a remote, and CI has executed for the first time
+
+1,340 files committed as `673d9bf` and pushed to `https://github.com/wdwd720/Nodal.git`. **SB-008 and SB-004 are closed.** Before pushing: `gitleaks detect` reports no leaks, and the 26 pre-existing findings were confirmed to be credential-shaped fixtures in tests that prove refusal, masking and redaction — AWS's documented example key, the canonical jwt.io token, truncated PEM stubs. They are allowlisted by path with the blind spot stated in `.gitleaks.toml`, and a **negative control confirmed realistic secrets are still caught in production paths**, so the allowlist has not blinded the scan.
+
+`ci.yml` is running against a real commit for the first time. A remote existing is not the same as a green run — until one completes, `ci.yml` and `release.yml` remain unverified, and condition 9 stays PARTIAL.
+
 ## 4. Next exact work (ordered)
 
 1. Land wave 2 (§3): re-verify every package on a fresh isolated DB, fold deviations into DECISION_REGISTER, wire `execution` ↔ `intent`/`quote` types and `chain` observers into the executor/recoverer.

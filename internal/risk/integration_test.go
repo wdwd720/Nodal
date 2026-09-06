@@ -384,9 +384,17 @@ func TestIntegration_CountOrders_FromPersistedIntents(t *testing.T) {
 		if agent != nil {
 			agentID = *agent
 		}
+		// content_hash has been NOT NULL since migration 00605. This fixture
+		// writes trade_intents directly rather than through internal/intent, so
+		// it has to supply the column itself; the equivalent fixture in
+		// internal/capital was updated when 00605 landed and this one was not,
+		// which left risk.CountOrders — the input to the order-rate limit —
+		// with no DB-backed test that could run. The value only has to be a
+		// stable 32-byte digest of the row's identity, not the real canonical
+		// hash, because nothing here reads it back.
 		_, err := testDB.Exec(ctx, `INSERT INTO trade_intents
-			(id, account_id, actor_type, actor_id, agent_id, action, instrument_id, notional_usd_minor, constraints, requested_at, received_at, idempotency_key, correlation_id, mode, status)
-			VALUES ($1,$2,'USER','u-1',$3,'ACQUIRE_NOTIONAL',$4,10000,'{}',$5,$5,$6,'corr','PAPER',$7)`,
+			(id, account_id, actor_type, actor_id, agent_id, action, instrument_id, notional_usd_minor, constraints, requested_at, received_at, idempotency_key, correlation_id, mode, status, content_hash)
+			VALUES ($1,$2,'USER','u-1',$3,'ACQUIRE_NOTIONAL',$4,10000,'{}',$5,$5,$6,'corr','PAPER',$7,sha256(convert_to($6,'UTF8')))`,
 			uuid.New(), acct, agentID, instrumentID, receivedAt, uuid.NewString(), status)
 		require.NoError(t, err)
 	}

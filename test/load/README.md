@@ -31,7 +31,11 @@ The error contract held under load: every refusal was `application/problem+json`
 
 ### Blocked, and why — this is not a capacity limit
 
-`quote_load` and `reservation_contention` cannot be measured yet. Both need a quote, and `POST /quotes/preview` answers `503 PROVIDER_UNAVAILABLE — "no execution venue adapter is configured, so no quote can be produced"`. **That is the correct behaviour**: with no venue wired, the only alternatives are inventing a quote or pretending success, and both are worse than refusing. Measurement waits on provider credentials (EB-005/010/011), not on any code change here.
+**Only `quote_load` is genuinely blocked.** It needs a quote, and `POST /quotes/preview` answers `503 PROVIDER_UNAVAILABLE — "no execution venue adapter is configured, so no quote can be produced"`. **That is the correct behaviour**: with no venue wired, the only alternatives are inventing a quote or pretending success, and both are worse than refusing. It waits on provider credentials (EB-005/010/011), not on any code change here.
+
+**`reservation_contention` does run**, and an earlier version of this file wrongly said it could not — corrected after the PART 238 matrix run actually executed it. 400 iterations produced 301 × `202` and 99 × `409`, and the database held exactly 301 `trade_intents`: **100 concurrent callers on one idempotency key produced exactly one intent**, which is the idempotency property under real contention.
+
+What it does **not** yet measure is its namesake invariant. `reserved` stayed at `0.00` throughout, because capital reservation happens in the execution worker and no worker was running against that database. The scenario measures contention on the submission path; measuring contention on the *reservation* path needs `cmd/execution-worker` running alongside it. Do not read this scenario as evidence about reservations until that is set up.
 
 ### Three defects in these scripts, found by running them
 
