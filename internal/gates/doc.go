@@ -19,7 +19,24 @@
 //     transaction. The legal transitions are an explicit table
 //     (CanTransition) covered by an exhaustive test.
 //   - Bootstrap persists a DISABLED row for every capability so that "fresh
-//     deployment = everything DISABLED" is a stored fact, not an absence.
+//     deployment = everything DISABLED" is a stored fact, not an absence. It
+//     has no caller yet; until it has one, the default rests on Evaluate
+//     failing closed on an absent row and on the database refusing to create
+//     a gate row in any state but DISABLED (migration 00701).
+//
+// # The database enforces the same rule
+//
+// Every check here also exists in PostgreSQL, and neither side may be
+// dropped because the other has it. cp_app holds no UPDATE privilege on
+// capability_gates.state, the approval chain, the evidence references or the
+// validity window, and no INSERT on capability_gate_transitions; the only
+// writer of state is cp_gate_transition, a SECURITY DEFINER function owned by
+// the migration role that re-derives the legal-transition table, both
+// dual-control rules and conditions 2-5 of POLICY_AUTHORITY §1 from the
+// stored row, and writes the row and its transition together (migration
+// 00701, DECISION_REGISTER D-043). applyTransition is this package's only
+// route to it. The checks below run first and produce the operator-facing
+// errors; the database is what holds when they are bypassed.
 //
 // # What this package must never do
 //
@@ -35,4 +52,7 @@
 //   - Call a model, read a clock implicitly, use randomness, or iterate a map
 //     in an order that affects a decision.
 //   - Persist a transition without an audit event, or vice versa.
+//   - Write capability_gates with a statement of its own: every state change
+//     goes through applyTransition, so the row and its history can never come
+//     apart and the database re-checks what this package decided.
 package gates

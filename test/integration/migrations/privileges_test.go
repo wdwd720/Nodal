@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 )
 
@@ -110,4 +111,78 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 			}
 		}
 	}
+}
+
+// gateDecisionColumns are the capability_gates columns that gates.Evaluate
+// reads to decide whether a live-money capability is active. Migration 00701
+// puts every one of them out of cp_app's UPDATE reach, so the five-condition
+// rule is a database invariant rather than an application convention.
+var gateDecisionColumns = []string{
+	"state", "approval_version", "approvers", "proposed_by_user_id", "evidence_hashes",
+	"legal_review_ref", "provider_contract_ref", "risk_approval_ref", "security_approval_ref",
+	"effective_at", "expires_at", "revoked_at", "revoke_reason",
+}
+
+// TestIntegration_CapabilityGateStateAuthority pins the privilege half of
+// migration 00701: state moves only through cp_gate_transition, which cp_app
+// can call but cannot own, redefine or bypass. A later migration that
+// re-granted UPDATE on capability_gates (or INSERT on its history) would put
+// back the one-transaction forgery 00701 closed, and fails here.
+func TestIntegration_CapabilityGateStateAuthority(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	admin := connect(t, migrateURL)
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+
+	colPriv := func(table, col, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT has_column_privilege('cp_app', $1, $2, $3)`, "public."+table, col, p).Scan(&ok))
+		return ok
+	}
+	for _, col := range gateDecisionColumns {
+		assert.False(t, colPriv("capability_gates", col, "UPDATE"),
+			"cp_app must not UPDATE capability_gates.%s: it decides whether live money moves", col)
+	}
+	// The single exception: `version` is the optimistic-concurrency counter,
+	// granted only because PostgreSQL requires UPDATE for SELECT ... FOR UPDATE.
+	assert.True(t, colPriv("capability_gates", "version", "UPDATE"),
+		"cp_app needs UPDATE (version) to take a row lock on a gate")
+
+	tablePriv := func(table, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT has_table_privilege('cp_app', $1, $2)`, "public."+table, p).Scan(&ok))
+		return ok
+	}
+	assert.False(t, tablePriv("capability_gate_transitions", "INSERT"),
+		"gate history is written only by cp_gate_transition, in the same statement as the state change")
+	assert.True(t, tablePriv("capability_gates", "INSERT"), "gates are bootstrapped DISABLED by the application")
+	assert.True(t, tablePriv("capability_gates", "SELECT"), "the checker reads a gate on every live-money call")
+
+	var owner string
+	var secDef bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT pg_get_userbyid(p.proowner), p.prosecdef
+		FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public' AND p.proname = 'cp_gate_transition'`).Scan(&owner, &secDef))
+	assert.Equal(t, "cp_migrate", owner, "the gate authority must be owned by the migration role")
+	assert.True(t, secDef, "cp_gate_transition must be SECURITY DEFINER")
+
+	var appMayExecute, publicMayExecute, appIsMigrate bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT
+		has_function_privilege('cp_app', p.oid, 'EXECUTE'),
+		has_function_privilege('public', p.oid, 'EXECUTE'),
+		pg_has_role('cp_app', 'cp_migrate', 'USAGE')
+		FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public' AND p.proname = 'cp_gate_transition'`).
+		Scan(&appMayExecute, &publicMayExecute, &appIsMigrate))
+	assert.True(t, appMayExecute, "the application drives gate transitions through the function")
+	assert.False(t, publicMayExecute, "EXECUTE must not be left with PUBLIC")
+	assert.False(t, appIsMigrate, "cp_app must not be able to become the function's owner")
+
+	// A gate can only be born DISABLED (PART 244), whatever role inserts it.
+	_, err := admin.Exec(ctx, `INSERT INTO capability_gates (id, capability, environment, state, effective_at)
+		VALUES (gen_random_uuid(), 'WITHDRAWALS', 'PROD', 'ACTIVE', now())`)
+	require.Error(t, err, "even the migration role may not create a gate already ACTIVE")
+	assert.Equal(t, "GT005", db.SQLState(err), "got %v", err)
 }

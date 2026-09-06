@@ -106,7 +106,20 @@ func TestDualControl_AProposerCannotApproveItsOwnAction(t *testing.T) {
 	require.True(t, security.RoleGrants(security.RoleSecurity, security.PermBreakGlassApprove),
 		"SECURITY must be able to approve a break-glass grant")
 
-	actionID := proposeBreakGlass(t, proposer, second.SubjectID, "self")
+	// The elevation names a THIRD operator. A break-glass grant's target_id is
+	// a person, and approving an elevation of yourself is granting yourself
+	// one however many other people were involved, so internal/admin refuses
+	// the target as approver as well as the proposer. Pointing the grant at
+	// `second` would make the positive control below fail for *that* rule,
+	// which would hide whether this one works at all.
+	// "operations" is a distinct dev identity granted ADMIN here, so the
+	// grantee holds break_glass:approve like the proposer does: what refuses
+	// them below is the elevation being theirs, not a missing permission.
+	grantee := operatorSession(t, "operations", string(security.RoleAdmin))
+	require.NotEqual(t, proposer.SubjectID, grantee.SubjectID)
+	require.NotEqual(t, second.SubjectID, grantee.SubjectID)
+
+	actionID := proposeBreakGlass(t, proposer, grantee.SubjectID, "self")
 	before := adminAction(t, actionID)
 	require.Equal(t, "PROPOSED", before.Status)
 	require.True(t, before.RequiresDual)
@@ -128,6 +141,21 @@ func TestDualControl_AProposerCannotApproveItsOwnAction(t *testing.T) {
 	after := adminAction(t, actionID)
 	require.Equal(t, "PROPOSED", after.Status, "the refused self-approval still moved the action")
 	require.Nil(t, after.ApprovedBy, "the refused self-approval still recorded an approver")
+
+	// The other shape of self-approval, and the one a proposer check alone
+	// misses: the beneficiary signing off their own elevation. The grantee is
+	// an ADMIN, so they hold break_glass:approve and reach the same code path
+	// `second` is about to succeed on — the only difference is that the
+	// elevation is theirs.
+	beneficiary := decide(t, grantee, actionID, "approve", "beneficiary")
+	require.Equal(t, http.StatusForbidden, beneficiary.Status,
+		"the grantee approved its own elevation: %s", beneficiary.text())
+	require.Equal(t, string(errs.CodeForbidden), beneficiary.Problem.Code)
+	require.NotContains(t, beneficiary.text(), grantee.SubjectID,
+		"the refusal named the grantee, which tells an attacker whose session to take")
+	stillOpen := adminAction(t, actionID)
+	require.Equal(t, "PROPOSED", stillOpen.Status, "the refused beneficiary approval still moved the action")
+	require.Nil(t, stillOpen.ApprovedBy)
 
 	// The action must still be approvable by someone else: a refusal that also
 	// broke the legitimate path would be a denial of service, not a control.

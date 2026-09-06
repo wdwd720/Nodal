@@ -25,7 +25,7 @@ import (
 // whose effect has no other home, and every other kind keeps answering 422
 // UNSUPPORTED rather than reporting a success that never happened.
 
-// AdminExecutors returns the executors this composition can honour. A nil
+// AdminExecutors returns the executors this composition can honor. A nil
 // dependency leaves its kind unregistered rather than half-wired.
 func AdminExecutors(adminSvc *admin.Service, sessions *auth.Manager, kills *killswitch.Controller) map[admin.Kind]admin.ExecFunc {
 	out := make(map[admin.Kind]admin.ExecFunc, 2)

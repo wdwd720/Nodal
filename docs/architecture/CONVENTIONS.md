@@ -189,6 +189,7 @@ type SessionStore interface { Create(ctx, tx, Session) error; Get(ctx, q Querier
 ## State changes must carry a transition row (migration 00603)
 
 - For gates, kill switches, accounts, assets, instruments, deposits, withdrawals, trade intents, orders, reconciliation records, and admin actions, a change to the state column is refused at COMMIT (SQLSTATE `AU001`) unless a row was inserted into the entity's `*_transitions` table in the same transaction with the same target state. Statement order inside the transaction does not matter. Repositories therefore expose a single `Transition(...)` that writes both, plus the outbox event and the audit event.
+- **Capability gates go further (migration 00701).** `cp_app` has no `UPDATE` privilege on `capability_gates` (except the `version` counter, needed only so `SELECT … FOR UPDATE` can take a row lock) and no `INSERT` on `capability_gate_transitions`. The only writer of `capability_gates.state` is `cp_gate_transition(…)`, a `SECURITY DEFINER` function owned by `cp_migrate` that re-derives the legal-transition table, both dual-control rules and the evidence and validity-window conditions from the stored row, then writes the row and its transition record together. A gate row can also only be *created* `DISABLED` with an empty approval chain. SQLSTATEs `GT001`–`GT005`. See `docs/compliance-gates/PRODUCTION_GATES.md` §8 and DECISION_REGISTER D-043; apply the same shape to any other state whose value is itself the authorisation.
 
 ## Migrations
 

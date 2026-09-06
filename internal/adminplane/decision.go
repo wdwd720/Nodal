@@ -111,11 +111,18 @@ type Actor struct {
 // NewActor derives the canonical user id once so every Decide call compares
 // the same string admin.Service would.
 func NewActor(p security.Principal) Actor {
-	a := Actor{Principal: p}
-	if u, err := id.ParseAny(p.SubjectID); err == nil && !u.IsZero() {
-		a.UserID = u.String()
+	return Actor{Principal: p, UserID: canonicalUserID(p.SubjectID)}
+}
+
+// canonicalUserID returns s in canonical users.id form, or "" when s is not a
+// user id at all. A target_id that is a capability, a switch or an account
+// therefore compares equal to no actor.
+func canonicalUserID(s string) string {
+	u, err := id.ParseAny(s)
+	if err != nil || u.IsZero() {
+		return ""
 	}
-	return a
+	return u.String()
 }
 
 // Anonymous reports whether there is no principal at all. The zero Actor is

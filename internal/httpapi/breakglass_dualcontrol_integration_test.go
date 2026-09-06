@@ -485,17 +485,44 @@ func TestIntegration_BreakGlassGrantRefusesTheBypasses(t *testing.T) {
 	approver := h.signIn(security.RoleSecurity)
 	grantee := h.signIn(security.RoleOperations)
 
-	t.Run("an elevation longer than the ceiling is refused at proposal", func(t *testing.T) {
-		res := h.call(&requester, http.MethodPost, "/v1/admin/actions", map[string]any{
-			"kind": string(admin.KindBreakGlassGrant), "target_type": "user", "target_id": grantee.userID,
-			"params": map[string]any{
+	t.Run("an elevation longer than the ceiling never reaches a session", func(t *testing.T) {
+		action := h.propose(requester, admin.KindBreakGlassGrant, "user", grantee.userID,
+			map[string]any{
 				"user_id": grantee.userID, "scope": "INC-too-long",
 				"duration_seconds": int64(admin.MaxBreakGlassDuration/time.Second) + 1,
 			},
-			"reason": "asking for more than the maximum elevation",
-		})
-		require.Equal(t, http.StatusUnprocessableEntity, res.Code, "body=%s", res.Body.String())
+			"asking for more than the maximum elevation")
+		require.Equal(t, http.StatusOK,
+			h.decide(approver, action.ID, "approve", "did not read the duration carefully").Code)
+
+		// Two people can agree on an elevation that is out of bounds; the
+		// bound is not theirs to widen, and the execution refuses it.
+		res := h.decide(requester, action.ID, "execute", "applying the approved elevation")
+		require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+		p := res.problem()
+		assert.Equal(t, errs.CodeValidationFailed, p.Code)
+		assert.Contains(t, p.Detail, "duration must be",
+			"the refusal must say what was wrong, or the operator retries the same proposal")
+		until, _ := h.storedElevation(grantee.sessionID)
+		assert.Nil(t, until, "nothing was elevated")
+	})
+
+	t.Run("a grant whose params name someone other than the target is refused", func(t *testing.T) {
+		victim := h.signIn(security.RoleOperations)
+		action := h.propose(requester, admin.KindBreakGlassGrant, "user", victim.userID,
+			map[string]any{"user_id": grantee.userID, "scope": "INC-mismatch", "duration_seconds": 300},
+			"the target says one person and the params say another")
+		require.Equal(t, http.StatusOK,
+			h.decide(approver, action.ID, "approve", "approving what the target_id says").Code)
+
+		res := h.decide(requester, action.ID, "execute", "applying the approved elevation")
+		require.Equal(t, http.StatusBadRequest, res.Code,
+			"an approver reads target_id; the params must not elevate someone else; body=%s", res.Body.String())
 		assert.Equal(t, errs.CodeValidationFailed, res.problem().Code)
+		for name, op := range map[string]operator{"the target": victim, "the params' subject": grantee} {
+			until, _ := h.storedElevation(op.sessionID)
+			assert.Nil(t, until, "%s must not be elevated", name)
+		}
 	})
 
 	t.Run("the storage ceiling equals the proposal ceiling", func(t *testing.T) {

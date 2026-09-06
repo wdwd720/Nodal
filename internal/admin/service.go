@@ -497,7 +497,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, actionID string, exec 
 		if err := s.auditEvent(ctx, tx, pr.ActorType, uid, AuditFailed, &before, a, deref(a.ExecutionError), now); err != nil {
 			return Action{}, err
 		}
-		return a, errs.Wrap(execErr, errs.CodeOf(execErr), "admin: action execution failed").WithField("action_id", a.ID.String())
+		return a, errs.Wrap(execErr, errs.CodeOf(execErr), executionDetail(execErr)).WithField("action_id", a.ID.String())
 	}
 	a.Status = StatusExecuted
 	a.ExecutionResult = result
@@ -515,6 +515,21 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, actionID string, exec 
 		return Action{}, err
 	}
 	return a, nil
+}
+
+// executionDetail is the client-facing detail for a failed execution. Only
+// the outermost detail reaches the API boundary, so an executor's own reason
+// is carried out with it — otherwise every failure reads "execution failed"
+// and the operator is left to guess, while the text that would have told them
+// sits in a FAILED row their caller may well have rolled back. Details of
+// *errs.Error values are client-safe by contract, and an INTERNAL code is
+// still redacted at the boundary.
+func executionDetail(execErr error) string {
+	const base = "admin: action execution failed"
+	if e, ok := errs.As(execErr); ok && e.Detail != "" && e.Code != errs.CodeInternal {
+		return base + ": " + e.Detail
+	}
+	return base
 }
 
 // runExec runs exec inside a savepoint and canonicalizes its result. Any
