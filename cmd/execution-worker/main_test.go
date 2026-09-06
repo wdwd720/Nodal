@@ -67,6 +67,38 @@ func TestWire_RefusesWithoutAProviderBinding(t *testing.T) {
 		"a worker that cannot name its venue adapter refuses to start")
 }
 
+// The provider-binding refusal must not depend on a reachable database.
+//
+// This pins the startup ordering rather than the message. wire validates
+// configuration before it opens any connection, so a misconfigured worker says
+// what is actually wrong instead of first failing to reach a database that was
+// never the problem. It is also what makes the test above a real unit test:
+// before the ordering was fixed, that test passed locally only because Postgres
+// happened to be listening on 5433, and in CI — where the unit job has no
+// database — the worker died on the ping and the provider-binding assertion was
+// never reached. A unit test that silently depends on a running database proves
+// nothing on the machine where it matters most.
+func TestWire_RefusesTheProviderBindingWithoutTouchingTheDatabase(t *testing.T) {
+	t.Parallel()
+	var out, errOut bytes.Buffer
+	code := run([]string{"run"}, func(k string) (string, bool) {
+		switch k {
+		case "CP_ENV":
+			return "LOCAL", true
+		case "CP_DATABASE_URL":
+			// Port 1 is reserved and nothing listens there, so any attempt to
+			// connect fails immediately and loudly.
+			return "postgres://cp_app:cp_app_local@127.0.0.1:1/nonexistent?sslmode=disable", true
+		}
+		return "", false
+	}, &out, &errOut)
+	require.Equal(t, exitFailure, code)
+	assert.Contains(t, errOut.String(), "no execution provider binding",
+		"the configuration error must be reported, not a connection failure")
+	assert.NotContains(t, errOut.String(), "dial",
+		"wire reached the database before validating its configuration")
+}
+
 func TestRunnerOptions_FromEnvironment(t *testing.T) {
 	t.Parallel()
 	env := map[string]string{

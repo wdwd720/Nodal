@@ -29,7 +29,14 @@ dev: infra-up migrate ## Start local infra, migrate, then run api + workers (for
 stop: infra-down ## Stop everything
 
 infra-up: ## Start Postgres/Redis/Redpanda/ClickHouse/Temporal/MinIO
-	$(DOCKER) compose up -d --wait
+	# --wait is given the long-lived services explicitly. Passing no list makes
+	# compose wait on every service including cp-minio-init, a one-shot job that
+	# creates the buckets and then exits 0 — and `--wait` treats any container
+	# that exits as a failure, so `make infra-up` returned 2 while every service
+	# was in fact healthy. Locally that is invisible because the stack is
+	# already up; in CI it failed the whole chaos job.
+	$(DOCKER) compose up -d minio-init
+	$(DOCKER) compose up -d --wait postgres redis redpanda clickhouse temporal minio
 
 infra-down: ## Stop local infra (keeps volumes)
 	$(DOCKER) compose down
@@ -60,7 +67,14 @@ sqlc: ## Generate typed SQL (requires ./bin/sqlc or sqlc on PATH)
 	$(GO) run ./scripts/tool sqlc generate
 
 proto: ## Lint + generate protobuf/gRPC code (proto/ → internal/gen/proto)
-	cd proto && $(GO) run ../scripts/tool buf lint && $(GO) run ../scripts/tool buf generate
+	# buf generate execs protoc-gen-go and protoc-gen-go-grpc BY NAME from PATH,
+	# so unlike every other tool here they cannot be reached through
+	# `go run ./scripts/tool`. They must be installed into ./bin first and ./bin
+	# put on PATH. This worked locally only because a developer's ./bin is
+	# already populated and on PATH; in CI it failed with
+	# `plugin protoc-gen-go: executable file not found in $$PATH`.
+	$(GO) run ./scripts/tool install -only protoc-gen-go,protoc-gen-go-grpc
+	cd proto && PATH="$(CURDIR)/bin:$$PATH" $(GO) run ../scripts/tool buf lint && 		PATH="$(CURDIR)/bin:$$PATH" $(GO) run ../scripts/tool buf generate
 
 proto-breaking: ## Check proto backward compatibility against the main branch
 	cd proto && $(GO) run ../scripts/tool buf breaking --against ../.git#branch=main,subdir=proto
@@ -119,7 +133,11 @@ e2e: ## API-level end-to-end tests
 	$(GO) test -count=1 -timeout=30m -tags=integration,e2e ./test/e2e/...
 
 e2e-web: ## Playwright critical-path UI tests
-	$(PNPM) --filter web test:e2e
+	# The package is @controlplane/web and its script is `e2e`. This target
+	# named neither correctly (`--filter web test:e2e`) and so had never run:
+	# pnpm answered ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT, which only surfaced once
+	# CI executed for the first time.
+	$(PNPM) --filter @controlplane/web e2e
 
 chaos: ## Chaos tests (fault injection)
 	$(GO) test -count=1 -timeout=30m -tags=integration,chaos ./test/chaos/...

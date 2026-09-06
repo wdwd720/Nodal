@@ -193,6 +193,22 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		With("service", serviceName, "build_version", cfg.BuildVersion, "env", cfg.Env)
 	resolver := config.NewResolver(cfg.Env, lookup)
 
+	// Configuration is validated BEFORE any connection is opened. Binding the
+	// venue adapter is pure configuration — it asks "is there an execution
+	// provider for this mode?" and needs nothing external to answer — so doing
+	// it first means a misconfigured worker says exactly what is wrong instead
+	// of first failing to reach a database that was never the problem.
+	//
+	// This ordering is also what makes TestWire_RefusesWithoutAProviderBinding
+	// a real unit test. It used to pass locally only because Postgres happened
+	// to be listening; in CI, where the unit job has no database, the worker
+	// died on the ping and the assertion about the provider binding was never
+	// reached. A unit test that silently depends on a running database proves
+	// nothing on the machine where it matters most.
+	if _, err := bindProviders(cfg); err != nil {
+		return nil, err
+	}
+
 	dbURL, err := resolver.Resolve(ctx, cfg.Database.AppURL)
 	if err != nil {
 		return nil, fmt.Errorf("resolve database url: %w", err)
