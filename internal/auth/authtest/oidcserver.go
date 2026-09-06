@@ -227,7 +227,7 @@ func (s *OIDCServer) authorize(w http.ResponseWriter, r *http.Request) {
 	rq.Set("code", code)
 	rq.Set("state", q.Get("state"))
 	redirect.RawQuery = rq.Encode()
-	http.Redirect(w, r, redirect.String(), http.StatusFound) //nolint:gosec // test-only fake IdP: redirect_uri is supplied by the test's own client
+	http.Redirect(w, r, redirect.String(), http.StatusFound) // #nosec G710 -- test-only fake IdP: a fake authorize endpoint must redirect to the redirect_uri its own test client supplied; depguard forbids authtest in production code
 }
 
 func (s *OIDCServer) token(w http.ResponseWriter, r *http.Request) {

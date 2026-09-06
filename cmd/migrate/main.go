@@ -45,7 +45,7 @@ const (
 
 	// localDefaultURL mirrors docker-compose.yml / docker/postgres/init/001_roles.sql.
 	// It is a LOCAL development credential, not a secret.
-	localDefaultURL = "postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane?sslmode=disable" //nolint:gosec // G101: LOCAL docker-compose default; resolveMigrateURL substitutes it only when CP_ENV is unset, LOCAL or TEST
+	localDefaultURL = "postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane?sslmode=disable" // #nosec G101 -- LOCAL docker-compose credential mirroring docker/postgres/init/001_roles.sql; resolveMigrateURL returns it only when CP_ENV is unset, LOCAL or TEST and errors in every other environment
 
 	exitOK      = 0
 	exitFailure = 1
@@ -269,7 +269,7 @@ func cmdCreate(args []string, stdout io.Writer) error {
 	// Anything at or above the protected version gets the non-destructive Down skeleton.
 	r.Protected = r.Protected || version >= migrate.ProtectedVersion
 	path := filepath.Join(*dir, migrate.Filename(version, name))
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // G302,G304: creates a migration source file to be committed; path is inside the operator-supplied -dir
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) // #nosec G302 G304 -- writes a new migration source file that is committed to the repository, so 0644 is deliberate; path is filepath.Join of the operator's -dir and a generated version_name
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}

@@ -646,7 +646,7 @@ func (m *ReadModel) AssetRefs(ctx context.Context, ids []assets.AssetID) (map[as
 		if err := rows.Scan(&aid, &ref.Symbol, &ref.Chain, &ref.Mint, &decimals, &status); err != nil {
 			return nil, errs.Wrap(err, errs.CodeInternal, "internal error")
 		}
-		ref.Decimals = uint8(decimals) //nolint:gosec // assets.decimals is CHECKed to 0..38
+		ref.Decimals = uint8(decimals) // #nosec G115 -- assets.decimals is smallint CHECK (decimals BETWEEN 0 AND 18) in migrations/00100_assets.sql, so it always fits uint8
 		ref.AssetStatus = assets.Status(status)
 		out[aid] = ref
 	}

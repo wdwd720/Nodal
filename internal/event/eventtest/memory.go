@@ -400,7 +400,7 @@ func partitionOf(key string, n int) int {
 	}
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(key))
-	return int(h.Sum32() % uint32(n)) //nolint:gosec // G115: n is a small positive partition count
+	return int(h.Sum32() % uint32(n)) // #nosec G115 -- n > 1 here (n <= 1 returned above), so uint32(n) is exact and the modulus is < n
 }
 
 // reorderBatch reverses the order of distinct keys while keeping the order

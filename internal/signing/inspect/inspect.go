@@ -455,7 +455,7 @@ func checkComputeBudget(c *collector, p *parsedExpectations, w *walk, totalIxs i
 		if n == 0 {
 			n = totalIxs
 		}
-		limit = uint64(n) * DefaultComputeUnitsPerInstruction //nolint:gosec // n is a small non-negative instruction count
+		limit = uint64(n) * DefaultComputeUnitsPerInstruction // #nosec G115 -- n is a counter or len(rtx.ixs), so n >= 0, and it is bounded by the 1232-byte MaxTransactionSize, so n*DefaultComputeUnitsPerInstruction cannot overflow uint64
 		if limit > MaxComputeUnitLimit {
 			limit = MaxComputeUnitLimit
 		}

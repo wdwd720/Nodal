@@ -180,13 +180,13 @@ func (r *Relay) jitter(d time.Duration) time.Duration {
 		if span <= 0 {
 			return 0
 		}
-		return time.Duration(rand.Int64N(int64(span) + 1)) //nolint:gosec // G404: poll jitter is not security-sensitive
+		return time.Duration(rand.Int64N(int64(span) + 1)) // #nosec G404 -- poll jitter only, to desynchronise relay instances; this value has no security role
 	}
 	span := d * time.Duration(r.opts.JitterPercent) / 100
 	if span <= 0 {
 		return d
 	}
-	return d - span + time.Duration(rand.Int64N(int64(2*span)+1)) //nolint:gosec // G404: poll jitter is not security-sensitive
+	return d - span + time.Duration(rand.Int64N(int64(2*span)+1)) // #nosec G404 -- poll jitter only, to desynchronise relay instances; this value has no security role
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {

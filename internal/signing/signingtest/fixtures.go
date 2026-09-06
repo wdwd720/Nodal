@@ -164,7 +164,7 @@ func RouteData(a RouteArgs) []byte {
 		steps = []RouteStep{{SwapTag: 7, Percent: 100, InputIndex: 0, OutputIndex: 1}} // Raydium
 	}
 	var n [4]byte
-	binary.LittleEndian.PutUint32(n[:], uint32(len(steps))) //nolint:gosec // fixture step counts are tiny
+	binary.LittleEndian.PutUint32(n[:], uint32(len(steps))) // #nosec G115 -- len of a fixture slice built in-process, always far below MaxUint32
 	out = append(out, n[:]...)
 	for _, s := range steps {
 		out = append(out, s.SwapTag)

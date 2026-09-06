@@ -92,7 +92,7 @@ func runWithRetry(ctx context.Context, maxRetries int, sleep sleepFunc, op func(
 			}
 			return err
 		}
-		if serr := sleep(ctx, backoffDelay(attempt, rand.Float64())); serr != nil { //nolint:gosec // G404: backoff jitter is not security-sensitive
+		if serr := sleep(ctx, backoffDelay(attempt, rand.Float64())); serr != nil { // #nosec G404 -- retry backoff jitter only; this value has no security role
 			return fmt.Errorf("%w (last error: %w)", serr, err)
 		}
 	}

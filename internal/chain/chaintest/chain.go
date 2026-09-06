@@ -77,7 +77,7 @@ func (c *Chain) heightAt(s uint64) uint64 {
 	if n == 0 {
 		return 0
 	}
-	return uint64(n - 1) //nolint:gosec // G115: n >= 1 here (sort.Search over a non-empty block list)
+	return uint64(n - 1) // #nosec G115 -- n is sort.Search's result and the n==0 case returned above, so n >= 1 and n-1 is in [0, len(blockSlots))
 }
 
 // Advance produces n consecutive blocks (one per slot).

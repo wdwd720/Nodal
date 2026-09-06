@@ -185,8 +185,8 @@ func cmdRun(name string, args []string) int {
 	if fromPath {
 		fmt.Fprintf(os.Stderr, "tool: note: using %s from PATH; ./bin has no pinned copy (run: go run ./scripts/tool install -only %s)\n", exe, name)
 	}
-	// Running the requested pinned tool with the caller's arguments is the purpose of this command.
-	cmd := exec.CommandContext(context.Background(), exe, args...) // #nosec G702 G204
+	// #nosec G702 G204 -- running the requested pinned tool with the caller's arguments is the purpose of this command: name is rejected above unless it is in the pinned table, exe is ./bin/<name> or a PATH lookup of it, args are the developer's own CLI arguments, and exec.CommandContext never invokes a shell
+	cmd := exec.CommandContext(context.Background(), exe, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	signal.Ignore(os.Interrupt) // Ctrl-C goes to the child, which owns the terminal
 	if err := cmd.Run(); err != nil {
@@ -709,11 +709,12 @@ func readZipEntry(f *zip.File) ([]byte, error) {
 // writeExecutable atomically writes data to dest with the execute bit set.
 func writeExecutable(dest string, data []byte) error {
 	tmp := dest + ".tmp"
-	// Installed tools must be executable; bin/ is developer-local and git-ignored.
-	if err := os.WriteFile(tmp, data, 0o755); err != nil { // #nosec G306
+	// #nosec G306 -- an installed tool binary has to carry the execute bit, and bin/ is developer-local and git-ignored
+	if err := os.WriteFile(tmp, data, 0o755); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp, 0o755); err != nil { // #nosec G302
+	// #nosec G302 -- same: the execute bit is the point, and bin/ is developer-local and git-ignored
+	if err := os.Chmod(tmp, 0o755); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}

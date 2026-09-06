@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	localAppDSN = "postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable" //nolint:gosec // LOCAL docker-compose default
+	localAppDSN = "postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable" // #nosec G101 -- LOCAL docker-compose credential; seed is a local-only developer script
 	devIssuer   = "devidp"
 	chain       = "solana-devnet"
 	usdcDevMint = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" // official devnet USDC mint

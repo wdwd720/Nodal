@@ -173,6 +173,7 @@ func build(ctx context.Context, selected []service) (map[string]string, error) {
 			path += ".exe"
 		}
 		fmt.Fprintf(os.Stderr, "devrun: building %s\n", s.name)
+		// #nosec G204 -- dev runner: "go build" with a service name from devrun's own fixed services table (pick only filters it) and a path under a temp dir it created
 		cmd := exec.CommandContext(ctx, "go", "build", "-o", path, "./cmd/"+s.name)
 		cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -191,6 +192,7 @@ func supervise(ctx context.Context, s service, bin string, width int) {
 	// drain (SIGINT below) and wait for it, not have os/exec kill it the moment
 	// the context ends. A worker killed mid-transaction is exactly what every
 	// graceful-shutdown path in this repo exists to avoid.
+	// #nosec G204 -- dev runner: bin is a binary devrun itself just built into its own temp dir; args come from the fixed services table
 	cmd := exec.Command(bin, s.args...) //nolint:noctx // see above: shutdown is signaled, not context-killed
 	cmd.Env = os.Environ()
 

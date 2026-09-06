@@ -90,7 +90,7 @@ func (a *DirArchive) Put(_ context.Context, key string, body []byte, _ *time.Dur
 	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
 		return "", nil, fmt.Errorf("proof: archive put: %w", err)
 	}
-	f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o440) //nolint:gosec // G304: path is confined to the archive root by resolve
+	f, err := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o440) // #nosec G302 G304 -- resolve rejects ".." segments and asserts the result stays under the archive root; 0440 is deliberate write-once and the parent directory is 0750
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return "", nil, fmt.Errorf("%w: %s", ErrObjectExists, key)

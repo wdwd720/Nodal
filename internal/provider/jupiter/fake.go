@@ -150,6 +150,14 @@ func NewFake(cfg FakeConfig) (*Fake, error) {
 	if cfg.DefaultSlippageBPS <= 0 {
 		cfg.DefaultSlippageBPS = 50
 	}
+	// Order() falls back to this value and encodes it as a u16 basis-point
+	// field, so it carries the same 0..10000 bound that orderQuery and
+	// buildQuery enforce on a request-supplied slippage. Without this the
+	// fallback path is the one place a slippage above 10000 could reach the
+	// encoder and be silently truncated.
+	if cfg.DefaultSlippageBPS > money.OneHundredPercent {
+		return nil, fmt.Errorf("jupiter: fake DefaultSlippageBPS %d exceeds %d", cfg.DefaultSlippageBPS, money.OneHundredPercent)
+	}
 	if cfg.StartBlockHeight == 0 {
 		cfg.StartBlockHeight = 250_000_000
 	}
@@ -366,7 +374,7 @@ func (f *Fake) Order(ctx context.Context, req OrderRequest) (Order, error) {
 		raw, err := BuildFakeRouteTransaction(FakeRouteParams{
 			ProgramID: f.programID, Taker: solana.MustPublicKeyFromBase58(req.TakerPubkey),
 			InputMint: solana.MustPublicKeyFromBase58(req.InputMint), OutputMint: solana.MustPublicKeyFromBase58(req.OutputMint),
-			InAmount: uint64(inAmt), QuotedOutAmount: uint64(outAmt), SlippageBPS: uint16(slippage), //nolint:gosec // G115: slippage validated 0..10000
+			InAmount: uint64(inAmt), QuotedOutAmount: uint64(outAmt), SlippageBPS: uint16(slippage), // #nosec G115 -- inAmt/outAmt are rejected above when negative; slippage is in [0, 10000] (orderQuery validates a request value, NewFake bounds the config default)
 			RecentBlockhash: blockhash, ComputeUnitLimit: f.cfg.ComputeUnitLimit, ComputeUnitPriceMicroLamports: f.cfg.ComputeUnitPriceMicroLamports,
 		})
 		if err != nil {

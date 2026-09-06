@@ -19,7 +19,7 @@ import (
 // FakeWebhookSecret is the signing secret the fake uses when none is
 // configured. It exists so LOCAL/TEST/DEV deployments can exercise the
 // full signature path.
-const FakeWebhookSecret = "whsec_fake_local_only" //nolint:gosec // test-mode constant, not a credential
+const FakeWebhookSecret = "whsec_fake_local_only" // #nosec G101 -- default signing secret of the in-process fake; NewFake refuses any environment outside LOCAL/TEST/DEV
 
 // Fake is the in-process double of the onramp: Stripe-shaped sessions and
 // signed webhook deliveries, no network. It is refused outside

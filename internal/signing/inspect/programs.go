@@ -10,11 +10,11 @@ const (
 	// ComputeBudgetProgram sets compute-unit limits and priority fees.
 	ComputeBudgetProgram = "ComputeBudget111111111111111111111111111111"
 	// TokenProgram is SPL Token.
-	TokenProgram = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" //nolint:gosec // program id, not a credential
+	TokenProgram = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" // #nosec G101 -- public SPL program address published by Solana, not a credential
 	// Token2022Program is SPL Token-2022 (token extensions).
-	Token2022Program = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" //nolint:gosec // program id, not a credential
+	Token2022Program = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" // #nosec G101 -- public SPL program address published by Solana, not a credential
 	// AssociatedTokenProgram is the Associated Token Account program.
-	AssociatedTokenProgram = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" //nolint:gosec // program id, not a credential
+	AssociatedTokenProgram = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" // #nosec G101 -- public SPL program address published by Solana, not a credential
 	// AddressLookupTableProgram is the ALT program (never allowlisted for
 	// swaps: a swap has no business mutating lookup tables).
 	AddressLookupTableProgram = "AddressLookupTab1e1111111111111111111111111"

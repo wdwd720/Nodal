@@ -32,7 +32,7 @@ type Kind string
 const (
 	KindNative       Kind = "NATIVE"
 	KindSPLToken     Kind = "SPL_TOKEN"
-	KindSPLToken2022 Kind = "SPL_TOKEN_2022" //nolint:gosec // asset kind name, not a credential
+	KindSPLToken2022 Kind = "SPL_TOKEN_2022" // #nosec G101 -- asset kind enum value, not a credential
 	// KindFiat is a valuation-only quote reference (e.g. USD). Fiat assets are
 	// never held, traded, or posted to the ledger (migration 00108 enforces it).
 	KindFiat Kind = "FIAT"

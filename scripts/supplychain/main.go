@@ -66,7 +66,7 @@ func toolPath(name string) (string, error) {
 }
 
 func execTool(ctx context.Context, bin string, args ...string) error {
-	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // dev tool: pinned scanner binaries with fixed argument shapes
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- dev/CI tool: bin resolves to ./bin/<pinned tool> or a PATH lookup of a literal name; args are assembled by this program, and exec.Command never invokes a shell
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

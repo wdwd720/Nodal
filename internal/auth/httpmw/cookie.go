@@ -27,7 +27,7 @@ func EffectiveCookieName(name, domain string, secure bool) string {
 // secure-host-only; Max-Age from ttl when positive (otherwise a browser
 // session cookie). The token is written verbatim and never logged.
 func SetSessionCookie(w http.ResponseWriter, name, token, domain string, secure bool, ttl time.Duration) {
-	c := &http.Cookie{ //nolint:gosec // Secure comes from config; config.Validate forces CookieSecure=true outside LOCAL/TEST
+	c := &http.Cookie{ // #nosec G124 -- HttpOnly and SameSite are set below; Secure comes from Auth.CookieSecure, which config.Validate (RuleCookieSecure) requires to be true in STAGING/PROD
 		Name:     EffectiveCookieName(name, domain, secure),
 		Value:    token,
 		Path:     "/",
@@ -50,7 +50,7 @@ func SetSessionCookie(w http.ResponseWriter, name, token, domain string, secure 
 // ClearSessionCookie expires the session cookie with attributes matching
 // SetSessionCookie so the browser actually removes it.
 func ClearSessionCookie(w http.ResponseWriter, name, domain string, secure bool) {
-	c := &http.Cookie{ //nolint:gosec // Secure comes from config; config.Validate forces CookieSecure=true outside LOCAL/TEST
+	c := &http.Cookie{ // #nosec G124 -- HttpOnly and SameSite are set below; Secure comes from Auth.CookieSecure, which config.Validate (RuleCookieSecure) requires to be true in STAGING/PROD
 		Name:     EffectiveCookieName(name, domain, secure),
 		Value:    "",
 		Path:     "/",

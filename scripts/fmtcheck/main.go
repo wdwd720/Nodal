@@ -30,7 +30,7 @@ func run(args []string) int {
 	var dirs []string
 	for _, d := range args {
 		clean := filepath.Clean(d)
-		if st, err := os.Stat(clean); err == nil && st.IsDir() { //nolint:gosec // dev tool: operator-supplied directory list
+		if st, err := os.Stat(clean); err == nil && st.IsDir() { // #nosec G703 -- dev tool: the directory list is this program's own command-line arguments
 			dirs = append(dirs, clean)
 		}
 	}
@@ -52,7 +52,7 @@ func run(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, append([]string{"-l"}, dirs...)...) //nolint:gosec // dev tool: pinned formatter binary, validated directory args
+	cmd := exec.CommandContext(ctx, bin, append([]string{"-l"}, dirs...)...) // #nosec G204 G702 -- dev tool: bin is ./bin/gofumpt or a PATH lookup of the literal name; dirs are CLI arguments filtered to existing directories, and exec.Command never invokes a shell
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb

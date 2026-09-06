@@ -132,7 +132,7 @@ const (
 	SignalDelimiterForgery InjectionSignal = "DELIMITER_FORGERY"
 	// SignalCredentialProbe: text asking for a secret, key or token.
 	// The constant names a detection signal; it holds no credential.
-	SignalCredentialProbe InjectionSignal = "CREDENTIAL_PROBE" //nolint:gosec // G101: a signal name, not a secret
+	SignalCredentialProbe InjectionSignal = "CREDENTIAL_PROBE" // #nosec G101 -- prompt-injection signal name, not a credential
 	// SignalHiddenText: control characters, bidi overrides or zero-width
 	// characters, i.e. content that renders differently from how it parses.
 	SignalHiddenText InjectionSignal = "HIDDEN_TEXT"

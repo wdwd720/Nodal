@@ -56,7 +56,7 @@ const (
 	ReasonProgramNotAllowed      = "PROGRAM_NOT_ALLOWED"
 	ReasonUnknownInstruction     = "UNKNOWN_INSTRUCTION"
 	ReasonRouteCount             = "ROUTE_COUNT"
-	ReasonToken2022Disabled      = "TOKEN_2022_DISABLED" //nolint:gosec // reason code, not a credential
+	ReasonToken2022Disabled      = "TOKEN_2022_DISABLED" // #nosec G101 -- inspection reason code, not a credential
 	ReasonUnexpectedMint         = "UNEXPECTED_MINT"
 	ReasonTokenAccountUnknown    = "TOKEN_ACCOUNT_UNKNOWN"
 	ReasonTokenProgramMismatch   = "TOKEN_PROGRAM_MISMATCH"

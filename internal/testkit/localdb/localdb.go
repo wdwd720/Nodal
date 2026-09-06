@@ -25,9 +25,9 @@ import (
 
 // LOCAL docker-compose credentials only (see docker/postgres/init/001_roles.sql).
 const (
-	DefaultAdminDSN = "postgres://cp_admin:cp_admin_local@127.0.0.1:5433/postgres?sslmode=disable" //nolint:gosec // local-only compose credential
-	appPassword     = "cp_app_local"                                                               //nolint:gosec // local-only compose credential
-	migratePassword = "cp_migrate_local"                                                           //nolint:gosec // local-only compose credential
+	DefaultAdminDSN = "postgres://cp_admin:cp_admin_local@127.0.0.1:5433/postgres?sslmode=disable" // #nosec G101 -- LOCAL docker-compose credential (docker/postgres/init/001_roles.sql); testkit is test-only and depguard forbids it in production code
+	appPassword     = "cp_app_local"                                                               // #nosec G101 -- LOCAL docker-compose credential (docker/postgres/init/001_roles.sql); testkit is test-only and depguard forbids it in production code
+	migratePassword = "cp_migrate_local"                                                           // #nosec G101 -- LOCAL docker-compose credential (docker/postgres/init/001_roles.sql); testkit is test-only and depguard forbids it in production code
 )
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,40}$`)

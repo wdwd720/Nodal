@@ -177,7 +177,27 @@ vuln: ## govulncheck
 	$(GO) run ./scripts/tool govulncheck ./...
 
 sast: ## gosec
-	$(GO) run ./scripts/tool gosec -quiet ./...
+	# -exclude-generated skips files carrying the "Code generated ... DO NOT EDIT."
+	# header (internal/gen/**): protoc-gen-go emits unsafe.Slice/unsafe.StringData
+	# for its raw descriptors (G103) and oapi-codegen emits enum constants whose
+	# names trip the G101 word list. Neither is hand-written and `make gen`
+	# overwrites any annotation added there, so the exclusion is the only stable
+	# place to record the decision.
+	#
+	# -nosec-require-rules and -nosec-require-justification make gosec itself
+	# enforce the review rule that every suppression names the rule it silences
+	# and states the invariant that makes it safe: a bare `#nosec` now fails this
+	# target instead of quietly hiding a finding.
+	#
+	# THE BLIND SPOT, stated because it is real (as in .gitleaks.toml): gosec
+	# builds only the default tag set, so unlike `golangci-lint
+	# --build-tags=integration` it never sees ./test/... or any *_test.go behind
+	# //go:build integration, e2e or chaos. Those trees are covered by golangci's
+	# gosec instead. Adding -tags here would widen the scan to a batch of
+	# findings nobody has triaged, so it is a deliberate follow-up, not an
+	# oversight.
+	$(GO) run ./scripts/tool gosec -quiet -exclude-generated \
+		-nosec-require-rules -nosec-require-justification -- ./...
 
 secrets: ## gitleaks
 	$(GO) run ./scripts/tool gitleaks detect --no-banner --redact -v

@@ -247,7 +247,7 @@ const (
 	secHTTP       = "HTTP"
 	secDatabase   = "Database (Postgres)"
 	secRedis      = "Redis"
-	secRedpanda   = "Redpanda (event bus)" //nolint:gosec // G101: section heading, not a credential
+	secRedpanda   = "Redpanda (event bus)" // #nosec G101 -- config section heading, not a credential
 	secClickHouse = "ClickHouse (analytics)"
 	secTemporal   = "Temporal (workflows)"
 	secArchive    = "Archive (S3-compatible evidence/audit storage)"
@@ -256,7 +256,7 @@ const (
 	secProviders  = "Providers"
 	secTelemetry  = "Telemetry"
 	secSeed       = "Seed"
-	secRetention  = "Retention (days per retention class)" //nolint:gosec // G101: section heading, not a credential
+	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
 )
 
 func specs() []varSpec {

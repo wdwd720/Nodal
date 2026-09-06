@@ -59,7 +59,7 @@ func PriceFromDecimalString(s, quoteAsset, source string, at time.Time) (Price, 
 	if err != nil {
 		return Price{}, fmt.Errorf("%w: %w", ErrInvalidPrice, err)
 	}
-	return NewPrice(mantissa, int32(len(parts.fracDigits)), quoteAsset, source, at) //nolint:gosec // G115: bounded by the MaxPriceScale check above
+	return NewPrice(mantissa, int32(len(parts.fracDigits)), quoteAsset, source, at) // #nosec G115 -- len(fracDigits) is in [0, MaxPriceScale] (38) by the check above, so int32 is exact
 }
 
 // Validate checks that Scale is within [0, MaxPriceScale], Mantissa is not

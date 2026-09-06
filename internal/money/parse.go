@@ -80,10 +80,10 @@ func isASCIIDigit(c byte) bool { return '0' <= c && c <= '9' }
 // correct for the full int64 range including the minimum value.
 func formatCents(n int64) string {
 	var b strings.Builder
-	mag := uint64(n) //nolint:gosec // G115: replaced below when n is negative
+	mag := uint64(n) // #nosec G115 -- n >= 0 on the path that reads this value, where uint64(n) is exact; when n < 0 the next line overwrites mag before any read
 	if n < 0 {
 		b.WriteByte('-')
-		mag = uint64(-(n + 1)) + 1 //nolint:gosec // G115: -(n+1) is non-negative for every negative n, so this is exact even for math.MinInt64
+		mag = uint64(-(n + 1)) + 1 // #nosec G115 -- n < 0, so n+1 is in [MinInt64+1, 0] and -(n+1) is in [0, MaxInt64]: the negation cannot overflow and the conversion is exact, including for MinInt64
 	}
 	b.WriteString(strconv.FormatUint(mag/100, 10))
 	b.WriteByte('.')

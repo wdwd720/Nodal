@@ -229,7 +229,7 @@ func (s *ClickHouseStore) InsertNormalized(ctx context.Context, events []Normali
 	for _, e := range events {
 		ts := e.Timestamps.UTC()
 		if err := batch.Append(
-			e.EventID, e.DedupID, uint16(e.SchemaVersion), e.Source, e.EventType, e.Sequence, e.SourcePartition, e.SourceOffset, //nolint:gosec // G115: bounded above
+			e.EventID, e.DedupID, uint16(e.SchemaVersion), e.Source, e.EventType, e.Sequence, e.SourcePartition, e.SourceOffset, // #nosec G115 -- SchemaVersion is in [1, 0xFFFF]: Validate rejects < 1 and the loop above rejects > 0xFFFF
 			ts.SourceEventAt, nilIfZero(ts.ProviderPublishedAt), ts.PlatformReceivedAt, ts.NormalizedAt, ts.FeatureAvailableAt, ts.DecisionAvailableAt,
 			nilIfEmpty(e.InstrumentID), nilIfEmpty(e.AssetID), e.Wallet, e.RawObjectID, e.RawObjectHash, string(e.Payload),
 		); err != nil {

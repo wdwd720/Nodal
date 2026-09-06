@@ -296,7 +296,7 @@ func journalHash(ctx context.Context, adminDSN string) (string, error) {
 }
 
 func dockerOut(ctx context.Context, container string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "docker", append([]string{"exec", "-i", container}, args...)...) //nolint:gosec // local drill; fixed argument shape
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"exec", "-i", container}, args...)...) // #nosec G204 -- local restore drill: fixed "docker exec -i" argument shape, container from this tool's -container flag; no shell is involved
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -306,7 +306,7 @@ func dockerOut(ctx context.Context, container string, args ...string) ([]byte, e
 }
 
 func dockerIn(ctx context.Context, stdin []byte, container string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "docker", append([]string{"exec", "-i", container}, args...)...) //nolint:gosec // local drill; fixed argument shape
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"exec", "-i", container}, args...)...) // #nosec G204 -- local restore drill: fixed "docker exec -i" argument shape, container from this tool's -container flag; no shell is involved
 	var stdout, stderr bytes.Buffer
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

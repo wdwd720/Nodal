@@ -180,7 +180,7 @@ func parseTokenBalance(tb tokenBalance, field string, nkeys int) (parsedTokenBal
 	if err != nil {
 		return parsedTokenBalance{}, err
 	}
-	if idx >= uint64(nkeys) { //nolint:gosec // G115: nkeys is a slice length, never negative
+	if idx >= uint64(nkeys) { // #nosec G115 -- nkeys is len(keys) at both call sites, so it is never negative and uint64(nkeys) is exact
 		return parsedTokenBalance{}, Malformed("%s.accountIndex %d out of range (%d keys)", field, idx, nkeys)
 	}
 	if tb.Mint == "" {

@@ -14,8 +14,8 @@ import (
 // Program ids fixed by the documentation (solana-rpc.md, "Token programs").
 // These are public on-chain program addresses, not credentials.
 const (
-	TokenProgramID     = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" //nolint:gosec // G101: public program id
-	Token2022ProgramID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" //nolint:gosec // G101: public program id
+	TokenProgramID     = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" // #nosec G101 -- public SPL Token program address published by Solana, not a credential
+	Token2022ProgramID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" // #nosec G101 -- public SPL Token program address published by Solana, not a credential
 )
 
 // maxBodyBytes bounds a response body (getTransaction responses with logs
