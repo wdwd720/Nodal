@@ -360,6 +360,36 @@ The Stage 19 readiness work checked the CI jobs against what they actually execu
 
 Condition 13 was deliberately held until now, because the goal says not to write it prematurely and because a readiness report assembled before the PART 238 matrix and a green CI run would have been exactly the fabrication the document forbids. Both now exist.
 
+## 3d. FINAL stopping-criteria audit — commit `1c6fe23`, every condition re-verified
+
+Not inherited from an earlier audit. Each row was re-checked against the repository at this commit, after the two control-gap fixes.
+
+| # | Condition | Verdict | Evidence gathered at `1c6fe23` |
+|---|---|---|---|
+| 1 | all implementable V1 systems exist | **MET** | 9 binaries, 2 web apps, 54 internal packages, 41 migrations |
+| 2 | all locally executable critical tests pass | **MET** | `go build ./...` clean; **82 packages `-race`, 0 failures**; golangci-lint 0 issues; staticcheck exit 0; `make sast` exit 0; gitleaks no leaks |
+| 3 | provider integrations at strongest verifiable level | **NOT MET** — see below | 6 contract suites, all replaying recorded fixtures; no venue adapter exists (`bindProviders` errors for every mode); SB-007 open |
+| 4 | external blockers machine-gated | **MET** | `config.RuleNoFakeProviders` refuses fake providers in STAGING/PROD; 5 binaries refuse to start rather than half-wire |
+| 5 | safety-critical invariants have automated tests | **MET** | all eight named invariants resolve to a test that exists: PART 49 crash recovery, timeout-is-not-failure, kill-switch-never-stops-reconciliation, agent-can-never-resolve, no-balance-edit-endpoint, one-env-var-cannot-enable-live-money, forged-gate-activation-refused, severe-kill-switch-releasable |
+| 6 | critical failure scenarios exercised | **MET** | 8 chaos, 7 cross-process E2E, 40 security tests with 16 proven negative controls |
+| 7 | the web application is complete | **MET** | 11 pages, 3 Playwright spec files, 51 tests passing against the real API |
+| 8 | infrastructure exists | **MET** | 63 Terraform files, 3 environments, all validate and scan clean; services for all 9 binaries |
+| 9 | CI/CD exists | **MET** | `ci.yml` green on `af28dd8` running all 40 integration packages, the financial core raced with the integration tag, and chaos with 0 skips. `release.yml` still unproven (tag-triggered, no tags) |
+| 10 | observability exists | **MET** | 11 files in `internal/observability`; metrics, tracing, structured logging with secret redaction incl. connection strings (D-041) |
+| 11 | operator tooling exists | **MET** | 20 runbooks, worker CLIs, admin console, `scripts/devrun`, `scripts/restoredrill` |
+| 12 | documentation reflects reality | **MET** | traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71 IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references resolving to declarations that exist |
+| 13 | readiness report states what is authorized for live capital | **MET** | `docs/PRODUCTION_READINESS_REPORT.md`, 693 lines, opening line `Platform status: NOT_READY. Capital authority: DISABLED.` |
+
+### Why condition 3 is NOT met, and why that is not an external blocker
+
+The wording is "the **strongest verifiable level available**". For most providers, recorded-fixture contract tests genuinely are that level: Stripe, Privy and Helius need credentials nobody has, so EB-003/005/010 hold and those are correctly BLOCKED_EXTERNAL.
+
+**SB-007 is different, and the distinction matters.** The Jupiter v6 IDL is *public*. Checking the instruction layout in `internal/signing/inspect/jupiter.go` against it requires no credential, no counterparty and no money — it is verifiable today and has not been verified. Worse, `TestLayout_JupiterDiscriminators` pins the same layout the code assumes, so it cannot detect the error it exists to catch, and the fake mirrors it too: three artefacts agreeing because they share one unverified source is not corroboration.
+
+**So this is the one condition that is open on work that is ours to do, not on anyone else.** It is also the first item in the readiness report's gate list, and it forbids any canary trade.
+
+**Verdict: 12 of 13 met. The goal's terminal state has not been reached**, and claiming otherwise would be the failure mode the goal document spends PART 249 warning against.
+
 ## 4. Next exact work (ordered)
 
 1. Land wave 2 (§3): re-verify every package on a fresh isolated DB, fold deviations into DECISION_REGISTER, wire `execution` ↔ `intent`/`quote` types and `chain` observers into the executor/recoverer.
