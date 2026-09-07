@@ -1,0 +1,317 @@
+package credit
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
+)
+
+// Poster is the part of internal/ledger this package uses.
+type Poster interface {
+	Post(ctx context.Context, tx pgx.Tx, p ledger.Posting) (ledger.PostResult, error)
+}
+
+// Service issues, consumes, restores and reverses Credits.
+type Service struct {
+	poster Poster
+	clk    clock.Clock
+
+	// assetID is the single CREDIT asset, resolved once and cached. There can
+	// only ever be one (migration 00711's partial unique index), so caching it
+	// cannot go stale in a way that matters.
+	assetID assets.AssetID
+}
+
+// NewService returns a Service. Neither argument may be nil.
+func NewService(poster Poster, clk clock.Clock) *Service {
+	if poster == nil {
+		panic("credit: NewService requires a ledger poster")
+	}
+	if clk == nil {
+		panic("credit: NewService requires a clock")
+	}
+	return &Service{poster: poster, clk: clk}
+}
+
+// AssetID returns the Credit asset, resolving it on first use.
+//
+// A deployment with no Credit asset is a configuration error, not a condition
+// to work around: it fails with NOT_FOUND rather than creating one, because
+// minting the unit of account is a deliberate act with a migration behind it.
+func (s *Service) AssetID(ctx context.Context, q db.Querier) (assets.AssetID, error) {
+	if !s.assetID.IsZero() {
+		return s.assetID, nil
+	}
+	var got assets.AssetID
+	err := q.QueryRow(ctx, `SELECT id FROM assets WHERE kind = 'CREDIT'`).Scan(&got)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return got, errs.New(errs.CodeNotFound,
+				"no Credit asset is registered; the internal economy is not provisioned in this environment")
+		}
+		return got, errs.Wrap(err, errs.CodeInternal, "credit: resolve credit asset")
+	}
+	s.assetID = got
+	return got, nil
+}
+
+// Issue mints Credits into an account and records where they came from.
+//
+// It posts the journal transaction and writes the lot in the caller's
+// transaction, so either both land or neither does. The ledger's own triggers
+// enforce that the movement balances; migration 00711 enforces that the lot
+// ties back to this exact posting.
+func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, error) {
+	if err := r.Validate(); err != nil {
+		return Lot{}, err
+	}
+	if tx == nil {
+		return Lot{}, errs.New(errs.CodeInternal, "credit: Issue requires a transaction")
+	}
+	assetID, err := s.AssetID(ctx, tx)
+	if err != nil {
+		return Lot{}, err
+	}
+	actorType, actorID := actorFrom(ctx)
+
+	res, err := s.poster.Post(ctx, tx, ledger.Posting{
+		Kind:           ledger.KindCreditIssued,
+		IdempotencyKey: r.IdempotencyKey,
+		Reference:      ledger.FinancialEventReference{Type: r.Reference.Type, ID: r.Reference.ID},
+		EffectiveAt:    r.EffectiveAt,
+		Description:    r.Reason,
+		CorrelationID:  r.CorrelationID,
+		Entries: []ledger.Entry{
+			{Account: ledger.CustomerAccount(r.AccountID, ledger.CodeCreditBalance, assetID), Side: ledger.Debit, Quantity: r.Quantity},
+			{Account: ledger.CustomerAccount(r.AccountID, ledger.CodeCreditIssuance, assetID), Side: ledger.Credit, Quantity: r.Quantity},
+		},
+		Metadata: map[string]any{
+			"credit_origin":   string(r.Origin),
+			"credit_finality": string(r.Finality),
+		},
+	})
+	if err != nil {
+		return Lot{}, err
+	}
+	if res.Existing {
+		// The posting was a replay. The lot it created is the answer; creating
+		// a second lot for the same issuance would double the provenance while
+		// the balance stayed put.
+		return s.lotByJournalTx(ctx, tx, res.TransactionID)
+	}
+
+	lot := Lot{
+		ID:                NewLotID(),
+		AccountID:         r.AccountID,
+		AssetID:           assetID,
+		Origin:            r.Origin,
+		Quantity:          r.Quantity,
+		Remaining:         r.Quantity,
+		Finality:          r.Finality,
+		InitialFinality:   r.Finality,
+		FundingReference:  r.FundingReference,
+		JournalTxID:       res.TransactionID,
+		IssuedByActorType: actorType,
+		IssuedByActorID:   actorID,
+		Reason:            r.Reason,
+	}
+	var refType, refID any
+	if r.FundingReference != nil {
+		refType, refID = r.FundingReference.Type, r.FundingReference.ID
+	}
+	err = tx.QueryRow(ctx,
+		`INSERT INTO credit_lots
+		   (id, account_id, asset_id, origin, initial_finality, quantity,
+		    funding_reference_type, funding_reference_id, journal_transaction_id,
+		    issued_by_actor_type, issued_by_actor_id, reason)
+		 VALUES ($1,$2,$3,$4,$5,$6::numeric,$7,$8,$9,$10,$11,$12)
+		 RETURNING created_at`,
+		lot.ID, lot.AccountID, lot.AssetID, string(lot.Origin), string(lot.InitialFinality),
+		lot.Quantity.String(), refType, refID, lot.JournalTxID,
+		lot.IssuedByActorType, lot.IssuedByActorID, lot.Reason).Scan(&lot.CreatedAt)
+	if err != nil {
+		return Lot{}, mapError(err)
+	}
+	lot.CreatedAt = lot.CreatedAt.UTC()
+	lot.Version = 1
+	return lot, nil
+}
+
+// Consume allocates qty across the account's open lots in consumption order
+// and records a CONSUME event against each one.
+//
+// The lots are locked FOR UPDATE in a deterministic order, so concurrent
+// spenders queue rather than deadlock and the "exactly N of 100 concurrent
+// spends succeed" property holds here as well as in the journal.
+func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]Allocation, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	if tx == nil {
+		return nil, errs.New(errs.CodeInternal, "credit: Consume requires a transaction")
+	}
+	assetID, err := s.AssetID(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID, r.RequireSpendableFinality, r.AllowedOrigins)
+	if err != nil {
+		return nil, err
+	}
+
+	remaining := r.Quantity
+	var allocs []Allocation
+	for _, lot := range lots {
+		if !remaining.IsPositive() {
+			break
+		}
+		take := lot.Remaining.Min(remaining)
+		if !take.IsPositive() {
+			continue
+		}
+		ev, err := s.appendEvent(ctx, tx, lotEvent{
+			lotID:       lot.ID,
+			kind:        "CONSUME",
+			delta:       &take,
+			reference:   r.Reference,
+			journalTxID: &r.JournalTxID,
+			reason:      r.Reason,
+		})
+		if err != nil {
+			return nil, err
+		}
+		allocs = append(allocs, Allocation{
+			LotID: lot.ID, Origin: lot.Origin, Finality: lot.Finality, Quantity: take, EventID: ev,
+		})
+		remaining = remaining.Sub(take)
+	}
+	if remaining.IsPositive() {
+		// Deliberately does not say how much IS available: the caller has the
+		// balance API for that, and an error path that reports a balance is a
+		// balance oracle for anyone who can provoke it.
+		return nil, errs.Newf(errs.CodeInsufficientBuyingPower,
+			"insufficient Credits with the required provenance to cover %s", r.Quantity).
+			WithField("account_id", r.AccountID.String()).
+			WithField("requested", r.Quantity.String()).
+			WithField("shortfall", remaining.String())
+	}
+	return allocs, nil
+}
+
+// Restore returns previously consumed units to the exact lots they came from.
+func (s *Service) Restore(ctx context.Context, tx pgx.Tx, r RestoreRequest) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if tx == nil {
+		return errs.New(errs.CodeInternal, "credit: Restore requires a transaction")
+	}
+	// Sorted so concurrent restores touching overlapping lots take the row
+	// locks in the same order.
+	allocs := append([]Allocation(nil), r.Allocations...)
+	sort.Slice(allocs, func(i, j int) bool { return allocs[i].LotID.String() < allocs[j].LotID.String() })
+	for _, a := range allocs {
+		qty := a.Quantity
+		if _, err := s.appendEvent(ctx, tx, lotEvent{
+			lotID:       a.LotID,
+			kind:        "RESTORE",
+			delta:       &qty,
+			reference:   r.Reference,
+			journalTxID: &r.JournalTxID,
+			reason:      r.Reason,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetFinality moves a lot's funding finality.
+//
+// The legal transitions are enforced twice: once by
+// valuedomain.CanTransitionFinality for the operator-facing error, and once by
+// the database (SQLSTATE CR003) for everything that does not come through
+// here. REVERSED is terminal on both sides.
+func (s *Service) SetFinality(ctx context.Context, tx pgx.Tx, lotID LotID, to valuedomain.FundingFinality, ref Reference, reason string) error {
+	if tx == nil {
+		return errs.New(errs.CodeInternal, "credit: SetFinality requires a transaction")
+	}
+	if lotID.IsZero() {
+		return errs.New(errs.CodeValidationFailed, "credit: lot id is required")
+	}
+	if !to.Valid() {
+		return errs.Newf(errs.CodeValidationFailed, "credit: unknown funding finality %q", to)
+	}
+	if !ref.Valid() {
+		return errs.New(errs.CodeValidationFailed, "credit: finality change requires a reference")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return errs.New(errs.CodeValidationFailed, "credit: finality change requires a reason")
+	}
+	if err := lockLot(ctx, tx, lotID); err != nil {
+		return err
+	}
+	var from valuedomain.FundingFinality
+	err := tx.QueryRow(ctx, `SELECT finality FROM credit_lot_state WHERE lot_id = $1`, lotID).Scan(&from)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errs.New(errs.CodeNotFound, "credit lot not found").WithField("lot_id", lotID.String())
+		}
+		return mapError(err)
+	}
+	if from == to {
+		return nil
+	}
+	if !valuedomain.CanTransitionFinality(from, to) {
+		return errs.Newf(errs.CodeInvalidStateTransition,
+			"credit lot funding finality cannot go %s -> %s", from, to).
+			WithField("lot_id", lotID.String()).
+			WithField("from", string(from)).
+			WithField("to", string(to))
+	}
+	_, err = s.appendEvent(ctx, tx, lotEvent{
+		lotID: lotID, kind: "FINALITY", toFinality: &to, reference: ref, reason: reason,
+	})
+	return err
+}
+
+// actorFrom reads the acting principal from the context. Background workers
+// with no principal are recorded as the system actor rather than being
+// refused: issuing a promotional grant from a scheduled job is legitimate, and
+// an unattributed row would be worse than an attributed system one.
+func actorFrom(ctx context.Context) (string, string) {
+	if p, ok := security.PrincipalFrom(ctx); ok {
+		return string(p.ActorType), p.SubjectID
+	}
+	return "SYSTEM", "credit-service"
+}
+
+func mapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch db.SQLState(err) {
+	case "CR001":
+		return errs.Wrap(err, errs.CodeConflict, "credit lot does not hold the units this change requires")
+	case "CR003":
+		return errs.Wrap(err, errs.CodeInvalidStateTransition, "illegal credit lot funding finality transition")
+	case "CR004":
+		return errs.Wrap(err, errs.CodeValidationFailed, "credit lot is not backed by the journal transaction it names")
+	}
+	if mapped := ledger.MapError(err); mapped != nil {
+		return mapped
+	}
+	return errs.Wrap(err, errs.CodeInternal, fmt.Sprintf("credit: %v", err))
+}

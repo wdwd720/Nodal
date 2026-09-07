@@ -132,9 +132,6 @@ const (
 
 	// --- Nodal-native economy, platform side ---
 
-	// CodeCreditLiability is the platform's obligation for the Credits
-	// outstanding. CREDIT-normal.
-	CodeCreditLiability Code = "CREDIT_LIABILITY"
 	// CodeMarketReserve is Credits held in a native market's reserve.
 	// DEBIT-normal, never negative: a market may not owe Credits it does not
 	// hold.
@@ -184,7 +181,6 @@ var codeRegistry = map[Code]codeInfo{
 	CodeCreditFees:           {OwnerCustomer, Debit, false},
 	CodePayoutReserved:       {OwnerCustomer, Debit, false},
 
-	CodeCreditLiability:       {OwnerPlatform, Credit, false},
 	CodeMarketReserve:         {OwnerPlatform, Debit, false},
 	CodeMarketInventory:       {OwnerPlatform, Debit, false},
 	CodePlatformCreditRevenue: {OwnerPlatform, Credit, false},
@@ -198,7 +194,7 @@ var allCodes = []Code{
 	CodePlatformFeeReceivable, CodePlatformFeeRevenue, CodePlatformAdjustment,
 	CodeCreditBalance, CodeCreditIssuance, CodeNativeAssetBalance,
 	CodeNativeTradingOutflow, CodeNativeTradingInflow, CodeCreditFees, CodePayoutReserved,
-	CodeCreditLiability, CodeMarketReserve, CodeMarketInventory,
+	CodeMarketReserve, CodeMarketInventory,
 	CodePlatformCreditRevenue, CodePayoutClearing, CodePayoutSettled,
 }
 

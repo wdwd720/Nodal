@@ -42,15 +42,14 @@ func TestCode_Chart(t *testing.T) {
 		{CodeNativeTradingInflow, OwnerCustomer, Credit, false},
 		{CodeCreditFees, OwnerCustomer, Debit, false},
 		{CodePayoutReserved, OwnerCustomer, Debit, false},
-		{CodeCreditLiability, OwnerPlatform, Credit, false},
 		{CodeMarketReserve, OwnerPlatform, Debit, false},
 		{CodeMarketInventory, OwnerPlatform, Debit, false},
 		{CodePlatformCreditRevenue, OwnerPlatform, Credit, false},
 		{CodePayoutClearing, OwnerPlatform, Credit, false},
 		{CodePayoutSettled, OwnerPlatform, Debit, false},
 	}
-	require.Len(t, want, 25)
-	require.Len(t, AllCodes(), 25)
+	require.Len(t, want, 24)
+	require.Len(t, AllCodes(), 24)
 	for i, w := range want {
 		assert.Equal(t, w.code, AllCodes()[i], "chart order")
 		assert.True(t, w.code.Valid(), "%s valid", w.code)
