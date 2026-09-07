@@ -519,6 +519,163 @@ paths:
           description: Providers
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ProviderStatus" } } } }
 
+  # ---------------------------------------------------------------------
+  # Nodal-native economy (gola.md PARTS XII-XXI). Every command here is
+  # idempotent and every one is separately capability-gated: an endpoint
+  # existing says only that the system knows how to answer, never that this
+  # deployment permits it. A capability that is not ACTIVE produces 422
+  # CAPABILITY_NOT_APPROVED with the capability named.
+  # ---------------------------------------------------------------------
+  /credits/balance:
+    get:
+      tags: [credits]
+      summary: Credit balance broken down by what may and may not be withdrawn (PART XX)
+      description: >-
+        Never returns a single number. A balance is gross, spendable, frozen and
+        payout-eligible, with the reasons the remainder is not, because
+        "18,450 Credits" does not answer "how much may I withdraw".
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Credit balance breakdown
+          content: { application/json: { schema: { $ref: "#/components/schemas/CreditBalance" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /native-assets:
+    post:
+      tags: [native-economy]
+      summary: Create a Nodal-native asset in DRAFT, after content screening (PART XIII)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateNativeAssetRequest" } } }
+      responses:
+        "201":
+          description: Asset created in DRAFT
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeAsset" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeAsset" } } }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422":
+          description: Refused by content screening, with every finding named
+          content:
+            application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+    get:
+      tags: [native-economy]
+      summary: Native assets that currently accept at least sells
+      parameters: [{ $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200":
+          description: Page of native assets
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeAssetPage" } } }
+
+  /native-assets/{assetId}:
+    get:
+      tags: [native-economy]
+      parameters: [{ $ref: "#/components/parameters/AssetId" }]
+      responses:
+        "200":
+          description: Asset with its supply, policy profile and moderation state
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeAsset" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}:
+    get:
+      tags: [native-economy]
+      summary: Market state, curve, fees and holder concentration (PART LIV)
+      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+      responses:
+        "200":
+          description: Market
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeMarket" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/quotes:
+    post:
+      tags: [native-economy]
+      summary: Price a hypothetical trade against current state (PART XIV)
+      description: >-
+        A quote is a record of what the market said at a version. It is not a
+        promise: execution re-prices against current state, and the caller's
+        protection is min_output on the order.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/NativeQuoteRequest" } } }
+      responses:
+        "200":
+          description: Quote with full fee and slippage disclosure
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeQuote" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/orders:
+    post:
+      tags: [native-economy]
+      summary: Execute a trade against the internal market
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/NativeOrderRequest" } } }
+      responses:
+        "201":
+          description: Filled
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeFill" } } }
+        "200":
+          description: Idempotent replay of a fill already executed
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeFill" } } }
+        "409":
+          description: The market moved past the caller's minimum output
+          content:
+            application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /payouts:
+    post:
+      tags: [payouts]
+      summary: Request a payout of eligible value (PARTS XVIII-XXI)
+      description: >-
+        Eligibility is decided per unit of provenance, not per balance. The
+        response states what was decided, under which policy version, and — when
+        the only obstacle is identity — that verification would suffice.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePayoutRequest" } } }
+      responses:
+        "201":
+          description: Payout request created; see state and decision for what happens next
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutRequest" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutRequest" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [payouts]
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of payout requests
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutRequestPage" } } }
+
+  /payouts/{payoutId}:
+    get:
+      tags: [payouts]
+      parameters: [{ $ref: "#/components/parameters/PayoutId" }]
+      responses:
+        "200":
+          description: Payout request
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutRequest" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
   /healthz:
     get:
       tags: [system]
@@ -590,6 +747,9 @@ components:
     OrderId: { in: path, name: orderId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     DepositId: { in: path, name: depositId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     SessionId: { in: path, name: sessionId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    AssetId: { in: path, name: assetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    MarketId: { in: path, name: marketId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    PayoutId: { in: path, name: payoutId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
     Problem:
       description: Structured error
@@ -619,6 +779,254 @@ components:
     Timestamp:
       type: string
       format: date-time
+    # --- Nodal-native economy --------------------------------------------
+    CreditBalance:
+      type: object
+      required: [account_id, gross, spendable, frozen, payout_eligible, ineligible, policy_version]
+      description: >-
+        The breakdown PART XX requires. gross is every remaining unit;
+        payout_eligible is what the named policy version permits to be withdrawn
+        right now. They are different numbers and the product must never show
+        one where it means the other.
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        gross: { $ref: "#/components/schemas/Quantity" }
+        spendable: { $ref: "#/components/schemas/Quantity" }
+        frozen: { $ref: "#/components/schemas/Quantity" }
+        reversed: { $ref: "#/components/schemas/Quantity" }
+        payout_eligible: { $ref: "#/components/schemas/Quantity" }
+        ineligible: { $ref: "#/components/schemas/Quantity" }
+        by_origin:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Quantity" }
+        by_finality:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Quantity" }
+        ineligible_reasons:
+          type: array
+          items: { type: string }
+          description: Why the ineligible remainder cannot be withdrawn
+        policy_version: { type: string }
+        policy_hash: { type: string }
+
+    NativeSupply:
+      type: object
+      required: [max_supply, creator_allocation, treasury_allocation, pool_supply]
+      properties:
+        max_supply: { $ref: "#/components/schemas/Quantity" }
+        creator_allocation: { $ref: "#/components/schemas/Quantity" }
+        treasury_allocation: { $ref: "#/components/schemas/Quantity" }
+        pool_supply: { $ref: "#/components/schemas/Quantity" }
+
+    NativeAssetPolicy:
+      type: object
+      required: [internal_only, transferable, cashout_eligible, minimum_age]
+      description: >-
+        The stated position on this asset (PART XXXIV). Every field is a
+        decision, never a default: "we never decided" and "we decided no" are
+        different facts and the product must not conflate them.
+      properties:
+        internal_only: { type: boolean }
+        transferable: { type: boolean }
+        cashout_eligible: { type: boolean }
+        creator_earning_eligible: { type: boolean }
+        market_proceeds_eligible: { type: boolean }
+        minimum_age: { type: integer }
+        jurisdiction_policy: { type: string }
+        marketing_restrictions: { type: string }
+
+    NativeAsset:
+      type: object
+      required: [asset_id, creator_account_id, name, symbol, status, supply, policy, moderation_state]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        creator_account_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        symbol: { type: string }
+        description: { type: string }
+        image_url: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, PENDING_REVIEW, ACTIVE, CLOSE_ONLY, HALTED, DELISTED, REJECTED]
+        supply: { $ref: "#/components/schemas/NativeSupply" }
+        policy: { $ref: "#/components/schemas/NativeAssetPolicy" }
+        moderation_state:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, FLAGGED]
+        moderation_notes: { type: string }
+        economics_locked_at: { $ref: "#/components/schemas/Timestamp" }
+        activated_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    NativeAssetPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/NativeAsset" }
+
+    CreateNativeAssetRequest:
+      type: object
+      required: [account_id, name, symbol, max_supply]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string, minLength: 2, maxLength: 64 }
+        symbol: { type: string, minLength: 2, maxLength: 10 }
+        description: { type: string, maxLength: 2000 }
+        image_url: { type: string, maxLength: 512 }
+        max_supply: { $ref: "#/components/schemas/Quantity" }
+        creator_allocation: { $ref: "#/components/schemas/Quantity" }
+        decimals: { type: integer, minimum: 0, maximum: 18 }
+
+    NativeMarket:
+      type: object
+      required: [market_id, asset_id, status, real_credit_reserve, asset_reserve, state_version, platform_fee_bps, creator_fee_bps]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED]
+        virtual_credit_reserve: { $ref: "#/components/schemas/Quantity" }
+        initial_asset_reserve: { $ref: "#/components/schemas/Quantity" }
+        real_credit_reserve: { $ref: "#/components/schemas/Quantity" }
+        asset_reserve: { $ref: "#/components/schemas/Quantity" }
+        circulating_supply: { $ref: "#/components/schemas/Quantity" }
+        spot_price: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer }
+        platform_fee_bps: { $ref: "#/components/schemas/BPS" }
+        creator_fee_bps: { $ref: "#/components/schemas/BPS" }
+        state_version: { type: integer, format: int64 }
+        top_holders:
+          type: array
+          description: Holder concentration, which is the number a buyer most needs to see
+          items:
+            type: object
+            properties:
+              account_id: { $ref: "#/components/schemas/UUID" }
+              quantity: { $ref: "#/components/schemas/Quantity" }
+
+    NativeQuoteRequest:
+      type: object
+      required: [account_id, side, amount]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        side: { type: string, enum: [BUY, SELL] }
+        amount:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Credits for a BUY, asset base units for a SELL
+
+    NativeQuote:
+      type: object
+      required: [quote_id, market_id, side, input_amount, expected_output, state_version, expires_at]
+      properties:
+        quote_id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        side: { type: string, enum: [BUY, SELL] }
+        input_amount: { $ref: "#/components/schemas/Quantity" }
+        expected_output: { $ref: "#/components/schemas/Quantity" }
+        platform_fee: { $ref: "#/components/schemas/Quantity" }
+        creator_fee: { $ref: "#/components/schemas/Quantity" }
+        spot_price_before: { $ref: "#/components/schemas/Quantity" }
+        effective_price: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer }
+        slippage_bps: { $ref: "#/components/schemas/BPS" }
+        state_version: { type: integer, format: int64 }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+
+    NativeOrderRequest:
+      type: object
+      required: [account_id, side, amount, min_output]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        side: { type: string, enum: [BUY, SELL] }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        min_output:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: >-
+            The trade is refused if it would return less than this. It is checked
+            against a freshly computed fill, not against whatever a quote said,
+            because this is the number the caller actually agreed to.
+        quote_id: { $ref: "#/components/schemas/UUID" }
+
+    NativeFill:
+      type: object
+      required: [fill_id, market_id, side, state_version_after]
+      properties:
+        fill_id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        side: { type: string, enum: [BUY, SELL] }
+        credits_in: { $ref: "#/components/schemas/Quantity" }
+        credits_out: { $ref: "#/components/schemas/Quantity" }
+        assets_in: { $ref: "#/components/schemas/Quantity" }
+        assets_out: { $ref: "#/components/schemas/Quantity" }
+        platform_fee: { $ref: "#/components/schemas/Quantity" }
+        creator_fee: { $ref: "#/components/schemas/Quantity" }
+        effective_price: { $ref: "#/components/schemas/Quantity" }
+        price_scale: { type: integer }
+        slippage_bps: { $ref: "#/components/schemas/BPS" }
+        real_credit_reserve_after: { $ref: "#/components/schemas/Quantity" }
+        asset_reserve_after: { $ref: "#/components/schemas/Quantity" }
+        state_version_after: { type: integer, format: int64 }
+        alerts:
+          type: array
+          description: Surveillance findings this trade raised. They never block it.
+          items:
+            type: object
+            properties:
+              kind: { type: string }
+              severity: { type: string, enum: [INFO, WARN, CRITICAL] }
+              reason: { type: string }
+
+    CreatePayoutRequest:
+      type: object
+      required: [account_id, amount]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        amount: { $ref: "#/components/schemas/Quantity" }
+        destination_id: { $ref: "#/components/schemas/UUID" }
+
+    PayoutRequest:
+      type: object
+      required: [payout_id, account_id, state, requested_quantity, reserved_quantity, policy_version]
+      properties:
+        payout_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        state:
+          type: string
+          enum: [DRAFT, ELIGIBILITY_CHECK, VERIFICATION_REQUIRED, VERIFICATION_PENDING, VERIFIED,
+                 SUBMITTED, PROVIDER_PENDING, PAYOUT_STATUS_UNKNOWN, SETTLED, FAILED, REJECTED,
+                 REVERSED, MANUAL_REVIEW]
+        requested_quantity: { $ref: "#/components/schemas/Quantity" }
+        reserved_quantity: { $ref: "#/components/schemas/Quantity" }
+        settled_quantity: { $ref: "#/components/schemas/Quantity" }
+        eligible_quantity:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: How much of the request the policy permitted, present on creation
+        eligibility_reasons:
+          type: array
+          items: { type: string }
+        verification_would_suffice:
+          type: boolean
+          description: >-
+            True when the only obstacle is identity verification. It is a
+            different answer from "no" and the product must present it as one.
+        required_verification: { type: string }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        failure_reason: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    PayoutRequestPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutRequest" }
+
     Problem:
       type: object
       required: [type, title, status, code]

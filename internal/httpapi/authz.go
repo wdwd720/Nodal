@@ -110,6 +110,26 @@ var operationPolicies = map[string]operationPolicy{
 	"GetInstruments":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 	"GetInstrumentsInstrumentId": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
 
+	// --- Nodal-native economy (gola.md PARTS XII-XXI) ---------------------
+	//
+	// These are separate permissions from trade:* on purpose: a deployment must
+	// be able to grant real-asset trading without granting the launch of
+	// speculative internal ones, and the reverse. Tenant scoping is a separate
+	// per-request check, as everywhere else.
+	"GetCreditsBalance":        {AnyOf: perms(security.PermCreditRead)},
+	"PostNativeAssets":         {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
+	"GetNativeAssets":          {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeAssetsAssetId":   {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketId": {AnyOf: perms(security.PermNativeAssetRead)},
+	// A native-market quote is persisted -- it is the record of what the user
+	// was shown, with the state version it was priced against -- so it is a
+	// command with an idempotency key, not a read that happens to write.
+	"PostNativeMarketsMarketIdQuotes": {AnyOf: perms(security.PermNativeMarketTrade), Mutating: true},
+	"PostNativeMarketsMarketIdOrders": {AnyOf: perms(security.PermNativeMarketTrade), Mutating: true},
+	"PostPayouts":                     {AnyOf: perms(security.PermPayoutCreate), Mutating: true},
+	"GetPayouts":                      {AnyOf: perms(security.PermPayoutRead)},
+	"GetPayoutsPayoutId":              {AnyOf: perms(security.PermPayoutRead)},
+
 	// --- trading ----------------------------------------------------------
 	"PostQuotesPreview":         {AnyOf: perms(security.PermTradeRead)},
 	"PostIntents":               {AnyOf: perms(security.PermTradeCreate), Mutating: true},

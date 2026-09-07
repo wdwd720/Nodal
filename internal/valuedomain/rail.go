@@ -81,8 +81,14 @@ var railRegistry = map[CapitalRail]railInfo{
 		executionModel:             "PARTNER_EXECUTION",
 		settlementModel:            "PARTNER_SETTLEMENT",
 		reconciliationModel:        "PROVIDER_STATEMENT_VS_MIRROR",
-		implemented:                true,
-		requiresFinancialIdentity:  true,
+		// Declared and NOT implemented: no hosted provider adapter exists,
+		// because PART XVIII forbids writing one against an unverified API.
+		// Reporting it implemented would let the Settlement Compiler select a
+		// rail with nothing behind it, which is the exact failure mode
+		// PART XXII warns about -- "do not implement live unsupported products
+		// merely because an interface exists".
+		implemented:               false,
+		requiresFinancialIdentity: true,
 	},
 	RailSelfCustodialOnchain: {
 		authoritativeBalanceSource: "CHAIN",

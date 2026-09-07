@@ -20,12 +20,51 @@ const (
 	PredictionMarkets     Capability = "PREDICTION_MARKETS"
 	Securities            Capability = "SECURITIES"
 	CEXTrading            Capability = "CEX_TRADING"
+
+	// --- Nodal-native economy (gola.md PARTS XII-XXI) ---------------------
+	//
+	// These are gates rather than feature flags because PART LXXXIX forbids an
+	// ordinary flag being the sole protection for a legal financial
+	// capability. The machinery here -- dual control, evidence references,
+	// database-held state authority -- is what that requirement is asking for.
+
+	// CreditPurchase lets a user buy Credits with real money.
+	CreditPurchase Capability = "CREDIT_PURCHASE"
+	// NativeAssetCreation lets a user create a Nodal-native asset.
+	NativeAssetCreation Capability = "NATIVE_ASSET_CREATION"
+	// NativeMarketTrading lets Credits and native assets move against each
+	// other on the internal market.
+	NativeMarketTrading Capability = "NATIVE_MARKET_TRADING"
+	// PayoutReserve lets eligible Credits be committed to a payout.
+	PayoutReserve Capability = "PAYOUT_RESERVE"
+	// PayoutSettle lets reserved value leave the system.
+	PayoutSettle Capability = "PAYOUT_SETTLE"
+	// HostedTrading lets fiat and crypto move inside a partner account.
+	HostedTrading Capability = "HOSTED_TRADING"
+	// HostedFunding lets value enter or leave a partner account.
+	HostedFunding Capability = "HOSTED_FUNDING"
+
+	// --- agent authority above level 3 (PART XXVIII) ----------------------
+	//
+	// Each level has its own gate: approving "choose among the options I
+	// picked" is not approving "choose my investments".
+
+	// AgentBoundedDiscretion is authority level 4.
+	AgentBoundedDiscretion Capability = "AGENT_BOUNDED_DISCRETION"
+	// AgentAutonomousSelection is authority level 5.
+	AgentAutonomousSelection Capability = "AGENT_AUTONOMOUS_SELECTION"
+	// AgentAutonomousPortfolio is authority level 6.
+	AgentAutonomousPortfolio Capability = "AGENT_AUTONOMOUS_PORTFOLIO"
 )
 
 var allCapabilities = []Capability{
 	LiveFunding, LiveManualTrading, LiveAgentTrading, Withdrawals,
 	SocialDataPersistence, Marketplace, CrossChain, PredictionMarkets,
 	Securities, CEXTrading,
+
+	CreditPurchase, NativeAssetCreation, NativeMarketTrading,
+	PayoutReserve, PayoutSettle, HostedTrading, HostedFunding,
+	AgentBoundedDiscretion, AgentAutonomousSelection, AgentAutonomousPortfolio,
 }
 
 // AllCapabilities returns every capability in declaration order.
@@ -50,6 +89,20 @@ func IsHighRisk(c Capability) bool {
 	case LiveFunding, LiveManualTrading, LiveAgentTrading, Withdrawals,
 		Securities, CEXTrading, CrossChain, PredictionMarkets:
 		return true
+
+	// The internal economy. A capability is high risk when exercising it moves
+	// value a user could reasonably believe is theirs, or changes who decides
+	// what happens to that value.
+	case CreditPurchase, NativeMarketTrading, PayoutReserve, PayoutSettle,
+		HostedTrading, HostedFunding,
+		AgentBoundedDiscretion, AgentAutonomousSelection, AgentAutonomousPortfolio:
+		return true
+
+		// NativeAssetCreation is deliberately NOT high risk. Creating a draft
+		// asset moves nothing; it is gated because publication is a content and
+		// jurisdiction question, and it needs a legal review reference. Demanding
+		// a provider contract before somebody may name a token would be theatre,
+		// and a control that is theatre teaches operators to route around controls.
 	}
 	return false
 }

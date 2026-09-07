@@ -1,12 +1,102 @@
 # MASTER BUILD STATE
 
 > **READ THIS FILE FIRST when resuming in a new session.**
-> Source goal: `ULTIMATE MASTER GOAL — Production Universal Financial Control Plane.md` (repo root, 249 parts, 19 stages).
-> Companion files: `REQUIREMENTS_TRACEABILITY.md`, `BLOCKERS.md`, `DECISION_REGISTER.md` (same directory).
-
-Last updated: 2026-09-05 (session 1)
+>
+> **The goal changed.** The current source goal is `gola.md` (repo root, 102 parts, 25 stages):
+> an independent adversarial audit of the existing system, a migration to the final Nodal
+> architecture, and production proof. The previous goal document
+> (`ULTIMATE MASTER GOAL — Production Universal Financial Control Plane.md`) built what is now
+> Domain B and Domain C; its history is preserved below from "## 2. Completed milestones" onward and
+> is still accurate about that work.
+>
+> Companion files: `FINAL_ARCHITECTURE_MIGRATION.md`, `CURRENT_SYSTEM_INVENTORY.md`,
+> `KEEP_MODIFY_REPLACE_MATRIX.md`, `BLOCKERS.md`, `DECISION_REGISTER.md`,
+> `REQUIREMENTS_TRACEABILITY.md`, and `../audit/INDEPENDENT_AUDIT.md`.
 
 ---
+
+# PART 0 — CURRENT GOAL (gola.md) AND STATE
+
+Baseline frozen at `b8da0c4`. Everything below this line describes work done against `gola.md`.
+
+## 0.1 The finding that shapes everything
+
+The repository implemented the previous goal completely and soundly: 40 of 40 integration packages,
+the migration, e2e, chaos and six contract suites pass on freshly provisioned databases. Measured
+against `gola.md` that is Domain B (simulated capital) and Domain C (real capital).
+
+**Domain A — the Nodal-native economy — did not exist at all.** Not partially: a grep for
+`ValueDomain`, `CapitalRail`, `CreditOrigin`, native assets, a market engine, payout eligibility, a
+legal router or agent authority levels returned zero files. That absence, not a defect list, is the
+migration.
+
+## 0.2 What has landed
+
+| Stage | Subject | State |
+|---|---|---|
+| 0 | Baseline freeze, inventory, KEEP/MODIFY matrix | **done** |
+| 1 | Independent adversarial audit | **done, and continuing alongside each stage** |
+| 2 | ValueDomain / CapitalRail / provenance, enforced in Go and SQL | **done** (`internal/valuedomain`, migration 00710) |
+| 3 | Accounting hardening | **partial** — domain isolation added to the ledger; reservations pre-existed and were verified |
+| 4 | Credit ledger, provenance lots, funding lifecycle | **done** (`internal/credit`, migration 00711) |
+| 5 | Native asset registry, moderation, lifecycle | **done** (`internal/nativeasset`, migration 00712) |
+| 6 | Native market engine (constant product, virtual reserve) | **done** (`internal/nativemarket`, migration 00712) |
+| 7 | Market surveillance | **done** (`nativemarket/surveillance.go`) |
+| 8 | Internal commerce / creator economy | **not started** |
+| 9 | Payout eligibility, provider architecture, reconciliation | **done** (`internal/payout`, migration 00713) |
+| 10 | Hosted partner rail | **not started** — and see BLOCKERS B-05 |
+| 11 | Self-custodial onchain rail | **kept as-is**, re-classified as one rail among several |
+| 12 | Rails unified behind FinancialIntent | **not started** |
+| 13 | LegalCapabilityRouter, composite capability key | **done** (`internal/legalrouter`, gates extended, migration 00714) |
+| 14 | Agent authority levels | **done** (`internal/agentauthority`) |
+| 15 | Reality / Prediction / Proof integration with Domain A | **not started** |
+| 16 | Frontend | **not started** |
+| 17 | Admin tooling for Domain A | **not started** |
+| 18 | Infrastructure / IAM hardening | pre-existing, audited |
+| 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
+| 20–24 | Chaos, load, provider sandbox, re-audit, launch package | **not started** |
+
+API surface: 10 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
+into `cmd/api`, and covered by the existing deny-by-default authorization invariants.
+
+## 0.3 Next exact work, in order
+
+1. **Stage 8 — internal commerce.** `InternalProduct`, `InternalSeller`, `InternalCommerceOrder`,
+   `InternalPayoutAttribution` (PART XVII). Creator revenue must land with origins
+   `CREATOR_EARNING` / `DATA_SALE_EARNING` / `AGENT_SERVICE_EARNING`, which
+   `internal/credit` already understands and `internal/payout` already treats separately from
+   speculative proceeds. This is the last piece needed for JOURNEY C.
+2. **Stage 12 — route Domain A through the Settlement Compiler.** `internal/settlement` currently
+   compiles one rail shape. It needs to dispatch on `valuedomain.CapitalRail`, and
+   `internal/intent.FinancialIntent` needs the action types for native assets, internal services and
+   payout (PART XXV). Until then Domain A commands bypass the compiler, which is the largest
+   architectural gap remaining.
+3. **Stage 17 — admin workflows** for freeze market, close-only, disable asset, moderation verdict
+   and payout manual review. `internal/admin` already has the dual-control machinery; these are new
+   action kinds.
+4. **Stage 16 — frontend.** The API exists; `apps/web` has no Domain A surface. PART LII's rule
+   (Nodal Economy / Simulated / Real Capital never summed) has to be structural in the UI, not a
+   styling choice.
+5. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
+
+## 0.4 Verification commands that matter
+
+    make integration        # scripts/inttest: every //go:build integration package, one fresh DB each
+    make integration-race   # the same over the financial core, with -race
+    go test -count=1 -run FuzzCurve -fuzz FuzzCurve_NeverBreaksTheInvariant -fuzztime=60s ./internal/nativemarket/
+
+**Run every suite twice against the same database before believing it.** This project has now been
+bitten three times by a fixture that passes on a fresh database and fails on the second run — most
+recently by a test that created a Credit asset per call when the schema permits exactly one.
+
+## 0.5 Failing tests
+
+None. `go build ./...`, `go vet ./...`, `go vet -tags=integration ./...`, the short unit suite, and
+the full integration sweep are green at the time of writing.
+
+---
+
+# PREVIOUS GOAL — HISTORY (accurate for Domains B and C)
 
 ## 1. Current milestone
 

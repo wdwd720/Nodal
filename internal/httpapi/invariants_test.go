@@ -28,22 +28,47 @@ func TestThereIsNoBalanceEditingEndpoint(t *testing.T) {
 
 	forbidden := []string{
 		"balance", "balances", "post", "posting", "journal/entries",
-		"credit", "debit", "adjust", "adjustment", "mint", "burn",
+		"credit", "credits", "debit", "adjust", "adjustment", "mint", "burn",
 	}
 	h := newHarness(t)
 	for _, probe := range mountedRoutes(t, h.server) {
 		lower := strings.ToLower(probe.path)
+		readOnly := probe.method == "GET" || probe.method == "HEAD"
 		for _, word := range forbidden {
 			// "/ledger/transactions" is a read; it is the only route whose
 			// path names the ledger at all, and it is a GET.
 			if word == "post" && probe.method == "POST" {
 				continue
 			}
-			assert.NotContains(t, lower, "/"+word,
-				"%s %s looks like a balance-editing route", probe.method, probe.path)
+			if !strings.Contains(lower, "/"+word) {
+				continue
+			}
+			// The invariant is about EDITING a balance, and a GET cannot edit
+			// anything. GET /v1/credits/balance is the read PART XX requires:
+			// gross, spendable, frozen and payout-eligible, with the reasons
+			// for the gap. Refusing the word outright would forbid the product
+			// from telling a user what they hold.
+			//
+			// So the check is narrowed by method and widened in exchange: a
+			// state-changing route may not contain any of these words at all,
+			// which now also forbids POST /credits/anything — something the
+			// previous version permitted, because it never looked at the
+			// method.
+			assert.True(t, readOnly,
+				"%s %s changes state and names a balance concept; money moves only through the domain packages' posting paths",
+				probe.method, probe.path)
 		}
 		if strings.Contains(lower, "/ledger") {
 			assert.Equal(t, "GET", probe.method, "the ledger is read-only over HTTP")
+		}
+	}
+
+	// And the balance-shaped reads that DO exist are reads.
+	for _, probe := range mountedRoutes(t, h.server) {
+		lower := strings.ToLower(probe.path)
+		if strings.Contains(lower, "/credits/") || strings.Contains(lower, "/balance") {
+			assert.Equal(t, "GET", probe.method,
+				"%s %s must be a read; Credits move only through internal/credit", probe.method, probe.path)
 		}
 	}
 }

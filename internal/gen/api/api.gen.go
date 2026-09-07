@@ -694,6 +694,186 @@ func (e KillSwitchRequestAction) Valid() bool {
 	}
 }
 
+// Defines values for NativeAssetModerationState.
+const (
+	NativeAssetModerationStateAPPROVED NativeAssetModerationState = "APPROVED"
+	NativeAssetModerationStateFLAGGED  NativeAssetModerationState = "FLAGGED"
+	NativeAssetModerationStatePENDING  NativeAssetModerationState = "PENDING"
+	NativeAssetModerationStateREJECTED NativeAssetModerationState = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the NativeAssetModerationState enum.
+func (e NativeAssetModerationState) Valid() bool {
+	switch e {
+	case NativeAssetModerationStateAPPROVED:
+		return true
+	case NativeAssetModerationStateFLAGGED:
+		return true
+	case NativeAssetModerationStatePENDING:
+		return true
+	case NativeAssetModerationStateREJECTED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeAssetStatus.
+const (
+	NativeAssetStatusACTIVE        NativeAssetStatus = "ACTIVE"
+	NativeAssetStatusCLOSEONLY     NativeAssetStatus = "CLOSE_ONLY"
+	NativeAssetStatusDELISTED      NativeAssetStatus = "DELISTED"
+	NativeAssetStatusDRAFT         NativeAssetStatus = "DRAFT"
+	NativeAssetStatusHALTED        NativeAssetStatus = "HALTED"
+	NativeAssetStatusPENDINGREVIEW NativeAssetStatus = "PENDING_REVIEW"
+	NativeAssetStatusREJECTED      NativeAssetStatus = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the NativeAssetStatus enum.
+func (e NativeAssetStatus) Valid() bool {
+	switch e {
+	case NativeAssetStatusACTIVE:
+		return true
+	case NativeAssetStatusCLOSEONLY:
+		return true
+	case NativeAssetStatusDELISTED:
+		return true
+	case NativeAssetStatusDRAFT:
+		return true
+	case NativeAssetStatusHALTED:
+		return true
+	case NativeAssetStatusPENDINGREVIEW:
+		return true
+	case NativeAssetStatusREJECTED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeFillAlertsSeverity.
+const (
+	CRITICAL NativeFillAlertsSeverity = "CRITICAL"
+	INFO     NativeFillAlertsSeverity = "INFO"
+	WARN     NativeFillAlertsSeverity = "WARN"
+)
+
+// Valid indicates whether the value is a known member of the NativeFillAlertsSeverity enum.
+func (e NativeFillAlertsSeverity) Valid() bool {
+	switch e {
+	case CRITICAL:
+		return true
+	case INFO:
+		return true
+	case WARN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeFillSide.
+const (
+	NativeFillSideBUY  NativeFillSide = "BUY"
+	NativeFillSideSELL NativeFillSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the NativeFillSide enum.
+func (e NativeFillSide) Valid() bool {
+	switch e {
+	case NativeFillSideBUY:
+		return true
+	case NativeFillSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketStatus.
+const (
+	NativeMarketStatusACTIVE    NativeMarketStatus = "ACTIVE"
+	NativeMarketStatusCLOSEONLY NativeMarketStatus = "CLOSE_ONLY"
+	NativeMarketStatusDELISTED  NativeMarketStatus = "DELISTED"
+	NativeMarketStatusFROZEN    NativeMarketStatus = "FROZEN"
+	NativeMarketStatusHALTED    NativeMarketStatus = "HALTED"
+	NativeMarketStatusPENDING   NativeMarketStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketStatus enum.
+func (e NativeMarketStatus) Valid() bool {
+	switch e {
+	case NativeMarketStatusACTIVE:
+		return true
+	case NativeMarketStatusCLOSEONLY:
+		return true
+	case NativeMarketStatusDELISTED:
+		return true
+	case NativeMarketStatusFROZEN:
+		return true
+	case NativeMarketStatusHALTED:
+		return true
+	case NativeMarketStatusPENDING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeOrderRequestSide.
+const (
+	NativeOrderRequestSideBUY  NativeOrderRequestSide = "BUY"
+	NativeOrderRequestSideSELL NativeOrderRequestSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the NativeOrderRequestSide enum.
+func (e NativeOrderRequestSide) Valid() bool {
+	switch e {
+	case NativeOrderRequestSideBUY:
+		return true
+	case NativeOrderRequestSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeQuoteSide.
+const (
+	NativeQuoteSideBUY  NativeQuoteSide = "BUY"
+	NativeQuoteSideSELL NativeQuoteSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the NativeQuoteSide enum.
+func (e NativeQuoteSide) Valid() bool {
+	switch e {
+	case NativeQuoteSideBUY:
+		return true
+	case NativeQuoteSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeQuoteRequestSide.
+const (
+	NativeQuoteRequestSideBUY  NativeQuoteRequestSide = "BUY"
+	NativeQuoteRequestSideSELL NativeQuoteRequestSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the NativeQuoteRequestSide enum.
+func (e NativeQuoteRequestSide) Valid() bool {
+	switch e {
+	case NativeQuoteRequestSideBUY:
+		return true
+	case NativeQuoteRequestSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrderSide.
 const (
 	OrderSideBUY  OrderSide = "BUY"
@@ -856,6 +1036,57 @@ func (e OrderDetailStatus) Valid() bool {
 	case OrderDetailStatusSUBMITTING:
 		return true
 	case OrderDetailStatusVALIDATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PayoutRequestState.
+const (
+	PayoutRequestStateDRAFT                PayoutRequestState = "DRAFT"
+	PayoutRequestStateELIGIBILITYCHECK     PayoutRequestState = "ELIGIBILITY_CHECK"
+	PayoutRequestStateFAILED               PayoutRequestState = "FAILED"
+	PayoutRequestStateMANUALREVIEW         PayoutRequestState = "MANUAL_REVIEW"
+	PayoutRequestStatePAYOUTSTATUSUNKNOWN  PayoutRequestState = "PAYOUT_STATUS_UNKNOWN"
+	PayoutRequestStatePROVIDERPENDING      PayoutRequestState = "PROVIDER_PENDING"
+	PayoutRequestStateREJECTED             PayoutRequestState = "REJECTED"
+	PayoutRequestStateREVERSED             PayoutRequestState = "REVERSED"
+	PayoutRequestStateSETTLED              PayoutRequestState = "SETTLED"
+	PayoutRequestStateSUBMITTED            PayoutRequestState = "SUBMITTED"
+	PayoutRequestStateVERIFICATIONPENDING  PayoutRequestState = "VERIFICATION_PENDING"
+	PayoutRequestStateVERIFICATIONREQUIRED PayoutRequestState = "VERIFICATION_REQUIRED"
+	PayoutRequestStateVERIFIED             PayoutRequestState = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the PayoutRequestState enum.
+func (e PayoutRequestState) Valid() bool {
+	switch e {
+	case PayoutRequestStateDRAFT:
+		return true
+	case PayoutRequestStateELIGIBILITYCHECK:
+		return true
+	case PayoutRequestStateFAILED:
+		return true
+	case PayoutRequestStateMANUALREVIEW:
+		return true
+	case PayoutRequestStatePAYOUTSTATUSUNKNOWN:
+		return true
+	case PayoutRequestStatePROVIDERPENDING:
+		return true
+	case PayoutRequestStateREJECTED:
+		return true
+	case PayoutRequestStateREVERSED:
+		return true
+	case PayoutRequestStateSETTLED:
+		return true
+	case PayoutRequestStateSUBMITTED:
+		return true
+	case PayoutRequestStateVERIFICATIONPENDING:
+		return true
+	case PayoutRequestStateVERIFICATIONREQUIRED:
+		return true
+	case PayoutRequestStateVERIFIED:
 		return true
 	default:
 		return false
@@ -1658,6 +1889,84 @@ type CapabilityGate struct {
 // CapabilityGateState defines model for CapabilityGate.State.
 type CapabilityGateState string
 
+// CreateNativeAssetRequest defines model for CreateNativeAssetRequest.
+type CreateNativeAssetRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// CreatorAllocation Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreatorAllocation *Quantity `json:"creator_allocation,omitempty"`
+	Decimals          *int      `json:"decimals,omitempty"`
+	Description       *string   `json:"description,omitempty"`
+	ImageUrl          *string   `json:"image_url,omitempty"`
+
+	// MaxSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaxSupply Quantity `json:"max_supply"`
+	Name      string   `json:"name"`
+	Symbol    string   `json:"symbol"`
+}
+
+// CreatePayoutRequest defines model for CreatePayoutRequest.
+type CreatePayoutRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId *UUID `json:"destination_id,omitempty"`
+}
+
+// CreditBalance The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
+type CreditBalance struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId  UUID                 `json:"account_id"`
+	ByFinality *map[string]Quantity `json:"by_finality,omitempty"`
+	ByOrigin   *map[string]Quantity `json:"by_origin,omitempty"`
+
+	// Frozen Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Frozen Quantity `json:"frozen"`
+
+	// Gross Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Gross Quantity `json:"gross"`
+
+	// Ineligible Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Ineligible Quantity `json:"ineligible"`
+
+	// IneligibleReasons Why the ineligible remainder cannot be withdrawn
+	IneligibleReasons *[]string `json:"ineligible_reasons,omitempty"`
+
+	// PayoutEligible Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PayoutEligible Quantity `json:"payout_eligible"`
+	PolicyHash     *string  `json:"policy_hash,omitempty"`
+	PolicyVersion  string   `json:"policy_version"`
+
+	// Reversed Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Reversed *Quantity `json:"reversed,omitempty"`
+
+	// Spendable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Spendable Quantity `json:"spendable"`
+}
+
 // Decision defines model for Decision.
 type Decision struct {
 	Decision    string    `json:"decision"`
@@ -2022,6 +2331,294 @@ type KillSwitchRequest struct {
 // KillSwitchRequestAction defines model for KillSwitchRequest.Action.
 type KillSwitchRequestAction string
 
+// NativeAsset defines model for NativeAsset.
+type NativeAsset struct {
+	ActivatedAt *Timestamp `json:"activated_at,omitempty"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId   UUID       `json:"asset_id"`
+	CreatedAt *Timestamp `json:"created_at,omitempty"`
+
+	// CreatorAccountId UUIDv7 in canonical form
+	CreatorAccountId  UUID                       `json:"creator_account_id"`
+	Description       *string                    `json:"description,omitempty"`
+	EconomicsLockedAt *Timestamp                 `json:"economics_locked_at,omitempty"`
+	ImageUrl          *string                    `json:"image_url,omitempty"`
+	ModerationNotes   *string                    `json:"moderation_notes,omitempty"`
+	ModerationState   NativeAssetModerationState `json:"moderation_state"`
+	Name              string                     `json:"name"`
+
+	// Policy The stated position on this asset (PART XXXIV). Every field is a decision, never a default: "we never decided" and "we decided no" are different facts and the product must not conflate them.
+	Policy NativeAssetPolicy `json:"policy"`
+	Status NativeAssetStatus `json:"status"`
+	Supply NativeSupply      `json:"supply"`
+	Symbol string            `json:"symbol"`
+}
+
+// NativeAssetModerationState defines model for NativeAsset.ModerationState.
+type NativeAssetModerationState string
+
+// NativeAssetStatus defines model for NativeAsset.Status.
+type NativeAssetStatus string
+
+// NativeAssetPage defines model for NativeAssetPage.
+type NativeAssetPage struct {
+	Items []NativeAsset `json:"items"`
+}
+
+// NativeAssetPolicy The stated position on this asset (PART XXXIV). Every field is a decision, never a default: "we never decided" and "we decided no" are different facts and the product must not conflate them.
+type NativeAssetPolicy struct {
+	CashoutEligible        bool    `json:"cashout_eligible"`
+	CreatorEarningEligible *bool   `json:"creator_earning_eligible,omitempty"`
+	InternalOnly           bool    `json:"internal_only"`
+	JurisdictionPolicy     *string `json:"jurisdiction_policy,omitempty"`
+	MarketProceedsEligible *bool   `json:"market_proceeds_eligible,omitempty"`
+	MarketingRestrictions  *string `json:"marketing_restrictions,omitempty"`
+	MinimumAge             int     `json:"minimum_age"`
+	Transferable           bool    `json:"transferable"`
+}
+
+// NativeFill defines model for NativeFill.
+type NativeFill struct {
+	// Alerts Surveillance findings this trade raised. They never block it.
+	Alerts *[]struct {
+		Kind     *string                   `json:"kind,omitempty"`
+		Reason   *string                   `json:"reason,omitempty"`
+		Severity *NativeFillAlertsSeverity `json:"severity,omitempty"`
+	} `json:"alerts,omitempty"`
+
+	// AssetReserveAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetReserveAfter *Quantity `json:"asset_reserve_after,omitempty"`
+
+	// AssetsIn Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetsIn *Quantity `json:"assets_in,omitempty"`
+
+	// AssetsOut Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetsOut *Quantity `json:"assets_out,omitempty"`
+
+	// CreatorFee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreatorFee *Quantity `json:"creator_fee,omitempty"`
+
+	// CreditsIn Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditsIn *Quantity `json:"credits_in,omitempty"`
+
+	// CreditsOut Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditsOut *Quantity `json:"credits_out,omitempty"`
+
+	// EffectivePrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EffectivePrice *Quantity `json:"effective_price,omitempty"`
+
+	// FillId UUIDv7 in canonical form
+	FillId UUID `json:"fill_id"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// PlatformFee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PlatformFee *Quantity `json:"platform_fee,omitempty"`
+	PriceScale  *int      `json:"price_scale,omitempty"`
+
+	// RealCreditReserveAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RealCreditReserveAfter *Quantity      `json:"real_credit_reserve_after,omitempty"`
+	Side                   NativeFillSide `json:"side"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps       *BPS  `json:"slippage_bps,omitempty"`
+	StateVersionAfter int64 `json:"state_version_after"`
+}
+
+// NativeFillAlertsSeverity defines model for NativeFill.Alerts.Severity.
+type NativeFillAlertsSeverity string
+
+// NativeFillSide defines model for NativeFill.Side.
+type NativeFillSide string
+
+// NativeMarket defines model for NativeMarket.
+type NativeMarket struct {
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// AssetReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetReserve Quantity `json:"asset_reserve"`
+
+	// CirculatingSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CirculatingSupply *Quantity `json:"circulating_supply,omitempty"`
+
+	// CreatorFeeBps Basis points; 10000 == 100%
+	CreatorFeeBps BPS `json:"creator_fee_bps"`
+
+	// InitialAssetReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialAssetReserve *Quantity `json:"initial_asset_reserve,omitempty"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// PlatformFeeBps Basis points; 10000 == 100%
+	PlatformFeeBps BPS  `json:"platform_fee_bps"`
+	PriceScale     *int `json:"price_scale,omitempty"`
+
+	// RealCreditReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RealCreditReserve Quantity `json:"real_credit_reserve"`
+
+	// SpotPrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPrice    *Quantity          `json:"spot_price,omitempty"`
+	StateVersion int64              `json:"state_version"`
+	Status       NativeMarketStatus `json:"status"`
+
+	// TopHolders Holder concentration, which is the number a buyer most needs to see
+	TopHolders *[]struct {
+		// AccountId UUIDv7 in canonical form
+		AccountId *UUID `json:"account_id,omitempty"`
+
+		// Quantity Exact asset base units as an integer string
+		//
+		// Examples: 1500000000
+		Quantity *Quantity `json:"quantity,omitempty"`
+	} `json:"top_holders,omitempty"`
+
+	// VirtualCreditReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	VirtualCreditReserve *Quantity `json:"virtual_credit_reserve,omitempty"`
+}
+
+// NativeMarketStatus defines model for NativeMarket.Status.
+type NativeMarketStatus string
+
+// NativeOrderRequest defines model for NativeOrderRequest.
+type NativeOrderRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+
+	// MinOutput The trade is refused if it would return less than this. It is checked against a freshly computed fill, not against whatever a quote said, because this is the number the caller actually agreed to.
+	MinOutput Quantity `json:"min_output"`
+
+	// QuoteId UUIDv7 in canonical form
+	QuoteId *UUID                  `json:"quote_id,omitempty"`
+	Side    NativeOrderRequestSide `json:"side"`
+}
+
+// NativeOrderRequestSide defines model for NativeOrderRequest.Side.
+type NativeOrderRequestSide string
+
+// NativeQuote defines model for NativeQuote.
+type NativeQuote struct {
+	// CreatorFee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreatorFee *Quantity `json:"creator_fee,omitempty"`
+
+	// EffectivePrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EffectivePrice *Quantity `json:"effective_price,omitempty"`
+
+	// ExpectedOutput Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ExpectedOutput Quantity  `json:"expected_output"`
+	ExpiresAt      Timestamp `json:"expires_at"`
+
+	// InputAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InputAmount Quantity `json:"input_amount"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId UUID `json:"market_id"`
+
+	// PlatformFee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PlatformFee *Quantity `json:"platform_fee,omitempty"`
+	PriceScale  *int      `json:"price_scale,omitempty"`
+
+	// QuoteId UUIDv7 in canonical form
+	QuoteId UUID            `json:"quote_id"`
+	Side    NativeQuoteSide `json:"side"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps *BPS `json:"slippage_bps,omitempty"`
+
+	// SpotPriceBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPriceBefore *Quantity `json:"spot_price_before,omitempty"`
+	StateVersion    int64     `json:"state_version"`
+}
+
+// NativeQuoteSide defines model for NativeQuote.Side.
+type NativeQuoteSide string
+
+// NativeQuoteRequest defines model for NativeQuoteRequest.
+type NativeQuoteRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Credits for a BUY, asset base units for a SELL
+	Amount Quantity               `json:"amount"`
+	Side   NativeQuoteRequestSide `json:"side"`
+}
+
+// NativeQuoteRequestSide defines model for NativeQuoteRequest.Side.
+type NativeQuoteRequestSide string
+
+// NativeSupply defines model for NativeSupply.
+type NativeSupply struct {
+	// CreatorAllocation Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreatorAllocation Quantity `json:"creator_allocation"`
+
+	// MaxSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaxSupply Quantity `json:"max_supply"`
+
+	// PoolSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PoolSupply Quantity `json:"pool_supply"`
+
+	// TreasuryAllocation Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TreasuryAllocation Quantity `json:"treasury_allocation"`
+}
+
 // Order defines model for Order.
 type Order struct {
 	// AccountId UUIDv7 in canonical form
@@ -2151,6 +2748,54 @@ type OrderPage struct {
 // Page defines model for Page.
 type Page struct {
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// PayoutRequest defines model for PayoutRequest.
+type PayoutRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID       `json:"account_id"`
+	CreatedAt *Timestamp `json:"created_at,omitempty"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId      *UUID     `json:"destination_id,omitempty"`
+	EligibilityReasons *[]string `json:"eligibility_reasons,omitempty"`
+
+	// EligibleQuantity How much of the request the policy permitted, present on creation
+	EligibleQuantity *Quantity `json:"eligible_quantity,omitempty"`
+	FailureReason    *string   `json:"failure_reason,omitempty"`
+
+	// PayoutId UUIDv7 in canonical form
+	PayoutId      UUID    `json:"payout_id"`
+	PolicyHash    *string `json:"policy_hash,omitempty"`
+	PolicyVersion string  `json:"policy_version"`
+
+	// RequestedQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RequestedQuantity    Quantity `json:"requested_quantity"`
+	RequiredVerification *string  `json:"required_verification,omitempty"`
+
+	// ReservedQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ReservedQuantity Quantity `json:"reserved_quantity"`
+
+	// SettledQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SettledQuantity *Quantity          `json:"settled_quantity,omitempty"`
+	State           PayoutRequestState `json:"state"`
+
+	// VerificationWouldSuffice True when the only obstacle is identity verification. It is a different answer from "no" and the product must present it as one.
+	VerificationWouldSuffice *bool `json:"verification_would_suffice,omitempty"`
+}
+
+// PayoutRequestState defines model for PayoutRequest.State.
+type PayoutRequestState string
+
+// PayoutRequestPage defines model for PayoutRequestPage.
+type PayoutRequestPage struct {
+	Items []PayoutRequest `json:"items"`
 }
 
 // Principal defines model for Principal.
@@ -2654,6 +3299,9 @@ type WithdrawalRequest struct {
 // AccountId UUIDv7 in canonical form
 type AccountId = UUID
 
+// AssetId UUIDv7 in canonical form
+type AssetId = UUID
+
 // Cursor defines model for Cursor.
 type Cursor = string
 
@@ -2672,8 +3320,14 @@ type IntentId = UUID
 // Limit defines model for Limit.
 type Limit = int
 
+// MarketId UUIDv7 in canonical form
+type MarketId = UUID
+
 // OrderId UUIDv7 in canonical form
 type OrderId = UUID
+
+// PayoutId UUIDv7 in canonical form
+type PayoutId = UUID
 
 // SessionId UUIDv7 in canonical form
 type SessionId = UUID
@@ -2796,6 +3450,11 @@ type GetAuthLoginParams struct {
 	StepUp *bool `form:"step_up,omitempty" json:"step_up,omitempty"`
 }
 
+// GetCreditsBalanceParams defines parameters for GetCreditsBalance.
+type GetCreditsBalanceParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
 // GetEventsStreamParams defines parameters for GetEventsStream.
 type GetEventsStreamParams struct {
 	// LastEventID Resume cursor; on a gap the server sends a `resync` event and the client must refetch REST state
@@ -2834,11 +3493,46 @@ type PostIntentsIntentIdCancelParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetNativeAssetsParams defines parameters for GetNativeAssets.
+type GetNativeAssetsParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostNativeAssetsParams defines parameters for PostNativeAssets.
+type PostNativeAssetsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostNativeMarketsMarketIdOrdersParams defines parameters for PostNativeMarketsMarketIdOrders.
+type PostNativeMarketsMarketIdOrdersParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostNativeMarketsMarketIdQuotesParams defines parameters for PostNativeMarketsMarketIdQuotes.
+type PostNativeMarketsMarketIdQuotesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetOrdersParams defines parameters for GetOrders.
 type GetOrdersParams struct {
 	AccountId UUID    `form:"account_id" json:"account_id"`
 	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetPayoutsParams defines parameters for GetPayouts.
+type GetPayoutsParams struct {
+	AccountId UUID   `form:"account_id" json:"account_id"`
+	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostPayoutsParams defines parameters for PostPayouts.
+type PostPayoutsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostWebhooksProviderJSONBody defines parameters for PostWebhooksProvider.
@@ -2879,6 +3573,18 @@ type PostFundingDepositsJSONRequestBody = StartDepositRequest
 
 // PostIntentsJSONRequestBody defines body for PostIntents for application/json ContentType.
 type PostIntentsJSONRequestBody = SubmitIntentRequest
+
+// PostNativeAssetsJSONRequestBody defines body for PostNativeAssets for application/json ContentType.
+type PostNativeAssetsJSONRequestBody = CreateNativeAssetRequest
+
+// PostNativeMarketsMarketIdOrdersJSONRequestBody defines body for PostNativeMarketsMarketIdOrders for application/json ContentType.
+type PostNativeMarketsMarketIdOrdersJSONRequestBody = NativeOrderRequest
+
+// PostNativeMarketsMarketIdQuotesJSONRequestBody defines body for PostNativeMarketsMarketIdQuotes for application/json ContentType.
+type PostNativeMarketsMarketIdQuotesJSONRequestBody = NativeQuoteRequest
+
+// PostPayoutsJSONRequestBody defines body for PostPayouts for application/json ContentType.
+type PostPayoutsJSONRequestBody = CreatePayoutRequest
 
 // PostQuotesPreviewJSONRequestBody defines body for PostQuotesPreview for application/json ContentType.
 type PostQuotesPreviewJSONRequestBody = QuotePreviewRequest
@@ -2963,6 +3669,9 @@ type ServerInterface interface {
 	// PostAuthLogout Revoke the current session
 	// (POST /auth/logout)
 	PostAuthLogout(w http.ResponseWriter, r *http.Request)
+	// GetCreditsBalance Credit balance broken down by what may and may not be withdrawn (PART XX)
+	// (GET /credits/balance)
+	GetCreditsBalance(w http.ResponseWriter, r *http.Request, params GetCreditsBalanceParams)
 	// GetEventsStream Server-sent events for balances, orders, deposits and agent state (not authoritative)
 	// (GET /events/stream)
 	GetEventsStream(w http.ResponseWriter, r *http.Request, params GetEventsStreamParams)
@@ -2999,12 +3708,39 @@ type ServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetNativeAssets Native assets that currently accept at least sells
+	// (GET /native-assets)
+	GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams)
+	// PostNativeAssets Create a Nodal-native asset in DRAFT, after content screening (PART XIII)
+	// (POST /native-assets)
+	PostNativeAssets(w http.ResponseWriter, r *http.Request, params PostNativeAssetsParams)
+
+	// (GET /native-assets/{assetId})
+	GetNativeAssetsAssetId(w http.ResponseWriter, r *http.Request, assetId AssetId)
+	// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
+	// (GET /native-markets/{marketId})
+	GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
+	// (POST /native-markets/{marketId}/orders)
+	PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdOrdersParams)
+	// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
+	// (POST /native-markets/{marketId}/quotes)
+	PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams)
 
 	// (GET /orders)
 	GetOrders(w http.ResponseWriter, r *http.Request, params GetOrdersParams)
 
 	// (GET /orders/{orderId})
 	GetOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId)
+
+	// (GET /payouts)
+	GetPayouts(w http.ResponseWriter, r *http.Request, params GetPayoutsParams)
+	// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
+	// (POST /payouts)
+	PostPayouts(w http.ResponseWriter, r *http.Request, params PostPayoutsParams)
+
+	// (GET /payouts/{payoutId})
+	GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId)
 	// PostQuotesPreview Non-binding quote preview with full fee disclosure (no money moves, no reservation)
 	// (POST /quotes/preview)
 	PostQuotesPreview(w http.ResponseWriter, r *http.Request)
@@ -3173,6 +3909,12 @@ func (_ Unimplemented) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetCreditsBalance Credit balance broken down by what may and may not be withdrawn (PART XX)
+// (GET /credits/balance)
+func (_ Unimplemented) GetCreditsBalance(w http.ResponseWriter, r *http.Request, params GetCreditsBalanceParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetEventsStream Server-sent events for balances, orders, deposits and agent state (not authoritative)
 // (GET /events/stream)
 func (_ Unimplemented) GetEventsStream(w http.ResponseWriter, r *http.Request, params GetEventsStreamParams) {
@@ -3240,6 +3982,41 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetNativeAssets Native assets that currently accept at least sells
+// (GET /native-assets)
+func (_ Unimplemented) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostNativeAssets Create a Nodal-native asset in DRAFT, after content screening (PART XIII)
+// (POST /native-assets)
+func (_ Unimplemented) PostNativeAssets(w http.ResponseWriter, r *http.Request, params PostNativeAssetsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /native-assets/{assetId})
+func (_ Unimplemented) GetNativeAssetsAssetId(w http.ResponseWriter, r *http.Request, assetId AssetId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
+// (GET /native-markets/{marketId})
+func (_ Unimplemented) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
+// (POST /native-markets/{marketId}/orders)
+func (_ Unimplemented) PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdOrdersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
+// (POST /native-markets/{marketId}/quotes)
+func (_ Unimplemented) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /orders)
 func (_ Unimplemented) GetOrders(w http.ResponseWriter, r *http.Request, params GetOrdersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -3247,6 +4024,22 @@ func (_ Unimplemented) GetOrders(w http.ResponseWriter, r *http.Request, params 
 
 // (GET /orders/{orderId})
 func (_ Unimplemented) GetOrdersOrderId(w http.ResponseWriter, r *http.Request, orderId OrderId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /payouts)
+func (_ Unimplemented) GetPayouts(w http.ResponseWriter, r *http.Request, params GetPayoutsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
+// (POST /payouts)
+func (_ Unimplemented) PostPayouts(w http.ResponseWriter, r *http.Request, params PostPayoutsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /payouts/{payoutId})
+func (_ Unimplemented) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4304,6 +5097,39 @@ func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetCreditsBalance operation middleware
+func (siw *ServerInterfaceWrapper) GetCreditsBalance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCreditsBalanceParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCreditsBalance(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetEventsStream operation middleware
 func (siw *ServerInterfaceWrapper) GetEventsStream(w http.ResponseWriter, r *http.Request) {
 
@@ -4727,6 +5553,244 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetNativeAssets operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeAssets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeAssetsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeAssets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostNativeAssets operation middleware
+func (siw *ServerInterfaceWrapper) PostNativeAssets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostNativeAssetsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostNativeAssets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeAssetsAssetId operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeAssetsAssetId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "assetId" -------------
+	var assetId AssetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "assetId", chi.URLParam(r, "assetId"), &assetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "assetId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeAssetsAssetId(w, r, assetId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketId operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketId(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostNativeMarketsMarketIdOrders operation middleware
+func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostNativeMarketsMarketIdOrdersParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostNativeMarketsMarketIdOrders(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostNativeMarketsMarketIdQuotes operation middleware
+func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostNativeMarketsMarketIdQuotesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostNativeMarketsMarketIdQuotes(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOrders operation middleware
 func (siw *ServerInterfaceWrapper) GetOrders(w http.ResponseWriter, r *http.Request) {
 
@@ -4803,6 +5867,123 @@ func (siw *ServerInterfaceWrapper) GetOrdersOrderId(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrdersOrderId(w, r, orderId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPayouts operation middleware
+func (siw *ServerInterfaceWrapper) GetPayouts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPayoutsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPayouts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostPayouts operation middleware
+func (siw *ServerInterfaceWrapper) PostPayouts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostPayoutsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostPayouts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPayoutsPayoutId operation middleware
+func (siw *ServerInterfaceWrapper) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "payoutId" -------------
+	var payoutId PayoutId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "payoutId", chi.URLParam(r, "payoutId"), &payoutId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "payoutId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPayoutsPayoutId(w, r, payoutId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5203,6 +6384,36 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/providers", wrapper.GetAdminProviders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/credits/balance", wrapper.GetCreditsBalance)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-assets", wrapper.GetNativeAssets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/native-assets", wrapper.PostNativeAssets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-assets/{assetId}", wrapper.GetNativeAssetsAssetId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}", wrapper.GetNativeMarketsMarketId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/native-markets/{marketId}/quotes", wrapper.PostNativeMarketsMarketIdQuotes)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/native-markets/{marketId}/orders", wrapper.PostNativeMarketsMarketIdOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/payouts", wrapper.GetPayouts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/payouts", wrapper.PostPayouts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/payouts/{payoutId}", wrapper.GetPayoutsPayoutId)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.GetHealthz)
@@ -6005,6 +7216,58 @@ func (response PostAuthLogout204Response) VisitPostAuthLogoutResponse(w http.Res
 	return nil
 }
 
+type GetCreditsBalanceRequestObject struct {
+	Params GetCreditsBalanceParams
+}
+
+type GetCreditsBalanceResponseObject interface {
+	VisitGetCreditsBalanceResponse(w http.ResponseWriter) error
+}
+
+type GetCreditsBalance200JSONResponse CreditBalance
+
+func (response GetCreditsBalance200JSONResponse) VisitGetCreditsBalanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCreditsBalance403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetCreditsBalance403ApplicationProblemPlusJSONResponse) VisitGetCreditsBalanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCreditsBalance422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetCreditsBalance422ApplicationProblemPlusJSONResponse) VisitGetCreditsBalanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetEventsStreamRequestObject struct {
 	Params GetEventsStreamParams
 }
@@ -6474,6 +7737,279 @@ func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w 
 	return err
 }
 
+type GetNativeAssetsRequestObject struct {
+	Params GetNativeAssetsParams
+}
+
+type GetNativeAssetsResponseObject interface {
+	VisitGetNativeAssetsResponse(w http.ResponseWriter) error
+}
+
+type GetNativeAssets200JSONResponse NativeAssetPage
+
+func (response GetNativeAssets200JSONResponse) VisitGetNativeAssetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeAssetsRequestObject struct {
+	Params PostNativeAssetsParams
+	Body   *PostNativeAssetsJSONRequestBody
+}
+
+type PostNativeAssetsResponseObject interface {
+	VisitPostNativeAssetsResponse(w http.ResponseWriter) error
+}
+
+type PostNativeAssets200JSONResponse NativeAsset
+
+func (response PostNativeAssets200JSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeAssets201JSONResponse NativeAsset
+
+func (response PostNativeAssets201JSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeAssets409ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostNativeAssets409ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeAssets422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostNativeAssets422ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeAssetsAssetIdRequestObject struct {
+	AssetId AssetId `json:"assetId"`
+}
+
+type GetNativeAssetsAssetIdResponseObject interface {
+	VisitGetNativeAssetsAssetIdResponse(w http.ResponseWriter) error
+}
+
+type GetNativeAssetsAssetId200JSONResponse NativeAsset
+
+func (response GetNativeAssetsAssetId200JSONResponse) VisitGetNativeAssetsAssetIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeAssetsAssetId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeAssetsAssetId404ApplicationProblemPlusJSONResponse) VisitGetNativeAssetsAssetIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+}
+
+type GetNativeMarketsMarketIdResponseObject interface {
+	VisitGetNativeMarketsMarketIdResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketId200JSONResponse NativeMarket
+
+func (response GetNativeMarketsMarketId200JSONResponse) VisitGetNativeMarketsMarketIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketId404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeMarketsMarketIdOrdersRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostNativeMarketsMarketIdOrdersParams
+	Body     *PostNativeMarketsMarketIdOrdersJSONRequestBody
+}
+
+type PostNativeMarketsMarketIdOrdersResponseObject interface {
+	VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error
+}
+
+type PostNativeMarketsMarketIdOrders200JSONResponse NativeFill
+
+func (response PostNativeMarketsMarketIdOrders200JSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeMarketsMarketIdOrders201JSONResponse NativeFill
+
+func (response PostNativeMarketsMarketIdOrders201JSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeMarketsMarketIdOrders409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostNativeMarketsMarketIdOrders409ApplicationProblemPlusJSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeMarketsMarketIdOrders422ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostNativeMarketsMarketIdOrders422ApplicationProblemPlusJSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeMarketsMarketIdQuotesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   PostNativeMarketsMarketIdQuotesParams
+	Body     *PostNativeMarketsMarketIdQuotesJSONRequestBody
+}
+
+type PostNativeMarketsMarketIdQuotesResponseObject interface {
+	VisitPostNativeMarketsMarketIdQuotesResponse(w http.ResponseWriter) error
+}
+
+type PostNativeMarketsMarketIdQuotes200JSONResponse NativeQuote
+
+func (response PostNativeMarketsMarketIdQuotes200JSONResponse) VisitPostNativeMarketsMarketIdQuotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostNativeMarketsMarketIdQuotes422ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostNativeMarketsMarketIdQuotes422ApplicationProblemPlusJSONResponse) VisitPostNativeMarketsMarketIdQuotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOrdersRequestObject struct {
 	Params GetOrdersParams
 }
@@ -6523,6 +8059,119 @@ type GetOrdersOrderId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrdersOrderId404ApplicationProblemPlusJSONResponse) VisitGetOrdersOrderIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPayoutsRequestObject struct {
+	Params GetPayoutsParams
+}
+
+type GetPayoutsResponseObject interface {
+	VisitGetPayoutsResponse(w http.ResponseWriter) error
+}
+
+type GetPayouts200JSONResponse PayoutRequestPage
+
+func (response GetPayouts200JSONResponse) VisitGetPayoutsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsRequestObject struct {
+	Params PostPayoutsParams
+	Body   *PostPayoutsJSONRequestBody
+}
+
+type PostPayoutsResponseObject interface {
+	VisitPostPayoutsResponse(w http.ResponseWriter) error
+}
+
+type PostPayouts200JSONResponse PayoutRequest
+
+func (response PostPayouts200JSONResponse) VisitPostPayoutsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayouts201JSONResponse PayoutRequest
+
+func (response PostPayouts201JSONResponse) VisitPostPayoutsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayouts422ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostPayouts422ApplicationProblemPlusJSONResponse) VisitPostPayoutsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPayoutsPayoutIdRequestObject struct {
+	PayoutId PayoutId `json:"payoutId"`
+}
+
+type GetPayoutsPayoutIdResponseObject interface {
+	VisitGetPayoutsPayoutIdResponse(w http.ResponseWriter) error
+}
+
+type GetPayoutsPayoutId200JSONResponse PayoutRequest
+
+func (response GetPayoutsPayoutId200JSONResponse) VisitGetPayoutsPayoutIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPayoutsPayoutId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetPayoutsPayoutId404ApplicationProblemPlusJSONResponse) VisitGetPayoutsPayoutIdResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -6839,6 +8488,9 @@ type StrictServerInterface interface {
 	// PostAuthLogout Revoke the current session
 	// (POST /auth/logout)
 	PostAuthLogout(ctx context.Context, request PostAuthLogoutRequestObject) (PostAuthLogoutResponseObject, error)
+	// GetCreditsBalance Credit balance broken down by what may and may not be withdrawn (PART XX)
+	// (GET /credits/balance)
+	GetCreditsBalance(ctx context.Context, request GetCreditsBalanceRequestObject) (GetCreditsBalanceResponseObject, error)
 	// GetEventsStream Server-sent events for balances, orders, deposits and agent state (not authoritative)
 	// (GET /events/stream)
 	GetEventsStream(ctx context.Context, request GetEventsStreamRequestObject) (GetEventsStreamResponseObject, error)
@@ -6875,12 +8527,39 @@ type StrictServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetNativeAssets Native assets that currently accept at least sells
+	// (GET /native-assets)
+	GetNativeAssets(ctx context.Context, request GetNativeAssetsRequestObject) (GetNativeAssetsResponseObject, error)
+	// PostNativeAssets Create a Nodal-native asset in DRAFT, after content screening (PART XIII)
+	// (POST /native-assets)
+	PostNativeAssets(ctx context.Context, request PostNativeAssetsRequestObject) (PostNativeAssetsResponseObject, error)
+
+	// (GET /native-assets/{assetId})
+	GetNativeAssetsAssetId(ctx context.Context, request GetNativeAssetsAssetIdRequestObject) (GetNativeAssetsAssetIdResponseObject, error)
+	// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
+	// (GET /native-markets/{marketId})
+	GetNativeMarketsMarketId(ctx context.Context, request GetNativeMarketsMarketIdRequestObject) (GetNativeMarketsMarketIdResponseObject, error)
+	// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
+	// (POST /native-markets/{marketId}/orders)
+	PostNativeMarketsMarketIdOrders(ctx context.Context, request PostNativeMarketsMarketIdOrdersRequestObject) (PostNativeMarketsMarketIdOrdersResponseObject, error)
+	// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
+	// (POST /native-markets/{marketId}/quotes)
+	PostNativeMarketsMarketIdQuotes(ctx context.Context, request PostNativeMarketsMarketIdQuotesRequestObject) (PostNativeMarketsMarketIdQuotesResponseObject, error)
 
 	// (GET /orders)
 	GetOrders(ctx context.Context, request GetOrdersRequestObject) (GetOrdersResponseObject, error)
 
 	// (GET /orders/{orderId})
 	GetOrdersOrderId(ctx context.Context, request GetOrdersOrderIdRequestObject) (GetOrdersOrderIdResponseObject, error)
+
+	// (GET /payouts)
+	GetPayouts(ctx context.Context, request GetPayoutsRequestObject) (GetPayoutsResponseObject, error)
+	// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
+	// (POST /payouts)
+	PostPayouts(ctx context.Context, request PostPayoutsRequestObject) (PostPayoutsResponseObject, error)
+
+	// (GET /payouts/{payoutId})
+	GetPayoutsPayoutId(ctx context.Context, request GetPayoutsPayoutIdRequestObject) (GetPayoutsPayoutIdResponseObject, error)
 	// PostQuotesPreview Non-binding quote preview with full fee disclosure (no money moves, no reservation)
 	// (POST /quotes/preview)
 	PostQuotesPreview(ctx context.Context, request PostQuotesPreviewRequestObject) (PostQuotesPreviewResponseObject, error)
@@ -7621,6 +9300,32 @@ func (sh *strictHandler) PostAuthLogout(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// GetCreditsBalance operation middleware
+func (sh *strictHandler) GetCreditsBalance(w http.ResponseWriter, r *http.Request, params GetCreditsBalanceParams) {
+	var request GetCreditsBalanceRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCreditsBalance(ctx, request.(GetCreditsBalanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCreditsBalance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCreditsBalanceResponseObject); ok {
+		if err := validResponse.VisitGetCreditsBalanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetEventsStream operation middleware
 func (sh *strictHandler) GetEventsStream(w http.ResponseWriter, r *http.Request, params GetEventsStreamParams) {
 	var request GetEventsStreamRequestObject
@@ -7942,6 +9647,185 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetNativeAssets operation middleware
+func (sh *strictHandler) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
+	var request GetNativeAssetsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeAssets(ctx, request.(GetNativeAssetsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeAssets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeAssetsResponseObject); ok {
+		if err := validResponse.VisitGetNativeAssetsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostNativeAssets operation middleware
+func (sh *strictHandler) PostNativeAssets(w http.ResponseWriter, r *http.Request, params PostNativeAssetsParams) {
+	var request PostNativeAssetsRequestObject
+
+	request.Params = params
+
+	var body PostNativeAssetsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostNativeAssets(ctx, request.(PostNativeAssetsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostNativeAssets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostNativeAssetsResponseObject); ok {
+		if err := validResponse.VisitPostNativeAssetsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeAssetsAssetId operation middleware
+func (sh *strictHandler) GetNativeAssetsAssetId(w http.ResponseWriter, r *http.Request, assetId AssetId) {
+	var request GetNativeAssetsAssetIdRequestObject
+
+	request.AssetId = assetId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeAssetsAssetId(ctx, request.(GetNativeAssetsAssetIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeAssetsAssetId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeAssetsAssetIdResponseObject); ok {
+		if err := validResponse.VisitGetNativeAssetsAssetIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketId operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	var request GetNativeMarketsMarketIdRequestObject
+
+	request.MarketId = marketId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketId(ctx, request.(GetNativeMarketsMarketIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostNativeMarketsMarketIdOrders operation middleware
+func (sh *strictHandler) PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdOrdersParams) {
+	var request PostNativeMarketsMarketIdOrdersRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostNativeMarketsMarketIdOrdersJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostNativeMarketsMarketIdOrders(ctx, request.(PostNativeMarketsMarketIdOrdersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostNativeMarketsMarketIdOrders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostNativeMarketsMarketIdOrdersResponseObject); ok {
+		if err := validResponse.VisitPostNativeMarketsMarketIdOrdersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostNativeMarketsMarketIdQuotes operation middleware
+func (sh *strictHandler) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams) {
+	var request PostNativeMarketsMarketIdQuotesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	var body PostNativeMarketsMarketIdQuotesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostNativeMarketsMarketIdQuotes(ctx, request.(PostNativeMarketsMarketIdQuotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostNativeMarketsMarketIdQuotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostNativeMarketsMarketIdQuotesResponseObject); ok {
+		if err := validResponse.VisitPostNativeMarketsMarketIdQuotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetOrders operation middleware
 func (sh *strictHandler) GetOrders(w http.ResponseWriter, r *http.Request, params GetOrdersParams) {
 	var request GetOrdersRequestObject
@@ -7987,6 +9871,91 @@ func (sh *strictHandler) GetOrdersOrderId(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOrdersOrderIdResponseObject); ok {
 		if err := validResponse.VisitGetOrdersOrderIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPayouts operation middleware
+func (sh *strictHandler) GetPayouts(w http.ResponseWriter, r *http.Request, params GetPayoutsParams) {
+	var request GetPayoutsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPayouts(ctx, request.(GetPayoutsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPayouts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPayoutsResponseObject); ok {
+		if err := validResponse.VisitGetPayoutsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostPayouts operation middleware
+func (sh *strictHandler) PostPayouts(w http.ResponseWriter, r *http.Request, params PostPayoutsParams) {
+	var request PostPayoutsRequestObject
+
+	request.Params = params
+
+	var body PostPayoutsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostPayouts(ctx, request.(PostPayoutsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostPayouts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostPayoutsResponseObject); ok {
+		if err := validResponse.VisitPostPayoutsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPayoutsPayoutId operation middleware
+func (sh *strictHandler) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId) {
+	var request GetPayoutsPayoutIdRequestObject
+
+	request.PayoutId = payoutId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPayoutsPayoutId(ctx, request.(GetPayoutsPayoutIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPayoutsPayoutId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPayoutsPayoutIdResponseObject); ok {
+		if err := validResponse.VisitGetPayoutsPayoutIdResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -8194,163 +10163,207 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"/+8A",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -76,6 +76,11 @@ type WireDeps struct {
 	// until an operator runs its own tool.
 	AdminExecutors map[admin.Kind]admin.ExecFunc
 
+	// NativeEconomy holds the internal-economy services. Every field is
+	// optional: a deployment that has not provisioned the Nodal-native economy
+	// leaves them nil and those routes answer UNSUPPORTED.
+	NativeEconomy NativeEconomyDeps
+
 	IdempotencyTTL time.Duration
 }
 
@@ -170,6 +175,7 @@ func Wire(d WireDeps) (Ports, error) {
 	if d.Idempotency != nil {
 		p.Idempotency = idempotencyAdapter{store: d.Idempotency, db: d.DB}
 	}
+	wireNativeEconomy(&p, d)
 	return p, nil
 }
 

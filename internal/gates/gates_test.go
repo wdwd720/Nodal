@@ -118,11 +118,24 @@ func TestCanTransition_EveryPair(t *testing.T) {
 
 func TestCapabilities_And_HighRisk(t *testing.T) {
 	caps := AllCapabilities()
-	require.Len(t, caps, 10)
+	require.Len(t, caps, 20)
 	high := map[Capability]bool{
 		LiveFunding: true, LiveManualTrading: true, LiveAgentTrading: true, Withdrawals: true,
 		Securities: true, CEXTrading: true, CrossChain: true, PredictionMarkets: true,
 		SocialDataPersistence: false, Marketplace: false,
+
+		// The internal economy. High risk where exercising the capability
+		// moves value a user could believe is theirs, or changes who decides
+		// what happens to it.
+		CreditPurchase: true, NativeMarketTrading: true,
+		PayoutReserve: true, PayoutSettle: true,
+		HostedTrading: true, HostedFunding: true,
+		AgentBoundedDiscretion: true, AgentAutonomousSelection: true, AgentAutonomousPortfolio: true,
+
+		// Creating a DRAFT asset moves nothing. It is gated because
+		// publication is a content and jurisdiction question, not because a
+		// provider contract could possibly be relevant to naming a token.
+		NativeAssetCreation: false,
 	}
 	for _, c := range caps {
 		assert.True(t, c.Valid())

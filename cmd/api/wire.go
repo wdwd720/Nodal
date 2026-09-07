@@ -29,6 +29,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
+	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
@@ -41,7 +42,10 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/nativeasset"
+	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
@@ -213,6 +217,33 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("identity service: %w", err)
 	}
 
+	// --- the Nodal-native economy -------------------------------------------
+	//
+	// These are constructed unconditionally and gated at runtime. There is no
+	// "enable the internal economy" flag here on purpose: whether a Credit may
+	// move, an asset may launch or a payout may leave is a capability-gate and
+	// legal-router question answered per request, not a boolean read at
+	// startup. A deployment with no Credit asset provisioned still gets the
+	// routes, and they answer NOT_FOUND with a reason rather than 404-ing as
+	// though the feature did not exist.
+	creditSvc := credit.NewService(ledgerSvc, clk)
+	nativeAssetSvc := nativeasset.NewService(clk, nil)
+	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, clk)
+
+	// Payout providers. A registry built with allowSandbox=false refuses any
+	// provider with no contract reference, which is the programmatic assertion
+	// PART LXV asks for: production cannot load a test double. Nothing is
+	// registered, so every payout answers "no provider configured" -- the
+	// honest state until a contract exists (BLOCKERS: B-PAYOUT-PROVIDER).
+	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest)
+	payoutEngine := payout.NewEngine(creditSvc)
+	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+
+	// The ledger's value-domain isolation consults the same gate checker every
+	// other capability decision uses, so turning a capability off stops the
+	// movement at the journal rather than only in a service.
+	ledgerSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
+
 	// --- realtime ----------------------------------------------------------
 	// The hub is mounted so the endpoint honors Last-Event-ID, heartbeats and
 	// per-client cleanup. No producer is attached: the event bus adapter lives
@@ -248,6 +279,23 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Providers:         provider.NewRegistry(),
 		FundingSettlement: settlement,
 		ProviderCatalog:   providerCatalog(cfg),
+		NativeEconomy: httpapi.NativeEconomyDeps{
+			Credits:       creditSvc,
+			NativeAssets:  nativeAssetSvc,
+			NativeMarkets: nativeMarketSvc,
+			Payouts:       payoutSvc,
+			PayoutEngine:  payoutEngine,
+			// No payout policy is configured, so the fail-closed default
+			// applies and no origin is withdrawable. Activating one is a
+			// policy version with evidence, not a code change here.
+			PayoutPolicy: nil,
+			Capabilities: gateCapabilityResolver{checker: gateChecker, q: database},
+			// No financial verification provider is wired, so every account is
+			// VerificationNone. That is not a placeholder: a deployment that
+			// cannot establish identity has not established it, and the payout
+			// engine refuses accordingly.
+			Verification: nil,
+		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.
 		Quotes: nil,

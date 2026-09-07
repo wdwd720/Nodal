@@ -34,6 +34,9 @@ type DestinationID = id.ID[destinationKind]
 // NewDestinationID returns a fresh destination id.
 func NewDestinationID() DestinationID { return id.New[destinationKind]() }
 
+// ParseDestinationID parses the canonical form.
+func ParseDestinationID(s string) (DestinationID, error) { return id.Parse[destinationKind](s) }
+
 // TransitionID identifies a recorded state change.
 type TransitionID = id.ID[transitionKind]
 

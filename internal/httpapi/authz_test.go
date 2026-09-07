@@ -162,12 +162,17 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{action}":       "propose",
 		"{decision}":     "approve",
 		"{provider}":     "stripe",
+		"{assetId}":      testInstrument.String(),
+		"{marketId}":     testOrderID.String(),
+		"{payoutId}":     testSessionID,
 	}
 
 	requiredQuery := map[string]string{
 		"/v1/intents":          "account_id=" + testAccountID.String(),
 		"/v1/orders":           "account_id=" + testAccountID.String(),
 		"/v1/funding/deposits": "account_id=" + testAccountID.String(),
+		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
+		"/v1/payouts":          "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe

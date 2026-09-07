@@ -54,6 +54,10 @@ func NewService(poster Poster, credits Credits, engine *Engine, providers *Regis
 	return &Service{poster: poster, credits: credits, engine: engine, providers: providers, clk: clk}
 }
 
+// Provider returns a registered payout provider, so callers can ask what it
+// actually supports rather than assuming (PART LXXVI).
+func (s *Service) Provider(name string) (Provider, error) { return s.providers.Get(name) }
+
 // Create evaluates eligibility and, if the full amount is eligible, reserves
 // the exact units in one transaction.
 //

@@ -77,9 +77,14 @@ func TestRail_UnimplementedRailsAreDeclaredButNotUsable(t *testing.T) {
 	require.True(t, RailPredictionDCM.Valid())
 	require.False(t, RailPredictionDCM.Implemented())
 
-	for _, r := range []CapitalRail{RailSimulated, RailNativeInternal, RailHostedPartner, RailSelfCustodialOnchain} {
+	for _, r := range []CapitalRail{RailSimulated, RailNativeInternal, RailSelfCustodialOnchain} {
 		require.True(t, r.Implemented(), "%s must be implemented", r)
 	}
+	// The hosted-partner rail is declared and has no adapter, because none can
+	// be written against an unverified API. Reporting it implemented would let
+	// the Settlement Compiler route to nothing.
+	require.False(t, RailHostedPartner.Implemented(),
+		"a rail with no provider adapter must not report itself implemented")
 }
 
 func TestRail_EveryRailDescribesItsAuthorityModel(t *testing.T) {

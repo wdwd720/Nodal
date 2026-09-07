@@ -55,8 +55,15 @@ type Ports struct {
 	AdminActions   AdminActionsPort
 	Providers      ProvidersPort
 	Reconciliation ReconciliationPort
-	Health         HealthPort
-	Idempotency    IdempotencyPort
+	// The Nodal-native economy. A nil port answers UNSUPPORTED: a deployment
+	// that has not provisioned the internal economy says so rather than
+	// returning an empty balance.
+	Credits       CreditsPort
+	NativeAssets  NativeAssetsPort
+	NativeMarkets NativeMarketsPort
+	Payouts       PayoutsPort
+	Health        HealthPort
+	Idempotency   IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because

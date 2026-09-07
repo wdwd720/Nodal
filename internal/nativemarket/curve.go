@@ -417,8 +417,12 @@ func ceilDiv(a, b *big.Int) *big.Int {
 	return q
 }
 
-// spot is the marginal price: credit base units per asset base unit, scaled
-// by 10^PriceScale. It is display-only.
+// SpotPrice is the marginal price: credit base units per asset base unit,
+// scaled by 10^PriceScale. It is display-only, and it is exported because the
+// API surface has to show a price without recomputing one of its own.
+func SpotPrice(c Curve, s State) money.Quantity { return spot(c, s) }
+
+// spot is SpotPrice's internal name, used throughout the curve.
 func spot(c Curve, s State) money.Quantity {
 	return ratioScaled(s.Effective(c).BigInt(), s.AssetReserve.BigInt())
 }

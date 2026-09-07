@@ -1,48 +1,166 @@
 # BLOCKERS
 
-Two categories. Never mix them.
+Things that cannot be completed from inside this repository, and exactly what would unblock each.
 
-- **SOFTWARE BLOCKER** — something engineering can resolve inside this repository.
-- **EXTERNAL BLOCKER** — requires legal approval, provider contract, production credentials, external account access, business approval, or information impossible to infer safely. Software for these must still be implemented, tested, and gated. `BLOCKED_EXTERNAL` does not mean "not built".
+The bar is the one `gola.md` PART IV sets. `BLOCKED_EXTERNAL` is only for facts that genuinely require
+a human, a provider or counsel. Missing code, tests, migrations, runbooks, mocks, contract tests,
+chaos tests and admin tools are **not** blockers — they are work, and they are tracked in
+`MASTER_BUILD_STATE.md` instead.
 
-IDs are referenced from `REQUIREMENTS_TRACEABILITY.md`; do not renumber.
-
-Last updated: 2026-09-06
+Every entry states what the repository already does, so that when the external fact arrives the
+remaining work is activation rather than construction.
 
 ---
 
-## SOFTWARE BLOCKERS
+## B-01 — No payout provider contract exists · BLOCKED_EXTERNAL
 
-| ID | Blocker | Impact | Status | Resolution path |
-|---|---|---|---|---|
-| SB-001 | Go / make / terraform toolchain not installed on build host at session start | cannot build core | RESOLVED (Go) 2026-09-05; make/terraform pending | Go 1.27.0 installed from SHA-256-verified zip at `C:/Dev/tools/go`; winget MSI stuck behind UAC (operator may approve/dismiss); ezwinports.make + Hashicorp.Terraform queued behind it |
-| SB-002 | Docker daemon / local compose stack not running at session start | no Postgres/Redis/Redpanda/ClickHouse/Temporal/MinIO locally | RESOLVED 2026-09-05 | Docker Desktop launched; `docker compose up -d --wait` healthy (7 services). Host also runs unrelated containers on 127.0.0.1:8788/8789 — compose uses offset ports |
-| SB-003 | sqlc, buf, golangci-lint, staticcheck, govulncheck, gosec, k6, gitleaks, trivy, syft not installed | lint/scan/generate targets | PARTIAL 2026-09-05 | staticcheck, govulncheck, gofumpt, goimports, buf, oapi-codegen, gosec, golangci-lint in `./bin`; sqlc/gitleaks/trivy/syft/k6 via `scripts/tool install` (prebuilt, checksum-verified) |
-| SB-004 | No git remote / GitHub repository | CI workflows cannot run; no OIDC deploy identity | **RESOLVED 2026-09-06** | workflows authored under `.github/workflows`; the operator supplied `https://github.com/wdwd720/Nodal.git` and `main` is pushed (673d9bf). **CI is now fully green** (run 34062522222, commit 5143d0e, all 18 jobs). Getting there took six runs and surfaced twelve distinct defects, none of which was reachable by reading the workflow files: targets that had never been invoked once, lint suppressions written in a syntax the failing tool cannot read, a shared database two suites correctly refuse, a process assertion true on Windows and false on Linux, and a test double whose ordering depended on Go's randomized map iteration. `release.yml` remains unverified — it triggers on tags and none has been pushed. OIDC deploy identity (EB-012) is still an operator action |
-| SB-005 | Solana transaction decoding + Token-2022 extension inspection library selection | transaction inspector (Stage 6) | OPEN | evaluate `github.com/gagliardetto/solana-go` (versioned tx + ALT support) vs hand-written decoder; decision recorded in DECISION_REGISTER before Stage 6 |
-| SB-007 | Jupiter v6 on-chain instruction layout in `internal/signing/inspect/jupiter.go` was reproduced from memory | the inspector's checks on real Jupiter transactions could reject valid swaps or misparse a variant | **LARGELY RESOLVED 2026-09-07 — narrowed to an on-chain confirmation** | The published IDL was fetched from `jup-ag/jupiter-cpi` at commit `12bc5f67b94a2c3edc74d6e721a19442124a0bad` (sha256 `764ea6d7…a5c50`) and committed at `internal/signing/inspect/testdata/jupiter_v6_idl.json`. That repo's `src/lib.rs` declares `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4` — the exact program id this inspector accepts — which is what ties the document to the program. **Everything the inspector actually relies on matched**: `route` (9 accounts) and `sharedAccountsRoute` (13) in exact order and optionality, the single signer in each, the route argument list including `slippageBps: u16` and `platformFeeBps: u8`, `RoutePlanStep`'s fields, and **all 39 Swap variants by ordinal and payload size**. `jupiter_idl_test.go` derives its expectations from that file rather than restating them, so the circularity is gone — the old `TestLayout_JupiterDiscriminators` pinned the same values the code assumed. **Both negative controls were run**: corrupting one payload size (Symmetry 16→8) and removing one variant each make it fail with a message naming the variant. **What remains:** an IDL is a published artefact, not the chain, so nothing here proves the deployed program still matches it — that needs the on-chain IDL account or a decoded mainnet transaction. Swap ordinals ≥39 postdate this IDL and stay from memory; a test asserts they are absent so a newer IDL forces a real check. A canary trade still requires the on-chain confirmation |
-| SB-008 | Entire build was uncommitted: 1 commit, 1,300+ untracked files, no remote | total loss to a disk failure or an errant delete; no bisect, no blame, no per-stage diff | **RESOLVED 2026-09-06** | operator supplied a remote; 1,340 files committed as `673d9bf` and pushed to `origin/main`. Verified before pushing: `gitleaks detect` reports no leaks, and a negative control confirmed realistic secrets are still caught in production paths, so the new test-fixture allowlist has not blinded the scan. No `node_modules`, `.terraform`, binaries or `.env` are tracked |
-| SB-009 | Production role bootstrap must never re-grant `cp_app` table-wide `UPDATE` on `capability_gates` or `INSERT` on `capability_gate_transitions`. Migration 00701 revokes both; a bootstrap that re-granted them would silently undo the database-enforced activation control | a live-money capability could again be activated by anything holding the application credential | **OPEN — operator awareness, no action needed today** | verified 2026-09-06: every `GRANT ALL` in `infra/terraform/modules/rds/bootstrap/roles.sql`, `docker/postgres/init/001_roles.sql` and `internal/testkit/localdb` targets `cp_migrate`, never `cp_app`, and the only `ALTER DEFAULT PRIVILEGES` toward `cp_app` covers SEQUENCES. `TestIntegration_CapabilityGateStateAuthority` in `test/integration/migrations` pins the per-column privileges, the function owner and the absence of PUBLIC EXECUTE, so a re-grant fails CI rather than passing silently |
-| SB-006 | No gcc on host (no cgo; `go test -race` unavailable) | race detector, cgo-dependent tools | RESOLVED 2026-09-05 | WinLibs GCC 16.2 (SHA-256 verified) extracted to `C:/Dev/tools/mingw64`; `-race` verified on money/id/clock/errs. Production builds remain `CGO_ENABLED=0` |
+**Decision needed.** Which licensed provider will actually send value to a user, under what
+commercial terms, for which destination types and currencies.
 
-## EXTERNAL BLOCKERS
+**Why external.** A provider contract is signed by people. No amount of engineering produces one, and
+PART XVIII explicitly forbids implementing an adapter against an unverified API — building one from
+guessed endpoint names would be worse than having none, because it would look finished.
 
-| ID | Category | Blocker | Blocks | Software state required before "BLOCKED_EXTERNAL" may be claimed |
-|---|---|---|---|---|
-| EB-001 | LEGAL | U.S. and California licensing or exemption determination | LIVE_* capabilities | capability gate with `legal_review_ref` field; no live gate ACTIVE |
-| EB-002 | LEGAL | Delegated-signing custody analysis (embedded wallet control semantics) | all live trading | signing boundary implemented and tested; prod startup fails closed if signing semantics unverified |
-| EB-003 | PROVIDER | Stripe fiat-to-crypto onramp commercial approval and production credentials (sandbox is application-gated too) | LIVE_FUNDING | **software state met 2026-09-06**: adapter CODE_COMPLETE + CONTRACT_TESTED (`internal/provider/stripe`, `test/contract/stripe`), webhook pipeline (`internal/webhook`), gate (`internal/gates`) — genuinely BLOCKED_EXTERNAL |
-| EB-004 | BUSINESS | Stripe fraud/dispute responsibility allocation | funding reversibility policy values | reversal handling implemented with configurable hold policy |
-| EB-005 | PROVIDER | Wallet provider (Privy) production credentials and verified signing semantics (idempotent replay of `signTransaction` is documented but unverified; policy engine cannot resolve lookup-table accounts) | LIVE_MANUAL_TRADING, LIVE_AGENT_TRADING | **software state met 2026-09-06** (`internal/wallet`, `internal/provider/privy`, `internal/signing`, `test/contract/privy`); prod startup fails closed without `delegation_verified_at` |
-| EB-006 | LEGAL | Permitted asset universe decision | instrument activation | asset registry with status + policy reference; unlisted assets fail closed |
-| EB-007 | LEGAL | Strategy / adviser / CTA regulatory implications | LIVE_AGENT_TRADING, any marketplace | gate; no personalized recommendations implemented |
-| EB-008 | LEGAL | Provider data-retention and redistribution rights (social + market data licensing) | SOCIAL_DATA_PERSISTENCE, long-term raw archive of licensed feeds | retention classes + capability gate |
-| EB-009 | BUSINESS | Final brand clearance (PUBLIC_PRODUCT_NAME / trademark) | user-facing product name | `PUBLIC_PRODUCT_NAME` config; codename only internally |
-| EB-010 | PROVIDER | Helius production credentials and plan | live observation | **software state met 2026-09-06** (`internal/provider/helius`, `internal/provider/solanarpc`, `internal/chain` agreement policy, `test/contract/{helius,solanarpc}`) — genuinely BLOCKED_EXTERNAL |
-| EB-011 | PROVIDER | Jupiter API key and commercial terms | live execution | **client software state met 2026-09-06** (`internal/provider/jupiter`, `test/contract/jupiter`); wrapping into `execution.ExecutionAdapter` + executor wiring still pending (Stage 6 integration), so not yet BLOCKED_EXTERNAL end to end |
-| EB-012 | PROVIDER / INFRA | AWS production account, IAM bootstrap, GitHub OIDC trust | staging + prod deployment, WORM audit archive, CI/CD to AWS | **software state met 2026-09-06**: `infra/terraform` validates in dev/staging/prod, trivy clean, DEPLOYMENT.md written; local MinIO archive; OIDC deploy role module — `plan`/`apply` impossible without the account |
-| EB-013 | PROVIDER | Model provider (Anthropic) production API key and usage terms | NL strategy compilation in prod | ModelProvider adapter; model budgets |
-| EB-014 | PROVIDER / INFRA | Managed Temporal / Redpanda / ClickHouse accounts | staging + prod | local containers; config-driven endpoints |
-| EB-015 | PROVIDER / LEGAL | Fiat off-ramp / withdrawal partner and custody path | WITHDRAWALS | withdrawal domain + state machine + gate implemented; capability DISABLED |
-| EB-016 | PROVIDER | Tax-reporting partner | tax filing claims | lot-level records preserved; no filing claims made |
-| EB-017 | BUSINESS / PROVIDER | Identity provider selection (OIDC issuer) + production tenant | production auth, passkey UX | OIDC-generic IdentityProvider adapter; dev IdP rejected in STAGING/PROD |
+**What the code already supports.**
+- `internal/payout.Provider` — the interface, shaped around what any payout provider must do (accept
+  a request under a key we chose, say later what happened to that key, describe what it supports)
+  rather than around one vendor's request body.
+- `internal/payout.Registry` — refuses a provider with no `ContractReference` unless built with
+  sandboxes allowed, which production never is. Refuses any provider that cannot answer a lookup,
+  because a timed-out submission to one would be permanently ambiguous.
+- `internal/payout/payouttest.Sandbox` — a faithful fake, including the inconvenient behaviours: the
+  same key is the same payout, and a submission can succeed and lose its response on demand.
+- The full request lifecycle, reservation, provenance consumption, settlement, failure return,
+  `PAYOUT_STATUS_UNKNOWN` and reconciliation are implemented and tested against that sandbox.
+
+**Evidence required to close.** A signed agreement naming the provider, the destination types, the
+currencies, the jurisdictions, and the provider's own statement of idempotency and lookup semantics.
+
+**Capabilities currently disabled.** `PAYOUT_RESERVE`, `PAYOUT_SETTLE`.
+
+---
+
+## B-02 — Whether Credits or trading proceeds may be paid out at all · BLOCKED_EXTERNAL
+
+**Decision needed.** For each `CreditOrigin`, in each jurisdiction: may value of that provenance
+leave the system, and under what conditions.
+
+**Why external.** This is a legal determination about the economic substance of the internal economy.
+`gola.md` PART IX is explicit that the mapping is policy, that counsel may approve a different one,
+and that the code must not hardcode a business truth.
+
+**What the code already supports.**
+- `valuedomain.Policy` — versioned, hashed, covering every origin explicitly. `Validate` refuses a
+  policy that omits an origin, that permits payout without naming a capability gate, or that permits
+  payout below `PAYOUT_KYC` verification.
+- `valuedomain.DefaultPolicy` — every origin forbidden. A fresh deployment pays nobody out, and the
+  integration tests assert that even a fully verified user with settled funds and every capability
+  active is refused under it.
+- `payout.Engine` — decides per unit and records the policy version and hash on the decision, so a
+  decision made under one policy can still be explained after two more have replaced it.
+
+**Evidence required to close.** A written determination per origin and jurisdiction, recorded as a
+policy version with an approval reference.
+
+---
+
+## B-03 — Whether pre-KYC participation in native markets is permissible · BLOCKED_EXTERNAL
+
+**Decision needed.** May a user trade Nodal-native assets before any financial identity verification,
+and in which jurisdictions.
+
+**Why external.** PART XIX states the target experience (KYC at exit) and immediately warns against
+assuming it is available. It is a money-transmission and consumer-protection question.
+
+**What the code already supports.** `legalrouter` keys a capability on jurisdiction, product, value
+origin, agent authority and verification level together, so the answer can be as narrow as the
+determination is. The shipped `ConservativePolicy` denies native-market trading everywhere and
+permits only simulation, which is the correct starting position rather than a placeholder.
+
+**Capabilities currently disabled.** `NATIVE_MARKET_TRADING`, `NATIVE_ASSET_CREATION`.
+
+---
+
+## B-04 — Credit purchase provider production credentials · BLOCKED_EXTERNAL
+
+**Decision needed.** Live credentials and a production account with the payment provider used to sell
+Credits.
+
+**What the code already supports.** `internal/credit` implements the eleven-state funding lifecycle,
+mints on `CAPTURED → REVERSIBLE`, promotes to settled only when the funding settles, and handles
+chargeback with a recorded `DEFICIT` rather than a negative balance. `internal/provider/stripe`
+exists and is contract-tested against recorded fixtures.
+
+**Capabilities currently disabled.** `CREDIT_PURCHASE`.
+
+---
+
+## B-05 — Hosted partner rail: no provider selected · BLOCKED_EXTERNAL
+
+**Decision needed.** Which licensed partner carries hosted customer accounts.
+
+**Why this is not merely unbuilt.** An adapter cannot be written against an unverified API, and the
+partner's capability set (does it support hosted USD, hosted crypto, statements, tax artifacts,
+webhooks) is a contractual fact rather than an engineering choice.
+
+**What the code already supports.** `valuedomain.RailHostedPartner` is declared with its authority
+model — the provider is authoritative for balances and Nodal holds a mirror — and the ledger's
+value-domain isolation already refuses to let hosted value share a transaction with internal Credits.
+
+**A defect this document found and closed.** `RailHostedPartner.Implemented()` returned `true` while
+no adapter existed. Writing this entry is what surfaced it. It now returns `false`, so the Settlement
+Compiler cannot route to a rail with nothing behind it — PART XXII's "do not implement live
+unsupported products merely because an interface exists", enforced rather than intended.
+
+---
+
+## B-06 — Financial identity verification provider · BLOCKED_EXTERNAL
+
+**Decision needed.** Who performs KYC, and whether their verification is accepted by the payout
+provider (the two are not the same question).
+
+**What the code already supports.** `valuedomain.VerificationLevel` separates Nodal identity from
+financial identity from enhanced diligence. `payout.EligibilityInput` takes the level as an input and
+`Decision.VerificationWouldSuffice` distinguishes "you cannot" from "you have not verified yet", so
+the product has something useful to say the moment a provider exists.
+
+**Current state.** No verification resolver is wired in `cmd/api`, so every account is
+`VerificationNone`. That is not a placeholder: a deployment that cannot establish identity has not
+established it, and the payout engine refuses accordingly.
+
+---
+
+## B-07 — Age and jurisdiction matrix · BLOCKED_EXTERNAL
+
+**Decision needed.** The per-jurisdiction age policy and the list of jurisdictions in which each
+product may operate.
+
+**What the code already supports.** `nativeasset.PolicyProfile.MinimumAge` defaults to 18 and is
+frozen at activation; `legalrouter` carries jurisdiction as a first-class key dimension and matches
+comma-separated sets, so a determination covering three states is one rule.
+
+---
+
+## B-08 — Independent security review and penetration test · BLOCKED_EXTERNAL
+
+**Why external.** A review by the team that wrote the code is not an independent review.
+
+**What the code already supports.** `docs/threat-model/THREAT_MODEL.md`, the `test/security` suite
+(cross-tenant probes, forged sessions, SQL-source constancy analysis, agent escalation, webhook
+forgery), `gosec`, `govulncheck`, `gitleaks` and a supply-chain script, all runnable today.
+
+---
+
+## Not blockers
+
+Recorded because their absence might otherwise look like one:
+
+| Item | Status | Where it is tracked |
+|---|---|---|
+| Internal commerce / creator economy | not built | `MASTER_BUILD_STATE.md` Stage 8 |
+| Hosted partner rail adapter | not built (and see B-05) | Stage 10 |
+| Rails unified behind FinancialIntent | not built | Stage 12 |
+| Frontend for Domain A | not built | Stage 16 |
+| Admin tooling for Domain A | not built | Stage 17 |
+| Chaos, load, restore drill for the new subsystems | not run | Stages 20–21 |
+| Terraform for the new tables | not needed (schema is migration-managed) | — |
