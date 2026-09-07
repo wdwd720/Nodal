@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/quote"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
 
@@ -300,7 +301,7 @@ func (r *response) raw() map[string]any {
 
 func sampleAsset() assets.Asset {
 	return assets.Asset{
-		ID: testAssetID, Chain: "solana", MintAddress: "Es9vMFrzaCER", Kind: assets.KindSPLToken,
+		ID: testAssetID, Chain: "solana", MintAddress: "Es9vMFrzaCER", Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto,
 		Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD",
 		RiskClass: assets.RiskSettlement, Status: assets.StatusActive, CreatedAt: testNow,
 	}

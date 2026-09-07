@@ -25,6 +25,7 @@ import (
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
 
@@ -85,7 +86,7 @@ func newDBFixture(t *testing.T) *dbFixture {
 	acc, err := ar.CreateAccount(ctx, testDB, u.ID, accounts.KindCustomer)
 	require.NoError(t, err)
 	a, err := assets.NewRepository().Create(ctx, testDB, assets.Asset{
-		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin",
+		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin",
 		Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
 	})
 	require.NoError(t, err)

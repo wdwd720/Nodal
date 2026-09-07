@@ -29,6 +29,14 @@ import (
 // the hash; any change to a quantity, side, account, asset, kind, key,
 // reference, time, reversal target or metadata value does. The proof system
 // chains these hashes later.
+//
+// A declared value-domain conversion is part of the hash, and is omitted
+// entirely when there is none. Omitting rather than emitting null keeps every
+// content hash computed before migration 00710 exactly as it was, so the
+// existing audit chain still verifies; and including it when present means
+// replaying an idempotency key while claiming a different conversion is an
+// INVALID_IDEMPOTENCY_REUSE rather than a silent no-op returning the original
+// transaction.
 
 type hashAccount struct {
 	OwnerType string `json:"owner_type"`
@@ -48,6 +56,11 @@ type hashReference struct {
 	ID   string `json:"id"`
 }
 
+type hashConversion struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
 type hashDocument struct {
 	Kind           string            `json:"kind"`
 	IdempotencyKey string            `json:"idempotency_key"`
@@ -56,6 +69,7 @@ type hashDocument struct {
 	Entries        []json.RawMessage `json:"entries"`
 	ReversalOf     *string           `json:"reversal_of"`
 	Metadata       json.RawMessage   `json:"metadata"`
+	Conversion     *hashConversion   `json:"conversion,omitempty"`
 }
 
 // CanonicalContent returns the canonical JSON that ContentHash hashes. It
@@ -98,6 +112,12 @@ func CanonicalContent(p Posting) ([]byte, error) {
 		Entries:        entries,
 		ReversalOf:     reversalOf,
 		Metadata:       meta,
+	}
+	if p.Conversion != nil {
+		doc.Conversion = &hashConversion{
+			From: string(p.Conversion.From),
+			To:   string(p.Conversion.To),
+		}
 	}
 	return canonicalJSON(doc)
 }

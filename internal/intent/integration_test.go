@@ -27,6 +27,7 @@ import (
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Shared with internal/db and test/integration/migrations: schema-mutating
@@ -118,9 +119,9 @@ func newFixture(t *testing.T) *fixture {
 	f.account = f.newAccount()
 
 	suffix := uuidStr()
-	f.sol, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "SOL-" + suffix, Kind: assets.KindSPLToken, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
+	f.sol, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "SOL-" + suffix, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
 	require.NoError(t, err)
-	f.usdc, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "USDC-" + suffix, Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
+	f.usdc, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "USDC-" + suffix, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
 	require.NoError(t, err)
 	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error

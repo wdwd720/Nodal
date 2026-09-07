@@ -31,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 const (
@@ -104,11 +105,11 @@ func run() error {
 	var summary []string
 	err = d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		// Assets (idempotent on chain+mint).
-		usdc, err := ensureAsset(ctx, tx, assetRepo, assets.Asset{Chain: chain, MintAddress: usdcDevMint, Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin (devnet)", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
+		usdc, err := ensureAsset(ctx, tx, assetRepo, assets.Asset{Chain: chain, MintAddress: usdcDevMint, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin (devnet)", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
 		if err != nil {
 			return err
 		}
-		sol, err := ensureAsset(ctx, tx, assetRepo, assets.Asset{Chain: chain, MintAddress: assets.NativeMintSentinel, Kind: assets.KindNative, Symbol: "SOL", Name: "Solana (devnet)", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
+		sol, err := ensureAsset(ctx, tx, assetRepo, assets.Asset{Chain: chain, MintAddress: assets.NativeMintSentinel, Kind: assets.KindNative, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana (devnet)", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
 		if err != nil {
 			return err
 		}

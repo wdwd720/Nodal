@@ -30,6 +30,7 @@ import (
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Golden corpus layout:
@@ -84,8 +85,8 @@ func mustText[T interface{ UnmarshalText([]byte) error }](v T, s string) T {
 func goldenBase() PlannerInput {
 	now, _ := time.Parse(time.RFC3339, gNowString)
 	usdcID, solID := mustAsset(gUSDC), mustAsset(gSOL)
-	usdc := assets.Asset{ID: usdcID, Chain: "solana-devnet", MintAddress: "USDC-mint", Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive, MetadataVersion: 1}
-	sol := assets.Asset{ID: solID, Chain: "solana-devnet", MintAddress: "native", Kind: assets.KindNative, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive, MetadataVersion: 1}
+	usdc := assets.Asset{ID: usdcID, Chain: "solana-devnet", MintAddress: "USDC-mint", Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive, MetadataVersion: 1}
+	sol := assets.Asset{ID: solID, Chain: "solana-devnet", MintAddress: "native", Kind: assets.KindNative, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive, MetadataVersion: 1}
 	instrID := mustText(new(instruments.InstrumentID), gInstr)
 	exposureID := mustText(new(instruments.ExposureID), gExposure)
 	venueJup := mustText(new(instruments.VenueID), gVenueJup)

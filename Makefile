@@ -104,7 +104,7 @@ seed: ## Seed clearly-labelled LOCAL fake users/assets (refused outside LOCAL/DE
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-.PHONY: test unit property race fuzz contract integration e2e e2e-web chaos load security test-all
+.PHONY: test unit property race fuzz contract integration integration-list integration-race e2e e2e-web chaos load security test-all
 test: unit property race ## Default developer test set
 
 unit: ## Go unit tests
@@ -126,8 +126,21 @@ fuzz: ## Run every fuzz target briefly (FUZZTIME=30s default)
 contract: ## Provider contract tests against recorded fixtures
 	$(GO) test -count=1 -timeout=10m ./test/contract/...
 
-integration: ## Integration tests (need DATABASE_URL etc.; skipped with reason if absent)
-	$(GO) test -count=1 -timeout=30m -tags=integration ./test/integration/...
+integration: ## Integration tests: every //go:build integration package, one fresh database each
+	# This used to be `go test -tags=integration ./test/integration/...`, and
+	# ./test/integration/ holds exactly one package (the migration suite). The
+	# database-backed proof of the financial core lives behind the build tag
+	# inside internal/ and cmd/ — 40 packages that this target never ran, so
+	# `make test-all` reported success having executed none of them. CI had
+	# grown its own inline loop to work around it. scripts/inttest is the one
+	# implementation both now call.
+	$(GO) run ./scripts/inttest
+
+integration-list: ## List the integration packages inttest would run
+	$(GO) run ./scripts/inttest -list
+
+integration-race: ## Race detector over the financial core WITH the integration tag
+	$(GO) run ./scripts/inttest -race -pkg '^\./internal/(capital|ledger|execution|reconciliation|event|settlement|signing)'
 
 e2e: ## API-level end-to-end tests
 	$(GO) test -count=1 -timeout=30m -tags=integration,e2e ./test/e2e/...

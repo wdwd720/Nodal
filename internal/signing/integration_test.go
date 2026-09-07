@@ -162,12 +162,12 @@ func seedChain(t *testing.T, fake *wallettest.Fake, opts seedOptions) *seed {
 	if opts.native {
 		inputKind, inputMint = "NATIVE", "native"
 	}
-	require.NoError(t, testDB.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, risk_class, status)
-		VALUES ($1,'solana-mainnet',$2,$3,$4,$4,6,'SETTLEMENT','ACTIVE')
+	require.NoError(t, testDB.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, risk_class, status, value_domain)
+		VALUES ($1,'solana-mainnet',$2,$3,$4,$4,6,'SETTLEMENT','ACTIVE','SELF_CUSTODIAL_CRYPTO')
 		ON CONFLICT (chain, mint_address) DO UPDATE SET name = EXCLUDED.name RETURNING id::text`,
 		newID(), inputMint, inputKind, "IN"+tail(newID())).Scan(&s.inputAssetID))
-	require.NoError(t, testDB.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, risk_class, status)
-		VALUES ($1,'solana-mainnet',$2,'SPL_TOKEN',$3,$3,5,'STANDARD','ACTIVE') RETURNING id::text`,
+	require.NoError(t, testDB.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, risk_class, status, value_domain)
+		VALUES ($1,'solana-mainnet',$2,'SPL_TOKEN',$3,$3,5,'STANDARD','ACTIVE','SELF_CUSTODIAL_CRYPTO') RETURNING id::text`,
 		newID(), swap.OutputMint.String(), "OUT"+tail(newID())).Scan(&s.outputAssetID))
 
 	s.venueID, s.exposureID, s.instrumentID, s.listingID = newID(), newID(), newID(), newID()

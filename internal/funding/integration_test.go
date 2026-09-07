@@ -31,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/webhook"
 )
 
@@ -123,7 +124,7 @@ func newFixture(t *testing.T, mutate ...func(*funding.Config, *funding.Deps)) *f
 	require.NoError(t, err)
 	f.account = acc.ID
 	a, err := assets.NewRepository().Create(ctx, testDB, assets.Asset{
-		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken,
+		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto,
 		Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD",
 		RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
 	})

@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/idempotency"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // The suite runs against an isolated database provisioned by
@@ -59,7 +60,7 @@ func seedAsset(t *testing.T, d *db.DB) assets.Asset {
 	t.Helper()
 	a, err := assets.NewRepository().Create(t.Context(), d, assets.Asset{
 		Chain: "solana-devnet", MintAddress: "mint-" + id.New[id.Any]().String(),
-		Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin", Decimals: 6,
+		Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin", Decimals: 6,
 		IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement,
 		Status: assets.StatusActive,
 	})

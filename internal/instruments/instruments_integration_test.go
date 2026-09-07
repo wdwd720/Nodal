@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 func openDB(t *testing.T) *db.DB {
@@ -38,9 +39,9 @@ func seedAssets(t *testing.T, d *db.DB) (sol, usdc assets.Asset) {
 	repo := assets.NewRepository()
 	suffix := time.Now().UnixNano()
 	var err error
-	sol, err = repo.Create(ctx, d.Pool(), assets.Asset{Chain: "solana-test", MintAddress: "So1" + itoa(suffix), Kind: assets.KindSPLToken, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
+	sol, err = repo.Create(ctx, d.Pool(), assets.Asset{Chain: "solana-test", MintAddress: "So1" + itoa(suffix), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
 	require.NoError(t, err)
-	usdc, err = repo.Create(ctx, d.Pool(), assets.Asset{Chain: "solana-test", MintAddress: "USDC" + itoa(suffix), Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
+	usdc, err = repo.Create(ctx, d.Pool(), assets.Asset{Chain: "solana-test", MintAddress: "USDC" + itoa(suffix), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
 	require.NoError(t, err)
 	return sol, usdc
 }

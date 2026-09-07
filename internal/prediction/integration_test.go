@@ -117,11 +117,11 @@ func newFixture(t *testing.T) *fixture {
 		f.userID, "owner-"+suffix)
 	exec(`INSERT INTO accounts (id, owner_user_id, kind, status) VALUES ($1, $2, 'CUSTOMER', 'ACTIVE')`,
 		f.accountID, f.userID)
-	exec(`INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, risk_class, status)
-	      VALUES ($1, 'solana-devnet', $2, 'SPL_TOKEN', 'SOL', 'Solana', 9, 'MAJOR', 'ACTIVE')`,
+	exec(`INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, risk_class, status, value_domain)
+	      VALUES ($1, 'solana-devnet', $2, 'SPL_TOKEN', 'SOL', 'Solana', 9, 'MAJOR', 'ACTIVE', 'SELF_CUSTODIAL_CRYPTO')`,
 		f.baseAssetID, "base-"+suffix)
-	exec(`INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, risk_class, status)
-	      VALUES ($1, 'solana-devnet', $2, 'SPL_TOKEN', 'USDC', 'USD Coin', 6, true, 'USD', 'SETTLEMENT', 'ACTIVE')`,
+	exec(`INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, risk_class, status, value_domain)
+	      VALUES ($1, 'solana-devnet', $2, 'SPL_TOKEN', 'USDC', 'USD Coin', 6, true, 'USD', 'SETTLEMENT', 'ACTIVE', 'SELF_CUSTODIAL_CRYPTO')`,
 		f.quoteAssetID, "quote-"+suffix)
 	exec(`INSERT INTO economic_exposures (id, kind, description, underlying_asset_id)
 	      VALUES ($1, 'ASSET_PRICE', 'SOL price', $2)`, exposureID, f.baseAssetID)

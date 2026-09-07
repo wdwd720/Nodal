@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/settlement"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Now is the fixed instant every World starts at.
@@ -75,11 +76,11 @@ func NewWorld() *World {
 	clk := clock.NewFake(Now)
 	w := &World{Clock: clk}
 	w.USDC = assets.Asset{
-		ID: assets.NewAssetID(), Chain: "solana-devnet", MintAddress: "USDC-mint", Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin",
+		ID: assets.NewAssetID(), Chain: "solana-devnet", MintAddress: "USDC-mint", Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin",
 		Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive, MetadataVersion: 1,
 	}
 	w.SOL = assets.Asset{
-		ID: assets.NewAssetID(), Chain: "solana-devnet", MintAddress: "native", Kind: assets.KindNative, Symbol: "SOL", Name: "Solana",
+		ID: assets.NewAssetID(), Chain: "solana-devnet", MintAddress: "native", Kind: assets.KindNative, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana",
 		Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive, MetadataVersion: 1,
 	}
 	solID, usdcID := w.SOL.ID, w.USDC.ID

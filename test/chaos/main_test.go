@@ -20,6 +20,7 @@ import (
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // The suite runs against an isolated database provisioned by
@@ -127,7 +128,7 @@ func newAccount(t *testing.T) (accounts.UserID, accounts.AccountID) {
 func newAsset(t *testing.T, symbol string, decimals uint8, stable bool) assets.AssetID {
 	t.Helper()
 	a := assets.Asset{
-		Chain: "solana-chaos-" + uuid.NewString(), MintAddress: uuid.NewString(), Kind: assets.KindSPLToken,
+		Chain: "solana-chaos-" + uuid.NewString(), MintAddress: uuid.NewString(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto,
 		Symbol: symbol, Name: symbol, Decimals: decimals, IsStablecoin: stable,
 		RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
 	}

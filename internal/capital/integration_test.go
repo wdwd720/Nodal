@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Shared with internal/db and test/integration/migrations: schema-mutating
@@ -186,7 +187,7 @@ func newFixture(t testingT) *fixture {
 	f.user = u.ID
 	f.accountID = f.newAccount()
 	a, err := assets.NewRepository().Create(ctx, testDB, assets.Asset{
-		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken,
+		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto,
 		Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD",
 		RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
 	})
@@ -661,7 +662,7 @@ func TestIntegration_IntentLink(t *testing.T) {
 	f := newFixture(t)
 	f.seedWallet(f.accountID, qty(1_000*oneUSDC))
 	quote, err := assets.NewRepository().Create(f.ctx, testDB, assets.Asset{
-		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken, Symbol: "SOL", Name: "Wrapped SOL",
+		Chain: "solana-devnet", MintAddress: "mint-" + uuid.NewString(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Wrapped SOL",
 		Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive,
 	})
 	require.NoError(t, err)

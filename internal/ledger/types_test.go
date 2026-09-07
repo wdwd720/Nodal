@@ -33,9 +33,24 @@ func TestCode_Chart(t *testing.T) {
 		{CodePlatformFeeReceivable, OwnerPlatform, Debit, false},
 		{CodePlatformFeeRevenue, OwnerPlatform, Credit, false},
 		{CodePlatformAdjustment, OwnerPlatform, Credit, true},
+
+		// Nodal-native economy (migration 00710).
+		{CodeCreditBalance, OwnerCustomer, Debit, false},
+		{CodeCreditIssuance, OwnerCustomer, Credit, false},
+		{CodeNativeAssetBalance, OwnerCustomer, Debit, false},
+		{CodeNativeTradingOutflow, OwnerCustomer, Debit, false},
+		{CodeNativeTradingInflow, OwnerCustomer, Credit, false},
+		{CodeCreditFees, OwnerCustomer, Debit, false},
+		{CodePayoutReserved, OwnerCustomer, Debit, false},
+		{CodeCreditLiability, OwnerPlatform, Credit, false},
+		{CodeMarketReserve, OwnerPlatform, Debit, false},
+		{CodeMarketInventory, OwnerPlatform, Debit, false},
+		{CodePlatformCreditRevenue, OwnerPlatform, Credit, false},
+		{CodePayoutClearing, OwnerPlatform, Credit, false},
+		{CodePayoutSettled, OwnerPlatform, Debit, false},
 	}
-	require.Len(t, want, 12)
-	require.Len(t, AllCodes(), 12)
+	require.Len(t, want, 25)
+	require.Len(t, AllCodes(), 25)
 	for i, w := range want {
 		assert.Equal(t, w.code, AllCodes()[i], "chart order")
 		assert.True(t, w.code.Valid(), "%s valid", w.code)
@@ -67,7 +82,7 @@ func TestSide(t *testing.T) {
 
 func TestKind(t *testing.T) {
 	t.Parallel()
-	require.Len(t, AllKinds(), 10)
+	require.Len(t, AllKinds(), 19)
 	for _, k := range AllKinds() {
 		assert.True(t, k.Valid(), "%s", k)
 	}

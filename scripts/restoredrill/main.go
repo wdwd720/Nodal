@@ -204,8 +204,8 @@ func seed(ctx context.Context, appDSN string) error {
 	stmts := []string{
 		`INSERT INTO users (id, idp_issuer, idp_subject, status) VALUES ('00000000-0000-7000-8000-000000000001','drill','u1','ACTIVE')`,
 		`INSERT INTO accounts (id, owner_user_id, kind, status) VALUES ('00000000-0000-7000-8000-000000000010','00000000-0000-7000-8000-000000000001','CUSTOMER','ACTIVE')`,
-		`INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, risk_class, status)
-		 VALUES ('00000000-0000-7000-8000-0000000000aa','solana-drill','EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v','SPL_TOKEN','USDC','USD Coin',6,true,'USD','SETTLEMENT','ACTIVE')`,
+		`INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, risk_class, status, value_domain)
+		 VALUES ('00000000-0000-7000-8000-0000000000aa','solana-drill','EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v','SPL_TOKEN','USDC','USD Coin',6,true,'USD','SETTLEMENT','ACTIVE','SELF_CUSTODIAL_CRYPTO')`,
 		`INSERT INTO ledger_accounts (id, owner_type, owner_id, code, asset_id, normal_side) VALUES
 		 ('00000000-0000-7000-8000-0000000000a1','CUSTOMER','00000000-0000-7000-8000-000000000010','WALLET','00000000-0000-7000-8000-0000000000aa','DEBIT'),
 		 ('00000000-0000-7000-8000-0000000000a2','CUSTOMER','00000000-0000-7000-8000-000000000010','CAPITAL','00000000-0000-7000-8000-0000000000aa','CREDIT')`,

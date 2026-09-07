@@ -31,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/positions"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 var testAppURL = os.Getenv("CP_TEST_DATABASE_URL")
@@ -182,13 +183,13 @@ func newFixture(t *testing.T, d *db.DB) *fixture {
 
 	areg := assets.NewRepository()
 	f.usdc, err = areg.Create(ctx, d, assets.Asset{
-		Chain: "solana-devnet", MintAddress: "usdc-" + f.suffix, Kind: assets.KindSPLToken, Symbol: "USDC",
+		Chain: "solana-devnet", MintAddress: "usdc-" + f.suffix, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC",
 		Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD",
 		RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
 	})
 	require.NoError(t, err)
 	f.sol, err = areg.Create(ctx, d, assets.Asset{
-		Chain: "solana-devnet", MintAddress: "sol-" + f.suffix, Kind: assets.KindSPLToken, Symbol: "SOL",
+		Chain: "solana-devnet", MintAddress: "sol-" + f.suffix, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL",
 		Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive,
 	})
 	require.NoError(t, err)

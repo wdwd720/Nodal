@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // The suite runs against an isolated database provisioned by
@@ -121,7 +122,7 @@ func createAccount(t *testing.T) accounts.AccountID {
 func createAsset(t *testing.T, symbol string, decimals uint8, stable bool) assets.AssetID {
 	t.Helper()
 	a := assets.Asset{
-		Chain: "solana-itest-" + uuid.NewString(), MintAddress: uuid.NewString(), Kind: assets.KindSPLToken,
+		Chain: "solana-itest-" + uuid.NewString(), MintAddress: uuid.NewString(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto,
 		Symbol: symbol, Name: symbol, Decimals: decimals, IsStablecoin: stable,
 		RiskClass: assets.RiskSettlement, Status: assets.StatusActive,
 	}

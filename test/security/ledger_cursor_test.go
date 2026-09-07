@@ -40,10 +40,18 @@ type journalRow struct {
 	OwnerID  string
 }
 
-// aForeignJournalRow returns a posted journal transaction together with the
-// customer account it belongs to. It reads through the migrate role, which is
-// how the test knows the truth the API is supposed to be hiding.
-func aForeignJournalRow(t *testing.T) journalRow {
+// aJournalRowOwnedBy returns a posted journal transaction belonging to a
+// specific customer account. It reads through the migrate role, which is how
+// the test knows the truth the API is supposed to be hiding.
+//
+// It selects by owner rather than taking the first row and asserting that the
+// row happens to belong to the account under test. The earlier version did the
+// latter, and its precondition failed the moment any other suite posted a
+// journal row first — which meant the cross-tenant assertion below, the entire
+// point of the test, never ran. A security test that stops before its assertion
+// reports a failure, which is survivable; the same test passing while proving
+// nothing would not be.
+func aJournalRowOwnedBy(t *testing.T, accountID string) journalRow {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -53,11 +61,12 @@ func aForeignJournalRow(t *testing.T) journalRow {
 		   FROM journal_transactions t
 		   JOIN journal_entries e ON e.transaction_id = t.id
 		   JOIN ledger_accounts a ON a.id = e.ledger_account_id
-		  WHERE a.owner_type = 'CUSTOMER'
+		  WHERE a.owner_type = 'CUSTOMER' AND a.owner_id = $1::uuid
 		  ORDER BY t.posted_at, t.id
-		  LIMIT 1`).Scan(&row.TxID, &row.PostedAt, &row.OwnerID)
+		  LIMIT 1`, accountID).Scan(&row.TxID, &row.PostedAt, &row.OwnerID)
 	require.NoError(t, err,
-		"no customer-owned journal transaction exists; run `go run ./scripts/seed` so this test has something to leak")
+		"account %s owns no journal transaction; run `go run ./scripts/seed` so this test has something to leak",
+		accountID)
 	return row
 }
 
@@ -76,9 +85,8 @@ func TestLedger_AForgedCursorCannotCrossTenants(t *testing.T) {
 	acctA, acctB := firstAccount(t, a), firstAccount(t, b)
 	require.NotEqual(t, acctA, acctB)
 
-	target := aForeignJournalRow(t)
-	require.Equal(t, acctA, target.OwnerID,
-		"this test assumes the seeded journal posting belongs to customer-a; it belongs to %s", target.OwnerID)
+	target := aJournalRowOwnedBy(t, acctA)
+	require.Equal(t, acctA, target.OwnerID)
 	require.Zero(t, countRows(t,
 		`SELECT count(*) FROM journal_entries e
 		   JOIN ledger_accounts a ON a.id = e.ledger_account_id

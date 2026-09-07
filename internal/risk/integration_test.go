@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Shared with internal/db and test/integration/migrations: schema-mutating
@@ -365,7 +366,7 @@ func TestIntegration_CountOrders_FromPersistedIntents(t *testing.T) {
 	ctx := context.Background()
 
 	asset, err := assets.NewRepository().Create(ctx, testDB, assets.Asset{
-		Chain: "solana-test-" + uuid.NewString(), MintAddress: "native", Kind: assets.KindNative, Symbol: "SOL", Name: "Solana",
+		Chain: "solana-test-" + uuid.NewString(), MintAddress: "native", Kind: assets.KindNative, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana",
 		Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive,
 	})
 	require.NoError(t, err)

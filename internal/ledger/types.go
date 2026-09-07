@@ -14,6 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Side is the side of a journal entry.
@@ -102,6 +103,56 @@ const (
 	// CodePlatformAdjustment is the platform-side offset for corrections.
 	// PLATFORM-owned, CREDIT-normal, bidirectional.
 	CodePlatformAdjustment Code = "PLATFORM_ADJUSTMENT"
+
+	// --- Nodal-native economy, customer side (gola.md PARTS XII-XVII) ---
+
+	// CodeCreditBalance is the customer's spendable Nodal Credits.
+	// DEBIT-normal, never negative.
+	CodeCreditBalance Code = "CREDIT_BALANCE"
+	// CodeCreditIssuance is the customer-side origin of the Credits they
+	// hold: what they bought, were granted or earned. CREDIT-normal, the
+	// Credit analogue of CAPITAL, never negative.
+	CodeCreditIssuance Code = "CREDIT_ISSUANCE"
+	// CodeNativeAssetBalance is the customer's holding of a Nodal-native
+	// asset. DEBIT-normal, never negative.
+	CodeNativeAssetBalance Code = "NATIVE_ASSET_BALANCE"
+	// CodeNativeTradingOutflow is value disposed through internal market
+	// trades. DEBIT-normal.
+	CodeNativeTradingOutflow Code = "NATIVE_TRADING_OUTFLOW"
+	// CodeNativeTradingInflow is value acquired through internal market
+	// trades. CREDIT-normal.
+	CodeNativeTradingInflow Code = "NATIVE_TRADING_INFLOW"
+	// CodeCreditFees is fees the customer paid in Credits. DEBIT-normal.
+	CodeCreditFees Code = "CREDIT_FEES"
+	// CodePayoutReserved is Credits committed to a payout request and no
+	// longer spendable. Its value domain is PAYOUT_PENDING rather than the
+	// asset's INTERNAL_CREDIT, which is what makes reserving a payout a
+	// gated cross-domain movement. DEBIT-normal, never negative.
+	CodePayoutReserved Code = "PAYOUT_RESERVED"
+
+	// --- Nodal-native economy, platform side ---
+
+	// CodeCreditLiability is the platform's obligation for the Credits
+	// outstanding. CREDIT-normal.
+	CodeCreditLiability Code = "CREDIT_LIABILITY"
+	// CodeMarketReserve is Credits held in a native market's reserve.
+	// DEBIT-normal, never negative: a market may not owe Credits it does not
+	// hold.
+	CodeMarketReserve Code = "MARKET_RESERVE"
+	// CodeMarketInventory is the unsold native-asset units a market's curve
+	// still holds. DEBIT-normal, never negative: a market cannot sell supply
+	// that does not exist, which is the invariant that stops a creator
+	// minting behind the curve.
+	CodeMarketInventory Code = "MARKET_INVENTORY"
+	// CodePlatformCreditRevenue is platform fee revenue denominated in
+	// Credits. CREDIT-normal.
+	CodePlatformCreditRevenue Code = "PLATFORM_CREDIT_REVENUE"
+	// CodePayoutClearing is the platform side of reserved payout value.
+	// CREDIT-normal, domain PAYOUT_PENDING.
+	CodePayoutClearing Code = "PAYOUT_CLEARING"
+	// CodePayoutSettled is value irrevocably paid out through an approved
+	// provider. DEBIT-normal, domain EXTERNAL_SETTLED, terminal.
+	CodePayoutSettled Code = "PAYOUT_SETTLED"
 )
 
 type codeInfo struct {
@@ -124,12 +175,31 @@ var codeRegistry = map[Code]codeInfo{
 	CodePlatformFeeReceivable:    {OwnerPlatform, Debit, false},
 	CodePlatformFeeRevenue:       {OwnerPlatform, Credit, false},
 	CodePlatformAdjustment:       {OwnerPlatform, Credit, true},
+
+	CodeCreditBalance:        {OwnerCustomer, Debit, false},
+	CodeCreditIssuance:       {OwnerCustomer, Credit, false},
+	CodeNativeAssetBalance:   {OwnerCustomer, Debit, false},
+	CodeNativeTradingOutflow: {OwnerCustomer, Debit, false},
+	CodeNativeTradingInflow:  {OwnerCustomer, Credit, false},
+	CodeCreditFees:           {OwnerCustomer, Debit, false},
+	CodePayoutReserved:       {OwnerCustomer, Debit, false},
+
+	CodeCreditLiability:       {OwnerPlatform, Credit, false},
+	CodeMarketReserve:         {OwnerPlatform, Debit, false},
+	CodeMarketInventory:       {OwnerPlatform, Debit, false},
+	CodePlatformCreditRevenue: {OwnerPlatform, Credit, false},
+	CodePayoutClearing:        {OwnerPlatform, Credit, false},
+	CodePayoutSettled:         {OwnerPlatform, Debit, false},
 }
 
 var allCodes = []Code{
 	CodeWallet, CodeCapital, CodeTradingOutflow, CodeTradingInflow,
 	CodeFeesNetwork, CodeFeesVenue, CodeFeesPlatform, CodeDeficit, CodeReconciliationAdjustment,
 	CodePlatformFeeReceivable, CodePlatformFeeRevenue, CodePlatformAdjustment,
+	CodeCreditBalance, CodeCreditIssuance, CodeNativeAssetBalance,
+	CodeNativeTradingOutflow, CodeNativeTradingInflow, CodeCreditFees, CodePayoutReserved,
+	CodeCreditLiability, CodeMarketReserve, CodeMarketInventory,
+	CodePlatformCreditRevenue, CodePayoutClearing, CodePayoutSettled,
 }
 
 // AllCodes returns every account code in chart order (a copy).
@@ -169,11 +239,38 @@ const (
 	// KindSeed is for LOCAL/TEST fixtures only; Service rejects it unless
 	// AllowSeedPostings was called by the composition root.
 	KindSeed Kind = "SEED"
+
+	// --- Nodal-native economy ---
+
+	// KindCreditIssued records Credits minted to a customer against a funding
+	// event, a promotional grant or an earning.
+	KindCreditIssued Kind = "CREDIT_ISSUED"
+	// KindCreditReversed records Credits destroyed because the funding behind
+	// them was reversed.
+	KindCreditReversed Kind = "CREDIT_REVERSED"
+	// KindCreditSpent records Credits spent on a platform service.
+	KindCreditSpent Kind = "CREDIT_SPENT"
+	// KindNativeTrade records a buy or sell on a Nodal-native market.
+	KindNativeTrade Kind = "NATIVE_TRADE"
+	// KindInternalPurchase records a creator-economy purchase.
+	KindInternalPurchase Kind = "INTERNAL_PURCHASE"
+	// KindCreatorEarning records revenue credited to a creator.
+	KindCreatorEarning Kind = "CREATOR_EARNING"
+	// KindPayoutReserved records eligible Credits moving into PAYOUT_PENDING.
+	KindPayoutReserved Kind = "PAYOUT_RESERVED"
+	// KindPayoutSettled records reserved value leaving the system.
+	KindPayoutSettled Kind = "PAYOUT_SETTLED"
+	// KindPayoutReturned records reserved value coming back to the customer
+	// after a failed, rejected or cancelled payout.
+	KindPayoutReturned Kind = "PAYOUT_RETURNED"
 )
 
 var allKinds = []Kind{
 	KindFundingSettled, KindFundingReversal, KindFundingReversalDeficit, KindTradeFill, KindFee,
 	KindWithdrawalSettled, KindCompensation, KindCorrection, KindReconciliationAdjustment, KindSeed,
+	KindCreditIssued, KindCreditReversed, KindCreditSpent, KindNativeTrade,
+	KindInternalPurchase, KindCreatorEarning,
+	KindPayoutReserved, KindPayoutSettled, KindPayoutReturned,
 }
 
 // AllKinds returns every kind in declaration order (a copy).
@@ -325,6 +422,13 @@ type Posting struct {
 	ReversalOf     *TransactionID
 	Entries        []Entry
 	Metadata       map[string]any
+
+	// Conversion names the value-domain movement this transaction performs.
+	// It must be nil for a single-domain transaction and non-nil for one that
+	// spans two domains: a cross-domain movement is always a stated intent
+	// recorded in the journal, never something a reader has to infer from
+	// which accounts happened to be involved (gola.md PART IX).
+	Conversion *valuedomain.ConversionKey
 }
 
 // ReasonCode returns Metadata[MetadataReasonCode] when it is a string.
@@ -352,6 +456,7 @@ type LedgerAccount struct {
 	NormalSide    Side
 	AllowNegative bool
 	Status        AccountStatus
+	Domain        valuedomain.Domain
 	CreatedAt     time.Time
 }
 

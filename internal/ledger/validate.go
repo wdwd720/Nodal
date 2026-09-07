@@ -6,6 +6,7 @@ import (
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Limits on a single posting. They bound the work of the deferred balance
@@ -49,6 +50,21 @@ func validatePosting(p Posting) error {
 	}
 	if p.Kind.RequiresReasonCode() && p.ReasonCode() == "" {
 		return errs.Newf(errs.CodeValidationFailed, "%s transactions must carry metadata.%s", p.Kind, MetadataReasonCode)
+	}
+	if p.Conversion != nil {
+		if !p.Conversion.From.Valid() || !p.Conversion.To.Valid() {
+			return errs.Newf(errs.CodeValidationFailed,
+				"declared conversion %s names an unknown value domain", p.Conversion)
+		}
+		if p.Conversion.From == p.Conversion.To {
+			return errs.Newf(errs.CodeValidationFailed,
+				"declared conversion %s does not move value between domains", p.Conversion)
+		}
+		if _, ok := valuedomain.LookupConversion(p.Conversion.From, p.Conversion.To); !ok {
+			return errs.Newf(errs.CodeForbidden,
+				"no declared conversion moves value from %s to %s",
+				p.Conversion.From, p.Conversion.To)
+		}
 	}
 	if len(p.Entries) < 2 {
 		return errs.Newf(errs.CodeLedgerUnbalanced, "a journal transaction needs at least two entries, got %d", len(p.Entries)).

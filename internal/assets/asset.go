@@ -11,6 +11,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 type assetKind struct{}
@@ -36,7 +37,22 @@ const (
 	// KindFiat is a valuation-only quote reference (e.g. USD). Fiat assets are
 	// never held, traded, or posted to the ledger (migration 00108 enforces it).
 	KindFiat Kind = "FIAT"
+	// KindCredit is the Nodal Credit: the internal unit of account. It exists
+	// on no chain and has no mint (gola.md PART XII).
+	KindCredit Kind = "CREDIT"
+	// KindNativeAsset is a Nodal-native asset created by a user inside the
+	// platform. It is not a blockchain token (gola.md PART XIII).
+	KindNativeAsset Kind = "NATIVE_ASSET"
 )
+
+// InternalChain is the chain value every Nodal-internal asset uses. Internal
+// assets satisfy the registry's (chain, mint_address) identity honestly: the
+// chain is this sentinel and the mint address is the asset's own id, so
+// nothing pretends an internal asset has a mint (migration 00710).
+const InternalChain = "nodal-internal"
+
+// IsInternal reports whether the kind is a Nodal-internal asset.
+func (k Kind) IsInternal() bool { return k == KindCredit || k == KindNativeAsset }
 
 // FiatChain is the chain value every fiat reference uses.
 const FiatChain = "fiat"
@@ -71,15 +87,19 @@ const NativeMintSentinel = "native"
 
 // Asset is a registry row.
 type Asset struct {
-	ID              AssetID
-	Chain           string
-	MintAddress     string
-	Kind            Kind
-	Symbol          string
-	Name            string
-	Decimals        uint8
-	IsStablecoin    bool
-	PegCurrency     string
+	ID           AssetID
+	Chain        string
+	MintAddress  string
+	Kind         Kind
+	Symbol       string
+	Name         string
+	Decimals     uint8
+	IsStablecoin bool
+	PegCurrency  string
+	// ValueDomain classifies what kind of value this asset represents
+	// (gola.md PART IX). It is required for every asset that can be held, and
+	// is empty only for FIAT quote references, which are never held at all.
+	ValueDomain     valuedomain.Domain
 	RiskClass       RiskClass
 	Status          Status
 	MetadataVersion int32
@@ -142,9 +162,20 @@ func (a Asset) Validate() error {
 		problems = append(problems, "mint_address required")
 	}
 	switch a.Kind {
-	case KindNative, KindSPLToken, KindSPLToken2022, KindFiat:
+	case KindNative, KindSPLToken, KindSPLToken2022, KindFiat, KindCredit, KindNativeAsset:
 	default:
 		problems = append(problems, fmt.Sprintf("unknown kind %q", a.Kind))
+	}
+	problems = append(problems, a.valueDomainProblems()...)
+	if a.Kind.IsInternal() {
+		if a.Chain != InternalChain {
+			problems = append(problems, "internal asset must use chain "+InternalChain)
+		}
+		if a.ID.IsZero() || a.MintAddress != a.ID.String() {
+			problems = append(problems, "internal asset mint_address must be its own id")
+		}
+	} else if a.Chain == InternalChain {
+		problems = append(problems, "only CREDIT and NATIVE_ASSET may use chain "+InternalChain)
 	}
 	if a.Kind == KindNative && a.MintAddress != NativeMintSentinel {
 		problems = append(problems, "native asset must use the native mint sentinel")
@@ -191,13 +222,13 @@ type Repository struct{}
 // NewRepository returns a Repository.
 func NewRepository() *Repository { return &Repository{} }
 
-const assetColumns = `id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, coalesce(peg_currency,''), risk_class, status, metadata_version, coalesce(policy_ref,''), token_extensions, created_at, updated_at`
+const assetColumns = `id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, coalesce(peg_currency,''), coalesce(value_domain,''), risk_class, status, metadata_version, coalesce(policy_ref,''), token_extensions, created_at, updated_at`
 
 func scanAsset(row pgx.Row) (Asset, error) {
 	var a Asset
 	var decimals int16
 	var ext []byte
-	if err := row.Scan(&a.ID, &a.Chain, &a.MintAddress, &a.Kind, &a.Symbol, &a.Name, &decimals, &a.IsStablecoin, &a.PegCurrency, &a.RiskClass, &a.Status, &a.MetadataVersion, &a.PolicyRef, &ext, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := row.Scan(&a.ID, &a.Chain, &a.MintAddress, &a.Kind, &a.Symbol, &a.Name, &decimals, &a.IsStablecoin, &a.PegCurrency, &a.ValueDomain, &a.RiskClass, &a.Status, &a.MetadataVersion, &a.PolicyRef, &ext, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		return Asset{}, err
 	}
 	if decimals < 0 || decimals > 18 {
@@ -214,20 +245,25 @@ func scanAsset(row pgx.Row) (Asset, error) {
 
 // Create inserts a new asset. Duplicate (chain, mint_address) → CONFLICT.
 func (r *Repository) Create(ctx context.Context, q db.Querier, a Asset) (Asset, error) {
-	if err := a.Validate(); err != nil {
-		return Asset{}, err
-	}
+	// The id is assigned before validation because an internal asset's
+	// mint_address is its own id, and Validate checks that relationship.
 	if a.ID.IsZero() {
 		a.ID = NewAssetID()
+		if a.Kind.IsInternal() && a.MintAddress == "" {
+			a.MintAddress = a.ID.String()
+		}
+	}
+	if err := a.Validate(); err != nil {
+		return Asset{}, err
 	}
 	ext, err := encodeExtensions(a.TokenExtensions)
 	if err != nil {
 		return Asset{}, err
 	}
-	row := q.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, risk_class, status, metadata_version, policy_ref, token_extensions)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,$11,GREATEST($12,1),NULLIF($13,''),$14)
+	row := q.QueryRow(ctx, `INSERT INTO assets (id, chain, mint_address, kind, symbol, name, decimals, is_stablecoin, peg_currency, value_domain, risk_class, status, metadata_version, policy_ref, token_extensions)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),NULLIF($10,''),$11,$12,GREATEST($13,1),NULLIF($14,''),$15)
 		RETURNING `+assetColumns,
-		a.ID, a.Chain, a.MintAddress, a.Kind, a.Symbol, a.Name, int16(a.Decimals), a.IsStablecoin, a.PegCurrency, a.RiskClass, a.Status, a.MetadataVersion, a.PolicyRef, ext)
+		a.ID, a.Chain, a.MintAddress, a.Kind, a.Symbol, a.Name, int16(a.Decimals), a.IsStablecoin, a.PegCurrency, string(a.ValueDomain), a.RiskClass, a.Status, a.MetadataVersion, a.PolicyRef, ext)
 	created, err := scanAsset(row)
 	if err != nil {
 		if db.IsUniqueViolation(err) {
@@ -326,4 +362,41 @@ func (r *Repository) Transition(ctx context.Context, tx pgx.Tx, assetID AssetID,
 		return Asset{}, fmt.Errorf("assets: update status: %w", err)
 	}
 	return updated, nil
+}
+
+// valueDomainProblems states the relationship between an asset's kind and its
+// value domain. It mirrors the assets_kind_domain_agree constraint added by
+// migration 00710; a test asserts the two agree for every kind.
+//
+// A FIAT row is a quote reference, not a balance: migrations 00602/00108
+// already forbid it from being held, traded or posted. Giving it a value
+// domain would be inventing a fact, so it carries none, and carrying one is an
+// error rather than a harmless extra.
+func (a Asset) valueDomainProblems() []string {
+	var problems []string
+	switch a.Kind {
+	case KindFiat:
+		if a.ValueDomain != "" {
+			problems = append(problems, "fiat quote reference must not carry a value domain; it is never held")
+		}
+	case KindCredit:
+		if a.ValueDomain != valuedomain.InternalCredit {
+			problems = append(problems, "CREDIT assets are always domain INTERNAL_CREDIT")
+		}
+	case KindNativeAsset:
+		if a.ValueDomain != valuedomain.InternalNativeAsset {
+			problems = append(problems, "NATIVE_ASSET assets are always domain INTERNAL_NATIVE_ASSET")
+		}
+	case KindNative, KindSPLToken, KindSPLToken2022:
+		switch a.ValueDomain {
+		case valuedomain.SelfCustodialCrypto, valuedomain.HostedCrypto, valuedomain.Simulated:
+		case "":
+			problems = append(problems,
+				"chain assets must declare a value domain; custody is not inferable from the token")
+		default:
+			problems = append(problems, fmt.Sprintf(
+				"chain asset cannot be domain %s", a.ValueDomain))
+		}
+	}
+	return problems
 }

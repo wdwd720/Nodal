@@ -22,6 +22,7 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 var testAppURL = os.Getenv("CP_TEST_DATABASE_URL")
@@ -52,7 +53,7 @@ func seedAccount(t *testing.T, d *db.DB) accounts.AccountID {
 func seedAssetRow(t *testing.T, d *db.DB, symbol string, decimals uint8, stable bool, risk assets.RiskClass) assets.Asset {
 	t.Helper()
 	a := assets.Asset{
-		Chain: "solana-devnet", MintAddress: "mint-" + id.New[id.Any]().String(), Kind: assets.KindSPLToken, Symbol: symbol, Name: symbol,
+		Chain: "solana-devnet", MintAddress: "mint-" + id.New[id.Any]().String(), Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: symbol, Name: symbol,
 		Decimals: decimals, IsStablecoin: stable, RiskClass: risk, Status: assets.StatusActive,
 	}
 	if stable {

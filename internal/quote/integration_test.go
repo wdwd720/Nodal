@@ -27,6 +27,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/quote"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // Same advisory-lock protocol as internal/intent; run against an isolated
@@ -90,9 +91,9 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{t: t, ctx: ctx, clk: clock.NewFake(received)}
 	suffix := id.New[id.Any]().String()
 	var err error
-	f.sol, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "SOL-" + suffix, Kind: assets.KindSPLToken, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
+	f.sol, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "SOL-" + suffix, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "SOL", Name: "Solana", Decimals: 9, RiskClass: assets.RiskMajor, Status: assets.StatusActive})
 	require.NoError(t, err)
-	f.usdc, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "USDC-" + suffix, Kind: assets.KindSPLToken, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
+	f.usdc, err = assets.NewRepository().Create(ctx, testDB, assets.Asset{Chain: "solana-test", MintAddress: "USDC-" + suffix, Kind: assets.KindSPLToken, ValueDomain: valuedomain.SelfCustodialCrypto, Symbol: "USDC", Name: "USD Coin", Decimals: 6, IsStablecoin: true, PegCurrency: "USD", RiskClass: assets.RiskSettlement, Status: assets.StatusActive})
 	require.NoError(t, err)
 	ins := instruments.NewRepository()
 	venue, err := ins.CreateVenue(ctx, testDB, instruments.Venue{Code: "JUP-" + suffix, Name: "Jupiter", Kind: instruments.VenueDEXAggregator, Chain: "solana-test", Status: instruments.VenueActive})

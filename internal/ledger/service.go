@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // PostMaxRetries is the deadlock/serialization retry budget of PostInTx.
@@ -34,6 +35,36 @@ type Service struct {
 	clk          clock.Clock
 	buildVersion string
 	allowSeed    atomic.Bool
+	caps         atomic.Pointer[CapabilityResolver]
+}
+
+// CapabilityResolver reports which value-domain conversion capabilities are
+// currently ACTIVE. internal/gates supplies the production implementation.
+//
+// A Service with no resolver treats every capability as inactive, which is the
+// correct reading for a process that has not been told otherwise: it permits
+// every single-domain posting the system has ever made and refuses every
+// cross-domain one. Fail closed is the default, not a configuration.
+type CapabilityResolver interface {
+	ActiveConversionCapabilities(ctx context.Context) (map[valuedomain.CapabilityKey]bool, error)
+}
+
+// SetCapabilityResolver installs the resolver. Only the composition root calls
+// it.
+func (s *Service) SetCapabilityResolver(r CapabilityResolver) {
+	if r == nil {
+		s.caps.Store(nil)
+		return
+	}
+	s.caps.Store(&r)
+}
+
+func (s *Service) activeCapabilities(ctx context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+	p := s.caps.Load()
+	if p == nil {
+		return nil, nil
+	}
+	return (*p).ActiveConversionCapabilities(ctx)
 }
 
 var (
@@ -55,11 +86,11 @@ func NewService(clk clock.Clock, buildVersion string) *Service {
 // postings fail with FORBIDDEN.
 func (s *Service) AllowSeedPostings() { s.allowSeed.Store(true) }
 
-const ledgerAccountColumns = `id, owner_type, owner_id::text, code, asset_id, normal_side, allow_negative, status, created_at`
+const ledgerAccountColumns = `id, owner_type, owner_id::text, code, asset_id, normal_side, allow_negative, status, value_domain, created_at`
 
 func scanLedgerAccount(row pgx.Row) (LedgerAccount, error) {
 	var a LedgerAccount
-	if err := row.Scan(&a.ID, &a.Ref.OwnerType, &a.Ref.OwnerID, &a.Ref.Code, &a.Ref.AssetID, &a.NormalSide, &a.AllowNegative, &a.Status, &a.CreatedAt); err != nil {
+	if err := row.Scan(&a.ID, &a.Ref.OwnerType, &a.Ref.OwnerID, &a.Ref.Code, &a.Ref.AssetID, &a.NormalSide, &a.AllowNegative, &a.Status, &a.Domain, &a.CreatedAt); err != nil {
 		return LedgerAccount{}, err
 	}
 	a.CreatedAt = a.CreatedAt.UTC()
@@ -255,6 +286,9 @@ func (s *Service) Post(ctx context.Context, tx pgx.Tx, p Posting) (PostResult, e
 	if err != nil {
 		return PostResult{}, err
 	}
+	if err := s.checkDomainIsolation(ctx, rows, p.Conversion); err != nil {
+		return PostResult{}, err
+	}
 	metadata, err := canonicalMetadata(p.Metadata)
 	if err != nil {
 		return PostResult{}, err
@@ -272,13 +306,19 @@ func (s *Service) Post(ctx context.Context, tx pgx.Tx, p Posting) (PostResult, e
 	if err != nil {
 		return PostResult{}, MapError(err)
 	}
+	var convFrom, convTo any
+	if p.Conversion != nil {
+		convFrom, convTo = string(p.Conversion.From), string(p.Conversion.To)
+	}
 	_, err = sp.Exec(ctx,
 		`INSERT INTO journal_transactions
 		   (id, kind, idempotency_key, reference_type, reference_id, reversal_of, effective_at, posted_at,
-		    description, correlation_id, posted_by_actor_type, posted_by_actor_id, reason_code, metadata, content_hash, build_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, NULLIF($13, ''), $14, $15, NULLIF($16, ''))`,
+		    description, correlation_id, posted_by_actor_type, posted_by_actor_id, reason_code, metadata, content_hash, build_version,
+		    conversion_from, conversion_to)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, NULLIF($13, ''), $14, $15, NULLIF($16, ''), $17, $18)`,
 		txID, p.Kind, p.IdempotencyKey, p.Reference.Type, p.Reference.ID, reversalOf, p.EffectiveAt.UTC(), s.clk.Now(),
-		p.Description, p.CorrelationID, string(actorType), actorID, p.ReasonCode(), metadata, hash, s.buildVersion)
+		p.Description, p.CorrelationID, string(actorType), actorID, p.ReasonCode(), metadata, hash, s.buildVersion,
+		convFrom, convTo)
 	if err != nil {
 		_ = sp.Rollback(ctx)
 		if db.IsUniqueViolation(err) && db.ConstraintName(err) == constraintIdempotencyKey {
@@ -352,4 +392,23 @@ func (s *Service) PostInTx(ctx context.Context, d *db.DB, p Posting) (PostResult
 		return PostResult{}, MapError(fmt.Errorf("ledger: post %s: %w", p.Kind, err))
 	}
 	return res, nil
+}
+
+// checkDomainIsolation is the application half of the value-domain invariant
+// (gola.md PART IX); the deferred trigger installed by migration 00710 is the
+// other half, and neither may be dropped because the other exists. This side
+// produces the operator-facing error and is the only side that can evaluate
+// capability activation, because a capability gate is keyed by environment and
+// a database connection carries no environment the application could not
+// simply assert.
+func (s *Service) checkDomainIsolation(ctx context.Context, rows []entryRow, conv *valuedomain.ConversionKey) error {
+	domains := make([]valuedomain.Domain, 0, len(rows))
+	for _, r := range rows {
+		domains = append(domains, r.account.Domain)
+	}
+	caps, err := s.activeCapabilities(ctx)
+	if err != nil {
+		return errs.Wrap(err, errs.CodeInternal, "ledger: resolve active conversion capabilities")
+	}
+	return valuedomain.CheckPosting(domains, conv, caps)
 }
