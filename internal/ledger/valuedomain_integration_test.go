@@ -5,6 +5,7 @@ package ledger
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,6 +28,30 @@ type staticCaps map[valuedomain.CapabilityKey]bool
 
 func (s staticCaps) ActiveConversionCapabilities(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
 	return s, nil
+}
+
+// creditAssetOnce provisions THE Credit asset for the whole suite. Migration
+// 00711 permits exactly one, which is the point, so it cannot be per-test --
+// and an earlier version of this file created one per call, which passed on a
+// fresh database and failed on the second run of the same one.
+var (
+	creditAssetOnce sync.Once
+	creditAssetID   assets.AssetID
+)
+
+func creditAsset(t *testing.T) assets.AssetID {
+	t.Helper()
+	creditAssetOnce.Do(func() {
+		ctx := context.Background()
+		var existing assets.AssetID
+		if err := testDB.QueryRow(ctx, `SELECT id FROM assets WHERE kind = 'CREDIT'`).Scan(&existing); err == nil {
+			creditAssetID = existing
+			return
+		}
+		creditAssetID = createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CREDIT")
+	})
+	require.False(t, creditAssetID.IsZero())
+	return creditAssetID
 }
 
 func createInternalAsset(t *testing.T, kind assets.Kind, domain valuedomain.Domain, symbol string) assets.AssetID {
@@ -97,7 +122,7 @@ func TestIntegration_AssetsCarryTheirValueDomain(t *testing.T) {
 	ctx := context.Background()
 	repo := assets.NewRepository()
 
-	creditID := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CREDIT")
+	creditID := creditAsset(t)
 	got, err := repo.Get(ctx, testDB, creditID)
 	require.NoError(t, err)
 	require.Equal(t, valuedomain.InternalCredit, got.ValueDomain)
@@ -175,7 +200,7 @@ func (f *fixture) seedPlatform(code Code, asset assets.AssetID, qty int64) {
 func TestIntegration_LedgerAccountInheritsDomainFromAssetAndCode(t *testing.T) {
 	requireEnv(t)
 	f := newFixture(t)
-	credit := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CR")
+	credit := creditAsset(t)
 
 	balance, err := f.svc.EnsureAccount(f.ctx, testDB, f.cust(CodeCreditBalance, credit))
 	require.NoError(t, err)
@@ -204,7 +229,7 @@ func TestIntegration_LedgerAccountInheritsDomainFromAssetAndCode(t *testing.T) {
 func TestIntegration_TheDatabaseRefusesCreditsReachingRealCapital(t *testing.T) {
 	requireEnv(t)
 	f := newFixture(t)
-	credit := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CR")
+	credit := creditAsset(t)
 
 	f.seed(CodeCreditBalance, credit, 10_000)
 	f.seed(CodeWallet, f.sol, 10_000)
@@ -286,7 +311,7 @@ func TestIntegration_TheDatabaseRefusesCreditsReachingRealCapital(t *testing.T) 
 	// The negative control: the same four entries, all within one domain,
 	// commit. Without this the test could be passing because the posting is
 	// malformed rather than because isolation works.
-	other := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CR2")
+	other := creditAsset(t)
 	f.seed(CodeCreditBalance, other, 10_000)
 	otherAcct, err := f.svc.EnsureAccount(f.ctx, testDB, f.cust(CodeCreditBalance, other))
 	require.NoError(t, err)
@@ -306,7 +331,7 @@ func TestIntegration_TheDatabaseRefusesCreditsReachingRealCapital(t *testing.T) 
 func TestIntegration_CrossDomainPostingMustDeclareItself(t *testing.T) {
 	requireEnv(t)
 	f := newFixture(t)
-	credit := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CR")
+	credit := creditAsset(t)
 	doggu := createInternalAsset(t, assets.KindNativeAsset, valuedomain.InternalNativeAsset, "DOGGU")
 
 	f.seed(CodeCreditBalance, credit, 10_000)
@@ -370,7 +395,7 @@ func TestIntegration_CrossDomainPostingMustDeclareItself(t *testing.T) {
 func TestIntegration_ServiceEnforcesCapabilityOnCrossDomainPostings(t *testing.T) {
 	requireEnv(t)
 	f := newFixture(t)
-	credit := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CR")
+	credit := creditAsset(t)
 	doggu := createInternalAsset(t, assets.KindNativeAsset, valuedomain.InternalNativeAsset, "DOGGU")
 
 	buy := valuedomain.ConversionKey{From: valuedomain.InternalCredit, To: valuedomain.InternalNativeAsset}
@@ -438,7 +463,7 @@ func TestIntegration_ServiceEnforcesCapabilityOnCrossDomainPostings(t *testing.T
 func TestIntegration_DeclaredConversionIsPartOfTheIdempotencyIdentity(t *testing.T) {
 	requireEnv(t)
 	f := newFixture(t)
-	credit := createInternalAsset(t, assets.KindCredit, valuedomain.InternalCredit, "CR")
+	credit := creditAsset(t)
 
 	key := "vd-idem-" + uuid.NewString()
 	base := Posting{

@@ -98,6 +98,45 @@ const (
 
 	PermBreakGlassRequest Permission = "break_glass:request"
 	PermBreakGlassApprove Permission = "break_glass:approve"
+
+	// --- Nodal-native economy (gola.md PARTS XII-XXI) ---------------------
+	//
+	// These are separate permissions rather than reuses of trade:* and
+	// withdrawal:* because the internal economy is a different legal animal
+	// from external trading, and a deployment must be able to grant one
+	// without the other. A role that may trade real assets is not thereby
+	// permitted to launch speculative internal ones.
+
+	// PermCreditRead reads a Credit balance and its provenance breakdown.
+	PermCreditRead Permission = "credit:read"
+	// PermCreditPurchase starts a Credit purchase.
+	PermCreditPurchase Permission = "credit:purchase"
+	// PermCreditAdjust is the privileged, audited administrative adjustment
+	// of a Credit balance (PART XLIX). No standing role holds it.
+	PermCreditAdjust Permission = "credit:adjust"
+
+	// PermNativeAssetCreate creates a Nodal-native asset.
+	PermNativeAssetCreate Permission = "native_asset:create"
+	// PermNativeAssetRead reads the native asset registry.
+	PermNativeAssetRead Permission = "native_asset:read"
+	// PermNativeAssetModerate records a moderation verdict.
+	PermNativeAssetModerate Permission = "native_asset:moderate"
+	// PermNativeMarketTrade buys and sells on an internal market.
+	PermNativeMarketTrade Permission = "native_market:trade"
+	// PermNativeMarketHalt halts, freezes or closes a market.
+	PermNativeMarketHalt Permission = "native_market:halt"
+	// PermNativeMarketSurveil reads surveillance alerts.
+	PermNativeMarketSurveil Permission = "native_market:surveil"
+
+	// PermPayoutCreate requests a payout of eligible value.
+	PermPayoutCreate Permission = "payout:create"
+	// PermPayoutRead reads payout requests.
+	PermPayoutRead Permission = "payout:read"
+	// PermPayoutReview is the operator side of a manual payout review.
+	PermPayoutReview Permission = "payout:review"
+	// PermPayoutApprove is the approve half of a dual-controlled payout
+	// release. No standing role holds it.
+	PermPayoutApprove Permission = "payout:approve"
 )
 
 var allPermissions = []Permission{
@@ -119,6 +158,10 @@ var allPermissions = []Permission{
 	PermAdminAuditRead,
 	PermSessionListOwn, PermSessionRevokeOwn, PermSessionRevokeAny,
 	PermBreakGlassRequest, PermBreakGlassApprove,
+	PermCreditRead, PermCreditPurchase, PermCreditAdjust,
+	PermNativeAssetCreate, PermNativeAssetRead, PermNativeAssetModerate,
+	PermNativeMarketTrade, PermNativeMarketHalt, PermNativeMarketSurveil,
+	PermPayoutCreate, PermPayoutRead, PermPayoutReview, PermPayoutApprove,
 }
 
 var allRoles = []Role{
@@ -132,6 +175,8 @@ var allActorTypes = []ActorType{ActorUser, ActorOperator, ActorService, ActorAge
 // standing role holds them: an ADMIN may propose, and a *different* principal
 // holding a live BREAK_GLASS elevation must approve (RequireDualControl).
 var dualControlPermissions = []Permission{
+	PermPayoutApprove,
+	PermCreditAdjust,
 	PermLedgerApproveCorrection,
 	PermGateApprove,
 	PermKillRelease,
@@ -166,6 +211,7 @@ var agentPermissions = []Permission{
 var reads = []Permission{
 	PermAccountRead, PermTradeRead, PermFundingRead, PermStrategyRead,
 	PermLedgerRead, PermReconciliationRead, PermRiskRead, PermGateRead,
+	PermCreditRead, PermNativeAssetRead, PermPayoutRead,
 }
 
 // ownSession lets every human manage the sessions of their own subject
@@ -184,17 +230,28 @@ var RolePermissions = map[Role][]Permission{
 		[]Permission{
 			PermAccountRead, PermTradeCreate, PermTradeRead, PermFundingCreate, PermFundingRead,
 			PermWithdrawalCreate, PermStrategyWrite, PermStrategyRead, PermAgentPause,
+			// The internal economy. A customer may hold Credits, create an
+			// asset, trade an internal market and ask for a payout. Whether
+			// any of that is permitted TODAY is a capability and legal-router
+			// question; holding the permission only means the role is the
+			// right one to ask.
+			PermCreditRead, PermCreditPurchase,
+			PermNativeAssetCreate, PermNativeAssetRead,
+			PermNativeMarketTrade,
+			PermPayoutCreate, PermPayoutRead,
 		},
 		ownSession,
 	),
 	RoleSupportReadOnly: operatorBase,
 	RoleOperations: union(operatorBase, []Permission{
 		PermAgentPause, PermAgentPromote, PermProviderDisable, PermKillActivate, PermInstrumentStatusWrite, PermReconciliationResolve,
+		PermNativeMarketHalt, PermNativeMarketSurveil, PermPayoutReview,
 	}),
 	RoleRisk: union(operatorBase, []Permission{
 		PermRiskPolicyWrite, PermKillActivate, PermInstrumentStatusWrite, PermGatePropose, PermEnvelopeAuthorityWrite, PermAgentPromote,
 	}),
 	RoleCompliance: union(operatorBase, []Permission{
+		PermNativeAssetModerate, PermNativeMarketSurveil, PermNativeMarketHalt, PermPayoutReview,
 		PermAccountFreeze, PermGatePropose, PermWithdrawalReview,
 	}),
 	RoleFinance: union(operatorBase, []Permission{

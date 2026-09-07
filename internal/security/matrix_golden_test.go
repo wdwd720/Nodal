@@ -13,6 +13,7 @@ import (
 var goldenPermissions = []string{
 	"account:freeze", "account:read", "account:read_any",
 	"admin:audit_read",
+	"credit:adjust", "credit:purchase", "credit:read",
 	"agent:pause", "agent:promote", "agent:promote_approve", "agent:run",
 	"break_glass:approve", "break_glass:request",
 	"envelope:approve", "envelope:authority_write",
@@ -22,6 +23,9 @@ var goldenPermissions = []string{
 	"intent:create_agent",
 	"kill:activate", "kill:release",
 	"ledger:approve_correction", "ledger:post_correction", "ledger:read",
+	"native_asset:create", "native_asset:moderate", "native_asset:read",
+	"native_market:halt", "native_market:surveil", "native_market:trade",
+	"payout:approve", "payout:create", "payout:read", "payout:review",
 	"prediction:commit",
 	"provider:disable", "provider:enable",
 	"reconciliation:approve", "reconciliation:read", "reconciliation:resolve",
@@ -36,60 +40,93 @@ var goldenPermissions = []string{
 // RolePermissions that is not mirrored here — in particular any privilege
 // expansion — fails TestGoldenMatrix_Equal. Edit deliberately, with review.
 var goldenMatrix = map[string][]string{
+	// A customer may hold Credits, create an internal asset, trade an internal
+	// market and ask for a payout. Holding the permission means only that this
+	// is the role that may ASK; whether any of it is permitted today is a
+	// capability gate and legal-router question, checked independently.
 	"CUSTOMER": {
-		"account:read", "agent:pause", "funding:create", "funding:read",
+		"account:read", "agent:pause",
+		"credit:purchase", "credit:read",
+		"funding:create", "funding:read",
+		"native_asset:create", "native_asset:read", "native_market:trade",
+		"payout:create", "payout:read",
 		"session:list_own", "session:revoke_own",
 		"strategy:read", "strategy:write", "trade:create", "trade:read", "withdrawal:create",
 	},
 	"SUPPORT_READ_ONLY": {
-		"account:read", "account:read_any", "funding:read", "gate:read", "ledger:read",
+		"account:read", "account:read_any", "credit:read", "funding:read", "gate:read", "ledger:read",
+		"native_asset:read", "payout:read",
 		"reconciliation:read", "risk:read", "session:list_own", "session:revoke_own",
 		"strategy:read", "trade:read",
 	},
 	"OPERATIONS": {
-		"account:read", "account:read_any", "agent:pause", "agent:promote", "funding:read", "gate:read",
-		"instrument:status_write", "kill:activate", "ledger:read", "provider:disable",
+		"account:read", "account:read_any", "agent:pause", "agent:promote",
+		"credit:read", "funding:read", "gate:read",
+		"instrument:status_write", "kill:activate", "ledger:read",
+		"native_asset:read", "native_market:halt", "native_market:surveil",
+		"payout:read", "payout:review", "provider:disable",
 		"reconciliation:read", "reconciliation:resolve", "risk:read",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read",
 	},
 	"RISK": {
-		"account:read", "account:read_any", "agent:promote", "envelope:authority_write", "funding:read", "gate:propose", "gate:read",
-		"instrument:status_write", "kill:activate", "ledger:read", "reconciliation:read",
+		"account:read", "account:read_any", "agent:promote", "credit:read", "envelope:authority_write",
+		"funding:read", "gate:propose", "gate:read",
+		"instrument:status_write", "kill:activate", "ledger:read",
+		"native_asset:read", "payout:read", "reconciliation:read",
 		"risk:policy_write", "risk:read", "session:list_own", "session:revoke_own",
 		"strategy:read", "trade:read",
 	},
+	// Compliance is the role that judges user-generated content and market
+	// conduct, so it holds the moderation and surveillance permissions and the
+	// halt that follows from them.
 	"COMPLIANCE": {
-		"account:freeze", "account:read", "account:read_any", "funding:read", "gate:propose",
-		"gate:read", "ledger:read", "reconciliation:read", "risk:read",
+		"account:freeze", "account:read", "account:read_any", "credit:read", "funding:read", "gate:propose",
+		"gate:read", "ledger:read",
+		"native_asset:moderate", "native_asset:read", "native_market:halt", "native_market:surveil",
+		"payout:read", "payout:review",
+		"reconciliation:read", "risk:read",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read", "withdrawal:review",
 	},
 	"FINANCE": {
-		"account:read", "account:read_any", "funding:read", "gate:read", "ledger:post_correction",
-		"ledger:read", "reconciliation:read", "reconciliation:resolve", "risk:read",
+		"account:read", "account:read_any", "credit:read", "funding:read", "gate:read", "ledger:post_correction",
+		"ledger:read", "native_asset:read", "payout:read",
+		"reconciliation:read", "reconciliation:resolve", "risk:read",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read", "withdrawal:review",
 	},
 	"SECURITY": {
-		"account:read", "account:read_any", "break_glass:approve", "funding:read", "gate:read", "kill:activate",
-		"ledger:read", "provider:disable", "reconciliation:read", "risk:read",
+		"account:read", "account:read_any", "break_glass:approve", "credit:read", "funding:read",
+		"gate:read", "kill:activate",
+		"ledger:read", "native_asset:read", "payout:read", "provider:disable",
+		"reconciliation:read", "risk:read",
 		"session:list_own", "session:revoke_any", "session:revoke_own", "strategy:read", "trade:read",
 	},
+	// ADMIN is the union of the operator roles plus the customer surface, and
+	// deliberately does NOT hold credit:adjust: adjusting a Credit balance is
+	// dual-controlled, exactly like approving a ledger correction.
 	"ADMIN": {
 		"account:freeze", "account:read", "account:read_any", "admin:audit_read", "agent:pause", "agent:promote",
-		"break_glass:approve", "break_glass:request", "envelope:authority_write", "funding:create", "funding:read", "gate:propose", "gate:read",
+		"break_glass:approve", "break_glass:request",
+		"credit:purchase", "credit:read",
+		"envelope:authority_write", "funding:create", "funding:read", "gate:propose", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:post_correction", "ledger:read",
+		"native_asset:create", "native_asset:moderate", "native_asset:read",
+		"native_market:halt", "native_market:surveil", "native_market:trade",
+		"payout:create", "payout:read", "payout:review",
 		"provider:disable", "provider:enable", "reconciliation:read", "reconciliation:resolve",
 		"risk:policy_write", "risk:read", "session:list_own", "session:revoke_any", "session:revoke_own",
 		"strategy:read", "strategy:write", "trade:create", "trade:read", "withdrawal:create", "withdrawal:review",
 	},
 	"BREAK_GLASS": {
-		"agent:promote_approve", "envelope:approve", "gate:approve", "kill:release", "ledger:approve_correction",
+		"agent:promote_approve", "credit:adjust", "envelope:approve", "gate:approve", "kill:release",
+		"ledger:approve_correction", "payout:approve",
 		"reconciliation:approve", "withdrawal:approve",
 	},
 }
 
 // goldenDualControl are the approve-side permissions no standing role holds.
 var goldenDualControl = []string{
-	"agent:promote_approve", "envelope:approve", "gate:approve", "kill:release", "ledger:approve_correction",
+	"agent:promote_approve", "credit:adjust", "envelope:approve", "gate:approve", "kill:release",
+	"ledger:approve_correction", "payout:approve",
 	"reconciliation:approve", "withdrawal:approve",
 }
 
@@ -127,10 +164,14 @@ func TestGoldenMatrix_PermissionListClosed(t *testing.T) {
 	if !equalStrings(got, want) {
 		t.Fatalf("AllPermissions drifted from golden list\n got=%v\nwant=%v", got, want)
 	}
-	// 42 after adding withdrawal:review, agent:promote(+_approve), envelope:authority_write,
-	// envelope:approve and break_glass:approve (2026-09-06, admin dual-control kinds).
-	if len(got) != 42 {
-		t.Fatalf("expected 42 permissions, got %d", len(got))
+	// 55 after the Nodal-native economy: credit:{read,purchase,adjust},
+	// native_asset:{create,read,moderate}, native_market:{trade,halt,surveil},
+	// payout:{create,read,review,approve} (13 added). They are separate from
+	// trade:* and withdrawal:* because the internal economy is a different
+	// legal animal, and a deployment must be able to grant one without the
+	// other.
+	if len(got) != 55 {
+		t.Fatalf("expected 55 permissions, got %d", len(got))
 	}
 	for _, p := range goldenPermissions {
 		if !Permission(p).Valid() {

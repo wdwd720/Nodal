@@ -48,6 +48,18 @@ func TestConsumptionRank_AnUnknownOriginSortsLast(t *testing.T) {
 		"a newly added origin must be preserved rather than spent first")
 }
 
+// TestConsumptionOrderSQL_MatchesTheMap is what lets the SQL be a constant.
+//
+// The constant is what runs, because test/security proves every statement in
+// the repository is built from constants and a value assembled at init is not
+// provably one. The Go map stays the authority on the ordering, and this
+// asserts the constant implements it exactly -- so the constant cannot drift
+// from the rank it is supposed to encode.
+func TestConsumptionOrderSQL_MatchesTheMap(t *testing.T) {
+	require.Equal(t, buildConsumptionOrderSQL(), ConsumptionOrderSQL(),
+		"the ORDER BY constant no longer matches consumptionRank; regenerate it")
+}
+
 func TestConsumptionOrderSQL_MentionsEveryOriginExactlyOnce(t *testing.T) {
 	sql := ConsumptionOrderSQL()
 	for _, o := range valuedomain.AllOrigins() {

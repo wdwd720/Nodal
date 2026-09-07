@@ -18,11 +18,35 @@ import (
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-// consumptionOrderSQL is built from consumptionRank so the SQL ordering and
-// the Go ordering cannot disagree. An origin the map does not know sorts after
-// every known one, matching ConsumptionRank.
-var consumptionOrderSQL = buildConsumptionOrderSQL()
+// consumptionOrderSQL is the ORDER BY that implements ConsumptionRank.
+//
+// It is a CONSTANT rather than a value built from consumptionRank at init, and
+// the reason is a security control rather than style: test/security proves that
+// every SQL statement in the repository is built from constants, so that no
+// request-derived string can ever be concatenated into one. A statement
+// assembled from a package-level var is not provably constant, and weakening
+// the check to accommodate this package would weaken it for every package.
+//
+// The Go map remains the authority on the ordering. buildConsumptionOrderSQL
+// regenerates this string from it and TestConsumptionOrderSQL_MatchesTheMap
+// asserts the two are identical, so the constant cannot drift from the rank it
+// is supposed to implement.
+const consumptionOrderSQL = `CASE l.origin` +
+	` WHEN 'PROMOTIONAL' THEN 0` +
+	` WHEN 'COMPETITION_REWARD' THEN 1` +
+	` WHEN 'ADMIN_ADJUSTMENT' THEN 2` +
+	` WHEN 'REFUND' THEN 3` +
+	` WHEN 'PURCHASED' THEN 4` +
+	` WHEN 'PROVIDER_SETTLEMENT' THEN 5` +
+	` WHEN 'MARKET_TRADING_PROCEEDS' THEN 6` +
+	` WHEN 'MARKET_CREATOR_EARNING' THEN 7` +
+	` WHEN 'AGENT_SERVICE_EARNING' THEN 8` +
+	` WHEN 'DATA_SALE_EARNING' THEN 9` +
+	` WHEN 'CREATOR_EARNING' THEN 10` +
+	` ELSE 11 END`
 
+// buildConsumptionOrderSQL regenerates the constant above from consumptionRank.
+// It exists so a test can prove the two agree; nothing else calls it.
 func buildConsumptionOrderSQL() string {
 	type entry struct {
 		origin valuedomain.CreditOrigin
@@ -42,6 +66,26 @@ func buildConsumptionOrderSQL() string {
 	fmt.Fprintf(&b, " ELSE %d END", len(consumptionRank))
 	return b.String()
 }
+
+// openLotsQuery selects an account's open lots in consumption order.
+//
+// $3 is "require spendable finality" and $4 is the allowed-origin set; a null
+// or empty set means no origin restriction. Expressing both as parameters of
+// one constant statement is what lets test/security prove the statement is not
+// assembled from anything a request supplied.
+const openLotsQuery = `SELECT ` + lotColumns + `
+	  FROM credit_lots l
+	  JOIN credit_lot_state st ON st.lot_id = l.id
+	 WHERE l.account_id = $1 AND l.asset_id = $2 AND st.remaining_quantity > 0
+	   AND ($3::boolean = false OR st.finality IN ('UNFUNDED','REVERSIBLE','SETTLED'))
+	   AND ($4::text[] IS NULL OR cardinality($4::text[]) = 0 OR l.origin = ANY($4::text[]))
+	 ORDER BY ` + consumptionOrderSQL + `, l.created_at, l.id`
+
+// accountLotsQuery is every lot an account holds, in the same order.
+const accountLotsQuery = `SELECT ` + lotColumns + `
+	  FROM credit_lots l JOIN credit_lot_state st ON st.lot_id = l.id
+	 WHERE l.account_id = $1 AND l.asset_id = $2
+	 ORDER BY ` + consumptionOrderSQL + `, l.created_at, l.id`
 
 const lotColumns = `l.id, l.account_id, l.asset_id, l.origin, l.initial_finality, l.quantity::text,
 	 coalesce(l.funding_reference_type,''), coalesce(l.funding_reference_id,''), l.journal_transaction_id,
@@ -91,19 +135,20 @@ func (s *Service) openLotsForUpdate(
 	accountID accounts.AccountID, assetID assets.AssetID,
 	requireSpendable bool, allowedOrigins []valuedomain.CreditOrigin,
 ) ([]Lot, error) {
-	where := []string{"l.account_id = $1", "l.asset_id = $2", "st.remaining_quantity > 0"}
-	args := []any{accountID, assetID}
-	if requireSpendable {
-		where = append(where, "st.finality IN ('UNFUNDED','REVERSIBLE','SETTLED')")
-	}
+	// Both filters are PARAMETERS of one constant statement rather than
+	// fragments concatenated into a built one. An earlier version assembled
+	// the WHERE clause from literals, which was safe and was not provably
+	// safe, and test/security proves every statement in the repository is
+	// built from constants precisely so that nobody has to take "safe" on
+	// trust.
+	var origins []string
 	if len(allowedOrigins) > 0 {
-		origins := make([]string, 0, len(allowedOrigins))
+		origins = make([]string, 0, len(allowedOrigins))
 		for _, o := range allowedOrigins {
 			origins = append(origins, string(o))
 		}
-		args = append(args, origins)
-		where = append(where, fmt.Sprintf("l.origin = ANY($%d)", len(args)))
 	}
+	args := []any{accountID, assetID, requireSpendable, origins}
 	// Serialise spenders on this account's Credits before reading the lots.
 	//
 	// `FOR UPDATE OF st` would be the obvious way and is not available: the
@@ -121,12 +166,7 @@ func (s *Service) openLotsForUpdate(
 	if err := lockAccountCredits(ctx, tx, accountID, assetID); err != nil {
 		return nil, err
 	}
-	q := `SELECT ` + lotColumns + `
-	        FROM credit_lots l
-	        JOIN credit_lot_state st ON st.lot_id = l.id
-	       WHERE ` + strings.Join(where, " AND ") + `
-	       ORDER BY ` + consumptionOrderSQL + `, l.created_at, l.id`
-	rows, err := tx.Query(ctx, q, args...)
+	rows, err := tx.Query(ctx, openLotsQuery, args...)
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -230,11 +270,7 @@ func (s *Service) Lots(ctx context.Context, q db.Querier, accountID accounts.Acc
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.Query(ctx,
-		`SELECT `+lotColumns+`
-		   FROM credit_lots l JOIN credit_lot_state st ON st.lot_id = l.id
-		  WHERE l.account_id = $1 AND l.asset_id = $2
-		  ORDER BY `+consumptionOrderSQL+`, l.created_at, l.id`, accountID, assetID)
+	rows, err := q.Query(ctx, accountLotsQuery, accountID, assetID)
 	if err != nil {
 		return nil, mapError(err)
 	}
