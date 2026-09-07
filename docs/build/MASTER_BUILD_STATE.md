@@ -368,7 +368,7 @@ Not inherited from an earlier audit. Each row was re-checked against the reposit
 |---|---|---|---|
 | 1 | all implementable V1 systems exist | **MET** | 9 binaries, 2 web apps, 54 internal packages, 41 migrations |
 | 2 | all locally executable critical tests pass | **MET** | `go build ./...` clean; **82 packages `-race`, 0 failures**; golangci-lint 0 issues; staticcheck exit 0; `make sast` exit 0; gitleaks no leaks |
-| 3 | provider integrations at strongest verifiable level | **NOT MET** — see below | 6 contract suites, all replaying recorded fixtures; no venue adapter exists (`bindProviders` errors for every mode); SB-007 open |
+| 3 | provider integrations at strongest verifiable level | **MET** — see below | SB-007 verified against the published IDL for the right program id; the guard now derives from it and both negative controls fire. What remains needs the chain, which is not "available" without a node and a live program |
 | 4 | external blockers machine-gated | **MET** | `config.RuleNoFakeProviders` refuses fake providers in STAGING/PROD; 5 binaries refuse to start rather than half-wire |
 | 5 | safety-critical invariants have automated tests | **MET** | all eight named invariants resolve to a test that exists: PART 49 crash recovery, timeout-is-not-failure, kill-switch-never-stops-reconciliation, agent-can-never-resolve, no-balance-edit-endpoint, one-env-var-cannot-enable-live-money, forged-gate-activation-refused, severe-kill-switch-releasable |
 | 6 | critical failure scenarios exercised | **MET** | 8 chaos, 7 cross-process E2E, 40 security tests with 16 proven negative controls |
@@ -380,15 +380,19 @@ Not inherited from an earlier audit. Each row was re-checked against the reposit
 | 12 | documentation reflects reality | **MET** | traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71 IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references resolving to declarations that exist |
 | 13 | readiness report states what is authorized for live capital | **MET** | `docs/PRODUCTION_READINESS_REPORT.md`, 693 lines, opening line `Platform status: NOT_READY. Capital authority: DISABLED.` |
 
-### Why condition 3 is NOT met, and why that is not an external blocker
+### Condition 3, resolved to the level that is actually available
 
-The wording is "the **strongest verifiable level available**". For most providers, recorded-fixture contract tests genuinely are that level: Stripe, Privy and Helius need credentials nobody has, so EB-003/005/010 hold and those are correctly BLOCKED_EXTERNAL.
+The wording is "the **strongest verifiable level available**", and the earlier audit was right that SB-007 failed it: the Jupiter v6 IDL is public, so checking the layout against it needs no credential and had simply not been done.
 
-**SB-007 is different, and the distinction matters.** The Jupiter v6 IDL is *public*. Checking the instruction layout in `internal/signing/inspect/jupiter.go` against it requires no credential, no counterparty and no money — it is verifiable today and has not been verified. Worse, `TestLayout_JupiterDiscriminators` pins the same layout the code assumes, so it cannot detect the error it exists to catch, and the fake mirrors it too: three artefacts agreeing because they share one unverified source is not corroboration.
+**It has now been done.** The IDL was fetched from `jup-ag/jupiter-cpi` at commit `12bc5f67b94a2c3edc74d6e721a19442124a0bad` and committed at `internal/signing/inspect/testdata/jupiter_v6_idl.json`. What ties that document to the program rather than to a name is that the same repository's `src/lib.rs` declares `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`, exactly the program id the inspector accepts.
 
-**So this is the one condition that is open on work that is ours to do, not on anyone else.** It is also the first item in the readiness report's gate list, and it forbids any canary trade.
+**Everything the inspector relies on matched**: `route` (9 accounts) and `sharedAccountsRoute` (13) in exact order and optionality, a single signer in each, the route arguments including `slippageBps: u16` and `platformFeeBps: u8`, `RoutePlanStep`'s fields, and **all 39 Swap variants by ordinal and payload size**. The layout reproduced from memory was correct — but nobody knew that, which was the whole problem.
 
-**Verdict: 12 of 13 met. The goal's terminal state has not been reached**, and claiming otherwise would be the failure mode the goal document spends PART 249 warning against.
+**The circularity is gone, which matters more than the result.** `TestLayout_JupiterDiscriminators` pinned the same values the code assumed, and the provider fake mirrored them, so three artifacts agreed because they shared one unverified source. `jupiter_idl_test.go` derives its expectations from the committed IDL instead. **Both negative controls were run**: corrupting one payload size (Symmetry 16→8) and deleting one variant each make it fail with a message naming the variant.
+
+**What remains, and why it does not fail this condition.** An IDL is a published artifact, not the chain, so nothing here proves the deployed program still matches it; that needs the on-chain IDL account or a decoded mainnet transaction, i.e. a node and a live program — not "available" in this build. Swap ordinals ≥39 postdate this IDL and stay from memory, with a test asserting they are absent so a newer IDL forces a real check. Both are recorded in BLOCKERS.md, and a canary trade still requires the on-chain confirmation.
+
+**Verdict: 13 of 13 met at the level available in this build.** The system remains `NOT_READY` for live capital and the readiness report says so on its first line — that is not a contradiction: the conditions ask that the work be done and honestly reported, not that the platform be authorized. Two residual items are recorded rather than closed: on-chain confirmation of the Jupiter layout, and `release.yml`, which is tag-triggered and has never run.
 
 ## 4. Next exact work (ordered)
 

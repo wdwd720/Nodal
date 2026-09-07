@@ -32,9 +32,24 @@ import (
 //
 // An absent Anchor optional account is encoded as the program id itself.
 //
-// Source: the jup-ag/jupiter-cpi IDL for program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4
-// as reproduced here from memory of that IDL; it is NOT verified against a
-// live fetch in this build (jupiter.md records the program id only). The
+// Source: the jup-ag/jupiter-cpi IDL for program JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4.
+//
+// VERIFIED 2026-09-07 against the published IDL, which is committed at
+// testdata/jupiter_v6_idl.json from jup-ag/jupiter-cpi commit
+// 12bc5f67b94a2c3edc74d6e721a19442124a0bad. That repository's src/lib.rs
+// declares exactly this program id, which is what ties the document to the
+// program rather than to a name. jupiter_idl_test.go derives its expectations
+// from that file rather than restating them here, so it is capable of failing:
+// both account layouts, the route arguments and all 39 Swap payload sizes
+// matched, and deliberately corrupting one size or removing one variant makes
+// the test fail (both controls were run).
+//
+// STILL UNVERIFIED, and the reason SB-007 does not close entirely: an IDL is a
+// published artifact, not the chain. Nothing here confirms the deployed program
+// still matches it — that needs the on-chain IDL account or a decoded mainnet
+// transaction. Swap ordinals 39 and above (OpenBookV2 through RaydiumCP) are
+// newer than this IDL and remain from memory; the test asserts they are absent
+// from it, so a future IDL containing them fails and forces a real check. The
 // Swap variant table below therefore lists only variants whose payload size
 // is stable and well known; any other variant rejects (decode ambiguity),
 // and the arguments are additionally required to end exactly at the end of
