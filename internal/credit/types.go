@@ -214,6 +214,59 @@ func (r IssueRequest) Validate() error {
 	return nil
 }
 
+// RecordLotRequest records provenance for units an already-posted journal
+// transaction moved into an account.
+type RecordLotRequest struct {
+	AccountID        accounts.AccountID
+	Quantity         money.Quantity
+	Origin           valuedomain.CreditOrigin
+	Finality         valuedomain.FundingFinality
+	Reference        Reference
+	FundingReference *Reference
+	// JournalTxID is the posting that moved the units. The database refuses a
+	// lot whose transaction did not touch this account and asset.
+	JournalTxID ledger.TransactionID
+	Reason      string
+}
+
+// Validate checks the request without touching the database.
+func (r RecordLotRequest) Validate() error {
+	if r.AccountID.IsZero() {
+		return errs.New(errs.CodeValidationFailed, "credit: recording a lot requires an account id")
+	}
+	if r.Quantity.Sign() <= 0 {
+		return errs.New(errs.CodeValidationFailed, "credit: lot quantity must be positive")
+	}
+	if !r.Origin.Valid() {
+		return errs.Newf(errs.CodeValidationFailed, "credit: unknown origin %q", r.Origin)
+	}
+	if !r.Finality.Valid() {
+		return errs.Newf(errs.CodeValidationFailed, "credit: unknown funding finality %q", r.Finality)
+	}
+	if r.Finality == valuedomain.FinalityReversed {
+		return errs.New(errs.CodeValidationFailed, "credit: cannot record a lot that is already reversed")
+	}
+	if r.Origin == valuedomain.OriginPromotional && r.Finality != valuedomain.FinalityUnfunded {
+		return errs.New(errs.CodeValidationFailed,
+			"credit: promotional Credits are UNFUNDED by definition; nothing external backs them")
+	}
+	if r.Origin == valuedomain.OriginPurchased && r.Finality == valuedomain.FinalityUnfunded {
+		return errs.New(errs.CodeValidationFailed,
+			"credit: purchased Credits are backed by a payment and cannot be UNFUNDED")
+	}
+	if !r.Reference.Valid() {
+		return errs.New(errs.CodeValidationFailed, "credit: recording a lot requires a financial event reference")
+	}
+	if r.FundingReference != nil && !r.FundingReference.Valid() {
+		return errs.New(errs.CodeValidationFailed, "credit: funding reference must have both a type and an id")
+	}
+	if r.JournalTxID.IsZero() {
+		return errs.New(errs.CodeValidationFailed,
+			"credit: recording a lot requires the journal transaction that moved the units")
+	}
+	return nil
+}
+
 // ConsumeRequest allocates a quantity across an account's open lots.
 //
 // It must run in the same database transaction as the ledger posting that

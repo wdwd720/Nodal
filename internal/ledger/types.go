@@ -116,14 +116,6 @@ const (
 	// CodeNativeAssetBalance is the customer's holding of a Nodal-native
 	// asset. DEBIT-normal, never negative.
 	CodeNativeAssetBalance Code = "NATIVE_ASSET_BALANCE"
-	// CodeNativeTradingOutflow is value disposed through internal market
-	// trades. DEBIT-normal.
-	CodeNativeTradingOutflow Code = "NATIVE_TRADING_OUTFLOW"
-	// CodeNativeTradingInflow is value acquired through internal market
-	// trades. CREDIT-normal.
-	CodeNativeTradingInflow Code = "NATIVE_TRADING_INFLOW"
-	// CodeCreditFees is fees the customer paid in Credits. DEBIT-normal.
-	CodeCreditFees Code = "CREDIT_FEES"
 	// CodePayoutReserved is Credits committed to a payout request and no
 	// longer spendable. Its value domain is PAYOUT_PENDING rather than the
 	// asset's INTERNAL_CREDIT, which is what makes reserving a payout a
@@ -141,9 +133,6 @@ const (
 	// that does not exist, which is the invariant that stops a creator
 	// minting behind the curve.
 	CodeMarketInventory Code = "MARKET_INVENTORY"
-	// CodePlatformCreditRevenue is platform fee revenue denominated in
-	// Credits. CREDIT-normal.
-	CodePlatformCreditRevenue Code = "PLATFORM_CREDIT_REVENUE"
 	// CodePayoutClearing is the platform side of reserved payout value.
 	// CREDIT-normal, domain PAYOUT_PENDING.
 	CodePayoutClearing Code = "PAYOUT_CLEARING"
@@ -173,29 +162,23 @@ var codeRegistry = map[Code]codeInfo{
 	CodePlatformFeeRevenue:       {OwnerPlatform, Credit, false},
 	CodePlatformAdjustment:       {OwnerPlatform, Credit, true},
 
-	CodeCreditBalance:        {OwnerCustomer, Debit, false},
-	CodeCreditIssuance:       {OwnerCustomer, Credit, false},
-	CodeNativeAssetBalance:   {OwnerCustomer, Debit, false},
-	CodeNativeTradingOutflow: {OwnerCustomer, Debit, false},
-	CodeNativeTradingInflow:  {OwnerCustomer, Credit, false},
-	CodeCreditFees:           {OwnerCustomer, Debit, false},
-	CodePayoutReserved:       {OwnerCustomer, Debit, false},
+	CodeCreditBalance:      {OwnerCustomer, Debit, false},
+	CodeCreditIssuance:     {OwnerCustomer, Credit, false},
+	CodeNativeAssetBalance: {OwnerCustomer, Debit, false},
+	CodePayoutReserved:     {OwnerCustomer, Debit, false},
 
-	CodeMarketReserve:         {OwnerPlatform, Debit, false},
-	CodeMarketInventory:       {OwnerPlatform, Debit, false},
-	CodePlatformCreditRevenue: {OwnerPlatform, Credit, false},
-	CodePayoutClearing:        {OwnerPlatform, Credit, false},
-	CodePayoutSettled:         {OwnerPlatform, Debit, false},
+	CodeMarketReserve:   {OwnerPlatform, Debit, false},
+	CodeMarketInventory: {OwnerPlatform, Debit, false},
+	CodePayoutClearing:  {OwnerPlatform, Credit, false},
+	CodePayoutSettled:   {OwnerPlatform, Debit, false},
 }
 
 var allCodes = []Code{
 	CodeWallet, CodeCapital, CodeTradingOutflow, CodeTradingInflow,
 	CodeFeesNetwork, CodeFeesVenue, CodeFeesPlatform, CodeDeficit, CodeReconciliationAdjustment,
 	CodePlatformFeeReceivable, CodePlatformFeeRevenue, CodePlatformAdjustment,
-	CodeCreditBalance, CodeCreditIssuance, CodeNativeAssetBalance,
-	CodeNativeTradingOutflow, CodeNativeTradingInflow, CodeCreditFees, CodePayoutReserved,
-	CodeMarketReserve, CodeMarketInventory,
-	CodePlatformCreditRevenue, CodePayoutClearing, CodePayoutSettled,
+	CodeCreditBalance, CodeCreditIssuance, CodeNativeAssetBalance, CodePayoutReserved,
+	CodeMarketReserve, CodeMarketInventory, CodePayoutClearing, CodePayoutSettled,
 }
 
 // AllCodes returns every account code in chart order (a copy).

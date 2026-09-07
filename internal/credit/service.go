@@ -84,8 +84,6 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 	if err != nil {
 		return Lot{}, err
 	}
-	actorType, actorID := actorFrom(ctx)
-
 	res, err := s.poster.Post(ctx, tx, ledger.Posting{
 		Kind:           ledger.KindCreditIssued,
 		IdempotencyKey: r.IdempotencyKey,
@@ -111,6 +109,44 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 		// the balance stayed put.
 		return s.lotByJournalTx(ctx, tx, res.TransactionID)
 	}
+	return s.RecordLot(ctx, tx, RecordLotRequest{
+		AccountID:        r.AccountID,
+		Quantity:         r.Quantity,
+		Origin:           r.Origin,
+		Finality:         r.Finality,
+		Reference:        r.Reference,
+		FundingReference: r.FundingReference,
+		JournalTxID:      res.TransactionID,
+		Reason:           r.Reason,
+	})
+}
+
+// RecordLot creates a provenance lot for units that a journal transaction the
+// caller ALREADY POSTED moved into the account.
+//
+// It exists because Issue does two things — post the movement and record where
+// the units came from — and there are flows where the movement is one leg of a
+// larger transaction that has already been written. A native-market sale is the
+// motivating case: the trade posting already credits the seller's balance as
+// part of a six-entry, two-asset transaction, and calling Issue there would
+// post a SECOND transaction and credit them twice. Splitting the two halves
+// makes that mistake impossible to make silently.
+//
+// The database still refuses a lot whose journal transaction did not touch this
+// account and asset (SQLSTATE CR004), so RecordLot cannot be used to invent
+// provenance for units nobody moved.
+func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) (Lot, error) {
+	if err := r.Validate(); err != nil {
+		return Lot{}, err
+	}
+	if tx == nil {
+		return Lot{}, errs.New(errs.CodeInternal, "credit: RecordLot requires a transaction")
+	}
+	assetID, err := s.AssetID(ctx, tx)
+	if err != nil {
+		return Lot{}, err
+	}
+	actorType, actorID := actorFrom(ctx)
 
 	lot := Lot{
 		ID:                NewLotID(),
@@ -122,7 +158,7 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 		Finality:          r.Finality,
 		InitialFinality:   r.Finality,
 		FundingReference:  r.FundingReference,
-		JournalTxID:       res.TransactionID,
+		JournalTxID:       r.JournalTxID,
 		IssuedByActorType: actorType,
 		IssuedByActorID:   actorID,
 		Reason:            r.Reason,
