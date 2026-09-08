@@ -425,6 +425,11 @@ func (a payoutsAdapter) ListByAccount(ctx context.Context, accountID accounts.Ac
 // behind them and leaves the rest nil.
 func wireNativeEconomy(p *Ports, d WireDeps) {
 	n := d.NativeEconomy
+	// Unconditional, unlike everything below it. The compiler's inputs are
+	// deployment policy rather than a service the deployment may not have, and
+	// a deployment with none has made no determination rather than a
+	// permissive one -- the zero value IS the conservative policy.
+	p.SettlementPolicy = n
 	if n.Credits != nil {
 		p.Credits = creditsAdapter{deps: n, db: d.DB, clk: d.Clock}
 	}

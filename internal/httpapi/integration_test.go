@@ -25,6 +25,7 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/idempotency"
 	"github.com/nodal/controlplane/internal/killswitch"
+	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -488,4 +489,118 @@ func TestIntegration_ProblemJSONNeverLeaksARealDriverError(t *testing.T) {
 	assert.NotContains(t, string(body), "127.0.0.1")
 	assert.NotContains(t, string(body), "sslmode")
 	assert.Contains(t, string(body), `"instance":"/v1/orders"`)
+}
+
+// TestIntegration_ARealCapitalIntentIsRefusedAtTheEdge is the STAGE 12 / PART
+// XXVI property for Domain B and C: the SAME place that refuses a Domain A
+// command refuses a trade intent, in the same shape, before the intent service
+// is touched at all.
+//
+// The harness configures no legal policy, which is what a fresh deployment
+// looks like, and a deployment that has made no determination has not decided
+// yes. The simulated modes still work — a system that could not even
+// demonstrate itself would be useless — and that contrast is the point: the
+// refusal is about real capital, not about the endpoint being broken.
+func TestIntegration_ARealCapitalIntentIsRefusedAtTheEdge(t *testing.T) {
+	d := openTestDB(t)
+	userID, accountID := seedAccount(t, d)
+	h := newIntegrationHarness(t, d, accountID, userID)
+
+	body := func(mode string) map[string]any {
+		return map[string]any{
+			"account_id":    accountID.String(),
+			"instrument_id": testInstrument.String(),
+			"action":        "ACQUIRE_NOTIONAL",
+			"notional_usd":  "100.00",
+			"mode":          mode,
+		}
+	}
+
+	// Simulated capital: still accepted, and it reaches the intent service.
+	require.Equal(t, http.StatusAccepted,
+		h.do(http.MethodPost, "/v1/intents", body("PAPER"), "Idempotency-Key", "sim-"+id.New[id.Any]().String()).Code)
+	require.Equal(t, 1, h.ports.intents.submitCount())
+
+	// Real capital: refused, with the policy that refused it named.
+	for _, mode := range []string{"CANARY", "LIMITED", "LIVE"} {
+		res := h.do(http.MethodPost, "/v1/intents", body(mode), "Idempotency-Key", "real-"+id.New[id.Any]().String())
+		require.Equal(t, http.StatusForbidden, res.Code, "mode=%s body=%s", mode, res.Body.String())
+		problem := res.problem()
+		require.Equal(t, errs.CodeForbidden, problem.Code)
+		require.Contains(t, res.Body.String(), "policy_version",
+			"a refusal must name the policy that produced it, not just say no")
+	}
+	require.Equal(t, 1, h.ports.intents.submitCount(),
+		"a refused intent must never reach the intent service")
+
+	// And the refusal is a recorded conclusion, not a transient answer: PART
+	// 36 makes replaying the key reproduce it rather than asking the policy
+	// again. Otherwise one idempotency key gives two different answers across
+	// a gate activation.
+	key := "replay-" + id.New[id.Any]().String()
+	live := body("LIVE")
+	first := h.do(http.MethodPost, "/v1/intents", live, "Idempotency-Key", key)
+	require.Equal(t, http.StatusForbidden, first.Code)
+	second := h.do(http.MethodPost, "/v1/intents", live, "Idempotency-Key", key)
+	require.Equal(t, http.StatusForbidden, second.Code)
+	// Everything except request_id, which is per-request by design: two
+	// deliveries of one conclusion are still two requests.
+	require.Equal(t, first.problem().Code, second.problem().Code)
+	require.Equal(t, first.problem().Detail, second.problem().Detail)
+	require.Equal(t, first.problem().Fields, second.problem().Fields,
+		"a replayed refusal must carry the same policy version, rule index and reasons")
+	require.Equal(t, 1, h.ports.intents.submitCount())
+}
+
+// TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler is the
+// positive control for the test above, and it exists because its absence hid a
+// real defect for exactly as long as it was absent.
+//
+// The refusal test passes whether or not the deployment's policy is wired
+// through to the compiler, because a harness with no policy and a compiler
+// that cannot see the policy produce the identical answer. The first version
+// of this change never assigned Ports.SettlementPolicy at all: every
+// deployment silently got the conservative policy, which is fail-closed and
+// still wrong, and nothing failed.
+//
+// So this test wires a policy that PERMITS self-custodial trading and asserts
+// the answer changes. A control that cannot distinguish "refused correctly"
+// from "refused because nothing was connected" is not a control.
+func TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler(t *testing.T) {
+	d := openTestDB(t)
+	userID, accountID := seedAccount(t, d)
+	h := newIntegrationHarness(t, d, accountID, userID)
+
+	permissive, err := legalrouter.New(legalrouter.Policy{
+		Version: "itest-permits-self-custodial",
+		Rules: []legalrouter.Rule{
+			{
+				Match:              legalrouter.Key{Product: legalrouter.ProductSelfCustodialTrade},
+				Outcome:            legalrouter.Allow,
+				ReasonCode:         "ITEST_ONLY",
+				Detail:             "a test policy, not a legal determination",
+				ApprovalReference:  "NOT-AN-APPROVAL-TEST-ONLY",
+				RequiredCapability: "LIVE_MANUAL_TRADING",
+			},
+			{Outcome: legalrouter.Deny, ReasonCode: "NO_APPROVAL_ON_RECORD", Detail: "nothing permits this"},
+		},
+	})
+	require.NoError(t, err)
+	h.server.opts.Ports.SettlementPolicy = NativeEconomyDeps{LegalRouter: permissive}
+
+	body := map[string]any{
+		"account_id":    accountID.String(),
+		"instrument_id": testInstrument.String(),
+		"action":        "ACQUIRE_NOTIONAL",
+		"notional_usd":  "100.00",
+		"mode":          "LIVE",
+	}
+	res := h.do(http.MethodPost, "/v1/intents", body, "Idempotency-Key", "policy-"+id.New[id.Any]().String())
+	problem := res.problem()
+	require.Equal(t, "itest-permits-self-custodial", problem.Fields["policy_version"],
+		"the deployment's own policy must be the one that answered, not the conservative default")
+	require.Equal(t, errs.CodeCapabilityNotApproved, problem.Code,
+		"the policy now permits the product, so the next obstacle is the gate rather than the policy")
+	require.NotContains(t, problem.Fields["reasons"], "LEGAL_ROUTER_DENIED")
+	require.Equal(t, 0, h.ports.intents.submitCount())
 }

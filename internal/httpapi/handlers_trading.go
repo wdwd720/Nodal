@@ -14,6 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/settlement"
 )
 
 // PostQuotesPreview returns a non-binding disclosure of what a trade would
@@ -134,6 +135,18 @@ func (s *Server) PostIntents(ctx context.Context, request api.PostIntentsRequest
 		deadline = request.Body.Deadline.UTC()
 	}
 
+	routeAmount := ""
+	if quantity != nil {
+		routeAmount = quantity.String()
+	}
+	routeNotional := notional
+	if routeNotional == nil && quantity == nil && target != nil {
+		// TARGET_EXPOSURE states where it wants to end up rather than how much
+		// it moves. The target is the conservative stand-in: it is at least as
+		// large as the move, so it faces the same rules or stricter ones.
+		routeNotional = target
+	}
+
 	req := intent.SubmitRequest{
 		AccountID:         accountID.String(),
 		ActorType:         p.ActorType,
@@ -152,6 +165,18 @@ func (s *Server) PostIntents(ctx context.Context, request api.PostIntentsRequest
 
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.TradeIntent, commandMeta, error) {
+			// STAGE 12 / PART XXVI: one place decides whether this may happen
+			// at all. See wiring_intents.go. Everything below still runs; this
+			// is in front of it, not instead of it.
+			//
+			// It is INSIDE runCommand because a refusal is an outcome. PART 36
+			// makes a business rejection a recorded conclusion, so replaying
+			// the key reproduces the refusal instead of asking the policy
+			// again -- which is how the same idempotency key ends up with two
+			// different answers across a gate activation.
+			if rerr := s.routeIntent(ctx, request, accountID, instrumentID, mode, action, routeAmount, routeNotional); rerr != nil {
+				return api.TradeIntent{}, commandMeta{}, rerr
+			}
 			t, serr := s.opts.Ports.Intents.Submit(ctx, p, req)
 			if serr != nil {
 				return api.TradeIntent{}, commandMeta{}, serr
@@ -169,6 +194,40 @@ func (s *Server) PostIntents(ctx context.Context, request api.PostIntentsRequest
 		return api.PostIntents200JSONResponse(res.Value), nil
 	}
 	return api.PostIntents202JSONResponse(res.Value), nil
+}
+
+// routeIntent compiles the trade intent's settlement route and returns the
+// refusal, if any. See wiring_intents.go for what decides the action type.
+func (s *Server) routeIntent(
+	ctx context.Context,
+	request api.PostIntentsRequestObject,
+	accountID accounts.AccountID,
+	instrumentID instruments.InstrumentID,
+	mode intent.Mode,
+	action intent.Action,
+	amount string,
+	notional *money.USD,
+) error {
+	baseAssetID, baseDomain, err := s.intentBase(ctx, instrumentID)
+	if err != nil {
+		return err
+	}
+	actionType, err := intentActionType(mode, action, baseDomain)
+	if err != nil {
+		return err
+	}
+	_, err = s.opts.Ports.SettlementPolicy.compileRoute(ctx, compileContext{
+		Action: actionType,
+		Subject: settlement.Subject{
+			Type: settlement.SubjectInstrument, ID: instrumentID.String(), AssetID: baseAssetID,
+		},
+		AccountID:      accountID,
+		Amount:         amount,
+		NotionalUSD:    notional,
+		IdempotencyKey: request.Params.IdempotencyKey,
+		CorrelationID:  observability.CorrelationID(ctx),
+	})
+	return err
 }
 
 // GetIntents pages an account's intents, newest first.

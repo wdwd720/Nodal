@@ -774,3 +774,31 @@ func TestCompile_MinAgentAuthorityIsAFloorNotACeiling(t *testing.T) {
 		"a permanently forbidden action has no minimum level")
 	require.False(t, payout.AgentMayAct)
 }
+
+// TestProfiles_BuyAndSellAgreeOnEveryExternalRail underwrites a decision made
+// in internal/httpapi rather than here.
+//
+// A TARGET_EXPOSURE trade intent says where the account wants to end up, not
+// which way it is about to move, and the HTTP layer does not know the current
+// position. It routes such an intent as a BUY, visibly and on purpose. That is
+// harmless only while the two sides of a rail are routed identically — same
+// capabilities, same verification, same executor, same confirmation. The
+// moment they diverge, routing a sell as a buy becomes a real misclassification
+// and intentActionType has to learn the position instead.
+//
+// So this test fails when that day comes, rather than the mistake being
+// discovered by whoever the misrouted refusal happens to.
+func TestProfiles_BuyAndSellAgreeOnEveryExternalRail(t *testing.T) {
+	for _, pair := range [][2]ActionType{
+		{ActionBuyOnchainAsset, ActionSellOnchainAsset},
+		{ActionBuyHostedAsset, ActionSellHostedAsset},
+	} {
+		buy, ok := profiles[pair[0]]
+		require.True(t, ok, pair[0])
+		sell, ok := profiles[pair[1]]
+		require.True(t, ok, pair[1])
+		require.Equal(t, buy, sell,
+			"%s and %s must route identically, or internal/httpapi cannot route TARGET_EXPOSURE as a buy",
+			pair[0], pair[1])
+	}
+}

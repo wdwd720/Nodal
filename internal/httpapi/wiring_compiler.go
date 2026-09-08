@@ -7,6 +7,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/legalrouter"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/settlement"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -59,7 +60,12 @@ type compileContext struct {
 	// Amount is the exact base-unit quantity the action moves, as a string so
 	// that callers holding a money.Quantity and callers holding a decimal
 	// string agree. Empty means the action moves nothing.
-	Amount         string
+	Amount string
+	// NotionalUSD is the alternative denomination the external and simulated
+	// rails accept. An INTERNAL action never carries one -- a USD figure there
+	// would mean somebody converted a price into money outside the ledger --
+	// and the compiler refuses an intent that states both or neither.
+	NotionalUSD    *money.USD
 	IdempotencyKey string
 	CorrelationID  string
 	ValueOrigin    valuedomain.CreditOrigin
@@ -114,6 +120,7 @@ func (d NativeEconomyDeps) compileRoute(ctx context.Context, cc compileContext) 
 	if q, perr := parseOptionalQuantity(cc.Amount); perr == nil && q != nil {
 		fi.Quantity = q
 	}
+	fi.NotionalUSD = cc.NotionalUSD
 
 	route, err := settlement.Compile(settlement.CompilerInput{
 		Intent: fi, Router: router, ActiveCapabilities: caps, Now: d.now(),

@@ -46,7 +46,7 @@ migration.
 | 9 | Payout eligibility, provider architecture, reconciliation | **done** (`internal/payout`, migration 00713) |
 | 10 | Hosted partner rail | **not started** — and see BLOCKERS B-05 |
 | 11 | Self-custodial onchain rail | **kept as-is**, re-classified as one rail among several |
-| 12 | Rails unified behind FinancialIntent | **done** (`settlement.FinancialIntent`, `settlement.Compile`, wired in front of every Domain A command) |
+| 12 | Rails unified behind FinancialIntent | **done** — in front of every Domain A command AND every Domain B/C trade intent |
 | 13 | LegalCapabilityRouter, composite capability key | **done** (`internal/legalrouter`, gates extended, migration 00714) |
 | 14 | Agent authority levels | **done** (`internal/agentauthority`) |
 | 15 | Reality / Prediction / Proof integration with Domain A | **done** — prices, instrument, audit events; see below |
@@ -56,7 +56,9 @@ migration.
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
 | 20 | Chaos / fault injection | **done for Domain A** (3 tests, 2 negative controls; whole suite 10/10 with nothing skipped) |
 | 21 | Load | **partial** — read surface and refusal path measured; the committed write path needs a gate a script must not activate |
-| 22–24 | Provider sandbox, re-audit, launch package | **not started** |
+| 22 | Provider sandbox integration where externally possible | **done to the limit of what is possible** — 5 contract suites, 53 cases, against documented fixtures; every real sandbox is application-gated or has no contract |
+| 23 | Final independent re-audit | **in progress** — F-23, F-24 and F-25 came from it |
+| 24 | Launch evidence package | **deliberately not started** — see the readiness report §5 |
 
 API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
 into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
@@ -374,10 +376,115 @@ only move a price LATER, never earlier — the conservative direction.
 NATIVE_TRADE row in the database" and was only correct while no other test
 traded later on a faster clock. It is now scoped to its own fill.
 
+### Stage 12's second half — Domain B and C through the same compiler
+
+`wiring_compiler.go` put every Domain A command through one place. Trade
+intents did not go through it: `PostIntents` validated its body and called
+`intent.Submit`, and everything deciding whether the action was permitted lived
+further down — the eligibility engine, the risk evaluator, the execution
+planner, each sound on its own. "Sound on its own, in several places" is
+exactly what PART XXVI says is not enough.
+
+Every intent is now compiled first. Two independent questions decide the action
+type, and keeping them independent is the point:
+
+- **Is this real capital?** The MODE, and nothing else. BACKTEST, PAPER and
+  SHADOW are simulated whatever the instrument is; CANARY, LIMITED and LIVE are
+  real. PART 159 makes the submitter state the mode precisely so this is never
+  inferred from the UI or the account.
+- **Which real rail?** The instrument's base asset value domain, read from the
+  registry. Guessing it from a symbol or a chain name is how a hosted balance
+  gets settled as though it were self-custodial.
+
+Three things worth recording:
+
+1. **The first version skipped the instrument lookup for simulated modes**, on
+   the reasoning that a simulation is simulated whatever it is about. Every
+   PAPER intent was then refused with `SUBJECT_ASSET_NOT_STATED`: the legal
+   policy is keyed by asset even for simulation, because a simulation of a
+   prohibited asset is still a question the policy is entitled to answer.
+2. **The compile happens INSIDE `runCommand`**, not before it. PART 36 makes a
+   business rejection a recorded conclusion, so replaying the key reproduces
+   the refusal instead of asking the policy again — otherwise one idempotency
+   key gives two different answers across a gate activation.
+3. **`Ports.SettlementPolicy` is a struct, not an interface.** Its zero value
+   is the conservative deployment, so a caller that forgets to wire it refuses
+   real capital rather than permitting it. A nil interface would have done the
+   opposite — which stopped being hypothetical immediately: the assignment in
+   `Wire` did not land at all, every deployment silently got the conservative
+   policy, and the refusal test passed either way because it could not tell
+   the two apart. That is F-24, and its fix is two tests that can.
+
+`TARGET_EXPOSURE` is the one action whose direction this layer cannot know —
+"make my exposure X" is a buy or a sell depending on a position the HTTP layer
+does not hold. It is routed as a buy, visibly, and that is harmless only while
+both sides of a rail route identically.
+`TestProfiles_BuyAndSellAgreeOnEveryExternalRail` fails on the day that stops
+being true, rather than the mistake being discovered by whoever gets the
+misrouted refusal.
+
+### A readiness document's citations are now checked, not promised
+
+`REQUIREMENTS_TRACEABILITY.md` states that "all 609 Go test-function references
+resolve to a `func Test`/`func Fuzz` that exists", hand-verified on one
+afternoon. A hand-verified claim about 609 things goes false without anybody
+knowing which week it happened, and this project has already been bitten by
+that shape twice (F-14, F-18).
+
+`test/docs/references_test.go` checks it instead, for the five documents a
+reviewer would actually use to decide readiness. Its first run found one: the
+readiness report offered `TestIsolation_CrossDomainPostingMustDeclareItself`,
+which does not exist, as evidence; the function is called
+`TestIsolation_CrossDomainPostingMustDeclareItsConversion`. The property was
+proven, the citation was not. That is F-25.
+
+Two deliberate limits, both about telling an assertion from a quotation:
+
+- It is NOT applied to the whole `docs/` tree. `THREAT_MODEL.md` and
+  `SECURITY.md` quote the names of tests they assert do NOT exist, and a check
+  that could not tell the difference would force them to lie to satisfy it.
+- Inside the five, a name is exempt when its PARAGRAPH says in words that the
+  thing is missing. A findings register has to be able to name a citation that
+  pointed at nothing. The rule that results is the one worth having: a document
+  may name an absent test only while stating the absence.
+
+The check was observed failing on a deliberately broken citation before being
+believed.
+
+### Stage 22, and what "where externally possible" actually leaves
+
+The goal says provider sandbox integration WHERE EXTERNALLY POSSIBLE. Measured
+against that qualifier, this is finished rather than not started, and the
+distinction is worth stating precisely because "not started" reads like a gap
+somebody could close.
+
+Five contract suites run the REAL adapters against `httptest` fixtures built
+from verified provider documentation, and all pass:
+
+    ok  test/contract/eventtopics   ok  test/contract/helius
+    ok  test/contract/jupiter       ok  test/contract/privy
+    ok  test/contract/solanarpc     ok  test/contract/stripe
+
+What is NOT possible, with the reason in each case:
+
+- **A live Stripe onramp sandbox** is application-gated; the application is not
+  approved (EB-003). The adapter is CODE_COMPLETE and CONTRACT_TESTED, and its
+  own README says `SANDBOX_VERIFIED` is unreachable until then.
+- **Helius, Jupiter and the wallet provider** need production credentials and
+  commercial terms (EB-005, EB-010, EB-011).
+- **A payout provider has no contract suite at all**, and cannot: PART XVIII
+  forbids implementing a vendor against endpoints nobody has verified, and
+  there is no payout vendor (B-01). `payouttest.Sandbox` is an in-house double
+  that models the CONTRACT rather than any vendor's API, which is the only
+  honest thing to build before the vendor exists.
+
+So Stage 22 is not blocked on work. It is blocked on eight external items that
+are already enumerated in `BLOCKERS.md`, and writing more adapter code against
+guessed endpoints would make the blockers less visible rather than more.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.
-3. **Stage 12's second half** — expressing Domain C as a `FinancialIntent` through the same compiler.
 
 The PART LXXII adversarial list is complete: thirty of thirty, item by item in the readiness report
 §3a. The last three (out-of-order webhook, cross-account wash trading, contradictory provider status)

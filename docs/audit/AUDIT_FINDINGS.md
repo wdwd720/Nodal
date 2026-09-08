@@ -36,6 +36,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-21 | P2 | NEW | fixed | A chaos negative control could not fail, so the guard it defended was unproven |
 | F-22 | P3 | NEW | fixed | A load script reported idempotency conflicts as price changes |
 | F-23 | P2 | NEW | fixed | Reconciling a finished payout asked the provider nothing and reported agreement it never obtained |
+| F-24 | P2 | NEW | fixed | The deployment's legal policy never reached the trade-intent compiler, and no test could tell |
+| F-25 | P3 | BASELINE | fixed | The readiness report named a test that does not exist, and 609 such names were hand-checked once |
 
 ---
 
@@ -501,6 +503,85 @@ Reaching the scenario at all needed a provider double that can contradict
 itself. `payouttest.Sandbox` is deliberately incapable of it, because a correct
 provider is; the affordance is a single `Corrupt` method, named after what it
 models, in the package the production registry refuses to load.
+
+## F-24 · A deployment's legal policy never reached the intent compiler · NEW · P2 · FIXED
+
+**Found by** reading `git status` and noticing a file that should have been
+modified was not.
+
+Putting Domain B and C trade intents through the settlement compiler needed two
+halves: a `Ports.SettlementPolicy` the handler reads, and an assignment in
+`Wire` that fills it from the deployment's `WireDeps.NativeEconomy`. A script
+that applied several edits at once asserted its way out on an earlier step, and
+the assignment never landed.
+
+The result: every deployment's trade intents were compiled against the ZERO
+VALUE — no legal policy on record, no capability active, no verification,
+unknown jurisdiction. That is the conservative policy, so nothing became
+permissive; but a deployment that had configured a real policy would have been
+refused by a policy it never chose, which is a different wrong answer.
+
+**Nothing caught it.** `TestIntegration_ARealCapitalIntentIsRefusedAtTheEdge`
+passed with the assignment missing and passes with it present, because a
+harness that configures no policy and a compiler that cannot see the policy
+produce the identical refusal. This is F-21's shape again in a different place:
+not a guard that failed, a guard that could not distinguish the two cases it
+existed to distinguish.
+
+**Fix.** The assignment, plus the two tests that can tell the difference:
+
+- `TestWire_CarriesTheDeploymentsSettlementPolicy` asserts `Wire` carries the
+  configured router through, and that an unconfigured deployment still gets the
+  conservative policy rather than a nil one. **Observed failing** with the
+  assignment removed.
+- `TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler` wires a
+  policy that PERMITS self-custodial trading and asserts the answer changes —
+  the policy version in the refusal is the deployment's own, and the leading
+  reason moves from the policy to the gate.
+
+`Ports.SettlementPolicy` is a struct rather than an interface for the same
+reason the finding is only P2: its zero value is the conservative deployment,
+so the failure mode of forgetting it is refusal rather than permission.
+
+## F-25 · A readiness claim pointed at a test that does not exist · BASELINE · P3 · FIXED
+
+**Found by** asking, mechanically, whether every test name the documents cite
+resolves to a declaration.
+
+`docs/release/PRODUCTION_READINESS_REPORT.md` offered
+`TestIsolation_CrossDomainPostingMustDeclareItself` as the evidence that a
+cross-domain movement must declare its conversion. No such function exists. The
+test is `TestIsolation_CrossDomainPostingMustDeclareItsConversion`, and the
+property IS proven — so the defect is in the citation and not in the system,
+which is exactly why it survived: everything a reader could check by hand said
+the right thing, and the one thing they would have had to grep for did not.
+
+The wider problem is the habit rather than the row.
+`REQUIREMENTS_TRACEABILITY.md` states that "all 609 Go test-function references
+resolve to a `func Test`/`func Fuzz` that exists", hand-verified on one
+afternoon. A hand-verified claim about 609 things is one that goes false
+without anybody knowing which week it happened. It is F-14 and F-18's shape
+again: a document asserting something about the test suite, written by
+recalling rather than by checking.
+
+**Fix.** The name is corrected, and `test/docs/references_test.go` now enforces
+the property for the five documents a reviewer would actually use to decide
+readiness. It is deliberately NOT applied to the whole `docs/` tree:
+`THREAT_MODEL.md` and `SECURITY.md` legitimately quote the names of tests they
+assert do NOT exist, and a check that could not tell an assertion from a
+quotation would force those documents to lie to satisfy it.
+
+A cited name resolves if a declaration matches it exactly, or if it is a family
+prefix at an underscore boundary — prose that says "the `TestProp_` suite" is
+naming a group, not claiming one function.
+
+**Still open, and named rather than fixed:** `THREAT_MODEL.md` and
+`SECURITY.md` carry a 2026-09-05 inventory that lists as absent a dozen
+packages that now exist, including a `TestAgentImportBoundary` whose property
+is in fact covered three times over (`TestAgentTreesNeverImportAuthority`,
+`TestAgentBoundaryNeverImportsSigning`, `TestNoAgentPathImportsWithdrawal`).
+That staleness is in the pessimistic direction and was already recorded in the
+readiness report; re-scoring those two documents is work, not a claim.
 
 ## Findings deliberately NOT raised
 

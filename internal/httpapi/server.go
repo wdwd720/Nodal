@@ -70,6 +70,18 @@ type Ports struct {
 	// Stream serves GET /v1/events/stream. It is an http.Handler because
 	// SSE owns the connection for its lifetime (internal/stream).
 	Stream http.Handler
+
+	// SettlementPolicy is the deployment policy every compiled route is judged
+	// against. It is a STRUCT, not an interface, and its zero value is the
+	// conservative deployment -- no legal policy on record, no capability
+	// active, no verification, unknown jurisdiction -- under which the only
+	// thing anybody may do is simulate. A caller that forgets to set it
+	// therefore refuses real capital rather than permitting it, which is the
+	// opposite of what a nil interface would have done.
+	//
+	// Its fields are not native-economy specific despite the type's name;
+	// Domain A simply needed them first.
+	SettlementPolicy NativeEconomyDeps
 }
 
 // Options configures the server. Everything here comes from internal/config in

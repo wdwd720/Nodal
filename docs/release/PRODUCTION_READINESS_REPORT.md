@@ -8,8 +8,8 @@ are not synonyms and this report does not treat them as such.
 
 | Level | Status |
 |---|---|
-| **CODE READY** | **NO** — Stage 10 is externally blocked; Stage 21 is partial and Stages 22–24 are not built |
-| **SANDBOX READY** | **PARTIAL** — the internal economy runs end to end against a sandbox payout provider; no external provider sandbox is integrated |
+| **CODE READY** | **NO** — Stage 10 is externally blocked, Stage 21's committed write path is unmeasured, and Stage 24 is deliberately unwritten |
+| **SANDBOX READY** | **PARTIAL** — the internal economy runs end to end against an in-house payout double, and five provider adapters pass contract suites against documented fixtures; no LIVE external sandbox is reachable (every one is application-gated or has no contract) |
 | **STAGING READY** | **NO** — no staging deployment of the new subsystems has been exercised |
 | **PROVIDER READY** | **NO** — no payout or hosted provider contract exists (BLOCKERS B-01, B-05) |
 | **LEGAL READY** | **NO** — no jurisdiction or payout-eligibility determination exists (B-02, B-03, B-07) |
@@ -30,7 +30,7 @@ Each row is a property with an executable test behind it, not a claim.
 |---|---|
 | Internal Credits can never share a transaction with real capital — no capability, policy or approval permits it | `TestIsolation_CreditsCanNeverReachRealCapital`; and at the database layer, `TestIntegration_TheDatabaseRefusesCreditsReachingRealCapital` writes a properly balanced Credits-to-SOL swap by hand **through the migration role** and watches it refused six ways, including when disguised as a legitimate declared conversion |
 | Simulated capital never mixes with anything | `TestIsolation_SimulatedNeverMixesWithAnything` |
-| A cross-domain movement must declare which conversion it is | `TestIsolation_CrossDomainPostingMustDeclareItself`, `TestIntegration_CrossDomainPostingMustDeclareItself` |
+| A cross-domain movement must declare which conversion it is | `TestIsolation_CrossDomainPostingMustDeclareItsConversion`, `TestIntegration_CrossDomainPostingMustDeclareItself` |
 | The rule holds over the entire ordered domain × domain × capability-subset space | `TestProp_IsolationIsExhaustiveOverEveryPairAndCapabilitySubset` — exhaustive, not sampled |
 | Go and SQL agree on every one of the 64 ordered pairs | `TestIntegration_GoAndSQLAgreeOnEveryOrderedDomainPair` |
 | Content hashes computed before the migration still verify | the conversion is omitted from the canonical form when absent; `TestCanonicalContent_Golden` unchanged |
@@ -187,6 +187,28 @@ Run here against the real `cmd/api` binary on a seeded local database:
 | Purchases refused `IDEMPOTENCY_IN_PROGRESS` | 18 — the shared-key iterations racing, the idempotency store working |
 | Purchases COMMITTED | **none, and this is the gap.** Committing needs the MARKETPLACE gate ACTIVE, which is high risk: three distinct principals, a step-up and four evidence references. A load script that activated its own gate would be one that switched off a control to get a number. |
 
+### This report's own citations
+
+| Property | Evidence |
+|---|---|
+| Every test this report names exists | `TestDocs_EveryTestTheyNameExists` — it also covers `AUDIT_FINDINGS.md`, `INDEPENDENT_AUDIT.md`, `MASTER_BUILD_STATE.md` and `ADVERSARIAL_VALIDATION.md` |
+| The check found a real broken citation on its first run | F-25: this report offered `TestIsolation_CrossDomainPostingMustDeclareItself`, which does not exist |
+
+### Every rail compiles through one place (Stage 12, PART XXVI)
+
+| Property | Evidence |
+|---|---|
+| A Domain B or C trade intent is compiled before the intent service is touched | `TestIntegration_ARealCapitalIntentIsRefusedAtTheEdge` — a refused intent never reaches `intent.Submit` |
+| A fresh deployment refuses real capital at the edge, naming the policy that refused it | same test: `policy_version`, `policy_rule_index` and every reason on a 403 |
+| A fresh deployment still permits simulation, so the refusal is about real capital and not a broken endpoint | same test: PAPER is accepted in the same run |
+| The refusal is a recorded conclusion, so replaying the key reproduces it rather than re-asking the policy | same test: two deliveries, identical code, detail and fields |
+| Whether capital is real is decided by the MODE alone, never by the instrument | `TestIntentRouting_TheModeDecidesWhetherCapitalIsReal` |
+| Which real rail it travels is read from the instrument's base asset, never guessed | `TestIntentRouting_TheRailComesFromTheInstrument`, including a domain with no real rail |
+| Every declared intent action has a direction | `TestIntentRouting_TheDirectionFollowsTheAction`, which fails when a new action is added |
+| `TARGET_EXPOSURE` may be routed as a buy only while both sides of a rail route identically | `TestProfiles_BuyAndSellAgreeOnEveryExternalRail` in `internal/settlement` |
+| A deployment that wired no policy refuses real capital rather than permitting it | `Ports.SettlementPolicy` is a struct whose ZERO VALUE is the conservative deployment |
+| The deployment's OWN policy is the one that answers, not the default | `TestWire_CarriesTheDeploymentsSettlementPolicy` (observed failing without the wiring) and `TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler` — this is F-24 |
+
 ### Reality, Prediction and Proof over Domain A (Stage 15)
 
 | Property | Evidence |
@@ -245,10 +267,11 @@ earlier one.
   and `internal_sellers.status` and the product lifecycle support suspension and withdrawal, but no
   admin workflow drives them: an operator would have to run SQL. The controls exist; the operator
   interface to them does not.
-- **Domain C is not yet expressed as a `FinancialIntent`** (the second half of Stage 12). Domain A
-  now compiles through `settlement.Compile`, and external spot swaps still reach `V1Planner` through
-  the older `IntentSnapshot` path. The compiler routes them correctly; what is missing is the single
-  entry point, so `intent.TradeIntent` and `settlement.FinancialIntent` currently coexist.
+- **`intent.TradeIntent` and `settlement.FinancialIntent` still coexist.** Every trade intent is now
+  COMPILED as a `FinancialIntent` before `intent.Submit` is reached, so the permission decision has
+  one home. What has not been unified is the record: an accepted intent is still persisted and
+  planned as a `TradeIntent` through `V1Planner`. That is a representation question, not a control
+  question, and collapsing the two types is work rather than risk.
 - **The risk kernel is not yet an input to the Domain A route.** `Route.RequiresRiskEvaluation` is
   determined and recorded; nothing consumes it for internal trades yet.
 - **No kind-SPECIFIC admin screens for Domain A** (part of Stage 16). The nine administrative
