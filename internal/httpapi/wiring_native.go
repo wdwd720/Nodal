@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/settlement"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -336,7 +338,41 @@ func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.Execut
 		res, eerr = a.deps.NativeMarkets.Execute(ctx, tx, r)
 		return eerr
 	})
+	a.recordRiskRefusal(ctx, err)
 	return res, err
+}
+
+// recordRiskRefusal persists a risk REJECT that the trade's own transaction
+// could not carry.
+//
+// A refused trade rolls back, and a decision written inside that transaction
+// rolls back with it — so the deployment would keep every ALLOW and lose every
+// REJECT, which is precisely backwards for an audit trail. The service hands
+// the decision out with the error instead, and this writes it in a NEW
+// transaction once the failed one is finished.
+//
+// It runs after InTx returns rather than inside it for the reason F-27 taught:
+// taking a second pool connection while holding the first deadlocks the pool
+// under concurrency.
+//
+// A failure to record is logged and does not change the answer. The trade was
+// refused either way, and turning a correct RISK_CONCENTRATION into an INTERNAL
+// would tell the user something false about their own request.
+func (a nativeMarketsAdapter) recordRiskRefusal(ctx context.Context, err error) {
+	var refusal *nativemarket.RiskRefusal
+	if !errors.As(err, &refusal) {
+		return
+	}
+	rerr := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		return a.deps.NativeMarkets.RecordRefusal(ctx, tx, refusal)
+	})
+	if rerr != nil {
+		observability.LoggerFrom(ctx).ErrorContext(ctx, "risk decision could not be recorded",
+			"error", rerr.Error(),
+			"reason_codes", refusal.Decision.ReasonCodes,
+			"decision_hash", refusal.Decision.Hash,
+			"correlation_id", refusal.CorrelationID)
+	}
 }
 
 // --- payouts ---------------------------------------------------------------

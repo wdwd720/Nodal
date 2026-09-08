@@ -64,8 +64,10 @@ func requireEnv(t *testing.T) {
 // creditAssetOnce provisions the single CREDIT asset for the whole suite.
 // Migration 00711 permits exactly one, which is the point, so it cannot be
 // per-test.
-var creditAssetOnce sync.Once
-var creditAssetID assets.AssetID
+var (
+	creditAssetOnce sync.Once
+	creditAssetID   assets.AssetID
+)
 
 func creditAsset(t *testing.T) assets.AssetID {
 	t.Helper()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -66,7 +68,8 @@ func seedDomainA(ctx context.Context, appDSN string) error {
 	credits := credit.NewService(led, clk)
 	assetSvc := nativeasset.NewService(clk, nil)
 	marketSvc := nativemarket.NewService(led, credits,
-		valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
+		valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(),
+		nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
 	commerceSvc := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	commerceSvc.SetCapabilityResolver(drillCaps{commerce.CapMarketplace: true})
 
@@ -90,6 +93,23 @@ func seedDomainA(ctx context.Context, appDSN string) error {
 	}
 
 	return pool.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		// The GLOBAL risk policy. A native trade is evaluated against it and
+		// fails closed without one, so the drill records what
+		// `go run ./scripts/riskpolicy` gives a fresh deployment -- and
+		// risk_policies and risk_decisions then carry rows for the restore to
+		// prove something about, which was the whole point of this file.
+		if _, err := risk.NewStore().RecordPolicy(ctx, tx, risk.PolicyRecord{
+			Scope:       risk.ScopeGlobal,
+			Version:     "restore-drill-global",
+			Rules:       json.RawMessage(risk.DefaultGlobalPolicyJSON),
+			EffectiveAt: epoch.Add(-time.Hour),
+			ActorType:   security.ActorSystem,
+			ActorID:     "restoredrill",
+			Reason:      "the compiled-in default limits, as a fresh deployment gets them",
+		}); err != nil {
+			return fmt.Errorf("risk policy: %w", err)
+		}
+
 		// Credits, held in provenance lots.
 		for _, a := range []accounts.AccountID{buyer, seller} {
 			if _, err := credits.Issue(ctx, tx, credit.IssueRequest{

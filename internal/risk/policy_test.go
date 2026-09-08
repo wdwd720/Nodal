@@ -126,7 +126,7 @@ func TestValidate_GlobalMustBeComplete(t *testing.T) {
 
 	empty, err := ParsePolicy(json.RawMessage(`{}`))
 	require.NoError(t, err)
-	assert.Len(t, empty.MissingLimits(), 19)
+	assert.Len(t, empty.MissingLimits(), 21)
 	assert.Error(t, empty.Validate(ScopeGlobal))
 }
 

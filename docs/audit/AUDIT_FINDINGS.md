@@ -50,6 +50,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-31 | P3 | NEW | **OPEN, unreproduced** | Four of a hundred concurrent buyers failed once, on a loaded machine, and the test discarded the reason |
 | F-32 | P2 | BASELINE | fixed | The browser test for the internal-economy pages could not tell a working page from a broken one |
 | F-33 | P2 | BASELINE | fixed | No browser test completed a transaction, so nothing proved a customer could finish anything |
+| F-34 | P1 | BASELINE | fixed | The whole risk kernel was unreachable: no deployment wrote a policy and nothing evaluated one |
+| F-35 | P2 | BASELINE | fixed | `make lint` had never passed either: 70 findings, 56 of them a linter arbitrating British English |
 
 ---
 
@@ -997,6 +999,222 @@ was checking existed — F-32's first fix, this refusal branch, and this outcome
 wait. The pattern is worth naming: **an assertion about an absence, or a branch
 on a condition, needs a positive signal before it, or it is only measuring how
 fast the test runs.**
+
+## F-34 · The risk kernel was complete, tested, and unreachable · BASELINE · P1 · FIXED
+
+**Found by** following the readiness report's own admission — *"The risk kernel
+is not yet an input to the Domain A route. `Route.RequiresRiskEvaluation` is
+determined and recorded; nothing consumes it for internal trades yet"* — and
+asking the F-26 question of `internal/risk` rather than only of Domain A.
+
+The answer was worse than the report said. It is not that one route fails to
+consult the kernel. **Nothing does.** `risk.Store.RecordPolicy` and
+`risk.Store.RecordDecision` had no caller outside a test; no migration, script
+or endpoint ever wrote a `risk_policies` row; so `risk_policies` was empty in
+every deployment, `EffectivePolicy` answered `ErrNoPolicy` everywhere, and
+`risk_decisions` had never received a row. Nine hundred lines of limits, kill
+switches, hash verification and fail-closed reasoning, none of it reachable.
+
+The kernel's own documentation described the missing step:
+`DefaultGlobalPolicyJSON` is commented as *"the compiled-in GLOBAL policy used
+only to seed a fresh deployment"*, for a seeding step that did not exist.
+
+That is F-26, F-28 and F-29 a fourth time, and it is the largest instance:
+**a path only tests can walk looks finished from inside the tests.**
+
+**Two of the limits did not exist either.** PART XXXII names what the kernel
+must constrain "at minimum", and two entries are about this economy
+specifically: native-market concentration and creator concentration. Neither was
+in `Policy`. They cannot be expressed the way every other limit is, because
+every other limit is denominated in USD and a Credit has no approved external
+value (PART LIV) — so a USD limit on a native position would need an exchange
+rate nobody set. Both are ratios instead, compared as `part * 10000 > whole *
+limit` with no division and no float.
+
+**Choosing the denominators was the hard part, and the first two choices were
+both broken.** The obvious denominator for market concentration is the FLOAT,
+which is also what `surveil` alerts on. It is unusable as a limit: the first
+buyer in a new market holds all of the float, so a limit against it refuses the
+opening trade of every market that will ever exist. Creator concentration
+measured as one creator's share of the account's native SPEND has the identical
+defect one level down — an account's first native purchase is necessarily 100%
+of its native spend. Both were fixed by changing the denominator to something
+that is not degenerate at zero history: total supply, which is fixed at mint and
+which no participant can move, and the account's whole Credit position, spent
+plus still spendable.
+
+**A refusal that costs nothing to write is the wrong kind of refusal**, so both
+denominators were chosen against the real curve rather than in the abstract.
+Under the compiled-in defaults (2000 / 3000 bps) five of this package's
+fifty-two integration tests began failing, and every one of them was a test
+buying a genuinely concentrated position: a 10,000-Credit order that takes 22.5%
+of an asset's entire supply, a hundred buyers each putting half their Credits
+into one creator. The tests were changed to buy positions inside the limits, and
+each carries a comment saying why — the alternative, a fixture policy that
+relaxes the limits it is meant to prove, is the test equivalent of turning the
+control off.
+
+**Fix, in four parts.**
+
+1. **The limits.** `max_native_market_concentration_bps` and
+   `max_creator_concentration_bps` in `Policy`, in `Validate`, in
+   `MissingLimits`, in `Compose` (so an ACCOUNT row can only tighten), and in
+   `DefaultGlobalPolicyJSON`. `EvaluateNativeTrade` is a second entry point
+   beside `Evaluate` that evaluates exactly these two and refuses
+   `RISK_POLICY_MISSING` if either is absent, naming the absent ones.
+
+2. **The caller.** `nativemarket.Execute` builds a snapshot — counts and
+   Credits, never a price — evaluates it after pricing the fill and BEFORE
+   posting anything, and refuses with `RISK_CONCENTRATION`. A SELL is never
+   refused: both limits constrain holding too much, and refusing an exit would
+   trap a holder in the position the limit exists to discourage.
+
+3. **The seeding step.** `scripts/riskpolicy` records a GLOBAL policy through
+   the real `Store.RecordPolicy`. With `-rules` it records an operator's
+   document in any environment; with no `-rules` it records the compiled-in
+   default and REFUSES outside LOCAL/DEV/TEST, because seeding production with
+   starter limits nobody signed off would produce exactly what this audit is
+   against: a control that looks decided and is not. `make seed-economy` and the
+   CI e2e job run it.
+
+4. **The evidence.** Every decision is persisted. An ALLOW is written inside the
+   trade's own transaction, so a decision cannot commit without the trade it
+   permitted. A REJECT cannot be — the transaction it refuses rolls back and
+   would take the record with it — so the service hands the decision out with
+   the error and `nativeMarketsAdapter` writes it in a new transaction once the
+   failed one is finished. Not inside it: acquiring a second pool connection
+   while holding the first is precisely F-27.
+
+**A wrong answer the control introduced, caught before it shipped.** An order
+larger than the account's Credits makes the creator-concentration denominator
+smaller than its numerator, so the ratio exceeds every limit and the kernel
+answered `RISK_CONCENTRATION` — for what is really "you do not have that many
+Credits". The trade was correctly refused either way, which is exactly why
+nobody would have noticed: a refusal that is right about the outcome and wrong
+about the reason sends somebody to read a concentration policy. The limits are
+now not evaluated for a trade the account cannot pay for; the ledger's own
+negative-balance guard produces that refusal, and
+`TestIntegration_AnOrderBiggerThanTheBalanceSaysSo` was observed reporting
+`RISK_CONCENTRATION` with the guard removed.
+
+**What the refusal says.** Both limits have an obvious remedy — a smaller order
+— and a customer shown `RISK_NATIVE_MARKET_CONCENTRATION` learns that something
+was refused and nothing about what to do, which reads as a fault rather than a
+limit. The detail names the limit in words and says a smaller order may be
+within it; the reason codes stay on the problem for anything machine-read. The
+one case that does NOT say "try a smaller order" is a refusal caused by the
+deployment rather than the order — a policy missing its limits — because that
+would send somebody to fix something that is not theirs.
+
+A deployment with no risk policy at all answers `UNSUPPORTED` with "this
+deployment has recorded no risk policy, so no internal trade can be evaluated",
+not an opaque `INTERNAL`. It is true, and the fix is `go run
+./scripts/riskpolicy` rather than a bug report.
+
+**Observed failing before being believed.** All five new
+`internal/nativemarket` integration tests fail with the `checkRisk` call
+removed, `TestIntegration_ARefusedTradeStillRecordsItsRiskDecision` fails with
+`no rows in result set` when the adapter's `recordRiskRefusal` call is removed,
+and the overspend test fails with the affordability guard removed.
+
+**What this did NOT fix.** `internal/risk` is still unreachable for everything
+except native trades: no Domain B or C route consults it, and `RecordPolicy` has
+no administrative endpoint — an operator changes limits by running a script
+against the database rather than by two operators through the admin plane, which
+is what PART 58's risk-desk sign-off deserves.
+
+`internal/eligibility` is in the identical position, and for the same reason:
+`Store.RecordPolicy` and `Store.RecordDecision` have no caller outside their own
+tests, because the settlement PLANNER that would consume an
+`eligibility.Decision` is part of the Domain B and C execution path this
+deployment does not run. That is checkable rather than asserted — nothing
+outside a `_test.go` file and `settlementtest` constructs a `settlement.Input`
+at all, so the struct field that holds the decision has never been filled by a
+deployment. That is recorded here rather than raised as a separate
+finding, because it is the same fact the readiness levels already state — but it
+should be read as "the eligibility kernel has never run either", not as
+"eligibility is covered".
+
+`internal/risk` is now in `test/reachability`'s package list, so the answer
+cannot quietly go back to no.
+
+
+## F-35 · `make lint` had never passed · BASELINE · P2 · FIXED
+
+**Found by** running it, after F-34's work touched enough packages to make it
+worth checking. It is the third target in this session found red on arrival, and
+the same argument applies as to `make sast`: **a check that can only fail is a
+check nobody runs.**
+
+Three separate causes, and only the third was a real defect count:
+
+**1. `fmt-check` was red on fifteen committed files.** Not files this session
+wrote — `internal/agentauthority`, `internal/commerce`, `internal/credit`,
+`internal/payout`, `scripts/seedeconomy` and others had been committed
+unformatted. `gofumpt -w` on all fifteen; the diff is whitespace and struct
+literal bracing.
+
+**2. `misspell` was arbitrating dialect, and losing either way.** Configured
+`locale: US`, it reported 56 findings across 27 files — `cancelling`,
+`behaviour`, `catalogue`, `serialised`, `honour`, and `CHEQUE`, which is a
+payout instrument kind whose spelling IS the name of the thing. Switching to
+`locale: UK` produced 692, because the repository genuinely mixes: `sanitizes`,
+`analyze` and `authorization` sit beside the British spellings.
+
+Neither locale can pass without rewriting correct prose, so the locale is now
+unset. misspell still catches actual typos, which is what it is for, and stops
+adjudicating a house style nobody wrote down. Imposing one dialect across 27
+files is a real change worth making on its own; making it as a side effect of a
+linter setting, in the same commit as a risk kernel, is not.
+
+**3. Fourteen genuine findings, all fixed.** The ones worth naming:
+
+- **Six unchecked type assertions in the commerce integration test.**
+  `created.raw()["product_id"].(string)` panics when the field is absent, which
+  is exactly what a handler that started returning a Problem instead of a
+  product looks like — so the failure mode was a panic inside a helper rather
+  than an assertion naming the field. Replaced with a helper that requires the
+  field and says which one is missing.
+- **Three doc comments orphaned by insertions.** `GetBySpotPair`,
+  `AllRequiredCapabilities` and `StoredQuote` each carried the FIRST LINE of
+  another symbol's comment, because a new function had been inserted between a
+  comment and the thing it documented. In each case the original symbol was left
+  undocumented and the new one was introduced by a sentence about something
+  else. Moved back.
+- **A bidi control character in `nativeasset_test.go`.** The same Trojan Source
+  issue `make sast` found in `moderation.go` earlier this session, in the test
+  that proves bidi names are refused — and invisible to gosec, which builds only
+  the default tag set. Written as `\u202e` now, like the source it tests.
+
+**Trojan Source made mechanical.** That was the third occurrence in this
+project, each found by a different tool, and each in a file the other tools do
+not read: gosec builds only the default tag set so it never sees a file behind
+`//go:build integration`; staticcheck reads Go and nothing else; neither reads
+Markdown, and a sweep found the character in TWO readiness documents — including
+the paragraph describing its removal from the code.
+
+`test/source` reads every text file in the repository, whatever the extension
+and whatever build tag guards it, and refuses the nine bidi embedding, override
+and isolate codepoints. U+200E and U+200F are deliberately not among them: they
+are ordinary characters in multilingual text and do not reorder a line. There is
+no allowlist, because the one file that legitimately needs these codepoints
+already carries them as escapes, which is strictly better than the literal. It
+was observed failing on a planted override, and it names the file, the line and
+the codepoint — the only three things that help, given the character itself
+cannot be seen.
+- **A negated parenthesised pair in the isolation check.**
+  `if !((declared.From == a && declared.To == b) || ...)` — correct, and exactly
+  the shape a reviewer misreads. F-03 was a direction-blind isolation check, so
+  the condition is now named (`declaresThisPair`) rather than read through a
+  `!`.
+
+**And the two formatters disagreed.** `scripts/fmtcheck` ran plain `gofumpt -l`
+while `.golangci.yml` sets `gofumpt.extra.group-params: true`, so `make fmt`
+could produce a file `make lint` rejects — which is how two of the fourteen were
+found. fmtcheck now passes `-extra`, and the 25 files that difference had been
+hiding are formatted.
+
+`make lint` exits 0.
 
 ## Findings deliberately NOT raised
 

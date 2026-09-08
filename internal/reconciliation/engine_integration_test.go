@@ -103,7 +103,8 @@ func TestIntegration_KillSwitchNeverStopsReconciliation(t *testing.T) {
 	fills := f.fills(ord.ID)
 	require.Len(t, fills, 1, "a fill already received is still processed (PART 52)")
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fills[0].ID),
+		`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fills[0].ID,
+	),
 		"ledger posting is not blocked")
 	assert.Equal(t, "CONSUMED", string(f.reservation(res.ID).Status))
 
@@ -299,7 +300,8 @@ func TestIntegration_AutomaticResolutionIsNarrow(t *testing.T) {
 	// Exactly one adjustment, and the ledger now equals the chain.
 	assert.Equal(t, 1, f.countRows(
 		`SELECT count(*) FROM journal_transactions WHERE kind = 'RECONCILIATION_ADJUSTMENT' AND reference_id = $1`,
-		rec.ID.String()))
+		rec.ID.String(),
+	))
 	assert.True(t, f.balance(ledger.CodeWallet, f.usdc.ID).Equal(money.QuantityFromInt64(fundedUSDC-500)))
 
 	// A material record can never resolve automatically.

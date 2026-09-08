@@ -200,10 +200,12 @@ func TestIntegration_Part163_ReconciliationE2E(t *testing.T) {
 	// referencing the record; no balance was edited.
 	assert.Equal(t, 1, f.countRows(
 		`SELECT count(*) FROM journal_transactions WHERE kind = 'RECONCILIATION_ADJUSTMENT' AND reference_id = $1`,
-		rec.ID.String()))
+		rec.ID.String(),
+	))
 	assert.Equal(t, 1, f.countRows(
 		`SELECT count(*) FROM journal_transactions WHERE id = $1::uuid AND reason_code = 'CHAIN_SHORTFALL'`,
-		resolved.CompensatingJournalTxID))
+		resolved.CompensatingJournalTxID,
+	))
 
 	// Internal truth now equals external truth, exactly.
 	assert.True(t, f.balance(ledger.CodeWallet, f.usdc.ID).Equal(money.QuantityFromInt64(externalObserved)))
@@ -215,7 +217,8 @@ func TestIntegration_Part163_ReconciliationE2E(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, drifts)
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM lot_dispositions WHERE account_id = $1 AND asset_id = $2`, f.account, f.usdc.ID))
+		`SELECT count(*) FROM lot_dispositions WHERE account_id = $1 AND asset_id = $2`, f.account, f.usdc.ID,
+	))
 
 	// --- the block is lifted ---------------------------------------------
 	require.NoError(t, blocks.RequireNoBlock(f.ctx, f.d, f.account))
@@ -259,10 +262,12 @@ func TestIntegration_Part163_ReconciliationE2E(t *testing.T) {
 		assert.False(t, later.BlocksNewRisk)
 	}
 	assert.Equal(t, before, f.countRows(
-		`SELECT count(*) FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2`, rec.ScopeType, rec.ScopeID))
+		`SELECT count(*) FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2`, rec.ScopeType, rec.ScopeID,
+	))
 	assert.Equal(t, 1, f.countRows(
 		`SELECT count(*) FROM journal_transactions WHERE kind = 'RECONCILIATION_ADJUSTMENT' AND reference_id = $1`,
-		rec.ID.String()), "no second compensating posting")
+		rec.ID.String(),
+	), "no second compensating posting")
 	require.NoError(t, blocks.RequireNoBlock(f.ctx, f.d, f.account))
 }
 

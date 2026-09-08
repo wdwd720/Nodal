@@ -579,7 +579,7 @@ doing the opposite of their job.
 All seven are now justified or removed. The best of them was
 `internal/nativeasset/moderation.go`, flagged for Trojan Source because it
 contains bidirectional control characters — it is the code that REFUSES them in
-user-supplied asset names. They are now `'‪'` escapes: the characters are
+user-supplied asset names. They are now `\u202a`-style escapes: the characters are
 gone from the source and a reviewer can see which codepoint each one is instead
 of an invisible glyph.
 
@@ -657,6 +657,82 @@ Running the browser suite needs a fully configured deployment: a settlement
 asset (CP_API_SETTLEMENT_CHAIN/MINT), or three tests fail on buying power,
 holdings and withdrawals which are disabled without one. 70/70 with it.
 
+### F-34: the risk kernel had never run anywhere
+
+The readiness report admitted that `Route.RequiresRiskEvaluation` was recorded
+and never consumed. Asking the F-26 question of `internal/risk` rather than of
+Domain A gave a worse answer: NOTHING consumed it. No migration, script or
+endpoint had ever written a `risk_policies` row, so the table was empty in every
+deployment, `EffectivePolicy` answered `ErrNoPolicy` everywhere, and
+`risk_decisions` had never received a row. The kernel's own comment described
+`DefaultGlobalPolicyJSON` as "used only to seed a fresh deployment" for a
+seeding step that did not exist.
+
+Two of the limits PART XXXII names did not exist either -- native-market
+concentration and creator concentration. Neither can be denominated in USD,
+because a Credit has no approved external value, so both are integer ratios.
+
+**Choosing the denominators was the whole difficulty, and the first two choices
+were both degenerate.** A share of the FLOAT refuses the first buyer of every
+market (they hold all of it). A creator's share of native SPEND refuses every
+account's first native purchase (it is 100% of their native spend). Both were
+replaced with denominators that mean the same thing on day one and day one
+thousand: total supply, fixed at mint and unmovable by any participant, and the
+account's whole Credit position, spent plus still spendable.
+
+Four parts landed: the limits; the caller (`nativemarket.Execute`, after pricing
+and before posting, refusing with `RISK_CONCENTRATION` and never refusing a
+SELL); the seeding step (`scripts/riskpolicy`, which refuses to write the
+compiled-in starter limits outside LOCAL/DEV/TEST); and the evidence -- an ALLOW
+recorded inside the trade's transaction, a REJECT recorded by the httpapi
+adapter AFTER the transaction it aborted, because a second pool connection taken
+while holding the first is exactly F-27.
+
+Under the real default limits five of the fifty-two `internal/nativemarket`
+integration tests began failing, every one of them buying a genuinely
+concentrated position. They were changed to buy positions inside the limits,
+each with a comment saying why. The alternative -- a fixture policy that relaxes
+the limits it is meant to prove -- is the test equivalent of turning the control
+off, and it is worth naming as a temptation because it would have been three
+lines instead of five edits.
+
+`make seed-economy`, the CI e2e job and the restore drill all record a policy
+now; the drill's 118-table row-count comparison covers `risk_policies` and
+`risk_decisions` with rows in them.
+
+### F-35: `make lint` had never passed either
+
+Third target found red on arrival this session, after `make sast` and the
+backup drill's Domain A coverage. Seventy findings, from three causes:
+
+  - `fmt-check` red on fifteen COMMITTED files, none of them written here;
+  - `misspell` set to `locale: US` against a repository written largely in
+    British English -- 56 findings, one of them CHEQUE, a payout instrument
+    kind whose spelling is the name of the thing. `locale: UK` gives 692,
+    because the prose genuinely mixes. The locale is now unset: misspell still
+    catches typos and stops adjudicating a house style nobody wrote down;
+  - fourteen real findings, all fixed, including six unchecked type assertions
+    that would panic rather than fail, three doc comments orphaned by
+    insertions (the original symbol left undocumented, the new one introduced
+    by a sentence about something else), and a bidi control character in the
+    test that proves bidi names are refused -- invisible to gosec, which builds
+    only the default tag set.
+
+The Trojan Source finding was the third in this project, each found by a
+different tool and each in a file the others do not read -- and a sweep found
+the character in two readiness documents, including the paragraph describing its
+removal from the code. `test/source` now reads every text file whatever its
+extension and whatever build tag guards it, refuses the nine bidi embedding,
+override and isolate codepoints, and was observed failing on a planted one. It
+runs in the fast tier beside test/docs and test/reachability.
+
+And the two formatters disagreed: `scripts/fmtcheck` ran plain `gofumpt -l`
+while `.golangci.yml` sets `extra.group-params`, so `make fmt` could produce a
+file `make lint` rejects. fmtcheck passes `-extra` now, and the 25 files that
+gap was hiding are formatted.
+
+`make lint` exits 0.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.
@@ -667,6 +743,7 @@ closed after this document last said they were open, and closing item 23 found F
 
 ## 0.4 Verification commands that matter
 
+    make lint               # fmtcheck (-extra), vet, staticcheck, golangci-lint, lintfin -- green since F-35
     make integration        # scripts/inttest: every //go:build integration package, one fresh DB each
     make integration-race   # the same over the financial core, with -race
     go test -count=1 -run FuzzCurve -fuzz FuzzCurve_NeverBreaksTheInvariant -fuzztime=60s ./internal/nativemarket/

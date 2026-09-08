@@ -4,6 +4,7 @@ package nativemarket
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
@@ -27,6 +28,8 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
+	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -150,7 +153,9 @@ func newFixture(t *testing.T) *fixture {
 		creator:     newAccount(t),
 		trader:      newAccount(t),
 	}
-	f.svc = NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
+	f.svc = NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(),
+		NewRiskGate(risk.NewStore(), clk), clk)
+	seedGlobalRiskPolicy(t, clk.Now())
 
 	suffix := uuid.NewString()[:6]
 	require.NoError(t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
@@ -203,6 +208,79 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
+// seedGlobalRiskPolicy records the GLOBAL risk policy every trade below is
+// evaluated against, once for the whole package.
+//
+// It records the COMPILED-IN DEFAULT rather than a permissive fixture policy,
+// because a fixture that relaxes the limits it is meant to prove would be the
+// test equivalent of turning the control off. What these tests therefore run
+// against is what `go run ./scripts/riskpolicy` gives a fresh deployment.
+//
+// A test that wants a tighter limit records an ACCOUNT policy for its own
+// account: Compose takes the minimum, so an ACCOUNT row can only tighten, and
+// tightening one account does not touch any other test.
+func seedGlobalRiskPolicy(t *testing.T, at time.Time) {
+	t.Helper()
+	globalRiskPolicy.Do(func() {
+		ctx := security.WithPrincipal(context.Background(), security.Principal{
+			SubjectID: "nm-itest", ActorType: security.ActorSystem, AuthTime: at,
+		})
+		// Already recorded by an earlier run against this database. Policy
+		// versions are unique and the table is append-only, so recording it
+		// again is a CONFLICT rather than a no-op.
+		if _, _, err := risk.NewStore().EffectivePolicy(ctx, testDB, "", "", at); err == nil {
+			return
+		}
+		require.NoError(t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, err := risk.NewStore().RecordPolicy(ctx, tx, risk.PolicyRecord{
+					Scope:       risk.ScopeGlobal,
+					Version:     "nm-itest-global",
+					Rules:       json.RawMessage(risk.DefaultGlobalPolicyJSON),
+					EffectiveAt: at.Add(-time.Hour),
+					ActorType:   security.ActorSystem,
+					ActorID:     "nm-itest",
+					Reason:      "the compiled-in default limits, as a fresh deployment gets them",
+				})
+				return err
+			}))
+	})
+}
+
+var globalRiskPolicy sync.Once
+
+// tightenNativeLimits records an ACCOUNT policy that lowers the two native
+// concentration limits for one account and nothing else.
+//
+// ACCOUNT policies can only tighten (Compose takes the minimum), which is what
+// makes this safe to use in a package whose tests share a database: no other
+// account's limits move.
+func tightenNativeLimits(t *testing.T, account accounts.AccountID, market, creator money.BPS, at time.Time) {
+	t.Helper()
+	rules, err := json.Marshal(map[string]any{
+		"max_native_market_concentration_bps": market,
+		"max_creator_concentration_bps":       creator,
+	})
+	require.NoError(t, err)
+	ctx := security.WithPrincipal(context.Background(), security.Principal{
+		SubjectID: "nm-itest", ActorType: security.ActorSystem, AuthTime: at,
+	})
+	require.NoError(t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, rerr := risk.NewStore().RecordPolicy(ctx, tx, risk.PolicyRecord{
+				Scope:       risk.ScopeAccount,
+				ScopeID:     account.String(),
+				Version:     "nm-itest-account-" + uuid.NewString(),
+				Rules:       json.RawMessage(rules),
+				EffectiveAt: at.Add(-time.Minute),
+				ActorType:   security.ActorSystem,
+				ActorID:     "nm-itest",
+				Reason:      "a tighter native concentration limit for one test account",
+			})
+			return rerr
+		}))
+}
+
 // fund issues settled Credits to an account.
 func (f *fixture) fund(account accounts.AccountID, amount int64) {
 	f.t.Helper()
@@ -233,7 +311,7 @@ func (f *fixture) buy(account accounts.AccountID, credits int64, minOut money.Qu
 	return res, err
 }
 
-func (f *fixture) sell(account accounts.AccountID, units money.Quantity, minOut money.Quantity) (ExecuteResult, error) {
+func (f *fixture) sell(account accounts.AccountID, units, minOut money.Quantity) (ExecuteResult, error) {
 	var res ExecuteResult
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
@@ -459,7 +537,11 @@ func TestIntegration_AStaleFillIsRefusedByTheDatabase(t *testing.T) {
 // that would take Credits out of the pool without giving units back.
 func TestIntegration_TheDatabaseRefusesAFillThatBreaksTheInvariant(t *testing.T) {
 	f := newFixture(t)
-	_, err := f.buy(f.trader, 10_000_000_000, money.Quantity{})
+	// 5,000 Credits, not 10,000: a 10,000-Credit order against this curve buys
+	// 22.5% of the asset's entire supply, which the deployment's own risk
+	// policy refuses (max_native_market_concentration_bps 2000). This test is
+	// about a database trigger and needs a trade, not a large one.
+	_, err := f.buy(f.trader, 5_000_000_000, money.Quantity{})
 	require.NoError(t, err)
 
 	st, err := f.svc.State(f.ctx, testDB, f.market.ID)
@@ -620,7 +702,12 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 	traders := make([]accounts.AccountID, workers)
 	for i := range traders {
 		traders[i] = newAccount(t)
-		f.fund(traders[i], 2_000_000_000)
+		// 5,000 Credits each for a 1,000-Credit order. The buy is 20% of the
+		// trader's Credit position, inside the deployment's creator
+		// concentration limit of 30%; funding 2,000 made every one of these
+		// buyers 50% concentrated in one creator and the risk kernel refused
+		// all hundred of them.
+		f.fund(traders[i], 5_000_000_000)
 	}
 
 	var ok, failed atomic.Int64
@@ -716,8 +803,11 @@ func TestIntegration_ADeliveredQuoteDoesNotSetThePrice(t *testing.T) {
 
 	// Somebody else buys first, moving the price up.
 	other := newAccount(t)
-	f.fund(other, 20_000_000_000)
-	_, err := f.buy(other, 15_000_000_000, money.Quantity{})
+	// Enough to move the price hard while staying inside both concentration
+	// limits: 8,000 Credits buys 18.9% of supply, and is 20% of this account's
+	// Credits. The original 15,000 of 20,000 was over both.
+	f.fund(other, 40_000_000_000)
+	_, err := f.buy(other, 8_000_000_000, money.Quantity{})
 	require.NoError(t, err)
 
 	// The original trader executes with the stale quote attached.
@@ -739,8 +829,11 @@ func TestIntegration_ADeliveredQuoteDoesNotSetThePrice(t *testing.T) {
 func TestIntegration_SurveillanceRaisesAlertsWithoutBlocking(t *testing.T) {
 	f := newFixture(t)
 
-	// A creator trading their own market.
-	f.fund(f.creator, 5_000_000_000)
+	// A creator trading their own market. Funded 10,000 for a 2,000 order so
+	// the trade is inside the creator concentration limit -- self-dealing is
+	// what this test is about, and a trade refused by a different control
+	// would prove nothing about surveillance.
+	f.fund(f.creator, 10_000_000_000)
 	buy, err := f.buy(f.creator, 2_000_000_000, money.Quantity{})
 	require.NoError(t, err, "creator self-dealing is visible, not forbidden")
 	requireAlert(t, buy.Alerts, AlertCreatorSelfDealing)

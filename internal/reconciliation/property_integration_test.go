@@ -58,16 +58,20 @@ func TestProp_ReplayConvergesAndNeverDoublePosts(t *testing.T) {
 		assert.Equal(rt, 1, f.countRows(`SELECT count(*) FROM fills WHERE order_id = $1`, ord.ID))
 		// One set of ledger entries.
 		assert.Equal(rt, 1, f.countRows(
-			`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fillID))
+			`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fillID,
+		))
 		// One position change per asset.
 		assert.Equal(rt, 1, f.countRows(
-			`SELECT count(*) FROM position_lots WHERE account_id = $1 AND acquisition_ref_id = $2`, f.account, fillID))
+			`SELECT count(*) FROM position_lots WHERE account_id = $1 AND acquisition_ref_id = $2`, f.account, fillID,
+		))
 		assert.Equal(rt, 1, f.countRows(
-			`SELECT count(*) FROM lot_dispositions WHERE account_id = $1 AND disposition_ref_id = $2`, f.account, fillID))
+			`SELECT count(*) FROM lot_dispositions WHERE account_id = $1 AND disposition_ref_id = $2`, f.account, fillID,
+		))
 		// One record, in one status.
 		assert.Equal(rt, 1, f.countRows(
 			`SELECT count(*) FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2`,
-			ScopeAttempt, att.ID.String()))
+			ScopeAttempt, att.ID.String(),
+		))
 		rec, err := f.records.Get(f.ctx, f.d, recordID)
 		require.NoError(rt, err)
 		assert.Equal(rt, StatusMatched, rec.Status)
@@ -103,6 +107,7 @@ func TestProp_BalanceComparisonConverges(t *testing.T) {
 		}
 		assert.Equal(rt, 1, f.countRows(
 			`SELECT count(*) FROM reconciliation_records WHERE kind = $1 AND scope_type = $2 AND scope_id = $3`,
-			KindWalletBalance, ScopeWallet, f.walletID+":"+f.usdc.ID.String()))
+			KindWalletBalance, ScopeWallet, f.walletID+":"+f.usdc.ID.String(),
+		))
 	})
 }

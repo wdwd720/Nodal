@@ -395,7 +395,8 @@ func (a Asset) valueDomainProblems() []string {
 				"chain assets must declare a value domain; custody is not inferable from the token")
 		default:
 			problems = append(problems, fmt.Sprintf(
-				"chain asset cannot be domain %s", a.ValueDomain))
+				"chain asset cannot be domain %s", a.ValueDomain,
+			))
 		}
 	}
 	return problems

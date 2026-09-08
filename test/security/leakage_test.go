@@ -75,7 +75,8 @@ func internalCause() error {
 		`ERROR: relation "ledger_balances" does not exist (SQLSTATE 42P01) `+
 			`while executing SELECT id, owner_user_id FROM accounts WHERE owner_user_id = $1 AND status = 'ACTIVE'; `+
 			`conn=%s; retry-with=%s`,
-		secretMaterial["dsn_with_password"], secretMaterial["bearer_token"])
+		secretMaterial["dsn_with_password"], secretMaterial["bearer_token"],
+	)
 	return fmt.Errorf("readmodel: load account: %w", base)
 }
 

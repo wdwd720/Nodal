@@ -78,7 +78,8 @@ func ReconciliationEscalationWorkflow(ctx workflow.Context, in EscalationInput) 
 	wlog := workflow.GetLogger(ctx)
 	if in.RecordID == "" {
 		return EscalationResult{}, temporal.NewNonRetryableApplicationError(
-			"escalation workflow requires a record id", string(codeValidationFailed), nil)
+			"escalation workflow requires a record id", string(codeValidationFailed), nil,
+		)
 	}
 	if len(in.Tiers) == 0 {
 		in.Tiers = DefaultEscalationTiers()

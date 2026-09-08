@@ -261,7 +261,7 @@ func (s *Service) recentOppositeFill(ctx context.Context, q db.Querier, marketID
 // trigger.
 func (s *Service) recentOppositeFillBySameOwner(
 	ctx context.Context, q db.Querier, marketID MarketID, account accounts.AccountID, side Side, since time.Time,
-) (ownerID string, otherAccount string, err error) {
+) (ownerID, otherAccount string, err error) {
 	opposite := Sell
 	if side == Sell {
 		opposite = Buy

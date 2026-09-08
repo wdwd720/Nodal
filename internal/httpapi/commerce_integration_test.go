@@ -207,12 +207,25 @@ func (h *commerceHarness) principal(user accounts.UserID, account accounts.Accou
 	}
 }
 
+// productIDOf reads the product id out of a response body.
+//
+// A bare `body["product_id"].(string)` panics when the field is missing or is
+// not a string, which is how a handler that started returning a Problem shows
+// up: a panic in a helper rather than a failed assertion naming the field. It
+// also trips errcheck, so `make lint` was red on six of them.
+func productIDOf(t *testing.T, body map[string]any) string {
+	t.Helper()
+	id, ok := body["product_id"].(string)
+	require.True(t, ok, "no product_id in %v", body)
+	return id
+}
+
 func (h *commerceHarness) asSeller() *harness {
-	return h.harness.as(h.principal(h.sellerUser, h.sellerAccount))
+	return h.as(h.principal(h.sellerUser, h.sellerAccount))
 }
 
 func (h *commerceHarness) asBuyer() *harness {
-	return h.harness.as(h.principal(h.buyerUser, h.buyerAccount))
+	return h.as(h.principal(h.buyerUser, h.buyerAccount))
 }
 
 // fund mints Credits directly through the domain service. There is no HTTP
@@ -266,7 +279,7 @@ func TestIntegration_CommerceJourneyOverHTTP(t *testing.T) {
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
 	product := res.raw()
-	productID := product["product_id"].(string)
+	productID := productIDOf(t, product)
 	assert.Equal(t, "DRAFT", product["status"])
 	assert.Equal(t, "DATA_SALE_EARNING", product["earning_origin"])
 	assert.Equal(t, "100", product["platform_fee"])
@@ -371,7 +384,7 @@ func TestIntegration_CommerceRefusesCrossTenantRequests(t *testing.T) {
 		"title": "A note", "price": "500",
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, created.Code, "body=%s", created.Body.String())
-	productID := created.raw()["product_id"].(string)
+	productID := productIDOf(t, created.raw())
 	require.Equal(t, http.StatusOK, h.asSeller().do(http.MethodPost,
 		"/v1/internal-products/"+productID+"/status",
 		map[string]any{"status": "ACTIVE"}, "Idempotency-Key", idemKey()).Code)
@@ -448,7 +461,7 @@ func TestIntegration_APriceTheBuyerDidNotAgreeToIsAConflictOverHTTP(t *testing.T
 		"title": "GPU hours", "price": "1200",
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, created.Code)
-	productID := created.raw()["product_id"].(string)
+	productID := productIDOf(t, created.raw())
 	require.Equal(t, http.StatusOK, h.asSeller().do(http.MethodPost,
 		"/v1/internal-products/"+productID+"/status",
 		map[string]any{"status": "ACTIVE"}, "Idempotency-Key", idemKey()).Code)
@@ -484,7 +497,7 @@ func TestIntegration_AFreshDeploymentSellsNothing(t *testing.T) {
 		"title": "A dataset", "price": "1000",
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, created.Code, "body=%s", created.Body.String())
-	productID := created.raw()["product_id"].(string)
+	productID := productIDOf(t, created.raw())
 	require.Equal(t, http.StatusOK, h.asSeller().do(http.MethodPost,
 		"/v1/internal-products/"+productID+"/status",
 		map[string]any{"status": "ACTIVE"}, "Idempotency-Key", idemKey()).Code)
@@ -525,14 +538,26 @@ func TestIntegration_TheGateAndThePolicyMustBothAgree(t *testing.T) {
 	// version and rule index, so it can be traced to a line somebody wrote.
 	// Collapsing them would lose the distinction that makes either useful.
 	for _, tc := range []setup{
-		{"policy and gate agree", commercePolicy, commerceCaps{commerce.CapMarketplace: true},
-			"US-CA", true, http.StatusCreated, ""},
-		{"gate off", commercePolicy, commerceCaps{},
-			"US-CA", false, http.StatusUnprocessableEntity, errs.CodeCapabilityNotApproved},
-		{"policy denies this jurisdiction", commercePolicy, commerceCaps{commerce.CapMarketplace: true},
-			"US-NY", false, http.StatusForbidden, errs.CodeForbidden},
-		{"no policy at all", noPolicy, commerceCaps{commerce.CapMarketplace: true},
-			"US-CA", false, http.StatusForbidden, errs.CodeForbidden},
+		{
+			"policy and gate agree", commercePolicy,
+			commerceCaps{commerce.CapMarketplace: true},
+			"US-CA", true, http.StatusCreated, "",
+		},
+		{
+			"gate off", commercePolicy,
+			commerceCaps{},
+			"US-CA", false, http.StatusUnprocessableEntity, errs.CodeCapabilityNotApproved,
+		},
+		{
+			"policy denies this jurisdiction", commercePolicy,
+			commerceCaps{commerce.CapMarketplace: true},
+			"US-NY", false, http.StatusForbidden, errs.CodeForbidden,
+		},
+		{
+			"no policy at all", noPolicy,
+			commerceCaps{commerce.CapMarketplace: true},
+			"US-CA", false, http.StatusForbidden, errs.CodeForbidden,
+		},
 	} {
 		t.Run(tc.what, func(t *testing.T) {
 			h := newCommerceHarnessWith(t, tc.router(t), tc.caps, tc.juris)
@@ -546,7 +571,7 @@ func TestIntegration_TheGateAndThePolicyMustBothAgree(t *testing.T) {
 				"title": "A note", "price": "500",
 			}, "Idempotency-Key", idemKey())
 			require.Equal(t, http.StatusCreated, created.Code)
-			productID := created.raw()["product_id"].(string)
+			productID := productIDOf(t, created.raw())
 			require.Equal(t, http.StatusOK, h.asSeller().do(http.MethodPost,
 				"/v1/internal-products/"+productID+"/status",
 				map[string]any{"status": "ACTIVE"}, "Idempotency-Key", idemKey()).Code)
@@ -650,7 +675,7 @@ func TestIntegration_JurisdictionTurningBlockedMidSessionStopsTheNextPurchase(t 
 		"title": "A dataset", "price": "1000",
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, created.Code, "body=%s", created.Body.String())
-	productID := created.raw()["product_id"].(string)
+	productID := productIDOf(t, created.raw())
 	require.Equal(t, http.StatusOK, ch.asSeller().do(http.MethodPost,
 		"/v1/internal-products/"+productID+"/status",
 		map[string]any{"status": "ACTIVE"}, "Idempotency-Key", idemKey()).Code)

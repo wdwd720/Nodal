@@ -343,7 +343,6 @@ func (r *Repository) List(ctx context.Context, q db.Querier, limit int) ([]Instr
 	return out, rows.Err()
 }
 
-// StatusChange is an audited instrument status transition request.
 // GetBySpotPair returns the SPOT_PAIR instrument for a (base, quote) pair.
 //
 // It exists so a venue can keep the registry honest about its own market
@@ -362,6 +361,7 @@ func (r *Repository) GetBySpotPair(ctx context.Context, q db.Querier, base, quot
 	return i, nil
 }
 
+// StatusChange is an audited instrument status transition request.
 type StatusChange struct {
 	To            Status
 	ActorType     string

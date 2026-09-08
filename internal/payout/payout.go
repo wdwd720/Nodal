@@ -13,11 +13,13 @@ import (
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-type requestKind struct{}
-type destinationKind struct{}
-type transitionKind struct{}
-type allocationKind struct{}
-type providerEventKind struct{}
+type (
+	requestKind       struct{}
+	destinationKind   struct{}
+	transitionKind    struct{}
+	allocationKind    struct{}
+	providerEventKind struct{}
+)
 
 // RequestID identifies a payout request.
 type RequestID = id.ID[requestKind]

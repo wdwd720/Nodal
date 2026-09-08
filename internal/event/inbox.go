@@ -257,7 +257,8 @@ func (i *Inbox) Get(ctx context.Context, q db.Querier, source, messageID string)
 		status      string
 	)
 	err := q.QueryRow(ctx, getInboxSQL, source, messageID).Scan(
-		&rec.Source, &rec.MessageID, &rec.SchemaVersion, &rec.ReceivedAt, &processedAt, &status, &rec.Error, &rec.PayloadHash)
+		&rec.Source, &rec.MessageID, &rec.SchemaVersion, &rec.ReceivedAt, &processedAt, &status, &rec.Error, &rec.PayloadHash,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Record{}, false, nil
 	}

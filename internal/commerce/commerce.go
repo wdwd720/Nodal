@@ -48,8 +48,10 @@ import (
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-type productKindTag struct{}
-type orderKindTag struct{}
+type (
+	productKindTag struct{}
+	orderKindTag   struct{}
+)
 
 // ProductID identifies an internal product.
 type ProductID = id.ID[productKindTag]

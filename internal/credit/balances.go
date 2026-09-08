@@ -60,10 +60,10 @@ func (s *Service) Balances(ctx context.Context, q db.Querier, r BalanceRequest) 
 		b.ByOrigin[lot.Origin] = b.ByOrigin[lot.Origin].Add(lot.Remaining)
 		b.ByFinality[lot.Finality] = b.ByFinality[lot.Finality].Add(lot.Remaining)
 
-		switch {
-		case lot.Finality == valuedomain.FinalityDisputed:
+		switch lot.Finality {
+		case valuedomain.FinalityDisputed:
 			b.Frozen = b.Frozen.Add(lot.Remaining)
-		case lot.Finality == valuedomain.FinalityReversed:
+		case valuedomain.FinalityReversed:
 			b.Reversed = b.Reversed.Add(lot.Remaining)
 		}
 		if lot.Finality.Spendable() {

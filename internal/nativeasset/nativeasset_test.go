@@ -220,7 +220,11 @@ func TestScreen_ConfusableNamesAreFlaggedNotBlocked(t *testing.T) {
 
 func TestScreen_BidiOverridesAreRefused(t *testing.T) {
 	in := good()
-	in.Name = "Doggu‮Coin" // right-to-left override
+	// The override is written as an escape rather than as the character: a
+	// source file that CONTAINS a bidi control renders wrongly in every
+	// reviewer's editor, which is the attack this test is about
+	// (internal/nativeasset/moderation.go carries the same note).
+	in.Name = "Doggu\u202eCoin" // right-to-left override
 	v := Screen(in)
 	require.True(t, v.Blocked(),
 		"a bidi override lets a name render as something other than what it compares as")

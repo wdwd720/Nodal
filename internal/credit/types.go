@@ -12,10 +12,12 @@ import (
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-type lotKind struct{}
-type lotEventKind struct{}
-type fundingKind struct{}
-type fundingTransitionKind struct{}
+type (
+	lotKind               struct{}
+	lotEventKind          struct{}
+	fundingKind           struct{}
+	fundingTransitionKind struct{}
+)
 
 // LotID identifies a provenance lot.
 type LotID = id.ID[lotKind]

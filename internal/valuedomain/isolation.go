@@ -299,7 +299,13 @@ func CheckPosting(domains []Domain, declared *ConversionKey, activeCaps map[Capa
 			WithField("domain_a", string(a)).
 			WithField("domain_b", string(b))
 	}
-	if !((declared.From == a && declared.To == b) || (declared.From == b && declared.To == a)) {
+	// Named rather than negated inline: a security check whose meaning has to
+	// be read through a `!` in front of a parenthesised pair is one a reviewer
+	// can misread, and the direction is exactly what matters here (F-03 was a
+	// direction-blind isolation check).
+	declaresThisPair := (declared.From == a && declared.To == b) ||
+		(declared.From == b && declared.To == a)
+	if !declaresThisPair {
 		return errs.Newf(errs.CodeValidationFailed,
 			"transaction declares conversion %s but touches value domains %s and %s",
 			declared, a, b)
@@ -339,7 +345,7 @@ func DescribeIsolation() string {
 		if c.AlwaysPermitted() {
 			cap = "(none - unwind path, must never be blocked)"
 		}
-		b.WriteString(fmt.Sprintf("  - %-24s -> %-24s %s\n      %s\n", c.From, c.To, cap, c.Why))
+		fmt.Fprintf(&b, "  - %-24s -> %-24s %s\n      %s\n", c.From, c.To, cap, c.Why)
 	}
 	return b.String()
 }

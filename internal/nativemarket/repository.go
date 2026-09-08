@@ -185,7 +185,7 @@ func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key st
 	return res, true, nil
 }
 
-// Quote returns a recorded quote.
+// StoredQuote returns a recorded quote.
 func (s *Service) StoredQuote(ctx context.Context, q db.Querier, id QuoteID) (Quote, error) {
 	var (
 		qt                             Quote

@@ -73,6 +73,7 @@ type Service struct {
 	prices      Prices
 	auditor     Audit
 	instruments Instruments
+	risk        Risk
 	clk         clock.Clock
 }
 
@@ -84,11 +85,11 @@ type Service struct {
 // configured" is not a thing anyone should be able to discover later. Tests
 // that do not care still have to pass a store; internal/audit and
 // internal/valuation both work against any pgx transaction.
-func NewService(poster Poster, credits Credits, prices Prices, auditor Audit, insts Instruments, clk clock.Clock) *Service {
-	if poster == nil || credits == nil || prices == nil || auditor == nil || insts == nil || clk == nil {
-		panic("nativemarket: NewService requires a poster, a credit service, a price store, an audit writer, an instrument registry and a clock")
+func NewService(poster Poster, credits Credits, prices Prices, auditor Audit, insts Instruments, rk Risk, clk clock.Clock) *Service {
+	if poster == nil || credits == nil || prices == nil || auditor == nil || insts == nil || rk == nil || clk == nil {
+		panic("nativemarket: NewService requires a poster, a credit service, a price store, an audit writer, an instrument registry, a risk kernel and a clock")
 	}
-	return &Service{poster: poster, credits: credits, prices: prices, auditor: auditor, instruments: insts, clk: clk}
+	return &Service{poster: poster, credits: credits, prices: prices, auditor: auditor, instruments: insts, risk: rk, clk: clk}
 }
 
 // Create opens a market and mints the asset's entire supply, once.
@@ -353,6 +354,13 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 
 	creatorID, err := s.creatorOf(ctx, tx, m.AssetID)
 	if err != nil {
+		return ExecuteResult{}, err
+	}
+
+	// The risk kernel, before anything is posted (see risk.go). The settlement
+	// compiler has already recorded that this route requires an evaluation;
+	// this is the evaluation.
+	if err := s.checkRisk(ctx, tx, m, r, fill, creatorID); err != nil {
 		return ExecuteResult{}, err
 	}
 

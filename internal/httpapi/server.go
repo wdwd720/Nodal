@@ -175,7 +175,8 @@ func New(opts Options) (*Server, error) {
 	if len(opts.NonSpecRoutes) > 0 && !opts.Env.AllowsDevAuth() {
 		return nil, fmt.Errorf(
 			"httpapi: routes outside the /v1 contract are refused in %s: %v",
-			opts.Env, sortedPaths(opts.NonSpecRoutes))
+			opts.Env, sortedPaths(opts.NonSpecRoutes),
+		)
 	}
 	trusted, err := parseCIDRs(opts.TrustedProxyCIDRs)
 	if err != nil {

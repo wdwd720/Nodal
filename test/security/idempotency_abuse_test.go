@@ -43,7 +43,8 @@ func TestIdempotency_SameKeyDifferentBodyIsRefused(t *testing.T) {
 
 	different := fmt.Sprintf(
 		`{"account_id":%q,"instrument_id":%q,"action":"ACQUIRE_NOTIONAL","mode":"PAPER","notional_usd":"11.00"}`,
-		acct, inst)
+		acct, inst,
+	)
 	r2 := postAs(t, a.Token, "/v1/intents", second, different)
 	require.Equal(t, http.StatusConflict, r2.Status, "same key with a different body: %s", r2.text())
 	require.Equal(t, string(errs.CodeInvalidIdempotencyReuse), r2.Problem.Code)

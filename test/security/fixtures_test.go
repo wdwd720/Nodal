@@ -44,7 +44,8 @@ func instrumentID(t *testing.T, s session) string {
 func intentBody(accountID, instrument string) string {
 	return fmt.Sprintf(
 		`{"account_id":%q,"instrument_id":%q,"action":"ACQUIRE_NOTIONAL","mode":"PAPER","notional_usd":"10.00"}`,
-		accountID, instrument)
+		accountID, instrument,
+	)
 }
 
 // createIntent submits one intent and returns its id. POST /v1/intents is the

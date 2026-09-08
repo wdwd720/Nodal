@@ -82,7 +82,8 @@ func FundingWorkflow(ctx workflow.Context, in FundingInput) (FundingResult, erro
 	wlog := workflow.GetLogger(ctx)
 	if in.DepositID == "" {
 		return FundingResult{}, temporal.NewNonRetryableApplicationError(
-			"funding workflow requires a deposit id", string(codeValidationFailed), nil)
+			"funding workflow requires a deposit id", string(codeValidationFailed), nil,
+		)
 	}
 	in = in.withDefaults(workflow.Now(ctx).UTC())
 

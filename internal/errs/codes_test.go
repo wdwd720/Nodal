@@ -35,6 +35,7 @@ var expectedStatus = map[errs.Code]int{
 	errs.CodeQuoteExpired:               http.StatusUnprocessableEntity,
 	errs.CodeRiskMaxPosition:            http.StatusUnprocessableEntity,
 	errs.CodeRiskDailyLoss:              http.StatusUnprocessableEntity,
+	errs.CodeRiskConcentration:          http.StatusUnprocessableEntity,
 	errs.CodeEligibilityJurisdiction:    http.StatusUnprocessableEntity,
 	errs.CodeCapabilityNotApproved:      http.StatusUnprocessableEntity,
 	errs.CodeVerificationRequired:       http.StatusUnprocessableEntity,

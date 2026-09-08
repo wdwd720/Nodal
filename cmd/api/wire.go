@@ -52,6 +52,7 @@ import (
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/ratelimit"
+	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
@@ -234,7 +235,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// though the feature did not exist.
 	creditSvc := credit.NewService(ledgerSvc, clk)
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
-	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
+	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
+		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
 
 	// Payout providers. A registry built with allowSandbox=false refuses any
 	// provider with no contract reference, which is the programmatic assertion

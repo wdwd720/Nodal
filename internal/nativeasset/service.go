@@ -362,9 +362,8 @@ func mapError(err error) error {
 		return errs.Wrap(err, errs.CodeInternal,
 			"a native asset status changed without its transition row")
 	}
-	var pgErr error = err
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errs.New(errs.CodeNotFound, "native asset not found")
 	}
-	return errs.Wrap(pgErr, errs.CodeInternal, "nativeasset: database error")
+	return errs.Wrap(err, errs.CodeInternal, "nativeasset: database error")
 }

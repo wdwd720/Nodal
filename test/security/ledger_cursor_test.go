@@ -30,7 +30,8 @@ import (
 // (posted_at, id) > (cursor.at, cursor.id).
 func ledgerCursor(at time.Time, txID string) string {
 	return base64.RawURLEncoding.EncodeToString(
-		[]byte("v1|" + at.UTC().Format(time.RFC3339Nano) + "|" + txID))
+		[]byte("v1|" + at.UTC().Format(time.RFC3339Nano) + "|" + txID),
+	)
 }
 
 // journalRow is one posted transaction and the customer account that owns it.

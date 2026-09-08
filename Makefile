@@ -110,6 +110,11 @@ seed-economy: seed ## Seed the internal economy: Credit asset, Credits, a seller
 	# on takes three principals and four evidence references; a script that did
 	# it would be filling a control with fiction. The command prints the steps.
 	$(GO) run ./scripts/seedeconomy
+	# The GLOBAL risk policy. A native-market trade is evaluated against it and
+	# fails closed without one, so an economy seeded without this has a
+	# catalogue and no market. These are STARTER limits nobody signed off, which
+	# is why riskpolicy refuses to write them outside LOCAL/DEV/TEST.
+	$(GO) run ./scripts/riskpolicy -operator local-dev -reason "make seed-economy: the compiled-in development limits"
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -118,13 +123,15 @@ seed-economy: seed ## Seed the internal economy: Credit asset, Credits, a seller
 test: unit property race ## Default developer test set
 
 unit: ## Go unit tests
-	# ./test/docs and ./test/reachability are here rather than under
-	# `integration` because they need no database. One checks that every test
-	# the readiness documents cite exists; the other checks that every method
-	# which moves money has a caller a deployment can reach. Both belong to the
-	# fast tier: a broken citation and an unreachable control should be caught
-	# by the same run that catches a broken package.
-	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/... ./test/reachability/...
+	# ./test/docs, ./test/reachability and ./test/source are here rather than
+	# under `integration` because they need no database. They check that every
+	# test the readiness documents cite exists, that every method which moves
+	# money has a caller a deployment can reach, and that no file contains a
+	# bidirectional control character. All three belong to the fast tier: a
+	# broken citation, an unreachable control and source that renders as
+	# something other than what it is should be caught by the same run that
+	# catches a broken package.
+	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/... ./test/reachability/... ./test/source/...
 
 property: ## Property-based financial tests
 	# Property tests live beside the code they constrain, named Prop*/Property*,

@@ -94,6 +94,9 @@ type Input struct {
 	Account  AccountSnapshot   `json:"account"`
 	Envelope *EnvelopeSnapshot `json:"envelope"`
 	Market   MarketSnapshot    `json:"market"`
+	// NativeMarket is present only for a Nodal-native trade. Nil means the
+	// intent is not one, and the two native limits are not evaluated.
+	NativeMarket *NativeMarketSnapshot `json:"native_market"`
 	// KillSwitches lists the currently active switches (kind, scope).
 	KillSwitches []KillSwitch `json:"kill_switches"`
 	// Now is the evaluation time supplied by the caller.
@@ -194,6 +197,63 @@ type MarketSnapshot struct {
 	DataFreshness  map[string]DataAge `json:"data_freshness"`
 }
 
+// NativeMarketSnapshot is what the kernel needs to evaluate the two limits
+// PART XXXII names for the Nodal-native economy.
+//
+// Every field is a base-unit COUNT or a Credit amount. There is no USD here
+// and there is no price: a Credit has no approved external value, and a
+// native-asset price is one the holder being constrained can move. Both
+// limits are ratios of numbers nobody can rewrite.
+//
+// The caller supplies the snapshot; internal/risk never reads a market.
+type NativeMarketSnapshot struct {
+	MarketID string `json:"market_id"`
+	AssetID  string `json:"asset_id"`
+	// CreatorAccountID is whose asset this is. Creator concentration is
+	// measured against it.
+	CreatorAccountID string `json:"creator_account_id"`
+
+	// HoldingAfter is the units this account would hold after the trade, and
+	// TotalSupply is every unit that exists. Their ratio is the market
+	// concentration.
+	//
+	// # Why total supply and not the float
+	//
+	// The obvious denominator is the float -- units the pool has sold. It is
+	// unusable: the first buyer in a new market holds ALL of it, so a limit
+	// against the float refuses the opening trade of every market that will
+	// ever exist. That is not a risk control, it is a market that cannot open.
+	//
+	// Total supply is fixed at mint, is never zero, and no participant can
+	// move it (PART XIII: there is exactly one mint path). A share of it is
+	// therefore a number that means the same thing on day one and day one
+	// thousand.
+	HoldingAfter money.Quantity `json:"holding_after"`
+	TotalSupply  money.Quantity `json:"total_supply"`
+
+	// SpendOnThisCreatorAfter is the Credits this account would have committed
+	// to this creator's assets after the trade, and CreditBaseAfter is every
+	// Credit it has committed to native assets plus every Credit it can still
+	// spend. Their ratio is the creator concentration: how much of what this
+	// account has is riding on one person.
+	//
+	// # Why the base includes unspent Credits
+	//
+	// Measuring one creator's share of native SPEND alone has the same defect
+	// as the float: an account's first native purchase is necessarily 100% of
+	// its native spend, so every account's first trade would be refused. Adding
+	// what the account can still spend makes the denominator the account's
+	// actual Credit position, which is what "concentrated" is supposed to mean.
+	//
+	// # Why spend and not current value
+	//
+	// The numerator is cost basis, not what the holding is worth now. A holder
+	// of a thinly traded native asset can move its price, so a limit measured
+	// on current value would be a limit its subject can move.
+	SpendOnThisCreatorAfter money.Quantity `json:"spend_on_this_creator_after"`
+	CreditBaseAfter         money.Quantity `json:"credit_base_after"`
+}
+
 // Quote is the executable quote under evaluation.
 type Quote struct {
 	ID             string    `json:"id"`
@@ -284,6 +344,14 @@ func (in Input) normalized() Input {
 		fresh[strings.TrimSpace(k)] = v
 	}
 	m.DataFreshness = fresh
+
+	if in.NativeMarket != nil {
+		n := *in.NativeMarket
+		n.MarketID = strings.TrimSpace(n.MarketID)
+		n.AssetID = strings.TrimSpace(n.AssetID)
+		n.CreatorAccountID = strings.TrimSpace(n.CreatorAccountID)
+		in.NativeMarket = &n
+	}
 
 	switches := make([]KillSwitch, 0, len(in.KillSwitches))
 	seen := map[KillSwitch]struct{}{}

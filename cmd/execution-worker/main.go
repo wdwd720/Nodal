@@ -282,7 +282,8 @@ type ProviderBinding interface {
 var bindProviders = func(cfg *config.Config) (ProviderBinding, error) {
 	return nil, fmt.Errorf(
 		"no execution provider binding for mode %q: the venue adapter, chain observer, inspector, signing client and recoverer are not wired in this build",
-		cfg.Providers.Execution.Mode)
+		cfg.Providers.Execution.Mode,
+	)
 }
 
 func settlementDeps(d *deps) (executorDeps, error) {

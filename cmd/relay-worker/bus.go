@@ -47,7 +47,8 @@ func resolveBusBinding(env config.Environment, mode config.ProviderMode, allowLo
 	case config.ProviderModeFake:
 		if env.IsProductionLike() {
 			return "", fmt.Errorf(
-				"the event bus provider is in %q mode, which is never permitted in %s", mode, env)
+				"the event bus provider is in %q mode, which is never permitted in %s", mode, env,
+			)
 		}
 		if !allowLoopback {
 			return "", fmt.Errorf(
@@ -55,7 +56,8 @@ func resolveBusBinding(env config.Environment, mode config.ProviderMode, allowLo
 					"subscriber outside this process, so every relayed event would be marked published and then discarded. "+
 					"Point the worker at a broker (%s=sandbox|live with %s), or, in LOCAL/TEST/DEV only, accept that loss "+
 					"deliberately with %s=true",
-				mode, envVarEventBusMode, envVarRedpandaBrokers, envAllowLoopback)
+				mode, envVarEventBusMode, envVarRedpandaBrokers, envAllowLoopback,
+			)
 		}
 		return busLoopback, nil
 	default:

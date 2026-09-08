@@ -4,6 +4,7 @@ package chaos
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -122,6 +125,37 @@ func chaosCreditAsset(t *testing.T) assets.AssetID {
 	return creditAssetID
 }
 
+// seedGlobalRiskPolicy records the GLOBAL risk policy the internal economy is
+// evaluated against, once for the whole package. It is the compiled-in default
+// -- what `go run ./scripts/riskpolicy` gives a fresh deployment -- so a chaos
+// run exercises the limits a deployment actually has.
+func seedGlobalRiskPolicy(t *testing.T, at time.Time) {
+	t.Helper()
+	globalRiskPolicy.Do(func() {
+		ctx := security.WithPrincipal(context.Background(), security.Principal{
+			SubjectID: "chaos", ActorType: security.ActorSystem, AuthTime: at,
+		})
+		if _, _, err := risk.NewStore().EffectivePolicy(ctx, testDB, "", "", at); err == nil {
+			return // an earlier run against this database already recorded it
+		}
+		require.NoError(t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, err := risk.NewStore().RecordPolicy(ctx, tx, risk.PolicyRecord{
+					Scope:       risk.ScopeGlobal,
+					Version:     "chaos-global",
+					Rules:       json.RawMessage(risk.DefaultGlobalPolicyJSON),
+					EffectiveAt: at.Add(-time.Hour),
+					ActorType:   security.ActorSystem,
+					ActorID:     "chaos",
+					Reason:      "the compiled-in default limits, as a fresh deployment gets them",
+				})
+				return err
+			}))
+	})
+}
+
+var globalRiskPolicy sync.Once
+
 func newInternalWorld(t *testing.T, fundBuyer int64) *internalWorld {
 	t.Helper()
 	ctx := context.Background()
@@ -138,11 +172,14 @@ func newInternalWorld(t *testing.T, fundBuyer int64) *internalWorld {
 
 	_, buyer := newAccount(t)
 	_, seller := newAccount(t)
+	seedGlobalRiskPolicy(t, clk.Now())
 
 	w := &internalWorld{
 		t: t, ctx: ctx, clk: clk,
 		ledger: led, credits: credits, commerce: com,
-		assetSvc: nativeasset.NewService(clk, nil), markets: nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk),
+		assetSvc: nativeasset.NewService(clk, nil),
+		markets: nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(),
+			instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk),
 		creditAsset: chaosCreditAsset(t), buyer: buyer, seller: seller,
 	}
 
@@ -306,10 +343,14 @@ func TestChaos_APurchaseDiesMidTransaction(t *testing.T) {
 					Reference:      ledger.FinancialEventReference{Type: "chaos", ID: key},
 					EffectiveAt:    w.clk.Now(),
 					Entries: []ledger.Entry{
-						{Account: ledger.CustomerAccount(w.buyer, ledger.CodeCreditBalance, w.creditAsset),
-							Side: ledger.Credit, Quantity: qty(1_000)},
-						{Account: ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, w.creditAsset),
-							Side: ledger.Debit, Quantity: qty(1_000)},
+						{
+							Account: ledger.CustomerAccount(w.buyer, ledger.CodeCreditBalance, w.creditAsset),
+							Side:    ledger.Credit, Quantity: qty(1_000),
+						},
+						{
+							Account: ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, w.creditAsset),
+							Side:    ledger.Debit, Quantity: qty(1_000),
+						},
 					},
 				})
 				return err
@@ -405,10 +446,14 @@ func TestChaos_ATradeDiesMidTransaction(t *testing.T) {
 					Reference:      ledger.FinancialEventReference{Type: "chaos", ID: key},
 					EffectiveAt:    w.clk.Now(),
 					Entries: []ledger.Entry{
-						{Account: ledger.CustomerAccount(w.buyer, ledger.CodeCreditBalance, w.creditAsset),
-							Side: ledger.Credit, Quantity: qty(1_000_000_000)},
-						{Account: ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, w.creditAsset),
-							Side: ledger.Debit, Quantity: qty(1_000_000_000)},
+						{
+							Account: ledger.CustomerAccount(w.buyer, ledger.CodeCreditBalance, w.creditAsset),
+							Side:    ledger.Credit, Quantity: qty(1_000_000_000),
+						},
+						{
+							Account: ledger.PlatformAccount(ledger.CodePlatformFeeReceivable, w.creditAsset),
+							Side:    ledger.Debit, Quantity: qty(1_000_000_000),
+						},
 					},
 				})
 				return err

@@ -11,11 +11,13 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 )
 
-type marketKind struct{}
-type quoteKind struct{}
-type fillKind struct{}
-type transitionKind struct{}
-type alertKind struct{}
+type (
+	marketKind     struct{}
+	quoteKind      struct{}
+	fillKind       struct{}
+	transitionKind struct{}
+	alertKind      struct{}
+)
 
 // MarketID identifies a native market.
 type MarketID = id.ID[marketKind]

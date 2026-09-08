@@ -155,10 +155,11 @@ func (r CapitalRail) AuthoritativeBalanceSource() string {
 	return railRegistry[r].authoritativeBalanceSource
 }
 
-// CustodyModel, ExecutionModel, SettlementModel and ReconciliationModel are
-// the remaining rail descriptors required by PART XXII. They are strings
-// rather than enums because they are descriptive metadata surfaced to
-// operators and documentation, not inputs to any decision.
+// CustodyModel is the first of the four remaining rail descriptors required by
+// PART XXII, with ExecutionModel, SettlementModel and ReconciliationModel
+// below it. All four are strings rather than enums because they are
+// descriptive metadata surfaced to operators and documentation, not inputs to
+// any decision.
 func (r CapitalRail) CustodyModel() string        { return railRegistry[r].custodyModel }
 func (r CapitalRail) ExecutionModel() string      { return railRegistry[r].executionModel }
 func (r CapitalRail) SettlementModel() string     { return railRegistry[r].settlementModel }

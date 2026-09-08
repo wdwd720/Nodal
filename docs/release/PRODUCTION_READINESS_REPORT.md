@@ -64,6 +64,24 @@ Each row is a property with an executable test behind it, not a claim.
 | Close-only lets holders out and refuses entry | `TestIntegration_CloseOnlyLetsHoldersOutAndNobodyIn` |
 | With `NATIVE_MARKET_TRADING` off, no trade commits | `TestIntegration_WithoutTheCapabilityNoTradeCommits` |
 
+### The risk kernel, on Domain A
+
+Every row here was unreachable before F-34: no deployment had ever written a risk policy, so nothing
+had ever been evaluated.
+
+| Property | Evidence |
+|---|---|
+| A trade that would leave one account holding too much of an asset's supply is refused, and nothing moves | `TestIntegration_ATradeThatWouldOwnTooMuchOfAMarketIsRefused` — the balance and the market's version are both asserted unchanged |
+| A trade that would put too much of an account's Credit position into one creator is refused | `TestIntegration_ATradeThatWouldConcentrateOneCreatorIsRefused` |
+| A concentration limit never refuses a SELL, however tight | `TestIntegration_ASellIsNeverRefusedByAConcentrationLimit` — the same account is refused a buy and permitted its exit in the same test |
+| An allowed trade records its decision inside its own transaction | `TestIntegration_AnAllowedTradeRecordsItsRiskDecision` — with the snapshot it was computed from, so the decision can be recomputed |
+| A REFUSED trade records its decision too, after the transaction it aborted | `TestIntegration_ARefusedTradeStillRecordsItsRiskDecision` — observed failing with `no rows in result set` when the recording call is removed |
+| A deployment with no risk policy refuses every native trade | `TestIntegration_ADeploymentWithNoRiskPolicyRefusesEveryNativeTrade`, `TestEvaluateNativeTrade_FailsClosedOnAnIncompletePolicy` |
+| The entry point refuses an input it cannot evaluate rather than answering ALLOW | `TestEvaluateNativeTrade_RefusesAnInputItCannotEvaluate` |
+| Both ratios are exact integer arithmetic at quantities beyond int64 | `TestNativeConcentration_TheComparisonIsExact` |
+| Neither limit refuses the opening trade of a market or an account's first purchase | `TestNativeConcentration_TheFirstBuyerOfANewMarketIsNotConcentrated` |
+| An order larger than the balance is refused for that reason, not as a concentration breach | `TestIntegration_AnOrderBiggerThanTheBalanceSaysSo` — observed reporting `RISK_CONCENTRATION` with the affordability guard removed |
+
 ### Payouts
 
 | Property | Evidence |
@@ -249,10 +267,12 @@ proving nothing, and an inspector that approves everything still fails it.
 | `gosec` (`make sast`) | **clean** — and it had never been clean: seven findings, every one a suppression that did not satisfy `-nosec-require-justification`, so the target failed for anyone who ran it |
 | `gitleaks` (`make secrets`) | **clean** — one finding, in `internal/gen/api/api.gen.go`, which embeds the OpenAPI document as base64'd gzip; adding two endpoints was enough to trip the entropy rule |
 | `trivy config` (`make iac-scan`) | 0 HIGH/CRITICAL across every terraform module and environment |
+| `make lint` (fmtcheck, vet, staticcheck, golangci-lint, lintfin) | **clean** — and it had never been clean either: 70 findings, 56 of them `misspell` set to the US locale against prose written largely in British English, and 15 committed files that were never gofumpt-formatted (F-35) |
+| `test/source` (in `make unit`) | **clean** — every text file in the repository, refused for the nine bidi embedding, override and isolate codepoints; the same class had been found three times, each by a tool that could not see the other occurrences |
 | SBOM (`make sbom`) | generated, 6.1 MB SPDX |
 | `terraform validate` | dev, staging and prod all valid; `terraform fmt -check -recursive` clean |
 
-Two of those are worth more than a tick.
+Three of those are worth more than a tick.
 
 **`make sast` had never passed.** Its flags require every `#nosec` to name the
 rule it silences AND state the invariant that makes it safe, and seven
@@ -260,7 +280,7 @@ suppressions predating this session said only `#nosec G101` or nothing at all. A
 scan target that fails is a scan nobody runs. The seventh was the best of them:
 `internal/nativeasset/moderation.go` was flagged for Trojan Source because it
 contains bidirectional control characters — it is the code that REFUSES them in
-user-supplied asset names. They are now written as `'‪'` escapes, which
+user-supplied asset names. They are now written as `\u202a`-style escapes, which
 removes the characters from the source and reads better anyway: a reviewer can
 see which codepoint each one is instead of an invisible glyph.
 
@@ -275,7 +295,7 @@ normally — which is where a real secret would have to be introduced first.
 | Property | Evidence |
 |---|---|
 | A backup of a database holding a live internal economy restores complete | `make restore-drill`: 118 tables, row counts match, journal hashes match on both sides, zero balance drift |
-| The restored copy carries the Domain A tables with DATA in them | 1 native-market fill, 1 commerce order, 4 credit lots, 2 lot events, 2 published prices, 1 market, 1 instrument, 3 audit events |
+| The restored copy carries the Domain A tables with DATA in them | 1 native-market fill, 1 commerce order, 4 credit lots, 2 lot events, 2 published prices, 1 market, 1 instrument, 3 audit events, and — since F-34 — 1 GLOBAL risk policy and the 1 ALLOW decision the trade produced, carrying the native snapshot it was computed from (checked with `-keep`, because "118 row counts match" is also true of zero against zero, which is what this table said before) |
 | The fixture is made the way the application makes it | `scripts/restoredrill/domaina.go` drives the REAL services, so the restored rows satisfy the deferred balance triggers, CR004, AU001, IC001 and the terms-frozen guard by having been written through them |
 | Migration state survives | source and restored both at version 715, checksums verified on the restored copy |
 
@@ -431,8 +451,14 @@ would close this is the error text from a recurrence, not another clean run.
   one home. What has not been unified is the record: an accepted intent is still persisted and
   planned as a `TradeIntent` through `V1Planner`. That is a representation question, not a control
   question, and collapsing the two types is work rather than risk.
-- **The risk kernel is not yet an input to the Domain A route.** `Route.RequiresRiskEvaluation` is
-  determined and recorded; nothing consumes it for internal trades yet.
+- **The risk kernel is not an input to anything but the Domain A route.** It is now an input to
+  that one: a native trade is evaluated against the deployment's GLOBAL and ACCOUNT policies before
+  anything is posted, refuses with `RISK_CONCENTRATION`, and persists the decision either way
+  (F-34). What remains unreached is everything else — no Domain B or C route consults the kernel,
+  and `risk.Store.RecordPolicy` has no administrative endpoint, so limits are changed by running
+  `scripts/riskpolicy` against the database rather than by two operators through the admin plane.
+  A deployment that has run neither refuses every native trade, which is the correct failure and
+  not a usable state.
 - **No kind-SPECIFIC admin screens for Domain A** (part of Stage 16). The nine administrative
   actions are fully operable from the existing console today: its propose form is driven by the
   generated `authority.json`, which now lists all nine, and it carries a free-form params field that

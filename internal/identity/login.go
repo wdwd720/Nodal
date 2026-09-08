@@ -184,7 +184,8 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		issuer := s.d.IdP.Name()
 		user, err := s.d.Accounts.GetUserBySubject(ctx, tx, issuer, ident.Subject)
 		created := false
-		if errs.CodeOf(err) == errs.CodeNotFound {
+		switch {
+		case errs.CodeOf(err) == errs.CodeNotFound:
 			var emailHash []byte
 			if ident.EmailVerified && ident.Email != "" {
 				h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(ident.Email))))
@@ -197,9 +198,9 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 				return err
 			}
 			created = true
-		} else if err != nil {
+		case err != nil:
 			return err
-		} else if user.EmailHash == nil && ident.EmailVerified && ident.Email != "" {
+		case user.EmailHash == nil && ident.EmailVerified && ident.Email != "":
 			// The assertion arrived later than the user did. email_hash was
 			// only ever written at creation, so an account created before its
 			// email was verified could never reach NODAL_IDENTITY afterwards,

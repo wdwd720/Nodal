@@ -81,12 +81,18 @@ type seedProduct struct {
 }
 
 var catalogue = []seedProduct{
-	{commerce.KindData, "Order-book snapshots, 2026 (LOCAL FAKE)",
-		"A year of level-2 snapshots. Development data; the file does not exist.", "1500000000", 1_000},
-	{commerce.KindAgentService, "Agent run: portfolio review (LOCAL FAKE)",
-		"An agent reviews a portfolio and writes a note. Development data.", "800000000", 500},
-	{commerce.KindResearch, "Weekly research note (LOCAL FAKE)",
-		"Written analysis. Development data, and not advice.", "300000000", 0},
+	{
+		commerce.KindData, "Order-book snapshots, 2026 (LOCAL FAKE)",
+		"A year of level-2 snapshots. Development data; the file does not exist.", "1500000000", 1_000,
+	},
+	{
+		commerce.KindAgentService, "Agent run: portfolio review (LOCAL FAKE)",
+		"An agent reviews a portfolio and writes a note. Development data.", "800000000", 500,
+	},
+	{
+		commerce.KindResearch, "Weekly research note (LOCAL FAKE)",
+		"Written analysis. Development data, and not advice.", "300000000", 0,
+	},
 }
 
 func main() {

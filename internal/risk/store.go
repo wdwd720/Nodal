@@ -213,6 +213,12 @@ type persistedAccountSnapshot struct {
 
 type persistedMarketSnapshot struct {
 	Market MarketSnapshot `json:"market"`
+	// NativeMarket is present only for a Nodal-native trade. It is persisted
+	// beside the market snapshot rather than omitted because a decision that
+	// cannot be recomputed from its own row is not evidence -- the two native
+	// limits read nothing else, so without this the stored REJECT would have
+	// no reproducible cause.
+	NativeMarket *NativeMarketSnapshot `json:"native_market,omitempty"`
 }
 
 type persistedConstraints struct {
@@ -265,7 +271,7 @@ func (s *Store) RecordDecision(ctx context.Context, tx pgx.Tx, in Input, d Decis
 	if err != nil {
 		return DecisionID{}, errs.Wrap(err, errs.CodeValidationFailed, "risk: account snapshot cannot be rendered")
 	}
-	marketSnap, err := canonicalJSON(persistedMarketSnapshot{Market: in.Market})
+	marketSnap, err := canonicalJSON(persistedMarketSnapshot{Market: in.Market, NativeMarket: in.NativeMarket})
 	if err != nil {
 		return DecisionID{}, errs.Wrap(err, errs.CodeValidationFailed, "risk: market snapshot cannot be rendered")
 	}

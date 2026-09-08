@@ -416,7 +416,8 @@ func TestInternalErrorsNeverLeak(t *testing.T) {
 	leaky := errors.New(
 		`pq: relation "ledger_balances" does not exist; SELECT * FROM ledger_balances; ` +
 			`dsn=postgres://cp_app:hunter2@db.internal:5432/controlplane ` +
-			`provider=https://api.stripe.com/v1/crypto/onramp_sessions api_key=sk_live_abc123`)
+			`provider=https://api.stripe.com/v1/crypto/onramp_sessions api_key=sk_live_abc123`,
+	)
 
 	h := newHarness(t)
 	p := customerPrincipal()

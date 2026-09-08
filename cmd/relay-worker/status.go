@@ -159,7 +159,8 @@ func TakeSnapshot(ctx context.Context, q db.Querier, now time.Time) (Snapshot, e
 	s := Snapshot{At: now.UTC()}
 	err := q.QueryRow(ctx, snapshotSQL, s.At).Scan(
 		&s.Unpublished, &s.Eligible, &s.Failing, &s.MaxAttempts,
-		&s.OldestRecordedAt, &s.NextAttemptAt, &s.Partitions, &s.BlockedPartitions)
+		&s.OldestRecordedAt, &s.NextAttemptAt, &s.Partitions, &s.BlockedPartitions,
+	)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("relay-worker: read outbox snapshot: %w", err)
 	}

@@ -863,8 +863,10 @@ func TestIntegration_WithoutTheMarketplaceCapabilityNothingSells(t *testing.T) {
 
 	// Listing and publishing are fine: they move no value. Buying is not.
 	closed := commerce.NewService(f.led, f.credits, audit.NewWriter(), f.clk) // no resolver at all
-	shut := &fixture{t: t, ctx: f.ctx, clk: f.clk, led: f.led, credits: f.credits,
-		svc: closed, buyer: f.buyer, seller: f.seller, asset: f.asset}
+	shut := &fixture{
+		t: t, ctx: f.ctx, clk: f.clk, led: f.led, credits: f.credits,
+		svc: closed, buyer: f.buyer, seller: f.seller, asset: f.asset,
+	}
 
 	_, err := shut.purchase(p, f.buyer, q(1_000), "nogate-"+uuid.NewString())
 	require.Error(t, err, "a service with no capability resolver must sell nothing")
@@ -908,8 +910,10 @@ func TestIntegration_ARepeatedPurchaseStopsWorkingWhenTheGateIsPulled(t *testing
 
 	off := commerce.NewService(f.led, f.credits, audit.NewWriter(), f.clk)
 	off.SetCapabilityResolver(activeCaps{commerce.CapMarketplace: false})
-	shut := &fixture{t: t, ctx: f.ctx, clk: f.clk, led: f.led, credits: f.credits,
-		svc: off, buyer: f.buyer, seller: f.seller, asset: f.asset}
+	shut := &fixture{
+		t: t, ctx: f.ctx, clk: f.clk, led: f.led, credits: f.credits,
+		svc: off, buyer: f.buyer, seller: f.seller, asset: f.asset,
+	}
 
 	_, err = shut.purchase(p, f.buyer, q(500), key)
 	require.Error(t, err)

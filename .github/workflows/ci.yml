@@ -501,6 +501,12 @@ jobs:
           # customers, a seller and a catalogue. Without it /marketplace has
           # nothing to buy and the purchase spec has nothing to exercise.
           go run ./scripts/seedeconomy
+          # The GLOBAL risk policy. Domain A trades are evaluated against it and
+          # fail closed without one, so a deployment that skips this step has a
+          # marketplace but no internal market. The compiled-in default is what
+          # a fresh development deployment gets; riskpolicy refuses to write it
+          # outside LOCAL/DEV/TEST.
+          go run ./scripts/riskpolicy -operator ci-operator -reason "continuous integration: the compiled-in development limits"
           # MARKETPLACE, through the REAL three-principal ceremony rather than
           # by writing an ACTIVE row. gateceremony drives gates.Admin, so the
           # state machine, the permission split, the step-up and all four

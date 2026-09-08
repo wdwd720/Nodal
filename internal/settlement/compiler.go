@@ -354,7 +354,6 @@ var profiles = map[ActionType]actionProfile{
 	},
 }
 
-// Profile returns the compile-time facts for an action type.
 // AllRequiredCapabilities returns every capability any action profile can
 // require, sorted and de-duplicated.
 //
@@ -379,6 +378,7 @@ func AllRequiredCapabilities() []valuedomain.CapabilityKey {
 	return out
 }
 
+// Profile returns the compile-time facts for an action type.
 func Profile(a ActionType) (valuedomain.Domain, valuedomain.CapitalRail, string, bool) {
 	p, ok := profiles[a]
 	return p.domain, p.rail, p.product, ok

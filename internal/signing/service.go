@@ -249,7 +249,8 @@ func (s *PGService) Sign(ctx context.Context, req Request) (Decision, []byte, er
 	}
 	log := s.deps.Logger.With(
 		slog.String("attempt_id", req.AttemptID), slog.String("plan_id", req.PlanID),
-		slog.String("wallet_id", req.WalletID), slog.String("correlation_id", req.CorrelationID))
+		slog.String("wallet_id", req.WalletID), slog.String("correlation_id", req.CorrelationID),
+	)
 
 	txHash := sha256.Sum256(req.UnsignedTx)
 

@@ -61,7 +61,8 @@ func proposeBreakGlass(t *testing.T, proposer session, targetUser, label string)
 	t.Helper()
 	body := fmt.Sprintf(
 		`{"kind":"BREAK_GLASS_GRANT","target_type":"user","target_id":%q,"reason":%q}`,
-		targetUser, "adversarial dual-control probe "+label)
+		targetUser, "adversarial dual-control probe "+label,
+	)
 	r := postAs(t, proposer.Token, "/v1/admin/actions", key("dual-propose-"+label), body)
 	require.Equal(t, http.StatusCreated, r.Status, "propose BREAK_GLASS_GRANT: %s", r.text())
 	var doc struct {
@@ -240,7 +241,8 @@ func TestStepUp_AdminWritesRequireRecentStrongAuthentication(t *testing.T) {
 	t.Run("propose", func(t *testing.T) {
 		body := fmt.Sprintf(
 			`{"kind":"BREAK_GLASS_GRANT","target_type":"user","target_id":%q,"reason":"adversarial step-up probe %s"}`,
-			weak.SubjectID, runToken)
+			weak.SubjectID, runToken,
+		)
 		r := postAs(t, probe.Token, "/v1/admin/actions", key("stepup-propose"), body)
 		requireStepUpRefusal(t, r, "POST /v1/admin/actions")
 	})

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -61,6 +63,40 @@ type domainAHarness struct {
 	market  nativemarket.Market
 }
 
+// seedGlobalRiskPolicy records the GLOBAL risk policy these tests evaluate
+// against, once for the whole package.
+//
+// It records the compiled-in default -- what `go run ./scripts/riskpolicy`
+// gives a fresh deployment -- rather than a relaxed fixture policy, because a
+// fixture that loosens the limits it is meant to exercise is the test
+// equivalent of turning the control off.
+func seedGlobalRiskPolicy(t *testing.T, d *db.DB, at time.Time) {
+	t.Helper()
+	globalRiskPolicy.Do(func() {
+		ctx := security.WithPrincipal(context.Background(), security.Principal{
+			SubjectID: "domaina-itest", ActorType: security.ActorSystem, AuthTime: at,
+		})
+		if _, _, err := risk.NewStore().EffectivePolicy(ctx, d, "", "", at); err == nil {
+			return // an earlier run against this database already recorded it
+		}
+		require.NoError(t, d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, err := risk.NewStore().RecordPolicy(ctx, tx, risk.PolicyRecord{
+					Scope:       risk.ScopeGlobal,
+					Version:     "domaina-itest-global",
+					Rules:       json.RawMessage(risk.DefaultGlobalPolicyJSON),
+					EffectiveAt: at.Add(-time.Hour),
+					ActorType:   security.ActorSystem,
+					ActorID:     "domaina-itest",
+					Reason:      "the compiled-in default limits, as a fresh deployment gets them",
+				})
+				return err
+			}))
+	})
+}
+
+var globalRiskPolicy sync.Once
+
 func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	t.Helper()
 	clk := clock.NewFake(testNow)
@@ -69,7 +105,9 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	credits := credit.NewService(led, clk)
 
 	assetSvc := nativeasset.NewService(clk, nil)
-	marketSvc := nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
+	seedGlobalRiskPolicy(t, d, testNow)
+	marketSvc := nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(),
+		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
 	commerceSvc := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	commerceSvc.SetCapabilityResolver(commerceCaps{commerce.CapMarketplace: true})
 
@@ -547,7 +585,9 @@ func TestIntegration_ADeploymentWithoutTheInternalEconomyRegistersNoExecutors(t 
 	partial := DomainAExecutors(DomainAExecutorDeps{NativeMarkets: nativemarket.NewService(
 		ledger.NewService(clock.NewFake(testNow), "x"),
 		credit.NewService(ledger.NewService(clock.NewFake(testNow), "x"), clock.NewFake(testNow)),
-		valuation.NewPriceStore(clock.NewFake(testNow)), audit.NewWriter(), instruments.NewRepository(), clock.NewFake(testNow))})
+		valuation.NewPriceStore(clock.NewFake(testNow)), audit.NewWriter(), instruments.NewRepository(),
+		nativemarket.NewRiskGate(risk.NewStore(), clock.NewFake(testNow)), clock.NewFake(testNow),
+	)})
 	require.Len(t, partial, 4, "the four market controls and nothing else")
 	for _, k := range []admin.Kind{
 		admin.KindNativeMarketHalt, admin.KindNativeMarketCloseOnly,

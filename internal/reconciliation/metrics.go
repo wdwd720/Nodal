@@ -126,7 +126,8 @@ func (m *Metrics) Raise(ctx context.Context, a Alert) {
 	}
 	if m.financial != nil && m.financial.ReconciliationMismatches != nil {
 		m.financial.ReconciliationMismatches.Add(ctx, 1, observability.WithSafeAttrs(
-			attribute.String("alert", a.Name), attribute.String("severity", string(a.Severity))))
+			attribute.String("alert", a.Name), attribute.String("severity", string(a.Severity)),
+		))
 	}
 	if m.observer != nil {
 		m.observer(a)

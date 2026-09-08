@@ -116,6 +116,7 @@ func (f fakeProvider) Capabilities() Capabilities { return f.caps }
 func (f fakeProvider) Submit(context.Context, SubmitRequest) (SubmitResult, error) {
 	return SubmitResult{}, nil
 }
+
 func (f fakeProvider) Lookup(context.Context, string) (SubmitResult, error) {
 	return SubmitResult{}, nil
 }

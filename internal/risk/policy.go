@@ -80,6 +80,30 @@ type Policy struct {
 	MaxQuoteAgeMS                 *int64     `json:"max_quote_age_ms"`
 	MinLiquidityUSD               *money.USD `json:"min_liquidity_usd"`
 
+	// The two limits PART XXXII names for the Nodal-native economy. Both are
+	// pure RATIOS and neither has a USD term, which is not an omission: a
+	// Credit has no approved external value, so a limit on a native position
+	// expressed in USD would require an exchange rate nobody set (PART LIV).
+	//
+	// MaxNativeMarketConcentrationBPS caps the share of an asset's TOTAL
+	// SUPPLY a single account may hold after a trade. It is the limit that
+	// stops one holder owning a market, which is the position from which its
+	// price can be set at will.
+	//
+	// Total supply rather than the traded float: the first buyer in a new
+	// market holds all of the float, so a limit against it would refuse the
+	// opening trade of every market. See NativeMarketSnapshot.
+	MaxNativeMarketConcentrationBPS *money.BPS `json:"max_native_market_concentration_bps"`
+	// MaxCreatorConcentrationBPS caps the share of an account's Credit
+	// position that may be committed to the assets of ONE creator.
+	//
+	// It is measured on Credits SPENT against Credits spent plus Credits still
+	// spendable -- not on holdings valued at the current price. A holder of a
+	// native asset can move that price, so a limit denominated in it would be
+	// a limit the person it constrains can move. Cost basis is the number
+	// nobody can rewrite.
+	MaxCreatorConcentrationBPS *money.BPS `json:"max_creator_concentration_bps"`
+
 	// MaxDataAgeMS caps the age of each data dependency kind the input
 	// reports (for example "price", "wallet_event"). Compose keeps the
 	// smallest cap per kind.
@@ -175,6 +199,8 @@ func (p Policy) validateValues() error {
 	nonNegativeUSD("min_liquidity_usd", p.MinLiquidityUSD)
 	boundedBPS("max_concentration_bps", p.MaxConcentrationBPS)
 	boundedBPS("max_asset_class_concentration_bps", p.MaxAssetClassConcentrationBPS)
+	boundedBPS("max_native_market_concentration_bps", p.MaxNativeMarketConcentrationBPS)
+	boundedBPS("max_creator_concentration_bps", p.MaxCreatorConcentrationBPS)
 	boundedBPS("max_slippage_bps", p.MaxSlippageBPS)
 	boundedBPS("max_fee_bps", p.MaxFeeBPS)
 	boundedBPS("max_price_impact_bps", p.MaxPriceImpactBPS)
@@ -250,6 +276,8 @@ func (p Policy) MissingLimits() []string {
 	check("max_total_exposure_usd", p.MaxTotalExposureUSD == nil)
 	check("max_concentration_bps", p.MaxConcentrationBPS == nil)
 	check("max_asset_class_concentration_bps", p.MaxAssetClassConcentrationBPS == nil)
+	check("max_native_market_concentration_bps", p.MaxNativeMarketConcentrationBPS == nil)
+	check("max_creator_concentration_bps", p.MaxCreatorConcentrationBPS == nil)
 	check("max_daily_loss_usd", p.MaxDailyLossUSD == nil)
 	check("max_drawdown_usd", p.MaxDrawdownUSD == nil)
 	check("max_orders_per_hour", p.MaxOrdersPerHour == nil)
@@ -290,6 +318,8 @@ func Compose(global, account, agent *Policy) Policy {
 		out.MaxTotalExposureUSD = minUSD(out.MaxTotalExposureUSD, l.MaxTotalExposureUSD)
 		out.MaxConcentrationBPS = minBPS(out.MaxConcentrationBPS, l.MaxConcentrationBPS)
 		out.MaxAssetClassConcentrationBPS = minBPS(out.MaxAssetClassConcentrationBPS, l.MaxAssetClassConcentrationBPS)
+		out.MaxNativeMarketConcentrationBPS = minBPS(out.MaxNativeMarketConcentrationBPS, l.MaxNativeMarketConcentrationBPS)
+		out.MaxCreatorConcentrationBPS = minBPS(out.MaxCreatorConcentrationBPS, l.MaxCreatorConcentrationBPS)
 		out.MaxDailyLossUSD = minUSD(out.MaxDailyLossUSD, l.MaxDailyLossUSD)
 		out.MaxDrawdownUSD = minUSD(out.MaxDrawdownUSD, l.MaxDrawdownUSD)
 		out.MaxOrdersPerHour = minInt(out.MaxOrdersPerHour, l.MaxOrdersPerHour)
@@ -489,6 +519,8 @@ const DefaultGlobalPolicyJSON = `{
   "max_total_exposure_usd": "10000.00",
   "max_concentration_bps": 2500,
   "max_asset_class_concentration_bps": 5000,
+  "max_native_market_concentration_bps": 2000,
+  "max_creator_concentration_bps": 3000,
   "max_daily_loss_usd": "500.00",
   "max_drawdown_usd": "1000.00",
   "max_orders_per_hour": 30,

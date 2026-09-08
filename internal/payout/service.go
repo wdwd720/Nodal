@@ -216,10 +216,14 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 		Description:    "Credits reserved against a payout request",
 		Conversion:     &conv,
 		Entries: []ledger.Entry{
-			{Account: ledger.CustomerAccount(req.AccountID, ledger.CodeCreditBalance, req.CreditAssetID),
-				Side: ledger.Credit, Quantity: d.Requested},
-			{Account: ledger.CustomerAccount(req.AccountID, ledger.CodePayoutReserved, req.CreditAssetID),
-				Side: ledger.Debit, Quantity: d.Requested},
+			{
+				Account: ledger.CustomerAccount(req.AccountID, ledger.CodeCreditBalance, req.CreditAssetID),
+				Side:    ledger.Credit, Quantity: d.Requested,
+			},
+			{
+				Account: ledger.CustomerAccount(req.AccountID, ledger.CodePayoutReserved, req.CreditAssetID),
+				Side:    ledger.Debit, Quantity: d.Requested,
+			},
 		},
 		Metadata: map[string]any{"policy_version": d.PolicyVersion, "policy_hash": d.PolicyHash},
 	})
@@ -424,10 +428,14 @@ func (s *Service) settle(ctx context.Context, tx pgx.Tx, requestID RequestID, re
 		Description:    "payout settled by provider",
 		Conversion:     &conv,
 		Entries: []ledger.Entry{
-			{Account: ledger.CustomerAccount(req.AccountID, ledger.CodePayoutReserved, req.CreditAssetID),
-				Side: ledger.Credit, Quantity: req.ReservedQuantity},
-			{Account: ledger.PlatformAccount(ledger.CodePayoutSettled, req.CreditAssetID),
-				Side: ledger.Debit, Quantity: req.ReservedQuantity},
+			{
+				Account: ledger.CustomerAccount(req.AccountID, ledger.CodePayoutReserved, req.CreditAssetID),
+				Side:    ledger.Credit, Quantity: req.ReservedQuantity,
+			},
+			{
+				Account: ledger.PlatformAccount(ledger.CodePayoutSettled, req.CreditAssetID),
+				Side:    ledger.Debit, Quantity: req.ReservedQuantity,
+			},
 		},
 		Metadata: map[string]any{"provider_reference": result.ProviderReference},
 	}); err != nil {
@@ -652,10 +660,14 @@ func (s *Service) returnReservation(ctx context.Context, tx pgx.Tx, req Request,
 		Description:    "reserved Credits returned to the customer",
 		Conversion:     &conv,
 		Entries: []ledger.Entry{
-			{Account: ledger.CustomerAccount(req.AccountID, ledger.CodePayoutReserved, req.CreditAssetID),
-				Side: ledger.Credit, Quantity: req.ReservedQuantity},
-			{Account: ledger.CustomerAccount(req.AccountID, ledger.CodeCreditBalance, req.CreditAssetID),
-				Side: ledger.Debit, Quantity: req.ReservedQuantity},
+			{
+				Account: ledger.CustomerAccount(req.AccountID, ledger.CodePayoutReserved, req.CreditAssetID),
+				Side:    ledger.Credit, Quantity: req.ReservedQuantity,
+			},
+			{
+				Account: ledger.CustomerAccount(req.AccountID, ledger.CodeCreditBalance, req.CreditAssetID),
+				Side:    ledger.Debit, Quantity: req.ReservedQuantity,
+			},
 		},
 		Metadata: map[string]any{"reason": reason},
 	})

@@ -286,7 +286,8 @@ func (PgHealthStore) Latest(ctx context.Context, q db.Querier, providerName, rol
 		sample_count, reason_codes, evaluator_version, evaluated_at FROM provider_health_samples WHERE provider = $1 AND role = $2
 		ORDER BY evaluated_at DESC, id DESC LIMIT 1`, providerName, role).Scan(
 		&sid, &h.Provider, &h.Role, &dsid, &state, &h.ErrorRateBPS, &h.P50LatencyMS, &h.P99LatencyMS, &h.StalenessMS, &h.WindowMS,
-		&h.SampleCount, &h.ReasonCodes, &h.EvaluatorVersion, &h.EvaluatedAt)
+		&h.SampleCount, &h.ReasonCodes, &h.EvaluatorVersion, &h.EvaluatedAt,
+	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return HealthSample{}, errs.New(errs.CodeNotFound, "reality: no health sample").WithField("provider", providerName).WithField("role", role)

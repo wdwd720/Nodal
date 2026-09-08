@@ -303,15 +303,19 @@ type Decision struct {
 // accidentally open it.
 func Permits(level Level, action Action, activeCaps map[valuedomain.CapabilityKey]bool) Decision {
 	if !action.Valid() {
-		return Decision{Reasons: []Reason{ReasonUnknownAction},
-			Detail: "unknown agent action " + string(action)}
+		return Decision{
+			Reasons: []Reason{ReasonUnknownAction},
+			Detail:  "unknown agent action " + string(action),
+		}
 	}
 	if forbidden, why := ForbiddenAlways(action); forbidden {
 		return Decision{Reasons: []Reason{ReasonForbiddenAlways}, Detail: why}
 	}
 	if !level.Valid() {
-		return Decision{Reasons: []Reason{ReasonUnknownLevel},
-			Detail: "unknown agent authority level"}
+		return Decision{
+			Reasons: []Reason{ReasonUnknownLevel},
+			Detail:  "unknown agent authority level",
+		}
 	}
 
 	need, ok := MinimumLevel(action)
@@ -319,8 +323,10 @@ func Permits(level Level, action Action, activeCaps map[valuedomain.CapabilityKe
 		// Neither permitted at a level nor explicitly forbidden. Refusing is
 		// the only safe reading, and Validate makes this state impossible to
 		// reach in a build that has been tested.
-		return Decision{Reasons: []Reason{ReasonUnknownAction},
-			Detail: "action " + string(action) + " has no declared authority level"}
+		return Decision{
+			Reasons: []Reason{ReasonUnknownAction},
+			Detail:  "action " + string(action) + " has no declared authority level",
+		}
 	}
 
 	d := Decision{RequiredLevel: need, RequiredCapability: need.RequiresCapability()}

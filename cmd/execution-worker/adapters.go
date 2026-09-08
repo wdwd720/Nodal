@@ -102,7 +102,8 @@ func toQuoteRow(q execution.QuoteSnapshot) (quote.Quote, error) {
 	out.EstVenueFeeAssetID = optionalAsset(q.EstVenueFeeAsset)
 	out.PlatformFeeAssetID = optionalAsset(q.PlatformFeeAsset)
 	out.EffectivePrice = quote.NewEffectivePrice(
-		q.EffectivePrice.Mantissa, q.EffectivePrice.Scale, side, q.InputAsset, q.OutputAsset, q.Provider, out.ReceivedAt)
+		q.EffectivePrice.Mantissa, q.EffectivePrice.Scale, side, q.InputAsset, q.OutputAsset, q.Provider, out.ReceivedAt,
+	)
 	return out, nil
 }
 

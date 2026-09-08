@@ -371,8 +371,10 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 	// -- this is a transfer inside INTERNAL_CREDIT, and the ledger's own
 	// balance and negative-balance triggers are the whole check.
 	entries := []ledger.Entry{
-		{Account: ledger.CustomerAccount(r.BuyerAccountID, ledger.CodeCreditBalance, creditAsset),
-			Side: ledger.Credit, Quantity: p.Price},
+		{
+			Account: ledger.CustomerAccount(r.BuyerAccountID, ledger.CodeCreditBalance, creditAsset),
+			Side:    ledger.Credit, Quantity: p.Price,
+		},
 	}
 	if proceeds.IsPositive() {
 		entries = append(entries, ledger.Entry{

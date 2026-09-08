@@ -109,14 +109,17 @@ func TestIntegration_Part49_CrashRecovery(t *testing.T) {
 	// 10. exactly one position change occurs: one SOL lot acquired, one USDC
 	// disposal recorded. (The seed lot is the only other lot.)
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM position_lots WHERE account_id = $1 AND asset_id = $2`, f.account, f.sol.ID))
+		`SELECT count(*) FROM position_lots WHERE account_id = $1 AND asset_id = $2`, f.account, f.sol.ID,
+	))
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM lot_dispositions WHERE account_id = $1 AND asset_id = $2`, f.account, f.usdc.ID))
+		`SELECT count(*) FROM lot_dispositions WHERE account_id = $1 AND asset_id = $2`, f.account, f.usdc.ID,
+	))
 
 	// 11. correct ledger entries post: exactly one TRADE_FILL transaction,
 	// and the balances it produced.
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fills[0].ID))
+		`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fills[0].ID,
+	))
 	assert.True(t, f.balance(ledger.CodeWallet, f.usdc.ID).Equal(money.QuantityFromInt64(fundedUSDC-orderInput)),
 		"WALLET:USDC = 100 - 49.5")
 	assert.True(t, f.balance(ledger.CodeWallet, f.sol.ID).Equal(money.QuantityFromInt64(filledOutput-networkFee)),
@@ -179,10 +182,13 @@ func TestIntegration_Part49_CrashRecovery(t *testing.T) {
 	}
 	assert.Len(t, f.fills(ord.ID), 1)
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fills[0].ID))
+		`SELECT count(*) FROM journal_transactions WHERE kind = 'TRADE_FILL' AND reference_id = $1`, fills[0].ID,
+	))
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM position_lots WHERE account_id = $1 AND asset_id = $2`, f.account, f.sol.ID))
+		`SELECT count(*) FROM position_lots WHERE account_id = $1 AND asset_id = $2`, f.account, f.sol.ID,
+	))
 	assert.Equal(t, 1, f.countRows(
-		`SELECT count(*) FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2`, ScopeAttempt, att.ID.String()))
+		`SELECT count(*) FROM reconciliation_records WHERE scope_type = $1 AND scope_id = $2`, ScopeAttempt, att.ID.String(),
+	))
 	assert.Zero(t, f.adapter.submits)
 }

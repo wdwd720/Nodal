@@ -866,9 +866,11 @@ func TestIntegration_OutOfOrderWebhooksNeverMoveADepositBackwards(t *testing.T) 
 	require.Nil(t, actionAt)
 
 	require.Equal(t, 1, f.count(
-		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status = 'PROVIDER_CONFIRMED'`, depositID))
+		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status = 'PROVIDER_CONFIRMED'`, depositID,
+	))
 	require.Equal(t, 0, f.count(
-		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status IN ('PROVIDER_PROCESSING','CUSTOMER_ACTION_REQUIRED')`, depositID))
+		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status IN ('PROVIDER_PROCESSING','CUSTOMER_ACTION_REQUIRED')`, depositID,
+	))
 
 	// And the out-of-order stream still ends where an ordered one would, with
 	// the customer credited exactly once.
@@ -894,7 +896,8 @@ func TestIntegration_OutOfOrderWebhooksNeverMoveADepositBackwards(t *testing.T) 
 	require.Equal(t, q(100*oneUSDC).String(), f.balance(ledger.CodeWallet).String(),
 		"a late webhook must not post a second credit")
 	require.Equal(t, 1, f.count(
-		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status = 'PROVIDER_CONFIRMED'`, depositID))
+		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status = 'PROVIDER_CONFIRMED'`, depositID,
+	))
 }
 
 // TestIntegration_ARejectionArrivingAfterConfirmationEscalates covers the one

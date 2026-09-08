@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"math/big"
 	"sort"
 	"time"
 
@@ -22,6 +23,8 @@ const (
 	ReasonMaxPosition                  = "RISK_MAX_POSITION"
 	ReasonMaxExposure                  = "RISK_MAX_EXPOSURE"
 	ReasonConcentration                = "RISK_CONCENTRATION"
+	ReasonNativeMarketConcentration    = "RISK_NATIVE_MARKET_CONCENTRATION"
+	ReasonCreatorConcentration         = "RISK_CREATOR_CONCENTRATION"
 	ReasonDailyLoss                    = "RISK_DAILY_LOSS"
 	ReasonMaxDrawdown                  = "RISK_MAX_DRAWDOWN"
 	ReasonOrderRate                    = "RISK_ORDER_RATE"
@@ -149,6 +152,7 @@ func Evaluate(p Policy, in Input) Decision {
 		ev.accountChecks()
 		if intentStage {
 			ev.intentChecks()
+			ev.nativeMarketChecks()
 		}
 		d.Constraints = ev.constraints()
 	}
@@ -448,6 +452,68 @@ func (e *evaluator) intentChecks() {
 			e.rs.add(ReasonLiquidity)
 		}
 	}
+}
+
+// nativeMarketChecks evaluates the two limits PART XXXII names for the
+// Nodal-native economy: native-market concentration and creator concentration.
+//
+// It runs only when the caller supplied a NativeMarketSnapshot. An intent that
+// is not a native trade has none, and neither limit applies to it.
+//
+// # Why there is no USD anywhere in here
+//
+// Every other limit in this kernel is denominated in USD. These two cannot be,
+// and that is a property of what they constrain rather than a shortcut. A
+// Credit has no approved external value (PART LIV), so a USD limit on a native
+// position would need an exchange rate nobody set. Both limits are therefore
+// ratios: units held against units outstanding, and Credits spent on one
+// creator against Credits spent on all of them.
+//
+// # Why spend and not value
+//
+// Creator concentration could have been measured on holdings valued at each
+// market's current price. It is not, because the holder of a thinly traded
+// native asset can move that price -- so the limit would be one the person it
+// constrains can move. Cost basis is the number nobody can rewrite.
+//
+// # Both denominators are chosen so the FIRST trade is not automatically a
+// violation
+//
+// See NativeMarketSnapshot. A share of the float, or a share of native spend,
+// is 100% for the opening trade in a market and for an account's first native
+// purchase respectively -- so limits built on them would refuse everybody's
+// first trade forever, which is a broken market rather than a control.
+//
+// A zero denominator is still not a violation, for the same reason: an account
+// that holds nothing of an asset with no supply is not concentrated in it.
+func (e *evaluator) nativeMarketChecks() {
+	n := e.in.NativeMarket
+	if n == nil {
+		return
+	}
+	if e.p.MaxNativeMarketConcentrationBPS != nil &&
+		shareExceeds(n.HoldingAfter, n.TotalSupply, *e.p.MaxNativeMarketConcentrationBPS) {
+		e.rs.add(ReasonNativeMarketConcentration)
+	}
+	if e.p.MaxCreatorConcentrationBPS != nil &&
+		shareExceeds(n.SpendOnThisCreatorAfter, n.CreditBaseAfter, *e.p.MaxCreatorConcentrationBPS) {
+		e.rs.add(ReasonCreatorConcentration)
+	}
+}
+
+// shareExceeds reports whether part/whole is above limit, in basis points,
+// using integer arithmetic only.
+//
+// It compares part * 10000 against whole * limit rather than dividing, so
+// there is no rounding step to argue about and no float anywhere. A
+// non-positive whole is never a violation.
+func shareExceeds(part, whole money.Quantity, limit money.BPS) bool {
+	if !whole.IsPositive() || !part.IsPositive() {
+		return false
+	}
+	left := new(big.Int).Mul(part.BigInt(), big.NewInt(int64(money.OneHundredPercent)))
+	right := new(big.Int).Mul(whole.BigInt(), big.NewInt(int64(limit)))
+	return left.Cmp(right) > 0
 }
 
 func (e *evaluator) envelopeChecks(posAfter money.USD) {

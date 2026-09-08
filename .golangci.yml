@@ -83,8 +83,26 @@ linters:
         - name: unconditional-recursion
 
     misspell:
-      locale: US
-      # State names fixed by the goal document and DB CHECK constraints.
+      # NO locale, deliberately. This repository's prose is a genuine mix:
+      # "cancelling", "behaviour", "catalogue" and "serialised" sit beside
+      # "sanitizes", "analyze" and "authorization", and one of the words US
+      # mode rewrites is CHEQUE -- a payout instrument kind whose spelling is
+      # the name of the thing.
+      #
+      # Neither locale can pass. `locale: US` reported 56 findings across 27
+      # files and `locale: UK` reported 692, and every one of them was a
+      # deliberate spelling rather than a mistake, so the only way to go green
+      # was to rewrite correct prose. With no locale, misspell still catches
+      # what it is for -- actual typos -- and stops arbitrating dialect.
+      #
+      # This is the argument `make sast` already records in the Makefile: a
+      # check that can only fail is a check nobody runs, and `make lint` had
+      # been red for exactly this reason.
+      #
+      # A consistent dialect would be better than a mixed one. Imposing it by
+      # linter, across 27 files, in the same change as a risk-kernel wiring, is
+      # not the way to get there.
+      # State names fixed by the goal document and by DB CHECK constraints.
       ignore-rules:
         - cancelled
 

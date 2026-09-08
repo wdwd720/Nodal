@@ -72,6 +72,8 @@ func genPolicy(rt *rapid.T, label string, complete bool) Policy {
 		MaxTotalExposureUSD:               genOptUSD(rt, label+"_total", 10_000_000_00),
 		MaxConcentrationBPS:               genOptBPS(rt, label+"_conc"),
 		MaxAssetClassConcentrationBPS:     genOptBPS(rt, label+"_cconc"),
+		MaxNativeMarketConcentrationBPS:   genOptBPS(rt, label+"_nmconc"),
+		MaxCreatorConcentrationBPS:        genOptBPS(rt, label+"_crconc"),
 		MaxDailyLossUSD:                   genOptUSD(rt, label+"_loss", 100_000_00),
 		MaxDrawdownUSD:                    genOptUSD(rt, label+"_dd", 100_000_00),
 		MaxOrdersPerHour:                  genOptInt(rt, label+"_orders", 100),
@@ -114,6 +116,8 @@ func genPolicy(rt *rapid.T, label string, complete bool) Policy {
 		}
 		bps(&p.MaxConcentrationBPS, 10_000)
 		bps(&p.MaxAssetClassConcentrationBPS, 10_000)
+		bps(&p.MaxNativeMarketConcentrationBPS, 10_000)
+		bps(&p.MaxCreatorConcentrationBPS, 10_000)
 		bps(&p.MaxSlippageBPS, 10_000)
 		bps(&p.MaxFeeBPS, 10_000)
 		bps(&p.MaxPriceImpactBPS, 10_000)
@@ -348,6 +352,8 @@ func TestProp_ComposeStrictest(t *testing.T) {
 			}
 			leBPS("conc", c.MaxConcentrationBPS, l.MaxConcentrationBPS)
 			leBPS("cconc", c.MaxAssetClassConcentrationBPS, l.MaxAssetClassConcentrationBPS)
+			leBPS("nmconc", c.MaxNativeMarketConcentrationBPS, l.MaxNativeMarketConcentrationBPS)
+			leBPS("crconc", c.MaxCreatorConcentrationBPS, l.MaxCreatorConcentrationBPS)
 			leBPS("slip", c.MaxSlippageBPS, l.MaxSlippageBPS)
 			leBPS("fee", c.MaxFeeBPS, l.MaxFeeBPS)
 			leBPS("impact", c.MaxPriceImpactBPS, l.MaxPriceImpactBPS)

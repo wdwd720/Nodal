@@ -52,7 +52,12 @@ func run(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, append([]string{"-l"}, dirs...)...) // #nosec G204 G702 -- dev tool: bin is ./bin/gofumpt or a PATH lookup of the literal name; dirs are CLI arguments filtered to existing directories, and exec.Command never invokes a shell
+	// -extra, to match .golangci.yml's `gofumpt.extra.group-params: true`.
+	// Without it the two disagree: this target passed while `make lint`
+	// reported the same two files as unformatted, so `make fmt` could produce
+	// a file `make lint` rejects. Two formatters with different settings is
+	// worse than one.
+	cmd := exec.CommandContext(ctx, bin, append([]string{"-l", "-extra"}, dirs...)...) // #nosec G204 G702 -- dev tool: bin is ./bin/gofumpt or a PATH lookup of the literal name; dirs are CLI arguments filtered to existing directories, and exec.Command never invokes a shell
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb

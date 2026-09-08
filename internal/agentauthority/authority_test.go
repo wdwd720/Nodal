@@ -104,7 +104,7 @@ func TestPermits_TheLadderIsMonotonic(t *testing.T) {
 		if forbidden, _ := ForbiddenAlways(a); forbidden {
 			continue
 		}
-		var firstAllowed = -1
+		firstAllowed := -1
 		for _, l := range AllLevels() {
 			if Permits(l, a, everyCapability()).Allowed {
 				firstAllowed = int(l)

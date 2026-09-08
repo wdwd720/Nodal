@@ -48,14 +48,21 @@ import (
 	"testing"
 )
 
-// financialPackages are the ones whose mutators move value. Adding a package
-// here is how a new financial service joins the check.
+// financialPackages are the ones whose mutators move value, or decide whether
+// value may move. Adding a package here is how a new financial service joins
+// the check.
+//
+// internal/risk is in the second category and was added after F-34, where the
+// whole kernel turned out to be unreachable: nothing had ever written a policy
+// row, so nothing had ever been evaluated. A control that decides is worth the
+// same question as a control that moves.
 var financialPackages = []string{
 	"internal/nativeasset",
 	"internal/nativemarket",
 	"internal/commerce",
 	"internal/credit",
 	"internal/payout",
+	"internal/risk",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in
@@ -96,9 +103,17 @@ var unreachableOnPurpose = map[string]string{
 }
 
 var (
-	// mutator matches an exported method taking a transaction: the shape of
-	// every call that changes money in this codebase.
-	mutator = regexp.MustCompile(`(?m)^func \(\w+ \*?\w+\) ([A-Z]\w*)\(ctx context\.Context, tx pgx\.Tx`)
+	// mutator matches an exported method on an EXPORTED type taking a
+	// transaction: the shape of every call that changes money in this codebase.
+	//
+	// The receiver type must be exported because the question this test asks --
+	// "does anything outside this package call it" -- cannot be asked of a
+	// method on an unexported type. Nothing outside can name that type at all;
+	// such a method is reached only through an interface the package itself
+	// hands out, and its caller is by construction inside the package. Matching
+	// them produced exactly one finding, and it was false: the adapter that
+	// writes a risk decision, called by the service two files away.
+	mutator = regexp.MustCompile(`(?m)^func \(\w+ \*?[A-Z]\w*\) ([A-Z]\w*)\(ctx context\.Context, tx pgx\.Tx`)
 	// callSite matches an invocation of such a method. It requires the SECOND
 	// argument to be a transaction, which is what makes the match specific:
 	// `.Cancel(ctx` matches half a dozen unrelated types, and the first

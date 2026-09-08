@@ -186,6 +186,8 @@ func (s *Sandbox) Lookup(_ context.Context, key string) (payout.SubmitResult, er
 	}
 	// The provider has never heard of the key, which means the submission
 	// never landed. That is a definite answer and a safe one.
-	return payout.SubmitResult{Status: payout.ProviderFailed, RawStatus: "not_found",
-		FailureReason: "the provider has no record of this payout"}, nil
+	return payout.SubmitResult{
+		Status: payout.ProviderFailed, RawStatus: "not_found",
+		FailureReason: "the provider has no record of this payout",
+	}, nil
 }
