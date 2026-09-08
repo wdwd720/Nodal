@@ -898,6 +898,41 @@ risk, not a defect", and it became both -- F-43 in a security control and F-49 i
 a ledger invariant. Four parity tests now drive both copies. What is still
 uncompared is the transaction-kind list and the credit-origin list.
 
+### F-52 closed: the frozen account has a button now
+
+The reconciliation worker raises records and blocks_new_risk is read by buying
+power, so an automated check removes an account's capacity to trade. cmd/api set
+Reconcile: nil, so both admin endpoints answered UNSUPPORTED and
+Engine.ResolveManual had no caller outside its own tests. A deployment could
+freeze somebody and had no button; the only recourse was a hand-written UPDATE,
+which is what the admin plane exists to replace. F-29 one level up.
+
+cmd/api now builds a RESOLUTION-SHAPED engine -- no observers, no adapters, and
+deliberately NO LEDGER -- and httpapi.NewReconciliationPort serves both routes.
+
+Three domain rules the fix respects rather than works around, each found by the
+suite refusing an earlier version:
+
+  1. INVESTIGATING comes before RESOLVED_MANUAL, because somebody must have
+     looked. A worker-raised record is MISMATCH or ESCALATED, so a resolve-only
+     endpoint could not clear a single record the worker produces -- fixed in
+     name only. The adapter moves those two into INVESTIGATING first, carrying
+     the operator's own reason.
+  2. A record may change status at most once per transaction, which is what
+     binds each transition to exactly one audit row. So the investigate commits
+     first and the resolution follows. A failure between them leaves the record
+     INVESTIGATING, which still blocks: nothing is lost and repeating the call
+     finishes it.
+  3. An OPEN record is not operator-resolvable, because OPEN means the engine
+     has not decided there is a difference. The adapter does not force a path;
+     the test asserts the refusal.
+
+A compensating posting is refused BY NAME. It is the only way a resolution
+changes financial state, and building one from an API request means choosing a
+posting kind, an idempotency key, a reference and an owner per entry. The engine
+carries no ledger, so the refusal and the domain agree even if somebody later
+changes only one of them.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

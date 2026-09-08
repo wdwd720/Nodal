@@ -7,11 +7,11 @@ Findings in **existing code** are marked `BASELINE`. Findings in code written du
 are marked `NEW` — they are recorded with the same weight, because a defect found in your own work an
 hour after writing it is the same defect it would have been in six months.
 
-Four findings are **OPEN**: F-31, a concurrency failure seen once and not reproduced; F-42, a
-database control whose stated guarantee does not hold; F-47, two statements about who may read
-encrypted PII that contradict each other; and F-52, an account whose new risk can be blocked with no
-wired way to unblock it. All four are in the table with everything else rather than in a footnote,
-because a register that only records what was fixed is a register that rewards not looking.
+Three findings are **OPEN**: F-31, a concurrency failure seen once and not reproduced; F-42, a
+database control whose stated guarantee does not hold; and F-47, two statements about who may read
+encrypted PII that contradict each other. All three are in the table with everything else rather
+than in a footnote, because a register that only records what was fixed is a register that rewards
+not looking.
 
 **F-47 is also the one wrong call in this register.** It was raised as a privilege leak and a fix was
 written and applied before the integration suite refused it. The entry keeps the whole sequence
@@ -75,7 +75,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-49 | P2 | BASELINE | fixed | An account chose its own exemption from the negative-balance guard |
 | F-50 | P2 | BASELINE | fixed | An asset could be stored with no value domain: a CHECK that evaluates to NULL accepts |
 | F-51 | P2 | BASELINE | fixed | Three operations documents described controls and wiring that do not exist, in both directions |
-| F-52 | P1 | BASELINE | **OPEN** | A deployment can block an account's new risk and has no wired path to unblock it |
+| F-52 | P1 | BASELINE | fixed | A deployment could block an account's new risk and had no wired path to unblock it |
 
 ---
 
@@ -1774,46 +1774,68 @@ verifies that every TEST NAME cited in five documents exists — one narrow clas
 of claim, in five of the repository's fifty-odd documents. Nothing checks a
 claim about a control, a wiring, or a count. These three were found by reading.
 
-## F-52 · An account's new risk can be blocked with no wired way to unblock it · BASELINE · P1 · OPEN
+## F-52 · An account's new risk could be blocked with no wired way to unblock it · BASELINE · P1 · FIXED
 
 **Found by** a worker-reachability sweep asking which exported functions have no
 caller a deployment can run.
 
-The two halves of reconciliation are wired asymmetrically:
+The two halves of reconciliation were wired asymmetrically:
 
-- **Blocking is live.** `cmd/reconciliation-worker` runs `RunPeriodic` and
+- **Blocking was live.** `cmd/reconciliation-worker` runs `RunPeriodic` and
   `SweepEscalations` on tickers and raises records. `ReconciliationBlockReader`
   is wired into `cmd/api` and reads `reconciliation_records WHERE
   blocks_new_risk AND status IN ('OPEN','MISMATCH','INVESTIGATING','ESCALATED')`,
   which removes the account's capacity to take new risk.
-- **Resolution is not.** `cmd/api` sets `Reconcile: nil`, so both
-  `GET /v1/admin/reconciliation/records` and
-  `POST /v1/admin/reconciliation/records/{id}/resolve` answer 422 UNSUPPORTED.
-  `Engine.ResolveManual`, `ResolveAutomatic`, `Investigate` and `Escalate` have
-  no caller outside `internal/reconciliation`'s own tests.
+- **Resolution was not.** `cmd/api` set `Reconcile: nil`, so both admin
+  endpoints answered 422 UNSUPPORTED and `Engine.ResolveManual` had no caller
+  outside `internal/reconciliation`'s own tests.
 
-So a deployment can freeze an account's ability to trade and has no deployed
-path to unfreeze it. An operator's only recourse is a hand-written UPDATE
-against the database, which is the thing the admin plane exists to replace.
+A deployment could freeze somebody's account by automated check and had no
+button to unfreeze it. The only recourse was a hand-written UPDATE against the
+database — the thing the admin plane exists to replace.
 
 **This is F-29 one level up.** That finding was *"a user could reserve their
-Credits in a payout request and had no way to release them"* — money reserved
-with no path to release. This is capacity reserved with no path to release, and
-it was found by the same question.
+Credits in a payout request and had no way to release them"*. This is capacity
+reserved with no path to release, found by the same question.
 
-**Why it is OPEN.** The fix is real work rather than a line: `cmd/api` must
-construct a resolution-capable `reconciliation.Engine` — the pieces all exist
-there (`db`, `clock`, `NewRepository`, `DefaultPolicy`, `admin.Service` already
-satisfies the `Approvals` interface, and the ledger service is what a
-compensating posting needs) — plus an `httpapi` adapter implementing
-`ReconciliationPort`, plus an integration test that raises a blocking record,
-watches buying power fall, resolves it through the API and watches it return.
-`applyRepair` already refuses cleanly when no ledger is configured, so a
-partial wiring would degrade honestly rather than panic — but a partial wiring
-is not what this needs.
+**Fix.** `cmd/api` constructs a resolution-shaped `reconciliation.Engine` and
+`httpapi.NewReconciliationPort` serves both routes.
+`TestIntegration_AnOperatorCanClearAReconciliationBlock` raises a blocking
+record, asserts the account IS blocked, resolves it over HTTP as an operator,
+and asserts the block is gone and the record names who cleared it and why. It
+was observed failing with the port unwired.
 
-Recorded at P1 because the harm is to a customer who did nothing wrong: their
-account is frozen by an automated check and nobody has a button.
+**Three things the domain refused, which the fix respects rather than works
+around.**
+
+1. **`INVESTIGATING` comes before `RESOLVED_MANUAL`,** and the state machine
+   says why: somebody looked at the evidence before resolving. A worker-raised
+   record is `MISMATCH`, or `ESCALATED` after the sweep — so a resolve-only
+   endpoint could not clear a single record the worker actually produces, and
+   this would have been fixed in name only. The adapter moves those two into
+   `INVESTIGATING` first, carrying the operator's own reason.
+2. **A record may change status at most once per transaction.** The repository
+   refuses more than one, which is what keeps each transition bound to exactly
+   one audit row. So the investigate commits first and the resolution follows in
+   its own transaction. A failure between them leaves the record
+   `INVESTIGATING`, which still blocks: nothing is lost and repeating the call
+   finishes the job, because the first step is skipped for a record already
+   there.
+3. **An `OPEN` record is not operator-resolvable.** OPEN means the engine has
+   not decided there is a difference at all, and its only transitions are the
+   engine's own. The adapter does not force a path there;
+   `TestIntegration_AnOpenRecordIsNotOperatorResolvable` asserts the refusal
+   rather than working around it.
+
+**What is deliberately NOT wired.** A compensating posting. It is the only way a
+resolution changes financial state (PART 195), and building one from an API
+request means choosing the posting's kind, its idempotency key and its
+reference, and mapping each entry's account code onto an owner — decisions with
+financial consequences that deserve their own design and review. The adapter
+refuses one **by name**, and the engine it is given carries no ledger, so the
+two agree even if somebody later changes only one of them.
+`TestIntegration_AReconciliationResolutionRefusesToPost` asserts the refusal and
+that the record is left exactly as it was.
 
 ## Findings deliberately NOT raised
 

@@ -506,6 +506,15 @@ would close this is the error text from a recurrence, not another clean run.
 | Go and SQL agree on every (asset kind, value domain) pair | `TestIntegration_GoAndSQLAgreeOnEveryKindDomainPair` — `internal/assets` claimed this test existed; it did not, and on its first run it found that an asset could be stored with no value domain at all (F-50) |
 | Every SECURITY DEFINER trigger pins `pg_temp` | migration 00717; five of them did not, while 00701 names the hazard exactly for the sixth (F-48) |
 
+### Reconciliation, from the admin plane
+
+| Property | Evidence |
+|---|---|
+| An account frozen by a reconciliation block can be unfrozen through the API | `TestIntegration_AnOperatorCanClearAReconciliationBlock` — asserts the account IS blocked first, then that the block is gone and the record names who cleared it and why; observed failing with the port unwired (F-52) |
+| A resolution that would move value is refused by name, not approximated | `TestIntegration_AReconciliationResolutionRefusesToPost` — and the engine the API is given carries no ledger, so the refusal and the domain agree |
+| An OPEN record is not operator-resolvable | `TestIntegration_AnOpenRecordIsNotOperatorResolvable` — OPEN means the engine has not decided there is a difference; the adapter leaves the state machine to say so |
+| An agent can never resolve a reconciliation record | `TestIntegration_AnAgentCanNeverResolveAReconciliationRecord` |
+
 ### Known weaknesses, recorded rather than fixed
 
 - **Asset quantities on the market page use a hardcoded Credit scale (part of F-44).** `circulating_supply`,
@@ -520,12 +529,6 @@ would close this is the error text from a recurrence, not another clean run.
   everything. A revoke was written, applied, and refused by that test — which also documents `cp_ops`
   performing session retention, a job that needs SELECT on the table. Which statement is right is a
   policy decision about personal data, with an operational constraint attached.
-- **An account's new risk can be blocked with no wired way to unblock it (F-52, OPEN).** The
-  reconciliation worker raises records and `blocks_new_risk` is read by buying power, so an automated
-  check can remove an account's capacity to trade. `cmd/api` sets `Reconcile: nil`, so both admin
-  resolution endpoints answer UNSUPPORTED and `Engine.ResolveManual` has no caller outside its own
-  tests. The only recourse is a hand-written UPDATE, which is what the admin plane exists to replace.
-  This is F-29 one level up: there it was money reserved with no path to release, here it is capacity.
 - **The AU001 audit binding is forgeable (F-42, OPEN).** Migration 00603 binds a state change to a
   transition row through a transaction-local session variable, and its header claims the application
   role cannot set that variable. It can — `internal/reconciliation/store.go` does exactly that on a

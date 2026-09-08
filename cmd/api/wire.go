@@ -52,6 +52,7 @@ import (
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/ratelimit"
+	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/valuation"
@@ -94,6 +95,22 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 	// --- authority plane ------------------------------------------------
 	adminSvc := admin.NewService(clk, auditWriter)
+	// A resolution-shaped reconciliation engine (F-52). The worker owns
+	// detection; this owns the operator's answer to it. No observers, no
+	// adapters and no ledger: this plane clears a record, it does not post.
+	reconEngine, rerr := reconciliation.NewEngine(reconciliation.Config{
+		DB:        database,
+		Clock:     clk,
+		Records:   reconciliation.NewRepository(clk, outbox, auditWriter),
+		Policy:    reconciliation.DefaultPolicy(),
+		Approvals: adminSvc,
+		Metrics:   reconciliation.NoopMetrics(),
+		Logger:    log,
+	})
+	if rerr != nil {
+		return nil, fmt.Errorf("wiring: reconciliation engine: %w", rerr)
+	}
+
 	killController, cerr := killswitch.NewController(clk, auditAdapter.KillSwitchAudit(), httpapi.NewApprovalVerifier(adminSvc))
 	if cerr != nil {
 		return nil, fmt.Errorf("kill switch controller: %w", cerr)
@@ -339,9 +356,24 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.
 		Quotes: nil,
-		// The reconciliation engine is owned by its own binary; the API
-		// exposes no resolution path until it is wired.
-		Reconcile: nil,
+		// The reconciliation engine raises records in its own binary; this is
+		// the plane an operator resolves them from.
+		//
+		// It used to be nil, and the asymmetry was a trap: the worker raises
+		// records, `blocks_new_risk` is read by buying power, and nothing a
+		// deployment could run ever cleared one. An account could be frozen by
+		// an automated check with no button to unfreeze it (F-52).
+		//
+		// The engine here is deliberately resolution-shaped. It carries no
+		// observers, no adapters and NO LEDGER: this API resolves records and
+		// does not post compensating entries, and the adapter refuses a request
+		// for one by name. A nil ledger means `applyRepair` refuses too, so the
+		// two agree even if somebody later changes only one of them.
+		Reconcile: httpapi.NewReconciliationPort(httpapi.ReconciliationDeps{
+			Engine:    reconEngine,
+			ReadModel: httpapi.NewReadModel(database),
+			DB:        database,
+		}),
 		// Executable kinds are BREAK_GLASS_GRANT (which is what makes any
 		// approve-side permission obtainable at all) and KILL_SWITCH_RELEASE.
 		// Every other kind answers 422 UNSUPPORTED here: its effect belongs
