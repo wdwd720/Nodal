@@ -44,7 +44,7 @@ Severity: SEV1 (duplicate economic execution) · Owner: OPERATIONS (containment)
 - Reservation: `SELECT id, status, quantity, consumed_quantity, locked_by_order_id FROM asset_reservations WHERE id = (SELECT reservation_id FROM orders WHERE id = '<order_id>');` — `consumed_quantity` above `quantity` is impossible by CHECK; a second fill therefore consumed from somewhere else or the executor bypassed `capital.Service`.
 - Provider side: execution provider status for both signatures (Jupiter `/execute` returns "accepted", not "landed"; `docs/api/providers/jupiter.md`); `provider_events` and `inbox_messages` for duplicate deliveries (`SELECT source, message_id, status, received_at FROM inbox_messages WHERE message_id IN (...)`).
 - Audit: `audit_events WHERE stream = 'account:<id>'` around the two submissions; correlation ids tie the intent, plan, attempts and fills together.
-- The executor/recoverer (`internal/execution`, driven by `cmd/execution-worker`) and the reconciliation engine (`internal/reconciliation`, `cmd/reconciliation-worker`) both exist; the crash test (PART 49, R-049-1) and the unknown-submission recovery tests are the controls that prevent this. **BLOCKED_EXTERNAL:** none of it has run against a real venue.
+- The reconciliation engine runs (`internal/reconciliation`, `cmd/reconciliation-worker`). The executor does not: **PENDING `bindProviders`**, which fails closed in every production build, so no execution has happened outside tests -- which is also why this incident cannot occur in a current deployment. The crash test (PART 49, R-049-1) and the unknown-submission recovery tests are the controls that would prevent it.
 
 ## Containment and recovery
 

@@ -22,7 +22,7 @@ What a single compromised principal can and cannot do (SECURITY.md §4):
 
 ## Immediate actions (first 10 minutes)
 
-1. Revoke every session of the suspect principal(s): `auth.Manager.RevokeAllForSubject(subject)` (`session:revoke_any`: SECURITY, ADMIN), served by `cmd/api`. Then, read-only:
+1. Revoke every session of the suspect principal(s). **PENDING: there is no route for this.** `auth.Manager.RevokeAllForSubject` exists and is tested, and `SessionsPort` (`internal/httpapi/ports.go`) exposes only `ListForSubject` and `Revoke` by session id -- so an operator must revoke each session individually by id, or run `RevokeAllForSubject` from a Go program against the database. Worse for this incident: **nothing revokes sessions when a role is revoked.** Roles are frozen into the session row at login and `operator_roles` is read nowhere else, so clearing `revoked_at` leaves the suspect's ADMIN live until the session's own expiry (12 h). Revoke the sessions, not just the roles. Then, read-only:
    ```sql
    SELECT id, actor_type, roles, ip, user_agent, device_label, auth_time, amr, created_at, revoked_at, break_glass_until
      FROM sessions WHERE user_id = '<user_id>' ORDER BY created_at DESC;

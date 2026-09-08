@@ -7,7 +7,7 @@ Severity: SEV2 (elevated unknown submissions); SEV1 if observers disagree or a f
 - `unknown_submissions` counter; `unknown_submission_rate_unknown / unknown_submission_rate_submissions` above threshold (PART 135 SEV2 "elevated unknown submissions").
 - Any `execution_attempts.status = 'SUBMISSION_UNKNOWN'` older than one blockhash validity window (~60–90 s, `last_valid_block_height`) plus the policy margin; any order in `SUBMISSION_UNKNOWN` or `RECONCILIATION_REQUIRED`.
 - Executor crash/restart with attempts in `SUBMITTING`/`SUBMITTED` (the PART 49 crash scenario).
-- The executor/recoverer that performs steps 3–8 below (`internal/execution`, driven by `cmd/execution-worker`) and the reconciliation engine (`internal/reconciliation`, `cmd/reconciliation-worker`) both exist; `internal/chain` has proven-absence resolution. **BLOCKED_EXTERNAL:** alarms, and a real venue to submit against.
+- **PENDING `bindProviders`.** It returns an error in every production build, so the execution worker never starts, nothing submits, and the steps 3–8 below cannot arise in a current deployment. The code they describe exists and is tested: `internal/execution`, `internal/chain`'s proven-absence resolution, and the reconciliation engine (`internal/reconciliation`, `cmd/reconciliation-worker`), which does run. **BLOCKED_EXTERNAL:** alarms, and a real venue.
 
 ## Blast radius
 
@@ -30,7 +30,7 @@ Severity: SEV2 (elevated unknown submissions); SEV1 if observers disagree or a f
    A reservation not `ACTIVE`/locked, or a second live attempt, is a SEV1 executor defect: [duplicated-trade-suspicion.md](./duplicated-trade-suspicion.md).
 2. If the rate is elevated (many attempts, one provider): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"jupiter","action":"activate","reason":"<INC-id>: submit timeouts"}` (SEVERE; `kill:activate`).
 3. Confirm both chain observers are healthy; recovery needs them ([helius-outage.md](./helius-outage.md)).
-4. Let the recoverer run. Where it cannot classify the attempt, an engineer performs the observation steps in Diagnosis **read-only** and files the evidence; classification is then done through the reconciliation resolution path, never by editing rows.
+4. Let the recoverer run. **PENDING `bindProviders`**: until it exists an engineer performs the observation steps in Diagnosis **read-only** and files the evidence. Classification is then done through the reconciliation resolution path, never by editing rows.
 5. Announce counts, provider, and that no manual resubmission will occur.
 
 ## Diagnosis

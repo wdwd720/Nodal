@@ -86,6 +86,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-60 | P2 | BASELINE | fixed | Calibration dropped unresolvable predictions silently and reported a denominator that hid it |
 | F-61 | P2 | BASELINE | fixed | `position_lots` had no database invariant tying status to quantity, and open quantity could be raised |
 | F-62 | P3 | BASELINE | fixed | `normalized_events` replaced a column that varied between copies of the same event |
+| F-63 | P2 | NEW | fixed | F-55's own correction pass replaced three true PENDING markers with false claims that things were wired |
 
 ---
 
@@ -1495,6 +1496,51 @@ started at the end of a session.
 migration header that claims a guarantee the database does not make** — which
 is exactly F-40, one file over.
 
+### Update 2026-09-08: two more candidate fixes tried and rejected, with the evidence
+
+Both are recorded so the next attempt does not repeat them.
+
+**`pg_xact_status` does what `xmin = pg_current_xact_id()` could not.** Probed
+against this project's own PostgreSQL 16, one row inserted at the top level of a
+transaction and one inside a `SAVEPOINT`:
+
+| row | `xmin` | `pg_current_xact_id()` | `xmin = pg_current_xact_id()::text::xid` | `pg_xact_status(xmin::text::xid8)` |
+| --- | --- | --- | --- | --- |
+| top level | 1911303 | 1911303 | **true** | in progress |
+| in a savepoint | 1911304 | 1911303 | **false** | in progress |
+
+So the earlier rejection was right about `xmin =` and the reason was the
+subtransaction xid, exactly as recorded. `pg_xact_status` answers the question
+correctly for both, and a row that is visible to us with an in-progress writer
+can only be our own — no other transaction's uncommitted rows are visible at
+any isolation level this system uses.
+
+**It is still not safe to use.** `pg_xact_status` takes an `xid8`, and `xmin` is
+a 32-bit `xid`. Casting it through text produces a full transaction id with no
+epoch, which is correct until the counter wraps and then wrong for every row at
+once. A control that works for years and then refuses every state change in the
+system is worse than the forgery it prevents — the forgery needs the
+application's database credential; the wraparound needs only time.
+
+**Making the flag carry the transition row's id was also considered.** The
+deferred trigger would look the row up rather than trusting a bare setting, so a
+caller who sets the GUC without inserting a row fails. It does not close the
+finding on its own: nothing stops a caller naming an OLD transition row with the
+right `to_state`, replaying a state change that was once legitimate. Requiring
+the row to be the entity's *latest* transition would close that — the latest
+transition's `to_state` is by construction the current state, so a row naming a
+different target cannot already be latest — but "latest" needs an ordering,
+and the test suites run on fake clocks that make `occurred_at` non-monotonic.
+That is the same rock the `created_at >= transaction_timestamp()` attempt hit.
+
+**So the remedy is unchanged**: the `capability_gates` treatment — revoke
+`UPDATE` on the state column, route state changes through SECURITY DEFINER
+functions — applied to the other sixteen tables. It is privilege rather than
+detection, which is why it works. It remains open because it is a change to the
+mechanism seventeen state machines depend on, and the right way to do it is
+deliberately, one table at a time with its own tests, rather than as a
+sixteen-table migration written in one pass.
+
 ## F-43 · MARKETPLACE was high-risk in Go and not in SQL · BASELINE · P1 · FIXED
 
 **Found by** an audit of the documents against the code, which found
@@ -1685,6 +1731,48 @@ the evidence for both sides, and the constraint any resolution has to satisfy.
 **What was left in place.** Nothing about privileges changed. The bootstrap
 files carry a note saying the default is deliberate, and pointing at the
 contradiction rather than resolving it.
+
+### Update 2026-09-08: the table is empty, and there is now a fuse on it
+
+Two facts that size the finding, both checkable rather than argued.
+
+**Nothing reads or writes `identity_pii`.** `email_encrypted`,
+`legal_name_encrypted` and `dob_encrypted` appear in exactly one place in the
+repository outside documentation: the `CREATE TABLE` in migration 00010. No Go
+file mentions any of them. So in every deployment that exists, the table the
+contradiction is about holds no rows.
+
+That is not a new discovery so much as a confirmation of what two other
+documents already say honestly. `SECURITY.md` §167: *"Encryption of
+`identity_pii` at the application layer: DESIGNED."* R-121-1 in the traceability
+matrix, IN_PROGRESS: *"the column encryption is schema-shaped but has no Go
+implementation, the identity_pii grant review has not been done, and there is no
+test asserting the boundary."*
+
+So an unresolved grant on an empty table costs nothing today, and the same grant
+on a populated one is a standing exposure of every customer's name and date of
+birth to two roles that were meant not to have it. The finding is not urgent; it
+becomes urgent at an identifiable moment.
+
+**That moment now fails a test.**
+`TestPII_NothingWritesPersonalDataWhileTheGrantIsUnresolved` scans `internal`,
+`cmd` and `scripts` for a statement that writes `identity_pii`, and fails when
+one appears, saying what has to be decided before it lands. Observed failing on
+a planted writer, which it named by file. Its companion is the positive signal:
+the same scan must find writers of `journal_transactions`, which certainly has
+them, and the table must still be created by 00010 — so neither a broken
+regex nor a rename can make the absence vacuous (F-32, F-46).
+
+`sessions` is deliberately outside that check. `cp_ops` genuinely needs it for
+retention cleanup, that need is recorded in `privileges_test.go`'s
+`opsHousekeeping`, and it is written constantly. Its half of F-47 is a question
+about column-level grants — `token_hash` and `break_glass_until` are not
+`expires_at` — not about whether the table should have data.
+
+**Still OPEN, and still for the same reason.** This is a fuse on a decision, not
+the decision. Who may read encrypted personal data in a deployment is a policy
+question with an operational constraint attached, and it is not one to settle
+inside a migration.
 
 ## F-48 · Five SECURITY DEFINER functions did not pin `pg_temp` · BASELINE · P2 · FIXED
 
@@ -2596,6 +2684,80 @@ its input.
 `internal/backtest` and `internal/performance` do not exist, and both readers of
 `decision_available_at` have only test callers. This was fixed now because the
 defect becomes invisible the moment something reads it.
+
+## F-63 · The correction pass made the mistake it was correcting · NEW · P2 · FIXED
+
+**Found by** an independent read of `internal/auth` after F-55 had been
+committed, which reported that `auth.Manager.RevokeAllForSubject` has no caller
+outside its own package. The runbook step that names it had been edited by F-55
+to say it was served.
+
+**What was wrong.** F-55 removed 140 `PENDING` markers that named packages and
+binaries which exist. Three of those removals were wrong, because the marker was
+about a *capability* and the pass judged the *package*:
+
+| F-55 wrote | The truth |
+| --- | --- |
+| "`auth.Manager.RevokeAllForSubject(subject)` ..., served by `cmd/api`" | No route exists. `SessionsPort` exposes `ListForSubject` and `Revoke` by session id, and nothing outside `internal/auth` calls `RevokeAllForSubject`. The original marker said "PENDING: `cmd/api` route" and was right. |
+| "executor and recoverer wired in `cmd/execution-worker`" (five places) | `bindProviders` returns an error in every production build — *"the venue adapter, chain observer, inspector, signing client and recoverer are not wired in this build"* — and is replaced only in tests. The worker cannot start. |
+| "the agreement policy ... wired into `cmd/market-ingest-worker`" | `openProvider` returns a single `chain.SolanaDataProvider`. `chain.MultiObserver` and the two-observer agreement run in tests only. |
+
+The reasoning that produced all three was the same, and it is exactly the
+reasoning F-55 exists to name: *the directory is there, so the thing is done*. It
+was committed in the act of correcting 137 instances of the same error.
+
+**Why the controls F-55 shipped did not catch it.**
+`TestDocs_EveryRunbookRouteIsServed` looks for HTTP paths, and the session step
+names none. `TestDocs_NothingMarkedPendingAlreadyExists` looks at markers, and
+the pass had removed the marker. Both check that a *negative* claim is honest;
+neither checks a *positive* one. That was the missing third direction.
+
+**A fourth thing the same read exposed**, and the reason the session step now
+says more than "there is no route": **nothing revokes a session when a role is
+revoked.** Roles are frozen into the session row at login, `operator_roles` is
+read nowhere else, and `Manager.Rotate` — whose doc comment promises
+"rotation on privilege change ... revokes the old session and issues a new
+token" — also has no caller outside its package. So during an
+admin-compromise incident, clearing `revoked_at` on the suspect's roles leaves
+their ADMIN live until the session's own 12-hour expiry. The runbook now says to
+revoke the sessions, not the roles.
+
+**Fix.** All three claims corrected, and reworded so the marker names the thing
+that is actually missing — `bindProviders`, `chain.MultiObserver` —
+rather than a package that exists. That is the rule
+`TestDocs_NothingMarkedPendingAlreadyExists` enforces, and it refused two of the
+first rewrites for naming `cmd/execution-worker`, which was the check working on
+the person who wrote it.
+
+Writing those rewrites also exposed a flaw in that check: its clause boundary
+knew about `". "` and not about `".**"`, so a marker in bold read on into the
+next sentence and blamed it for packages that sentence merely mentioned. Fixed
+with a `sentenceEnd` that understands markup.
+
+**The new control.** `TestDocs_SessionRevocationIsStillUnreachable` asserts both
+halves: that `RevokeAllForSubject` still has no caller outside its package, and
+that the runbook step naming it still carries a marker. It fails in both
+directions — if the function becomes reachable it says to delete the marker
+and the control, and if the marker disappears while the function is still
+unreachable it says the runbook has gone back to claiming a route. Observed
+failing on the second, by restoring the exact sentence F-55 wrote.
+
+It is deliberately one named claim rather than a general scan. The general form
+was written first and abandoned: across every runbook there is exactly **one**
+function written in call form, so a scan would guard a corpus of one while
+carrying a name-based call index that cannot tell a package's own internals from
+an external caller — which it got wrong on its first run, reporting
+`RevokeAllForSubject` reachable because `auth.Manager` calls its own store method
+of the same name. A curated claim that is honest about being curated is worth
+more than a general check that is wrong.
+
+**What this says about F-55.** The other 137 removals were checked against the
+OpenAPI spec or against a package's existence where existence was the whole
+claim, and `TestDocs_EveryRunbookRouteIsServed` covers the largest group of them
+mechanically. These three were the ones where the marker's subject was narrower
+than the package it named, and nothing distinguished them at the time. The
+lesson is not "check more carefully" — it is that a positive claim about
+wiring needs a check of its own, which it now has for the case that produced it.
 
 ## Findings deliberately NOT raised
 

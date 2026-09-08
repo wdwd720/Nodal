@@ -13,7 +13,7 @@ Severity: procedure (invoked by SEV1 runbooks; exercised monthly in staging) · 
 
 Blocked (`ActionClass = NEW_RISK`, `WITHDRAW`): new manual trade intents, new agent intents, new funding sessions, withdrawals. Rejected with `KILL_SWITCH_ACTIVE` (field `switch = GLOBAL_NEW_RISK_KILL:*`); the risk kernel returns `RISK_KILL_SWITCH`.
 
-Still running, by construction (`internal/killswitch/matrix.go`, `TestProp_NeverBlockedClasses`, `TestProp_GlobalKillNeverStopsRiskReduction`): `REDUCE_RISK` (closing positions), `OBSERVE`, `SETTLE`, `RECONCILE`, `LEDGER_POST`, `CANCEL`. Orders already `SUBMITTED` continue to finality, fills post, positions update, reconciliation keeps opening and resolving records, audit keeps appending. the executor and the reconciliation engine that exercise those paths end to end both exist (`internal/execution` with `cmd/execution-worker`; `internal/reconciliation` is absent), so "still runs" is proven only at the matrix level today.
+Still running, by construction (`internal/killswitch/matrix.go`, `TestProp_NeverBlockedClasses`, `TestProp_GlobalKillNeverStopsRiskReduction`): `REDUCE_RISK` (closing positions), `OBSERVE`, `SETTLE`, `RECONCILE`, `LEDGER_POST`, `CANCEL`. Orders already `SUBMITTED` continue to finality, fills post, positions update, reconciliation keeps opening and resolving records, audit keeps appending. The reconciliation half of that runs. The execution half does not: **PENDING `bindProviders`**, which returns an error in every production build, so the executor never starts and "orders continue to finality" is proven at the matrix level and by the executor's own tests, never by a running deployment.
 
 ## Immediate actions (first 10 minutes)
 

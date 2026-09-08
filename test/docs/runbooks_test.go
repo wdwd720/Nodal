@@ -110,7 +110,11 @@ func clauseAt(line string, from int) string {
 	if i := strings.IndexAny(rest, ";|"); i >= 0 {
 		rest = rest[:i]
 	}
-	if i := strings.Index(rest, ". "); i >= 0 {
+	// A sentence may end into markup rather than into a space: "not wired.**"
+	// is the end of a bold clause, and reading past it attributes the next
+	// sentence's package names to this marker. The first version missed that
+	// and blamed a marker for a package the sentence after it merely mentioned.
+	if i := sentenceEnd(rest); i >= 0 {
 		rest = rest[:i]
 	}
 	// A marker inside a parenthetical ends with that parenthetical.
@@ -118,6 +122,23 @@ func clauseAt(line string, from int) string {
 		rest = rest[:i]
 	}
 	return rest
+}
+
+// sentenceEnd finds where a marker's sentence stops, or -1. A sentence ends at
+// a full stop followed by a space or by markup -- runbooks bold their markers,
+// so "not wired.**" is an ending and a rule that only knew about ". " read
+// straight through it into the next sentence.
+func sentenceEnd(s string) int {
+	for i := 0; i < len(s)-1; i++ {
+		if s[i] != '.' {
+			continue
+		}
+		switch s[i+1] {
+		case ' ', '*', '\t':
+			return i
+		}
+	}
+	return -1
 }
 
 // existsInRepo reports whether a token names something on disk, and what.

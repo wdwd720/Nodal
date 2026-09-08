@@ -8,7 +8,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [submission-un
 - `execution_failure_rate_failures / execution_failure_rate_attempts` above threshold; `quote_latency`, `build_latency`, `submit_latency` p95 breaches; `unknown_submission_rate` rising (timeouts on `/execute`).
 - `RISK_PROVIDER_HEALTH`/`RISK_QUOTE_AGE` rejections rising; settlement compiler returning `NO_VALID_PLAN`/`PROVIDER_DEGRADED`.
 - Jupiter status/announcements: `api.jup.ag/swap/v2` errors, `x-api-key` rejection (key rotated or quota), a host or version change (`/swap/v1` is unmaintained; the platform pins hosts in configuration).
-- **BLOCKED_EXTERNAL:** alarms, and a funded account on a real venue. The client and fake (`internal/provider/jupiter`), the `test/contract/jupiter` fixtures and the executor (`cmd/execution-worker`) all exist. PENDING: the health tracker feeding `RISK_PROVIDER_HEALTH` end to end.
+- **BLOCKED_EXTERNAL:** alarms, and a funded account on a real venue. The client and fake (`internal/provider/jupiter`) and the `test/contract/jupiter` fixtures exist. **PENDING `bindProviders`**, which returns an error in every production build, so the execution worker never starts. Also PENDING: the health tracker feeding `RISK_PROVIDER_HEALTH` end to end.
 
 ## Blast radius
 
@@ -40,7 +40,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [submission-un
 
 ## Containment and recovery
 
-1. Leave the executor/recoverer to resolve `SUBMISSION_UNKNOWN` attempts per PART 48 (the recoverer runs in `cmd/execution-worker`; where it cannot classify an attempt an engineer follows [submission-unknown.md](./submission-unknown.md) with observer reads and files evidence).
+1. Leave the executor/recoverer to resolve `SUBMISSION_UNKNOWN` attempts per PART 48 (**PENDING `bindProviders`**: the recoverer cannot run until it exists, so an engineer follows [submission-unknown.md](./submission-unknown.md) with observer reads and files evidence).
 2. Orders whose attempts expired and whose intent deadline has not passed go back to `PLANNED`; they get a new attempt with a fresh blockhash **only after** the provider is healthy, the switch is released, and a fresh risk `FINAL` decision against a fresh quote (EXECUTION.md §4 step 7). Orders past their deadline become `FAILED_FINAL` and their reservations release.
 3. When Jupiter recovers: watch the tracker return to `HEALTHY` through hysteresis; verify a quote round-trip in a CANARY account with the fake disabled; then release `PROVIDER_DISABLE_NEW_ACTIONS(jupiter)` via the dual-controlled `KILL_SWITCH_RELEASE` path ([global-kill-and-reenable.md](./global-kill-and-reenable.md), same steps with the provider kind/scope), attaching the provider incident and the canary evidence.
 4. If the outage is a breaking API change: adapter change + contract fixtures updated from the official docs (`docs/api/providers/jupiter.md` re-verified with fetch dates) + `make contract` green before release; the verification label must not exceed what was tested.
