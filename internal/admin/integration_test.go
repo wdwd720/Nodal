@@ -547,11 +547,25 @@ func TestIntegration_TamperedParamsAreRefused(t *testing.T) {
 	_, err = f.approve(f.breakGlass(approver), a.ID.String(), "ok")
 	require.NoError(t, err)
 
-	// cp_app may UPDATE admin_actions (status changes), so a bug or a stolen
-	// app credential could rewrite params; the hash check catches it.
+	// cp_app can no longer rewrite params at all: 00723 narrowed the grant to
+	// the lifecycle columns, so a stolen application credential cannot plant a
+	// tamper in the first place (F-64). That is the first line and it is
+	// asserted here rather than assumed.
 	_, err = testDB.Exec(context.Background(),
 		`UPDATE admin_actions SET params = jsonb_set(params, '{amount}', '"999999.00"') WHERE id = $1`, a.ID)
-	require.NoError(t, err)
+	require.Error(t, err, "cp_app rewrote an approved action's params")
+	require.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+
+	// The hash check is the second line, and it still has to work -- a
+	// migration or a superuser can still produce the row the grant now
+	// prevents. Planted as the owner, which is what such a caller would be.
+	owner := openOwner(t)
+	require.NoError(t, owner.InTx(context.Background(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, e := tx.Exec(ctx,
+				`UPDATE admin_actions SET params = jsonb_set(params, '{amount}', '"999999.00"') WHERE id = $1`, a.ID)
+			return e
+		}))
 
 	_, err = f.execute(pctx, a.ID.String(), okExec(`{}`))
 	requireCode(t, err, errs.CodeConflict)
@@ -560,9 +574,12 @@ func TestIntegration_TamperedParamsAreRefused(t *testing.T) {
 	assert.Len(t, transitionsFor(t, a.ID.String()), 2)
 
 	// Restoring the exact params (any key order) makes it executable again.
-	_, err = testDB.Exec(context.Background(),
-		`UPDATE admin_actions SET params = jsonb_set(params, '{amount}', '"12.50"') WHERE id = $1`, a.ID)
-	require.NoError(t, err)
+	require.NoError(t, owner.InTx(context.Background(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, e := tx.Exec(ctx,
+				`UPDATE admin_actions SET params = jsonb_set(params, '{amount}', '"12.50"') WHERE id = $1`, a.ID)
+			return e
+		}))
 	executed, err := f.execute(pctx, a.ID.String(), okExec(`{}`))
 	require.NoError(t, err)
 	assert.Equal(t, StatusExecuted, executed.Status)

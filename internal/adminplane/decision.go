@@ -170,6 +170,12 @@ func (a Actor) steppedUp(maxAge time.Duration, now time.Time) bool {
 	}
 	age := now.Sub(a.Principal.AuthTime)
 	if age < 0 {
+		// Same rule as security.RequireStepUp, and it has to be: an affordance
+		// that is more permissive than the enforcing layer produces a live
+		// button the server refuses, which this package's doc forbids (F-66).
+		if -age > security.MaxAuthTimeSkew {
+			return false
+		}
 		age = 0
 	}
 	return age <= maxAge && security.HasStrongAMR(a.Principal.AMR)

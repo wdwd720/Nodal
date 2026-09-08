@@ -168,12 +168,26 @@ function holdsAny(p: DecidePrincipal, perms: readonly Permission[], now: Date, i
   return perms.some((perm) => holds(p, perm, now, index));
 }
 
+/**
+ * How far into the future an authentication time may sit before it stops being
+ * clock skew and starts being unknown. Mirrors security.MaxAuthTimeSkew, which
+ * mirrors oidc.DefaultClockSkew.
+ */
+export const MAX_AUTH_TIME_SKEW_MS = 2 * 60 * 1000;
+
 /** Mirrors security.RequireStepUp. */
 export function steppedUp(p: DecidePrincipal, maxAgeSeconds: number, now: Date): boolean {
   if (maxAgeSeconds <= 0) return false;
   const authTime = ms(p.authTime);
   if (authTime === null) return false;
-  const age = Math.max(0, now.getTime() - authTime);
+  const raw = now.getTime() - authTime;
+  // A negative age is clock skew only within the tolerance the token verifier
+  // applies; beyond that the age is unknown and fails closed. Clamping without
+  // a bound made any future auth_time read as "just authenticated" (F-66), and
+  // an affordance more permissive than the server produces a live button the
+  // server refuses -- which this module exists not to do.
+  if (raw < 0 && -raw > MAX_AUTH_TIME_SKEW_MS) return false;
+  const age = Math.max(0, raw);
   return age <= maxAgeSeconds * 1000 && hasStrongAmr(p.amr);
 }
 

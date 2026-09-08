@@ -52,7 +52,7 @@ PART 158: **live financial trading may continue if the required critical data re
 - Never hand-load ClickHouse from Postgres to "catch up"; the ingestion path with checkpoints and gap records is the only way to keep point-in-time semantics honest.
 - Never let a strategy evaluate on partial history to keep it "running"; `Skip{MISSING_DEPENDENCY}` is correct.
 - Never present analytics computed over a gap without the impurity label.
-- Never activate `GLOBAL_NEW_RISK_KILL` for an analytics outage; use `AGENT_PAUSE` per affected agent.
+- Never activate `GLOBAL_NEW_RISK_KILL` for an analytics outage; use `AGENT_PAUSE` per affected agent. **PENDING the bridge:** activating `AGENT_PAUSE` writes a `kill_switches` row, and the agent runtime reads `agent_pauses`. `agent.KillSwitchMirror` exists to keep the two together and is implemented by nothing, so today the switch records the decision and does not reach a running agent (F-65).
 
 ## Verification / exit criteria
 

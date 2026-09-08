@@ -166,6 +166,15 @@ func RequireAccountOwner(ctx context.Context, accountID string) error {
 		ErrCrossTenant, p.SubjectID, accountID)
 }
 
+// MaxAuthTimeSkew is how far into the future an authentication time may sit
+// before it stops being clock skew and starts being unknown.
+//
+// It matches oidc.DefaultClockSkew, which is what the token verifier tolerates
+// on exp, nbf and iat. This package does not import the OIDC config -- the
+// constant is small and the coupling would be the wrong direction -- so
+// TestStepUpSkewMatchesTheTokenVerifier pins the two together.
+const MaxAuthTimeSkew = 2 * time.Minute
+
 // RequireStepUp returns nil when the principal authenticated within maxAge
 // of now() using a strong method (HasStrongAMR). Otherwise it returns
 // ErrStepUpRequired, and the caller should redirect to the identity
@@ -185,6 +194,21 @@ func RequireStepUp(ctx context.Context, maxAge time.Duration, now func() time.Ti
 	}
 	age := now().Sub(p.AuthTime)
 	if age < 0 {
+		// An authentication time in the future is clock skew or a broken
+		// identity provider, and it is treated as "now" only within the skew
+		// the token verifier itself tolerates.
+		//
+		// It used to be clamped without a bound (F-66). auth_time is copied
+		// verbatim out of the ID token and validated nowhere -- checkClaims
+		// checks azp, nbf, iat, nonce and sub, and not this -- so any future
+		// value made age zero, which satisfies every step-up window in the
+		// system for the whole life of the session. A value that far out is
+		// not a fresher authentication; it is one whose age is unknown, and an
+		// unknown age fails closed.
+		if -age > MaxAuthTimeSkew {
+			return fmt.Errorf("%w: authentication time is %s in the future, beyond the %s tolerated",
+				ErrStepUpRequired, (-age).Round(time.Second), MaxAuthTimeSkew)
+		}
 		age = 0
 	}
 	if age > maxAge {

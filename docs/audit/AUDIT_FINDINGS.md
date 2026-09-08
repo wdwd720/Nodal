@@ -87,6 +87,9 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-61 | P2 | BASELINE | fixed | `position_lots` had no database invariant tying status to quantity, and open quantity could be raised |
 | F-62 | P3 | BASELINE | fixed | `normalized_events` replaced a column that varied between copies of the same event |
 | F-63 | P2 | NEW | fixed | F-55's own correction pass replaced three true PENDING markers with false claims that things were wired |
+| F-64 | P1 | NEW | fixed | An approval could be repointed at another target after both signatures, and the dual-control gate trusted a column instead of the code |
+| F-65 | P2 | NEW | part | Two kill-switch kinds an operator would reach for in an incident reach nothing, and four documents said they work |
+| F-66 | P1 | NEW | fixed | An authentication time in the future satisfied every step-up window for the life of the session |
 
 ---
 
@@ -2758,6 +2761,229 @@ mechanically. These three were the ones where the marker's subject was narrower
 than the package it named, and nothing distinguished them at the time. The
 lesson is not "check more carefully" — it is that a positive claim about
 wiring needs a check of its own, which it now has for the case that produced it.
+
+## F-64 · An approval did not stay attached to what was approved · NEW · P1 · FIXED
+
+**Found by** an independent adversarial read of `internal/admin` and
+`internal/adminplane`, verified against the schema before acting.
+
+**What was found.** Three columns decide what dual control means, and nothing
+protected any of them:
+
+| Column | Decides |
+| --- | --- |
+| `requires_dual` | whether a second signature is needed at all |
+| `kind` | what the approval authorises |
+| `target_id` | what it authorises it against |
+
+All three sat on a table `cp_app` held **table-wide `UPDATE`** on, with no CHECK,
+no trigger, and no coverage by `params_hash` — which hashes `params` alone
+(`ParamsHash: hashBytes(params)`).
+
+**Two consequences.**
+
+*An approval could be repointed.* `VerifyApproved(ctx, q, approvalID, kind,
+targetID)` compares the caller's target against the stored one, and nothing bound
+the stored one to what was signed for. Two principals approve the release of one
+kill switch; a single `UPDATE admin_actions SET target_id = ...` makes the same
+approval verify for a different one. `KILL_SWITCH_RELEASE` is the sharp case
+because its whole subject lives in `target_id` and its params are empty —
+the hash protects nothing there.
+
+*The dual-control gate read the row.* `VerifyApproved` used `a.RequiresDual`
+while `Approve` and `executable` used `spec.RequiresDual` from the code's
+`KindSpec`. It was the **only** consumer that trusted the column, and it is the
+gate `killswitch`, `agent` and `reconciliation` call before acting. A row set to
+`requires_dual = false` satisfied it with no approver at all.
+
+**Severity P1** because it is the authority mechanism itself: dual control is the
+control that makes every other administrative action safe to have. It needs the
+application's database credential, which is the same bar as F-42 — and the
+same answer, that privilege is the thing that holds when detection does not.
+
+**Fix, in two independent halves.**
+
+Migration 00723 freezes a proposal's identity with a guard trigger raising
+`AD001`, and narrows the grant to exactly the columns `updateStatus` writes —
+read off its five call sites, not guessed. `VerifyApproved` now derives dual
+control from the `KindSpec` like every other caller.
+
+Two things about the trigger's scope are worth recording, because both were got
+wrong first.
+
+*`params` is deliberately not frozen; `params_hash` is.* Freezing `params` made
+the `ErrParamsTampered` check in `Execute` unreachable — a working, tested
+control turned into one only a test could walk, which is the F-26 class this
+session has spent its time removing. Freezing the hash instead is what makes the
+pair sound: change `params` and the hash no longer matches; change the hash and
+the trigger refuses; change both and the trigger refuses. `params` is outside the
+grant regardless, so the application cannot rewrite it either way.
+
+*The behavioural test for the dual-control half is deliberately not written.*
+Reaching that branch needs an APPROVED dual-control row with no approver, which
+needs a hand-written `admin_action_transitions` row to satisfy AU001 — which
+is exactly the forgery F-42 records, performed by a test. The first attempt did
+it, and the package's own `TestIntegration_AdminStreamVerifiesAfterEverything`
+caught it immediately: one transition, no audit event, invariant broken. A
+fixture that has to commit the exploit to reach the code is a fixture that should
+not exist, so that half is asserted against the package's own source instead, in
+the shape `accountscope_test.go` already uses.
+
+**Evidence.** `TestIntegration_AnApprovalCannotBeRepointedAtAnotherTarget` drives
+five identity columns as the owner (so a refusal is the trigger) and four as
+`cp_app` (so a refusal is the grant), then re-verifies the approval still holds
+for its own target and refuses the other one. Observed failing with the trigger
+dropped and the table-wide grant restored: **the repoint succeeded.**
+`TestIntegration_TheLifecycleStillMoves` is the positive control — a column
+list one entry short would pass every refusal above and break
+propose/approve/execute, and the failure would look like actions never completing
+rather than like a permission error anybody was watching for.
+
+`TestIntegration_TamperedParamsAreRefused` was updated rather than left: it used
+to plant its tamper as `cp_app`, which the narrowed grant now refuses. It asserts
+that refusal as the first line and plants the tamper as the owner to keep driving
+the hash check as the second.
+
+**Still open from the same read, and recorded rather than fixed:** two identities
+for one human defeats approver ≠ proposer entirely, because `users` is
+unique on `(idp_issuer, idp_subject)` and there is no person entity — a
+human with two IdP subjects can propose from one and approve from the other.
+`internal/security/roles.go` says "individually identified (no shared accounts)",
+which is a comment rather than a mechanism. That is an identity-model decision,
+not a code fix.
+
+## F-65 · Two kill switches that reach nothing, documented as working · NEW · P2 · PART
+
+**Found by** an independent adversarial read of `internal/killswitch`, verified
+against the matrix, the agent runtime and the import boundary before acting.
+
+**`MODEL_DISABLE` can never match.** `Matches` requires the action to carry a
+model id:
+
+```go
+case ModelDisable:
+    return a.ModelID != "" && (sw.ScopeID == GlobalScope || a.ModelID == sw.ScopeID)
+```
+
+No non-test code sets `ModelID` on a `killswitch.Action` — every
+`ModelID:` assignment in the tree is on an audit or event struct. And it cannot
+be fixed at the call site, because the model-call path is architecturally
+forbidden from consulting a kill switch at all: `internal/killswitch` is in
+`forbiddenForAgents`, and `internal/agent` and `internal/model` are agent trees.
+`test/security/authority_boundary_test.go` enforces that.
+
+**`AGENT_PAUSE` writes a table the agent runtime does not read.** Activating it
+through `POST /admin/kill-switches` writes a `kill_switches` row. Every
+agent-runtime pause check reads `agent_pauses` — the dispatcher, the broker,
+the model call, the emitter and the runner, five independent points, all correct
+and all looking at the other table. `agent.KillSwitchMirror` exists precisely to
+keep the two together, and is implemented by nothing; its own doc comment says
+the mirror is optional because "the pause itself is authoritative in
+`agent_pauses`", which is true of `Lifecycle.Pause` writing *outwards* and says
+nothing about an operator writing *inwards*.
+
+**Four documents said otherwise**, and one runbook is the place an operator
+looks during exactly this incident:
+
+- `model-malfunction.md` step 2: *"The ToolBroker refuses `CALL_MODEL` under
+  `MODEL_DISABLE`"*
+- `AGENT_RUNTIME.md` §: `KILL_SWITCH_ACTIVE` listed for `MODEL_DISABLE`
+- `SECURITY.md`: the ToolBroker row lists both switches among its checks
+- `clickhouse-outage.md`: *"use `AGENT_PAUSE` per affected agent"*
+
+`REQUIREMENTS_TRACEABILITY.md` marked R-053-12 (`MODEL_DISABLE`) **VERIFIED**,
+citing a test that asserts the kind's severity and scope-string rules — which
+is true of the kind and says nothing about whether anything consults it. That is
+F-58's shape in the traceability matrix: a citation that is accurate about
+something other than the claim.
+
+**Severity P2 rather than P1**, and the reason is worth being precise about. The
+agent runtime is inert: `agent.NewLifecycle` and `agent.NewEmitter` have no
+production callers, `cmd/agent-worker` wires no evaluator and its `EmitterFor`
+returns `UNSUPPORTED`. So there is no running agent for either switch to fail to
+stop. The defect is that the documents promise a control that would not work the
+day the subsystem is turned on — and the day it is turned on is exactly when
+nobody re-reads the runbook.
+
+**Fixed here: the documents.** All four now say what actually happens, and
+`model-malfunction.md` points the operator at the mechanism that does work
+(pause the agents; the broker checks `agent_pauses` on every call). R-053-12 is
+downgraded to IN_PROGRESS with the reason.
+
+**Not fixed here, deliberately: the bridge.** Implementing `KillSwitchMirror`, or
+teaching the operator path to write `agent_pauses`, would wire a control into a
+subsystem that does not run — producing exactly the thing this session has
+spent its time removing, a control only a test can reach. It belongs with the
+work that makes `internal/agent` reachable, and the runbooks now say so where an
+operator will read it.
+
+## F-66 · A future authentication time satisfied every step-up window · NEW · P1 · FIXED
+
+**Found by** an independent adversarial read of `internal/auth` and
+`internal/identity`, tracing `AuthTime` from where it is set to where it is
+checked. Verified against the source and the generated decision vectors before
+acting.
+
+**What was found.** `security.RequireStepUp` clamped a negative age to zero
+without a bound:
+
+```go
+age := now().Sub(p.AuthTime)
+if age < 0 {
+    age = 0
+}
+```
+
+`auth_time` is copied verbatim out of the OIDC ID token and validated nowhere.
+`checkClaims` verifies `azp`, `nbf`, `iat`, `nonce` and `sub`; `Identity.Validate`
+checks only that a subject is present; `Session.Validate` does not mention it;
+the column carries no CHECK.
+
+So an `auth_time` any distance in the future — an hour, a year — made
+the age zero, which satisfies **every** step-up window in the system: the
+15-minute HTTP surface, and the 5-minute windows on the tightest admin kinds
+including `LEDGER_CORRECTION`, `WITHDRAWAL_APPROVE` and `BREAK_GLASS_GRANT`. Not
+once, but for the whole 12-hour life of the session, because step-up freshness is
+the only thing those windows measure.
+
+`adminplane.Actor.steppedUp` and the console's TypeScript port
+(`apps/admin/src/decide.ts`) carried the same unbounded clamp, so the affordance
+layer agreed with the enforcement layer — both wrong in the same direction.
+
+**Severity P1.** Step-up is the freshness check standing between a stolen
+session and every dual-controlled action. The controlling party is whatever mints
+the ID token, so this is not reachable by an HTTP caller — `httpmw` reads the
+cookie and nothing else, which was checked — but a misconfigured or
+compromised identity provider, or a badly-set clock on one, turns it into a
+permanent step-up bypass. There was **no test anywhere** for a future
+`auth_time`; the OIDC fixture uses a value in the past.
+
+**Fix.** A negative age is treated as "now" only within the tolerance the token
+verifier already applies to `exp`, `nbf` and `iat` — `oidc.DefaultClockSkew`,
+two minutes. Beyond it the age is not fresher, it is unknown, and an unknown age
+fails closed with a message that says so rather than reporting a stale
+authentication and sending a reader to the wrong place. The same bound is applied
+in `adminplane` and in the console port, because an affordance more permissive
+than the server is a live button the server refuses — which
+`adminplane`'s own doc forbids.
+
+`security.MaxAuthTimeSkew` and `oidc.DefaultClockSkew` are two numbers that must
+agree and live in packages that do not import each other, so
+`TestStepUpSkewMatchesTheTokenVerifier` pins them together.
+
+**Evidence.** `TestRequireStepUp_AFutureAuthTimeBeyondSkewIsRefused` drives
+inside the tolerance (0, 1 s, exactly the skew — all still pass), beyond it
+(skew + 1 s, an hour, a year — all refused), and both ordinary cases as
+positive controls: a recent authentication passes and a stale one still fails for
+the ordinary reason. Observed failing with the bound removed: an auth time 2m1s
+in the future was accepted as a fresh step-up.
+
+The generated decision vectors moved, and the movement is the finding stated as
+data: **139 cases changed, all of one principal** — `other_admin_elevated_late`,
+whose `auth_time` sits 48 hours after the instant those cases evaluate at. **65
+went from ALLOWED to STEP_UP_REQUIRED.** The same principal's cases at the later
+instant, where it is genuinely one minute old, are unchanged, so the fixture
+keeps the purpose it was written for.
 
 ## Findings deliberately NOT raised
 

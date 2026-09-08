@@ -75,7 +75,19 @@ func (s *Service) VerifyApproved(ctx context.Context, q db.Querier, approvalID s
 	if a.Expired(s.now()) {
 		return Approval{}, ErrApprovalExpired
 	}
-	if a.RequiresDual && (a.ApprovedBy == nil || *a.ApprovedBy == a.ProposedBy) {
+	// Dual control comes from the code's KindSpec, never from the row.
+	//
+	// This was the one consumer that read a.RequiresDual instead. Approve and
+	// executable both use spec.RequiresDual, and requires_dual was a plain
+	// updatable boolean with no CHECK tying it to kind -- so a row set to false
+	// satisfied the gate that killswitch, agent and reconciliation call before
+	// acting, with no approver at all (F-64). Migration 00723 freezes the column
+	// as well; this is the half that does not depend on the schema.
+	spec, ok := Spec(a.Kind)
+	if !ok {
+		return Approval{}, ErrApprovalMismatch
+	}
+	if spec.RequiresDual && (a.ApprovedBy == nil || *a.ApprovedBy == a.ProposedBy) {
 		return Approval{}, ErrApprovalIncomplete
 	}
 	return Approval{
