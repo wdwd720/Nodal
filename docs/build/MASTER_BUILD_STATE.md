@@ -608,6 +608,29 @@ The restored copy now carries 1 fill, 1 order, 4 credit lots, 2 lot events, 2
 published prices, 1 market, 1 instrument and 3 audit events, with row counts and
 journal hashes matching on both sides.
 
+### F-32: the browser tests proved the routes existed
+
+The five internal-economy pages were covered by a test asserting the heading was
+visible, that there was exactly one of it, and that no formatter had given up.
+The heading renders before any request is made, so all three pass on a page
+whose every panel is an error.
+
+They were. `openapi.yaml` declares the asset and product list endpoints as
+`{items: [...]}` objects and the committed client called `validatedList`, which
+throws on anything that is not an array — so both lists rendered "This response
+could not be trusted" on every load.
+
+The first attempt to strengthen the test ALSO passed against the broken client:
+Playwright retries an assertion until it passes, and `toHaveCount(0)` passes the
+instant it is evaluated, which was before the query resolved. A negative
+assertion with no positive signal before it proves nothing. It now waits for
+`networkidle` and for every spinner to clear, and was observed failing with the
+committed client's parsing restored.
+
+Running these needs a built frontend and a live API:
+
+    (cd apps/web && CP_WEB_API_TARGET=http://127.0.0.1:18100        ./node_modules/.bin/playwright test --grep renders)
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

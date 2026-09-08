@@ -294,6 +294,20 @@ proven backup.
 | The eleven exemptions each name a real external blocker | `TestReachability_EveryExemptionNamesABlocker` — checked against `BLOCKERS.md` |
 | The check was observed failing on both defects it was written for | `payout.Cancel` and `nativeasset.Activate`, with their callers removed |
 
+### The internal-economy pages actually load (F-32)
+
+| Property | Evidence |
+|---|---|
+| Each of the five pages renders AND its data loads | `critical-paths.spec.ts` — 17 render tests against a live API and a real Postgres |
+| A client that mis-parses a response fails the test | **observed failing**: with the paged-response handling put back to the committed version, `Native Markets renders` fails |
+| The assertion waits for the page to settle first | a negative assertion evaluated before the query resolves passes instantly and proves nothing; the first attempt at this fix did exactly that |
+| A REFUSAL still passes | asserting no refusal appeared would demand the interface lie; what is asserted is that the data loaded |
+
+Until this session the test asserted the heading was visible, that there was
+exactly one of it, and that no formatter had given up. All three pass on a page
+whose every panel is an error, because the heading renders before any request
+is made. It proved the route existed.
+
 ### The registry and the venue cannot disagree
 
 | Property | Evidence |

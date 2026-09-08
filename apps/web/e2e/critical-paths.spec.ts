@@ -73,6 +73,30 @@ test.describe("the internal economy is separate from the rest", () => {
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
       await expect(page.locator("h1")).toHaveCount(1);
       await expect(page.locator(".malformed")).toHaveCount(0);
+
+      // And the page's DATA loaded. The three assertions above pass whether
+      // the panels show data, an empty state or an error, because the heading
+      // is rendered before any request is made -- so this test used to prove
+      // only that the route existed.
+      //
+      // "This response could not be trusted" is what the app shows when a
+      // response does not match the API contract. A mismatch between what the
+      // API returns and what the client parses would render it on every load
+      // and still pass the three assertions above.
+      //
+      // A REFUSAL is deliberately not asserted against: this deployment
+      // refuses plenty, and demanding no refusal appeared would be demanding
+      // the interface lie. What is asserted is narrower and is the thing a
+      // heading cannot tell you -- that the data loaded at all.
+      // Wait for the page to SETTLE before asserting an absence. Playwright
+      // retries an assertion until it passes, and `toHaveCount(0)` passes the
+      // instant it is evaluated -- so checking for the absence of an error
+      // before the query has resolved proves nothing. The first version of
+      // this assertion did exactly that and passed against a client that was
+      // mis-parsing every list response.
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator(".loading")).toHaveCount(0);
+      await expect(page.getByText("This response could not be trusted")).toHaveCount(0);
     });
   }
 

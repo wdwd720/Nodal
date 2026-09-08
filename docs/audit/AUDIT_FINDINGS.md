@@ -48,6 +48,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-29 | P2 | BASELINE | fixed | A user could reserve their Credits in a payout request and had no way to release them |
 | F-30 | P2 | BASELINE | fixed | A property test could fail on a no-op mutation, and its shrinker would mis-explain any real failure |
 | F-31 | P3 | NEW | **OPEN, unreproduced** | Four of a hundred concurrent buyers failed once, on a loaded machine, and the test discarded the reason |
+| F-32 | P2 | BASELINE | fixed | The browser test for the internal-economy pages could not tell a working page from a broken one |
 
 ---
 
@@ -868,6 +869,50 @@ unproven is whether the cause was environmental.
 
 **What would close it.** The error text from a recurrence. The test now captures
 it, and CI runs this suite on every commit.
+
+## F-32 · A browser test that could not tell a working page from a broken one · BASELINE · P2 · FIXED
+
+**Found by** noticing an uncommitted change in the working tree — somebody
+else's, mid-fix — that made two list queries unwrap `{items: [...]}`, and asking
+why 69 browser tests had not caught what it was fixing.
+
+Verified independently of that change: `openapi.yaml` declares
+`NativeAssetPage` and `InternalProductPage` as objects with an `items` array,
+and the committed client called `validatedList`, which throws
+`ContractViolation("expected an array")`. So at HEAD the Native Markets asset
+list and the Marketplace product list rendered "This response could not be
+trusted" on every load.
+
+**The test that should have caught it asserted only this:**
+
+```
+await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+await expect(page.locator("h1")).toHaveCount(1);
+await expect(page.locator(".malformed")).toHaveCount(0);
+```
+
+The heading renders before any request is made. Every one of those passes on a
+page whose every panel is an error. The test proved the route existed.
+
+**And the first fix did not work either.** Adding
+`expect(page.getByText("This response could not be trusted")).toHaveCount(0)`
+still passed against the broken client — because Playwright retries an
+assertion until it passes, and `toHaveCount(0)` passes the instant it is
+evaluated, which was before the query had resolved. A negative assertion with
+no positive signal before it proves nothing at all. It now waits for
+`networkidle` and for every spinner to clear first.
+
+**Observed failing.** With the client's paged-response handling put back to the
+committed version, `Native Markets renders` fails. With it restored, all 17
+render tests pass against a live API and a real Postgres.
+
+**What is NOT asserted, deliberately.** That no refusal appeared. This
+deployment refuses plenty and demanding otherwise would be demanding the
+interface lie. The assertion is narrower and is exactly the thing a heading
+cannot tell you: that the data loaded at all.
+
+The client-side fix itself is somebody's uncommitted work and is left where it
+was found; this finding is about the test that let it through.
 
 ## Findings deliberately NOT raised
 
