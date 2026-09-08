@@ -370,11 +370,27 @@ func TestIntegration_Start_Refusals(t *testing.T) {
 	})
 	t.Run("kill switch FUNDING_DISABLE (real checker)", func(t *testing.T) {
 		requireEnv(t)
-		_, err := testDB.Exec(context.Background(), `INSERT INTO kill_switches (id, kind, scope_id, active, severity, reason, activated_by_actor_id, activated_at)
-			VALUES ($1, 'FUNDING_DISABLE', '*', true, 'SEVERE', 'funding itest', 'itest', now()) ON CONFLICT (kind, scope_id) DO NOTHING`, id.New[id.Any]())
-		require.NoError(t, err)
+		// A switch born active carries its transition row, as of migration
+		// 00724: the binding used to fire only on UPDATE, so a first activation
+		// went unaudited and this fixture relied on that (F-70). It now writes
+		// what Controller.Activate writes.
+		switchID := id.New[id.Any]()
+		require.NoError(t, testDB.InTx(context.Background(), db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			if err := tx.QueryRow(ctx, `INSERT INTO kill_switches
+				(id, kind, scope_id, active, severity, reason, activated_by_actor_id, activated_at)
+				VALUES ($1, 'FUNDING_DISABLE', '*', true, 'SEVERE', 'funding itest', 'itest', now())
+				ON CONFLICT (kind, scope_id) DO UPDATE SET active = true
+				RETURNING id`, switchID).Scan(&switchID); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `INSERT INTO kill_switch_transitions
+				(id, switch_id, kind, scope_id, to_active, actor_type, actor_id, reason)
+				VALUES ($1, $2, 'FUNDING_DISABLE', '*', true, 'OPERATOR', 'itest', 'funding itest')`,
+				id.New[id.Any](), switchID)
+			return err
+		}))
 		f := newFixture(t, func(_ *funding.Config, d *funding.Deps) { d.KillSwitches = killswitch.NewChecker(killswitch.Policy{}) })
-		_, err = f.svc.Start(f.ctx, f.principal(), f.request("k2"))
+		_, err := f.svc.Start(f.ctx, f.principal(), f.request("k2"))
 		require.Equal(t, errs.CodeKillSwitchActive, errs.CodeOf(err))
 	})
 	t.Run("frozen account", func(t *testing.T) {

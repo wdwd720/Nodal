@@ -93,6 +93,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-67 | P1 | NEW | fixed | The signing recovery path signed the bytes it was handed rather than the bytes that were approved |
 | F-68 | P2 | NEW | fixed | The production withdrawal velocity policy bounds nothing, under a comment saying it bounds everything |
 | F-69 | P2 | NEW | open | Inventory: what six independent audits found and what has not been fixed, with the reason for each |
+| F-70 | P2 | NEW | fixed | A kill switch's first activation needed no transition row, because the binding fired only on UPDATE |
 
 ---
 
@@ -3121,7 +3122,7 @@ indistinguishable from "not noticed".
 | --- | --- | --- |
 | A withdrawal is checked against no balance, settlement state or hold — in Go **or** SQL | `internal/withdrawal` imports neither `capital` nor `buyingpower`; `Repository.Transition` has zero non-test callers and there is no approve route, so the "consulted at approval time" the package doc promises has no approval time to happen at | This is Stage-not-built, not a defect in built code. The WITHDRAWALS gate is DISABLED and is the control. Building the approval path is the work, not patching around its absence. |
 | `EnvelopeService` is entirely unreachable, so `ApplyRealizedPnL` never runs and no envelope can be exhausted by losses | `NewEnvelopeService` has only test callers; no `EnvelopeAdmin` port, no OpenAPI path, no executor for `ENVELOPE_AUTHORITY_CHANGE` | Same shape. Wiring a limit into a subsystem nothing calls produces a control only a test can reach. |
-| `kill_switches_require_transition` fires `AFTER UPDATE OF active`, not on INSERT, so a first activation needs no transition row | Migration 00603; `Controller.Activate` creates via `insertActive` | Real, and narrow: the row still carries its actor and reason, and `Release` recomputes severity from the kind. Worth a migration; not one to write at the end of a batch without its own tests. |
+| ~~`kill_switches_require_transition` fires `AFTER UPDATE OF active`, not on INSERT~~ | — | **Fixed as F-70**, with the migration and tests it wanted. |
 | `internal/eligibility` has zero non-test callers for every function that refuses anything | Only non-test use is a struct field consumed inside the unreachable planner | Already recorded under F-34. Repeating it here so the inventory is complete. |
 | `agents.stage` and `agents.mode` are not bound to a transition row, so a PAUSED agent can be moved to stage LIVE by direct UPDATE and then Resumed with only `agent:pause` | 00690 binds `state` only; `cp_require_transition` returns early when the bound column did not change; the `agents` CHECK exempts side states | The sharpest of the agent findings and additive to F-42 — F-42's remedy (revoke UPDATE on the state column) would leave `stage` and `mode` writable. Belongs with F-42's privilege work, deliberately not started piecemeal. |
 | `agent.NewEmitter` does not require an `EnvelopeReader`; a nil one silently drops the instrument allow-list and the per-trade cap at any stage | `emitter.go` guards the whole envelope block on `deps.Envelope != nil`, while `NewBroker` refuses six nil dependencies | A one-line fail-closed fix in an inert package. Grouped with the agent-runtime work rather than committed alone, because its test needs the runtime the finding is about. |
@@ -3142,6 +3143,61 @@ subsets with a nil `Querier`, so a database read would panic rather than pass;
 and `agent.Authority` immutability is asserted by running the full adversarial
 prompt corpus through quarantine and re-checking the fingerprint, effect set,
 tool set, budgets, stage and mode byte for byte.
+
+## F-70 · The first activation of a kill switch went unbound · NEW · P2 · FIXED
+
+**Found by** the killswitch audit; verified against 00603 and `Controller.Activate`
+before acting. Listed in F-69's inventory as worth a migration of its own, which
+this is.
+
+**What was found.** Migration 00603's header says it binds *"every state change
+of an audited entity to a transition row written in the SAME transaction"*. For
+`kill_switches` it binds one event:
+
+```sql
+CREATE CONSTRAINT TRIGGER kill_switches_require_transition
+    AFTER UPDATE OF active ON kill_switches
+```
+
+A switch's **first** activation updates nothing. `Controller.Activate` calls
+`insertActive`, which writes `active = true` in the INSERT itself, and the
+trigger never saw it. `cp_app` holds INSERT, so a first activation carrying no
+audit row was a legal write as far as the database was concerned. One test in
+the tree did exactly that as a fixture convenience.
+
+Go always writes the row — `Activate` calls `c.record` in the same
+transaction — so the trail was complete in practice. That is F-49's shape,
+and it matters more here than in most: this table is the record of who stopped
+the platform and why, and the first activation is the one an incident review
+reads.
+
+`kill_switches` was also the only table carrying that trigger with **no negative
+test at all**. `withdrawals`, `orders`, `trade_intents`, `deposits`,
+`capability_gates`, `agents` and the three credit tables each have one.
+
+**Fix.** Migration 00724 adds `cp_require_transition_on_insert`, attached
+`AFTER INSERT ... WHEN (NEW.active)`. The `WHEN` is the whole of the scoping and
+it is deliberate: a row born **inactive** is not a state change from anything
+— it is the absence of a switch, written down — and requiring an audit
+row for it would be requiring evidence that nothing happened.
+
+**Evidence.** `TestIntegration_ASwitchBornActiveNeedsItsTransitionRow` drives all
+three cases: born active with no transition row (refused, `AU001`), born active
+with one (commits), born inactive with none (commits). Observed failing with the
+trigger dropped: the unaudited activation committed.
+
+`TestIntegration_ActivateStillWorksThroughTheController` is the positive control
+that matters most — a trigger one condition too broad would pass every
+refusal above and stop an operator halting the platform, and it would look like
+the kill switch failing at the worst possible moment. It activates through the
+real controller, asserts exactly one transition row was recorded, and then
+asserts the switch actually blocks, so it is a switch and not just a row.
+
+Writing it reproduced a defect this repository already knows: the first version
+built scope ids from the **head** of a UUIDv7, which is the millisecond
+timestamp, so two ids minted in the same millisecond collided on
+`UNIQUE (kind, scope_id)`. `internal/httpapi`'s `launchMarket` carries a comment
+warning about precisely that.
 
 ## Findings deliberately NOT raised
 
