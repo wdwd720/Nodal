@@ -411,3 +411,177 @@ export const sessionSpec: Spec = {
 export function pageSpec(item: Spec): Spec {
   return { arrays: { items: { required: true, spec: item } } };
 }
+
+/* --------------------------------------------------------------------------
+ * The Nodal-native economy (gola.md PARTS XII-XXI, LII-LIV)
+ *
+ * Every quantity here is `quantity` — exact base units as an integer string —
+ * and not one of them is `usd`. That is the contract enforcing PART LIV: there
+ * is no approved external value for a Credit, so a response that tried to hand
+ * this app a dollar figure for one would be refused at the boundary rather
+ * than rendered.
+ * ------------------------------------------------------------------------ */
+
+export const creditBalanceSpec: Spec = {
+  required: {
+    account_id: "uuid",
+    gross: "quantity",
+    spendable: "quantity",
+    frozen: "quantity",
+    payout_eligible: "quantity",
+    ineligible: "quantity",
+    policy_version: "string",
+  },
+  optional: { reversed: "quantity", policy_hash: "string", by_origin: "object", by_finality: "object" },
+};
+
+export const nativeAssetSpec: Spec = {
+  required: { asset_id: "uuid", creator_account_id: "uuid", name: "string", symbol: "string", status: "string" },
+  optional: {
+    description: "string",
+    image_url: "string",
+    decimals: "integer",
+    moderation_state: "string",
+    moderation_notes: "string",
+    economics_locked_at: "timestamp",
+    activated_at: "timestamp",
+    created_at: "timestamp",
+  },
+};
+
+export const nativeMarketSpec: Spec = {
+  required: {
+    market_id: "uuid",
+    asset_id: "uuid",
+    status: "string",
+    real_credit_reserve: "quantity",
+    asset_reserve: "quantity",
+    state_version: "integer",
+    platform_fee_bps: "integer",
+    creator_fee_bps: "integer",
+  },
+  optional: {
+    virtual_credit_reserve: "quantity",
+    initial_asset_reserve: "quantity",
+    circulating_supply: "quantity",
+    spot_price: "quantity",
+    price_scale: "integer",
+  },
+  arrays: {
+    top_holders: {
+      spec: { optional: { account_id: "uuid", quantity: "quantity" } },
+    },
+  },
+};
+
+export const nativeQuoteSpec: Spec = {
+  required: {
+    quote_id: "uuid",
+    market_id: "uuid",
+    side: "string",
+    input_amount: "quantity",
+    expected_output: "quantity",
+    state_version: "integer",
+    expires_at: "timestamp",
+  },
+  optional: {
+    platform_fee: "quantity",
+    creator_fee: "quantity",
+    spot_price_before: "quantity",
+    effective_price: "quantity",
+    price_scale: "integer",
+    slippage_bps: "integer",
+  },
+};
+
+export const nativeFillSpec: Spec = {
+  required: { fill_id: "uuid", market_id: "uuid", side: "string", state_version_after: "integer" },
+  optional: {
+    credits_in: "quantity",
+    credits_out: "quantity",
+    assets_in: "quantity",
+    assets_out: "quantity",
+    platform_fee: "quantity",
+    creator_fee: "quantity",
+    effective_price: "quantity",
+    price_scale: "integer",
+    slippage_bps: "integer",
+    real_credit_reserve_after: "quantity",
+    asset_reserve_after: "quantity",
+  },
+  arrays: {
+    alerts: { spec: { optional: { kind: "string", severity: "string", reason: "string" } } },
+  },
+};
+
+export const internalProductSpec: Spec = {
+  required: {
+    product_id: "uuid",
+    seller_account_id: "uuid",
+    kind: "string",
+    title: "string",
+    price: "quantity",
+    version: "integer",
+    status: "string",
+    earning_origin: "string",
+  },
+  optional: {
+    description: "string",
+    platform_fee: "quantity",
+    seller_proceeds: "quantity",
+    platform_fee_bps: "integer",
+    terms_frozen: "boolean",
+    published_at: "timestamp",
+    created_at: "timestamp",
+  },
+};
+
+export const internalSellerSpec: Spec = {
+  required: { account_id: "uuid", display_name: "string", status: "string" },
+  optional: { payout_account_id: "uuid", suspended_reason: "string", created_at: "timestamp" },
+};
+
+export const internalOrderSpec: Spec = {
+  required: {
+    order_id: "uuid",
+    product_id: "uuid",
+    product_version: "integer",
+    buyer_account_id: "uuid",
+    seller_account_id: "uuid",
+    price: "quantity",
+    platform_fee: "quantity",
+    seller_proceeds: "quantity",
+    earning_origin: "string",
+  },
+  optional: {
+    earning_account_id: "uuid",
+    journal_transaction_id: "uuid",
+    created_at: "timestamp",
+  },
+};
+
+export const payoutRequestSpec: Spec = {
+  required: {
+    payout_id: "uuid",
+    account_id: "uuid",
+    state: "string",
+    requested_quantity: "quantity",
+    reserved_quantity: "quantity",
+    policy_version: "string",
+  },
+  optional: {
+    destination_id: "uuid",
+    settled_quantity: "quantity",
+    eligible_quantity: "quantity",
+    verification_would_suffice: "boolean",
+    required_verification: "string",
+    policy_hash: "string",
+    failure_reason: "string",
+    created_at: "timestamp",
+  },
+};
+
+/** Spec for `{ items }` collections that carry no cursor. */
+export function itemsSpec(item: Spec): Spec {
+  return { arrays: { items: { required: true, spec: item } } };
+}

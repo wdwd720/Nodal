@@ -149,3 +149,61 @@ export const AUXILIARY_ACTIVITY_KINDS: Readonly<Record<string, string>> = {
   FUNDING: "Funding",
   SECURITY: "Security",
 };
+
+/* --------------------------------------------------------------------------
+ * The Nodal-native economy (gola.md PARTS LII, LIV)
+ * ------------------------------------------------------------------------ */
+
+/**
+ * PART LII's rule, and the reason the interface is shaped the way it is:
+ *
+ *   Nodal Economy, Simulated Capital and Real Capital are three different
+ *   things and the interface NEVER sums them.
+ *
+ * A single "total balance" would be the most convenient number on the page and
+ * the most dishonest: Credits cannot be withdrawn, simulated capital does not
+ * exist, and only real capital is money. Adding them produces a figure that is
+ * true of nothing.
+ */
+export const THREE_POTS_NOTE =
+  "Nodal Economy, Simulated Capital and Real Capital are shown separately and are never added " +
+  "together. They are different kinds of value: Credits are usable inside Nodal, simulated capital " +
+  "is a record of what would have happened, and only real capital is money.";
+
+/** What Credits are, said plainly wherever a Credit figure appears. */
+export const CREDITS_DISCLOSURE =
+  "Credits are an internal balance for use inside Nodal. They are not money, not a deposit and not " +
+  "redeemable for money unless this deployment has an approved payout path, which the payouts page " +
+  "states for your account.";
+
+/**
+ * PART LIV: prices on a native market are quoted in Credits, never converted
+ * to a currency, unless an approved external redemption value exists. Showing
+ * "$0.024" where the truth is "2.4 Credits" invents an exchange rate nobody
+ * approved.
+ */
+export const NATIVE_PRICE_NOTE =
+  "Prices on internal markets are quoted in Credits. They are not converted to a currency: no " +
+  "approved external value for a Credit exists in this deployment, so any currency figure would be " +
+  "an exchange rate nobody set.";
+
+/** The standing risk statement for user-created assets and their markets. */
+export const NATIVE_ASSET_RISK =
+  "A Nodal-native asset is created by a user, not by Nodal. Its price is set by a formula against a " +
+  "shared pool, it can fall to nearly nothing, and there is no obligation on anyone to buy it back. " +
+  "Nodal does not review it as an investment and nothing here is advice.";
+
+/** Shown before a creator publishes an asset (PART LIII). */
+export const CREATE_ASSET_IMMUTABILITY =
+  "Supply, creator allocation, symbol, fees and the market formula are fixed at launch and cannot " +
+  "be changed afterwards, by you or by Nodal. Read them before you publish.";
+
+/** What an earning's provenance means to somebody looking at their Credits. */
+export const PROVENANCE_NOTE =
+  "Credits are tracked by where they came from. What may be paid out — if anything — depends on " +
+  "that origin, not on the total, which is why the breakdown is shown instead of one number.";
+
+/** Shown wherever a payout is refused because nothing is approved yet. */
+export const PAYOUT_NOT_APPROVED =
+  "No payout path is approved in this deployment. That is a decision about the product, not about " +
+  "your account, and no amount of Credits changes it.";

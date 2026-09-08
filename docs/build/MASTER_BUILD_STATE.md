@@ -50,7 +50,7 @@ migration.
 | 13 | LegalCapabilityRouter, composite capability key | **done** (`internal/legalrouter`, gates extended, migration 00714) |
 | 14 | Agent authority levels | **done** (`internal/agentauthority`) |
 | 15 | Reality / Prediction / Proof integration with Domain A | **not started** |
-| 16 | Frontend | **not started** |
+| 16 | Frontend | **done for Domain A** (4 pages, honesty rules enforced, 66 browser tests) |
 | 17 | Admin tooling for Domain A | **done** (9 administrative action kinds + executors; `internal/httpapi/executors_domaina.go`) |
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
@@ -180,11 +180,53 @@ params. What is missing is kind-SPECIFIC UI: a market picker instead of a
 pasted uuid, a moderation-state dropdown instead of hand-written JSON. That is
 Stage 16 work and a usability risk, not a missing control.
 
+### Stage 16 as built
+
+Four pages, and one rule made structural.
+
+**The rule.** PART LII says Home must distinguish Nodal Economy, Simulated
+Capital and Real Capital, and that balances must never be misrepresented. The
+enforcement is not a layout convention:
+
+- **No query hook produces a combined figure.** There is nothing in
+  `apps/web/src/api/queries.ts` that adds a Credit amount to a USD amount or
+  converts one into the other, so no component can render the total by
+  accident.
+- **A source-scanning test refuses a page that shows both.**
+  `no page converts Credits into a currency` fails if a page renders a Credit
+  figure and a `<Usd>` together, because PART LIV forbids inventing an exchange
+  rate nobody approved.
+- **A browser test reads what actually rendered.**
+  `no page puts a Credit figure and a currency figure together` walks the four
+  pages and refuses a currency amount on any page that quotes Credits — which
+  covers strings arriving from the API, where a source scan cannot look.
+
+**The pages.**
+
+| Page | What it exists to say |
+|---|---|
+| Nodal Economy | Credits are not one number. Held, spendable and payout-eligible are separate figures with the origin and finality breakdown behind them, because eligibility is decided per origin. |
+| Marketplace | A price is in Credits; the platform's share is its own figure, not folded into the price; and a seller sees which provenance a sale produces before they list. |
+| Native Markets | Supply, the REAL reserve as distinct from the virtual one, holder concentration, both fees, asset status — and prices in Credits, never a currency. |
+| Payouts | The eligible figure next to the total, the reasons for the difference, and "verification would suffice" as the different answer it is. |
+
+**Honesty copy is enforced, not aspirational.** Four new constants
+(`THREE_POTS_NOTE`, `CREDITS_DISCLOSURE`, `NATIVE_PRICE_NOTE`,
+`NATIVE_ASSET_RISK`) with tests that a page showing Credits must say what they
+are, and a page showing a user-created asset must carry the risk statement.
+
+**One real defect fell out of building it** — F-20: any failure to read
+`/v1/me`, including a rate limit, told the customer they were signed out. That
+was baseline behaviour, it was self-concealing, and it took the fix to make the
+cause visible.
+
+**Not built.** Create Asset (PART LIII) has no UI; the API exists and the flow
+is a form this stage did not reach. Native-market trading is read-only in the
+UI — quote and order hooks exist and no page places an order yet.
+
 ## 0.3 Next exact work, in order
 
-1. **Stage 16 — frontend.** The API exists; `apps/web` has no Domain A surface. PART LII's rule
-   (Nodal Economy / Simulated / Real Capital never summed) has to be structural in the UI, not a
-   styling choice.
+1. **Stage 16 remainder** — Create Asset (PART LIII) and native-market trading in the UI.
 2. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
 
 ## 0.4 Verification commands that matter

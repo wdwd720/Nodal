@@ -8,7 +8,7 @@ are not synonyms and this report does not treat them as such.
 
 | Level | Status |
 |---|---|
-| **CODE READY** | **NO** — Stages 10, 15, 16 and 20–24 are not built |
+| **CODE READY** | **NO** — Stage 10 is externally blocked, Stage 15 and Stages 20–24 are not built, and Stage 16 covers the internal economy but not asset creation or in-UI trading |
 | **SANDBOX READY** | **PARTIAL** — the internal economy runs end to end against a sandbox payout provider; no external provider sandbox is integrated |
 | **STAGING READY** | **NO** — no staging deployment of the new subsystems has been exercised |
 | **PROVIDER READY** | **NO** — no payout or hosted provider contract exists (BLOCKERS B-01, B-05) |
@@ -139,6 +139,25 @@ Each row is a property with an executable test behind it, not a claim.
 | Every hand resolution carries a reason | `TestIntegration_AResolutionRequiresAReason` |
 | Stopping is one signature and restarting is two, across the whole kind table | `TestKindTable_Golden` |
 
+### The interface (PARTS LII, LIV)
+
+| Property | Evidence |
+|---|---|
+| No code path produces a figure that sums the three kinds of value | there is no such hook in `apps/web/src/api/queries.ts`; the separation is structural rather than a layout convention |
+| A page never shows a Credit figure and a currency figure together | `no page converts Credits into a currency` (source scan) and `no page puts a Credit figure and a currency figure together` (browser, reads rendered text) |
+| Home names all three pots and says they are never added | `home names all three pots and adds none of them` |
+| A page showing Credits says what Credits are | `a page showing Credits says what Credits are` |
+| A page showing a user-created asset carries the risk statement | `a page showing a user-created asset carries the risk statement` |
+| The four internal-economy pages render, have one `h1`, and are reachable from the navigation | `the internal economy is separate from the rest` |
+| Every route passes the rendered-text honesty scan and the WCAG A/AA automated scan | `honesty.spec.ts`, `accessibility.spec.ts` — 13 routes each |
+| A failure to reach the backend is never reported as being signed out | F-20; only a 401 renders the sign-in screen |
+
+Browser suite: **66 tests, three consecutive clean runs at ~52 s**, against a production `vite build`
+served by `vite preview`, proxying to the real `cmd/api` on a seeded database. Sign-in is the real
+OIDC round trip. The run needs the transport rate limits raised
+(`CP_API_RATE_LIMIT_*=100000/1m`) because a 66-test suite is not a person; the limiter correctly
+refuses to be disabled in a production-like environment.
+
 ### Policy and authority
 
 | Property | Evidence |
@@ -187,9 +206,10 @@ earlier one.
   entry point, so `intent.TradeIntent` and `settlement.FinancialIntent` currently coexist.
 - **The risk kernel is not yet an input to the Domain A route.** `Route.RequiresRiskEvaluation` is
   determined and recorded; nothing consumes it for internal trades yet.
-- **No frontend for Domain A** (Stage 16). PART LII's rule — that Nodal Economy, Simulated and Real
-  Capital are never summed — is enforced in the API's response shapes and is not yet enforced in a
-  UI, because there is no UI.
+- **Create Asset has no UI** (PART LIII, part of Stage 16). The API exists; the guided flow that
+  shows a creator the immutable economics before they publish does not.
+- **Native-market trading is read-only in the UI.** The quote and order hooks exist and no page
+  places an order, so a customer can see a market and cannot trade it from the interface.
 - **No kind-SPECIFIC admin screens for Domain A** (part of Stage 16). The nine administrative
   actions are fully operable from the existing console today: its propose form is driven by the
   generated `authority.json`, which now lists all nine, and it carries a free-form params field that

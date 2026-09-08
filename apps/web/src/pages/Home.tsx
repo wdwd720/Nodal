@@ -35,7 +35,12 @@ import {
   Table,
 } from "../components/Layout.tsx";
 import { Qty, Usd } from "../components/Money.tsx";
-import { PENDING_SETTLEMENT_NOTE, USDC_DISCLOSURE, USD_VALUATION_NOTE } from "../lib/honesty.ts";
+import {
+  PENDING_SETTLEMENT_NOTE,
+  THREE_POTS_NOTE,
+  USDC_DISCLOSURE,
+  USD_VALUATION_NOTE,
+} from "../lib/honesty.ts";
 import { useActiveAccountId, useSession } from "../session.tsx";
 
 export function Home(): ReactNode {
@@ -65,8 +70,31 @@ export function Home(): ReactNode {
       actions={<LinkButton to="/add-funds" variant="primary">Add funds</LinkButton>}
     >
       <Panel
+        title="Three kinds of value"
+        description="Nodal keeps three separate pots. This page shows real capital; the other two live on their own pages, and none of the three is ever added to another."
+      >
+        <FieldGrid columns={3}>
+          <Field
+            label="Real Capital"
+            note="Money and settlement assets held for this account. The figures below are these."
+          >
+            <Pill tone="info">This page</Pill>
+          </Field>
+          <Field label="Nodal Economy" note="Credits, what you have earned inside Nodal, and what you can buy with them.">
+            <LinkButton to="/nodal-economy">Open</LinkButton>
+          </Field>
+          <Field label="Simulated Capital" note="A record of what would have happened. No capital moved.">
+            <LinkButton to="/lab">Open the Lab</LinkButton>
+          </Field>
+        </FieldGrid>
+        <Disclosure title="Why these are never added together">
+          <p>{THREE_POTS_NOTE}</p>
+        </Disclosure>
+      </Panel>
+
+      <Panel
         title="Balances"
-        description="Recomputed by the backend on every request. Never cached as truth."
+        description="Real capital, recomputed by the backend on every request. Never cached as truth."
       >
         <AsyncPanel
           query={buyingPower}

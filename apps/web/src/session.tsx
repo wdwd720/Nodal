@@ -18,6 +18,15 @@ export interface SessionValue {
   readonly activeAccountId: string | undefined;
   readonly setActiveAccountId: (id: string) => void;
   readonly signedIn: boolean;
+  /**
+   * True only when the BACKEND said this session is not signed in (401).
+   *
+   * It is separate from `!signedIn` on purpose. "I could not ask" and "the
+   * answer was no" are different facts, and only the second one justifies
+   * telling a customer they are signed out — which is a claim about their
+   * session, not about the network.
+   */
+  readonly signedOut: boolean;
   readonly loading: boolean;
   /** Present when the principal or account list could not be read. */
   readonly error: unknown;
@@ -29,6 +38,7 @@ const SessionContext = createContext<SessionValue | undefined>(undefined);
 export function SessionProvider(props: { readonly children: ReactNode }): ReactNode {
   const me = useMe();
   const signedIn = me.isSuccess;
+  const signedOut = me.isError && isUnauthenticated(me.error);
   const accounts = useAccounts(signedIn);
   const [chosen, setChosen] = useState<string | undefined>(undefined);
 
@@ -41,6 +51,7 @@ export function SessionProvider(props: { readonly children: ReactNode }): ReactN
       activeAccountId: active,
       setActiveAccountId: setChosen,
       signedIn,
+      signedOut,
       loading: me.isPending || (signedIn && accounts.isPending),
       error: me.isError && !isUnauthenticated(me.error) ? me.error : accounts.error,
       refetch: () => {
@@ -48,7 +59,7 @@ export function SessionProvider(props: { readonly children: ReactNode }): ReactN
         void accounts.refetch();
       },
     };
-  }, [me, accounts, chosen, signedIn]);
+  }, [me, accounts, chosen, signedIn, signedOut]);
 
   return <SessionContext.Provider value={value}>{props.children}</SessionContext.Provider>;
 }

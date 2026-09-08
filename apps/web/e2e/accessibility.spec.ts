@@ -13,6 +13,10 @@ import { expect, test } from "@playwright/test";
 const ROUTES = [
   "/",
   "/add-funds",
+  "/nodal-economy",
+  "/marketplace",
+  "/native-markets",
+  "/payouts",
   "/trade",
   "/portfolio",
   "/strategy",

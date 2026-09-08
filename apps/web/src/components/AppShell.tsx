@@ -14,9 +14,22 @@ import { useSession } from "../session.tsx";
 import { useVersion } from "../api/queries.ts";
 import { StreamBadge, useEventStream } from "./StreamStatus.tsx";
 
+/**
+ * The navigation, grouped so that the three kinds of value stay apart.
+ *
+ * Nodal Economy, Marketplace and Native Markets are the internal economy;
+ * Trade and Portfolio are real capital; the Lab is simulated. They are
+ * adjacent in the list and never merged into one "balance" destination,
+ * because a single entry point would be the first step toward a single total
+ * (gola.md PART LII).
+ */
 export const NAV_ITEMS: ReadonlyArray<{ readonly to: string; readonly label: string }> = [
   { to: "/", label: "Home" },
   { to: "/add-funds", label: "Add funds" },
+  { to: "/nodal-economy", label: "Nodal Economy" },
+  { to: "/marketplace", label: "Marketplace" },
+  { to: "/native-markets", label: "Native Markets" },
+  { to: "/payouts", label: "Payouts" },
   { to: "/trade", label: "Trade" },
   { to: "/portfolio", label: "Portfolio" },
   { to: "/strategy", label: "Strategy builder" },

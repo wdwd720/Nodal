@@ -21,6 +21,19 @@ const PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> 
   { path: "/settings", heading: "Settings and security" },
 ];
 
+/**
+ * The internal-economy pages (gola.md PART LII). They are a separate list from
+ * PAGES because PAGES is PART 111's required set and this is a different
+ * requirement; merging them would make a failure in one look like a failure of
+ * the other.
+ */
+const INTERNAL_ECONOMY_PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
+  { path: "/nodal-economy", heading: "Nodal Economy" },
+  { path: "/marketplace", heading: "Marketplace" },
+  { path: "/native-markets", heading: "Native Markets" },
+  { path: "/payouts", heading: "Payouts" },
+];
+
 async function accountId(page: Page): Promise<string> {
   const response = await page.request.get("/v1/me");
   expect(response.ok()).toBeTruthy();
@@ -48,6 +61,54 @@ test.describe("the nine required pages", () => {
     for (const { heading } of PAGES) {
       await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: heading }).click();
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    }
+  });
+});
+
+test.describe("the internal economy is separate from the rest", () => {
+  for (const { path, heading } of INTERNAL_ECONOMY_PAGES) {
+    test(`${heading} renders`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expect(page.locator(".malformed")).toHaveCount(0);
+    });
+  }
+
+  test("every internal-economy page is reachable from the navigation", async ({ page }) => {
+    await page.goto("/");
+    for (const { heading } of INTERNAL_ECONOMY_PAGES) {
+      await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: heading }).click();
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    }
+  });
+
+  test("home names all three pots and adds none of them", async ({ page }) => {
+    await page.goto("/");
+    const panel = page.locator(".panel", { hasText: "Three kinds of value" });
+    await expect(panel).toBeVisible();
+    for (const name of ["Real Capital", "Nodal Economy", "Simulated Capital"]) {
+      await expect(panel.getByText(name, { exact: false }).first()).toBeVisible();
+    }
+    // .first(): the phrase appears in both the disclosure title and its body,
+    // which is the point — the rule is stated twice — but strict mode needs one.
+    await expect(panel.getByText("never added together", { exact: false }).first()).toBeVisible();
+  });
+
+  test("no page puts a Credit figure and a currency figure together", async ({ page }) => {
+    // PART LIV: there is no approved external value for a Credit, so a
+    // currency figure beside one would be an exchange rate nobody set. This
+    // reads what actually rendered, which the source scan cannot do for text
+    // that arrives from the API.
+    for (const { path } of INTERNAL_ECONOMY_PAGES) {
+      await page.goto(path);
+      await expect(page.locator("h1")).toHaveCount(1);
+      const text = await page.evaluate(() => document.body.innerText);
+      if (!text.includes("Credits")) continue;
+      expect(
+        /\$\s?\d/.test(text),
+        `${path} rendered a currency amount on a page that quotes Credits`,
+      ).toBeFalsy();
     }
   });
 });

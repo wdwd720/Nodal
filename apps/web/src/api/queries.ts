@@ -19,9 +19,10 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import type { Schemas } from "@controlplane/generated-client";
-import { idempotent } from "@controlplane/generated-client";
+import { idempotent, newIdempotencyKey } from "@controlplane/generated-client";
 
 import { api } from "./client.ts";
+import { isUnauthenticated } from "./problem.ts";
 import {
   accountSpec,
   activityItemSpec,
@@ -38,6 +39,14 @@ import {
   principalSpec,
   quoteDisclosureSpec,
   sessionSpec,
+  creditBalanceSpec,
+  internalOrderSpec,
+  internalProductSpec,
+  nativeAssetSpec,
+  nativeFillSpec,
+  nativeMarketSpec,
+  nativeQuoteSpec,
+  payoutRequestSpec,
   validated,
   validatedList,
 } from "./contract.ts";
@@ -87,7 +96,11 @@ export const keys = {
 export function useMe(): UseQueryResult<Principal> {
   return useQuery({
     queryKey: keys.me,
-    retry: false,
+    // A 401 is an answer and must not be retried: the backend has said this
+    // session is not signed in, and asking again cannot change that. Anything
+    // else is a failure to ASK, which is worth one more attempt before the
+    // application concludes anything about the customer's session at all.
+    retry: (failureCount, error) => !isUnauthenticated(error) && failureCount < 2,
     queryFn: async () => {
       const { data } = await api.GET("/me", {});
       return validated<Principal>(data, principalSpec, "/me");
@@ -504,6 +517,255 @@ export function useSignOut(): UseMutationResult<void, unknown, void> {
   return useMutation({
     mutationFn: async () => {
       await api.POST("/auth/logout", {});
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * The Nodal-native economy (gola.md PARTS XII-XXI)
+ *
+ * Note what is absent: there is no hook that adds a Credit figure to a USD
+ * figure, and there is no hook that converts one to the other. The separation
+ * PART LII requires is not a layout choice made in a component — the data
+ * layer never produces the combined number, so no component can render it by
+ * accident.
+ * ------------------------------------------------------------------------ */
+
+export type CreditBalance = Schemas["CreditBalance"];
+export type NativeAsset = Schemas["NativeAsset"];
+export type NativeMarket = Schemas["NativeMarket"];
+export type NativeQuote = Schemas["NativeQuote"];
+export type NativeFill = Schemas["NativeFill"];
+export type InternalProduct = Schemas["InternalProduct"];
+export type InternalSeller = Schemas["InternalSeller"];
+export type InternalOrder = Schemas["InternalOrder"];
+export type PayoutRequest = Schemas["PayoutRequest"];
+export type InternalProductKind = Schemas["InternalProductKind"];
+
+export const nodalKeys = {
+  credits: (accountId: string) => ["credits", accountId] as const,
+  nativeAssets: ["native-assets"] as const,
+  nativeAsset: (id: string) => ["native-asset", id] as const,
+  nativeMarket: (id: string) => ["native-market", id] as const,
+  products: (kind: string) => ["internal-products", kind] as const,
+  product: (id: string) => ["internal-product", id] as const,
+  orders: (accountId: string, role: string) => ["internal-orders", accountId, role] as const,
+  payouts: (accountId: string) => ["payouts", accountId] as const,
+};
+
+export function useCreditBalance(accountId: string | undefined): UseQueryResult<CreditBalance> {
+  return useQuery({
+    queryKey: nodalKeys.credits(accountId ?? ""),
+    enabled: accountId !== undefined,
+    // Never cached as truth: what may be paid out depends on a policy the
+    // deployment can change, and a stale breakdown would misstate it.
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/credits/balance", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validated<CreditBalance>(data, creditBalanceSpec, "/credits/balance");
+    },
+  });
+}
+
+export function useNativeAssets(limit = 50): UseQueryResult<NativeAsset[]> {
+  return useQuery({
+    queryKey: nodalKeys.nativeAssets,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-assets", { params: { query: { limit } } });
+      return validatedList<NativeAsset>(data, nativeAssetSpec, "/native-assets");
+    },
+  });
+}
+
+export function useNativeAsset(assetId: string | undefined): UseQueryResult<NativeAsset> {
+  return useQuery({
+    queryKey: nodalKeys.nativeAsset(assetId ?? ""),
+    enabled: assetId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-assets/{assetId}", {
+        params: { path: { assetId: assetId ?? "" } },
+      });
+      return validated<NativeAsset>(data, nativeAssetSpec, "/native-assets/{id}");
+    },
+  });
+}
+
+export function useNativeMarket(marketId: string | undefined): UseQueryResult<NativeMarket> {
+  return useQuery({
+    queryKey: nodalKeys.nativeMarket(marketId ?? ""),
+    enabled: marketId !== undefined,
+    // The state version moves on every trade, and a quote priced against a
+    // stale one is refused by the backend. Refetching is cheaper than
+    // explaining a rejection.
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets/{marketId}", {
+        params: { path: { marketId: marketId ?? "" } },
+      });
+      return validated<NativeMarket>(data, nativeMarketSpec, "/native-markets/{id}");
+    },
+  });
+}
+
+export interface NativeQuoteRequest {
+  readonly marketId: string;
+  readonly accountId: string;
+  readonly side: "BUY" | "SELL";
+  readonly amount: string;
+}
+
+/**
+ * A native-market quote is a record of what the market said at a version. It
+ * is a mutation because the backend persists it, and because a price should
+ * not appear because a component remounted.
+ */
+export function useNativeQuote(): UseMutationResult<NativeQuote, unknown, NativeQuoteRequest> {
+  return useMutation({
+    mutationFn: async (r: NativeQuoteRequest) => {
+      const { data } = await api.POST("/native-markets/{marketId}/quotes", {
+        ...idempotent(newIdempotencyKey(), { path: { marketId: r.marketId } }),
+        body: { account_id: r.accountId, side: r.side, amount: r.amount },
+      });
+      return validated<NativeQuote>(data, nativeQuoteSpec, "/native-markets/{id}/quotes");
+    },
+  });
+}
+
+export interface NativeOrderRequest extends NativeQuoteRequest {
+  /** The number the customer actually agreed to. Never taken from a quote. */
+  readonly minOutput: string;
+  readonly quoteId?: string;
+  readonly idempotencyKey: string;
+}
+
+export function useNativeOrder(): UseMutationResult<NativeFill, unknown, NativeOrderRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (r: NativeOrderRequest) => {
+      const { data } = await api.POST("/native-markets/{marketId}/orders", {
+        ...idempotent(r.idempotencyKey, { path: { marketId: r.marketId } }),
+        body: {
+          account_id: r.accountId,
+          side: r.side,
+          amount: r.amount,
+          min_output: r.minOutput,
+          ...(r.quoteId !== undefined ? { quote_id: r.quoteId } : {}),
+        },
+      });
+      return validated<NativeFill>(data, nativeFillSpec, "/native-markets/{id}/orders");
+    },
+    onSuccess: (_fill, r) => {
+      void qc.invalidateQueries({ queryKey: nodalKeys.nativeMarket(r.marketId) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.credits(r.accountId) });
+    },
+  });
+}
+
+export function useInternalProducts(kind: string): UseQueryResult<InternalProduct[]> {
+  return useQuery({
+    queryKey: nodalKeys.products(kind),
+    queryFn: async () => {
+      const { data } = await api.GET("/internal-products", {
+        params: { query: kind === "" ? {} : { kind: kind as InternalProductKind } },
+      });
+      return validatedList<InternalProduct>(data, internalProductSpec, "/internal-products");
+    },
+  });
+}
+
+export function useInternalProduct(productId: string | undefined): UseQueryResult<InternalProduct> {
+  return useQuery({
+    queryKey: nodalKeys.product(productId ?? ""),
+    enabled: productId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/internal-products/{productId}", {
+        params: { path: { productId: productId ?? "" } },
+      });
+      return validated<InternalProduct>(data, internalProductSpec, "/internal-products/{id}");
+    },
+  });
+}
+
+export function useInternalOrders(
+  accountId: string | undefined,
+  role: "BUYER" | "SELLER",
+): UseQueryResult<InternalOrder[]> {
+  return useQuery({
+    queryKey: nodalKeys.orders(accountId ?? "", role),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/internal-orders", {
+        params: { query: { account_id: accountId ?? "", role } },
+      });
+      return validatedList<InternalOrder>(data, internalOrderSpec, "/internal-orders");
+    },
+  });
+}
+
+export interface PurchaseRequest {
+  readonly productId: string;
+  readonly accountId: string;
+  /** What the customer was shown. A mismatch is a refusal, not a surprise charge. */
+  readonly expectedPrice: string;
+  readonly idempotencyKey: string;
+}
+
+export function usePurchaseProduct(): UseMutationResult<InternalOrder, unknown, PurchaseRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (r: PurchaseRequest) => {
+      const { data } = await api.POST("/internal-products/{productId}/orders", {
+        ...idempotent(r.idempotencyKey, { path: { productId: r.productId } }),
+        body: { account_id: r.accountId, expected_price: r.expectedPrice },
+      });
+      return validated<InternalOrder>(data, internalOrderSpec, "/internal-products/{id}/orders");
+    },
+    onSuccess: (_order, r) => {
+      void qc.invalidateQueries({ queryKey: nodalKeys.credits(r.accountId) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.orders(r.accountId, "BUYER") });
+    },
+  });
+}
+
+export function usePayouts(accountId: string | undefined): UseQueryResult<PayoutRequest[]> {
+  return useQuery({
+    queryKey: nodalKeys.payouts(accountId ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/payouts", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedList<PayoutRequest>(data, payoutRequestSpec, "/payouts");
+    },
+  });
+}
+
+export interface CreatePayoutRequest {
+  readonly accountId: string;
+  readonly amount: string;
+  readonly destinationId?: string;
+  readonly idempotencyKey: string;
+}
+
+export function useCreatePayout(): UseMutationResult<PayoutRequest, unknown, CreatePayoutRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (r: CreatePayoutRequest) => {
+      const { data } = await api.POST("/payouts", {
+        ...idempotent(r.idempotencyKey),
+        body: {
+          account_id: r.accountId,
+          amount: r.amount,
+          ...(r.destinationId !== undefined ? { destination_id: r.destinationId } : {}),
+        },
+      });
+      return validated<PayoutRequest>(data, payoutRequestSpec, "/payouts");
+    },
+    onSuccess: (_req, r) => {
+      void qc.invalidateQueries({ queryKey: nodalKeys.payouts(r.accountId) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.credits(r.accountId) });
     },
   });
 }

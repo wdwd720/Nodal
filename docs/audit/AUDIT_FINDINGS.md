@@ -32,6 +32,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-17 | P2 | NEW | fixed | A gate being off was reported as a policy refusal, sending operators to the wrong fix |
 | F-18 | P2 | NEW | fixed | The adversarial-coverage summary contradicted the evidence tables in its own document |
 | F-19 | P3 | NEW | fixed | A Route field called `MaxAgentAuthority` held a minimum, inviting a backwards gate |
+| F-20 | P2 | BASELINE | fixed | Any failure to read `/v1/me` told the customer they were signed out, including a rate limit |
 
 ---
 
@@ -342,6 +343,60 @@ may not, and a permanently forbidden action has no minimum at all because no lev
 
 **Why P3 and not P2.** No caller existed. Recorded anyway, because "nothing uses it yet" is a
 statement about today and the name would have outlived the memory of what it meant.
+
+## F-20 · A failure to ASK was reported as an answer about the session · BASELINE · P2 · FIXED
+
+**Found by** the browser suite failing intermittently while building the Domain A pages — two or
+three tests per run, never the same ones, always with the page rendering the sign-in screen. The
+tests that failed were about pages I had not touched, which is what made it worth chasing rather
+than working around.
+
+`SessionProvider` computed `signedIn = me.isSuccess`, and `App` rendered `<SignIn />` whenever that
+was false. So EVERY way of failing to read `/v1/me` — a dropped connection, a timeout, a 500, a 429 —
+produced the sentence *"This session is not signed in."*
+
+That sentence is a claim about the customer's session, and the application did not know it. The
+session was fine. What had actually happened was:
+
+```
+code RATE_LIMITED · HTTP 429
+```
+
+The suite makes enough requests to trip the transport rate limiter, the limiter did exactly its job,
+and the interface translated "I was told to slow down" into "you are logged out". A customer hitting
+a rate limit would have been shown a sign-in screen and would reasonably have concluded their session
+had been terminated.
+
+It was also self-concealing: the same code path discarded the real error, so the 429 never reached
+the screen. It took a fix to make the cause visible — the first run after the change failed with the
+rate-limit message rendered in full, which is how the root cause was finally identified.
+
+**Fix.**
+
+- `SessionValue` gains `signedOut`, true only when the backend actually answered 401. `App` shows the
+  sign-in screen for that and only that; every other failure renders the real problem with a retry
+  and the line *"This is a failure to reach the backend, not a statement about your session."*
+- `useMe` no longer refuses to retry everything. A 401 is an answer and is never retried; anything
+  else gets one more attempt before the application concludes anything about the session.
+
+**Verification.** Three consecutive full browser runs, 66/66, stable at ~52 s. Before the fix the
+same suite failed 1–2 tests in three runs out of four.
+
+**The harness half.** The e2e run also needs the transport limits raised, because a 66-test browser
+suite is not a human being:
+
+```
+CP_API_RATE_LIMIT_GENERAL=100000/1m CP_API_RATE_LIMIT_COMMAND=100000/1m \
+CP_API_RATE_LIMIT_QUOTE=100000/1m   CP_API_RATE_LIMIT_AUTH=100000/1m
+```
+
+That is a fact about the harness, not a defect: the limiter refuses to be switched off in a
+production-like environment, which is correct, and the default budget is the right one for a person.
+
+**The general lesson.** "The answer was no" and "I could not ask" are different facts, and an
+interface that collapses them tells the customer something false at the moment they are least able
+to check it. The same distinction is why the Settlement Compiler separates a policy denial from a
+gate being off (F-17) — this is that principle at the other end of the system.
 
 ---
 
