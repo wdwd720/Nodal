@@ -948,6 +948,15 @@ closed after this document last said they were open, and closing item 23 found F
     make integration-race   # the same over the financial core, with -race
     go test -count=1 -run FuzzCurve -fuzz FuzzCurve_NeverBreaksTheInvariant -fuzztime=60s ./internal/nativemarket/
 
+**A killed `make integration` wedges the next one.** `scripts/inttest` runs each
+package with its own pool -- nativemarket alone opens 30 connections -- and
+Postgres here allows 200. Killing a sweep mid-run leaves orphaned `go test`
+children holding their pools, and the next sweep then blocks inside `db.Open`
+waiting for a slot rather than failing: it creates a database or two and stops,
+with no locks, no active queries and no error. An hour was lost to this before
+the cause was clear. Check `SELECT count(*) FROM pg_stat_activity` before
+blaming the tree, and let a sweep finish or wait for its children to exit.
+
 **Run every suite twice against the same database before believing it.** This project has now been
 bitten three times by a fixture that passes on a fresh database and fails on the second run — most
 recently by a test that created a Credit asset per call when the schema permits exactly one.

@@ -60,6 +60,7 @@ Each row is a property with an executable test behind it, not a claim.
 | A stale fill is refused by the database | SQLSTATE NM002, written by hand through the migration role |
 | A fill below the constant product is refused by the database | SQLSTATE NM001, likewise |
 | A creator cannot change supply, allocation, symbol, policy or fees after launch | SQLSTATE NM003, six separate attempts through the migration role |
+| And a market cannot become tradable without that freeze engaging | `TestIntegration_AMarketCannotBecomeTradableWithoutFreezingItsEconomics` — tradability keyed on `status` while the freeze keyed on `activated_at`, so an ACTIVE row with no activation instant traded with an editable curve (F-53) |
 | A retried order does not re-trade | `TestIntegration_ExecutionIsIdempotent` — version moves once |
 | Close-only lets holders out and refuses entry | `TestIntegration_CloseOnlyLetsHoldersOutAndNobodyIn` |
 | With `NATIVE_MARKET_TRADING` off, no trade commits | `TestIntegration_WithoutTheCapabilityNoTradeCommits` |

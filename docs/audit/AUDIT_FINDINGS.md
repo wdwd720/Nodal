@@ -76,6 +76,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-50 | P2 | BASELINE | fixed | An asset could be stored with no value domain: a CHECK that evaluates to NULL accepts |
 | F-51 | P2 | BASELINE | fixed | Three operations documents described controls and wiring that do not exist, in both directions |
 | F-52 | P1 | BASELINE | fixed | A deployment could block an account's new risk and had no wired path to unblock it |
+| F-53 | P2 | BASELINE | fixed | Tradability and the economics freeze keyed on different columns, so a market could trade while editable |
 
 ---
 
@@ -1836,6 +1837,55 @@ refuses one **by name**, and the engine it is given carries no ledger, so the
 two agree even if somebody later changes only one of them.
 `TestIntegration_AReconciliationResolutionRefusesToPost` asserts the refusal and
 that the record is left exactly as it was.
+
+## F-53 · A market could be tradable while its economics were still editable · BASELINE · P2 · FIXED
+
+**Found by** an adversarial read of the migration surface, comparing which
+column each guard actually reads.
+
+Two freezes exist for PART XIII's *"do not allow a creator to silently change
+economics after buyers enter"*:
+
+    cp_native_market_curve_frozen     keys on native_markets.activated_at
+    cp_native_asset_economics_frozen  keys on native_assets.economics_locked_at
+
+and both `RETURN NEW` unconditionally when their column is NULL. What decides
+whether a fill is accepted is a **different column**:
+`cp_native_market_apply_fill` gates on `m.status IN ('ACTIVE','CLOSE_ONLY')`.
+
+Nothing tied them together. A row with `status = 'ACTIVE'` and `activated_at`
+NULL would trade normally while `virtual_credit_reserve`,
+`initial_asset_reserve`, `platform_fee_bps` and `creator_fee_bps` stayed
+mutable — so the constant product `k` and the NM005 supply ceiling could be
+rewritten between fills, which is precisely the harm the freeze exists to
+prevent.
+
+The application never produces that row: `nativemarket.SetStatus` sets
+`activated_at` in the same UPDATE as the status and `nativeasset.Activate` does
+the same for its lock, each with a comment saying why. This is F-49's shape — an
+invariant that holds because the service is careful, in a database that is
+supposed to hold it whatever the caller is.
+
+**Fix.** Two CHECK constraints in migration 00718, tying tradability to the
+freeze on both tables. Written as `status NOT IN (...) OR <column> IS NOT NULL`
+so the expression can never evaluate to NULL, which is F-50's lesson applied one
+migration later.
+
+**The test was written wrong twice, and both mistakes are the same mistake.**
+
+1. It first tried to build the forbidden state by clearing `activated_at` from
+   the fixture's live market. That is refused by `cp_native_market_curve_frozen`
+   itself (NM003), a BEFORE trigger that runs ahead of the constraint — so the
+   test would have passed on the trigger and proved nothing about the CHECK.
+   The state has to be built from a market that has never been activated, where
+   the freeze trigger returns early and the constraint is the only thing there.
+2. Its positive control then tried `UPDATE … SET status = 'ACTIVE', activated_at
+   = now()` by hand, and the AU001 audit binding refused it: a status change
+   needs a transition row in the same transaction. The control now goes through
+   the service, which is what a launch actually is.
+
+Both are the same lesson as the finding itself: **a test that passes because a
+different guard fired is a test that has not seen the guard it names.**
 
 ## Findings deliberately NOT raised
 
