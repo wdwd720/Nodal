@@ -1559,3 +1559,52 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
   check written for it. And the first GT003 test drove `cp_app`, which is
   refused by privilege before the guard is reached: it would have passed on
   SQLSTATE 42501 and proven nothing about the control it names.
+
+- **2026-09-08 S2 (third batch) — an adversarial re-audit of what this
+  session had not touched**: F-63 through F-69. Six read-only audits ran over
+  auth/identity, killswitch/eligibility, capital/withdrawal, signing/execution,
+  admin dual control and agent authority, each asked for the defect classes this
+  codebase keeps producing rather than for a general review. Every claim was
+  verified against the source before action, which is how one audit's framing
+  was caught: it read a comment in 00717 *describing* a revoke that F-47 took
+  back out as the revoke itself — the second time an agent has misread that
+  same comment.
+
+  **F-63 is my own.** Correcting F-55's 140 stale markers, three true ones were
+  replaced with false claims that things were wired, all by the reasoning F-55
+  exists to name: the directory is there, so the thing is done. The sharpest told
+  an incident responder that revoking a compromised principal's sessions was
+  served by `cmd/api`; `RevokeAllForSubject` has no caller outside its package.
+  The same read found that **nothing revokes a session when a role is revoked** —
+  roles are frozen into the session row at login — so clearing a suspect's
+  ADMIN leaves it live for twelve hours.
+
+  **F-64 (P1)**: `requires_dual`, `kind` and `target_id` decide what dual control
+  means and none was protected, so an approval could be repointed at another
+  target after both signatures; and `VerifyApproved` read `requires_dual` from
+  the row while every other consumer read the code. **F-66 (P1)**: a future
+  `auth_time` — copied verbatim from the ID token and validated nowhere —
+  satisfied every step-up window for the session's whole life; the generated
+  decision vectors moved 65 cases from ALLOWED to STEP_UP_REQUIRED, all of the
+  one principal whose clock sits 48 hours ahead. **F-67 (P1)**: the signing
+  recovery path signed the bytes it was handed rather than the bytes the decision
+  approved — latent, because `bindProviders` refuses to start in every
+  production build, and found before that path was turned on.
+
+  **F-65** and **F-68** are the same shape as F-55 in different places: two kill
+  switches an operator would reach for in an incident that reach nothing, and a
+  production velocity policy that bounds nothing under a comment saying it bounds
+  everything.
+
+  **F-69 is the inventory**: fourteen more things the audits found, verified, and
+  left, each with the reason. "Not fixed" without a reason is indistinguishable
+  from "not noticed", and most of them are unreachable-subsystem work where a fix
+  would produce exactly the control-only-a-test-can-reach this session has spent
+  itself removing.
+
+  Three of the batch's own fixes were caught being wrong by controls already in
+  the tree: freezing `params` would have made the tamper check unreachable; a
+  test forged an `admin_action_transitions` row to reach a branch and the
+  package's audit-count invariant refused it within seconds; and the marker check
+  refused two rewrites for naming a package that exists instead of the thing that
+  does not.

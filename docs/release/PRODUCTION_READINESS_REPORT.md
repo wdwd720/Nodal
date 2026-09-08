@@ -471,6 +471,39 @@ and the `integration` job now runs `make infra-up` and sets it. Observed in both
 `TestIntegration_S3_PutGetHeadListRoundTrip` fails naming the variable when the endpoint is absent
 and the promise is set, and passes when it is present.
 
+### The authority surface, re-audited (F-63 to F-69)
+
+Six independent read-only audits over the subsystems the rest of this work had
+not touched. Four defects in reachable code, three of them P1:
+
+| What was believed | What was true |
+|---|---|
+| dual control binds an approval to what was approved | `requires_dual`, `kind` and `target_id` were table-wide updatable with no CHECK and no trigger, and `params_hash` covers `params` alone — an approval could be repointed after both signatures |
+| the dual-control gate reads the policy | `VerifyApproved` read `requires_dual` from the row; every other consumer reads the `KindSpec` |
+| step-up means recently authenticated | `auth_time` comes verbatim from the ID token, is validated nowhere, and a future value was clamped to "now" without a bound — satisfying every window for the session's whole life |
+| the signing recovery path finishes what was approved | it signed the bytes of the call that arrived, never compared against the decision's inspected hash |
+| an operator can disable a model or pause an agent | `MODEL_DISABLE` can never match and the agent runtime cannot read kill switches at all; `AGENT_PAUSE` writes a table the runtime does not read |
+| the withdrawal velocity policy bounds the production path | the wired policy permits any quantity at any rate, under a comment saying the opposite |
+
+Every one was observed failing before it was believed, and the step-up fix is
+measured rather than asserted: the generated console decision vectors moved
+**139 cases, all of one principal** — the one whose authentication time sits
+48 hours after the instant those cases evaluate at — and **65 went from
+ALLOWED to STEP_UP_REQUIRED**.
+
+Three of the fixes were caught being wrong by controls already in the tree,
+which is the strongest evidence in this section that the controls work: freezing
+`params` would have made the params-tamper check unreachable; a fixture forged
+an audit transition row to reach a branch and the package's own count invariant
+refused it; and the runbook marker check refused two rewrites for naming a
+package that exists rather than the thing that does not.
+
+F-69 inventories fourteen further findings that were verified and left, each with
+its reason. Most are in subsystems nothing reaches — the envelope service,
+the eligibility kernel, the agent runtime, the executor — where a fix would
+add a control only a test can walk. That is the same judgement the rest of this
+report applies, stated once rather than fourteen times.
+
 ### Controls that were written and never exercised (F-58 to F-62)
 
 Six database guards and one derivation were believed rather than observed. Each

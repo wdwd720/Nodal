@@ -28,6 +28,27 @@ func (p VelocityPolicy) Validate() error {
 	return nil
 }
 
+// UnboundedVelocity is a policy that permits any quantity at any rate.
+//
+// It is the zero value, and it is given a name because the zero value reads as
+// a bound and is not one: `Check` returns nil for every request when
+// `MaxPerRequest` is not positive and both window limits are zero. The
+// production wiring passed `VelocityPolicy{}` under a comment saying "the bounds
+// stay at zero (no rolling allowance)", which is the opposite of what it does
+// (F-68).
+//
+// It is acceptable only while the WITHDRAWALS capability gate is DISABLED, which
+// refuses the request several checks earlier. The gate is the load-bearing
+// control; this is not a second one. Naming it is the point: a reviewer reading
+// the composition root sees a value that says it bounds nothing, rather than an
+// empty struct that looks like a default.
+func UnboundedVelocity() VelocityPolicy { return VelocityPolicy{} }
+
+// PermitsEverything reports whether the policy bounds nothing at all.
+func (p VelocityPolicy) PermitsEverything() bool {
+	return !p.MaxPerRequest.IsPositive() && !p.MaxPerWindow.IsPositive() && p.MaxCountPerWindow == 0
+}
+
 // Check applies the policy to a new request of quantity against the
 // account's active withdrawals (same asset) created within the window
 // ending at now. It fails with WITHDRAWAL_VELOCITY_LIMIT.

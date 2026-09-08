@@ -90,6 +90,9 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-64 | P1 | NEW | fixed | An approval could be repointed at another target after both signatures, and the dual-control gate trusted a column instead of the code |
 | F-65 | P2 | NEW | part | Two kill-switch kinds an operator would reach for in an incident reach nothing, and four documents said they work |
 | F-66 | P1 | NEW | fixed | An authentication time in the future satisfied every step-up window for the life of the session |
+| F-67 | P1 | NEW | fixed | The signing recovery path signed the bytes it was handed rather than the bytes that were approved |
+| F-68 | P2 | NEW | fixed | The production withdrawal velocity policy bounds nothing, under a comment saying it bounds everything |
+| F-69 | P2 | NEW | open | Inventory: what six independent audits found and what has not been fixed, with the reason for each |
 
 ---
 
@@ -2984,6 +2987,161 @@ whose `auth_time` sits 48 hours after the instant those cases evaluate at. **65
 went from ALLOWED to STEP_UP_REQUIRED.** The same principal's cases at the later
 instant, where it is genuinely one minute old, are unchanged, so the fixture
 keeps the purpose it was written for.
+
+## F-67 · The signing recovery path signed bytes nobody approved · NEW · P1 · FIXED
+
+**Found by** an independent adversarial read of `internal/signing`, verified
+line by line before acting.
+
+**What was found.** `Sign` computes the request's hash first:
+
+```go
+txHash := sha256.Sum256(req.UnsignedTx)
+
+// Fast replay path without chain I/O.
+if existing, err := s.repo.findDecision(...); ... else if existing != nil {
+    return s.replay(ctx, req, existing, log)
+}
+```
+
+and on the replay path never used it. When a decision exists and is APPROVED but
+no `signing_results` row does, `replayLoaded` finishes the job:
+
+```go
+// Approved but never signed (provider failure or crash): finish signing.
+l, err := s.loadWalletAndAccount(ctx, req)
+...
+return s.signApproved(ctx, req, d, l.wallet, ...)
+```
+
+and `signApproved` hands the provider `req.UnsignedTx` — **this call's
+bytes**. Nothing compared them against the decision's `InspectedTxHash`, which is
+recorded on the row and was simply unused. `Request.Validate` checks only that
+`ExpectedTxHash` is 32 bytes; it never checks that it is the hash of
+`UnsignedTx`, and both come from the same caller anyway.
+
+So for any attempt in the state *approved, not yet signed*, a second call with
+the same `attempt_id` and arbitrary transaction bytes signed those bytes with the
+wallet key. None of the sixteen inspector checks runs again on that path, and
+neither does `validateLinkage` — wallet status, delegation, plan approval,
+risk ALLOW, reservation and quote expiry are all re-read on the first path and
+none of them on this one. The hash was the whole of the binding, and it was not
+being applied.
+
+**The window is not exotic.** The decision commits in one transaction and the
+provider is called in a second. Every provider failure or crash between them
+produces exactly this state, and the code documents it as normal recovery —
+`TestIntegration_ProviderFailureThenRecovery` exercises it deliberately.
+
+**Latent, not live.** `internal/signing` has no non-test importer:
+`cmd/execution-worker`'s `bindProviders` returns an error in every production
+build (F-63). This is a code defect on the most security-critical path in the
+system, found before that path was turned on.
+
+**Fix.** The replay path refuses unless the offered bytes hash to what the
+decision inspected. The concurrent-winner path needed the same treatment and did
+not obviously look like it: when a parallel `Sign` wins the attempt lock, the
+decision loaded under that lock belongs to *its* request, so its hash travels out
+of the transaction with it rather than being assumed equal to this call's.
+
+**Evidence.** `TestIntegration_RecoveryRefusesDifferentBytes` leaves an attempt
+approved-but-unsigned, then calls again with one byte flipped and an
+internally-consistent `ExpectedTxHash` — which is what the old
+`Request.Validate` was checking, and why it was no defence. Observed failing with
+the binding removed: execution continued past the check and reached the signer.
+
+Two positive controls, and both are load-bearing. The genuine recovery must still
+complete — a binding that refused everything would make every provider
+failure permanently unrecoverable, which is worse than the defect. And
+`TestIntegration_ReplayOfASignedAttemptStillReturnsTheStoredBytes` pins the path
+that must **not** gain a binding: once a result exists the replay returns the
+stored bytes without reaching the signer, so a refusal there would break
+idempotency instead.
+
+**Related, from the same read and not fixed here:** `signing_decisions` has only
+a plain index on `attempt_id`, not a unique constraint — "one decision per
+attempt" is held by a `SELECT ... FOR UPDATE` on the attempt plus a re-check, and
+`findDecision` concedes it with `ORDER BY created_at DESC ... LIMIT 1`. That is
+the F-49 shape and it belongs with the work that makes this package reachable.
+
+## F-68 · The production velocity policy bounds nothing, and said the opposite · NEW · P2 · FIXED
+
+`cmd/api` wires `withdrawal.VelocityPolicy{}` under this comment:
+
+> the bounds stay at zero (no rolling allowance) until the gate is approved
+
+"Bounds at zero" reads as a refusal. A zero policy refuses nothing:
+`MaxPerRequest` is not positive so the per-request branch is skipped, and
+`!MaxPerWindow.IsPositive() && MaxCountPerWindow == 0` returns nil before
+anything is counted. A request of 2¹²⁸−1 base units passes.
+
+The semantics are deliberate and tested — `withdrawal_test.go` asserts "zero
+policy is unlimited" — so the defect is not the policy type; it is that the
+one place that wires it believed the opposite, in a comment, on a money bound.
+
+**What actually refuses a withdrawal today** is the WITHDRAWALS capability gate,
+DISABLED in every environment and checked several steps earlier. That is the
+load-bearing control and the velocity policy is not a second one.
+
+**Fix.** The value has a name that says what it does —
+`withdrawal.UnboundedVelocity()` — with `PermitsEverything()` beside it, and
+the composition root's comment now states the truth. Naming it is the point: a
+reviewer reading the composition root sees a value that announces it bounds
+nothing, rather than an empty struct that looks like a default somebody chose.
+
+**Evidence.** `TestUnboundedVelocityBoundsNothing` drives the wired policy with
+2¹²⁸−1 and asserts it passes, so the fact is recorded rather
+than believed — and the day the gate is approved, that test is what says the
+velocity policy is still a no-op. `TestARealPolicyActuallyBounds` is the positive
+control: without it the first test would also pass against a `Check` that had
+stopped refusing anything at all.
+
+## F-69 · Inventory: six independent audits, and what was not fixed · NEW · P2 · OPEN
+
+Six read-only audits ran over the subsystems this session had not touched:
+auth/identity, killswitch/eligibility, capital/withdrawal, signing/execution,
+admin dual control, and agent authority. Each was asked for the specific defect
+classes this codebase keeps producing rather than for a general review.
+
+**What came out of them and was fixed:** F-64 (dual control), F-65 (two dead
+kill switches), F-66 (the step-up bypass), F-67 (the signing recovery path),
+F-68 (the velocity comment), and the half of F-63 about session revocation.
+
+**One audit claim was wrong and is recorded as such.** It reported that migration
+00717 revokes `cp_readonly`/`cp_ops` SELECT on `identity_pii` and `sessions`.
+00717 contains no REVOKE; it contains a comment *describing* the revoke that F-47
+took back out. That is the second time an agent has misread that comment as the
+code, which is why every claim in this session was verified before action.
+
+**Verified and NOT fixed.** Each of these was checked against the source; the
+reason for leaving it is given, because "not fixed" without a reason is
+indistinguishable from "not noticed".
+
+| What | Verified | Why not fixed here |
+| --- | --- | --- |
+| A withdrawal is checked against no balance, settlement state or hold — in Go **or** SQL | `internal/withdrawal` imports neither `capital` nor `buyingpower`; `Repository.Transition` has zero non-test callers and there is no approve route, so the "consulted at approval time" the package doc promises has no approval time to happen at | This is Stage-not-built, not a defect in built code. The WITHDRAWALS gate is DISABLED and is the control. Building the approval path is the work, not patching around its absence. |
+| `EnvelopeService` is entirely unreachable, so `ApplyRealizedPnL` never runs and no envelope can be exhausted by losses | `NewEnvelopeService` has only test callers; no `EnvelopeAdmin` port, no OpenAPI path, no executor for `ENVELOPE_AUTHORITY_CHANGE` | Same shape. Wiring a limit into a subsystem nothing calls produces a control only a test can reach. |
+| `kill_switches_require_transition` fires `AFTER UPDATE OF active`, not on INSERT, so a first activation needs no transition row | Migration 00603; `Controller.Activate` creates via `insertActive` | Real, and narrow: the row still carries its actor and reason, and `Release` recomputes severity from the kind. Worth a migration; not one to write at the end of a batch without its own tests. |
+| `internal/eligibility` has zero non-test callers for every function that refuses anything | Only non-test use is a struct field consumed inside the unreachable planner | Already recorded under F-34. Repeating it here so the inventory is complete. |
+| `agents.stage` and `agents.mode` are not bound to a transition row, so a PAUSED agent can be moved to stage LIVE by direct UPDATE and then Resumed with only `agent:pause` | 00690 binds `state` only; `cp_require_transition` returns early when the bound column did not change; the `agents` CHECK exempts side states | The sharpest of the agent findings and additive to F-42 — F-42's remedy (revoke UPDATE on the state column) would leave `stage` and `mode` writable. Belongs with F-42's privilege work, deliberately not started piecemeal. |
+| `agent.NewEmitter` does not require an `EnvelopeReader`; a nil one silently drops the instrument allow-list and the per-trade cap at any stage | `emitter.go` guards the whole envelope block on `deps.Envelope != nil`, while `NewBroker` refuses six nil dependencies | A one-line fail-closed fix in an inert package. Grouped with the agent-runtime work rather than committed alone, because its test needs the runtime the finding is about. |
+| The runner never reads the agent's lifecycle state, so REVOKED, FAILED and SUPERSEDED agents keep executing runs already open | `prepare` uses `Stage` and `RiskPolicyVersion` only; the run-selection query has no agent-state predicate | Same package, same reason. `Pause` does reach an in-flight run, at five independent points, so the mechanism exists and one state is missing from it. |
+| `Store.LiveTradingEnabled` scans `effective_at` and `expires_at` and discards them, so an expired LIVE gate reads as active to the agent worker | `store.go`; `gates.Evaluate` checks both | Real divergence between two readers of the same gate. Fixing it means deciding which reader is authoritative, which is a design call in an inert path. |
+| Four admin action kinds have no test at all: `ENVELOPE_AUTHORITY_CHANGE`, `WITHDRAWAL_APPROVE`, `NATIVE_ASSET_DELIST`, `PAYOUT_MANUAL_REVIEW_RESOLVE` | Grepped for both the constant and the literal across every `*_test.go` | `PAYOUT_MANUAL_REVIEW_RESOLVE` and `NATIVE_ASSET_DELIST` have live executors and are the two worth writing first. Recorded rather than written because a test per kind is a body of work, not a patch. |
+| `ApproverIsNotTarget` is never evaluated true in any test or generated vector, and the console cannot express it | Every fixture uses a `target_id` that is not a user id, so the preceding case always catches first; `ActionKind` has no such field, so `authority.json` cannot carry it | The server refuses correctly (proven end to end), so this is a dead button rather than an escalation — but it violates `adminplane`'s own stated contract not to be more permissive than the enforcement layer. |
+| `admin.refuseAgent` permits the **absent** principal, so `VerifyApproved` runs fully unauthenticated | `if p, ok := PrincipalFrom(ctx); ok && p.ActorType == ActorAgent` | Deliberate per its doc ("it needs no principal but refuses agents") and every caller holds a `db.Querier` already. Recorded because the reasoning deserves to be revisited, not because it is wrong today. |
+| Two IdP identities for one human defeat approver ≠ proposer entirely | `users` is unique on `(idp_issuer, idp_subject)`; there is no person entity; `RoleAdmin` holds both halves of break-glass | An identity-model decision, not a code fix. Already noted under F-64. |
+| `login_attempts` accumulates plaintext `nonce` and `code_verifier` indefinitely | 00641 says the ops role purges it; nothing does, and `PurgeExpired` has no callers of any kind | A retention job, which is operations work with no home in this tree yet. |
+| `internal/auth/httpmw`'s `RequireAuth`, `RequireRole`, `RequirePermission` and `RequireStepUp` all have zero non-test callers | The API enforces through `httpapi/authz.go` instead; `httpmw/doc.go` still advertises the dead set | Not a hole — the live path is the correct one — but a doc that names the wrong enforcement layer, and five exported guards that look live. |
+| `signing_decisions` has a plain index on `attempt_id`, not a unique constraint | 00300; `findDecision` concedes it with `ORDER BY created_at DESC ... LIMIT 1` | Recorded under F-67. |
+
+**Two things the audits confirmed are genuinely well covered**, recorded because
+a clean answer is worth as much as a finding: the kill-switch never-blocked
+classes are proven by exhaustive property tests over all 2¹² kind
+subsets with a nil `Querier`, so a database read would panic rather than pass;
+and `agent.Authority` immutability is asserted by running the full adversarial
+prompt corpus through quarantine and re-checking the fingerprint, effect set,
+tool set, budgets, stage and mode byte for byte.
 
 ## Findings deliberately NOT raised
 

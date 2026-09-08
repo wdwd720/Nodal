@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -258,7 +259,7 @@ func (s *PGService) Sign(ctx context.Context, req Request) (Decision, []byte, er
 	if existing, err := s.repo.findDecision(ctx, s.deps.DB, req.AttemptID); err != nil {
 		return Decision{}, nil, err
 	} else if existing != nil {
-		return s.replay(ctx, req, existing, log)
+		return s.replay(ctx, req, existing, txHash[:], log)
 	}
 
 	// Chain facts are fetched before the transaction so no external I/O
@@ -274,8 +275,9 @@ func (s *PGService) Sign(ctx context.Context, req Request) (Decision, []byte, er
 	}
 
 	var (
-		decision Decision
-		l        *loaded
+		decision      Decision
+		l             *loaded
+		inspectedHash []byte
 	)
 	err = s.deps.DB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		// Re-check under the lock: a concurrent Sign may have decided.
@@ -289,6 +291,10 @@ func (s *PGService) Sign(ctx context.Context, req Request) (Decision, []byte, er
 		if existing != nil {
 			decision = toDecision(*existing, "")
 			decision.Replayed = true
+			// This decision was written by a concurrent caller, which may have
+			// offered different bytes. Its hash travels out with it so the
+			// replay path can bind against what was actually approved (F-67).
+			inspectedHash = append([]byte(nil), existing.InspectedTxHash...)
 			return nil
 		}
 		l, err = s.load(ctx, tx, req)
@@ -343,7 +349,7 @@ func (s *PGService) Sign(ctx context.Context, req Request) (Decision, []byte, er
 		return Decision{}, nil, err
 	}
 	if decision.Replayed {
-		return s.replayLoaded(ctx, req, decision, log)
+		return s.replayLoaded(ctx, req, decision, inspectedHash, txHash[:], log)
 	}
 	log.Info("signing decision recorded", slog.String("decision_id", decision.ID), slog.Bool("approved", decision.Approved),
 		slog.Any("reason_codes", decision.ReasonCodes), slog.String("inspected_tx_hash", hex.EncodeToString(txHash[:])))
@@ -354,13 +360,13 @@ func (s *PGService) Sign(ctx context.Context, req Request) (Decision, []byte, er
 }
 
 // replay handles a Sign for an attempt that already has a decision.
-func (s *PGService) replay(ctx context.Context, req Request, existing *decisionRow, log *slog.Logger) (Decision, []byte, error) {
+func (s *PGService) replay(ctx context.Context, req Request, existing *decisionRow, txHash []byte, log *slog.Logger) (Decision, []byte, error) {
 	d := toDecision(*existing, "")
 	d.Replayed = true
-	return s.replayLoaded(ctx, req, d, log)
+	return s.replayLoaded(ctx, req, d, existing.InspectedTxHash, txHash, log)
 }
 
-func (s *PGService) replayLoaded(ctx context.Context, req Request, d Decision, log *slog.Logger) (Decision, []byte, error) {
+func (s *PGService) replayLoaded(ctx context.Context, req Request, d Decision, inspected, txHash []byte, log *slog.Logger) (Decision, []byte, error) {
 	decisionID, err := ParseDecisionID(d.ID)
 	if err != nil {
 		return Decision{}, nil, fmt.Errorf("signing: decision id: %w", err)
@@ -379,6 +385,26 @@ func (s *PGService) replayLoaded(ctx context.Context, req Request, d Decision, l
 		return d, res.SignedTx, nil
 	}
 	// Approved but never signed (provider failure or crash): finish signing.
+	//
+	// The bytes signed here must be the bytes that were inspected and approved.
+	// They were not: signApproved is handed req.UnsignedTx -- THIS call's bytes
+	// -- and nothing on this path compared them against the decision's
+	// inspected hash, though it is recorded on the row and sha256 of the request
+	// was already computed at the top of Sign and then discarded (F-67).
+	//
+	// The window is not exotic. The decision commits in one transaction and the
+	// provider is called in a second, so every provider failure or crash between
+	// them leaves exactly this state, and the code documents it as normal
+	// recovery. A second call with the same attempt_id and different bytes would
+	// have signed those bytes with the wallet key, on an approval granted to
+	// something else. Not one of the sixteen inspector checks runs again on this
+	// path, so the hash is the whole of the binding and it has to hold.
+	if len(inspected) == 0 || !bytes.Equal(inspected, txHash) {
+		return Decision{}, nil, errs.New(errs.CodeConflict,
+			"signing: the transaction offered does not match the one this decision approved").
+			WithField("attempt_id", req.AttemptID).
+			WithField("decision_id", d.ID)
+	}
 	l, err := s.loadWalletAndAccount(ctx, req)
 	if err != nil {
 		return Decision{}, nil, err

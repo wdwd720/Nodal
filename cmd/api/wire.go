@@ -212,10 +212,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		DB: database, Clock: clk, Store: withdrawalRepo, Accounts: accountRepo,
 		Gates: gateChecker, KillSwitches: killChecker,
 		// The WITHDRAWALS capability is DISABLED in every environment, so no
-		// request reaches the velocity check; the bounds stay at zero
-		// (no rolling allowance) until the gate is approved and a policy is
-		// written down with it.
-		Velocity: withdrawal.VelocityPolicy{},
+		// request reaches the velocity check at all -- the gate refuses several
+		// checks earlier and is the load-bearing control here.
+		//
+		// This value bounds NOTHING. The comment that used to sit here said the
+		// bounds "stay at zero (no rolling allowance)", which reads as a refusal
+		// and is the opposite of what a zero policy does: Check returns nil for
+		// every request (F-68). The name now says so, so that whoever approves
+		// the gate has to replace it rather than inherit it.
+		Velocity: withdrawal.UnboundedVelocity(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("withdrawal service: %w", err)
