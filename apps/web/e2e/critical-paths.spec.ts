@@ -52,8 +52,19 @@ test.describe("the nine required pages", () => {
       // Exactly one h1 per page: the document outline is the navigation aid a
       // screen reader user actually has.
       await expect(page.locator("h1")).toHaveCount(1);
+      // SETTLE before asserting an absence. `toHaveCount(0)` passes the instant
+      // it is evaluated, so a check for "nothing is broken" that runs before
+      // the queries resolve is only measuring how fast the test runs -- which
+      // is F-32, and which the loop below had already been fixed for while
+      // these nine pages had not (F-46). Every page here now waits, and asserts
+      // that nothing is still loading before asserting that nothing is
+      // malformed.
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator(".loading")).toHaveCount(0);
       // Nothing renders the placeholder that would mean a formatter gave up.
       await expect(page.locator(".malformed")).toHaveCount(0);
+      // And nothing renders the contract-violation notice.
+      await expect(page.getByText("This response could not be trusted")).toHaveCount(0);
     });
   }
 
@@ -123,15 +134,39 @@ test.describe("the internal economy is separate from the rest", () => {
    * See scripts/gateceremony for activating MARKETPLACE locally through the real
    * three-principal ceremony.
    */
+  /**
+   * Exact base units from a figure the page displayed.
+   *
+   * BigInt, not a double. The first version of this test parsed both the balance
+   * and the price into JavaScript numbers and asserted their difference equalled
+   * the price -- IEEE-754 subtraction of two six-decimal Credit figures, as the
+   * sole proof that money moved. The repository's own source scan refuses that
+   * conversion on a wire value for exactly this reason, and it had been failing
+   * on these two lines since they were written (F-45).
+   *
+   * There is also no `?? "0"` fallback here. A missing figure must fail the
+   * test, not become zero: a zero balance and an unreadable one are the same
+   * assertion away from each other, and that is the honesty rule this suite
+   * exists to enforce.
+   */
+  const CREDIT_DECIMALS = 6;
+  const baseUnits = (displayed: string): bigint => {
+    const [whole, frac = ""] = displayed.replace(/,/g, "").split(".");
+    return BigInt(whole + frac.padEnd(CREDIT_DECIMALS, "0").slice(0, CREDIT_DECIMALS));
+  };
+
+  const figureIn = (text: string, what: string): bigint => {
+    const match = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text);
+    if (match === null) throw new Error(`no ${what} in ${text}`);
+    return baseUnits(match[1]);
+  };
+
   test("a customer can buy something and their Credits fall by exactly the price", async ({ page }) => {
-    const creditsShown = async (): Promise<number> => {
+    const creditsShown = async (): Promise<bigint> => {
       await page.goto("/nodal-economy");
       await page.waitForLoadState("networkidle");
       const field = page.locator(".field", { hasText: "Usable inside Nodal" }).first();
-      const text = await field.innerText();
-      const match = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text);
-      expect(match, `no Credit figure in ${text}`).not.toBeNull();
-      return Number((match?.[1] ?? "0").replace(/,/g, ""));
+      return figureIn(await field.innerText(), "Credit figure");
     };
 
     const before = await creditsShown();
@@ -147,11 +182,8 @@ test.describe("the internal economy is separate from the rest", () => {
     expect(await cards.count(), "the seeded catalogue should offer something to buy").toBeGreaterThan(0);
     const card = cards.last();
 
-    const priceText = await card.locator(".field", { hasText: "PRICE" }).first().innerText();
-    const priceMatch = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(priceText);
-    expect(priceMatch, `no price in ${priceText}`).not.toBeNull();
-    const price = Number((priceMatch?.[1] ?? "0").replace(/,/g, ""));
-    expect(price).toBeGreaterThan(0);
+    const price = figureIn(await card.locator(".field", { hasText: "PRICE" }).first().innerText(), "price");
+    expect(price > 0n, "a product with no price is not something a customer can buy").toBe(true);
 
     await card.getByRole("button", { name: "Buy for Credits" }).click();
 
@@ -190,7 +222,7 @@ test.describe("the internal economy is separate from the rest", () => {
     await expect(page.getByRole("table", { name: "Purchases" })).toBeVisible();
 
     const after = await creditsShown();
-    expect(before - after).toBe(price);
+    expect(before - after, "the Credits that left the account must be exactly the price shown").toBe(price);
   });
 
   test("every internal-economy page is reachable from the navigation", async ({ page }) => {

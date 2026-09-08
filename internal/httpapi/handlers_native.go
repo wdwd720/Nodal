@@ -9,6 +9,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/credit"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
@@ -227,6 +228,17 @@ func (s *Server) GetNativeAssetsAssetId(ctx context.Context, request api.GetNati
 	a, err := s.opts.Ports.NativeAssets.Get(ctx, assetID)
 	if err != nil {
 		return nil, err
+	}
+	// A DRAFT or PENDING_REVIEW asset is its creator's private work, and this
+	// response carries its moderation state and the moderator's notes.
+	// `ListTradable` shows only ACTIVE and CLOSE_ONLY; this read had no filter
+	// at all, so anybody holding `native_asset:read` -- every customer -- could
+	// read an unpublished asset and the internal commentary on it by asking for
+	// its id. NOT_FOUND rather than FORBIDDEN, for the same reason as
+	// everywhere else: a distinguishable refusal is a membership oracle (F-41).
+	if !a.Status.AllowsSell() && securityRequireAccountOwner(ctx, a.CreatorAccountID.String()) != nil {
+		return nil, errs.New(errs.CodeNotFound, "no such asset").
+			WithField("asset_id", assetID.String())
 	}
 	return api.GetNativeAssetsAssetId200JSONResponse(toAPINativeAsset(a)), nil
 }
@@ -566,11 +578,26 @@ func (s *Server) GetPayoutsPayoutId(ctx context.Context, request api.GetPayoutsP
 	}
 	// Tenant scoping: a payout belongs to an account, and reading somebody
 	// else's is a cross-tenant read however it is addressed.
+	//
+	// NOT_FOUND, not FORBIDDEN. This route fetched first and checked after, so
+	// a foreign payout answered 403 and an absent one 404 -- a membership
+	// oracle: anybody could learn which payout ids exist by asking. Its own
+	// sibling, POST /payouts/{id}/cancel, has answered NOT_FOUND to both since
+	// F-29 and says why in a comment. The two are the same resource and must
+	// not disagree about what a stranger is told (F-41).
 	if serr := securityRequireAccount(ctx, r.AccountID.String()); serr != nil {
-		return nil, serr
+		return nil, errs.New(errs.CodeNotFound, "no such payout").
+			WithField("payout_id", id.String())
 	}
 	return api.GetPayoutsPayoutId200JSONResponse(toAPIPayout(r, payout.Decision{})), nil
 }
+
+// securityRequireAccountOwner is security.RequireAccountOwner: ownership only,
+// no operator override. Used by the by-id reads to decide whether a caller may
+// see something unpublished, which is a question about the owner and not about
+// operator standing -- an operator reading a DRAFT still goes through the
+// account-scoped routes, which do honour the override.
+var securityRequireAccountOwner = security.RequireAccountOwner
 
 // securityRequireAccount is security.RequireAccount, named locally so the
 // tenant check reads the same way in this file as accountScope does elsewhere.

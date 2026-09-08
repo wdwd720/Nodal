@@ -32,6 +32,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
@@ -126,10 +127,23 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 		}),
 	}
 
-	// The customer-facing native-market port, so a test can make a real trade
-	// request over HTTP and not only drive the admin plane. Without it every
-	// customer route on this harness answers UNSUPPORTED, which reads as a
-	// refusal and is not one.
+	// The customer-facing Domain A ports, so a test can make a real request
+	// over HTTP and not only drive the admin plane. Without them every customer
+	// route on this harness answers UNSUPPORTED, which reads as a refusal and
+	// is not one -- and a test asserting a refusal would pass for the wrong
+	// reason. That is how F-37 stayed hidden: no test drove these routes.
+	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk)
+	economy := NativeEconomyDeps{
+		NativeAssets: assetSvc,
+		Payouts:      payoutSvc,
+		LegalRouter:  mustRouter(t, legalrouter.DevelopmentPolicy()),
+		Capabilities: commerceCaps{valuedomain.CapNativeMarketTrading: true},
+		Verification: verifiedAt(valuedomain.VerificationNodalIdentity),
+		Jurisdiction: fixedJurisdiction("US-CA"),
+		Clock:        clk,
+	}
+	ports.NativeAssets = nativeAssetsAdapter{deps: economy, db: d}
+	ports.Payouts = payoutsAdapter{deps: economy, db: d, clk: clk}
 	ports.NativeMarkets = nativeMarketsAdapter{db: d, deps: NativeEconomyDeps{
 		NativeMarkets: marketSvc,
 		LegalRouter:   mustRouter(t, legalrouter.DevelopmentPolicy()),

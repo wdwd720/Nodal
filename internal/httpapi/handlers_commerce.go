@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/errs"
 	api "github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/observability"
@@ -226,6 +227,16 @@ func (s *Server) GetInternalProductsProductId(ctx context.Context, request api.G
 	p, err := s.opts.Ports.Commerce.Product(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	// A DRAFT or WITHDRAWN product is the seller's own business, and this
+	// response carries its price, its fee split and its seller. `ListActive`
+	// shows only what is buyable; this read had no filter, so any customer
+	// could read an unpublished catalogue entry by asking for its id.
+	// NOT_FOUND rather than FORBIDDEN: a distinguishable refusal is a
+	// membership oracle (F-41).
+	if !p.Status.Sellable() && securityRequireAccountOwner(ctx, p.SellerAccountID.String()) != nil {
+		return nil, errs.New(errs.CodeNotFound, "no such product").
+			WithField("product_id", id.String())
 	}
 	return api.GetInternalProductsProductId200JSONResponse(toAPIProduct(p)), nil
 }

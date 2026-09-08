@@ -7,9 +7,10 @@ Findings in **existing code** are marked `BASELINE`. Findings in code written du
 are marked `NEW` — they are recorded with the same weight, because a defect found in your own work an
 hour after writing it is the same defect it would have been in six months.
 
-One finding is **OPEN**: F-31, a concurrency failure seen once and not reproduced. It is in the table
-with everything else rather than in a footnote, because a register that only records what was fixed
-is a register that rewards not looking.
+Two findings are **OPEN**: F-31, a concurrency failure seen once and not reproduced, and F-42, a
+database control whose stated guarantee does not hold and whose repair is larger than the session
+that found it. Both are in the table with everything else rather than in a footnote, because a
+register that only records what was fixed is a register that rewards not looking.
 
 The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 
@@ -57,6 +58,12 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-38 | P1 | BASELINE | fixed | A policy DENY carrying the gate's reason code became a PERMITTED route |
 | F-39 | P2 | BASELINE | fixed | The no-float linter never looked at the internal economy |
 | F-40 | P2 | NEW | fixed | This register claimed a database guarantee that the trigger it named does not make |
+| F-41 | P2 | BASELINE | fixed | Three by-id reads answered more than they should: a membership oracle and two unpublished records |
+| F-42 | P2 | BASELINE | **OPEN** | The AU001 audit binding trusts a session variable any caller can set |
+| F-43 | P1 | BASELINE | fixed | MARKETPLACE is high-risk in Go and was not in SQL, so the database evidence check never fired for it |
+| F-44 | P1 | BASELINE | fixed | Every native-market price was displayed at the wrong scale, as a sixteen-digit number of Credits |
+| F-45 | P2 | NEW | fixed | The web unit suite had been red on the purchase spec, which parsed money into doubles |
+| F-46 | P2 | BASELINE | fixed | The nine-page browser check asserted absences before the page had loaded |
 
 ---
 
@@ -1388,6 +1395,188 @@ document asks for.
 **Fix.** The five packages are in the list. The linter was run against them and
 is clean, and a deliberately-planted `float64` in a Credit calculation was
 observed failing it.
+
+## F-41 · Three by-id reads answered more than they should · BASELINE · P2 · FIXED
+
+**Found by** an adversarial re-audit of the HTTP authorization surface, asking
+of every handler that takes an id: does it verify ownership, and is a refusal
+for somebody else's record distinguishable from a refusal for one that does not
+exist?
+
+Three routes fetched by id and decided afterwards, and each leaked in the gap:
+
+- **`GET /v1/payouts/{payoutId}`** — 403 for a payout belonging to somebody
+  else, 404 for one that does not exist. That difference is a membership
+  oracle: anybody could enumerate which payout ids are real. Its own sibling,
+  `POST /v1/payouts/{payoutId}/cancel`, has answered NOT_FOUND to both since
+  F-29 and says why in a comment two files away. The same resource, two answers.
+- **`GET /v1/internal-products/{productId}`** — no ownership check and no status
+  filter, while `ListActive` beside it shows only what is buyable. A DRAFT
+  product of another seller, with its price and its fee split, was readable by
+  anyone holding `commerce:read`, which is every customer.
+- **`GET /v1/native-assets/{assetId}`** — the same shape, and the response
+  carries `moderation_state` and `moderation_notes`. A stranger could read
+  somebody's unpublished asset AND the moderator's private commentary on it.
+
+All three answer NOT_FOUND now. Owners and creators still read their own
+unpublished work; a published product and a live asset are still public,
+because a market nobody can look at is not a market.
+
+**The tests needed the ports first.** The Domain A harness wired only the admin
+plane, so a request to any customer route answered `UNSUPPORTED` — which reads
+as a refusal and is not one. A test asserting "a stranger is refused" would have
+passed against a deployment where the route did not exist. That is F-37's lesson
+arriving twice in one session: the harness now wires the native-asset and payout
+ports, and each of the three tests was observed failing with its fix removed.
+
+## F-42 · The audit binding trusts a session variable any caller can set · BASELINE · P2 · OPEN
+
+**Found by** an adversarial read of the migration surface.
+
+Migration 00603 binds every state change of an audited entity to a transition
+row written in the same transaction: an AFTER INSERT trigger on the transitions
+table sets a transaction-local setting, and a DEFERRED constraint trigger on the
+entity table raises `AU001` at COMMIT unless that setting matches the new state.
+Seventeen tables depend on it.
+
+Its header says: *"The application role cannot bypass this: it has no privilege
+to drop triggers, and the flag can only be set by inserting an immutable
+transition row."*
+
+**The second clause is false.** `cp.transition.*` is a custom GUC, and
+PostgreSQL lets any role set one. This repository proves the role can:
+`internal/reconciliation/store.go:366` executes `SELECT set_config($1, '1',
+true)` on a `cp.`-prefixed key as `cp_app`. So a caller that can execute SQL as
+`cp_app` can satisfy `AU001` without writing a transition row, and change state
+on any of the sixteen tables where `cp_app` holds unrestricted `UPDATE`.
+
+`capability_gates` is the exception and shows the shape of a real fix: 00701
+does `REVOKE UPDATE ON capability_gates FROM cp_app` and grants back only
+`UPDATE (version)`, so a bare state update is impossible whatever the flag says.
+
+**Why it is OPEN rather than fixed.** The obvious repair — have the deferred
+trigger check that a transition row exists in the current transaction, instead
+of trusting a setting — needs a way to say "in this transaction" that survives
+savepoints. `xmin = pg_current_xact_id()::text::xid` was tried and rejected:
+verified against this project's own PostgreSQL 16, a row inserted inside a
+`SAVEPOINT` does NOT match the top-level xid, and the admin executor runs every
+action inside one. A `created_at >= transaction_timestamp()` predicate was
+rejected too — the test suites run on fake clocks, so a legitimately-written
+transition row is routinely dated before the transaction that writes it.
+
+What remains is the `capability_gates` treatment applied to the other sixteen
+tables: revoke UPDATE on the state column and route state changes through
+SECURITY DEFINER functions. That is a real piece of work and it is not being
+started at the end of a session.
+
+**Recorded now, with the exploit and the remedy, because the alternative is a
+migration header that claims a guarantee the database does not make** — which
+is exactly F-40, one file over.
+
+## F-43 · MARKETPLACE was high-risk in Go and not in SQL · BASELINE · P1 · FIXED
+
+**Found by** an audit of the documents against the code, which found
+`docs/compliance-gates/PRODUCTION_GATES.md` asserting the opposite of
+`gates.IsHighRisk` — and asserting it as a *correction* to an earlier table,
+which is the form a reader trusts most.
+
+The document was wrong: F-16 had already moved `MARKETPLACE` to high risk in Go,
+because it gates the minting of the only withdrawable creator-earning
+provenance, so leaving it low risk would let one approver switch that on.
+
+**What was true is worse than what the document claimed.** The database did not
+agree with Go. `cp_gate_is_high_risk` listed seventeen capabilities;
+`gates.IsHighRisk` returns true for eighteen; the one they disagreed about was
+`MARKETPLACE`. Migration 00701 describes the SQL check as *"the line that holds
+when the Go check is bypassed"* — `GT003` refuses to approve a high-risk gate
+without four evidence references and three distinct principals. For MARKETPLACE
+that line was absent.
+
+Nothing was exploitable through the API, because `gates.Admin` asks Go first.
+What was missing is precisely the thing the second copy exists for: what happens
+when the API is not the caller.
+
+**Fix.** Migration 00716 adds `MARKETPLACE` to the SQL list, and
+`TestIntegration_GoAndSQLAgreeOnEveryCapabilitysRisk` drives
+`cp_gate_is_high_risk` for every capability `AllCapabilities()` declares and
+compares each answer with `IsHighRisk`. It was observed failing without the
+migration, reporting `MARKETPLACE: Go says yes, SQL says no`. A second test
+asserts every declared capability is nameable by the gate table's CHECK
+constraint, because a membership test against a literal list treats an unknown
+capability and a low-risk one identically.
+
+The register already listed "the chart of accounts is duplicated between Go and
+SQL" as a known, deliberately-unraised maintainability risk. This is that risk
+arriving: a list duplicated in two languages diverged, and the half that
+diverged was a security control.
+
+## F-44 · Every native-market price was shown at the wrong scale · BASELINE · P1 · FIXED
+
+**Found by** an audit of the browser interface against this project's own
+honesty rules: a screen must never show a number the API did not return.
+
+`NativeMarket.spot_price` and `NativeQuote.effective_price` are `Quantity` —
+*"exact asset base units as an integer string"* — and both responses carry a
+sibling `price_scale`. The web app declares `price_scale` in its own contract
+and no component reads it. Both fields were rendered with `DecimalValue`, which
+inserts thousands separators and nothing else.
+
+`nativemarket.PriceScale` is **18**. So a price of a few thousandths of a Credit
+was displayed as a sixteen-digit number of Credits, on the field labelled
+"Price" and marked `emphasis`, and on the "Effective price" of a live quote —
+the number a buyer commits against.
+
+This is a worse failure than the class the honesty rules were written for. Those
+forbid showing a zero for a figure the backend did not return. This showed a
+figure the backend *did* return, in a unit the backend never used, with no
+indication anything was wrong.
+
+**Fix.** Both fields render with `Qty` at the scale the response carries. The
+constant `CREDIT_DECIMALS = 6` now says in a comment that prices are not on that
+scale and that the scale is a fact about the asset which the API states.
+
+**Not fixed here, and recorded:** the same page scales `circulating_supply`,
+`asset_reserve`, the holder table and a quote's `expected_output` — all ASSET
+units — by the same hardcoded Credit scale. They are accidentally right today
+because the asset-creation screen also hardcodes six decimals and sends it, so
+every asset made through the interface has six. An asset created through the API
+with any other value renders wrong by a power of ten, and nothing would say so.
+
+## F-45 · The browser suite's own unit tests had been failing · NEW · P2 · FIXED
+
+**Found by** running them.
+
+`node --test src/lib/*.test.ts` is a source scan that enforces the money rules
+on the app's own source, and it had been red since the purchase spec was written
+— on that spec. Two lines converted a displayed Credit figure to a JavaScript
+number, and the test's central assertion subtracted two of them and compared the
+result to a third. IEEE-754 arithmetic on money, as the sole proof that money
+moved, inside the test that exists to prove money moved.
+
+The scan was right and the test I wrote was wrong. It parses exact base units
+into `BigInt` now, and the `?? "0"` fallbacks are gone: a figure the page did not
+show must fail the test, not become zero.
+
+Fourth target found red on arrival in this session, after `make sast`, the
+backup drill's Domain A coverage and `make lint`. The pattern is worth stating
+once more: **a check that fails is a check nobody runs**, and every one of these
+had been failing long enough that its failure had become the normal output.
+
+## F-46 · The nine-page browser check asserted absences before the page loaded · BASELINE · P2 · FIXED
+
+**Found by** the same audit, comparing the two page loops in
+`critical-paths.spec.ts`.
+
+F-32 established the rule: `toHaveCount(0)` passes the instant it is evaluated,
+so asserting the absence of an error before the queries resolve proves nothing.
+The fix was applied to the five internal-economy pages — `networkidle`, then no
+`.loading`, then no "This response could not be trusted" — and the nine required
+pages beside them kept the original shape: heading visible, one `h1`, no
+`.malformed`, all evaluated immediately.
+
+Home, Trade, Portfolio, Settings, Lab, Agents and Activity therefore passed with
+every panel on them showing an error. All nine now settle first and assert the
+same three things the other five do.
 
 ## Findings deliberately NOT raised
 

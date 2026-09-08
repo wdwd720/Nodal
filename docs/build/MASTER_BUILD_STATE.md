@@ -786,6 +786,60 @@ guarantee, in the document whose job is to be believed.
 declared kind list and asserted each was a declared kind. It now reads the kinds
 the corpus actually names, which is what it always claimed to do.
 
+### Wave two, and the one that changes an answer (F-41 to F-46)
+
+Four more read-only auditors: the SQL surface and its grants, the browser
+interface against the honesty rules, the documents against the code, and the
+reality/prediction spine. Everything below was re-verified by reading before
+anything changed.
+
+**F-43 is the one that matters.** `gates.IsHighRisk` returns true for
+MARKETPLACE (F-16 put it there, because it gates the minting of the only
+withdrawable creator-earning provenance). `cp_gate_is_high_risk` listed
+seventeen capabilities and Go listed eighteen, and the one they disagreed about
+was that one. Migration 00701 calls the SQL copy "the line that holds when the
+Go check is bypassed" -- GT003, four evidence references, three distinct
+principals. For MARKETPLACE that line was absent. Nothing was exploitable
+through the API because gates.Admin asks Go first; what was missing is exactly
+what the second copy exists for.
+
+The compliance document asserted the opposite of the code, and asserted it as a
+CORRECTION to an earlier table -- the form a reader trusts most. Migration 00716
+restores the parity and a test now drives both lists and compares them.
+
+**F-44 is the worst thing a user could see.** `nativemarket.PriceScale` is 18.
+The web app rendered `spot_price` and `effective_price` with a formatter that
+only inserts thousands separators, so a price of a few thousandths of a Credit
+was displayed as a sixteen-digit number of Credits -- on the field labelled
+Price, marked emphasis, and on the effective price of a live quote. The API
+returns `price_scale` on both responses and nothing read it.
+
+**F-41**: three by-id reads answered more than they should -- a membership
+oracle on GET /payouts/{id} whose own sibling has answered NOT_FOUND since F-29,
+and two unpublished records (a DRAFT product with its fee split, a DRAFT asset
+with its moderation notes) readable by any customer. The tests needed the ports
+wired into the harness first, which is F-37 arriving a second time: a test
+asserting a refusal would have passed against a route that answered UNSUPPORTED.
+
+**F-45**: the browser suite's own unit tests had been red -- on the purchase
+spec written earlier in this session, which parsed Credits into doubles and
+subtracted them as its central assertion. Fourth target found red on arrival,
+after make sast, the backup drill and make lint.
+
+**F-46**: the nine-page browser check asserted absences before the page loaded.
+F-32's fix had been applied to the five internal-economy pages and not to these.
+
+**F-42 is OPEN and stays open.** Migration 00603's header says the application
+role cannot set the transaction-local flag that binds a state change to its
+audit row. It can -- internal/reconciliation does exactly that on a cp.-prefixed
+key -- and sixteen of the seventeen guarded tables also hold unrestricted UPDATE
+for that role. Two cheaper repairs were tried against this project's own
+PostgreSQL 16 and rejected with evidence: an xmin check does not survive the
+savepoints the admin executor uses, and a created_at check does not survive the
+fake clocks the suites use. The real fix is capability_gates' treatment applied
+to sixteen more tables, and that is not something to start at the end of a
+session.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

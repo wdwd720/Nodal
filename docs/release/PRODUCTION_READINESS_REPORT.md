@@ -88,6 +88,9 @@ had ever been evaluated.
 |---|---|
 | An operator who may READ any account may not ACT on one | `TestRequireAccountOwner_AnOperatorMayReadAnyAccountAndActOnNone` — the same principal, the same account, opposite answers on the read and the write |
 | No account-scoped write route uses the read-side scope | `TestAccountScope_EveryWriteUsesOwnershipOnly`, with a negative control requiring the write helper to be in real use; both observed failing |
+| A by-id read tells a stranger nothing a list route would not | `TestIntegration_ADraftAssetIsNotReadableByAStranger`, `TestIntegration_ADraftProductIsNotReadableByAStranger`, `TestIntegration_AForeignPayoutIsIndistinguishableFromAnAbsentOne` — each observed failing with its fix removed |
+| Go and SQL agree on which capabilities are high risk | `TestIntegration_GoAndSQLAgreeOnEveryCapabilitysRisk` — observed failing with `MARKETPLACE: Go says yes, SQL says no` before migration 00716 |
+| Every declared capability is nameable by the gate table's CHECK | `TestIntegration_SQLKnowsEveryCapabilityGoDeclares` — an unknown capability and a low-risk one are otherwise identical to a membership test |
 | An ADMIN cannot trade out of a customer's balance, over HTTP | `TestIntegration_AnOperatorCannotTradeOutOfACustomersAccount` — 403, the balance unmoved, and the same operator still able to read that account and trade out of their own |
 | A customer can trade over HTTP at all | `TestIntegration_ACustomerCanTradeOverHTTP` — the route had never worked in any deployment (F-37); the test was observed failing with the fix removed |
 
@@ -484,6 +487,31 @@ would close this is the error text from a recurrence, not another clean run.
   a pasted uuid, a moderation-state dropdown rather than hand-written JSON. That is a usability gap,
   not a missing capability, and an operator pasting the wrong uuid into a freeze is the risk it
   leaves open.
+
+### The browser interface
+
+| Property | Evidence |
+|---|---|
+| A price is displayed at the scale the API states, not at a hardcoded one | `NativeMarkets.tsx` renders `spot_price` and `effective_price` with `Qty` at `price_scale`; both were rendered raw, and `PriceScale` is 18, so every price was shown as a sixteen-digit number of Credits (F-44) |
+| The suite's own money rules hold on its own source | `node --test src/lib/*.test.ts` — 35 pass; it had been red on the purchase spec, which parsed Credits into doubles and subtracted them as its central assertion (F-45) |
+| Every required page settles before anything is asserted absent | the nine-page loop now waits for `networkidle` and asserts no `.loading` before asserting no `.malformed`, as the five internal-economy pages already did (F-46) |
+
+### Known weaknesses, recorded rather than fixed
+
+- **Asset quantities on the market page use a hardcoded Credit scale (part of F-44).** `circulating_supply`,
+  `asset_reserve`, the holder table and a quote's `expected_output` are ASSET units rendered at
+  `CREDIT_DECIMALS = 6`. They are right today only because the asset-creation screen also hardcodes six
+  and sends it; an asset created through the API with any other `decimals` renders wrong by a power of
+  ten and nothing says so.
+- **The AU001 audit binding is forgeable (F-42, OPEN).** Migration 00603 binds a state change to a
+  transition row through a transaction-local session variable, and its header claims the application
+  role cannot set that variable. It can — `internal/reconciliation/store.go` does exactly that on a
+  `cp.`-prefixed key as `cp_app`. Sixteen of the seventeen tables it guards also hold unrestricted
+  `UPDATE` for that role, so a caller executing SQL as `cp_app` can change state without leaving the
+  audit row. `capability_gates` is the exception and shows the fix: revoke UPDATE on the state column
+  and route changes through a SECURITY DEFINER function. Two cheaper repairs were tried and rejected
+  against this project's own PostgreSQL 16 — an `xmin` check does not survive the savepoints the
+  admin executor uses, and a `created_at` check does not survive the fake clocks the test suites use.
 
 ### Not run
 

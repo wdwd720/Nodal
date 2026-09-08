@@ -703,3 +703,46 @@ func TestIntegration_JurisdictionTurningBlockedMidSessionStopsTheNextPurchase(t 
 		buyerAccount).Scan(&orders))
 	require.Equal(t, 1, orders)
 }
+
+// TestIntegration_ADraftProductIsNotReadableByAStranger.
+//
+// `GET /v1/internal-products/{id}` fetched by id with no ownership check and no
+// status filter, while `ListActive` beside it shows only what is buyable. So a
+// DRAFT product — its price, its fee split, its seller — was readable by anyone
+// holding `commerce:read`, which is every customer. The sibling WRITE on the
+// same resource, `POST /internal-products/{id}/status`, already required
+// ownership (F-41).
+func TestIntegration_ADraftProductIsNotReadableByAStranger(t *testing.T) {
+	h := newCommerceHarness(t)
+
+	res := h.asSeller().do(http.MethodPost, "/v1/internal-sellers", map[string]any{
+		"account_id": h.sellerAccount.String(), "display_name": "Test Creator",
+	}, "Idempotency-Key", idemKey())
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+
+	res = h.asSeller().do(http.MethodPost, "/v1/internal-products", map[string]any{
+		"account_id": h.sellerAccount.String(), "kind": "DATA",
+		"title": "Unlisted research", "description": "not published yet",
+		"price": "1000", "platform_fee_bps": 1000,
+	}, "Idempotency-Key", idemKey())
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	productID := productIDOf(t, res.raw())
+
+	// The buyer is a stranger to this draft.
+	stranger := h.asBuyer().do(http.MethodGet, "/v1/internal-products/"+productID, nil)
+	assert.Equal(t, http.StatusNotFound, stranger.Code,
+		"a draft product must not be readable by a stranger; body=%s", stranger.Body.String())
+	assert.NotContains(t, stranger.Body.String(), "platform_fee",
+		"and its fee split must not leak in the refusal")
+
+	// Its seller reads it, and once published everybody does.
+	mine := h.asSeller().do(http.MethodGet, "/v1/internal-products/"+productID, nil)
+	assert.Equal(t, http.StatusOK, mine.Code, "body=%s", mine.Body.String())
+
+	pub := h.asSeller().do(http.MethodPost, "/v1/internal-products/"+productID+"/status",
+		map[string]any{"status": "ACTIVE"}, "Idempotency-Key", idemKey())
+	require.Equal(t, http.StatusOK, pub.Code, "body=%s", pub.Body.String())
+	public := h.asBuyer().do(http.MethodGet, "/v1/internal-products/"+productID, nil)
+	assert.Equal(t, http.StatusOK, public.Code,
+		"a published product is public; body=%s", public.Body.String())
+}

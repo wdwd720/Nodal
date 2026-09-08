@@ -30,10 +30,17 @@ import {
 import { AsyncPanel, Explanation } from "../components/DataState.tsx";
 import { Button } from "../components/Button.tsx";
 import { Disclosure, Field, FieldGrid, Identifier, Page, Panel, Pill, Table } from "../components/Layout.tsx";
-import { Bps, DecimalValue, Qty } from "../components/Money.tsx";
+import { Bps, Qty } from "../components/Money.tsx";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../lib/honesty.ts";
 import { useActiveAccountId } from "../session.tsx";
 
+// Prices are NOT on this scale. A price is an integer scaled by the market's own
+// `price_scale`, which the API returns on every market and every quote and which
+// is eighteen, not six. Rendering one with DecimalValue -- which only inserts
+// thousands separators -- showed a fraction-of-a-Credit price as a sixteen-digit
+// number of Credits, on the emphasised Price field and on the Effective price of
+// a live quote (F-44). Use `Qty` with the scale the response carries, never a
+// constant: the scale is a fact about the asset and the API states it.
 const CREDIT_DECIMALS = 6;
 
 /** What each asset status means for somebody deciding whether to trade. */
@@ -193,10 +200,10 @@ function MarketDetail(props: { readonly assetId: string }): ReactNode {
             <FieldGrid columns={3}>
               <Field
                 label="Price"
-                note="In Credits. Not converted to a currency, because no approved external value for a Credit exists."
+                note="In Credits, at this asset's own price scale. Not converted to a currency, because no approved external value for a Credit exists."
                 emphasis
               >
-                <DecimalValue value={m.spot_price} /> Credits
+                <Qty value={m.spot_price} decimals={m.price_scale} symbol="Credits" absent="no price scale" />
               </Field>
               <Field label="Status" note={STATUS_COPY[m.status]?.text ?? ""}>
                 <Pill tone={STATUS_COPY[m.status]?.tone ?? "neutral"}>{m.status}</Pill>
@@ -375,8 +382,13 @@ function TradePanel(props: { readonly market: NativeMarket }): ReactNode {
             <Field label="Creator fee" note="Paid to whoever created this asset.">
               <Qty value={quote.data.creator_fee} decimals={CREDIT_DECIMALS} symbol="Credits" />
             </Field>
-            <Field label="Effective price" note="In Credits. Not converted to a currency.">
-              <DecimalValue value={quote.data.effective_price} /> Credits
+            <Field label="Effective price" note="In Credits, at this asset's own price scale.">
+              <Qty
+                value={quote.data.effective_price}
+                decimals={quote.data.price_scale}
+                symbol="Credits"
+                absent="no price scale"
+              />
             </Field>
             <Field label="Price impact">
               <Bps value={quote.data.slippage_bps} absent="not reported" />
