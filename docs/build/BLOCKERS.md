@@ -124,9 +124,21 @@ financial identity from enhanced diligence. `payout.EligibilityInput` takes the 
 `Decision.VerificationWouldSuffice` distinguishes "you cannot" from "you have not verified yet", so
 the product has something useful to say the moment a provider exists.
 
-**Current state.** No verification resolver is wired in `cmd/api`, so every account is
-`VerificationNone`. That is not a placeholder: a deployment that cannot establish identity has not
-established it, and the payout engine refuses accordingly.
+**Current state.** `cmd/api` resolves the verification level Nodal can establish BY ITSELF and no
+level above it: `NODAL_IDENTITY` when the identity provider asserted a verified email address
+(persisted as `users.email_hash`), otherwise NONE. `PAYOUT_KYC` and `ENHANCED` are unreachable and
+the payout engine refuses accordingly, which is what this blocker actually blocks.
+
+It used to resolve NOTHING — every account `VerificationNone` — on the reasoning that a deployment
+that cannot establish identity has not established it. That is right about a KYC provider and wrong
+about this rung: `NODAL_IDENTITY` is "a verified email address and/or passkey", which this system
+establishes at login. Every Domain A action requires exactly that level, so the over-wide reading
+made the entire internal economy unreachable in every deployment (F-26). A blocker that blocks more
+than it should is not conservative; it hides working software behind an external decision that has
+nothing to do with it.
+
+A passkey-only account with no email address still reports NONE, because only the email half is
+recorded. That is under-reporting in the same direction and is named rather than hidden.
 
 ---
 

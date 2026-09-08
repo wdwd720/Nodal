@@ -38,7 +38,11 @@ type Credits interface {
 // state that changes without a restart, and a snapshot taken at construction
 // would keep selling after the gate was pulled.
 type CapabilityResolver interface {
-	Active(ctx context.Context) (map[valuedomain.CapabilityKey]bool, error)
+	// ActiveCapabilities reads through the querier the caller supplies, which
+	// inside Purchase is the purchase's own transaction. Reading through the
+	// pool instead, while holding a transaction from that pool, is how a dozen
+	// concurrent purchases deadlocked every connection (F-27).
+	ActiveCapabilities(ctx context.Context, q db.Querier) (map[valuedomain.CapabilityKey]bool, error)
 }
 
 // CapMarketplace is the gate that must be ACTIVE for a purchase to commit.
@@ -83,11 +87,11 @@ func NewService(poster Poster, credits Credits, auditor Audit, clk clock.Clock) 
 func (s *Service) SetCapabilityResolver(r CapabilityResolver) { s.caps = r }
 
 // requireMarketplace refuses unless the MARKETPLACE gate is ACTIVE.
-func (s *Service) requireMarketplace(ctx context.Context) error {
+func (s *Service) requireMarketplace(ctx context.Context, q db.Querier) error {
 	var active map[valuedomain.CapabilityKey]bool
 	if s.caps != nil {
 		var err error
-		if active, err = s.caps.Active(ctx); err != nil {
+		if active, err = s.caps.ActiveCapabilities(ctx, q); err != nil {
 			return err
 		}
 	}
@@ -300,7 +304,7 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 	// The gate is checked before the idempotency lookup so that a replay of a
 	// purchase made while the marketplace was enabled does not keep working
 	// after it was switched off. A replay is not a different act.
-	if err := s.requireMarketplace(ctx); err != nil {
+	if err := s.requireMarketplace(ctx, tx); err != nil {
 		return Order{}, err
 	}
 	if existing, found, err := s.orderByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {

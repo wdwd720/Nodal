@@ -42,6 +42,11 @@ import (
 // and the domain service.
 type commerceCaps map[valuedomain.CapabilityKey]bool
 
+func (c commerceCaps) ActiveCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
+	return c, nil
+}
+
+// Active is the HTTP layer's shape, called outside any transaction.
 func (c commerceCaps) Active(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
@@ -49,7 +54,7 @@ func (c commerceCaps) Active(context.Context) (map[valuedomain.CapabilityKey]boo
 // ActiveConversionCapabilities makes the same set serve the ledger's resolver,
 // so a test that activates a capability activates it everywhere rather than in
 // one layer and not the other.
-func (c commerceCaps) ActiveConversionCapabilities(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (c commerceCaps) ActiveConversionCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
 

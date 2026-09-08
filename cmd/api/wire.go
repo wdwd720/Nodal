@@ -107,6 +107,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gate checker: %w", err)
 	}
+	verificationResolver, err := identity.NewVerificationResolver(database)
+	if err != nil {
+		return nil, fmt.Errorf("verification resolver: %w", err)
+	}
 	gateAdmin, err := gates.NewAdmin(string(cfg.Env), clk, auditAdapter.GateAudit())
 	if err != nil {
 		return nil, fmt.Errorf("gate admin: %w", err)
@@ -304,11 +308,19 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// policy version with evidence, not a code change here.
 			PayoutPolicy: nil,
 			Capabilities: gateCapabilityResolver{checker: gateChecker, q: database},
-			// No financial verification provider is wired, so every account is
-			// VerificationNone. That is not a placeholder: a deployment that
-			// cannot establish identity has not established it, and the payout
-			// engine refuses accordingly.
-			Verification: nil,
+			// The verification level Nodal can establish BY ITSELF, and no
+			// level above it: NODAL_IDENTITY when the identity provider
+			// asserted a verified email address, otherwise NONE.
+			//
+			// This was `nil` -- every account NONE -- on the reasoning that a
+			// deployment with no KYC provider has established nothing. The
+			// provider is genuinely external (BLOCKERS B-06) and PAYOUT_KYC
+			// and ENHANCED remain unreachable. But NODAL_IDENTITY is a fact
+			// this system establishes at login, and reporting NONE for it made
+			// every Domain A action -- which needs exactly that level --
+			// impossible in every deployment whatever its gates said. A
+			// control no user can ever satisfy is not a control.
+			Verification: verificationResolver,
 			// The Settlement Compiler's legal policy. The default is the
 			// conservative one: it permits simulation and denies every
 			// internal-economy product and every payout. CP_API_LEGAL_POLICY

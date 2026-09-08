@@ -173,19 +173,36 @@ refuses to be disabled in a production-like environment.
 | Both new guards have been OBSERVED failing | `CP_CHAOS_BREAK=commerce_partial_write` and `=native_trade_partial_write`, each producing the expected failure |
 | The whole chaos suite runs with nothing skipped | 10/10 with `CP_TEST_REDPANDA_BROKERS` and `CP_TEST_ARCHIVE_ENDPOINT` set; it was 8 passing and 2 skipped |
 
-### Load (Stage 21) — partial, and stated as such
+### Load (Stage 21) — the committed write path, measured
 
-Run here against the real `cmd/api` binary on a seeded local database:
+Run here against the real `cmd/api` binary on a freshly seeded local database,
+with the MARKETPLACE gate ACTIVE through the real three-principal ceremony
+(`scripts/gateceremony`, which drives `gates.Admin` rather than writing a row).
 
 | Measure | Result |
 |---|---|
-| Requests | 3,048 at 101 req/s |
-| Latency | p95 6.5 ms on successful reads; 27.6 ms including refusals |
+| Requests | 2,864 at 95 req/s |
+| Latency | p95 469 ms overall; **10.3 ms** on successful requests; median 4.6 ms |
+| Purchases COMMITTED | **31** — the entire seeded balance, 31 × 800 Credits = 24,800 of 25,000 |
+| Refused after that | 120 `LEDGER_NEGATIVE_BALANCE`, which is the correct answer to a buyer with 200 Credits and an 800-Credit product |
+| Refused `IDEMPOTENCY_IN_PROGRESS` | 49 — the shared-key iterations racing, the idempotency store working |
 | Server errors | none |
 | Refusal shape | every refusal delivered as problem+json |
-| Purchases refused `CAPABILITY_NOT_APPROVED` | 182 — the MARKETPLACE gate is off, which is correct |
-| Purchases refused `IDEMPOTENCY_IN_PROGRESS` | 18 — the shared-key iterations racing, the idempotency store working |
-| Purchases COMMITTED | **none, and this is the gap.** Committing needs the MARKETPLACE gate ACTIVE, which is high risk: three distinct principals, a step-up and four evidence references. A load script that activated its own gate would be one that switched off a control to get a number. |
+| Financial invariant | the buyer's Credits fell by exactly the 31 purchases that committed; fees + proceeds = price to the base unit |
+
+**The run's real value was the two defects it found.** With the gate genuinely
+active, the first run measured p95 **30.07 s**, five commits out of two hundred,
+three 500s and 124 requests killed by the statement timeout. That is F-27: the
+capability check inside a financial transaction read through the connection
+POOL, so every write held one connection and reached for another, and a dozen
+concurrent writes deadlocked the pool until the timeout. Reaching the run at all
+needed F-26 fixed first — two required compiler inputs `cmd/api` never supplied,
+which made the entire internal economy unreachable in every deployment.
+
+**What still bounds the number.** Committed throughput here is capped by the
+SEEDED BALANCE, not by the system: 25,000 Credits buys 31 of an 800-Credit
+product, and the remaining 169 iterations are correctly refused. A capacity
+number would need a larger seed, and it would still be a laptop number.
 
 ### This report's own citations
 
@@ -287,7 +304,7 @@ earlier one.
 
 ### Not run
 
-- Load testing of the COMMITTED write path (part of Stage 21) — see the table above for why.
+- A committed-throughput number not bounded by seed data (part of Stage 21) — see the table above.
 - The backup/restore drill against the new tables.
 - `govulncheck`, `gosec`, `gitleaks`, `trivy`, SBOM in this session.
 - Terraform validation in this session.

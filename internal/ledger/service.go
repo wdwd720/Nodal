@@ -45,8 +45,14 @@ type Service struct {
 // correct reading for a process that has not been told otherwise: it permits
 // every single-domain posting the system has ever made and refuses every
 // cross-domain one. Fail closed is the default, not a configuration.
+// It reads through the querier the CALLER supplies, which is always the
+// transaction the posting is being written in. That is not a convenience: the
+// production resolver used to read through the connection POOL while the
+// caller held a transaction from that same pool, so enough concurrent postings
+// held every connection and each waited for one more. Nothing recovered until
+// the statement timeout thirty seconds later (F-27).
 type CapabilityResolver interface {
-	ActiveConversionCapabilities(ctx context.Context) (map[valuedomain.CapabilityKey]bool, error)
+	ActiveConversionCapabilities(ctx context.Context, q db.Querier) (map[valuedomain.CapabilityKey]bool, error)
 }
 
 // SetCapabilityResolver installs the resolver. Only the composition root calls
@@ -59,12 +65,12 @@ func (s *Service) SetCapabilityResolver(r CapabilityResolver) {
 	s.caps.Store(&r)
 }
 
-func (s *Service) activeCapabilities(ctx context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (s *Service) activeCapabilities(ctx context.Context, q db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	p := s.caps.Load()
 	if p == nil {
 		return nil, nil
 	}
-	return (*p).ActiveConversionCapabilities(ctx)
+	return (*p).ActiveConversionCapabilities(ctx, q)
 }
 
 var (
@@ -286,7 +292,7 @@ func (s *Service) Post(ctx context.Context, tx pgx.Tx, p Posting) (PostResult, e
 	if err != nil {
 		return PostResult{}, err
 	}
-	if err := s.checkDomainIsolation(ctx, rows, p.Conversion); err != nil {
+	if err := s.checkDomainIsolation(ctx, tx, rows, p.Conversion); err != nil {
 		return PostResult{}, err
 	}
 	metadata, err := canonicalMetadata(p.Metadata)
@@ -401,12 +407,12 @@ func (s *Service) PostInTx(ctx context.Context, d *db.DB, p Posting) (PostResult
 // capability activation, because a capability gate is keyed by environment and
 // a database connection carries no environment the application could not
 // simply assert.
-func (s *Service) checkDomainIsolation(ctx context.Context, rows []entryRow, conv *valuedomain.ConversionKey) error {
+func (s *Service) checkDomainIsolation(ctx context.Context, q db.Querier, rows []entryRow, conv *valuedomain.ConversionKey) error {
 	domains := make([]valuedomain.Domain, 0, len(rows))
 	for _, r := range rows {
 		domains = append(domains, r.account.Domain)
 	}
-	caps, err := s.activeCapabilities(ctx)
+	caps, err := s.activeCapabilities(ctx, q)
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "ledger: resolve active conversion capabilities")
 	}

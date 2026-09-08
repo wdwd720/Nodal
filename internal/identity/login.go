@@ -199,6 +199,20 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 			created = true
 		} else if err != nil {
 			return err
+		} else if user.EmailHash == nil && ident.EmailVerified && ident.Email != "" {
+			// The assertion arrived later than the user did. email_hash was
+			// only ever written at creation, so an account created before its
+			// email was verified could never reach NODAL_IDENTITY afterwards,
+			// however many times the provider asserted it since.
+			//
+			// It is written once and never rewritten: this fills an absence,
+			// it does not follow a changing address, and a changed address is
+			// a different question with different consequences.
+			h := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(ident.Email))))
+			if err := s.d.Accounts.SetEmailHash(ctx, tx, user.ID, h[:]); err != nil {
+				return err
+			}
+			user.EmailHash = h[:]
 		}
 		if user.Status != "ACTIVE" {
 			return errs.New(errs.CodeForbidden, "user is not active").WithField("status", user.Status)

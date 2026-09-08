@@ -55,6 +55,53 @@ func (c *Checker) IsActive(ctx context.Context, q db.Querier, cap Capability) (V
 	return Evaluate(g, true, c.clk.Now()), nil
 }
 
+// ActiveSet answers for MANY capabilities in ONE query.
+//
+// IsActive per capability means one round trip per capability, and the
+// production resolver asks about a dozen on every financial posting. Twelve
+// round trips inside a transaction is twelve chances to be waiting on the
+// database while holding a lock, and it was measurably worse than that: the
+// resolver read through the POOL while the caller held a transaction from the
+// same pool, so a dozen concurrent postings could hold every connection and
+// each wait for one more (F-27).
+//
+// The configuration check still runs first and per capability, so a capability
+// configuration does not enable is inactive without the row being consulted at
+// all — no database read can be what enables a capability.
+func (c *Checker) ActiveSet(ctx context.Context, q db.Querier, caps []Capability) (map[Capability]Verdict, error) {
+	out := make(map[Capability]Verdict, len(caps))
+	need := false
+	for _, cap := range caps {
+		switch {
+		case !cap.Valid():
+			out[cap] = Verdict{Reason: ReasonNoGateRow}
+		case !c.enabled(cap):
+			out[cap] = Evaluate(nil, false, c.clk.Now())
+		default:
+			need = true
+		}
+	}
+	if !need {
+		return out, nil
+	}
+	rows, err := List(ctx, q, c.env)
+	if err != nil {
+		return nil, err
+	}
+	byCap := make(map[Capability]*Gate, len(rows))
+	for i := range rows {
+		byCap[rows[i].Capability] = &rows[i]
+	}
+	now := c.clk.Now()
+	for _, cap := range caps {
+		if _, done := out[cap]; done {
+			continue
+		}
+		out[cap] = Evaluate(byCap[cap], true, now)
+	}
+	return out, nil
+}
+
 // RequireActive is IsActive as a guard: nil when active, otherwise
 // CAPABILITY_NOT_APPROVED with fields capability, environment, reason and
 // state. Every live-money path calls this before doing work.

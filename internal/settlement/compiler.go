@@ -355,6 +355,30 @@ var profiles = map[ActionType]actionProfile{
 }
 
 // Profile returns the compile-time facts for an action type.
+// AllRequiredCapabilities returns every capability any action profile can
+// require, sorted and de-duplicated.
+//
+// It is exported so a deployment can CHECK that whatever answers "which
+// capabilities are active" answers about all of them. A resolver that is
+// silent on a capability reports it inactive, which is fail-closed and also
+// unsatisfiable: the gate can be ACTIVE in the database, enabled in
+// configuration, and the action still refused, with nothing in the refusal
+// saying why. That happened to MARKETPLACE (F-26).
+func AllRequiredCapabilities() []valuedomain.CapabilityKey {
+	seen := map[valuedomain.CapabilityKey]bool{}
+	for _, p := range profiles {
+		for _, c := range p.capabilities {
+			seen[c] = true
+		}
+	}
+	out := make([]valuedomain.CapabilityKey, 0, len(seen))
+	for c := range seen {
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
 func Profile(a ActionType) (valuedomain.Domain, valuedomain.CapitalRail, string, bool) {
 	p, ok := profiles[a]
 	return p.domain, p.rail, p.product, ok

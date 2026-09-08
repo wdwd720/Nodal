@@ -66,7 +66,7 @@ func requireEnv(t *testing.T) {
 // movements to commit.
 type payoutCaps map[valuedomain.CapabilityKey]bool
 
-func (c payoutCaps) ActiveConversionCapabilities(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (c payoutCaps) ActiveConversionCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
 

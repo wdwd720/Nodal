@@ -94,7 +94,11 @@ type User struct {
 	IdPIssuer  string
 	IdPSubject string
 	Status     string
-	CreatedAt  time.Time
+	// EmailHash is sha256(lowercase email), present only when the identity
+	// provider asserted a VERIFIED email address. It is a lookup key and an
+	// assurance record, never a way back to the address.
+	EmailHash []byte
+	CreatedAt time.Time
 }
 
 // Account is a financial account owned by a user.
@@ -136,8 +140,8 @@ func (r *Repository) CreateUser(ctx context.Context, q db.Querier, issuer, subje
 // GetUserBySubject looks a user up by identity-provider issuer and subject.
 func (r *Repository) GetUserBySubject(ctx context.Context, q db.Querier, issuer, subject string) (User, error) {
 	var u User
-	err := q.QueryRow(ctx, `SELECT id, idp_issuer, idp_subject, status, created_at FROM users WHERE idp_issuer = $1 AND idp_subject = $2`, issuer, subject).
-		Scan(&u.ID, &u.IdPIssuer, &u.IdPSubject, &u.Status, &u.CreatedAt)
+	err := q.QueryRow(ctx, `SELECT id, idp_issuer, idp_subject, status, email_hash, created_at FROM users WHERE idp_issuer = $1 AND idp_subject = $2`, issuer, subject).
+		Scan(&u.ID, &u.IdPIssuer, &u.IdPSubject, &u.Status, &u.EmailHash, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return User{}, errs.New(errs.CodeNotFound, "user not found")
@@ -145,6 +149,23 @@ func (r *Repository) GetUserBySubject(ctx context.Context, q db.Querier, issuer,
 		return User{}, fmt.Errorf("accounts: get user: %w", err)
 	}
 	return u, nil
+}
+
+// SetEmailHash records the identity provider's verified-email assertion for a
+// user that has none yet.
+//
+// It only ever fills an absence: the WHERE clause refuses to overwrite a hash
+// that is already there. Following a changed address is a different question
+// with different consequences, and this is not the place to answer it.
+func (r *Repository) SetEmailHash(ctx context.Context, q db.Querier, userID UserID, hash []byte) error {
+	if len(hash) == 0 {
+		return errs.New(errs.CodeValidationFailed, "an email hash is required")
+	}
+	if _, err := q.Exec(ctx,
+		`UPDATE users SET email_hash = $2 WHERE id = $1 AND email_hash IS NULL`, userID, hash); err != nil {
+		return fmt.Errorf("accounts: set email hash: %w", err)
+	}
+	return nil
 }
 
 const accountColumns = `id, owner_user_id, kind, status, coalesce(status_reason,''), frozen_at, cost_basis_method, created_at, updated_at`

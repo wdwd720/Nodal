@@ -132,7 +132,7 @@ func newAccount(t *testing.T) accounts.AccountID {
 // activeCaps reports a fixed capability set as ACTIVE.
 type activeCaps map[valuedomain.CapabilityKey]bool
 
-func (c activeCaps) Active(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (c activeCaps) ActiveCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
 

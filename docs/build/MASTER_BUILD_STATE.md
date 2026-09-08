@@ -55,7 +55,7 @@ migration.
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
 | 20 | Chaos / fault injection | **done for Domain A** (3 tests, 2 negative controls; whole suite 10/10 with nothing skipped) |
-| 21 | Load | **partial** — read surface and refusal path measured; the committed write path needs a gate a script must not activate |
+| 21 | Load | **done** — committed write path measured through a real gate ceremony; it found F-26 and F-27 |
 | 22 | Provider sandbox integration where externally possible | **done to the limit of what is possible** — 5 contract suites, 53 cases, against documented fixtures; every real sandbox is application-gated or has no contract |
 | 23 | Final independent re-audit | **in progress** — F-23, F-24 and F-25 came from it |
 | 24 | Launch evidence package | **deliberately not started** — see the readiness report §5 |
@@ -481,6 +481,46 @@ What is NOT possible, with the reason in each case:
 So Stage 22 is not blocked on work. It is blocked on eight external items that
 are already enumerated in `BLOCKERS.md`, and writing more adapter code against
 guessed endpoints would make the blockers less visible rather than more.
+
+### Stage 21 finished, and the two P1s it found
+
+The committed write path could not be load tested because MARKETPLACE is high
+risk and "a load script that activated its own gate would be one that switched
+off a control to get a number". That reasoning is right about a SCRIPT and wrong
+as a conclusion: what was needed was an operator tool that DRIVES the control
+rather than going around it.
+
+`scripts/gateceremony` is that tool. It calls `gates.Admin`, so the state
+machine, the permission split (propose needs `gate:propose`, which RISK holds;
+approve and activate need `gate:approve`, which no standing role holds and only
+a live BREAK_GLASS elevation grants), the step-up, the four evidence references
+and the refusal of self-approval all apply. It requires three DISTINCT principal
+identifiers, every evidence reference as an argument with no default, and
+LOCAL/DEV/TEST with a local database host. Its output says, and the gate's own
+reason records, that three development identities agreed rather than three
+people.
+
+With the gate genuinely active the first run measured **p95 30.07 s**, five
+commits out of two hundred, three 500s and 124 requests killed by the statement
+timeout. `pg_stat_activity` said it plainly: nine of ten pool connections
+`idle in transaction`, waiting on the client. That is **F-27** — the capability
+check inside a financial transaction read through the connection POOL, so every
+write held one connection while reaching for another, and a dozen concurrent
+writes deadlocked the pool.
+
+Getting that far needed **F-26** fixed first: `cmd/api` supplied neither a
+verification resolver (so every account was `VerificationNone`, and every Domain
+A action requires `NODAL_IDENTITY`) nor `MARKETPLACE` in the capability
+resolver's list (so the gate could be ACTIVE and every purchase still refused
+`CAPABILITY_NOT_ACTIVE`). Both fail closed, which is exactly why they survived:
+the refusals were indistinguishable from a correct fresh deployment's. The whole
+internal economy was unreachable in every deployment, and no test could see it
+because every test supplies a MAP as the capability resolver.
+
+Three defects stacked so the third was unobservable until the first two were
+fixed. After the fixes: p95 469 ms, 10.3 ms on successful requests, 31 purchases
+committed — the entire seeded balance — and the buyer's Credits down by exactly
+those 31 purchases.
 
 ## 0.3 Next exact work, in order
 

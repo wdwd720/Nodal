@@ -38,6 +38,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-23 | P2 | NEW | fixed | Reconciling a finished payout asked the provider nothing and reported agreement it never obtained |
 | F-24 | P2 | NEW | fixed | The deployment's legal policy never reached the trade-intent compiler, and no test could tell |
 | F-25 | P3 | BASELINE | fixed | The readiness report named a test that does not exist, and 609 such names were hand-checked once |
+| F-26 | P1 | BASELINE | fixed | Two required inputs were never supplied, so the internal economy was unreachable in every deployment |
+| F-27 | P1 | BASELINE | fixed | A capability check inside a financial transaction read through the pool, deadlocking it under concurrency |
 
 ---
 
@@ -582,6 +584,108 @@ is in fact covered three times over (`TestAgentTreesNeverImportAuthority`,
 `TestAgentBoundaryNeverImportsSigning`, `TestNoAgentPathImportsWithdrawal`).
 That staleness is in the pessimistic direction and was already recorded in the
 readiness report; re-scoring those two documents is work, not a claim.
+
+## F-26 · The internal economy was unreachable in every deployment · BASELINE · P1 · FIXED
+
+**Found by** trying to run the Stage 21 load script against a marketplace whose
+gate had actually been activated, and watching every purchase refused anyway.
+
+Two inputs the settlement compiler requires were never supplied by `cmd/api`,
+and each alone was enough to make every Domain A action impossible.
+
+**The verification level.** `NativeEconomyDeps.Verification` was `nil`, so every
+account resolved to `VerificationNone`. Every Domain A profile requires
+`NODAL_IDENTITY`. The reasoning recorded in BLOCKERS B-06 — "a deployment that
+cannot establish identity has not established it" — is right about a KYC
+provider and wrong about this rung of the ladder. `NODAL_IDENTITY` is "a
+verified email address and/or passkey: a person can be reached and can log in",
+which this system establishes at login and persists as `users.email_hash`.
+Reporting NONE for it was not conservatism, it was under-reporting.
+
+**The capability.** `gateCapabilityResolver` answers only about the keys in
+`conversionCapabilities`, and a key it does not answer about is reported
+inactive. `MARKETPLACE` was not in that list. So the gate could be ACTIVE in the
+database, three principals could have approved it with evidence, an operator
+could have enabled it in configuration, and every purchase would still be
+refused `CAPABILITY_NOT_ACTIVE` — indistinguishable from a gate nobody had ever
+approved.
+
+Both are fail-closed, which is why they were invisible: refusals looked exactly
+like the refusals a correct fresh deployment produces. But a control that no
+configuration can ever satisfy is not a control. It is dead code with a reason
+attached, and the whole Domain A surface — the marketplace, native asset
+creation, native market trading — sat behind it.
+
+**Fix.**
+
+- `internal/identity.NodalIdentityResolver` reports `NODAL_IDENTITY` when the
+  owning user is ACTIVE and the identity provider asserted a verified email
+  address, and NOTHING above it. `PAYOUT_KYC` and `ENHANCED` remain unreachable
+  and B-06 is narrowed to what it actually blocks: payouts. A passkey-only
+  account with no email still reports NONE, which is under-reporting again, in
+  the same direction, and is named rather than hidden.
+- `internal/identity` now fills `users.email_hash` on a later login when it is
+  absent, because it used to be written only at user creation: an account
+  created before its email was verified could never reach NODAL_IDENTITY
+  afterwards however many times the provider asserted it. It fills an absence
+  and never overwrites.
+- `MARKETPLACE` and `LIVE_MANUAL_TRADING` are added to the resolver's list, and
+  `settlement.AllRequiredCapabilities()` is exported so the list can be CHECKED
+  rather than remembered: `TestCapabilities_ResolverAnswersEverythingTheCompilerCanRequire`
+  fails on any capability a compiler profile can require that the resolver never
+  answers about. **Observed failing** with MARKETPLACE removed again, naming it.
+
+After the fix a purchase committed over HTTP for the first time.
+
+## F-27 · A capability check inside a transaction deadlocked the connection pool · BASELINE · P1 · FIXED
+
+**Found by** running 50 concurrent purchases once F-26 made purchases possible,
+and finding p95 latency of **30.07 seconds**, five commits out of two hundred,
+three 500s and 124 requests killed by the statement timeout.
+
+`pg_stat_activity` said it plainly: nine of ten pool connections `idle in
+transaction`, each waiting on `ClientRead` with `begin isolation level read
+committed` as its last statement. The database was not busy. It was holding
+transactions open for clients that had gone away to do something else.
+
+The something else was the capability check. `ledger.Service.Post` runs
+`checkDomainIsolation` inside the caller's transaction, and
+`commerce.Service.Purchase` runs `requireMarketplace` inside its own; both asked
+the capability resolver, and the production resolver held a `db.Querier` that
+was **the connection pool**. So every financial write, while holding one pooled
+connection for its transaction, reached for a second one — twelve times, once
+per capability.
+
+With a pool of ten and a dozen concurrent writes, every connection is held by a
+transaction whose owner is waiting for a connection that will never be released.
+Nothing recovers until the 30-second statement timeout, and then it all fails at
+once.
+
+**Why nothing caught it.** Every test supplies a MAP as the capability resolver,
+so only the production resolver touches the database and only production could
+deadlock. And the one place it would have shown — concurrent purchases through
+the API — could not commit a single purchase because of F-26. Three defects
+stacked so that the third was unobservable until the first two were fixed.
+
+**Fix.** Both resolver interfaces take the caller's `db.Querier`, which is the
+transaction the posting is being written in, so no financial write ever reaches
+for a second connection while holding its first. `gates.Checker.ActiveSet`
+answers every capability in ONE query instead of one per capability, so the
+round trips inside a transaction go from twelve to one. The configuration check
+still runs first and per capability, so no database read can be what enables a
+capability.
+
+**Measured, same script and host, before and after:**
+
+| | p95 latency | committed | 5xx | timed out |
+|---|---|---|---|---|
+| before | 30.07 s | 5 of 200 | 3 | 124 |
+| after | 469 ms (10.3 ms on successful requests) | 31 of 200, the entire seeded balance | 0 | 0 |
+
+`TestIntegration_ConcurrentPurchasesDoNotStarveTheConnectionPool` holds the line
+with a pool of TWO, which makes the failure certain rather than probable.
+**Observed failing** — hanging until its own deadline — with the resolver put
+back on the pool.
 
 ## Findings deliberately NOT raised
 

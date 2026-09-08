@@ -55,11 +55,11 @@ import (
 // conversion check and for the commerce service's own gate.
 type activeCapsChaos map[valuedomain.CapabilityKey]bool
 
-func (c activeCapsChaos) Active(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (c activeCapsChaos) ActiveCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
 
-func (c activeCapsChaos) ActiveConversionCapabilities(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (c activeCapsChaos) ActiveConversionCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
 

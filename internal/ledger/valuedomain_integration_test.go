@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -26,7 +27,7 @@ import (
 // staticCaps is a CapabilityResolver that reports a fixed set as ACTIVE.
 type staticCaps map[valuedomain.CapabilityKey]bool
 
-func (s staticCaps) ActiveConversionCapabilities(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (s staticCaps) ActiveConversionCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return s, nil
 }
 

@@ -76,7 +76,7 @@ func requireEnv(t *testing.T) {
 // which migration 00710 refuses unless NATIVE_MARKET_TRADING is ACTIVE.
 type activeCaps map[valuedomain.CapabilityKey]bool
 
-func (c activeCaps) ActiveConversionCapabilities(context.Context) (map[valuedomain.CapabilityKey]bool, error) {
+func (c activeCaps) ActiveConversionCapabilities(context.Context, db.Querier) (map[valuedomain.CapabilityKey]bool, error) {
 	return c, nil
 }
 

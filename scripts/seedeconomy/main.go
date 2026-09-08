@@ -239,8 +239,9 @@ func run() error {
 		fmt.Println("  - " + s)
 	}
 	fmt.Println()
-	fmt.Println("Nothing can be BOUGHT yet, and that is correct. Two decisions stand between this")
-	fmt.Println("data and a working marketplace, and neither is a seeder's to make:")
+	fmt.Println("Nothing can be BOUGHT yet, and that is correct. THREE things stand between this")
+	fmt.Println("data and a working marketplace, and none of them is a seeder's to decide.")
+	fmt.Println("They were two until somebody actually tried it and found the third.")
 	fmt.Println()
 	fmt.Println("  1. The legal policy. Start the API with CP_API_LEGAL_POLICY=DEVELOPMENT, which")
 	fmt.Println("     permits the internal economy and is refused in STAGING and PROD.")
@@ -249,8 +250,14 @@ func run() error {
 	fmt.Println("     earning provenance a payout policy may one day release — so activating it")
 	fmt.Println("     needs three distinct principals (propose, approve, activate), a recent")
 	fmt.Println("     step-up, and all four evidence references. Drive it through the admin")
-	fmt.Println("     console rather than by writing a row: a gate that was not approved is not a")
-	fmt.Println("     gate, and this script will not pretend otherwise.")
+	fmt.Println("     console, or through scripts/gateceremony, which performs the SAME ceremony")
+	fmt.Println("     against gates.Admin and refuses anything but LOCAL/DEV/TEST. Do not write")
+	fmt.Println("     the row: a gate that was not approved is not a gate.")
+	fmt.Println()
+	fmt.Println("  3. CP_API_ENABLED_CAPABILITIES must name MARKETPLACE. Configuration is checked")
+	fmt.Println("     BEFORE the gate row, so that no database read can ever be what enables a")
+	fmt.Println("     capability. An operator who does step 2 and not this one gets a gate that")
+	fmt.Println("     is ACTIVE and a marketplace that still refuses everything.")
 	return nil
 }
 
