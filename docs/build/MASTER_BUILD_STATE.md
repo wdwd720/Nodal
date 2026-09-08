@@ -840,6 +840,64 @@ fake clocks the suites use. The real fix is capability_gates' treatment applied
 to sixteen more tables, and that is not something to start at the end of a
 session.
 
+### The database as a boundary, tested rather than described (F-47 to F-50)
+
+Four findings from reading migrations/ and docker/postgres/init as an attacker
+would, and one more the fix for them uncovered.
+
+**F-47 is the one I got wrong, and the suite caught it.** cp_readonly and cp_ops
+can read identity_pii and sessions, because the role bootstrap grants a blanket
+default SELECT while migration 00010's grant list deliberately withholds both.
+That much is true and checked against a live database.
+
+I revoked them. test/integration/migrations/privileges_test.go states the
+opposite contract in a doc comment -- "cp_readonly and cp_ops can SELECT
+everything and write nothing" -- and failed. It also lists sessions under
+opsHousekeeping, where cp_ops performs retention cleanup, which a DELETE ...
+WHERE cannot do without SELECT on the columns it filters on. The revoke would
+have broken a documented operational job.
+
+So the finding is not a privilege leak. It is that TWO DELIBERATE STATEMENTS IN
+THIS REPOSITORY CONTRADICT EACH OTHER and the contradiction is invisible because
+one of them silently wins. Resolving it is a policy decision about personal
+data with an operational constraint attached, and it is recorded OPEN with both
+sides rather than settled unilaterally in a migration.
+
+The reusable lesson: an auditor's framing was acted on without checking whether
+another part of the repository stated a different contract. The suite is what
+caught it, which is the suite working.
+
+**F-49**: LG001 asks the ACCOUNT ROW whether it may go negative, and the column
+was NOT NULL DEFAULT false with cp_app holding INSERT -- so whoever created an
+account chose its own exemption from the guard. The application never did; the
+check simply was not where the guard reads it.
+
+**F-48**: five SECURITY DEFINER trigger bodies did not pin pg_temp, while 00701
+names that exact hazard for the sixth.
+
+**F-50 was found by a test that a comment claimed already existed.** Two
+comments promised Go/SQL parity tests -- `internal/assets` for the kind/domain
+rule, migration 00711 for the finality table -- and neither test had ever been
+written. Writing them made the claims true; the assets one FAILED ON ITS FIRST
+RUN.
+
+`assets_kind_domain_agree` accepts an asset with NO value domain. For a CREDIT
+row with value_domain NULL, `true AND NULL` is NULL, the other disjuncts are
+false, and NULL OR false is NULL -- and a CHECK constraint fails only on FALSE.
+A CREDIT asset with no domain inserts cleanly as cp_app. Contained rather than
+harmless: cp_ledger_account_domain raises VD001 for such an asset, so it cannot
+hold an account, but it can exist and be referenced.
+
+**Any CHECK whose expression can be NULL is a CHECK that accepts.** That
+constraint had been read by several people and cited in a doc comment as the
+thing Go mirrors.
+
+The register's "deliberately NOT raised" entry about the chart of accounts being
+duplicated between Go and SQL has been struck out: it said "a maintainability
+risk, not a defect", and it became both -- F-43 in a security control and F-49 in
+a ledger invariant. Four parity tests now drive both copies. What is still
+uncompared is the transaction-kind list and the credit-origin list.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

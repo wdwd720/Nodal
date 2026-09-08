@@ -1,6 +1,6 @@
 # RECONCILIATION OPERATIONS
 
-Status: operating procedure for the reconciliation subsystem designed in `docs/architecture/RECONCILIATION.md`. The reconciliation engine (`internal/reconciliation`) is **not yet implemented** (Stage 7); the tables, state machine constraints, admin API routes, and the blocking semantics it will rely on exist. Every step below that needs the engine is marked PENDING so operators never assume a control that does not run yet.
+Status: operating procedure for the reconciliation subsystem designed in `docs/architecture/RECONCILIATION.md`. **CORRECTION (F-51):** the reconciliation engine IS implemented — `internal/reconciliation` has `NewEngine`, `RunPeriodic` and `RunFull`, `cmd/reconciliation-worker` drives them on a ticker, and the admin read endpoints exist. This line said it was not, which is stale in the pessimistic direction and just as misleading: a reader following this runbook would not look for a subsystem that is running. What is genuinely absent is the RESOLUTION path — `cmd/api` wires `Reconcile: nil`, so both resolve endpoints answer UNSUPPORTED while the worker continues to raise records and block new risk; the tables, state machine constraints, admin API routes, and the blocking semantics it will rely on exist. Every step below that needs the engine is marked PENDING so operators never assume a control that does not run yet.
 
 ## 1. What operators see
 

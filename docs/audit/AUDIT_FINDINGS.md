@@ -7,10 +7,16 @@ Findings in **existing code** are marked `BASELINE`. Findings in code written du
 are marked `NEW` — they are recorded with the same weight, because a defect found in your own work an
 hour after writing it is the same defect it would have been in six months.
 
-Two findings are **OPEN**: F-31, a concurrency failure seen once and not reproduced, and F-42, a
-database control whose stated guarantee does not hold and whose repair is larger than the session
-that found it. Both are in the table with everything else rather than in a footnote, because a
-register that only records what was fixed is a register that rewards not looking.
+Four findings are **OPEN**: F-31, a concurrency failure seen once and not reproduced; F-42, a
+database control whose stated guarantee does not hold; F-47, two statements about who may read
+encrypted PII that contradict each other; and F-52, an account whose new risk can be blocked with no
+wired way to unblock it. All four are in the table with everything else rather than in a footnote,
+because a register that only records what was fixed is a register that rewards not looking.
+
+**F-47 is also the one wrong call in this register.** It was raised as a privilege leak and a fix was
+written and applied before the integration suite refused it. The entry keeps the whole sequence
+rather than the conclusion, because "an auditor's framing was taken without checking whether the
+repository stated a different contract" is the more useful thing to have written down.
 
 The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 
@@ -64,6 +70,12 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-44 | P1 | BASELINE | fixed | Every native-market price was displayed at the wrong scale, as a sixteen-digit number of Credits |
 | F-45 | P2 | NEW | fixed | The web unit suite had been red on the purchase spec, which parsed money into doubles |
 | F-46 | P2 | BASELINE | fixed | The nine-page browser check asserted absences before the page had loaded |
+| F-47 | P2 | BASELINE | **OPEN** | Two deliberate statements about who may read encrypted PII contradict each other |
+| F-48 | P2 | BASELINE | fixed | Five SECURITY DEFINER functions did not pin `pg_temp` |
+| F-49 | P2 | BASELINE | fixed | An account chose its own exemption from the negative-balance guard |
+| F-50 | P2 | BASELINE | fixed | An asset could be stored with no value domain: a CHECK that evaluates to NULL accepts |
+| F-51 | P2 | BASELINE | fixed | Three operations documents described controls and wiring that do not exist, in both directions |
+| F-52 | P1 | BASELINE | **OPEN** | A deployment can block an account's new risk and has no wired path to unblock it |
 
 ---
 
@@ -1578,13 +1590,245 @@ Home, Trade, Portfolio, Settings, Lab, Agents and Activity therefore passed with
 every panel on them showing an error. All nine now settle first and assert the
 same three things the other five do.
 
+## F-47 · Two deliberate statements about who may read encrypted PII contradict each other · BASELINE · P2 · OPEN
+
+**Found by** an adversarial read of the database as a security boundary,
+enumerating what each role can actually do rather than what each migration says
+it granted. **Then partly un-found by this project's own test suite, which is
+the part worth recording.**
+
+The observation is real. `cp_readonly` and `cp_ops` can SELECT `identity_pii`
+(`email_encrypted`, `legal_name_encrypted`, `dob_encrypted`, `key_version`) and
+`sessions` (`token_hash`, `roles`, `break_glass_until`, `ip`). Checked against a
+live database: `has_table_privilege('cp_readonly','identity_pii','SELECT')` is
+true.
+
+They can because the role bootstrap says:
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE cp_migrate IN SCHEMA public
+        GRANT SELECT ON TABLES TO cp_readonly, cp_ops;
+
+while migration 00010 grants those two roles SELECT on `users`, `accounts`,
+`compliance_profiles`, the transitions and `security_events` — and deliberately
+NOT on `identity_pii` or `sessions`. The migration's list has no effect while
+that default exists.
+
+**I revoked both, and the suite refused it.**
+`test/integration/migrations/privileges_test.go` states the opposite contract in
+a doc comment — *"cp_readonly and cp_ops can SELECT everything and write
+nothing"* — and asserts it for every table in the schema. It failed. That is the
+suite doing exactly its job, against a change made on an auditor's framing
+without checking whether another part of the repository stated a different
+contract.
+
+And the revoke would have broken something real: the same file lists `sessions`
+under `opsHousekeeping`, where *"cp_ops performs retention cleanup"*. A
+`DELETE … WHERE expires_at < now()` needs SELECT on the columns it filters on,
+so removing SELECT would have stopped session retention.
+
+**So the finding is not "a privilege leak". It is that two deliberate statements
+in this repository contradict each other, and the contradiction is invisible
+because one of them silently wins.** Migration 00010's grant list was written by
+somebody who meant those two tables to be withheld. The privileges test was
+written by somebody who meant every table to be readable. Both are still in the
+tree; only one has any effect.
+
+**Why this stays OPEN rather than being resolved here.** Which statement is
+right is a question about who may read encrypted personal data and session
+material in this deployment. It has an operational constraint attached
+(`cp_ops` needs `sessions`), it likely has a different answer for `cp_readonly`
+than for `cp_ops`, and it is not a decision to take unilaterally inside a
+migration at the end of a session. What is recorded here is the contradiction,
+the evidence for both sides, and the constraint any resolution has to satisfy.
+
+**What was left in place.** Nothing about privileges changed. The bootstrap
+files carry a note saying the default is deliberate, and pointing at the
+contradiction rather than resolving it.
+
+## F-48 · Five SECURITY DEFINER functions did not pin `pg_temp` · BASELINE · P2 · FIXED
+
+**Found by** the same audit, checking every SECURITY DEFINER body's
+`search_path`.
+
+Migration 00701 names this hazard precisely and pins `pg_catalog, public,
+pg_temp` for `cp_gate_transition`. Five older functions were written with
+`SET search_path = public` and never updated: `ledger_apply_entry`,
+`cp_credit_lot_open`, `cp_credit_lot_apply_event`, `cp_native_market_open` and
+`cp_native_market_apply_fill` — the triggers that enforce LG001, the credit-lot
+invariants and the market's constant product.
+
+`TEMP` on a database is granted to `PUBLIC` by default and is revoked nowhere in
+this tree, so any caller may create temporary tables; with `pg_temp` unpinned it
+is searched first. A temp relation shadowing `ledger_accounts` would be what
+`ledger_apply_entry` reads, as the definer.
+
+Not demonstrated as exploitable — the mechanism is confirmed, the exploit was
+not built. Recorded at P2 and fixed anyway, because `ALTER FUNCTION … SET
+search_path` changes nothing but the setting and the argument for pinning it was
+already written down in this repository, one migration over.
+
+## F-49 · An account chose its own exemption from the negative-balance guard · BASELINE · P2 · FIXED
+
+**Found by** the same audit, asking what LG001 actually reads.
+
+LG001 is the guard that stops a balance going below zero, and it asks the
+account row:
+
+    IF newbal < 0 AND NOT acct.allow_negative THEN RAISE ... LG001
+
+`ledger_accounts.allow_negative` is `NOT NULL DEFAULT false` and `cp_app` holds
+INSERT on the table. So a caller could create an account that says it may go
+negative, and post it below zero for ever after. Migration 00604 restricts
+UPDATE to `(status)` and explains that the app *"must never change an account's
+negative-balance policy"* — which is true, and it was setting the policy at
+creation instead.
+
+The application itself is not the risk here: `internal/ledger` sets the column
+from its chart of accounts and `checkDefinition` refuses an account whose stored
+values disagree with its code. What was missing is the check where the guard
+reads it.
+
+**Fix.** Migration 00717 adds `cp_ledger_code_allows_negative` and
+`cp_ledger_code_normal_side` and a CHECK constraint binding both columns to the
+code. Existing rows are validated rather than grandfathered: a forged account
+already in the table would be a finding, not an inconvenience.
+
+**And the copy is compared, not trusted.** These functions are a second copy of
+a Go table — the exact maintainability risk this register lists under "findings
+deliberately NOT raised", and the one that arrived as F-43 in a security
+control. `TestIntegration_GoAndSQLAgreeOnTheChartOfAccounts` drives both
+functions for every code the Go registry declares, with negative controls for
+"every code allows negative" and "none does", either of which would make the
+comparison agree perfectly and prove nothing.
+
+## F-50 · An asset could be stored with no value domain at all · BASELINE · P2 · FIXED
+
+**Found by** the parity test written for F-49's sibling claim — a comment in
+`internal/assets` promising that "a test asserts the two agree for every kind",
+where no such test existed. It failed on its first run.
+
+Migration 00710 introduces `assets_kind_domain_agree` with the sentence *"a kind
+and a domain that disagree is a data-entry error that would silently reclassify
+value"*. It does not catch the commonest form of that error.
+
+    CHECK ( (kind = 'CREDIT'       AND value_domain = 'INTERNAL_CREDIT')
+         OR (kind = 'NATIVE_ASSET' AND value_domain = 'INTERNAL_NATIVE_ASSET')
+         OR (kind = 'FIAT'         AND value_domain IS NULL)
+         OR (kind IN (...)         AND value_domain IN (...)) )
+
+For a CREDIT row with `value_domain` NULL the first disjunct is `true AND NULL`
+= NULL and the rest are `false`, so the whole expression is NULL — **and a CHECK
+constraint fails only on FALSE.** NULL passes.
+
+Demonstrated as `cp_app` against a migrated database: a CREDIT asset with no
+value domain inserts cleanly. `internal/assets` refuses the same shape, so Go
+and SQL disagreed on every kind except FIAT.
+
+**How far it goes.** Not far, and worth saying so rather than overstating it:
+`cp_ledger_account_domain` raises VD001 for an asset with no domain, so a
+malformed asset cannot hold a ledger account and cannot be posted. What it can
+do is exist, be listed, and be referenced by anything that never opens an
+account.
+
+**Fix.** `assets_value_domain_presence`, stated as an equivalence —
+`(kind = 'FIAT') = (value_domain IS NULL)` — so both sides are non-null booleans
+and the constraint can never evaluate to NULL. The parity test drives both
+constraints, coalescing each the way a CHECK behaves, and is exhaustive over
+every (kind, domain) pair including the absent domain.
+
+**The general lesson, which is not about this constraint.** Any CHECK whose
+expression can be NULL is a CHECK that accepts. This one had been read by
+several people, cited in a doc comment as the thing Go mirrors, and was wrong in
+a way that reading it in Go-shaped terms does not reveal.
+
+## F-51 · Three operations documents described a system that does not exist · BASELINE · P2 · FIXED
+
+**Found by** an audit of the documents against the code — the same question
+`test/docs` asks mechanically for cited test names, asked by hand of every other
+kind of claim.
+
+- **`docs/architecture/EXECUTION.md`**: *"The signing package is importable only
+  by `cmd/execution-worker` (depguard rule)"*. Both halves false. The only
+  depguard rule naming `internal/signing` is `agent-authority`, which denies it
+  to the agent trees — a different restriction, in the opposite direction. And
+  `cmd/execution-worker` does not import it: `internal/signing` has no non-test
+  importer at all.
+- **`docs/operations/DEPLOYMENT.md`**: *"`gates.Bootstrap` persists a `DISABLED`
+  row for every capability at first start"*. It has no caller in `cmd/`; only
+  `scripts/gateceremony` invokes it. Migration 00701 and the readiness report
+  both say a fresh deployment has no gate rows; the deployment runbook said the
+  opposite. Still fail-closed — an absent row is INACTIVE — but an operator
+  looking for those rows after a deploy will not find them.
+- **`docs/operations/RECONCILIATION.md`**: *"The reconciliation engine is not yet
+  implemented (Stage 7)"*. It is: the engine exists, a worker drives it on a
+  ticker, and the admin read endpoints are wired. Stale in the PESSIMISTIC
+  direction, which misleads just as effectively — a reader would not go looking
+  for a subsystem that is running and raising records.
+
+All three are corrected in place and labelled as corrections rather than
+silently edited, for the reason F-40 gives: a document that quietly changes its
+mind teaches nobody anything.
+
+**What this says about the mechanical check.** `test/docs/references_test.go`
+verifies that every TEST NAME cited in five documents exists — one narrow class
+of claim, in five of the repository's fifty-odd documents. Nothing checks a
+claim about a control, a wiring, or a count. These three were found by reading.
+
+## F-52 · An account's new risk can be blocked with no wired way to unblock it · BASELINE · P1 · OPEN
+
+**Found by** a worker-reachability sweep asking which exported functions have no
+caller a deployment can run.
+
+The two halves of reconciliation are wired asymmetrically:
+
+- **Blocking is live.** `cmd/reconciliation-worker` runs `RunPeriodic` and
+  `SweepEscalations` on tickers and raises records. `ReconciliationBlockReader`
+  is wired into `cmd/api` and reads `reconciliation_records WHERE
+  blocks_new_risk AND status IN ('OPEN','MISMATCH','INVESTIGATING','ESCALATED')`,
+  which removes the account's capacity to take new risk.
+- **Resolution is not.** `cmd/api` sets `Reconcile: nil`, so both
+  `GET /v1/admin/reconciliation/records` and
+  `POST /v1/admin/reconciliation/records/{id}/resolve` answer 422 UNSUPPORTED.
+  `Engine.ResolveManual`, `ResolveAutomatic`, `Investigate` and `Escalate` have
+  no caller outside `internal/reconciliation`'s own tests.
+
+So a deployment can freeze an account's ability to trade and has no deployed
+path to unfreeze it. An operator's only recourse is a hand-written UPDATE
+against the database, which is the thing the admin plane exists to replace.
+
+**This is F-29 one level up.** That finding was *"a user could reserve their
+Credits in a payout request and had no way to release them"* — money reserved
+with no path to release. This is capacity reserved with no path to release, and
+it was found by the same question.
+
+**Why it is OPEN.** The fix is real work rather than a line: `cmd/api` must
+construct a resolution-capable `reconciliation.Engine` — the pieces all exist
+there (`db`, `clock`, `NewRepository`, `DefaultPolicy`, `admin.Service` already
+satisfies the `Approvals` interface, and the ledger service is what a
+compensating posting needs) — plus an `httpapi` adapter implementing
+`ReconciliationPort`, plus an integration test that raises a blocking record,
+watches buying power fall, resolves it through the API and watches it return.
+`applyRepair` already refuses cleanly when no ledger is configured, so a
+partial wiring would degrade honestly rather than panic — but a partial wiring
+is not what this needs.
+
+Recorded at P1 because the harm is to a customer who did nothing wrong: their
+account is frozen by an automated check and nobody has a button.
+
 ## Findings deliberately NOT raised
 
 Stated so their absence is a decision rather than an oversight:
 
-- **The chart of accounts is duplicated between Go and SQL.** Both were extended together and a test
-  pins the Go side's shape, but nothing mechanically proves the two lists are identical. Worth a
-  generator or a cross-check test; it is a maintainability risk, not a defect.
+- ~~**The chart of accounts is duplicated between Go and SQL.**~~ **RAISED, twice.** This entry said
+  the duplication was "a maintainability risk, not a defect". It became both: F-43, where MARKETPLACE
+  was high-risk in Go and not in SQL so the database evidence check never fired for it, and F-49,
+  where the negative-balance policy was in Go and unenforced in SQL. Both halves are now compared by
+  a test that drives each language's copy — `TestIntegration_GoAndSQLAgreeOnEveryCapabilitysRisk` and
+  `TestIntegration_GoAndSQLAgreeOnTheChartOfAccounts`. The account-code and value-domain lists were
+  already covered by `TestIntegration_GoAndSQLAgreeOnEveryOrderedDomainPair` and
+  `TestIntegration_AccountDomainDerivationAgreesWithGo`; what remains uncovered is the transaction
+  kinds, the credit origins and the finality transition table, and two of those carry comments
+  claiming a test that does not exist.
 - **Capability activation is not enforced in the database.** Migration 00710 says so explicitly and
   gives the reason: a gate is keyed by environment, and a connection carries no environment the
   application could not simply assert. Adding a session GUC would look like a control and be none.

@@ -61,6 +61,17 @@ GRANT USAGE ON SCHEMA public TO cp_app, cp_readonly, cp_ops;
 -- keeps privilege review local to the migration that creates the table.
 -- Only sequence usage is defaulted so inserts into granted tables work.
 ALTER DEFAULT PRIVILEGES FOR ROLE cp_migrate IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO cp_app;
+-- The read roles DO get a default SELECT, and that is a deliberate contract
+-- rather than an oversight: test/integration/migrations/privileges_test.go
+-- asserts "cp_readonly and cp_ops can SELECT everything and write nothing" for
+-- every table in the schema, and cp_ops performs retention cleanup on sessions,
+-- which needs SELECT on the columns it filters on.
+--
+-- It does sit awkwardly beside migration 00010, whose grant list deliberately
+-- withholds identity_pii and sessions from these two roles. That list has no
+-- effect while this line exists. The contradiction is recorded as F-47, OPEN:
+-- resolving it is a decision about who may read encrypted PII, and it belongs
+-- to whoever owns that policy.
 ALTER DEFAULT PRIVILEGES FOR ROLE cp_migrate IN SCHEMA public GRANT SELECT ON TABLES TO cp_readonly, cp_ops;
 
 -- Query statistics for the operations role (parameter group preloads it).

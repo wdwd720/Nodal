@@ -496,6 +496,16 @@ would close this is the error text from a recurrence, not another clean run.
 | The suite's own money rules hold on its own source | `node --test src/lib/*.test.ts` — 35 pass; it had been red on the purchase spec, which parsed Credits into doubles and subtracted them as its central assertion (F-45) |
 | Every required page settles before anything is asserted absent | the nine-page loop now waits for `networkidle` and asserts no `.loading` before asserting no `.malformed`, as the five internal-economy pages already did (F-46) |
 
+### The database as a boundary
+
+| Property | Evidence |
+|---|---|
+| An account cannot exempt itself from the negative-balance guard | `TestIntegration_AnAccountCannotExemptItselfFromTheNegativeBalanceGuard` — `allow_negative` and `normal_side` are bound to the chart by a CHECK, not only by the service (F-49) |
+| Go and SQL agree on the chart of accounts | `TestIntegration_GoAndSQLAgreeOnTheChartOfAccounts` |
+| Go and SQL agree on every finality transition | `TestIntegration_GoAndSQLAgreeOnEveryFinalityTransition` — migration 00711 claimed this test existed; it did not |
+| Go and SQL agree on every (asset kind, value domain) pair | `TestIntegration_GoAndSQLAgreeOnEveryKindDomainPair` — `internal/assets` claimed this test existed; it did not, and on its first run it found that an asset could be stored with no value domain at all (F-50) |
+| Every SECURITY DEFINER trigger pins `pg_temp` | migration 00717; five of them did not, while 00701 names the hazard exactly for the sixth (F-48) |
+
 ### Known weaknesses, recorded rather than fixed
 
 - **Asset quantities on the market page use a hardcoded Credit scale (part of F-44).** `circulating_supply`,
@@ -503,6 +513,19 @@ would close this is the error text from a recurrence, not another clean run.
   `CREDIT_DECIMALS = 6`. They are right today only because the asset-creation screen also hardcodes six
   and sends it; an asset created through the API with any other `decimals` renders wrong by a power of
   ten and nothing says so.
+- **Two statements about who may read encrypted PII contradict each other (F-47, OPEN).** Migration
+  00010 withholds `identity_pii` and `sessions` from `cp_readonly` and `cp_ops`; the role bootstrap's
+  blanket `ALTER DEFAULT PRIVILEGES` grants them anyway, and
+  `test/integration/migrations/privileges_test.go` asserts in a doc comment that those roles read
+  everything. A revoke was written, applied, and refused by that test — which also documents `cp_ops`
+  performing session retention, a job that needs SELECT on the table. Which statement is right is a
+  policy decision about personal data, with an operational constraint attached.
+- **An account's new risk can be blocked with no wired way to unblock it (F-52, OPEN).** The
+  reconciliation worker raises records and `blocks_new_risk` is read by buying power, so an automated
+  check can remove an account's capacity to trade. `cmd/api` sets `Reconcile: nil`, so both admin
+  resolution endpoints answer UNSUPPORTED and `Engine.ResolveManual` has no caller outside its own
+  tests. The only recourse is a hand-written UPDATE, which is what the admin plane exists to replace.
+  This is F-29 one level up: there it was money reserved with no path to release, here it is capacity.
 - **The AU001 audit binding is forgeable (F-42, OPEN).** Migration 00603 binds a state change to a
   transition row through a transaction-local session variable, and its header claims the application
   role cannot set that variable. It can — `internal/reconciliation/store.go` does exactly that on a

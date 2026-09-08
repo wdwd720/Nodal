@@ -847,10 +847,19 @@ func TestIntegration_PostedByActorAndAccounts(t *testing.T) {
 	assert.False(t, a1.AllowNegative)
 	assert.Equal(t, AccountOpen, a1.Status)
 
+	// The forgery this used to perform is now unrepresentable. It wrote
+	// `allow_negative = true` onto a WALLET account through the MIGRATION role
+	// and watched checkDefinition refuse the account afterwards -- a Go guard
+	// catching a row the database had already accepted.
+	//
+	// Migration 00717 binds both columns to the chart, so the write itself is
+	// refused, by the schema owner as well as by the app (F-49). Asserting the
+	// refusal here rather than deleting the case: what changed is WHICH layer
+	// says no, and that is worth pinning. checkDefinition still exists and is
+	// still right -- it is covered by TestCheckDefinition_RefusesARowThatDisagreesWithTheChart,
+	// which builds the disagreeing value directly, because a database that
+	// enforces the rule can no longer produce one.
 	_, err = testMigrate.Exec(f.ctx, `UPDATE ledger_accounts SET allow_negative = true WHERE id = $1`, a1.ID)
-	require.NoError(t, err)
-	_, err = f.svc.EnsureAccount(f.ctx, testDB, untouched)
-	requireCode(t, err, errs.CodeInternal, "a stored definition that disagrees with the chart is refused")
-	_, err = testMigrate.Exec(f.ctx, `UPDATE ledger_accounts SET allow_negative = false WHERE id = $1`, a1.ID)
-	require.NoError(t, err)
+	require.Error(t, err, "the chart is enforced by the database, not only by the service")
+	assert.Contains(t, err.Error(), "ledger_accounts_match_chart")
 }

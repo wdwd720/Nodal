@@ -45,6 +45,17 @@ const (
 	KindNativeAsset Kind = "NATIVE_ASSET"
 )
 
+// allKinds is every declared kind, in the order the constants are written.
+//
+// It exists so a test can be exhaustive rather than sampled: the kind-domain
+// rule below is duplicated in SQL as `assets_kind_domain_agree`, and a
+// comparison that iterated a hand-written list would stop covering a kind the
+// day somebody added one.
+var allKinds = []Kind{KindNative, KindSPLToken, KindSPLToken2022, KindFiat, KindCredit, KindNativeAsset}
+
+// AllKinds returns every declared asset kind.
+func AllKinds() []Kind { return append([]Kind(nil), allKinds...) }
+
 // InternalChain is the chain value every Nodal-internal asset uses. Internal
 // assets satisfy the registry's (chain, mint_address) identity honestly: the
 // chain is this sentinel and the mint address is the asset's own id, so
