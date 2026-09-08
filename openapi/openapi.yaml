@@ -713,6 +713,38 @@ paths:
   # become AGENT_SERVICE_EARNING, everything else becomes CREATOR_EARNING.
   # A client cannot choose the provenance, and no response invites it to.
   # ---------------------------------------------------------------------
+  /payouts/{payoutId}/cancel:
+    post:
+      tags: [payouts]
+      summary: Cancel your own payout request before it has been submitted
+      description: >-
+        Returns the reserved Credits to the exact lots they came from, with
+        their provenance intact. A request that has been SUBMITTED cannot be
+        cancelled: it may already have been paid, and the only honest way out of
+        that is reconciliation.
+      parameters:
+        - { $ref: "#/components/parameters/PayoutId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, reason]
+              properties:
+                account_id: { $ref: "#/components/schemas/UUID" }
+                reason: { type: string, minLength: 3, maxLength: 500 }
+      responses:
+        "200":
+          description: Request is REJECTED and the reservation is returned
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutRequest" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: Already submitted; resolve it by reconciliation instead
+          content:
+            application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+
   /internal-sellers:
     post:
       tags: [commerce]

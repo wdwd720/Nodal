@@ -41,6 +41,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-26 | P1 | BASELINE | fixed | Two required inputs were never supplied, so the internal economy was unreachable in every deployment |
 | F-27 | P1 | BASELINE | fixed | A capability check inside a financial transaction read through the pool, deadlocking it under concurrency |
 | F-28 | P1 | BASELINE | fixed | No deployment could launch a native market: the act every document called separate was never built |
+| F-29 | P2 | BASELINE | fixed | A user could reserve their Credits in a payout request and had no way to release them |
 
 ---
 
@@ -734,6 +735,59 @@ Three tests drive the whole chain through the real surfaces — creator submits,
 compliance approves the content, two operators launch, and then somebody buys —
 because a launch that produced an unusable market would satisfy every assertion
 about states.
+
+## F-29 · A payout could be requested and never withdrawn · BASELINE · P2 · FIXED
+
+**Found by** the same question as F-26 and F-28, asked systematically instead of
+one path at a time: which methods that change money have no caller a deployment
+can reach?
+
+`payout.Cancel` was one of them. It is well tested — three service-level tests
+cover it — and nothing outside the test suite called it. So a user could request
+a payout, watch their Credits leave their spendable balance into
+PAYOUT_RESERVED, and have no way to get them back. Only an operator could, and
+only by running their own tool against the database.
+
+Reserving somebody's money with no path to release it is not a conservative
+control. It is a trap, and it is the kind that looks fine in review because the
+reservation logic is correct.
+
+**Fix.** `POST /v1/payouts/{payoutId}/cancel`. It returns the reserved Credits
+to the exact lots they came from with their provenance intact, and it refuses a
+SUBMITTED request — that one may already have been paid, and the only honest way
+out of it is reconciliation, which `payout.Cancel` already said.
+
+The endpoint introduces a question the service never had to answer — WHO may
+cancel — so that is what
+`TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses` tests: a stranger
+gets NOT_FOUND rather than FORBIDDEN, because a distinguishable refusal is a
+membership oracle, and the refused attempt changes nothing.
+
+## The class, made mechanical
+
+F-26, F-28 and F-29 are one defect three times: **a path only tests can walk
+looks finished from inside the tests.** Every one was correct, covered, and
+unreachable.
+
+`test/reachability` is that question turned into a check. Every exported method
+on a financial service that takes a transaction — every method that changes
+money — must have a caller in `internal/`, `cmd/` or `scripts/`, or an entry
+saying in words why not. A caller in `test/` does not count; that is the point.
+
+Eleven methods are exempt today and every reason is external: the Credit funding
+lifecycle needs a payment provider (B-04), payout destinations need a payout
+provider to verify them and somewhere to send the money (B-01, B-06), and
+PAYOUT_KYC is by definition a provider's determination. A second test refuses
+any exemption whose reason does not name a blocker `BLOCKERS.md` actually
+defines — an exemption without an external cause is a defect wearing a comment.
+
+**Its first version could not fail.** It matched `.Method(ctx`, and `Cancel`,
+`Create`, `Execute` and `SetStatus` are names four of the five packages share,
+so every method looked reachable from everywhere. Two changes fixed it: a call
+must pass a transaction as its second argument, and the calling file must import
+the declaring package. It was then observed failing on both defects it was
+written for — `payout.Cancel` with the endpoint removed, and
+`nativeasset.Activate` with the launch executor removed.
 
 ## Findings deliberately NOT raised
 

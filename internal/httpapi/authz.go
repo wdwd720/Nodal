@@ -123,9 +123,12 @@ var operationPolicies = map[string]operationPolicy{
 	// WHICH asset is an ownership question and is answered per request, not by
 	// a permission.
 	"PostNativeAssetsAssetIdSubmit": {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
-	"GetNativeAssets":               {AnyOf: perms(security.PermNativeAssetRead)},
-	"GetNativeAssetsAssetId":        {AnyOf: perms(security.PermNativeAssetRead)},
-	"GetNativeMarketsMarketId":      {AnyOf: perms(security.PermNativeAssetRead)},
+	// Cancelling your own payout is the same authority as creating one. WHICH
+	// payout you may cancel is an ownership question, answered per request.
+	"PostPayoutsPayoutIdCancel": {AnyOf: perms(security.PermPayoutCreate), Mutating: true},
+	"GetNativeAssets":           {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeAssetsAssetId":    {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketId":  {AnyOf: perms(security.PermNativeAssetRead)},
 	// A native-market quote is persisted -- it is the record of what the user
 	// was shown, with the state version it was priced against -- so it is a
 	// command with an idempotency key, not a read that happens to write.

@@ -118,11 +118,13 @@ seed-economy: seed ## Seed the internal economy: Credit asset, Credits, a seller
 test: unit property race ## Default developer test set
 
 unit: ## Go unit tests
-	# ./test/docs is here rather than under `integration` because it needs no
-	# database: it reads the repository and the readiness documents and checks
-	# that every test they cite exists. It belongs to the fast tier so a broken
-	# citation is caught by the same run that catches a broken package.
-	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/...
+	# ./test/docs and ./test/reachability are here rather than under
+	# `integration` because they need no database. One checks that every test
+	# the readiness documents cite exists; the other checks that every method
+	# which moves money has a caller a deployment can reach. Both belong to the
+	# fast tier: a broken citation and an unreachable control should be caught
+	# by the same run that catches a broken package.
+	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/... ./test/reachability/...
 
 property: ## Property-based financial tests
 	# Property tests live beside the code they constrain, named Prop*/Property*,

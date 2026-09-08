@@ -546,6 +546,28 @@ five-minute step-up, one-hour expiry, keyed by the approval so one approval
 mints one supply). Launching is the only action in the internal economy that
 mints, and the economics lock behind it.
 
+### The class, made mechanical (F-29 and `test/reachability`)
+
+F-26, F-28 and F-29 are one defect three times: a path only tests can walk looks
+finished from inside the tests. Every one was correct, covered and unreachable.
+
+`test/reachability` asks the question mechanically. Every exported method on a
+financial service that takes a transaction must have a caller in `internal/`,
+`cmd/` or `scripts/`, or an entry saying why not. A caller in `test/` does not
+count — that is the point. Eleven methods are exempt and every reason is
+external (B-01, B-04, B-06); a second test refuses any exemption whose reason
+does not name a blocker `BLOCKERS.md` defines.
+
+Its first version could not fail, because it matched `.Method(ctx` and `Cancel`,
+`Create`, `Execute` and `SetStatus` are names four of the five packages share.
+It now requires a transaction as the second argument AND the calling file to
+import the declaring package, and it was observed failing on both defects it was
+written for.
+
+It runs in the fast tier alongside `test/docs`, because an unreachable control
+and a broken citation should be caught by the same run that catches a broken
+package.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

@@ -226,6 +226,16 @@ number would need a larger seed, and it would still be a laptop number.
 | A deployment that wired no policy refuses real capital rather than permitting it | `Ports.SettlementPolicy` is a struct whose ZERO VALUE is the conservative deployment |
 | The deployment's OWN policy is the one that answers, not the default | `TestWire_CarriesTheDeploymentsSettlementPolicy` (observed failing without the wiring) and `TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler` — this is F-24 |
 
+### Every method that moves money can be reached (F-29)
+
+| Property | Evidence |
+|---|---|
+| A user can cancel their own pending payout and get the exact lots back | `TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses` |
+| A stranger cannot, and cannot learn the payout exists | same test: NOT_FOUND, and the request is unchanged |
+| Every financial mutator has a caller a deployment can run | `TestReachability_EveryFinancialMutatorHasADeploymentCaller` — a caller in `test/` does not count |
+| The eleven exemptions each name a real external blocker | `TestReachability_EveryExemptionNamesABlocker` — checked against `BLOCKERS.md` |
+| The check was observed failing on both defects it was written for | `payout.Cancel` and `nativeasset.Activate`, with their callers removed |
+
 ### A native market can be launched (F-28)
 
 | Property | Evidence |

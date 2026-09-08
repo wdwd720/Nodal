@@ -81,6 +81,14 @@ type PayoutsPort interface {
 	Create(ctx context.Context, r CreatePayout) (payout.Request, payout.Decision, error)
 	Get(ctx context.Context, id payout.RequestID) (payout.Request, error)
 	ListByAccount(ctx context.Context, accountID accounts.AccountID, limit int) ([]payout.Request, error)
+	// Cancel withdraws the account's OWN request before it is submitted,
+	// returning the reserved Credits to the exact lots they came from.
+	//
+	// Without it a user's Credits could be reserved with no way for that user
+	// to release them: `payout.Cancel` existed and had no caller outside
+	// tests, so only an operator could free them, and only by running their own
+	// tool.
+	Cancel(ctx context.Context, accountID accounts.AccountID, id payout.RequestID, reason string) (payout.Request, error)
 }
 
 // CreatePayout is the command behind POST /payouts.

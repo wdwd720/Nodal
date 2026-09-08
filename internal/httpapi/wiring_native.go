@@ -442,6 +442,28 @@ func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
 	return true
 }
 
+// Cancel withdraws the account's own pending request.
+//
+// The ownership check is here, and it answers NOT_FOUND rather than FORBIDDEN
+// for somebody else's payout, for the same reason every other account-scoped
+// read does: a distinguishable refusal is a membership oracle.
+func (a payoutsAdapter) Cancel(ctx context.Context, accountID accounts.AccountID, id payout.RequestID, reason string) (payout.Request, error) {
+	var out payout.Request
+	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		current, gerr := a.deps.Payouts.Get(ctx, tx, id)
+		if gerr != nil {
+			return gerr
+		}
+		if current.AccountID != accountID {
+			return errs.New(errs.CodeNotFound, "no such payout").WithField("payout_id", id.String())
+		}
+		var cerr error
+		out, cerr = a.deps.Payouts.Cancel(ctx, tx, id, reason)
+		return cerr
+	})
+	return out, err
+}
+
 func (a payoutsAdapter) Get(ctx context.Context, id payout.RequestID) (payout.Request, error) {
 	return a.deps.Payouts.Get(ctx, a.db, id)
 }
