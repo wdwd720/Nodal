@@ -36,6 +36,10 @@ var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	testDB         *db.DB
+	// testMigrate connects as the owning role, which holds every privilege.
+	// A control observed only through cp_app cannot distinguish a trigger from
+	// a missing grant; this pool is how the two are told apart.
+	testMigrate *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -57,6 +61,12 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	defer testDB.Close()
+	testMigrate, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "webhook-itest-migrate", MaxConns: 4})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "webhook integration: open migrate pool:", err)
+		return 1
+	}
+	defer testMigrate.Close()
 	return m.Run()
 }
 

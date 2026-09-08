@@ -8,7 +8,7 @@ Severity: SEV1 (signing credential compromise; unauthorized signing) · Owner: S
 - `signing_rejection` / `wallet_policy_violation` CRITICAL security events in a burst, or a `signing_decisions` row `APPROVED` whose `inspected_tx_hash` does not match the transaction that landed.
 - Provider breach notice, `provider_credential_change` outside a rotation ticket, provider dashboard showing signing requests not originating from `cmd/execution-worker`.
 - A fill outside `MinOutputQuantity`/`MaxInputDebit` (RECONCILIATION.md §3: signing-boundary failure candidate).
-- PENDING: emitters for `signing_rejection`, `wallet_policy_violation`, `provider_credential_change`; alarms. PENDING: `signing.Service` and the provider adapter (`internal/wallet` holds the `WalletProvider`/`SigningProvider` contracts and a fake; `internal/signing/inspect` is the pure inspector; no `internal/provider/privy`).
+- PENDING: emitters for `signing_rejection`, `wallet_policy_violation` and `provider_credential_change`. **BLOCKED_EXTERNAL:** alarms, and a real custody account. `signing.Service` (`internal/signing/service.go`) and the provider adapter (`internal/provider/privy`) both exist; `internal/wallet` holds the `WalletProvider`/`SigningProvider` contracts and a fake, and `internal/signing/inspect` is the pure inspector.
 
 ## Blast radius
 
@@ -19,9 +19,9 @@ Severity: SEV1 (signing credential compromise; unauthorized signing) · Owner: S
 
 ## Immediate actions (first 10 minutes)
 
-1. Stop all new signing platform-wide: activate `GLOBAL_NEW_RISK_KILL` ([global-kill-and-reenable.md](./global-kill-and-reenable.md)) **and** `PROVIDER_DISABLE_NEW_ACTIONS(<wallet provider name>)` (SEVERE; `kill:activate`): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"<provider>","action":"activate","reason":"<INC-id>: wallet provider compromise suspected"}` (PENDING `cmd/api`). The provider switch stops new submissions but never `Status`, `Reconcile` or observation (PART 107).
+1. Stop all new signing platform-wide: activate `GLOBAL_NEW_RISK_KILL` ([global-kill-and-reenable.md](./global-kill-and-reenable.md)) **and** `PROVIDER_DISABLE_NEW_ACTIONS(<wallet provider name>)` (SEVERE; `kill:activate`): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"<provider>","action":"activate","reason":"<INC-id>: wallet provider compromise suspected"}`. The provider switch stops new submissions but never `Status`, `Reconcile` or observation (PART 107).
 2. Revoke the delegation at the provider for every affected wallet (provider console or API; `WalletProvider.VerifyDelegation` will then report it): this is the only action that stops an attacker who already holds the provider-side credential. Record the provider ticket id.
-3. Rotate the platform's provider credentials via the `SecretRef` indirection (`aws-sm://` targets; PENDING resolver) and restart `cmd/execution-worker` (PENDING binary). Never edit images or commit secrets.
+3. Rotate the platform's provider credentials via the `SecretRef` indirection (`aws-sm://` targets; BLOCKED_EXTERNAL: the resolver) and restart `cmd/execution-worker`. Never edit images or commit secrets.
 4. Mark affected wallets `SUSPENDED` through the wallet service (writes `wallet_status_transitions`; direct SQL fails `AU001`). Read-only check:
    ```sql
    SELECT id, account_id, provider, provider_wallet_id, chain, address, status, delegation_verified_at, signing_policy_version
@@ -32,7 +32,7 @@ Severity: SEV1 (signing credential compromise; unauthorized signing) · Owner: S
 
 ## Diagnosis
 
-- Enumerate unauthorized activity per wallet: chain observer `SearchWalletActivity(wallet, since, limit)` on **both** observers (Helius adapter `internal/provider/helius`, fallback `internal/provider/solanarpc`), compared against `execution_attempts.tx_signature`, `deposits.tx_signature`, `withdrawals.tx_signature`. Everything unmatched is an unknown transaction record (PENDING: reconciliation engine; until then an engineer runs the observers and files the list as evidence).
+- Enumerate unauthorized activity per wallet: chain observer `SearchWalletActivity(wallet, since, limit)` on **both** observers (Helius adapter `internal/provider/helius`, fallback `internal/provider/solanarpc`), compared against `execution_attempts.tx_signature`, `deposits.tx_signature`, `withdrawals.tx_signature`. Everything unmatched is an unknown transaction record (`internal/reconciliation` opens the record; an engineer may also run the observers directly and file the list as evidence).
 - Signing evidence: `SELECT attempt_id, decision, reason_codes, inspector_version, requested_by_service, provider_sign_ref, decided_at FROM signing_decisions WHERE wallet_id IN (...) AND decided_at > '<window start>';` — an unauthorized transaction has **no** `APPROVED` row; a transaction that has one but differs from `inspected_tx_hash` means the provider signed something else (provider-side compromise).
 - Provider logs: signing requests by API key / idempotency key / source IP; compare with `cmd/execution-worker` egress.
 - Decode each unauthorized transaction (`getTransaction` with `maxSupportedTransactionVersion: 0`): fee payer, signers, destinations, `Approve`/`SetAuthority` instructions (a delegation grant is worse than a transfer: revoke it on chain via the provider if possible).
@@ -58,7 +58,7 @@ Severity: SEV1 (signing credential compromise; unauthorized signing) · Owner: S
 - Zero wallet activity on any platform wallet without a matching attempt/deposit/withdrawal over the last full reconciliation cycle on both observers.
 - All affected wallets `REVOKED` or re-delegated with fresh `delegation_verified_at`; new credential in place; old credential confirmed revoked at the provider.
 - Every unknown transaction record `RESOLVED_MANUAL` with `approval_id`, evidence and compensating posting; `blocks_new_risk = false`.
-- Audit chain verifies; `make verify-audit` (PENDING) output archived.
+- Audit chain verifies; `make verify-audit` output archived.
 - Switches released via the approval path; gates in their intended state.
 
 ## Post-incident

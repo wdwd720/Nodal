@@ -9,6 +9,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
 // SQLSTATEs raised by the triggers of migration 00101.
@@ -62,6 +63,13 @@ func MapError(err error) error {
 	var pe *pgconn.PgError
 	if !errors.As(err, &pe) {
 		return errs.Wrap(err, errs.CodeInternal, "ledger: database error")
+	}
+	// The value-domain triggers fire on the same inserts these codes come from,
+	// and their five SQLSTATEs reached callers as unclassified INTERNAL until
+	// F-58. Consulting valuedomain here means every ledger caller gets the
+	// classification without each of them repeating the switch.
+	if mapped := valuedomain.MapError(err); mapped != nil {
+		return mapped
 	}
 	switch pe.Code {
 	case SQLStateNegativeBalance:

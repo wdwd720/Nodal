@@ -70,6 +70,7 @@ func run() int {
 		list     = flag.Bool("list", false, "list the packages and exit")
 		keep     = flag.Bool("keep", false, "keep each package's database instead of dropping it")
 		extraTag = flag.String("tags", "", "additional build tags, comma separated")
+		runRe    = flag.String("run", "", "only run tests matching this regexp (packages with no match are skipped, not provisioned)")
 	)
 	flag.Parse()
 
@@ -100,6 +101,29 @@ func run() int {
 		fmt.Fprintf(os.Stderr,
 			"inttest: found only %d integration packages; the enumeration is broken, not the tree\n", len(pkgs))
 		return 1
+	}
+	// A -run filter narrows the packages too. Provisioning a fresh database for
+	// a package with no matching test costs the same as one with a hundred, and
+	// `make property` would otherwise spend most of its time creating databases
+	// for packages that then report "no tests to run".
+	if *runRe != "" {
+		re, err := regexp.Compile(*runRe)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "inttest: bad -run regexp:", err)
+			return 1
+		}
+		var kept []string
+		for _, pkg := range pkgs {
+			has, err := hasMatchingTest(root, pkg, re)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "inttest:", err)
+				return 1
+			}
+			if has {
+				kept = append(kept, pkg)
+			}
+		}
+		pkgs = kept
 	}
 	if len(pkgs) == 0 {
 		fmt.Fprintln(os.Stderr, "inttest: no packages matched")
@@ -140,6 +164,9 @@ func run() int {
 		args := []string{"test", "-count=1", "-timeout=" + timeout.String(), "-tags=" + tags}
 		if *race {
 			args = append(args, "-race")
+		}
+		if *runRe != "" {
+			args = append(args, "-run", *runRe)
 		}
 		args = append(args, pkg)
 
@@ -234,6 +261,39 @@ func discover(root string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// hasMatchingTest reports whether a package declares a test the -run regexp
+// would select, reading the integration-tagged files it was discovered by.
+// This is the same shape as `go test -run`'s own matching against the top-level
+// test name, which is all a package-level decision needs.
+func hasMatchingTest(root, pkg string, re *regexp.Regexp) (bool, error) {
+	dir := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(pkg, "./")))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	decl := regexp.MustCompile(`(?m)^func ((?:Test|Fuzz)[A-Za-z0-9_]*)\(`)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		tagged, err := hasIntegrationTag(path)
+		if err != nil || !tagged {
+			continue
+		}
+		body, err := os.ReadFile(path) // #nosec G304 -- path comes from walking the repository
+		if err != nil {
+			return false, err
+		}
+		for _, m := range decl.FindAllSubmatch(body, -1) {
+			if re.Match(m[1]) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func hasIntegrationTag(path string) (bool, error) {

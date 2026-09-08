@@ -23,6 +23,8 @@ import (
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/reality/redpandabus"
+
+	"github.com/nodal/controlplane/internal/testkit/deps"
 )
 
 // The suite runs against the LOCAL Redpanda (docker-compose) or any broker
@@ -31,10 +33,7 @@ import (
 // them.
 func brokers(t *testing.T) []string {
 	t.Helper()
-	v := os.Getenv("CP_TEST_REDPANDA_BROKERS")
-	if v == "" {
-		t.Skip("CP_TEST_REDPANDA_BROKERS not set; skipping Redpanda integration test")
-	}
+	v := deps.Need(t, "CP_TEST_REDPANDA_BROKERS", "Redpanda")
 	var out []string
 	for _, b := range strings.Split(v, ",") {
 		if b = strings.TrimSpace(b); b != "" {

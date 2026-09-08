@@ -413,7 +413,7 @@ func containsPrediction(ps []Prediction, want PredictionID) bool {
 func TestResolverRefusesBeforeTheHorizonEnds(t *testing.T) {
 	f := newFixture(t)
 	p := f.commit(t, f.draft(t, "enter", time.Hour, "0.6"))
-	r, err := NewResolver(f.clk, NewPriceReader())
+	r, err := NewResolver(f.clk, NewPriceReader(), time.Hour)
 	require.NoError(t, err)
 	_, err = r.Resolve(context.Background(), testDB, p)
 	require.Error(t, err, "scoring inside the window would judge a prediction against its own future")
@@ -436,7 +436,7 @@ func TestResolveScoresFromPointInTimePrices(t *testing.T) {
 	f.writePrice(t, "50000", 2, p.HorizonEnd().Add(time.Hour))
 
 	f.clk.Set(p.HorizonEnd().Add(2 * time.Hour))
-	r, err := NewResolver(f.clk, NewPriceReader())
+	r, err := NewResolver(f.clk, NewPriceReader(), time.Hour)
 	require.NoError(t, err)
 	o, err := r.Resolve(context.Background(), testDB, p)
 	require.NoError(t, err)
@@ -493,7 +493,7 @@ func TestResolverRefusesWhenThereIsNoPrice(t *testing.T) {
 	f := newFixture(t)
 	p := f.commit(t, f.draft(t, "enter", time.Minute, "0.6"))
 	f.clk.Set(p.HorizonEnd().Add(time.Minute))
-	r, err := NewResolver(f.clk, NewPriceReader())
+	r, err := NewResolver(f.clk, NewPriceReader(), time.Hour)
 	require.NoError(t, err)
 	_, err = r.Resolve(context.Background(), testDB, p)
 	require.Error(t, err, "an invented price would be worse than an unresolved prediction")

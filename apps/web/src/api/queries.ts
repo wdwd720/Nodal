@@ -47,6 +47,7 @@ import {
   nativeMarketSpec,
   nativeQuoteSpec,
   payoutRequestSpec,
+  itemsSpec,
   validated,
   validatedList,
 } from "./contract.ts";
@@ -574,7 +575,9 @@ export function useNativeAssets(limit = 50): UseQueryResult<NativeAsset[]> {
     queryKey: nodalKeys.nativeAssets,
     queryFn: async () => {
       const { data } = await api.GET("/native-assets", { params: { query: { limit } } });
-      return validatedList<NativeAsset>(data, nativeAssetSpec, "/native-assets");
+      return validated<{ items: NativeAsset[] }>(
+        data, itemsSpec(nativeAssetSpec), "/native-assets",
+      ).items;
     },
   });
 }
@@ -710,7 +713,9 @@ export function useInternalProducts(kind: string): UseQueryResult<InternalProduc
       const { data } = await api.GET("/internal-products", {
         params: { query: kind === "" ? {} : { kind: kind as InternalProductKind } },
       });
-      return validatedList<InternalProduct>(data, internalProductSpec, "/internal-products");
+      return validated<{ items: InternalProduct[] }>(
+        data, itemsSpec(internalProductSpec), "/internal-products",
+      ).items;
     },
   });
 }
@@ -739,7 +744,9 @@ export function useInternalOrders(
       const { data } = await api.GET("/internal-orders", {
         params: { query: { account_id: accountId ?? "", role } },
       });
-      return validatedList<InternalOrder>(data, internalOrderSpec, "/internal-orders");
+      return validated<{ items: InternalOrder[] }>(
+        data, itemsSpec(internalOrderSpec), "/internal-orders",
+      ).items;
     },
   });
 }
@@ -777,7 +784,9 @@ export function usePayouts(accountId: string | undefined): UseQueryResult<Payout
       const { data } = await api.GET("/payouts", {
         params: { query: { account_id: accountId ?? "" } },
       });
-      return validatedList<PayoutRequest>(data, payoutRequestSpec, "/payouts");
+      return validated<{ items: PayoutRequest[] }>(
+        data, itemsSpec(payoutRequestSpec), "/payouts",
+      ).items;
     },
   });
 }

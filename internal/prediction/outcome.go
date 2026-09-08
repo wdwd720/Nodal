@@ -148,6 +148,28 @@ type PriceReader interface {
 // invented price would be worse than an unresolved prediction.
 var ErrNoPrice = errors.New("prediction: no price at or before the requested instant")
 
+// ErrStalePrice is the cause when a price exists but is too old to score
+// against.
+//
+// The distinction matters more than it looks. PriceAsOf bounds its read from
+// above -- `received_at <= asOf` -- so a resolution can never see the future,
+// which is the property the whole package is built around and which held. It
+// had no bound from below at all, and nothing compared either price's age to
+// anything (F-59).
+//
+// So when a feed died, both reads returned the same row: the newest price that
+// existed, however old. The return was then exactly zero, the realized
+// direction FLAT, the drawdown zero, and Validate passed because both price
+// references were non-empty. Every open prediction on that instrument was
+// scored as a miss against a market nobody had observed -- durably, since
+// prediction_outcomes carries forbid_mutation and the score cannot be
+// corrected afterwards.
+//
+// Refusing leaves the prediction unresolved and retried, which is what the
+// worker already does with ErrNoPrice. See F-60 for the accounting that makes
+// a permanently unresolvable prediction visible rather than merely absent.
+var ErrStalePrice = errors.New("prediction: the price is too old to resolve against")
+
 // Resolver turns an elapsed prediction into an outcome. It is deliberately
 // separate from the run: the run cannot score itself, and the resolver cannot
 // change what was predicted.
@@ -156,17 +178,27 @@ type Resolver struct {
 	prices PriceReader
 	eps    ir.Decimal
 	band   money.BPS
+	maxAge time.Duration
 }
 
-// NewResolver builds the resolver.
-func NewResolver(clk clock.Clock, prices PriceReader) (*Resolver, error) {
+// NewResolver builds the resolver. maxPriceAge bounds how far before its
+// knowledge cut-off each endpoint price may have been received.
+//
+// It is a required argument rather than a default inside the constructor, for
+// the same reason WithFlatBand exists: the number decides whether an outcome is
+// a measurement or a fabrication, and a caller should have to say it. A
+// non-positive value is refused rather than corrected to something plausible.
+func NewResolver(clk clock.Clock, prices PriceReader, maxPriceAge time.Duration) (*Resolver, error) {
 	switch {
 	case clk == nil:
 		return nil, errs.New(errs.CodeValidationFailed, "prediction: resolver requires a clock")
 	case prices == nil:
 		return nil, errs.New(errs.CodeValidationFailed, "prediction: resolver requires a price reader")
+	case maxPriceAge <= 0:
+		return nil, errs.New(errs.CodeValidationFailed,
+			"prediction: resolver requires a positive maximum price age; without one a dead feed scores every prediction FLAT")
 	}
-	return &Resolver{clk: clk, prices: prices, eps: DefaultEpsilon(), band: FlatBandBPS}, nil
+	return &Resolver{clk: clk, prices: prices, eps: DefaultEpsilon(), band: FlatBandBPS, maxAge: maxPriceAge}, nil
 }
 
 // WithFlatBand overrides the FLAT band. It is configuration, not a default
@@ -198,6 +230,9 @@ func (r *Resolver) Resolve(ctx context.Context, q db.Querier, p Prediction) (Out
 	}
 	finish, err := r.prices.PriceAsOf(ctx, q, p.InstrumentID, end)
 	if err != nil {
+		return Outcome{}, err
+	}
+	if err := r.usable(p, start, finish, end); err != nil {
 		return Outcome{}, err
 	}
 	returnBPS, err := returnInBPS(start, finish)
@@ -261,6 +296,52 @@ func (r *Resolver) Resolve(ctx context.Context, q db.Querier, p Prediction) (Out
 // returnInBPS is (finish - start) / start in basis points, exactly. Prices
 // are big.Int mantissas with scales; the division rounds half-even once, at
 // the end, and never touches a float.
+// usable refuses a pair of prices that cannot measure the window they are
+// meant to measure. Two rules, and only the second has a number in it.
+//
+// The first is unconditional: the two endpoints must be different observations.
+// If PriceAsOf returned the same row for the start and the finish, then no
+// price arrived between the commitment and the horizon, the computed return is
+// zero by construction rather than by measurement, and FLAT would be a
+// statement about our data rather than about the market.
+//
+// The second bounds each price's age against its own cut-off. ReceivedAt is the
+// timestamp used, per PricePoint: only what we had received decides what was
+// knowable when, and a provider timestamp we learned about late is not evidence
+// we held it.
+func (r *Resolver) usable(p Prediction, start, finish PricePoint, end time.Time) error {
+	if start.Ref == finish.Ref {
+		return errs.Wrap(ErrStalePrice, errs.CodeStaleMarketData,
+			"prediction: the window contains no price movement to score -- both endpoints resolve to one observation").
+			WithField("prediction_id", p.ID.String()).
+			WithField("instrument_id", p.InstrumentID.String()).
+			WithField("price_ref", start.Ref).
+			WithField("price_received_at", start.ReceivedAt.UTC().Format(time.RFC3339Nano)).
+			WithField("committed_at", p.CommittedAt.UTC().Format(time.RFC3339Nano)).
+			WithField("horizon_end_at", end.UTC().Format(time.RFC3339Nano))
+	}
+	for _, e := range []struct {
+		name  string
+		point PricePoint
+		asOf  time.Time
+	}{
+		{"start", start, p.CommittedAt},
+		{"end", finish, end},
+	} {
+		if age := e.asOf.Sub(e.point.ReceivedAt); age > r.maxAge {
+			return errs.Wrap(ErrStalePrice, errs.CodeStaleMarketData,
+				"prediction: the "+e.name+" price is older than the resolver allows").
+				WithField("prediction_id", p.ID.String()).
+				WithField("instrument_id", p.InstrumentID.String()).
+				WithField("price_ref", e.point.Ref).
+				WithField("price_age", age.String()).
+				WithField("max_price_age", r.maxAge.String()).
+				WithField("as_of", e.asOf.UTC().Format(time.RFC3339Nano))
+		}
+	}
+	return nil
+}
+
 func returnInBPS(start, finish PricePoint) (money.BPS, error) {
 	if start.Mantissa == nil || finish.Mantissa == nil {
 		return 0, errs.New(errs.CodeStaleMarketData, "prediction: missing price mantissa")

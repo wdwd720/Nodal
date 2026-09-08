@@ -27,6 +27,7 @@ import (
 var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
+	testOwnerDB    *db.DB
 	testDB         *db.DB
 )
 
@@ -50,7 +51,21 @@ func testMain(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "gates integration: open pool:", err)
 		return 1
 	}
+	// The owning role. cp_app holds only UPDATE (version) on capability_gates --
+	// deliberately, so the state can move only through cp_gate_transition -- which
+	// means an evidence column cannot be blanked as the application at all. The
+	// GT003 guard exists for the cases that privilege does not cover: a defect in
+	// the Go layer, or anything running as the owner. This pool is how those are
+	// reached.
+	testMigrateDB, err := db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "gates-itest-owner", MaxConns: 4})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "gates integration: open owner pool:", err)
+		testDB.Close()
+		return 1
+	}
+	testOwnerDB = testMigrateDB
 	code := m.Run()
+	testMigrateDB.Close()
 	testDB.Close()
 	return code
 }

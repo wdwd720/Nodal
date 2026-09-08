@@ -205,11 +205,33 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 45 was sized for a job that started Postgres alone. It now brings up six
+    # services and runs five more packages, so a timeout here would be a false
+    # failure rather than a signal.
+    timeout-minutes: 60
     env:
       # Same DSNs as docker-compose / CONVENTIONS.md; the compose file publishes 5433.
       CP_TEST_DATABASE_URL: postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane_test?sslmode=disable
       CP_TEST_MIGRATE_DATABASE_URL: postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane_test?sslmode=disable
+      # The addresses of the services `make infra-up` starts. Without these,
+      # internal/reality (ClickHouse), internal/reality/redpandabus (Redpanda),
+      # internal/archive (MinIO), internal/workflows (Temporal) and
+      # internal/ratelimit (Redis) were enumerated by the loop below, invoked,
+      # and skipped -- five subsystems reporting a pass having run nothing,
+      # while fifteen VERIFIED rows in REQUIREMENTS_TRACEABILITY.md cited those
+      # tests as their evidence (F-57).
+      CP_TEST_CLICKHOUSE_ADDR: 127.0.0.1:19000
+      CP_TEST_REDPANDA_BROKERS: 127.0.0.1:19092
+      CP_TEST_ARCHIVE_ENDPOINT: http://127.0.0.1:9100
+      CP_TEST_REDIS_URL: redis://127.0.0.1:6380
+      # Temporal reads CP_TEMPORAL_HOSTPORT and already defaults to the compose
+      # port, so it needs no entry here; the health check is what gates it, and
+      # deps.Unavailable turns a failed one into a failure in this job.
+      # The promise. internal/testkit/deps turns every external-dependency skip
+      # into a failure when this is set, so a service that fails to start is a
+      # red job rather than a fast green one. It is deliberately not set in the
+      # unit job, which never claimed to have any of this.
+      CP_TEST_REQUIRE_EXTERNAL_DEPS: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -218,10 +240,11 @@ jobs:
           cache: true
       # GitHub `services:` cannot bind-mount docker/postgres/init/001_roles.sql and
       # cannot pass the server flags compose sets (wal_level, pg_stat_statements,
-      # which the init script requires). Starting the compose service instead runs
-      # the identical image, flags, roles and databases developers use locally.
-      - name: Start Postgres (docker compose, same as `make infra-up`)
-        run: docker compose up -d --wait postgres
+      # which the init script requires). Starting the compose services instead
+      # runs the identical images, flags, roles and databases developers use
+      # locally. This used to start postgres alone; see the env block above.
+      - name: Start the local stack (docker compose, same as `make infra-up`)
+        run: make infra-up
       - name: Integration tests (migration suite excluded, see the migrations job)
         # `make integration` is ./test/integration/..., which still includes the
         # migration suite; until that target takes a package list, the exclusion
@@ -267,6 +290,24 @@ jobs:
             echo "::endgroup::"
           done < /tmp/intpkgs.txt
           exit "$fails"
+      - name: Prove nothing skipped for a missing dependency
+        # The positive control for the env block above. `deps` fails rather than
+        # skips in this job, so a skip here can only come from a test that opted
+        # out for its own reasons -- but a count of zero external-dependency
+        # skips is the thing worth asserting, and asserting it is what stops the
+        # variables being quietly dropped again.
+        run: |
+          set -euo pipefail
+          for pkg in ./internal/reality ./internal/reality/redpandabus ./internal/archive ./internal/workflows ./internal/ratelimit; do
+            eval "$(go run ./scripts/testdb -name "ci_dep_$(echo "$pkg" | tr '/.-' '___' | tail -c 24)" -export)"
+            out="$(go test -count=1 -timeout=15m -tags=integration -v "$pkg" 2>&1 || true)"
+            if echo "$out" | grep -q 'not set; skipping\|is unreachable'; then
+              echo "::error::$pkg skipped for a missing dependency in a job that promised one"
+              echo "$out" | grep 'not set; skipping\|is unreachable'
+              exit 1
+            fi
+            echo "$pkg: no dependency skips"
+          done
       - name: Race detector over the financial core, WITH the integration tag
         # `make race` runs the same packages without -tags=integration, so it
         # only ever raced the in-memory tests. Every database-backed

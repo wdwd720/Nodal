@@ -6,8 +6,8 @@ Severity: SEV3 by default; SEV2 if LIVE-mode strategies depend on ClickHouse-ser
 
 - ClickHouse unreachable, TLS failure (`CLICKHOUSE_TLS` mandatory in STAGING/PROD), disk full, merge backlog; ingest consumer lag on market/decision topics.
 - Analytics, backtests, performance pages and strategy decision analysis failing or stale.
-- Strategy runs skipping with `MISSING_DEPENDENCY`/`STALE_DATA` for dependencies served from ClickHouse (PENDING: `internal/agent`, `internal/reality`).
-- PENDING: alarms (`infra/terraform/modules/observability`); PENDING: the ingest worker and ClickHouse client wiring (`cmd/market-ingest-worker`, `internal/reality`); the DDL is in `docs/architecture/POINT_IN_TIME.md` Appendix A.
+- Strategy runs skipping with `MISSING_DEPENDENCY`/`STALE_DATA` for dependencies served from ClickHouse (`internal/agent`, `internal/reality`).
+- BLOCKED_EXTERNAL: alarms (`infra/terraform/modules/observability`); the ingest worker and the ClickHouse client are wired (`cmd/market-ingest-worker`, `internal/reality`); the DDL is applied by `reality.ClickHouseStore.EnsureSchema` and mirrored in `docs/architecture/POINT_IN_TIME.md` Appendix A.
 
 ## Blast radius
 
@@ -20,15 +20,15 @@ PART 158: **live financial trading may continue if the required critical data re
 
 ## Immediate actions (first 10 minutes)
 
-1. Confirm the money path has no ClickHouse dependency in the current build: `SELECT max(posted_at) FROM journal_transactions;` advancing; risk decisions still being recorded (`SELECT max(decided_at) FROM risk_decisions;` — column per `internal/risk` store); `/readyz` (PENDING: `cmd/api`) does not consult ClickHouse.
-2. Identify strategies at risk (PENDING: `internal/agent`; the tables exist):
+1. Confirm the money path has no ClickHouse dependency in the current build: `SELECT max(posted_at) FROM journal_transactions;` advancing; risk decisions still being recorded (`SELECT max(decided_at) FROM risk_decisions;` — column per `internal/risk` store); `/readyz` does not consult ClickHouse.
+2. Identify strategies at risk (`internal/agent`):
    ```sql
    SELECT a.id, a.mode, a.status FROM agents a WHERE a.status = 'ACTIVE' AND a.mode IN ('CANARY','LIMITED','LIVE');
-   SELECT agent_id, skip_reason, count(*) FROM agent_runs WHERE created_at > now() - interval '15 minutes' GROUP BY 1,2;
+   SELECT agent_id, skip_reason, count(*) FROM agent_runs WHERE created_at > now - interval '15 minutes' GROUP BY 1,2;
    ```
    A rising `MISSING_DEPENDENCY`/`STALE_DATA` skip count is the expected, safe outcome.
-3. Decide on pausing: if any LIVE/LIMITED agent has open orders and a dependency on ClickHouse-served data for its *exit* logic, pause it with `AGENT_PAUSE(<agent_id>)` (STANDARD; `kill:activate` or `agent:pause`): `POST /admin/kill-switches {"kind":"AGENT_PAUSE","scope_id":"<agent_id>","action":"activate","reason":"<INC-id>: analytics dependency unavailable"}` (PENDING `cmd/api`). Pausing never cancels or closes positions by itself; `open_orders_policy` on `agent_pauses` governs cancellable orders only.
-4. Check ClickHouse itself (managed console, PENDING EB-014; locally `docker compose ps clickhouse`, `make infra-logs`): disk, replication, merges, `system.errors`.
+3. Decide on pausing: if any LIVE/LIMITED agent has open orders and a dependency on ClickHouse-served data for its *exit* logic, pause it with `AGENT_PAUSE(<agent_id>)` (STANDARD; `kill:activate` or `agent:pause`): `POST /admin/kill-switches {"kind":"AGENT_PAUSE","scope_id":"<agent_id>","action":"activate","reason":"<INC-id>: analytics dependency unavailable"}`. Pausing never cancels or closes positions by itself; `open_orders_policy` on `agent_pauses` governs cancellable orders only.
+4. Check ClickHouse itself (managed console, BLOCKED_EXTERNAL EB-014; locally `docker compose ps clickhouse`, `make infra-logs`): disk, replication, merges, `system.errors`.
 5. Announce: "analytics store outage; trading path unaffected; strategies depending on analytics are skipping/paused; backtests and performance views stale since <time>".
 
 ## Diagnosis

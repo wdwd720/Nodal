@@ -6,10 +6,10 @@ Severity: SEV1 for signing/wallet-provider credentials, database credentials, KM
 
 - `make secrets` (gitleaks) or the CI `security-scans` job reports a finding; a secret pasted in a ticket, chat, log line, screenshot, or a public repository.
 - A log line that should have been redacted (the denylist in `observability.deniedKeys` covers `private_key`, `seed`, `mnemonic`, `secret`, `token`, `api_key`, `webhook_secret`, `signing_token`, PEM blocks, `Bearer` values, 87–88-char base58 strings; a struct dump bypasses it by design).
-- Provider notice of credential misuse, `provider_credential_change` (PENDING emitter), unexpected usage/billing on a provider key.
+- Provider notice of credential misuse, `provider_credential_change` (PENDING emitter -- nothing writes this kind today), unexpected usage/billing on a provider key.
 - A Helius URL shared with its API key (the key travels in the query string on every host; `docs/api/providers/helius.md`).
 - Compromised developer or operator machine holding `.env`/`file://` secrets (LOCAL/DEV only by validation rule `SECRET_REF_SCHEME`; plain values are rejected outside LOCAL/TEST).
-- PENDING: the `aws-sm://` resolver, IAM task roles and Terraform secrets module wiring (EB-012); CI has never run (SB-004), so gitleaks has never scanned history in CI.
+- **BLOCKED_EXTERNAL:** the `aws-sm://` resolver, IAM task roles and Terraform secrets module wiring (EB-012). SB-004 is closed and CI runs, so gitleaks scans history there.
 
 ## Blast radius
 
@@ -31,8 +31,8 @@ Nothing in this table can enable live money by itself: a capability gate needs a
 
 ## Immediate actions (first 10 minutes)
 
-1. Classify the secret using the table; for SEV1 classes activate the containing switch now: signing ⇒ `GLOBAL_NEW_RISK_KILL` + `PROVIDER_DISABLE_NEW_ACTIONS(<wallet provider>)`; funding ⇒ `FUNDING_DISABLE(*)`; execution ⇒ `PROVIDER_DISABLE_NEW_ACTIONS(jupiter)`; database ⇒ `GLOBAL_NEW_RISK_KILL`. All `kill:activate`, `POST /admin/kill-switches` (PENDING `cmd/api`).
-2. Rotate at the source of truth first (provider console, RDS/Secrets Manager, IdP), then update the `SecretRef` target (`aws-sm://name` — PENDING resolver; `env://NAME` in the task definition), then restart the holding binaries. Never edit images, never commit values; `Config.Hash` excludes secret values so `/version` will not change (`TestHash_StableAndExcludesSecrets`).
+1. Classify the secret using the table; for SEV1 classes activate the containing switch now: signing ⇒ `GLOBAL_NEW_RISK_KILL` + `PROVIDER_DISABLE_NEW_ACTIONS(<wallet provider>)`; funding ⇒ `FUNDING_DISABLE(*)`; execution ⇒ `PROVIDER_DISABLE_NEW_ACTIONS(jupiter)`; database ⇒ `GLOBAL_NEW_RISK_KILL`. All `kill:activate`, `POST /admin/kill-switches`.
+2. Rotate at the source of truth first (provider console, RDS/Secrets Manager, IdP), then update the `SecretRef` target (`aws-sm://name` — BLOCKED_EXTERNAL: the resolver; `env://NAME` in the task definition), then restart the holding binaries. Never edit images, never commit values; `Config.Hash` excludes secret values so `/version` will not change (`TestHash_StableAndExcludesSecrets`).
 3. Revoke the old credential explicitly (deleting a Secrets Manager version does not revoke a provider key).
 4. Identify where the value travelled: git history (`make secrets` over the full history; `.gitleaks.toml` allow-lists only `cp_*_local`), logs (search the log store for the value's prefix; the redaction denylist is enforced in `NewLogger`, so a hit means a struct dump or a non-logger sink), tickets/chat, provider dashboards, CI artifacts.
 5. For operator/customer sessions: `auth.Manager.RevokeAllForSubject` (`session:revoke_any`).
@@ -41,13 +41,13 @@ Nothing in this table can enable live money by itself: a capability gate needs a
 ## Diagnosis
 
 - Provider-side usage logs for the exposure window: source IPs, request counts, endpoints; compare with our egress. Signing provider: every request must correspond to a `signing_decisions` row with `provider_sign_ref`.
-- Database: `pg_stat_activity` history and RDS logs for the role; `pg_stat_user_tables` mutation counters on journal tables; audit chain verification (`make verify-audit`, PENDING `cmd/audit-worker`; `audit.Verifier.VerifyStream`).
+- Database: `pg_stat_activity` history and RDS logs for the role; `pg_stat_user_tables` mutation counters on journal tables; audit chain verification (`make verify-audit`, which runs `cmd/audit-worker verify` over `audit.Verifier.VerifyStream`).
 - Gates/kill switches/admin actions in the window (a leaked `cp_app` credential could attempt bare state changes; migration 00603 refuses them with `AU001`, so failures are visible in DB logs).
 - How it leaked: `file://` or plain secrets outside LOCAL/TEST are rejected by `config.Validate`, so a production leak implies the environment store, a developer machine with production access, or a provider dashboard.
 
 ## Containment and recovery
 
-1. Complete rotation for every binary that held the secret (SYSTEM.md §2 table: one task role per binary; PENDING Terraform).
+1. Complete rotation for every binary that held the secret (SYSTEM.md §2 table: one task role per binary; BLOCKED_EXTERNAL: Terraform).
 2. Run the class-specific runbook to the end: chain scan for signing, webhook/deposit invariants for funding, reconciliation for database.
 3. If git history contains the secret: rewrite is optional (the credential is already revoked), but the finding stays in the incident record; add the pattern to gitleaks if it was missed.
 4. If logs contained it: purge per retention policy (`Retention.OperationalLogDays`), fix the logging site to log through attributes (`observability.Secret` never renders), add a redaction test.
@@ -63,7 +63,7 @@ Nothing in this table can enable live money by itself: a capability gate needs a
 
 ## Verification / exit criteria
 
-- Old credential confirmed revoked at the provider/store; new credential in use by every holder (restart timestamps, `/version` config hash unchanged, `/readyz` green — PENDING `cmd/api`).
+- Old credential confirmed revoked at the provider/store; new credential in use by every holder (restart timestamps, `/version` config hash unchanged, `/readyz` green).
 - Provider usage after revocation shows zero requests with the old credential.
 - Class-specific runbook exit criteria met (chain scan clean, deposit invariants hold, audit chain verifies).
 - Log store and repositories searched; findings recorded; gitleaks pattern updated if needed.

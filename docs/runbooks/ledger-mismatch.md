@@ -8,7 +8,7 @@ Severity: SEV1 (ledger integrity violation; unexplained financial mismatch; glob
 - SEV1 unexplained mismatch: `reconciliation_mismatches` counter with a `kind = WALLET_BALANCE | EXECUTION | FUNDING | POSITION_LEDGER` record where `material = true` and no enumerated automatic cause applies.
 - SEV1 global drift: `oldest_unresolved_mismatch` gauge above risk policy `max_unresolved_age` (PART 158).
 - `ledger_posting_errors` counter rising (postings rejected by triggers `LG001`–`LG005` or `LEDGER_NEGATIVE_BALANCE`).
-- PENDING: alarm rules for these metrics (`infra/terraform/modules/observability`); the instruments exist in `internal/observability/metrics.go`. PENDING: the reconciliation engine that opens the records (`internal/reconciliation`); the verifiers `ledger.VerifyBalances`, `positions.VerifyAgainstLedger`, `capital.VerifyReservationTotals` exist but are unscheduled.
+- BLOCKED_EXTERNAL: alarm rules for these metrics (`infra/terraform/modules/observability`); the instruments exist in `internal/observability/metrics.go`. The reconciliation engine that opens the records is built (`internal/reconciliation`, driven by `cmd/reconciliation-worker`). PENDING: the verifiers `ledger.VerifyBalances`, `positions.VerifyAgainstLedger` and `capital.VerifyReservationTotals` exist but nothing schedules them.
 
 ## Blast radius
 
@@ -26,7 +26,7 @@ Severity: SEV1 (ledger integrity violation; unexplained financial mismatch; glob
     WHERE status IN ('MISMATCH','INVESTIGATING','ESCALATED')
     ORDER BY material DESC, opened_at;
    ```
-2. If any record is `kind = LEDGER_INTERNAL`, or mismatches span more than one account without a common external cause: activate `GLOBAL_NEW_RISK_KILL` per [global-kill-and-reenable.md](./global-kill-and-reenable.md) (`POST /admin/kill-switches {"kind":"GLOBAL_NEW_RISK_KILL","scope_id":"*","action":"activate","reason":"<INC-id>: ledger integrity"}`; PENDING `cmd/api`).
+2. If any record is `kind = LEDGER_INTERNAL`, or mismatches span more than one account without a common external cause: activate `GLOBAL_NEW_RISK_KILL` per [global-kill-and-reenable.md](./global-kill-and-reenable.md) (`POST /admin/kill-switches {"kind":"GLOBAL_NEW_RISK_KILL","scope_id":"*","action":"activate","reason":"<INC-id>: ledger integrity"}`).
 3. If it is one account: `POST /admin/kill-switches {"kind":"ACCOUNT_FREEZE","scope_id":"<account_id>","action":"activate","reason":"..."}` (STANDARD, `kill:activate`), and ask COMPLIANCE to set `POST /admin/accounts/{accountId}/status {"to":"FROZEN","reason":"..."}` so the account status and the switch agree.
 4. Rule out direct mutation of the journal (the application role cannot, the migrate role can):
    ```sql
@@ -52,14 +52,14 @@ Severity: SEV1 (ledger integrity violation; unexplained financial mismatch; glob
 - **Unknown activity.** If `observed` shows a wallet delta with no matching attempt or deposit, this is [unknown-transaction.md](./unknown-transaction.md), not a ledger bug.
 - **Observer disagreement.** If the two observers differ, follow [rpc-disagreement.md](./rpc-disagreement.md) first; a ledger figure cannot be corrected against uncertain external truth.
 - **Reversal/deficit.** A `DEFICIT` credit balance after a funding reversal is expected (FINANCIAL_MODEL.md §2.2); confirm via `journal_transactions WHERE kind IN ('FUNDING_REVERSAL','FUNDING_REVERSAL_DEFICIT')` before treating it as drift.
-- **Audit trail.** `audit_events WHERE stream = 'account:<id>' ORDER BY stream_seq` around `opened_at`; `make verify-audit` (PENDING: `cmd/audit-worker`; run `audit.Verifier.VerifyStream` meanwhile). A chain break is evidence of tampering or corruption.
+- **Audit trail.** `audit_events WHERE stream = 'account:<id>' ORDER BY stream_seq` around `opened_at`; `make verify-audit` (run `audit.Verifier.VerifyStream` meanwhile). A chain break is evidence of tampering or corruption.
 - **Dust.** Differences below the asset `dust_threshold` are `RESOLVED_AUTOMATIC` with a `RECONCILIATION_ADJUSTMENT`, or recorded as `MATCHED_WITH_DUST`; they are never SEV1.
 
 ## Containment and recovery
 
 Financial repair is always a new, balanced, reason-coded journal transaction; balances are never edited (PART 129, 195).
 
-1. FINANCE (holding `reconciliation:resolve`) moves the record to `INVESTIGATING` with a note (`Resolver.Investigate`; PENDING engine) and collects evidence: both observations, ledger slice, fills, attempts, audit slice; store them in the evidence archive and quote their hashes.
+1. FINANCE (holding `reconciliation:resolve`) moves the record to `INVESTIGATING` with a note (`Resolver.Investigate`) and collects evidence: both observations, ledger slice, fills, attempts, audit slice; store them in the evidence archive and quote their hashes.
 2. Propose the material resolution (step-up ≤ 15 min; expires 4 h):
    ```http
    POST /admin/actions
@@ -70,14 +70,14 @@ Financial repair is always a new, balanced, reason-coded journal transaction; ba
 4. Resolve, quoting the approval; the service posts the compensating `JournalTransaction` (`kind = RECONCILIATION_ADJUSTMENT` or `COMPENSATION`, `reversal_of` where applicable) and links it in `compensating_journal_transaction_id`:
    ```http
    POST /admin/reconciliation/records/{recordId}/resolve
-   {"reason":"<INC-id>: ...","evidence_ref":"<archive uri>","approval_id":"<actionId>",
-    "compensation":{"reason_code":"<code>","entries":[{"account_code":"...","asset":"<asset_id>","side":"DEBIT","quantity":"..."}, ...]}}
+   {"reason":"<INC-id>:...","evidence_ref":"<archive uri>","approval_id":"<actionId>",
+    "compensation":{"reason_code":"<code>","entries":[{"account_code":"...","asset":"<asset_id>","side":"DEBIT","quantity":"..."},...]}}
    ```
    If the correction is not tied to a reconciliation record, use `LEDGER_CORRECTION` instead (FINANCE proposes with `ledger:post_correction`, step-up ≤ 5 min; a break-glass `ledger:approve_correction` holder approves; expires 4 h).
 5. Once every material record is `RESOLVED_MANUAL`, `blocks_new_risk` clears for the account; release `ACCOUNT_FREEZE` (`kill:release` + step-up) and, if used, the global kill via its dual-controlled path. `ACCOUNT_UNFREEZE` is a single COMPLIANCE operator admin action with step-up.
 6. If drift recurs or the cause is storage-level, go to [database-corruption.md](./database-corruption.md).
 
-PENDING: `internal/reconciliation` (`Resolver`), `cmd/api`; `admin.Actions` and the ledger poster with the `RECONCILIATION_ADJUSTMENT`/`COMPENSATION` kinds exist.
+`internal/reconciliation` (`Resolver`) and the resolve endpoint are wired; `admin.Actions` and the ledger poster with the `RECONCILIATION_ADJUSTMENT`/`COMPENSATION` kinds exist. The API refuses a `COMPENSATION` resolution by name as `UNSUPPORTED`: posting a compensating transaction from an HTTP handler is a decision for the ledger path, not the reconciliation one.
 
 ## What NOT to do
 
@@ -89,7 +89,7 @@ PENDING: `internal/reconciliation` (`Resolver`), `cmd/api`; `admin.Actions` and 
 
 ## Verification / exit criteria
 
-- `ledger.VerifyBalances`, `positions.VerifyAgainstLedger`, `capital.VerifyReservationTotals` report zero drift (PENDING: a scheduled job and an operator-runnable command; today an engineer runs them from a Go program).
+- `ledger.VerifyBalances`, `positions.VerifyAgainstLedger`, `capital.VerifyReservationTotals` report zero drift (PENDING: nothing schedules them; an engineer runs them from a Go program).
 - Every material record is `RESOLVED_MANUAL` with `approval_id`, `resolution_evidence_ref` and `compensating_journal_transaction_id` set; `blocks_new_risk = false`.
 - `oldest_unresolved_mismatch` is below policy; `RISK_RECONCILIATION_PENDING` rejections stop.
 - Audit chain verifies across the incident window.

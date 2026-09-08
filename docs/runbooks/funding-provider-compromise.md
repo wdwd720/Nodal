@@ -4,11 +4,27 @@ Severity: SEV1 when a credit path is affected (forged or replayed events reachin
 
 ## Trigger
 
-- `webhook_signature_failed` bursts (PENDING emitter; today `provider_events.signature_verified = false` rows with `verification_error` are the signal), replayed `provider_event_id`s (`provider_duplicate_events` rising).
+- `webhook_signature_failed` bursts. `internal/webhook` writes one `security_events` row at severity HIGH for every event whose signature does not verify:
+
+  ```sql
+  SELECT date_trunc('minute', occurred_at) AS minute, count(*), detail->>'reason'
+    FROM security_events
+   WHERE kind = 'webhook_signature_failed' AND detail->>'provider' = '<provider>'
+     AND occurred_at > now - interval '6 hours'
+   GROUP BY 1, 3 ORDER BY 1 DESC;
+  ```
+
+  This line used to say the emitter was PENDING and to look for
+  `provider_events.signature_verified = false` rows instead. That query returns
+  nothing however bad the incident is: an event whose signature fails is
+  rejected *before* any `provider_events` row is written, so the column is
+  `true` on every row that exists. A detection query that cannot fire is worse
+  than no query at all, because it answers (F-55).
+- Replayed `provider_event_id`s (`provider_duplicate_events` rising).
 - A deposit that reached `AVAILABLE` without a chain receipt (`deposits.tx_signature IS NULL` or `observed_quantity IS NULL` while `status = 'AVAILABLE'`) — impossible by design (RECONCILIATION.md §5) and therefore a SEV1 signal.
-- Provider breach notice; webhook secret or API key rotation not initiated by us (`provider_credential_change`, PENDING emitter); provider dashboard sessions with unknown origin.
-- Provider outage: onramp sessions failing to create, webhooks stopped, status polls erroring; provider health `UNHEALTHY` in `/admin/providers` (PENDING `cmd/api`) / `provider_health_samples` role `FUNDING`.
-- PENDING: alarms. Implemented: Stripe client and webhook verifier (`internal/provider/stripe`, `internal/webhook`), `test/contract/stripe`, funding state machine and reversal (`internal/funding`).
+- Provider breach notice; webhook secret or API key rotation not initiated by us (`provider_credential_change`, PENDING emitter -- nothing writes this kind today); provider dashboard sessions with unknown origin.
+- Provider outage: onramp sessions failing to create, webhooks stopped, status polls erroring; provider health `UNHEALTHY` in `/admin/providers` / `provider_health_samples` role `FUNDING`.
+- BLOCKED_EXTERNAL: alarms. Implemented: Stripe client and webhook verifier (`internal/provider/stripe`, `internal/webhook`), `test/contract/stripe`, funding state machine and reversal (`internal/funding`).
 
 ## Blast radius
 
@@ -19,14 +35,14 @@ Severity: SEV1 when a credit path is affected (forged or replayed events reachin
 
 ## Immediate actions (first 10 minutes)
 
-1. Stop new funding sessions: `POST /admin/kill-switches {"kind":"FUNDING_DISABLE","scope_id":"*","action":"activate","reason":"<INC-id>: funding provider compromise/outage"}` (SEVERE; `kill:activate`; PENDING `cmd/api`). Also `PROVIDER_DISABLE_NEW_ACTIONS(<funding provider>)` if you need to stop status polling writes but keep observation (it never blocks reads).
-2. Rotate the webhook signing secret and API key through the `SecretRef` indirection (PENDING `aws-sm://` resolver); the verifier fails closed on an unknown secret, so rotate at the provider **first**, then the platform, and expect a short window of `signature_verified = false` rows which are safe (they are ignored, never processed).
+1. Stop new funding sessions: `POST /admin/kill-switches {"kind":"FUNDING_DISABLE","scope_id":"*","action":"activate","reason":"<INC-id>: funding provider compromise/outage"}` (SEVERE; `kill:activate`). Also `PROVIDER_DISABLE_NEW_ACTIONS(<funding provider>)` if you need to stop status polling writes but keep observation (it never blocks reads).
+2. Rotate the webhook signing secret and API key through the `SecretRef` indirection (BLOCKED_EXTERNAL `aws-sm://` resolver); the verifier fails closed on an unknown secret, so rotate at the provider **first**, then the platform, and expect a short window of `signature_verified = false` rows which are safe (they are ignored, never processed).
 3. Read the webhook evidence (read-only):
    ```sql
    SELECT provider, event_type, signature_verified, verification_error, processing_status, count(*), min(received_at), max(received_at)
-     FROM provider_events WHERE received_at > now() - interval '24 hours' GROUP BY 1,2,3,4,5 ORDER BY 6 DESC;
+     FROM provider_events WHERE received_at > now - interval '24 hours' GROUP BY 1,2,3,4,5 ORDER BY 6 DESC;
    SELECT id, account_id, status, expected_quantity, observed_quantity, tx_signature, provider_confirmed_at, settlement_observed_at, reconciled_at, available_at
-     FROM deposits WHERE updated_at > now() - interval '24 hours' ORDER BY updated_at DESC;
+     FROM deposits WHERE updated_at > now - interval '24 hours' ORDER BY updated_at DESC;
    ```
 4. Assert the invariant: `SELECT count(*) FROM deposits WHERE status IN ('RECONCILED','AVAILABLE') AND (tx_signature IS NULL OR observed_quantity IS NULL OR journal_transaction_id IS NULL);` must be 0. If not: `GLOBAL_NEW_RISK_KILL` ([global-kill-and-reenable.md](./global-kill-and-reenable.md)) and freeze the affected accounts; this is SEV1.
 5. Check whether reversals are also arriving (a compromise often shows as disputes later): [chargeback-reversal.md](./chargeback-reversal.md).

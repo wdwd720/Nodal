@@ -5,10 +5,10 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [rpc-disagreem
 ## Trigger
 
 - Provider health for the `OBSERVATION`/`DATA` role reaches `UNHEALTHY` (error rate ≥ 50 % of calls in the window, p95 ≥ 8 s, or no successful sample for 30 s — `provider.DefaultThresholds`; production values are configuration) or `DEGRADED` for a sustained period.
-- `ingest_checkpoints.status = 'DISCONNECTED'` for the Helius wallet/program event stream; `stream_gaps` rows of kind `RECONNECT`/`SILENCE` (PENDING: ingestion worker).
+- `ingest_checkpoints.status = 'DISCONNECTED'` for the Helius wallet/program event stream; `stream_gaps` rows of kind `RECONNECT`/`SILENCE` (`cmd/market-ingest-worker`).
 - `confirmation_latency`/`finality_latency` histograms stretching; `data_freshness` breaching strategy `max_age_ms`; `RISK_STALE_DATA` rejections rising.
 - Helius status page / rate-limit (`429`) or plan-gating errors; webhook deliveries stopping (they retry only 3× at 1 s and are then permanently lost, so they are a hint, never truth).
-- PENDING: alarms; the health tracker (`internal/provider/health.go`), the Helius client (`internal/provider/helius`) and the fallback RPC (`internal/provider/solanarpc`) exist.
+- BLOCKED_EXTERNAL: alarms; the health tracker (`internal/provider/health.go`), the Helius client (`internal/provider/helius`) and the fallback RPC (`internal/provider/solanarpc`) exist.
 
 ## Blast radius
 
@@ -19,10 +19,10 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [rpc-disagreem
 
 ## Immediate actions (first 10 minutes)
 
-1. Confirm the fallback is healthy and independent: `GET /admin/providers` (PENDING `cmd/api`) or
+1. Confirm the fallback is healthy and independent: `GET /admin/providers` or
    ```sql
    SELECT provider, role, state, error_rate_bps, p99_latency_ms, staleness_ms, reason_codes, evaluated_at
-     FROM provider_health_samples WHERE evaluated_at > now() - interval '10 minutes' ORDER BY evaluated_at DESC LIMIT 20;
+     FROM provider_health_samples WHERE evaluated_at > now - interval '10 minutes' ORDER BY evaluated_at DESC LIMIT 20;
    ```
    If the fallback RPC is also unhealthy, treat as a chain-observation blackout: activate `CHAIN_DISABLE_NEW_ACTIONS(solana)` (SEVERE; `kill:activate`) so no new submission is made blind; observation keeps being attempted.
 2. Do **not** activate `PROVIDER_DISABLE_NEW_ACTIONS(helius)` for a plain outage: the health tracker already stops relying on it and hysteresis (`RecoverStreak`) brings it back safely. Activate it only if Helius returns *wrong* data (see [rpc-disagreement.md](./rpc-disagreement.md)); an operator `DISABLED` state is not lifted by observation (`TestTracker_DisableOverridesObservation`).
@@ -43,7 +43,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [rpc-disagreem
 2. If `CHAIN_DISABLE_NEW_ACTIONS` was activated (both observers down), release it via the dual-controlled `KILL_SWITCH_RELEASE` path once at least the fallback is healthy and the agreement policy can resolve in-flight attempts.
 3. Trigger periodic reconciliation for the outage window on every active wallet (`Engine.RunPeriodic(provider, since)`, PENDING engine) so any activity missed by the stream is found; expect `finality upgrade` auto-resolutions (`OBSERVED → FINALIZED`, no economic change).
 4. Funding availability resumes automatically once both observers agree on the receipts.
-5. Replay the market-data gap from the raw archive if `supports_replay` (PENDING: `internal/reality`); otherwise record `stream_gaps` as `UNRECOVERABLE` and label affected backtests.
+5. Replay the market-data gap from the raw archive if `supports_replay` (`internal/reality`); otherwise record `stream_gaps` as `UNRECOVERABLE` and label affected backtests.
 
 ## What NOT to do
 

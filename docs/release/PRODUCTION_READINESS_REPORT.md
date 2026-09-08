@@ -195,10 +195,10 @@ had ever been evaluated.
 | The order form never defaults the minimum output to the quote | it starts empty; a default equal to the quote is a zero slippage tolerance that would refuse every trade |
 | Create Asset and the market pages pass the rendered-text honesty scan and the WCAG scan | both suites cover `/create-asset` |
 
-Browser suite: **69 tests, consecutive clean runs**, against a production `vite build`
+Browser suite: **70 tests, consecutive clean runs**, against a production `vite build`
 served by `vite preview`, proxying to the real `cmd/api` on a seeded database. Sign-in is the real
 OIDC round trip. The run needs the transport rate limits raised
-(`CP_API_RATE_LIMIT_*=100000/1m`) because a 66-test suite is not a person; the limiter correctly
+(`CP_API_RATE_LIMIT_*=100000/1m`) because a 70-test suite is not a person; the limiter correctly
 refuses to be disabled in a production-like environment.
 
 ### Fault injection (Stage 20)
@@ -344,7 +344,7 @@ proven backup.
 | The purchase appears in the customer's own list, and the card says so in words | asserts the card's own "Bought." notice, not a status code |
 | With the capability off, the refusal names it and nothing moves | **observed**: the same test takes its refusal branch, asserts `CAPABILITY_NOT_APPROVED` and `MARKETPLACE`, and checks the balance did not change |
 
-Until this session no browser test completed a transaction. 69 tests covered
+Until this session no browser test completed a transaction. The suite covered
 rendering, navigation, accessibility and the honesty rules — every one a
 statement about a page at rest. The closest thing to a transaction was a
 heading being visible.
@@ -444,6 +444,54 @@ collapsed again. Everything below is *run here* unless it says otherwise.
 Every new suite was run **twice against the same database** before being believed. That rule caught
 two defects in this migration alone (F-08, F-13) and had caught a real key-rotation defect in an
 earlier one.
+
+### The suites that were reporting a pass without running (F-57)
+
+The Integration row above hid five packages. `internal/reality` (ClickHouse),
+`internal/reality/redpandabus` (Redpanda), `internal/archive` (MinIO), `internal/workflows`
+(Temporal) and `internal/ratelimit` (Redis) each guarded themselves with a `t.Skip` when their
+service was not addressed, and CI's `integration` job started Postgres alone. They were enumerated,
+invoked, skipped, and counted as passing — while fifteen VERIFIED rows in
+`REQUIREMENTS_TRACEABILITY.md` cited those exact tests as their evidence, including the Stage 11
+exit criterion, which is met entirely by two ClickHouse look-ahead-leakage tests.
+
+`make property` had the same shape from the other direction: it runs
+`go test -run 'Prop|Property' ./internal/...` with no build tag, so it could not compile the ten
+packages holding database-backed properties and silently ran none of them, while being cited as the
+operational evidence for R-150-1.
+
+| Suite | Command | Result |
+|---|---|---|
+| External-dependency integration | `go run ./scripts/inttest` with the five addresses exported and `CP_TEST_REQUIRE_EXTERNAL_DEPS=1` | all five packages ok against the live stack; `internal/reality` **36 tests, zero skips**, both look-ahead-leakage tests among them |
+| Property (database-backed) | `go run ./scripts/inttest -run 'Prop\|Property'` | **10 packages, 2m39s, all ok** — capital conservation, reservation oversubscription, reconciliation convergence, the ClickHouse point-in-time snapshot |
+
+`internal/testkit/deps` is what stops this recurring: a job that sets
+`CP_TEST_REQUIRE_EXTERNAL_DEPS` gets a **failure** rather than a skip when a dependency is missing,
+and the `integration` job now runs `make infra-up` and sets it. Observed in both directions —
+`TestIntegration_S3_PutGetHeadListRoundTrip` fails naming the variable when the endpoint is absent
+and the promise is set, and passes when it is present.
+
+### Documents as controls (F-54, F-55)
+
+A readiness decision is made from documents, so the documents were audited the way the code has
+been. Five derivable counts had gone stale, including a restore drill last run at schema version
+604 — a hundred and eleven migrations earlier, describing a database with no Domain A tables in it.
+The runbooks carried 140 `PENDING` markers and every one naming a package, binary or route named
+something that exists; all fifteen HTTP routes they tell an operator to call are served, and twelve
+of them sat under a marker saying they were not.
+
+Four checks now run in the fast tier, and each was observed failing on a planted defect:
+
+| Check | Holds |
+|---|---|
+| `TestDocs_CountsMatchTheCode` | capability, high-risk, permission and migration-version claims against the code that produces them |
+| `TestDocs_NothingMarkedPendingAlreadyExists` | a `PENDING` marker may not name something on disk |
+| `TestDocs_EveryRunbookRouteIsServed` | a runbook may not tell an operator to call a route the spec does not declare |
+| `TestDocs_EveryTestTheyNameExists` | widened to both readiness reports and `REQUIREMENTS_TRACEABILITY.md` |
+
+The restore drill was re-run rather than re-described: version 719 on both sides, 118 tables, row
+counts identical, zero balance drift, journal hashes equal, 11.0 s — and it fails the counts check
+whenever a migration lands without the drill being re-run, which it did twice during this session.
 
 ## 3. What is NOT ready, stated plainly
 

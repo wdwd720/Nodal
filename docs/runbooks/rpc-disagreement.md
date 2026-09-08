@@ -8,7 +8,7 @@ Severity: SEV2 (chain-data disagreement); SEV1 if a material, unexplained financ
 - Reconciliation opens `kind = EXECUTION` or `WALLET_BALANCE` records with both observations in `observed` and `blocks_new_risk = true` (RECONCILIATION.md §3 step 2); orders move to `RECONCILIATION_REQUIRED`.
 - `reconciliation_mismatches` counter rising with a chain-observation cause; `wallet_balance_observations` for one (wallet, asset) differing by `source` at the same slot.
 - Helius says `CONFIRMED`/`FINALIZED` while the fallback RPC says not found (the PART 196 case), or vice versa.
-- PENDING: the reconciliation engine that records these; alarms. Implemented: `chain.AgreementPolicy`, `MultiObserver` (`internal/chain`), both observer adapters.
+- The reconciliation engine that records these is built (`internal/reconciliation`). **BLOCKED_EXTERNAL:** alarms. Implemented: `chain.AgreementPolicy`, `MultiObserver` (`internal/chain`), both observer adapters.
 
 ## Blast radius
 
@@ -27,7 +27,7 @@ Severity: SEV2 (chain-data disagreement); SEV1 if a material, unexplained financ
    SELECT id, order_id, status, tx_signature, last_valid_block_height, submitted_at FROM execution_attempts
     WHERE order_id IN (SELECT id FROM orders WHERE status = 'RECONCILIATION_REQUIRED');
    ```
-2. Determine whether it is one observer being wrong at scale: count `DISAGREED` resolutions per hour and which side is the odd one out (`Differences`, `Primary`/`Secondary` in the record). If one observer is systematically wrong: `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"<observer>","action":"activate","reason":"<INC-id>: returning inconsistent chain data"}` (SEVERE; `kill:activate`; PENDING `cmd/api`) and set its health `DISABLED` (`provider:disable`), so the agreement policy treats it as unavailable (single-observer mode, capped at `CONFIRMED`) instead of poisoning resolutions. Reads from it continue for evidence.
+2. Determine whether it is one observer being wrong at scale: count `DISAGREED` resolutions per hour and which side is the odd one out (`Differences`, `Primary`/`Secondary` in the record). If one observer is systematically wrong: `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"<observer>","action":"activate","reason":"<INC-id>: returning inconsistent chain data"}` (SEVERE; `kill:activate`) and set its health `DISABLED` (`provider:disable`), so the agreement policy treats it as unavailable (single-observer mode, capped at `CONFIRMED`) instead of poisoning resolutions. Reads from it continue for evidence.
 3. If both observers are healthy and disagree on a *single* signature, it is usually propagation lag or a reorg: wait one finality window before any manual step. `getBlockHeight` on both; a secondary behind the primary by more than the margin is lag.
 4. If the disagreement is on wallet balances broadly (not a single transaction), check for a reorg or an RPC node serving a stale snapshot; compare `slot` in `wallet_balance_observations` per source.
 5. Announce the affected orders/accounts and which observer is suspect.

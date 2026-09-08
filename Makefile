@@ -133,12 +133,20 @@ unit: ## Go unit tests
 	# catches a broken package.
 	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/... ./test/reachability/... ./test/source/...
 
-property: ## Property-based financial tests
+property: ## Property-based financial tests (in-memory and database-backed)
 	# Property tests live beside the code they constrain, named Prop*/Property*,
 	# not in a separate tree. ./test/property/... used to be listed here and does
 	# not exist: `go test` treats a missing package path as a hard error, so this
 	# target failed outright rather than running the property tests it names.
 	$(GO) test -count=1 -timeout=20m -run 'Prop|Property' ./internal/...
+	# The second invocation is the point. Several properties are database-backed
+	# and sit behind //go:build integration -- capital conservation, reservation
+	# oversubscription, reconciliation convergence, balance convergence, the
+	# ClickHouse look-ahead snapshot. The first line cannot compile those files,
+	# so it silently ran none of them, while REQUIREMENTS_TRACEABILITY.md cited
+	# `make property` as the operational evidence for R-150-1 and named those
+	# exact tests (F-57). A target cited as proof has to execute the thing.
+	$(GO) run ./scripts/inttest -run 'Prop|Property'
 
 race: ## Race detector on concurrency-critical packages
 	$(GO) test -count=1 -race -timeout=20m $(RACE_PKGS)

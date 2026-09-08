@@ -7,13 +7,13 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [clickhouse-ou
 - Outbox age / relay lag alarm: rows in `outbox_events` with `published_at IS NULL` older than the alert threshold; `publish_attempts` climbing with `last_error` set.
 - Consumer-group lag on internal topics (`ledger.transaction.posted`, `order.transitioned`, `fill.observed`, `reconciliation.record.transitioned`, `killswitch.changed`, `audit.event.appended`, `security.event`; `internal/event/topics.go`).
 - Broker unreachable / TLS or SASL failures in the relay logs; managed-Redpanda status page.
-- PENDING: the alarms themselves (ADR-0005 "alarms on outbox age and relay lag", `infra/terraform/modules/observability`); the relay reports lag through its `Observer` but no collector is wired. PENDING: the production broker client wiring (`franz-go` is a dependency; the relay and bus interface are in `internal/event` and are tested against the in-memory bus).
+- **BLOCKED_EXTERNAL:** the alarms themselves (ADR-0005 "alarms on outbox age and relay lag", `infra/terraform/modules/observability`); the relay reports lag through its `Observer` but no collector is deployed. The production broker client is wired in `cmd/relay-worker` (`franz-go`; the relay and bus interface are in `internal/event`, tested against both the in-memory bus and a live broker).
 
 ## Blast radius
 
 - **No financial loss by design** (PART 117, ADR-0005): every money-affecting state change commits to Postgres together with its `outbox_events` row; publication is asynchronous and at-least-once. Ledger, reservations, orders, fills, reconciliation and audit keep committing.
-- Degraded: SSE streams and read-model fan-out (`internal/stream` is bus-fed) lag; ClickHouse ingestion of decisions/telemetry stops; agent event triggers (PENDING: `internal/agent`) do not fire, so event-driven strategies pause naturally; notifications dispatch later.
-- Market data and normalised chain events (not outboxed; PENDING: `internal/reality`) stop flowing: strategies depending on them skip with `STALE_DATA`/`MISSING_DEPENDENCY`, which is the intended fail-closed behaviour ([stale-market-data.md](./stale-market-data.md)).
+- Degraded: SSE streams and read-model fan-out (`internal/stream` is bus-fed) lag; ClickHouse ingestion of decisions/telemetry stops; agent event triggers (`internal/agent`) do not fire, so event-driven strategies pause naturally; notifications dispatch later.
+- Market data and normalised chain events (not outboxed; `internal/reality`) stop flowing: strategies depending on them skip with `STALE_DATA`/`MISSING_DEPENDENCY`, which is the intended fail-closed behaviour ([stale-market-data.md](./stale-market-data.md)).
 - Not affected: risk decisions, execution, finality observation, reconciliation (these read Postgres and providers directly).
 
 ## Immediate actions (first 10 minutes)
@@ -26,9 +26,9 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [clickhouse-ou
      FROM outbox_events WHERE published_at IS NULL GROUP BY topic ORDER BY 2 DESC;
    ```
    Rising `unpublished` with `last_error` naming the broker ⇒ bus outage. Rising `unpublished` with no relay errors ⇒ the relay itself is down (restart it).
-2. Confirm the money path is healthy: `SELECT max(posted_at) FROM journal_transactions;` advancing; `/readyz` (PENDING: `cmd/api`) is 200 because readiness never depends on the bus.
+2. Confirm the money path is healthy: `SELECT max(posted_at) FROM journal_transactions;` advancing; `/readyz` is 200 because readiness never depends on the bus.
 3. Do **not** activate any kill switch for a bus outage alone. If trading depends on market data that is no longer arriving, the risk kernel already refuses with `RISK_STALE_DATA`; a `GLOBAL_NEW_RISK_KILL` is only warranted if you find that stale data is *not* being detected (that is a SEV1 defect, not a bus problem).
-4. Check the broker: managed-Redpanda console/status page (PENDING: EB-014 account); locally `docker compose ps redpanda` and `make infra-logs`.
+4. Check the broker: managed-Redpanda console/status page (BLOCKED_EXTERNAL: EB-014 account); locally `docker compose ps redpanda` and `make infra-logs`.
 5. Announce: "bus outage, financial path unaffected, streams/analytics lagging since <oldest unpublished>".
 
 ## Diagnosis
@@ -44,7 +44,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [clickhouse-ou
 1. Restore the broker (managed provider incident, or `docker compose up -d redpanda` locally). No application change is needed for the relay to resume; it republishes every unpublished row.
 2. Watch `unpublished` drain to zero and consumer lag recover. Expect a burst; consumers must not be scaled down during the drain.
 3. If a poison row blocks a key: do not delete it. Fix the consumer/serialiser, or move the row aside via the `cp_ops` housekeeping path (ops may DELETE from outbox/inbox only for cleanup, and only with a ticket and after the payload is archived). Record it.
-4. If the outage exceeded broker retention, expect ClickHouse gaps: open `stream_gaps` rows of kind `SILENCE`/`GAP` (PENDING: ingestion, `internal/reality`) and label affected backtest windows impure; nothing financial needs repair.
+4. If the outage exceeded broker retention, expect ClickHouse gaps: open `stream_gaps` rows of kind `SILENCE`/`GAP` (`internal/reality`) and label affected backtest windows impure; nothing financial needs repair.
 5. Verify SSE clients resynced (`resync` on gap is built into `internal/stream`).
 
 ## What NOT to do
@@ -64,6 +64,6 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [clickhouse-ou
 
 ## Post-incident
 
-- Record outage window, oldest unpublished age reached and drain time; feed them into the alert thresholds (PENDING: alarms).
+- Record outage window, oldest unpublished age reached and drain time; feed them into the alert thresholds (BLOCKED_EXTERNAL: alarms).
 - Review any `cp_ops` DELETE performed and its ticket.
 - Update `docs/build/REQUIREMENTS_TRACEABILITY.md` R-117-1 with the observed at-least-once behaviour; add a chaos test (`test/chaos/redpanda_down_test.go`) if absent.

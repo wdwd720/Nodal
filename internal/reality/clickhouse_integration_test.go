@@ -21,6 +21,8 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/reality"
+
+	"github.com/nodal/controlplane/internal/testkit/deps"
 )
 
 // The suite needs the LOCAL ClickHouse (docker-compose) or any server named
@@ -28,10 +30,7 @@ import (
 // Every test creates its own suffixed tables and drops them afterwards.
 func newTestClickHouse(t *testing.T) *reality.ClickHouseStore {
 	t.Helper()
-	addr := os.Getenv("CP_TEST_CLICKHOUSE_ADDR")
-	if addr == "" {
-		t.Skip("CP_TEST_CLICKHOUSE_ADDR not set; skipping ClickHouse integration test")
-	}
+	addr := deps.Need(t, "CP_TEST_CLICKHOUSE_ADDR", "ClickHouse")
 	cfg := config.ClickHouseConfig{
 		Addr: addr, Database: envOr("CP_TEST_CLICKHOUSE_DATABASE", "controlplane"),
 		UsernameRef: config.SecretRef(envOr("CP_TEST_CLICKHOUSE_USERNAME", "cp")), PasswordRef: config.SecretRef(envOr("CP_TEST_CLICKHOUSE_PASSWORD", "cp_local")),
@@ -280,10 +279,7 @@ func TestProp_ClickHouse_SnapshotNeverReturnsFutureKnowledge(t *testing.T) {
 }
 
 func TestIntegration_ClickHouse_ConstructorRules(t *testing.T) {
-	addr := os.Getenv("CP_TEST_CLICKHOUSE_ADDR")
-	if addr == "" {
-		t.Skip("CP_TEST_CLICKHOUSE_ADDR not set; skipping ClickHouse integration test")
-	}
+	addr := deps.Need(t, "CP_TEST_CLICKHOUSE_ADDR", "ClickHouse")
 	ctx := context.Background()
 	resolver := config.NewResolver(config.EnvTest, os.LookupEnv)
 	_, err := reality.NewClickHouseStore(ctx, config.ClickHouseConfig{Addr: addr, Database: "controlplane", UsernameRef: "cp", PasswordRef: "cp_local"}, resolver, reality.ClickHouseOptions{TableSuffix: "Bad-Suffix"})

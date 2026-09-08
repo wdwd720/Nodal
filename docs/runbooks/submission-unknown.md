@@ -7,7 +7,7 @@ Severity: SEV2 (elevated unknown submissions); SEV1 if observers disagree or a f
 - `unknown_submissions` counter; `unknown_submission_rate_unknown / unknown_submission_rate_submissions` above threshold (PART 135 SEV2 "elevated unknown submissions").
 - Any `execution_attempts.status = 'SUBMISSION_UNKNOWN'` older than one blockhash validity window (~60–90 s, `last_valid_block_height`) plus the policy margin; any order in `SUBMISSION_UNKNOWN` or `RECONCILIATION_REQUIRED`.
 - Executor crash/restart with attempts in `SUBMITTING`/`SUBMITTED` (the PART 49 crash scenario).
-- PENDING: the executor/recoverer that performs steps 3–8 below and the reconciliation engine (`internal/execution` has records and the attempt repository; `internal/chain` has proven-absence resolution; `internal/reconciliation` is absent). PENDING: alarms.
+- The executor/recoverer that performs steps 3–8 below (`internal/execution`, driven by `cmd/execution-worker`) and the reconciliation engine (`internal/reconciliation`, `cmd/reconciliation-worker`) both exist; `internal/chain` has proven-absence resolution. **BLOCKED_EXTERNAL:** alarms, and a real venue to submit against.
 
 ## Blast radius
 
@@ -25,12 +25,12 @@ Severity: SEV2 (elevated unknown submissions); SEV1 if observers disagree or a f
      FROM execution_attempts a JOIN orders o ON o.id = a.order_id JOIN asset_reservations r ON r.id = o.reservation_id
     WHERE a.status = 'SUBMISSION_UNKNOWN' ORDER BY a.submitted_at;
    SELECT order_id, count(*) FROM execution_attempts WHERE status NOT IN ('FAILED','EXPIRED','INSPECTION_REJECTED','SIGNING_REJECTED')
-    GROUP BY order_id HAVING count(*) > 1;   -- must be empty: never two live attempts per plan
+    GROUP BY order_id HAVING count(*) > 1; -- must be empty: never two live attempts per plan
    ```
    A reservation not `ACTIVE`/locked, or a second live attempt, is a SEV1 executor defect: [duplicated-trade-suspicion.md](./duplicated-trade-suspicion.md).
-2. If the rate is elevated (many attempts, one provider): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"jupiter","action":"activate","reason":"<INC-id>: submit timeouts"}` (SEVERE; `kill:activate`; PENDING `cmd/api`).
+2. If the rate is elevated (many attempts, one provider): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"jupiter","action":"activate","reason":"<INC-id>: submit timeouts"}` (SEVERE; `kill:activate`).
 3. Confirm both chain observers are healthy; recovery needs them ([helius-outage.md](./helius-outage.md)).
-4. Let the recoverer run (PENDING). Until it exists, an engineer performs the observation steps in Diagnosis **read-only** and files the evidence; classification is then done through the reconciliation resolution path, never by editing rows.
+4. Let the recoverer run. Where it cannot classify the attempt, an engineer performs the observation steps in Diagnosis **read-only** and files the evidence; classification is then done through the reconciliation resolution path, never by editing rows.
 5. Announce counts, provider, and that no manual resubmission will occur.
 
 ## Diagnosis

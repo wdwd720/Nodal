@@ -9,7 +9,7 @@ Severity: SEV2 when CANARY/LIMITED/LIVE agents are affected; SEV3 otherwise (PAR
 - `model_cost` histogram / daily `model_calls.cost_usd_minor` sum far above baseline (looping, retries: the provider has no idempotency key, every retry is billable; a 429 can be the spend cap `enforced_spend_limit_reached`).
 - `model_calls.parse_result` in `INVALID_JSON | SCHEMA_VIOLATION | TOO_LARGE` at an elevated rate; `error_code` bursts; a model id retired or changed by the provider.
 - Qualitative: a model producing systematically wrong predictions (calibration collapse in `calibration_snapshots`), or rationale text that reveals it is following injected instructions.
-- PENDING: `internal/agent`, `internal/model`, `internal/strategy`, `cmd/agent-worker`; the tables (`model_calls`, `agent_runs`, `agent_pauses`, `predictions`, `calibration_snapshots`) and the `MODEL_DISABLE` switch exist.
+- `internal/agent`, `internal/model`, `internal/strategy` and `cmd/agent-worker` are built, as are the tables (`model_calls`, `agent_runs`, `agent_pauses`, `predictions`, `calibration_snapshots`) and the `MODEL_DISABLE` switch.
 
 ## Blast radius
 
@@ -23,11 +23,11 @@ Severity: SEV2 when CANARY/LIMITED/LIVE agents are affected; SEV3 otherwise (PAR
 1. Measure (read-only):
    ```sql
    SELECT provider, model_id, purpose, parse_result, error_code, success, count(*), sum(cost_usd_minor)
-     FROM model_calls WHERE request_at > now() - interval '1 hour' GROUP BY 1,2,3,4,5,6 ORDER BY 7 DESC;
+     FROM model_calls WHERE request_at > now - interval '1 hour' GROUP BY 1,2,3,4,5,6 ORDER BY 7 DESC;
    SELECT reason_code, count(*) FROM agent_pauses WHERE resumed_at IS NULL GROUP BY 1;
    SELECT a.id, a.mode FROM agents a JOIN agent_pauses p ON p.agent_id = a.id AND p.resumed_at IS NULL WHERE a.mode IN ('CANARY','LIMITED','LIVE');
    ```
-2. If the model is producing *wrong or hostile* output (not merely unavailable): `POST /admin/kill-switches {"kind":"MODEL_DISABLE","scope_id":"<model_id>" or "*","action":"activate","reason":"<INC-id>: ..."}` (STANDARD; `kill:activate`; PENDING `cmd/api`). The ToolBroker refuses `CALL_MODEL` under `MODEL_DISABLE`; required-model runs skip; nothing else changes.
+2. If the model is producing *wrong or hostile* output (not merely unavailable): `POST /admin/kill-switches {"kind":"MODEL_DISABLE","scope_id":"<model_id>" or "*","action":"activate","reason":"<INC-id>:..."}` (STANDARD; `kill:activate`). The ToolBroker refuses `CALL_MODEL` under `MODEL_DISABLE`; required-model runs skip; nothing else changes.
 3. If the model is merely *unavailable*, do nothing: auto-pause and skip semantics already hold. Confirm no synthetic outputs exist: `SELECT count(*) FROM model_calls WHERE success = false AND structured_output IS NOT NULL;` must be 0.
 4. If any LIVE/LIMITED agent shows `policy_violations` or an intent was created from a run whose model output failed schema validation (impossible by design; check `agent_runs` → `trade_intents` join with `model_calls.parse_result <> 'OK'`), pause that agent (`AGENT_PAUSE(<agent_id>)`) and treat it as a SEV1 authority-boundary defect.
 5. Announce which models/agents are disabled or paused and that manual trading is unaffected.

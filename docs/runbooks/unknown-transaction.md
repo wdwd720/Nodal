@@ -7,7 +7,7 @@ Severity: SEV1 (unauthorized signing candidate; unexplained financial mismatch) 
 - Periodic reconciliation finds wallet activity that matches no `execution_attempts`, `deposits` or `withdrawals` row and opens a record `kind = SUBMISSION_UNKNOWN` (scope: the wallet/account), `material = true`, `blocks_new_risk = true`, SEV1 candidate alert (RECONCILIATION.md §3).
 - `unknown_submissions` counter; a `WALLET_BALANCE` mismatch whose `difference` equals an unmatched on-chain transfer.
 - Do not confuse with `SUBMISSION_UNKNOWN` **attempt status** (our own submission with an unknown outcome): that is [submission-unknown.md](./submission-unknown.md). This runbook is for transactions we never built.
-- PENDING: the reconciliation engine and wallet-activity scan (`SearchWalletActivity` exists on both observers; the scan loop does not); alarms; the `signing_rejection`/`wallet_policy_violation` emitters.
+- The reconciliation engine is built (`internal/reconciliation`, `cmd/reconciliation-worker`). PENDING: the wallet-activity scan loop (`SearchWalletActivity` exists on both observers; nothing drives it on a schedule) and the `signing_rejection`/`wallet_policy_violation` emitters. **BLOCKED_EXTERNAL:** alarms.
 
 ## Blast radius
 
@@ -17,7 +17,7 @@ Severity: SEV1 (unauthorized signing candidate; unexplained financial mismatch) 
 
 ## Immediate actions (first 10 minutes)
 
-1. Freeze the account (STANDARD; `kill:activate`): `POST /admin/kill-switches {"kind":"ACCOUNT_FREEZE","scope_id":"<account_id>","action":"activate","reason":"<INC-id>: unknown wallet transaction"}`; COMPLIANCE sets `POST /admin/accounts/{accountId}/status {"to":"FROZEN","reason":"..."}`. PENDING `cmd/api`.
+1. Freeze the account (STANDARD; `kill:activate`): `POST /admin/kill-switches {"kind":"ACCOUNT_FREEZE","scope_id":"<account_id>","action":"activate","reason":"<INC-id>: unknown wallet transaction"}`; COMPLIANCE sets `POST /admin/accounts/{accountId}/status {"to":"FROZEN","reason":"..."}`.
 2. Pull the record and check our own tables for the signature (read-only):
    ```sql
    SELECT id, scope_type, scope_id, account_id, asset_id, observed, difference, status, opened_at
@@ -37,9 +37,9 @@ Severity: SEV1 (unauthorized signing candidate; unexplained financial mismatch) 
 
 - Signing evidence: `SELECT * FROM signing_decisions WHERE wallet_id = '<wallet_id>' AND decided_at BETWEEN <slot time − 10 min> AND <slot time + 10 min>;` — an `APPROVED` decision with `inspected_tx_hash` equal to the landed transaction means our attempt row is missing (engine/executor crash, [submission-unknown.md](./submission-unknown.md) adoption path); a `REJECTED` decision followed by the transaction landing means the provider signed a rejected transaction (SEV1 provider compromise); no decision means the signer was used outside the platform.
 - Provider signing logs for the wallet and time window (provider console).
-- Audit: `audit_events WHERE stream = 'account:<id>' AND occurred_at BETWEEN ...` for any signing request/submission action; `system` stream for worker activity.
+- Audit: `audit_events WHERE stream = 'account:<id>' AND occurred_at BETWEEN...` for any signing request/submission action; `system` stream for worker activity.
 - Inbound classification: exchange withdrawal to the customer's platform address (external-deposit), airdrop/dust (below `dust_threshold` ⇒ automatic under policy), refund from a venue program, a mistaken send by a third party (funds are held; return requires a withdrawal path that is DISABLED in V1 — a legal/compliance decision).
-- Token-2022 mints or unknown programs: an inbound token with unsupported extensions must not become a tradable balance (`assets.token_extensions`, `HasUnsupportedExtensions()`); it stays as an unclassified observation.
+- Token-2022 mints or unknown programs: an inbound token with unsupported extensions must not become a tradable balance (`assets.token_extensions`, `HasUnsupportedExtensions`); it stays as an unclassified observation.
 
 ## Containment and recovery
 
@@ -49,7 +49,7 @@ Every unknown transaction is material; resolution needs an approved `RECONCILIAT
 2. **external-deposit**: a compensating posting credits `WALLET` against `CAPITAL` (or a holding classification per FINANCE policy) via the `compensation` body of `POST /admin/reconciliation/records/{id}/resolve` with `approval_id`; buying-power eligibility follows the funding policy, never automatic.
 3. **unauthorized**: [wallet-provider-compromise.md](./wallet-provider-compromise.md) owns containment; the record is resolved with a loss posting after SECURITY sign-off.
 
-Steps for 2 and 3: OPERATIONS/FINANCE (`reconciliation:resolve`) proposes `POST /admin/actions {"kind":"RECONCILIATION_RESOLVE_MATERIAL","target_type":"reconciliation_record","target_id":"<record_id>","params":{...},"reason":"<INC-id>: classified <kind>"}` (step-up ≤ 15 min, expires 4 h); a break-glass `reconciliation:approve` holder approves `POST /admin/actions/{id}/approve`; then the resolve call. Release `ACCOUNT_FREEZE` (`kill:release` + step-up) and run `ACCOUNT_UNFREEZE` (COMPLIANCE) only after `RESOLVED_MANUAL`. PENDING: engine, `cmd/api`.
+Steps for 2 and 3: OPERATIONS/FINANCE (`reconciliation:resolve`) proposes `POST /admin/actions {"kind":"RECONCILIATION_RESOLVE_MATERIAL","target_type":"reconciliation_record","target_id":"<record_id>","params":{...},"reason":"<INC-id>: classified <kind>"}` (step-up ≤ 15 min, expires 4 h); a break-glass `reconciliation:approve` holder approves `POST /admin/actions/{id}/approve`; then the resolve call. Release `ACCOUNT_FREEZE` (`kill:release` + step-up) and run `ACCOUNT_UNFREEZE` (COMPLIANCE) only after `RESOLVED_MANUAL`.
 
 ## What NOT to do
 

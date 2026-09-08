@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
@@ -154,47 +152,4 @@ func TestProp_NeverExceedsBudgetWithinWindow(t *testing.T) {
 			rt.Fatalf("allowed %d > budget %d", allowed, limit.Requests)
 		}
 	})
-}
-
-func TestIntegration_RedisStore(t *testing.T) {
-	url := os.Getenv("CP_TEST_REDIS_URL")
-	if url == "" {
-		t.Skip("CP_TEST_REDIS_URL not set; skipping Redis rate-limit test")
-	}
-	opts, err := redis.ParseURL(url)
-	require.NoError(t, err)
-	client := redis.NewClient(opts)
-	defer func() { _ = client.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	require.NoError(t, client.Ping(ctx).Err())
-
-	store := NewRedisStore(client, "cp:test:rl:"+time.Now().Format("150405.000")+":")
-	now := time.Now().UTC()
-	l, err := NewLimiter("quote", store, Limit{Requests: 5, Window: 2 * time.Second}, func() time.Time { return now }, false)
-	require.NoError(t, err)
-	allowed := 0
-	for i := 0; i < 8; i++ {
-		d, err := l.Allow(ctx, "acct-1")
-		require.NoError(t, err)
-		if d.Allowed {
-			allowed++
-		}
-	}
-	assert.Equal(t, 5, allowed)
-
-	// Two limiters sharing the store see the same counters (multi-replica behavior).
-	l2, _ := NewLimiter("quote", store, Limit{Requests: 5, Window: 2 * time.Second}, func() time.Time { return now }, false)
-	d, err := l2.Allow(ctx, "acct-1")
-	require.NoError(t, err)
-	assert.False(t, d.Allowed)
-
-	// Keys carry a TTL so the store never grows without bound.
-	keys, err := client.Keys(ctx, "cp:test:rl:*").Result()
-	require.NoError(t, err)
-	require.NotEmpty(t, keys)
-	ttl, err := client.PTTL(ctx, keys[0]).Result()
-	require.NoError(t, err)
-	assert.Greater(t, ttl, time.Duration(0))
-	_ = client.Del(ctx, keys...)
 }

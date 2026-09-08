@@ -7,7 +7,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [chargeback-re
 - Workflow-worker task-queue backlog or schedule-to-start latency alarm; Temporal frontend unreachable; TLS failures (`TEMPORAL_TLS` is mandatory in STAGING/PROD).
 - Funding deposits not progressing: rows in `deposits` stuck in `PROVIDER_CONFIRMED`/`SETTLEMENT_OBSERVED` beyond `settlement_timeout` without a provider or chain cause.
 - Reconciliation escalation workflows or promotion workflows not advancing.
-- PENDING: alarms (ADR-0004 "worker capacity and task-queue backlogs need alarms"); PENDING: `cmd/workflow-worker` and the workflows themselves (the Temporal SDK is a dependency; the funding lifecycle driver is Temporal-free at the domain layer, MASTER_BUILD_STATE.md).
+- BLOCKED_EXTERNAL: alarms (ADR-0004 "worker capacity and task-queue backlogs need alarms"); `cmd/workflow-worker` and the workflows exist and are tested against a live Temporal server; the funding lifecycle driver is deliberately Temporal-free at the domain layer (MASTER_BUILD_STATE.md).
 
 ## Blast radius
 
@@ -27,7 +27,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [chargeback-re
    Stuck rows across all providers with no `provider_events` errors ⇒ orchestration, not the provider.
 2. Confirm the trading path is unaffected: `SELECT max(posted_at) FROM journal_transactions WHERE kind = 'TRADE_FILL';`, order transitions still occurring.
 3. Do **not** activate a kill switch for a Temporal outage alone. Consider `FUNDING_DISABLE(*)` (SEVERE, `kill:activate`) only if customers keep creating sessions that cannot progress and the provider charges for abandoned sessions; weigh the slow release path before doing so.
-4. Check the Temporal service: managed Temporal status (PENDING: EB-014); locally `docker compose ps temporal` and the Temporal UI on the compose port.
+4. Check the Temporal service: managed Temporal status (BLOCKED_EXTERNAL: EB-014); locally `docker compose ps temporal` and the Temporal UI on the compose port.
 5. Announce: "orchestration outage; trading unaffected; funding and escalations paused since <time>; no manual credits".
 
 ## Diagnosis
@@ -39,7 +39,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [chargeback-re
 
 ## Containment and recovery
 
-1. Restore Temporal (managed incident, or `docker compose up -d temporal` locally); restart `cmd/workflow-worker` (PENDING) after the frontend is healthy.
+1. Restore Temporal (managed incident, or `docker compose up -d temporal` locally); restart `cmd/workflow-worker` after the frontend is healthy.
 2. Workflows resume from their last durable step. Because activities are idempotent against Postgres (they check for an existing provider reference or ledger posting before any external call), a retried activity produces no second provider request and no second `FUNDING_SETTLED` posting.
 3. Watch `deposits` drain: `PROVIDER_CONFIRMED → SETTLEMENT_OBSERVED → RECONCILED → AVAILABLE`, each with a `deposit_transitions` row and a single `journal_transactions.kind = 'FUNDING_SETTLED'` per deposit (`idempotency_key` unique).
 4. If a workflow is stuck on a step that genuinely completed externally (chain receipt exists, posting exists), the fix is to let the activity's idempotent read observe it; never signal the workflow to "skip" a money step.

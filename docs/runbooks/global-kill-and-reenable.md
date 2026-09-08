@@ -7,13 +7,13 @@ Severity: procedure (invoked by SEV1 runbooks; exercised monthly in staging) · 
 - Any SEV1 runbook that says "activate `GLOBAL_NEW_RISK_KILL`": ledger integrity violation, unauthorized signing, duplicate economic execution across accounts, signing credential compromise, admin compromise touching authority tables, database corruption.
 - Global money-impacting reconciliation drift: `oldest_unresolved_mismatch` (seconds) above the risk policy `max_unresolved_age` (PART 158). The kernel already rejects with `RISK_RECONCILIATION_PENDING`; the kill makes the halt explicit and auditable.
 - Monthly staging drill (`docs/operations/DISASTER_RECOVERY.md` §3).
-- PENDING: the `global_kill` CRITICAL security event and page (only the `admin` audit stream records the transition today). PENDING: alarm routing (`infra/terraform/modules/observability`).
+- PENDING: the `global_kill` CRITICAL security event (only the `admin` audit stream records the transition today). BLOCKED_EXTERNAL: alarm routing (`infra/terraform/modules/observability`).
 
 ## Blast radius
 
 Blocked (`ActionClass = NEW_RISK`, `WITHDRAW`): new manual trade intents, new agent intents, new funding sessions, withdrawals. Rejected with `KILL_SWITCH_ACTIVE` (field `switch = GLOBAL_NEW_RISK_KILL:*`); the risk kernel returns `RISK_KILL_SWITCH`.
 
-Still running, by construction (`internal/killswitch/matrix.go`, `TestProp_NeverBlockedClasses`, `TestProp_GlobalKillNeverStopsRiskReduction`): `REDUCE_RISK` (closing positions), `OBSERVE`, `SETTLE`, `RECONCILE`, `LEDGER_POST`, `CANCEL`. Orders already `SUBMITTED` continue to finality, fills post, positions update, reconciliation keeps opening and resolving records, audit keeps appending. PENDING: the executor and reconciliation engine that exercise those paths end to end (`internal/execution` holds records only; `internal/reconciliation` is absent), so "still runs" is proven only at the matrix level today.
+Still running, by construction (`internal/killswitch/matrix.go`, `TestProp_NeverBlockedClasses`, `TestProp_GlobalKillNeverStopsRiskReduction`): `REDUCE_RISK` (closing positions), `OBSERVE`, `SETTLE`, `RECONCILE`, `LEDGER_POST`, `CANCEL`. Orders already `SUBMITTED` continue to finality, fills post, positions update, reconciliation keeps opening and resolving records, audit keeps appending. the executor and the reconciliation engine that exercise those paths end to end both exist (`internal/execution` with `cmd/execution-worker`; `internal/reconciliation` is absent), so "still runs" is proven only at the matrix level today.
 
 ## Immediate actions (first 10 minutes)
 
@@ -23,7 +23,7 @@ Still running, by construction (`internal/killswitch/matrix.go`, `TestProp_Never
    Idempotency-Key: <uuid>
    {"kind":"GLOBAL_NEW_RISK_KILL","scope_id":"*","action":"activate","reason":"<INC-id>: <one line cause>"}
    ```
-   PENDING: `cmd/api`. Until it exists the only path is `killswitch.Controller.Activate(ctx, tx, killswitch.GlobalNewRiskKill, "*", reason)` from an operator-run Go program; record who ran it and when in the incident log.
+   Until it exists the only path is `killswitch.Controller.Activate(ctx, tx, killswitch.GlobalNewRiskKill, "*", reason)` from an operator-run Go program; record who ran it and when in the incident log.
 2. Confirm the row and the transition (read-only, `cp_readonly`):
    ```sql
    SELECT kind, scope_id, active, severity, activated_by_actor_id, activated_at, version
@@ -43,13 +43,13 @@ The global kill is a containment tool, not a diagnosis; follow the calling runbo
 
 | Check | How |
 |---|---|
-| new manual trade rejected | `POST /v1/intents` returns problem `KILL_SWITCH_ACTIVE` (PENDING: `cmd/api`); `risk_decisions` rows show `RISK_KILL_SWITCH` |
-| new agent intent rejected | same reason code on an AGENT-actor intent; `agent_runs.skip_reason` (PENDING: `internal/agent`) |
+| new manual trade rejected | `POST /v1/intents` returns problem `KILL_SWITCH_ACTIVE`; `risk_decisions` rows show `RISK_KILL_SWITCH` |
+| new agent intent rejected | same reason code on an AGENT-actor intent; `agent_runs.skip_reason` (`internal/agent`) |
 | existing submitted trade still reconciles | `reconciliation_records` keep appearing for in-flight attempts (PENDING: engine) |
 | fills still post | `fills.journal_transaction_id` becomes non-null; `journal_transactions.kind = 'TRADE_FILL'` continues |
 | positions still update | `fills.position_applied_at` set |
-| audit still works | `audit_events.stream_seq` advancing on `account:*` and `system` streams; `make verify-audit` (PENDING: `cmd/audit-worker`) |
-| operator sees state | `GET /admin/kill-switches` shows `active = true` (PENDING: `cmd/api`); the SQL above |
+| audit still works | `audit_events.stream_seq` advancing on `account:*` and `system` streams; `make verify-audit` |
+| operator sees state | `GET /admin/kill-switches` shows `active = true`; the SQL above |
 
 ## Containment and recovery
 
@@ -57,7 +57,7 @@ This section is the re-enable path. Release is deliberately slow (PART 53). Prec
 
 1. Root cause of the calling incident is fixed and written up.
 2. No open material reconciliation record: `SELECT count(*) FROM reconciliation_records WHERE material AND status IN ('MISMATCH','INVESTIGATING','ESCALATED');` returns 0, and no order remains in `SUBMISSION_UNKNOWN` or `RECONCILIATION_REQUIRED`.
-3. Audit verification passes: `make verify-audit` (PENDING: `cmd/audit-worker`; until then an engineer runs `audit.Verifier.VerifyStream` on `admin`, `system` and the affected `account:*` streams and archives the output).
+3. Audit verification passes: `make verify-audit` (until then an engineer runs `audit.Verifier.VerifyStream` on `admin`, `system` and the affected `account:*` streams and archives the output).
 4. Capability gates are in their pre-incident state or more restrictive: `SELECT capability, state, approval_version FROM capability_gates WHERE environment = 'PROD';`.
 
 Steps (each step is a different human; every step needs step-up within 15 minutes):
@@ -80,7 +80,7 @@ Steps (each step is a different human; every step needs step-up within 15 minute
    `killswitch.Controller.Release` verifies the action is `APPROVED`, dual-controlled, targets the same `(kind, scope)`, and that the caller holds `kill:release` with fresh step-up (`TestController_ApprovalVerificationRules`).
 5. Confirm `active = false` with the SQL in Immediate actions step 2; confirm the `admin` audit stream has the release row carrying `approval_id`.
 
-PENDING: `cmd/api` for every HTTP call above. The services behind them (`admin.Actions.Propose/Approve`, `killswitch.Controller.Release`) exist and are integration-tested.
+Every HTTP call above is served. The services behind them (`admin.Actions.Propose/Approve`, `killswitch.Controller.Release`) exist and are integration-tested.
 
 ## What NOT to do
 
@@ -99,7 +99,7 @@ PENDING: `cmd/api` for every HTTP call above. The services behind them (`admin.A
 
 ## Post-incident
 
-- Export the `admin` audit stream slice from activation to release (`audit_events WHERE stream = 'admin' AND occurred_at BETWEEN ...`) into the evidence archive with its content hashes.
+- Export the `admin` audit stream slice from activation to release (`audit_events WHERE stream = 'admin' AND occurred_at BETWEEN...`) into the evidence archive with its content hashes.
 - Review `security_events` for the window (PENDING: `global_kill` emitter; none is written today).
 - Record measured activation-to-effect latency and release lead time against R-053-13 and R-165-1 in `docs/build/REQUIREMENTS_TRACEABILITY.md`; file `test/e2e/global_kill_test.go` as a SOFTWARE BLOCKER in `docs/build/BLOCKERS.md` if still absent.
 - If any never-blocked class was in fact blocked, that is a SEV1 defect: open a BLOCKERS entry and do not release the next kill until it is fixed.

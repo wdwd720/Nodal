@@ -14,6 +14,8 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+
+	"github.com/nodal/controlplane/internal/testkit/deps"
 )
 
 // The suite runs against the LOCAL MinIO (docker-compose) or any
@@ -22,10 +24,7 @@ import (
 // to the audit bucket stay locked for the retention they were given.
 func newTestS3(t *testing.T) (*archive.S3, string, string) {
 	t.Helper()
-	endpoint := os.Getenv("CP_TEST_ARCHIVE_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("CP_TEST_ARCHIVE_ENDPOINT not set; skipping MinIO integration test")
-	}
+	endpoint := deps.Need(t, "CP_TEST_ARCHIVE_ENDPOINT", "the MinIO object archive")
 	cfg := config.ArchiveConfig{
 		Endpoint:       endpoint,
 		Region:         envOr("CP_TEST_ARCHIVE_REGION", "us-east-1"),

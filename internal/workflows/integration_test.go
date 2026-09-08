@@ -19,6 +19,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/nodal/controlplane/internal/workflows"
+
+	"github.com/nodal/controlplane/internal/testkit/deps"
 )
 
 // Environment used by the integration tier.
@@ -45,11 +47,11 @@ func dialTemporal(t *testing.T) client.Client {
 	defer cancel()
 	c, err := client.DialContext(ctx, client.Options{HostPort: hostPort, Namespace: ns})
 	if err != nil {
-		t.Skipf("no Temporal server at %s (%v); start the local stack with `docker compose up -d --wait`", hostPort, err)
+		deps.Unavailable(t, "Temporal at "+hostPort, err)
 	}
 	if _, err := c.CheckHealth(ctx, &client.CheckHealthRequest{}); err != nil {
 		c.Close()
-		t.Skipf("Temporal at %s is not healthy: %v", hostPort, err)
+		deps.Unavailable(t, "Temporal at "+hostPort, err)
 	}
 	t.Cleanup(c.Close)
 	return c

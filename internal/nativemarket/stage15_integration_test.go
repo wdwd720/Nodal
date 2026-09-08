@@ -201,7 +201,7 @@ func TestIntegration_APredictionOnANativeMarketResolvesFromNodalNativePrices(t *
 	require.NoError(t, err)
 
 	// The horizon elapses. Nothing may be resolved before it does.
-	resolver, err := prediction.NewResolver(f.clk, prediction.NewPriceReader())
+	resolver, err := prediction.NewResolver(f.clk, prediction.NewPriceReader(), time.Hour)
 	require.NoError(t, err)
 	_, err = resolver.Resolve(f.ctx, testDB, committed)
 	require.Error(t, err, "a prediction cannot be scored while its window is still open")

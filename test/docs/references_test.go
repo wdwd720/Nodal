@@ -45,6 +45,12 @@ import (
 // reviewer would use to decide whether the system is ready.
 var inScope = []string{
 	"docs/release/PRODUCTION_READINESS_REPORT.md",
+	// The root copy is a different document against a different goal file, and
+	// MASTER_BUILD_STATE cites it for stopping-criterion 13 -- which made it the
+	// one readiness report a reviewer relies on whose citations had never been
+	// machine-checked (F-57).
+	"docs/PRODUCTION_READINESS_REPORT.md",
+	"docs/build/REQUIREMENTS_TRACEABILITY.md",
 	"docs/audit/AUDIT_FINDINGS.md",
 	"docs/audit/INDEPENDENT_AUDIT.md",
 	"docs/build/MASTER_BUILD_STATE.md",

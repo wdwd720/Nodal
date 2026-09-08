@@ -62,7 +62,7 @@ migration.
 
 API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
 into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
-59, up from 42 at the baseline; capabilities: 20, of which 9 are high-risk.
+60, up from 42 at the baseline; capabilities: 20, of which 18 are high-risk. (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
 
 ### Stage 8 as built
 
@@ -1497,3 +1497,36 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 - **2026-09-05 S1**: Stage 0 audit; toolchain install; build-state docs; repo init.
 - **2026-09-05/06 S1 (continued)**: Stage 1 foundation (money/id/clock/errs/config/observability/db/migrate/idempotency/security/auth/event), Stage 2 financial core (ledger/capital/positions/valuation/buying power), Stage 3 authority (gates/killswitch/eligibility/risk/admin/audit), migrations 00001–00605 + 00640/00641, privilege model D-016, transition binding 00603, OpenAPI + generated server/client, restore drill, identity login flow, notifications, compliance profiles, rate limiting, SSE stream, dev seed, ADRs, security/threat-model docs, provider API notes, traceability refresh. Two session rate-limit interruptions recovered by resuming agents. Wave 2 (Stages 4–8) in flight.
 - **2026-09-06 S1 (wave 3)**: Fourth rate-limit cutoff. Resumed all six agents by message after inventorying disk (settlement, Jupiter and strategy had each landed more than their last message reported). Launched the Stage 7 reconciliation agent. Corrected §5, which still claimed "no tests exist yet" — it now records the single real build break (`internal/reality`), the outstanding Jupiter re-verification, and the three open lint findings. Standing lesson reconfirmed: inventory disk before telling a resumed agent what to do, because a cut-off agent's last narrated step understates what it actually wrote.
+- **2026-09-08 S2 (documentation as a control surface)**: F-54 through F-57. The
+  numbers and the operating documents were audited the way the code has been,
+  on the principle that a readiness decision is made from them. **F-54**: five
+  derivable counts had gone stale, including a restore drill last run at schema
+  version 604, a hundred and eleven migrations ago;
+  `TestDocs_CountsMatchTheCode` now derives each from the thing it describes,
+  and the migration-version claim fails on staleness so a drill cannot fall
+  behind the schema unnoticed — it failed twice while this session added
+  migrations, and both times the fix was to re-run the drill, not to edit the
+  number. **F-55**: 140 `PENDING` markers across 21 runbooks, every one naming a
+  package, binary or route that exists; the index told an operator `cmd/api` had
+  no serving binary, and `funding-provider-compromise.md` gave a webhook-forgery
+  detection query that cannot return a row however bad the incident is. Markers
+  are now `PENDING` (missing here) or `BLOCKED_EXTERNAL` (needs an account or a
+  credential), and both claims are checked by
+  `TestDocs_NothingMarkedPendingAlreadyExists` and
+  `TestDocs_EveryRunbookRouteIsServed`. **F-56**: `provider_events` — the
+  table 00107 calls "the evidence record" — had no trigger and a table-wide
+  UPDATE grant, so `cp_app` could rewrite `payload_hash` and `signature_verified`
+  on a verified event; migration 00719 narrows the grant by column and adds a
+  guard trigger, and the test was observed passing all twelve mutations with the
+  guard removed. **F-57**: five subsystems' integration tests skipped silently in
+  CI while fifteen VERIFIED traceability rows cited them as evidence, and
+  `make property` could not compile the database-backed properties it was cited
+  as proving. `internal/testkit/deps` makes a missing dependency a failure in any
+  job that promised the stack; the integration job now runs `make infra-up`;
+  `scripts/inttest` gained `-run` and `make property` uses it. All ten
+  database-backed property packages pass in 2m39s, and `internal/reality` runs 36
+  tests with zero skips including both look-ahead-leakage tests.
+
+  The recurring class this session: **a document is a control, and a control
+  nobody executes decays to a claim.** Every fix above replaced a careful read
+  with a check that runs.

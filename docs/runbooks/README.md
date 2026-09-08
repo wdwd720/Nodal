@@ -40,21 +40,35 @@ Status: written 2026-09-05 against the working tree of the same date (goal PART 
 
 | Tool named in the runbooks | Status |
 |---|---|
-| `POST /admin/kill-switches`, `/admin/gates/{capability}/{action}`, `/admin/actions`, `/admin/actions/{id}/{decision}`, `/admin/accounts/{id}/status`, `/admin/instruments/{id}/status`, `/admin/providers`, `/admin/reconciliation/records[/{id}/resolve]` | specified in `openapi/openapi.yaml`; strict server generated in `internal/gen/api`. **PENDING: `cmd/api`** (no serving binary, no handler wiring). The services behind them exist: `killswitch.Controller`, `gates.Admin`, `admin.Actions`, `accounts`, `instruments`. |
-| Reconciliation engine, `/admin/reconciliation/*` behaviour | tables exist (migration 00301). **PENDING: `internal/reconciliation`, `cmd/reconciliation-worker`.** |
-| `make verify-audit` | target exists; **PENDING: `cmd/audit-worker`** (`verify` command). `audit.Verifier` exists in `internal/audit/verify.go` without a database test. Merkle/KMS/WORM tail pending. |
+| `POST /admin/kill-switches`, `/admin/gates/{capability}/{action}`, `/admin/actions`, `/admin/actions/{id}/{decision}`, `/admin/accounts/{id}/status`, `/admin/instruments/{id}/status`, `/admin/providers`, `/admin/reconciliation/records[/{id}/resolve]` | **served.** Specified in `openapi/openapi.yaml`, handled in `internal/httpapi/handlers_admin.go`, permission-gated and step-up-protected in `internal/httpapi/authz.go`, wired in `cmd/api`. `TestDocs_EveryRunbookRouteIsServed` holds every path these runbooks name against the spec. |
+| Reconciliation engine, `/admin/reconciliation/*` behaviour | **built.** `internal/reconciliation` (engine, `RunPeriodic`, `RunFull`), `cmd/reconciliation-worker` (ticker), read and resolve endpoints wired in `cmd/api` through `httpapi.NewReconciliationPort`. Compensation is refused by name as `UNSUPPORTED` -- see [RECONCILIATION.md](../operations/RECONCILIATION.md). |
+| `make verify-audit` | **runs.** `cmd/audit-worker verify` drives `audit.Verifier.VerifyStream`. PENDING: the target is invoked by no CI job, so it is a tool an operator can run rather than a check that runs itself. **BLOCKED_EXTERNAL:** the KMS-signed Merkle tail and WORM export need a KMS and an object store. |
 | `make restore-drill` | implemented, local only (`scripts/restoredrill`); production procedure unexercised (EB-012). |
 | `make migrate`, `cmd/migrate verify`, `make migrate-status` | implemented. |
-| Alarms and paging | **PENDING: `infra/terraform/modules/observability` (R-135-1).** Metric instruments exist in `internal/observability/metrics.go`; no collector or routing is deployed. |
-| Security event emitter | partial: `login` (identity), `funding_reversed`, `negative_deficit_accounts` (funding) are written to `security_events`. **PENDING:** `signing_rejection`, `global_kill`, `capability_activation`, `webhook_signature_failed`, `admin_privilege_use`, `cross_tenant_attempt`, `wallet_policy_violation`, `provider_credential_change`. |
-| Chain observers | Helius adapter (`internal/provider/helius`) and fallback RPC (`internal/provider/solanarpc`) implemented; agreement policy implemented (`internal/chain`). **PENDING: contract tests recorded as passing; observer wiring in workers.** |
-| Wallet / signing provider | contracts and repository (`internal/wallet`), pure inspector (`internal/signing/inspect`). **PENDING: the provider adapter (`internal/provider/privy`) and `signing.Service`.** |
-| Execution provider (Jupiter) | client and fake (`internal/provider/jupiter`), contract fixtures (`test/contract/jupiter`). **PENDING: executor/recoverer wiring.** |
+| Alarms and paging | **BLOCKED_EXTERNAL (R-135-1).** The metric instruments exist in `internal/observability/metrics.go` and are emitted; the collector, the `infra/terraform/modules/observability` environments and the paging routes need a cloud account. No work in this tree closes it. |
+| Security event emitter | partial: `login` (identity), `funding_reversed`, `negative_deficit_accounts` (funding), and `webhook_signature_failed` (`internal/webhook`, HIGH, on every verification failure) are written to `security_events`. **PENDING:** `signing_rejection`, `global_kill`, `capability_activation`, `admin_privilege_use`, `cross_tenant_attempt`, `wallet_policy_violation`, `provider_credential_change`, `login_anomaly`, `mfa_change`. |
+| Chain observers | Helius adapter (`internal/provider/helius`), fallback RPC (`internal/provider/solanarpc`) and the agreement policy (`internal/chain`) are implemented and wired into `cmd/market-ingest-worker`. **BLOCKED_EXTERNAL:** contract tests recorded against the live provider need provider credentials. |
+| Wallet / signing provider | contracts and repository (`internal/wallet`), pure inspector (`internal/signing/inspect`), the adapter (`internal/provider/privy`) and `signing.Service` (`internal/signing/service.go`) all exist. **BLOCKED_EXTERNAL:** a real custody provider account, without which the adapter has only ever run against its fake. |
+| Execution provider (Jupiter) | client and fake (`internal/provider/jupiter`), contract fixtures (`test/contract/jupiter`), executor and recoverer wired in `cmd/execution-worker`. **BLOCKED_EXTERNAL:** a funded mainnet account, so no submission has ever been made against the real venue. |
 | Funding provider (Stripe) | client, webhook verifier (`internal/provider/stripe`, `internal/webhook`), `test/contract/stripe`; reversal posting (`funding.Service.Reverse`). |
-| Redpanda / Temporal / ClickHouse clients | outbox/relay/inbox implemented in `internal/event` against an in-memory bus; `franz-go` and the Temporal SDK are dependencies. **PENDING: production client wiring in the `cmd/*` composition roots.** |
-| Agent / model / market-ingest runtime | **PENDING: `internal/agent`, `internal/model`, `internal/strategy`, `internal/reality`, `cmd/agent-worker`, `cmd/market-ingest-worker`.** |
+| Redpanda / Temporal / ClickHouse clients | outbox/relay/inbox in `internal/event`; the production clients are wired in `cmd/relay-worker`, `cmd/workflow-worker` and `cmd/market-ingest-worker`, and their integration tests pass against the local compose stack. **BLOCKED_EXTERNAL:** a deployed Redpanda, Temporal and ClickHouse beyond that stack. |
+| Agent / model / market-ingest runtime | **built.** `internal/agent`, `internal/model`, `internal/strategy`, `internal/reality`, `cmd/agent-worker` and `cmd/market-ingest-worker` all exist and carry integration tests. **PENDING:** `internal/backtest` and `internal/performance` (Stage 12) do not exist, so the point-in-time store has no backtester sitting on it. |
 
-Until `cmd/api` lands, the only way to activate a kill switch is to call `killswitch.Controller.Activate` from a Go program run by an operator against the database; there is no CLI. This is a production-readiness blocker and every runbook that depends on it says so.
+**Every row above said the opposite until F-55.** Each carried a `PENDING` naming a package or a binary that is on disk, and this paragraph told an operator that `cmd/api` did not exist and that the only way to activate a kill switch was to write a Go program against the database. `POST /admin/kill-switches` has been served, permission-gated and step-up-protected for some time.
+
+That is a documentation defect with an operational cost: a runbook is read under time pressure, and one that sends a responder to a Go compiler instead of an endpoint spends the minutes an incident is made of. Nothing in the production code was wrong; the map was.
+
+The two markers now mean different things, and both are checked:
+
+- **PENDING** -- missing from this repository. Somebody here can close it.
+  `TestDocs_NothingMarkedPendingAlreadyExists` fails if a marker names a
+  package, command or make target that has since been built.
+- **BLOCKED_EXTERNAL** -- needs a cloud account, a provider credential, a
+  funded wallet or a signed agreement. No work in this tree closes it.
+
+A runbook may also not tell an operator to call an endpoint the API does not
+declare: `TestDocs_EveryRunbookRouteIsServed` holds every `GET`/`POST` path in
+these documents against `openapi/openapi.yaml`.
 
 ## Roles and permissions cheat sheet (`internal/security/roles.go`)
 

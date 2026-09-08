@@ -4,11 +4,11 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [submission-un
 
 ## Trigger
 
-- Execution provider health `UNHEALTHY`/`DEGRADED` (role `EXECUTION`; error rate, p95, staleness thresholds in `provider.Thresholds`); `/admin/providers` (PENDING `cmd/api`) or `provider_health_samples`.
+- Execution provider health `UNHEALTHY`/`DEGRADED` (role `EXECUTION`; error rate, p95, staleness thresholds in `provider.Thresholds`); `/admin/providers` or `provider_health_samples`.
 - `execution_failure_rate_failures / execution_failure_rate_attempts` above threshold; `quote_latency`, `build_latency`, `submit_latency` p95 breaches; `unknown_submission_rate` rising (timeouts on `/execute`).
 - `RISK_PROVIDER_HEALTH`/`RISK_QUOTE_AGE` rejections rising; settlement compiler returning `NO_VALID_PLAN`/`PROVIDER_DEGRADED`.
 - Jupiter status/announcements: `api.jup.ag/swap/v2` errors, `x-api-key` rejection (key rotated or quota), a host or version change (`/swap/v1` is unmaintained; the platform pins hosts in configuration).
-- PENDING: alarms; the client and fake (`internal/provider/jupiter`) and `test/contract/jupiter` fixtures exist; PENDING: executor wiring and the health tracker feeding `RISK_PROVIDER_HEALTH` end to end.
+- **BLOCKED_EXTERNAL:** alarms, and a funded account on a real venue. The client and fake (`internal/provider/jupiter`), the `test/contract/jupiter` fixtures and the executor (`cmd/execution-worker`) all exist. PENDING: the health tracker feeding `RISK_PROVIDER_HEALTH` end to end.
 
 ## Blast radius
 
@@ -19,7 +19,7 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [submission-un
 
 ## Immediate actions (first 10 minutes)
 
-1. Make the stop explicit and sticky (the tracker's hysteresis could otherwise flap during a partial outage): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"jupiter","action":"activate","reason":"<INC-id>: execution provider outage"}` (SEVERE; `kill:activate`; PENDING `cmd/api`). If only one venue route is broken, `VENUE_DISABLE(<venue>)` (STANDARD) is narrower.
+1. Make the stop explicit and sticky (the tracker's hysteresis could otherwise flap during a partial outage): `POST /admin/kill-switches {"kind":"PROVIDER_DISABLE_NEW_ACTIONS","scope_id":"jupiter","action":"activate","reason":"<INC-id>: execution provider outage"}` (SEVERE; `kill:activate`). If only one venue route is broken, `VENUE_DISABLE(<venue>)` (STANDARD) is narrower.
 2. Count what is in flight and leave it alone (read-only):
    ```sql
    SELECT status, count(*), min(submitted_at) FROM execution_attempts
@@ -34,13 +34,13 @@ Severity: SEV2 (provider outage) · Owner: OPERATIONS · Related: [submission-un
 
 - Health samples: `SELECT state, error_rate_bps, p99_latency_ms, staleness_ms, reason_codes, evaluated_at FROM provider_health_samples WHERE provider = 'jupiter' ORDER BY evaluated_at DESC LIMIT 20;`.
 - Failure class per attempt: `execution_attempts.error` and `submit_response_ref` (archived raw response with hash; `raw_response_ref` evidence per EXECUTION.md §8). Definitive rejection (provider says invalid/expired **and** signature not on chain) ⇒ `FAILED` and reservation released; transport timeout/ambiguous ⇒ `SUBMISSION_UNKNOWN`.
-- Quote path vs execute path: `/order` (quote+build) failing is harmless (no side effect); `/execute` timeouts are `UNKNOWN_EFFECT_WRITE` and never retried blindly (`provider.RetryClass.MayRetryBlindly() = false`).
+- Quote path vs execute path: `/order` (quote+build) failing is harmless (no side effect); `/execute` timeouts are `UNKNOWN_EFFECT_WRITE` and never retried blindly (`provider.RetryClass.MayRetryBlindly = false`).
 - Blockhash expiry: attempts whose `last_valid_block_height` is below the current height (both observers) are proven absent and can expire; do not rebuild until the provider is healthy again.
 - Simulation: if `simulation_ok = false` spikes, the route provider may be returning transactions the inspector rejects (`INSPECTION_REJECTED` statuses) — that is a [wallet-provider-compromise.md](./wallet-provider-compromise.md)-adjacent signal (route provider tampering, THREAT_MODEL.md §3.5) rather than an outage.
 
 ## Containment and recovery
 
-1. Leave the executor/recoverer to resolve `SUBMISSION_UNKNOWN` attempts per PART 48 (PENDING: recoverer; until then an engineer follows [submission-unknown.md](./submission-unknown.md) with observer reads and files evidence).
+1. Leave the executor/recoverer to resolve `SUBMISSION_UNKNOWN` attempts per PART 48 (the recoverer runs in `cmd/execution-worker`; where it cannot classify an attempt an engineer follows [submission-unknown.md](./submission-unknown.md) with observer reads and files evidence).
 2. Orders whose attempts expired and whose intent deadline has not passed go back to `PLANNED`; they get a new attempt with a fresh blockhash **only after** the provider is healthy, the switch is released, and a fresh risk `FINAL` decision against a fresh quote (EXECUTION.md §4 step 7). Orders past their deadline become `FAILED_FINAL` and their reservations release.
 3. When Jupiter recovers: watch the tracker return to `HEALTHY` through hysteresis; verify a quote round-trip in a CANARY account with the fake disabled; then release `PROVIDER_DISABLE_NEW_ACTIONS(jupiter)` via the dual-controlled `KILL_SWITCH_RELEASE` path ([global-kill-and-reenable.md](./global-kill-and-reenable.md), same steps with the provider kind/scope), attaching the provider incident and the canary evidence.
 4. If the outage is a breaking API change: adapter change + contract fixtures updated from the official docs (`docs/api/providers/jupiter.md` re-verified with fetch dates) + `make contract` green before release; the verification label must not exceed what was tested.

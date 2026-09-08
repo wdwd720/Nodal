@@ -77,6 +77,15 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-51 | P2 | BASELINE | fixed | Three operations documents described controls and wiring that do not exist, in both directions |
 | F-52 | P1 | BASELINE | fixed | A deployment could block an account's new risk and had no wired path to unblock it |
 | F-53 | P2 | BASELINE | fixed | Tradability and the economics freeze keyed on different columns, so a market could trade while editable |
+| F-54 | P3 | BASELINE | fixed | Every derivable count in the readiness documents had gone stale, including a restore drill reported at 111 migrations old |
+| F-55 | P1 | BASELINE | fixed | Every runbook described a system that predates the build: 140 PENDING markers, and every package, binary and route they named exists |
+| F-56 | P2 | BASELINE | fixed | Provider webhook evidence was mutable by the application role, including the payload hash and the signature flag |
+| F-57 | P1 | BASELINE | fixed | Five subsystems' integration tests skipped silently in CI, and fifteen VERIFIED rows cited them as evidence |
+| F-58 | P2 | BASELINE | part | GT003 and the value-domain family are now covered; four documented-but-never-raised codes remain |
+| F-59 | P1 | BASELINE | fixed | The prediction resolver applied no maximum price age, so a dead feed scored every prediction FLAT |
+| F-60 | P2 | BASELINE | open | Calibration drops unresolvable predictions silently and reports a denominator that hides it |
+| F-61 | P2 | BASELINE | open | `position_lots` has no database invariant tying status to quantity, and open quantity can be raised |
+| F-62 | P3 | BASELINE | open | `normalized_events` replaces a column that varies between copies of the same event |
 
 ---
 
@@ -1886,6 +1895,524 @@ migration later.
 
 Both are the same lesson as the finding itself: **a test that passes because a
 different guard fired is a test that has not seen the guard it names.**
+
+## F-54 · Every derivable count in the readiness documents had gone stale · BASELINE · P3 · FIXED
+
+**Claim under test.** The numbers a reviewer reads in the readiness documents
+describe the system as it is now.
+
+**What was found.** Five of them did not.
+
+| Document | Said | Actually |
+| --- | --- | --- |
+| `MASTER_BUILD_STATE.md` | capabilities: 20, of which **9** are high-risk | **18** |
+| `MASTER_BUILD_STATE.md` | **59** permissions | **60** |
+| `PRODUCTION_READINESS_REPORT.md` | browser suite: **69** tests | **70** |
+| `PRODUCTION_READINESS_REPORT.md` | a **66**-test suite is not a person | same suite, same page |
+| `BACKUP_RESTORE.md` | latest drill: **89** tables, version **604**, 7.8 s | **118** tables, version **718** |
+
+Each was written accurately. The high-risk figure was right until F-16 moved
+MARKETPLACE and the rest of the internal economy behind gates and did not
+recount. The readiness report contradicted itself twice on one page because
+three sentences were written on three different days. The restore drill's line
+was the worst of them: a hundred and eleven migrations old, describing a run
+that had never seen a Domain A table, the ledger's chart-parity CHECK, or the
+frozen-economics constraints — which makes it not a weaker claim than it
+appears but a claim about a different database.
+
+**Severity.** P3. Nothing here is a control that fails; it is the evidence a
+reviewer would use to decide whether the controls are there. A readiness
+document whose numbers drift is exactly F-14 and F-18 again — a document
+asserting something about the system by recalling it rather than checking —
+in its slowest and least visible form. F-18 was caught because it was wrong in
+four places at once. These were wrong in one place each, for months.
+
+**Fix.** `TestDocs_CountsMatchTheCode` derives each number from the thing it
+describes and asserts it against the sentence that carries it: capabilities and
+high-risk capabilities from `gates.AllCapabilities`/`gates.IsHighRisk`,
+permissions from `security.AllPermissions`, and the drill's schema version from
+the newest migration in the tree. It sits beside the citation check this package
+already ran, which is what caught the first attempt at this fix — the edit
+cited `TestDocs_CountsMatchTheCode` in the build state before writing it, and
+`TestDocs_EveryTestTheyNameExists` refused it. That is F-25's mistake, made
+again, by the thing correcting F-25's class of mistake, and stopped by the
+control built for it.
+
+The migration-version claim deliberately fails on staleness rather than on
+typos: it compares the cited version against the tree, so landing a migration
+without re-running `make restore-drill` breaks the build. It broke immediately
+— the drill was three migrations behind at the time of writing. The fix was
+to re-run it, not to edit the number: version 718 on both sides, 118 tables, row
+counts identical, zero balance drift, journal hashes equal, 10.6 s. That run is
+also the first to carry 00716–00718 through a real dump and restore.
+
+The browser count is left out on purpose. Deriving it means expanding the
+Playwright loops in Go, and a derivation that is wrong while asserting against a
+number that is right would be worse than the staleness it replaced.
+
+**Evidence.** `go test ./test/docs/` — observed failing on the stale drill
+version before the drill was re-run, then passing.
+`TestDocs_CountsCheckIsNotVacuous` is the positive signal: it fails if the
+derivations collapse to zero or to each other, so agreement means something.
+
+## F-55 · Every runbook described a system that predates the build · BASELINE · P1 · FIXED
+
+**Claim under test.** An operator following a runbook during an incident is
+told what this system can actually do.
+
+**What was found.** 140 `PENDING` markers across 21 runbooks and the runbook
+index. Every one that named a Go package, a binary or a make target named
+something that is on disk:
+
+| The marker said | On disk |
+| --- | --- |
+| `cmd/api` — "no serving binary, no handler wiring" | serving the whole API, admin routes permission-gated and step-up-protected |
+| `internal/reconciliation`, `cmd/reconciliation-worker` | both built; the worker runs on a ticker |
+| `cmd/audit-worker` | built; `make verify-audit` drives it |
+| `internal/agent`, `internal/model`, `internal/strategy`, `internal/reality`, `cmd/agent-worker`, `cmd/market-ingest-worker` | all six built and integration-tested |
+| the executor/recoverer | `cmd/execution-worker` |
+| `internal/provider/privy`, `signing.Service` | both exist |
+| production broker/Temporal client wiring "in the `cmd/*` composition roots" | `cmd/relay-worker`, `cmd/workflow-worker`, `cmd/market-ingest-worker` |
+
+Fifteen HTTP routes the runbooks tell an operator to call were checked against
+`openapi/openapi.yaml`. **All fifteen exist**, and twelve of them carried a
+marker saying they did not. The index's closing paragraph read: "Until
+`cmd/api` lands, the only way to activate a kill switch is to call
+`killswitch.Controller.Activate` from a Go program run by an operator against
+the database; there is no CLI."
+
+**Severity.** P1, and the reasoning is worth stating because no production code
+is wrong here. A runbook is read once, under time pressure, by somebody who was
+not there when it was written. `database-corruption.md` step 5 told a responder
+that the reconciliation engine did not exist — during a corruption
+incident, that is the responder not running the one tool that says what the
+restored copy is missing. `global-kill-and-reenable.md` told them to write a Go
+program to stop the platform. The cost of a stale runbook is paid in the
+minutes an incident is made of.
+
+**The sharpest instance** was not a stale marker but a positively wrong query.
+`funding-provider-compromise.md` told an incident responder to detect webhook
+forgery by looking for `provider_events.signature_verified = false` rows, and
+said the `webhook_signature_failed` emitter was PENDING. Both halves are wrong
+in the dangerous direction: `internal/webhook` rejects an event whose signature
+does not verify *before* writing any `provider_events` row, so that column is
+`true` on every row that exists and the query cannot return one however bad the
+incident is — while the emitter it says is missing writes a HIGH-severity
+`security_events` row on every failure. A detection query that cannot fire is
+worse than no query, because it answers.
+
+**Fix.** Every false marker corrected against the tree. The vocabulary is now
+two words that mean different things: `PENDING` for what is missing from this
+repository, `BLOCKED_EXTERNAL` for what needs a cloud account, a credential or a
+funded wallet. Filing "we have no AWS account" under the same word as "this
+package does not exist" is what made the second invisible.
+
+Both claims are now checked, in `test/docs`:
+
+- `TestDocs_NothingMarkedPendingAlreadyExists` fails when a marker names a
+  package, command or make target that is on disk. This forces a marker to name
+  what is actually absent: "PENDING: `cmd/api` route" is the shape that rotted,
+  because `cmd/api` existed and the route was the pending part, so nothing
+  distinguished the sentence from a true one once the route landed.
+- `TestDocs_EveryRunbookRouteIsServed` holds every `GET`/`POST` path in these
+  documents against the spec. A stale marker wastes a responder's time; a route
+  that does not exist wastes it and leaves them with no containment action.
+
+**Evidence.** Both observed failing on planted defects — a PENDING naming
+`internal/ledger` and `make unit`, and a call to
+`POST /admin/definitely-not-a-route` — and passing after. Three markers
+survive, and all three are true: `internal/backtest` and `internal/performance`
+do not exist, and there is no `make reconcile-full` target.
+
+**Related.** This is F-51 at the scale of the whole runbook set. F-51 fixed
+three documents by hand; the rest went on rotting, which is the argument for
+the mechanical check rather than a second careful read.
+
+## F-56 · Provider webhook evidence was mutable by the application role · BASELINE · P2 · FIXED
+
+**Claim under test.** `provider_events` is the evidence record. Migration 00107
+says so in its header comment, and its `Down` section says "provider evidence is
+never dropped".
+
+**What was found.** Neither statement was enforced. The table had no trigger of
+any kind — alone among the evidence tables in this schema, where
+`audit_events`, `raw_archive_objects` and `payout_provider_events` all carry
+`forbid_mutation` — and `cp_app` held table-wide `UPDATE`. So the columns
+the evidence consists of were writable by anything holding the application role:
+`payload_hash` (what the provider actually sent), `signature_verified` (that we
+checked it was them), `raw_ref` (where the untouched body is archived),
+`provider_event_id`, `received_at`.
+
+Nothing does write them. `internal/webhook` touches four lifecycle columns in
+two places and is careful about it. That is exactly F-49's shape: an invariant
+that holds because the one caller is well behaved, in a table whose entire
+purpose is to be arguable against a provider who disputes what they sent.
+Evidence the disputing party's own software could rewrite is not evidence.
+
+**Fix.** Migration 00719 states it twice, following the house pattern for a
+table that has lifecycle columns and so cannot simply be `forbid_mutation`'d
+(`fills_guard`, `execution_plans_guard`, `notifications_guard`):
+
+1. the `UPDATE` grant is narrowed to the five columns that legitimately move,
+   so the privilege system refuses the rest before a trigger is reached;
+2. `provider_events_guard` refuses them again with SQLSTATE `LG003`, which also
+   covers the owning role and any future grant somebody widens without reading
+   the migration.
+
+`canonical_event_id` is in the mutable set deliberately — nothing writes it
+today, but it exists to be filled in when an event becomes a canonical one,
+which is the lifecycle assignment the guard permits. `signature_verified` and
+`verification_error` are frozen at their inserted values, and the reason is
+recorded in the migration: a `provider_events` row exists only for an event that
+verified, so the column records a fact rather than holding a field to revise.
+
+**Evidence.** `TestIntegration_ProviderEvidenceCannotBeRewritten` drives six
+evidence columns twice — once as the owner, which every grant is irrelevant
+to, so a refusal is the trigger and nothing else; once as `cp_app`, which is the
+role a defect or an intruder in this codebase would hold. Observed failing with
+the trigger dropped and the table-wide grant restored: **every one of the twelve
+mutations succeeded**, including `cp_app` rewriting `payload_hash` and setting
+`signature_verified = false` on a verified event.
+`TestIntegration_TheLifecycleColumnsStillMove` is the positive control — a
+guard that refused everything would pass all twelve assertions and break the
+pipeline that writes the evidence, which would look like an empty table rather
+than an error.
+
+## F-57 · Five subsystems' tests skipped silently in CI, and fifteen VERIFIED rows cited them · BASELINE · P1 · FIXED
+
+**Claim under test.** The `integration` job runs the integration tests.
+
+**What was found.** It enumerated all of them and ran most of them. Five
+packages need something a Go test binary cannot start, and the job started
+Postgres alone:
+
+| Package | Needs | Guard |
+| --- | --- | --- |
+| `internal/reality` | ClickHouse | `CP_TEST_CLICKHOUSE_ADDR` |
+| `internal/reality/redpandabus` | Redpanda | `CP_TEST_REDPANDA_BROKERS` |
+| `internal/archive` | MinIO | `CP_TEST_ARCHIVE_ENDPOINT` |
+| `internal/workflows` | Temporal | a health check |
+| `internal/ratelimit` | Redis | `CP_TEST_REDIS_URL` |
+
+Each skipped, and a skip is a pass. **Fifteen rows of
+`REQUIREMENTS_TRACEABILITY.md` marked VERIFIED cite those exact tests as their
+evidence**, including R-S11-1, whose stage exit is entirely met by
+`TestIntegration_ClickHouse_LookAheadLeakage` and
+`TestProp_ClickHouse_SnapshotNeverReturnsFutureKnowledge`.
+
+`internal/ratelimit` was worse than skipped: its Redis test sat in an untagged
+file, so `make unit` invoked it without Redis and the integration job's
+enumeration — which selects packages by the build tag — never reached
+the package at all. It could not run anywhere.
+
+And `make property`, cited as the operational evidence for R-150-1, runs
+`go test -run 'Prop|Property' ./internal/...` with no build tag. It cannot
+compile the database-backed property files, so it silently ran none of the ten
+packages that hold them — capital conservation, reservation
+oversubscription, reconciliation convergence, balance convergence among them.
+
+**The repository already knew.** The chaos job carries this comment: "Without
+these two, broker_stall_test and archive_refused_test t.Skip() silently and the
+job finishes in under half a second while reporting success." That warning was
+written for one job and never applied to the other, and
+`PRODUCTION_READINESS_REPORT.md` action item 13 asked for exactly this
+— "Export ... in the chaos **and integration** jobs" — and only the
+chaos half was done.
+
+**Severity.** P1. This is the recurring class in its quietest form: *a check
+that can only skip is a check nobody runs*. It is worse than a check that can
+only fail, because a failing check gets noticed.
+
+**Fix.**
+
+- `internal/testkit/deps` decides whether a missing dependency is a skip or a
+  failure. A job that promises the stack sets `CP_TEST_REQUIRE_EXTERNAL_DEPS`;
+  in that job a missing dependency is a failure. Anywhere else it stays a skip,
+  which is what makes this safe to apply everywhere — a fast unit job that
+  never starts Redis is not lying when it skips a Redis test, because it never
+  claimed to have Redis. Only a job that claims it can be caught out.
+- The `integration` job now runs `make infra-up` rather than starting Postgres
+  alone, exports the five addresses, and sets the promise. A following step
+  re-runs the five packages verbosely and fails on any dependency skip.
+- The Redis test moved to `internal/ratelimit/redis_integration_test.go` behind
+  the build tag, which is what puts it in the enumeration.
+- `scripts/inttest` gained `-run`, filtering packages by whether they declare a
+  matching test so a database is not provisioned for a package with nothing to
+  run, and `make property` now invokes it. A target cited as proof has to
+  execute the thing.
+
+**Evidence.** `deps.Need` observed in both directions: with
+`CP_TEST_REQUIRE_EXTERNAL_DEPS=1` and no endpoint,
+`TestIntegration_S3_PutGetHeadListRoundTrip` **fails** naming the variable;
+with the endpoint, it passes. All five packages then run green against the live
+stack — `internal/reality` 36 passes and zero skips, with the two
+look-ahead-leakage tests among them.
+
+## F-58 · Documented SQLSTATEs that are never raised, and raised ones nothing handles · BASELINE · P2 · OPEN
+
+**Claim under test.** Each migration's `-- Custom SQLSTATEs:` header names the
+codes its triggers raise, and the application classifies them.
+
+**What was found.** Every custom code in the tree was traced from its
+documentation to its raise site to its Go handler. Two gaps, in opposite
+directions.
+
+**Documented, never raised (4).** Each labels an invariant that *is* enforced,
+by a different mechanism carrying a different code — so the property holds
+and the documentation is fiction:
+
+| Code | Says | Actually enforced by | Actual SQLSTATE |
+| --- | --- | --- | --- |
+| `CR002` | immutable row | `forbid_mutation()` on the three credit tables | `P0001` |
+| `CR005` | more than one Credit asset | `assets_single_credit_asset` unique index | `23505` |
+| `PO002` | illegal state transition | the `state` CHECK plus the `AU001` transition binding | `23514` |
+| `PO004` | amount mismatch | `settled <= reserved <= requested` CHECKs | `23514` |
+
+The cost is not a missing control; it is that the application cannot tell these
+apart from any other unique or check violation, so a second Credit asset and a
+duplicate idempotency key surface identically.
+
+`PO003` is a third kind of drift: documented as "provenance mismatch", and all
+three of its raise sites emit `PAYOUT_ALLOCATION_IMMUTABLE`. The Go handler
+agrees with the SQL and contradicts the header.
+
+**Raised, never handled (13).** `VD001`–`VD005` — the entire
+value-domain family, thirteen raise sites — appear in no Go file at all,
+test or otherwise: `internal/valuedomain` has no `SQLState` or `pgconn`
+reference, so every one of them reaches a caller as an unclassified
+`INTERNAL`. `BT001` likewise. `GT001`, `GT002`, `GT004`, `GT005` and `AU002`
+are asserted only inside integration tests, never mapped in production code.
+
+**The sharpest of these is `GT003`.** It has five raise sites, and migration
+00716 describes it as "the line that holds when the Go check is bypassed" —
+the database backstop for capability-gate evidence and windows. **No Go code
+asserts on it, in production or in a test.** A backstop with no evidence that it
+fires is the F-26 shape: a control believed because it was written.
+
+**Fixed so far.**
+
+- **GT003 now has evidence.** `TestIntegration_DatabaseRefusesActivationWithoutEvidence`
+  drives all four evidence references and a whitespace-only one, and
+  `TestIntegration_DatabaseRefusesActivationOutsideTheWindow` drives the expired
+  and revoked cases. Seven assertions of `GT003` where there were none.
+
+  Writing it turned up something worth keeping: blanking an evidence column
+  **as `cp_app` is refused outright**, because 00701 grants the application only
+  `UPDATE (version)` on `capability_gates`. The privilege layer already covers
+  the attacker-with-the-application-credential case. GT003 covers what is left
+  — a defect in the Go layer, or anything running as the owner — so
+  the test drives the owning connection. Written against `cp_app` it would have
+  passed on SQLSTATE 42501 and never reached the guard it names, which is F-53's
+  mistake again.
+
+  The window half also had to be restructured: pushing a gate's state back from
+  ACTIVE to APPROVED to reuse it is refused by the AU001 audit binding. Each
+  case now gets its own gate, driven to APPROVED through the real proposal and
+  approval path.
+
+- **The value-domain family is classified.** `valuedomain.MapError` maps all
+  five codes, `ledger.MapError` consults it, and
+  `TestIntegration_ValueDomainRefusalsAreClassified` asserts what a caller
+  receives rather than what the database said. Observed failing with the
+  mapping removed: the refusal for moving Credits into real capital came back
+  `INTERNAL` rather than `VALIDATION_FAILED`.
+
+  Why the existing tests could not see it: every value-domain test in
+  `internal/ledger` asserts on the *text* of the database's message, which is
+  there with or without a mapping. Nothing asserted on the classification, which
+  is what the customer and the on-call engineer actually see.
+
+**Still open.** The four documented-but-never-raised codes (`CR002`, `CR005`,
+`PO002`, `PO004`) and `PO003`'s misdescription. Each labels an invariant that
+holds, so nothing is unguarded; what is missing is the ability to tell these
+refusals apart from any other unique or check violation. `BT001` and the
+test-only `GT001`/`GT002`/`GT004`/`GT005`/`AU002` are lower: they are asserted
+somewhere, just not in production code.
+
+## F-59 · The prediction resolver applied no maximum price age · BASELINE · P1 · FIXED
+
+**Claim under test.** A prediction is scored against the market.
+
+**What was found.** `Resolver.Resolve` reads two prices, at `CommittedAt` and at
+the horizon end, through `PriceAsOf`, whose SQL is:
+
+```sql
+ WHERE i.id = $1 AND p.received_at <= $2
+ ORDER BY p.received_at DESC, p.observed_at DESC
+ LIMIT 1
+```
+
+`received_at <= $2` is an upper bound — a look-ahead guard, which is the
+property the doc comment claims and which holds. There is no lower bound. No
+max-age parameter, no interval, and `observed_at` is selected and scanned but
+never compared to anything. The `Resolver` struct carries no age field.
+
+So when the price feed for an instrument stops, both calls return the same row:
+the newest price that exists, however old. `returnInBPS(start, finish)` is then
+zero, `realized` is `DirectionFlat`, drawdown is zero, and `Validate` passes
+because both price refs are non-empty. **Every open prediction on that
+instrument is durably scored as a miss, and `prediction_outcomes` carries
+`forbid_mutation`, so the score cannot be corrected.**
+
+The platform has this concept and the resolver does not use it:
+`asset_policies.max_price_age_ms` is `NOT NULL CHECK (> 0)` and is honoured by
+`valuation.PriceStore.Latest`, which bounds both ends. `internal/prediction`
+reads `asset_prices` directly and never consults `asset_policies`.
+
+**Coverage.** `TestResolverRefusesWhenThereIsNoPrice` covers **zero** price rows
+and asserts `CodeStaleMarketData` — a code used here for absence, never for
+staleness. `TestResolveScoresFromPointInTimePrices` writes its prices one second
+before commit and exactly at the cut-off, and its one "must not be used" case is
+a price from the *future*. No test writes an old price. That is the shape of the
+gap: the look-ahead direction was tested thoroughly and the look-behind
+direction was not tested at all.
+
+**Fix.** `Resolver.usable` refuses a pair of prices that cannot measure the
+window they are meant to measure. Two rules, and only the second has a number
+in it:
+
+1. **Unconditional:** the two endpoints must be different observations. If
+   `PriceAsOf` returned one row for both cut-offs, no price arrived between the
+   commitment and the horizon, and the computed return is zero by construction
+   rather than by measurement. FLAT would be a statement about our data.
+2. **Bounded:** each price must be within `maxPriceAge` of its own cut-off,
+   measured on `ReceivedAt` — per `PricePoint`'s own comment, only what we
+   had received decides what was knowable when.
+
+`NewResolver` takes the age as a required argument and refuses a non-positive
+one, naming the consequence. A default inside the constructor is how this comes
+back: silently, in whichever deployment forgot to set it. `cmd/agent-worker`
+sets fifteen minutes, with the reason written where the number is.
+
+**Evidence.** `TestIntegration_ResolverRefusesADeadFeed`,
+`TestIntegration_ResolverRefusesOneObservationSpanningTheWindow`,
+`TestIntegration_ResolverRefusesAStaleStart` and
+`TestResolverRequiresAMaximumPriceAge`. The dead-feed test also asserts that
+**no outcome row was written** — the table is append-only, so a
+half-resolution would be as permanent as a wrong one. The one-observation test
+carries the positive control: adding a second price inside the window makes the
+same prediction resolve, and resolve UP.
+
+**Left open deliberately, and recorded here so it is a decision.** A refused
+resolution stays unresolved and is retried, which for a permanently dead feed
+means retried forever. That is the right behaviour for a resolver — it must
+not invent a score — but it needs the accounting in F-60 to be visible
+rather than merely absent.
+
+## F-60 · Calibration drops predictions silently, and its denominator hides it · BASELINE · P2 · OPEN
+
+**Claim under test.** A calibration snapshot describes how a strategy version
+performed over a window.
+
+**What was found.** `calibrationSourceSQL` joins `predictions` to
+`prediction_outcomes` with an **inner** join, so every prediction in the window
+without an outcome — unresolved, or repeatedly unresolvable through F-59
+— is dropped before Go sees a row. `PGCalibrator` holds only a clock: no
+logger, no counter, no metric. The excluded rows never cross the database
+boundary and nothing anywhere compares the window's prediction count against the
+outcomes found.
+
+`CalibrationRow.NPredictions` is `len(bucket)` — the count that *survived*.
+There is no field for the window's population, the excluded count, or the
+unresolved count, so a reader cannot tell 6 of 6 from 6 of 600. Worse, that one
+figure sits beside four statistics computed over four different divisors:
+`RealizedFrequency` over `hitCount`, `BrierMean` over `brierCount`,
+`LogLossMean` over `logCount`, the return means over `len(bucket)`. An unset
+statistic persists as SQL `NULL`, not as a visible gap.
+
+These snapshots are load-bearing:
+`agent_lifecycle_transitions.calibration_snapshot_id` is a foreign key onto this
+table, so **a promotion decision cites a snapshot whose sample loss is
+unrecorded.**
+
+The existing test pins the behaviour rather than questioning it:
+`TestCalibrationIgnoresUnresolvedPredictions` builds one open prediction and
+asserts `err == nil` with zero rows. It is a test *for* the silent drop. No test
+covers the mixed case — some resolved, some not — and the only
+aggregation test writes an outcome for all six of its predictions, so the
+`hasHit` / `brier != nil` / `logLoss != nil` branches are never exercised in the
+false direction.
+
+The empty-bucket skip is documented as deliberate, and the reasoning is right:
+"an empty bucket is omitted rather than reported as zero, because 'no evidence'
+and 'perfectly calibrated' are not the same statement." That reasoning simply
+was not carried through to the predictions the query dropped.
+
+## F-61 · `position_lots` has no database invariant beyond per-row bounds · BASELINE · P2 · OPEN
+
+**Claim under test.** Provenance lots are held to their invariants by the
+database, as the credit lots beside them are.
+
+**What was found.** The schema is a strong guard on per-row arithmetic and no
+guard at all on anything relational:
+
+| Invariant | SQL | Go |
+| --- | --- | --- |
+| `quantity_original > 0`, `0 <= quantity_open <= quantity_original` | CHECK | yes |
+| at acquisition `quantity_open = quantity_original` | **no** | yes (one placeholder used twice) |
+| `status = 'CLOSED'` iff `quantity_open = 0` | **no** | yes (a CASE in the UPDATE) |
+| open quantity only ever decreases | **no** | yes (`OpenAfter = Open - min(Open, remaining)`) |
+| cannot dispose more than the open quantity | **no** | yes |
+| Σ open lots per (account, asset) = WALLET balance | **no** — detected, never enforced | reported as `Drift` |
+
+`cp_app` holds table-wide `UPDATE`, and `position_lots` is deliberately absent
+from `appendOnlyTables` (correctly — it has lifecycle columns). So
+`UPDATE position_lots SET quantity_open = quantity_original` satisfies every
+constraint and every trigger, refilling a consumed lot.
+
+The asymmetry is the finding: `credit_lots`, doing the same job for Credits,
+**does** get a SECURITY DEFINER trigger raising `CR001 CREDIT_LOT_OVERCONSUMED`.
+The two lot tables were written to different standards.
+
+No test writes an invalid lot directly through SQL. Every `position_lots`
+reference in a test is a `SELECT`, and the concurrency test drives
+`e.Dispose`, so it proves the Go compare-and-set rather than a database
+constraint.
+
+## F-62 · `normalized_events` replaces a column that varies between copies · BASELINE · P3 · OPEN
+
+**Claim under test.** Re-ingesting an event is idempotent, as
+`reality.Pipeline`'s doc comment says: "Every step is idempotent downstream
+(archive dedup key, bus dedup id, ReplacingMergeTree, checkpoint version), so a
+crash between steps replays safely."
+
+**What was found.** The ClickHouse table is
+`ReplacingMergeTree(platform_received_at)`, `ORDER BY (source, event_type,
+dedup_id)`, `PARTITION BY toYYYYMM(decision_available_at)`.
+
+On a re-ingest the archive returns the **original** meta, so
+`platform_received_at` — the version column — is frozen; but
+`Normalize` is handed a fresh `clk.Now()`, so `normalized_at` and therefore
+`decision_available_at` are strictly later. **The version does not move and the
+replaced column does.** Two rows with the same sort key and the same version
+carry different `decision_available_at`, and which survives is decided at merge
+time rather than by the data. Because the partition key is derived from the
+column that varies, a re-ingest landing in a different month produces two rows
+that `FINAL` cannot collapse.
+
+There is also a semantic disagreement: `reality.Dedup` keeps the **first**
+occurrence, and its comment says that is "what ClickHouse's ReplacingMergeTree
+does at merge time". ReplacingMergeTree keeps the highest version or the last
+inserted. When copies differ, a bus consumer and a ClickHouse reader resolve to
+opposite values.
+
+**Severity P3, and only because of what does not read it yet.** Both readers of
+`decision_available_at` (`QueryNormalized`, `QueryMarketPrices`) have no
+non-test caller: `internal/backtest` and `internal/performance` do not exist,
+and `reality.Snapshotter`, which POINT_IN_TIME.md describes as the consumer,
+returns zero hits. The Postgres lineage of the same column name, on
+`predictions` and `tool_invocations`, is independent and unaffected. This is a
+defect in the substrate of an unbuilt subsystem — recorded now because it
+will be invisible once something reads it.
+
+**The test masks it.** `TestIntegration_ClickHouse_NormalizedRoundTripAndReplacingDedup`
+builds its duplicate by shifting `PlatformReceivedAt` **and**
+`DecisionAvailableAt` together, so the version advances and the assertion "the
+latest platform_received_at wins" holds deterministically. The pipeline does
+the opposite. The pipeline-level test does exercise the real path but runs on a
+fake clock that is never advanced between the delivery and the redelivery, so
+both normalisations produce identical timestamps and the divergence cannot
+appear. Two tests, neither able to see it: the F-26 shape again.
 
 ## Findings deliberately NOT raised
 

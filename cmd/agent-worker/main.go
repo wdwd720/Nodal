@@ -214,7 +214,13 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		database.Close()
 		return nil, err
 	}
-	outcomeResolver, err := prediction.NewResolver(clk, prediction.NewPriceReader())
+	// A price older than this against its own cut-off does not measure the
+	// window it is being used to score, so the prediction stays unresolved and
+	// is retried rather than being written off as FLAT (F-59). Fifteen minutes
+	// is the coarsest cadence any instrument this worker scores is fed at; a
+	// feed quieter than that cannot support a prediction anyway.
+	const maxPredictionPriceAge = 15 * time.Minute
+	outcomeResolver, err := prediction.NewResolver(clk, prediction.NewPriceReader(), maxPredictionPriceAge)
 	if err != nil {
 		database.Close()
 		return nil, err

@@ -9,7 +9,7 @@ Severity: SEV1 (duplicate economic execution) · Owner: OPERATIONS (containment)
 - `provider_duplicate_events` rising together with fill anomalies (a duplicate provider event that was not deduplicated by the inbox).
 - `duplicate_command_rejections` spike: usually benign (idempotency doing its job) but a leading indicator of a client retry storm.
 - Customer report of a double trade; reconciliation `EXECUTION` mismatch where observed quantity is about twice expected.
-- PENDING: alarm rules on these metrics; the instruments exist. The design invariants that make duplication impossible are on disk: `execution_attempts.tx_signature UNIQUE`, `UNIQUE (order_id, attempt_no)`, `fills UNIQUE (venue, external_fill_id)`, `orders UNIQUE (intent_id)`, `journal_transactions.idempotency_key = 'fill:<fill_id>'`.
+- BLOCKED_EXTERNAL: alarm rules on these metrics; the instruments exist. The design invariants that make duplication impossible are on disk: `execution_attempts.tx_signature UNIQUE`, `UNIQUE (order_id, attempt_no)`, `fills UNIQUE (venue, external_fill_id)`, `orders UNIQUE (intent_id)`, `journal_transactions.idempotency_key = 'fill:<fill_id>'`.
 
 ## Blast radius
 
@@ -28,7 +28,7 @@ Severity: SEV1 (duplicate economic execution) · Owner: OPERATIONS (containment)
    SELECT order_id, count(*) FROM fills GROUP BY order_id HAVING count(*) > 1;
    SELECT tx_signature, count(*) FROM fills WHERE tx_signature IS NOT NULL GROUP BY tx_signature HAVING count(*) > 1;
    ```
-2. Freeze the affected account(s): `POST /admin/kill-switches {"kind":"ACCOUNT_FREEZE","scope_id":"<account_id>","action":"activate","reason":"<INC-id>: duplicate execution suspected"}` (STANDARD; `kill:activate`). PENDING: `cmd/api`.
+2. Freeze the affected account(s): `POST /admin/kill-switches {"kind":"ACCOUNT_FREEZE","scope_id":"<account_id>","action":"activate","reason":"<INC-id>: duplicate execution suspected"}` (STANDARD; `kill:activate`).
 3. If more than one account is affected, or the first query shows a second attempt created while the first was `SUBMISSION_UNKNOWN`, the executor is suspect: activate `GLOBAL_NEW_RISK_KILL` per [global-kill-and-reenable.md](./global-kill-and-reenable.md). If only one venue is involved, `VENUE_DISABLE(<venue>)` (STANDARD) is the narrower switch.
 4. Classify quickly, without acting:
    - **two signatures on chain for one plan** → genuine duplicate (SEV1 confirmed);
@@ -44,7 +44,7 @@ Severity: SEV1 (duplicate economic execution) · Owner: OPERATIONS (containment)
 - Reservation: `SELECT id, status, quantity, consumed_quantity, locked_by_order_id FROM asset_reservations WHERE id = (SELECT reservation_id FROM orders WHERE id = '<order_id>');` — `consumed_quantity` above `quantity` is impossible by CHECK; a second fill therefore consumed from somewhere else or the executor bypassed `capital.Service`.
 - Provider side: execution provider status for both signatures (Jupiter `/execute` returns "accepted", not "landed"; `docs/api/providers/jupiter.md`); `provider_events` and `inbox_messages` for duplicate deliveries (`SELECT source, message_id, status, received_at FROM inbox_messages WHERE message_id IN (...)`).
 - Audit: `audit_events WHERE stream = 'account:<id>'` around the two submissions; correlation ids tie the intent, plan, attempts and fills together.
-- PENDING: the executor/recoverer (`internal/execution` has records and repositories only) and the reconciliation engine; the crash test (PART 49, R-049-1) and unknown-submission recovery tests are the controls that would have prevented this.
+- The executor/recoverer (`internal/execution`, driven by `cmd/execution-worker`) and the reconciliation engine (`internal/reconciliation`, `cmd/reconciliation-worker`) both exist; the crash test (PART 49, R-049-1) and the unknown-submission recovery tests are the controls that prevent this. **BLOCKED_EXTERNAL:** none of it has run against a real venue.
 
 ## Containment and recovery
 

@@ -6,9 +6,9 @@ Severity: SEV1 (cross-tenant financial access; unauthorized use of authority) ·
 
 - A gate, kill-switch, policy, envelope or admin-action transition nobody on the on-call rota performed: rows in `capability_gate_transitions`, `kill_switch_transitions`, `admin_action_transitions`, `capital_envelope_changes`, `risk_policies`, `account_status_transitions`, `instrument` status transitions (all append to the `admin` audit stream).
 - Break-glass granted or used outside an incident ticket (`admin_actions.kind = 'BREAK_GLASS_GRANT'`, `sessions.break_glass_until` set).
-- `cross_tenant_attempt` bursts from an operator principal (`ErrCrossTenant`; PENDING emitter), `login_anomaly`, session creation from a new IP/device for an operator.
+- `cross_tenant_attempt` bursts from an operator principal (`ErrCrossTenant`; PENDING emitter -- the error is raised and the request refused, but nothing writes a `security_events` row, so there is no burst to see), `login_anomaly`, session creation from a new IP/device for an operator.
 - Identity-provider incident (EB-017) or a reported phished/stolen operator device.
-- PENDING: emitters for `admin_privilege_use`, `capability_activation`, `global_kill`, `cross_tenant_attempt`, `login_anomaly`, `mfa_change` (the `security_events` table exists; only `login`, `funding_reversed`, `negative_deficit_accounts` are written today); PENDING: alarm routing.
+- PENDING: emitters for `admin_privilege_use`, `capability_activation`, `global_kill`, `cross_tenant_attempt`, `login_anomaly`, `mfa_change` (the `security_events` table exists; only `login`, `funding_reversed`, `negative_deficit_accounts` are written today); BLOCKED_EXTERNAL: alarm routing.
 
 ## Blast radius
 
@@ -22,7 +22,7 @@ What a single compromised principal can and cannot do (SECURITY.md §4):
 
 ## Immediate actions (first 10 minutes)
 
-1. Revoke every session of the suspect principal(s): `auth.Manager.RevokeAllForSubject(subject)` (`session:revoke_any`: SECURITY, ADMIN). PENDING: `cmd/api` route; the manager and `pgstore` exist. Then, read-only:
+1. Revoke every session of the suspect principal(s): `auth.Manager.RevokeAllForSubject(subject)` (`session:revoke_any`: SECURITY, ADMIN), served by `cmd/api`. Then, read-only:
    ```sql
    SELECT id, actor_type, roles, ip, user_agent, device_label, auth_time, amr, created_at, revoked_at, break_glass_until
      FROM sessions WHERE user_id = '<user_id>' ORDER BY created_at DESC;
@@ -32,7 +32,7 @@ What a single compromised principal can and cannot do (SECURITY.md §4):
 4. Pull the principal's trail from the `admin` audit stream and account streams:
    ```sql
    SELECT stream, stream_seq, action, resource_type, resource_id, reason, source_ip, occurred_at
-     FROM audit_events WHERE actor_id = '<subject>' AND occurred_at > now() - interval '7 days' ORDER BY occurred_at;
+     FROM audit_events WHERE actor_id = '<subject>' AND occurred_at > now - interval '7 days' ORDER BY occurred_at;
    SELECT id, kind, target_type, target_id, status, proposed_by_user_id, approved_by_user_id, proposed_at, approved_at
      FROM admin_actions WHERE proposed_by_user_id = '<user_id>' OR approved_by_user_id = '<user_id>' ORDER BY proposed_at DESC;
    SELECT capability, environment, state, approval_version, approvers FROM capability_gates WHERE environment = 'PROD';
@@ -45,14 +45,14 @@ What a single compromised principal can and cannot do (SECURITY.md §4):
 
 - Reconstruct authority changes in the window and decide, per change, whether it stands: gate transitions (revert with `suspend`/`revoke`), kill releases (re-activate), risk policy versions (RISK writes a new stricter version; old ones stay for audit), envelope changes (`ENVELOPE_AUTHORITY_CHANGE` to restore), account status changes, instrument status changes.
 - Financial effect: did any `LEDGER_CORRECTION`, `RECONCILIATION_RESOLVE_MATERIAL` or `WITHDRAWAL_APPROVE` execute? Their compensating postings are immutable; an illegitimate one is reversed by another `LEDGER_CORRECTION` under fresh dual control. Cross-check with [ledger-mismatch.md](./ledger-mismatch.md).
-- Tenant access: `audit_events` with `resource_type IN ('account', 'wallet', 'ledger', 'position', ...)` for accounts the principal has no business reason to read (`account:read_any` is broad by design; the audit stream is the control).
-- Audit integrity: `make verify-audit` (PENDING: `cmd/audit-worker`; `audit.Verifier.VerifyStream`) — a break in `admin` or `system` streams means the database itself was touched, escalate to [database-corruption.md](./database-corruption.md).
-- Database sessions: `pg_stat_activity` for `cp_migrate`/`cp_ops` from unexpected hosts; RDS audit logs (PENDING: Terraform).
+- Tenant access: `audit_events` with `resource_type IN ('account', 'wallet', 'ledger', 'position',...)` for accounts the principal has no business reason to read (`account:read_any` is broad by design; the audit stream is the control).
+- Audit integrity: `make verify-audit` (`audit.Verifier.VerifyStream`) — a break in `admin` or `system` streams means the database itself was touched, escalate to [database-corruption.md](./database-corruption.md).
+- Database sessions: `pg_stat_activity` for `cp_migrate`/`cp_ops` from unexpected hosts; RDS audit logs (BLOCKED_EXTERNAL: Terraform).
 - How: phishing, stolen device, IdP compromise (a fully compromised IdP mints valid tokens; step-up and dual control bound the blast radius), leaked session cookie (`__Host-` cookie, `HttpOnly`, `Secure`, idle 30 min, absolute expiry never extended).
 
 ## Containment and recovery
 
-1. Revert illegitimate authority changes through the normal controlled paths, each with a reason citing the incident: gates via `POST /admin/gates/{capability}/suspend` (fast, `kill:activate`) then `revoke`; kill switches re-activated; risk policies superseded; envelopes restored via dual-controlled `ENVELOPE_AUTHORITY_CHANGE`; accounts unfrozen/refrozen via `ACCOUNT_UNFREEZE`/`POST /admin/accounts/{id}/status`. PENDING: `cmd/api`.
+1. Revert illegitimate authority changes through the normal controlled paths, each with a reason citing the incident: gates via `POST /admin/gates/{capability}/suspend` (fast, `kill:activate`) then `revoke`; kill switches re-activated; risk policies superseded; envelopes restored via dual-controlled `ENVELOPE_AUTHORITY_CHANGE`; accounts unfrozen/refrozen via `ACCOUNT_UNFREEZE`/`POST /admin/accounts/{id}/status`.
 2. If any secret could have been read (config dumps, provider dashboards), run [secret-exposure.md](./secret-exposure.md) for each.
 3. Re-verify every ACTIVE gate's approval chain (`approvers` JSON: two distinct approvers, neither the proposer, step-up within 15 minutes of acting, evidence hashes present); anything doubtful is `SUSPENDED` and needs a fresh dual-controlled approval version.
 4. Rotate operator credentials at the IdP for everyone who acted in the window; require re-enrolment of MFA for the compromised principal.

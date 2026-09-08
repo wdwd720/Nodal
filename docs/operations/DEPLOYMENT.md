@@ -11,21 +11,21 @@ The repository has **nine** commands. `SYSTEM.md` section 2 still lists eight: i
 ```
 infra/terraform/
   modules/
-    kms            symmetric keys (rds, s3/ecr, secrets, logs/sns) + ECC_NIST_P256 SIGN_VERIFY audit key
-    network        VPC, 3 AZ public/app/data subnets, NAT, VPC endpoints, security groups, flow logs
-    s3-evidence    raw-events, provider-evidence, audit-archive (Object Lock COMPLIANCE), access-log bucket
-    rds            PostgreSQL 16 Multi-AZ, PITR, rds.force_ssl, bootstrap/roles.sql (no null_resource)
-    redis          ElastiCache replication group, TLS + at-rest encryption, AUTH token
-    secrets        one Secrets Manager entry per aws-sm:// reference + the least-privilege reader matrix
-    ecs-cluster    Fargate cluster, immutable KMS-encrypted ECR repositories
-    ecs-service    one task role + execution role + hardened task definition per binary;
+    kms symmetric keys (rds, s3/ecr, secrets, logs/sns) + ECC_NIST_P256 SIGN_VERIFY audit key
+    network VPC, 3 AZ public/app/data subnets, NAT, VPC endpoints, security groups, flow logs
+    s3-evidence raw-events, provider-evidence, audit-archive (Object Lock COMPLIANCE), access-log bucket
+    rds PostgreSQL 16 Multi-AZ, PITR, rds.force_ssl, bootstrap/roles.sql (no null_resource)
+    redis ElastiCache replication group, TLS + at-rest encryption, AUTH token
+    secrets one Secrets Manager entry per aws-sm:// reference + the least-privilege reader matrix
+    ecs-cluster Fargate cluster, immutable KMS-encrypted ECR repositories
+    ecs-service one task role + execution role + hardened task definition per binary;
                    Application Auto Scaling for the api (and only the api)
-    app-config     CP_* environment map mirroring internal/config/load.go (no resources)
-    waf-edge       ALB (TLS 1.2/1.3), WAFv2 managed rules + rate limit, optional CloudFront;
+    app-config CP_* environment map mirroring internal/config/load.go (no resources)
+    waf-edge ALB (TLS 1.2/1.3), WAFv2 managed rules + rate limit, optional CloudFront;
                    readiness target group on /v1/readyz + liveness target group on /v1/healthz
-    observability  SNS SEV1/SEV2, CloudWatch alarms, dashboard skeleton
-    iam-deploy     GitHub OIDC provider + deploy role (ECR push, ECS deploy, run migrate)
-  environments/{dev,staging,prod}/   main.tf, variables.tf, outputs.tf, backend.tf, backend.hcl.example,
+    observability SNS SEV1/SEV2, CloudWatch alarms, dashboard skeleton
+    iam-deploy GitHub OIDC provider + deploy role (ECR push, ECS deploy, run migrate)
+  environments/{dev,staging,prod}/ main.tf, variables.tf, outputs.tf, backend.tf, backend.hcl.example,
                                      terraform.tfvars.example, versions.tf
 ```
 
@@ -73,7 +73,7 @@ Schema changes run **before** the new api/workers, as a one-shot task under the 
 ```
 aws ecs run-task --cluster cp-<env> --task-definition cp-<env>-migrate:<rev> --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[...],securityGroups=[<worker sg>],assignPublicIp=DISABLED}"
-aws ecs wait tasks-stopped ... && aws ecs describe-tasks ... --query 'tasks[0].containers[0].exitCode'   # must be 0
+aws ecs wait tasks-stopped... && aws ecs describe-tasks... --query 'tasks[0].containers[0].exitCode' # must be 0
 ```
 
 The task definition's command is `up`; `verify` (embedded checksums vs applied rows) and `status` are run the same way with `--overrides`. Migrations are forward-only above the protected version; a checksum mismatch aborts the rollout. The deploy role may `RunTask` only this family on this cluster and read only its log group.
@@ -210,16 +210,16 @@ aws ecs describe-services --cluster cp-<env> \
   --services $(terraform output -json service_names | jq -r '.[]' | tr '\n' ' ') \
   --query 'services[].{name:serviceName,running:runningCount,desired:desiredCount,rollout:deployments[0].rolloutState}'
 aws cloudwatch describe-alarms --alarm-name-prefix cp-<env>- --state-value ALARM
-curl -fsS https://<public_base_url>/v1/healthz    # the process is up
-curl -fsS https://<public_base_url>/v1/readyz     # its dependencies are reachable
+curl -fsS https://<public_base_url>/v1/healthz # the process is up
+curl -fsS https://<public_base_url>/v1/readyz # its dependencies are reachable
 ```
 
-A service whose `rolloutState` is `FAILED` was rolled back by the circuit breaker; read `/ecs/cp-<env>/<binary>` in CloudWatch Logs. The usual signatures: `config: ... NO_FAKE_PROVIDERS` or another `Rule` name (a tfvars value violates `config.Validate`; fix the variable, not the code); `AccessDeniedException ... secretsmanager:GetSecretValue` (the binary resolved a secret outside its matrix row; that is the intended fail-closed behaviour, so check which reference it needed and whether the matrix in `modules/secrets/main.tf` should change under review); ALB targets `unhealthy` with the api logging nothing (`/v1/readyz` depends on database and Redis reachability: check the `db` and `redis` security groups and that `sslmode=verify-full` can find its CA); a worker task that starts and exits 2 at once was given no subcommand (`service_command`).
+A service whose `rolloutState` is `FAILED` was rolled back by the circuit breaker; read `/ecs/cp-<env>/<binary>` in CloudWatch Logs. The usual signatures: `config:... NO_FAKE_PROVIDERS` or another `Rule` name (a tfvars value violates `config.Validate`; fix the variable, not the code); `AccessDeniedException... secretsmanager:GetSecretValue` (the binary resolved a secret outside its matrix row; that is the intended fail-closed behaviour, so check which reference it needed and whether the matrix in `modules/secrets/main.tf` should change under review); ALB targets `unhealthy` with the api logging nothing (`/v1/readyz` depends on database and Redis reachability: check the `db` and `redis` security groups and that `sslmode=verify-full` can find its CA); a worker task that starts and exits 2 at once was given no subcommand (`service_command`).
 
 **Rotation.**
 
 - RDS master password: rotated by RDS (`manage_master_user_password`); nothing to do. The db-bootstrap task always reads the current version.
-- Application role passwords: write new values to `cp/<env>/database/roles/*-password`, re-run the db-bootstrap task (idempotent `ALTER ROLE ... PASSWORD`), then update the three URL secrets; services pick the new URL up on their next start, so roll them (`terraform apply` with a no-op change or `aws ecs update-service --force-new-deployment`).
+- Application role passwords: write new values to `cp/<env>/database/roles/*-password`, re-run the db-bootstrap task (idempotent `ALTER ROLE... PASSWORD`), then update the three URL secrets; services pick the new URL up on their next start, so roll them (`terraform apply` with a no-op change or `aws ecs update-service --force-new-deployment`).
 - Redis AUTH token: taint `module.redis.random_password.auth_token` and apply; ElastiCache applies it with `ROTATE` (old and new tokens both valid until the next `SET`), and Terraform rewrites `redis/url`.
 - Provider keys, OIDC secret, webhook secrets: `secret_rotation` in tfvars attaches a rotation Lambda per secret name (`aws_secretsmanager_secret_rotation`); the Lambda role must be listed in `secret_admin_principal_arns` or the resource policy denies it. No rotation Lambdas are written yet.
 - Audit signing key: asymmetric keys cannot auto-rotate. Create a new key, switch `CP_KMS_AUDIT_SIGNING_KEY_ID`, keep the old key enabled for verification for the whole retention period; checkpoints record the key id.
@@ -228,7 +228,7 @@ A service whose `rolloutState` is `FAILED` was rolled back by the circuit breake
 
 **Scaling.** `service_sizing` per binary, plus `api_autoscaling` for the api alone (section 5). Running more than one `execution-worker` or `workflow-worker` is safe only because settlement and reservations serialize on Postgres row locks and idempotency keys (SYSTEM.md section 7); `market-ingest-worker` and `audit-worker` are single-task by design (checkpoints, chain heads).
 
-`relay-worker` runs several replicas deliberately, and prod validates a floor of two. They coordinate entirely through Postgres with no lease, heartbeat or election: `SELECT ... FOR UPDATE SKIP LOCKED` gives each row to exactly one instance, and since D-036 every claimed row -- not only each partition's oldest -- is checked against the rows another instance holds, so per-partition order survives a partition being split across instances mid-drain. `CP_RELAY_WORKER_EXCLUSIVE` (the advisory-lock single publisher) is off by default and stays off: since D-037 it protects nothing, caps drain rate at one instance, and fails over only when Postgres reaps the dead holder's connection, which is minutes of growing lag. It is an operator switch for a deliberate single publisher, not a safety control, and the `relay_worker` variable validates it to `false` so enabling it needs a decision-register entry first. One relay replica is a single point of staleness for every read model in the platform.
+`relay-worker` runs several replicas deliberately, and prod validates a floor of two. They coordinate entirely through Postgres with no lease, heartbeat or election: `SELECT... FOR UPDATE SKIP LOCKED` gives each row to exactly one instance, and since D-036 every claimed row -- not only each partition's oldest -- is checked against the rows another instance holds, so per-partition order survives a partition being split across instances mid-drain. `CP_RELAY_WORKER_EXCLUSIVE` (the advisory-lock single publisher) is off by default and stays off: since D-037 it protects nothing, caps drain rate at one instance, and fails over only when Postgres reaps the dead holder's connection, which is minutes of growing lag. It is an operator switch for a deliberate single publisher, not a safety control, and the `relay_worker` variable validates it to `false` so enabling it needs a decision-register entry first. One relay replica is a single point of staleness for every read model in the platform.
 
 Never use FARGATE_SPOT for money-path workers; the cluster's capacity provider strategy is FARGATE only.
 
@@ -243,19 +243,19 @@ $ terraform version
 Terraform v1.15.8
 on windows_amd64
 
-$ terraform fmt -check -recursive          # in infra/terraform
+$ terraform fmt -check -recursive # in infra/terraform
 exit=0
 
-$ (cd environments/dev     && terraform validate)   Success! The configuration is valid.   exit=0
-$ (cd environments/staging && terraform validate)   Success! The configuration is valid.   exit=0
-$ (cd environments/prod    && terraform validate)   Success! The configuration is valid.   exit=0
+$ (cd environments/dev && terraform validate) Success! The configuration is valid. exit=0
+$ (cd environments/staging && terraform validate) Success! The configuration is valid. exit=0
+$ (cd environments/prod && terraform validate) Success! The configuration is valid. exit=0
 
-$ trivy config --severity HIGH,CRITICAL --exit-code 1 infra/      # make iac-scan, trivy 0.74.0
- terraform/environments/dev          terraform   0
- terraform/environments/prod         terraform   0
- terraform/environments/staging      terraform   0
- terraform/modules/rds/main.tf       terraform   0
- terraform/modules/waf-edge/main.tf  terraform   0
+$ trivy config --severity HIGH,CRITICAL --exit-code 1 infra/ # make iac-scan, trivy 0.74.0
+ terraform/environments/dev terraform 0
+ terraform/environments/prod terraform 0
+ terraform/environments/staging terraform 0
+ terraform/modules/rds/main.tf terraform 0
+ terraform/modules/waf-edge/main.tf terraform 0
 exit=0
 ```
 

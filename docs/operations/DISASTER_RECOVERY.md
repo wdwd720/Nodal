@@ -8,7 +8,7 @@ Status: design and local evidence only (2026-09-06). No production or staging en
 |---|---|---|---|
 | Single AZ loss | RPO 0 for committed financial transactions; RTO minutes | RDS Multi-AZ synchronous standby; ECS services spread across 3 AZs; per-AZ NAT in prod | Terraform design (pending validate/apply) |
 | Primary database instance failure | RPO 0; automatic failover | RDS Multi-AZ | — |
-| Logical corruption (bad deploy, operator error) | RPO ≤ 5 min (PITR granularity); RTO hours | PITR restore into a **new** instance, verify, reconcile, promote (BACKUP_RESTORE.md §3) | local drill proves dump→restore→verify→ledger-consistency in 7.8 s on a small dataset |
+| Logical corruption (bad deploy, operator error) | RPO ≤ 5 min (PITR granularity); RTO hours | PITR restore into a **new** instance, verify, reconcile, promote (BACKUP_RESTORE.md §3) | local drill proves dump→restore→verify→ledger-consistency in about 11 s on a small dataset |
 | Region loss | RPO ≤ 24 h from cross-region snapshot copy; RTO ≥ hours; **new risk stays killed until reconciliation converges** | cross-region automated backup replication (design), evidence buckets replicated, Terraform re-apply in the secondary region | not designed in Terraform yet; single-primary-region V1 (ADR 0017) |
 | Evidence archive loss | none for audit archive: Object Lock COMPLIANCE + versioning + replication | S3 | Terraform design |
 | Event bus (Redpanda) loss | no financial loss: Postgres + outbox is the source; relay republishes after recovery | `internal/event` relay is at-least-once from the outbox table | outbox/relay tests (crash between publish and mark) |

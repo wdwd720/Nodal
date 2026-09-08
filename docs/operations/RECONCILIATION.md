@@ -1,6 +1,10 @@
 # RECONCILIATION OPERATIONS
 
-Status: operating procedure for the reconciliation subsystem designed in `docs/architecture/RECONCILIATION.md`. **CORRECTION (F-51):** the reconciliation engine IS implemented — `internal/reconciliation` has `NewEngine`, `RunPeriodic` and `RunFull`, `cmd/reconciliation-worker` drives them on a ticker, and the admin read endpoints exist. This line said it was not, which is stale in the pessimistic direction and just as misleading: a reader following this runbook would not look for a subsystem that is running. What is genuinely absent is the RESOLUTION path — `cmd/api` wires `Reconcile: nil`, so both resolve endpoints answer UNSUPPORTED while the worker continues to raise records and block new risk; the tables, state machine constraints, admin API routes, and the blocking semantics it will rely on exist. Every step below that needs the engine is marked PENDING so operators never assume a control that does not run yet.
+Status: operating procedure for the reconciliation subsystem designed in `docs/architecture/RECONCILIATION.md`. The subsystem is built and wired: `internal/reconciliation` has `NewEngine`, `RunPeriodic` and `RunFull`; `cmd/reconciliation-worker` drives them on a ticker; the admin read endpoints and the resolve endpoint are served by `cmd/api` through `httpapi.NewReconciliationPort`.
+
+One resolution shape is deliberately refused. A resolution carrying a `compensation` body is answered `UNSUPPORTED` by name rather than silently ignored: posting a compensating journal transaction is a decision for the ledger path with its own dual control (`LEDGER_CORRECTION`), and an HTTP handler that could post one would be a second, weaker way into the ledger. Resolutions without compensation — which is every classification, dust write-off and adoption — work.
+
+This paragraph has been wrong twice in opposite directions. It first said the engine did not exist (F-51) when it did; the correction then said the resolve path was unwired (true when written, wired since). Both were read by nobody at the time and would have been read by somebody at 3 a.m. See F-55.
 
 ## 1. What operators see
 
@@ -8,17 +12,17 @@ Status: operating procedure for the reconciliation subsystem designed in `docs/a
 |---|---|---|
 | `reconciliation_records` table (migration 00301) | exists | status CHECK, `material`, `blocks_new_risk`, manual-resolution CHECK (operator + reason + evidence required) |
 | `reconciliation_transitions` (immutable) + transition binding (00603, SQLSTATE `AU001`) | exists | a status change without a transition row in the same transaction is refused at COMMIT |
-| `GET /v1/admin/reconciliation/records` and `POST …/{recordId}/resolve` | in `openapi/openapi.yaml`; server handlers PENDING (`cmd/api`) | resolution requires reason + evidence; material resolutions require an approved `admin_actions` row of kind `RECONCILIATION_RESOLVE_MATERIAL` (dual control, exists in `internal/admin`) |
-| Metrics `reconciliation_mismatches`, `oldest_unresolved_mismatch`, `unknown_submissions` | instruments defined in `internal/observability`; emitters PENDING | alarms PENDING (Terraform observability module) |
+| `GET /v1/admin/reconciliation/records` and `POST …/{recordId}/resolve` | in `openapi/openapi.yaml`; served by `cmd/api` (`internal/httpapi/wiring_reconciliation.go`) | resolution requires reason + evidence; material resolutions require an approved `admin_actions` row of kind `RECONCILIATION_RESOLVE_MATERIAL` (dual control, exists in `internal/admin`) |
+| Metrics `reconciliation_mismatches`, `oldest_unresolved_mismatch`, `unknown_submissions` | instruments defined in `internal/observability`; emitters PENDING | alarms BLOCKED_EXTERNAL (Terraform observability module) |
 | Risk-kernel input `unresolved material mismatches` | consumed by `internal/risk` (`RISK_RECONCILIATION_PENDING`) | the reader that counts records is PENDING (`reconciliation.BlockReader`) |
 
 ## 2. Modes and cadence (target)
 
 | Mode | Trigger | Owner binary |
 |---|---|---|
-| EVENT_DRIVEN | after every execution attempt reaches terminal/unknown; after every deposit ≥ PROVIDER_CONFIRMED; after every withdrawal submission | `cmd/reconciliation-worker` consuming outbox events (PENDING) |
-| PERIODIC | every 60 s per provider window; every 5 min per active account | scheduler in `cmd/reconciliation-worker` (PENDING) |
-| FULL | hourly and on demand (`make reconcile-full` PENDING) | same |
+| EVENT_DRIVEN | after every execution attempt reaches terminal/unknown; after every deposit ≥ PROVIDER_CONFIRMED; after every withdrawal submission | `cmd/reconciliation-worker` consuming outbox events |
+| PERIODIC | every 60 s per provider window; every 5 min per active account | scheduler in `cmd/reconciliation-worker` |
+| FULL | hourly and on demand; PENDING: no `make reconcile-full` target exists, so an on-demand full run means calling `Engine.RunFull` | same |
 
 Checkpoints per (mode, scope) are persisted so restarts resume; resolved records are never reopened by a rerun.
 
@@ -36,7 +40,7 @@ Checkpoints per (mode, scope) are persisted so restarts resume; resolved records
    - Non-material: `RESOLVED_MANUAL` with operator id, reason, evidence ref (the DB CHECK enforces all three).
    - Material: propose `RECONCILIATION_RESOLVE_MATERIAL` through the admin actions API; a second, distinct principal approves under step-up; execute with the same params hash. If a financial correction is needed, it is a reason-coded compensating `JournalTransaction` (`ledger.Kind` `RECONCILIATION_ADJUSTMENT` or `COMPENSATION`) referenced from the record. **Balances are never edited.**
    - Escalate (`ESCALATED`) when evidence is incomplete or observers disagree.
-5. **Confirm the block is lifted**: after resolution `blocks_new_risk` must be false and the account's next intent must pass the risk kernel's `RISK_RECONCILIATION_PENDING` check (PENDING until the engine wires the reader).
+5. **Confirm the block is lifted**: after resolution `blocks_new_risk` must be false and the account's next intent must pass the risk kernel's `RISK_RECONCILIATION_PENDING` check.
 
 ## 4. Automatic resolution policy (target)
 
@@ -44,7 +48,7 @@ Only enumerated causes may resolve automatically: fee dust below `auto_resolve_t
 
 ## 5. Evidence and audit
 
-Every transition is appended to the audit stream of the affected account (or `system` for internal drift). `make verify-audit` (PENDING: `cmd/audit-worker verify`) recomputes the chains; an operator resolving a record must be able to point to the audit event proving the resolution and its approval.
+Every transition is appended to the audit stream of the affected account (or `system` for internal drift). `make verify-audit` recomputes the chains; an operator resolving a record must be able to point to the audit event proving the resolution and its approval.
 
 ## 6. Related
 

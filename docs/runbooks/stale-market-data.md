@@ -5,10 +5,10 @@ Severity: SEV2 (sustained stale data) · Owner: OPERATIONS (RISK for policy) · 
 ## Trigger
 
 - `RISK_STALE_DATA` / `RISK_QUOTE_AGE` rejections rising (`risk_rejections` by reason); `STALE_MARKET_DATA` problem responses from valuation (`valuation.PriceStore.Latest` judges staleness on `observed_at`, never `received_at`).
-- `data_freshness` histogram (age of the freshest input used for a decision) above strategy `max_age_ms`; `agent_runs.skip_reason = STALE_DATA | MISSING_DEPENDENCY` climbing (PENDING: `internal/agent`).
-- `ingest_checkpoints.status` in `DISCONNECTED | GAP | STOPPED`, or `last_platform_received_at` older than the source's expected cadence; `stream_gaps` rows `OPEN` of kind `SILENCE`/`GAP` (PENDING: ingestion worker).
+- `data_freshness` histogram (age of the freshest input used for a decision) above strategy `max_age_ms`; `agent_runs.skip_reason = STALE_DATA | MISSING_DEPENDENCY` climbing (`internal/agent`).
+- `ingest_checkpoints.status` in `DISCONNECTED | GAP | STOPPED`, or `last_platform_received_at` older than the source's expected cadence; `stream_gaps` rows `OPEN` of kind `SILENCE`/`GAP` (`cmd/market-ingest-worker`).
 - Market-data provider health `UNHEALTHY` (role `DATA`); `asset_prices.observed_at` not advancing for an active asset.
-- PENDING: alarms; `internal/reality`, `cmd/market-ingest-worker`. Implemented: `valuation` staleness, risk kernel `RISK_STALE_DATA`, quote freshness (`internal/quote`), tables for checkpoints/gaps/health samples.
+- BLOCKED_EXTERNAL: alarms; `internal/reality`, `cmd/market-ingest-worker`. Implemented: `valuation` staleness, risk kernel `RISK_STALE_DATA`, quote freshness (`internal/quote`), tables for checkpoints/gaps/health samples.
 
 ## Blast radius
 
@@ -29,7 +29,7 @@ Money safety holds without operator action: **stale data means no trade** (PART 
    SELECT kind, resolution, count(*), min(gap_start_at) FROM stream_gaps WHERE resolution = 'OPEN' GROUP BY 1,2;
    ```
    Then check that intents are being *rejected* for the affected instruments (`risk_decisions` reason codes contain `RISK_STALE_DATA`/`RISK_QUOTE_AGE`) rather than accepted. If an intent was accepted on stale data, that is a SEV1 kernel defect: activate `GLOBAL_NEW_RISK_KILL` ([global-kill-and-reenable.md](./global-kill-and-reenable.md)).
-2. If only some instruments are affected and you want the state to be explicit for customers: `POST /admin/instruments/{instrumentId}/status {"to":"CLOSE_ONLY","reason":"<INC-id>: market data stale","policy_version":"<v>"}` (`instrument:status_write`; OPERATIONS/RISK/ADMIN; PENDING `cmd/api`) or `INSTRUMENT_CLOSE_ONLY(<instrument_id>)` (STANDARD switch). Close-only preserves `REDUCE_RISK`.
+2. If only some instruments are affected and you want the state to be explicit for customers: `POST /admin/instruments/{instrumentId}/status {"to":"CLOSE_ONLY","reason":"<INC-id>: market data stale","policy_version":"<v>"}` (`instrument:status_write`; OPERATIONS/RISK/ADMIN) or `INSTRUMENT_CLOSE_ONLY(<instrument_id>)` (STANDARD switch). Close-only preserves `REDUCE_RISK`.
 3. Identify the layer: provider (health samples role `DATA`), stream/bus ([redpanda-outage.md](./redpanda-outage.md)), ingest worker (checkpoints not advancing while the provider is healthy), or normaliser (raw archive advancing but `asset_prices` not).
 4. Do not touch agents: they skip on their own; pause (`AGENT_PAUSE`) only an agent whose *exit* logic needs the stale stream and that has open positions you want held rather than evaluated.
 5. Announce affected instruments/streams, since when, and that trading on them is refused by policy.
@@ -45,7 +45,7 @@ Money safety holds without operator action: **stale data means no trade** (PART 
 ## Containment and recovery
 
 1. Restore the failing layer (provider ticket, bus, worker restart). Checkpoints resume from `last_sequence`/`last_source_offset`; `RECONNECT` gap rows are recorded automatically.
-2. Replay the gap when `data_sources.supports_replay` (from the provider or the raw archive; PENDING: `reality.Ingestor` replay): the gap becomes `REPLAYED`; otherwise mark `UNRECOVERABLE` with rationale (actor recorded; `stream_gaps.resolved_by_*`).
+2. Replay the gap when `data_sources.supports_replay` (from the provider or the raw archive; `internal/reality` replay): the gap becomes `REPLAYED`; otherwise mark `UNRECOVERABLE` with rationale (actor recorded; `stream_gaps.resolved_by_*`).
 3. Strategies resume automatically when the freshness check passes; backtests overlapping the gap carry `DATA_GAP:<id>` impurity forever.
 4. Return instruments to `ACTIVE` (`instrument:status_write`) or release `INSTRUMENT_CLOSE_ONLY` (`kill:release` + step-up) once prices are fresh for a full policy window.
 5. No financial repair: nothing traded on stale data, by construction. If something did (step 1 finding), the kernel defect is a release blocker and the affected orders are reviewed under [ledger-mismatch.md](./ledger-mismatch.md) for customer impact.
