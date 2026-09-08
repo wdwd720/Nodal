@@ -54,7 +54,9 @@ migration.
 | 17 | Admin tooling for Domain A | **done** (9 administrative action kinds + executors; `internal/httpapi/executors_domaina.go`) |
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
-| 20–24 | Chaos, load, provider sandbox, re-audit, launch package | **not started** |
+| 20 | Chaos / fault injection | **done for Domain A** (3 tests, 2 negative controls; whole suite 10/10 with nothing skipped) |
+| 21 | Load | **partial** — read surface and refusal path measured; the committed write path needs a gate a script must not activate |
+| 22–24 | Provider sandbox, re-audit, launch package | **not started** |
 
 API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
 into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
@@ -239,9 +241,78 @@ would fail.
 **Not built.** Nothing for Domain A. The remaining frontend gaps are outside
 the internal economy.
 
+### Stages 20 and 21 as built
+
+**Chaos (Stage 20).** `test/chaos/internal_economy_test.go`. The internal
+economy has a property the external rails do not: every financial act is a
+SINGLE database transaction. There is no submit, no provider and therefore no
+legitimate half-done state, which makes the invariant sharper than "recover
+correctly" — after a fault there must be NOTHING.
+
+Three tests, each killing the exact backend running the transaction after every
+write and before COMMIT, and each asserting three things: no partial effect, no
+drift (`VerifyProvenance`, `VerifyEarnings`, `VerifyReserves` all still hold),
+and that the same command retried still succeeds. That third assertion matters
+as much as the others: a guard that survives a fault by being permanently
+broken afterwards has not survived it.
+
+Both new guards carry named negative controls, and **both were observed
+failing**. The first attempt at one of them did not:
+
+> The first `commerce_partial_write` control consumed Credit lots with no
+> posting behind them, and the test PASSED with the control active — because
+> SQLSTATE CR004 makes that drift unrepresentable. A control that cannot fail
+> proves nothing, so it was replaced by the mirror image (post the movement,
+> skip the consumption), which fires.
+
+The whole chaos suite now runs 10/10 with **nothing skipped**, once
+`CP_TEST_REDPANDA_BROKERS` and `CP_TEST_ARCHIVE_ENDPOINT` are supplied; it had
+been running 8 with 2 skips.
+
+**Load (Stage 21).** `test/load/internal_economy.js`, and an honest partial
+result. Measured on this host against the real binary: 3,048 requests at
+101 req/s, p95 6.5 ms on the successful reads, no 5xx, and every refusal
+delivered as problem+json.
+
+What it measured is the READ surface and the REFUSAL path: 182 purchase
+attempts refused `CAPABILITY_NOT_APPROVED` because the MARKETPLACE gate is off,
+and 18 refused `IDEMPOTENCY_IN_PROGRESS` because the shared-key iterations
+raced — the idempotency store doing its job under contention.
+
+What it did NOT measure is the committed write path, because that needs the
+MARKETPLACE gate ACTIVE, and MARKETPLACE is high risk: three distinct
+principals, a step-up and four evidence references. A load script that
+activated its own gate would be a load script that switched off a control to
+get a number.
+
+The script's first draft reported all of its 409s as "price changed". They were
+idempotency conflicts. It now counts refusals **by the code the backend gave**,
+and its threshold is on "never a 5xx" and "always problem+json" rather than on
+`http_req_failed`, which counts an expected refusal as a failure and teaches an
+operator to ignore a red threshold.
+
+### Making Domain A reachable in development
+
+Two pieces, both fail-closed, added because the internal economy was otherwise
+unexercisable outside a test binary:
+
+- **`scripts/seedeconomy`** seeds the Credit asset, 25,000 PROMOTIONAL/UNFUNDED
+  Credits for each dev customer, a registered seller and three published
+  products spanning all three earning provenances. It issues PROMOTIONAL rather
+  than PURCHASED deliberately: nobody paid for them, and PURCHASED is the origin
+  a payout policy is most likely to permit. It activates **no** gate and prints
+  the operator steps instead.
+- **`CP_API_LEGAL_POLICY=DEVELOPMENT`** loads `legalrouter.DevelopmentPolicy()`,
+  which permits the internal economy through the REAL router with the REAL
+  required capabilities. It is refused in STAGING and PROD — as an error, not a
+  silent downgrade — and it still denies payouts, because a development policy
+  must never be where somebody discovers payouts were switched on.
+
 ## 0.3 Next exact work, in order
 
-1. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
+1. **Stage 15** — Reality Engine and Prediction Ledger integrated with Domain A.
+2. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.
+3. **The three uncovered PART LXXII items** (5, 14, 23), named in the readiness report.
 
 ## 0.4 Verification commands that matter
 

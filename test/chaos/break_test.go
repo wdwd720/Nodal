@@ -33,6 +33,11 @@ var breakNames = map[string]string{
 	"rogue_relay_ignores_the_claim": "a second relay publishes rows another instance has claimed, producing the duplicate delivery the row lock exists to prevent",
 	"archive_failure_swallowed": "an archive write that the object store refused is recorded as stored, " +
 		"so evidence is reported present when it is absent",
+	"commerce_partial_write": "the buyer's Credits are moved on the ledger WITHOUT consuming the lots behind them, " +
+		"so the ledger says they paid while provenance still claims every unit — the drift VerifyProvenance exists to catch. " +
+		"The mirror image (consuming lots with no posting) is not usable as a control: SQLSTATE CR004 makes it unrepresentable",
+	"native_trade_partial_write": "the trader's Credits leave their balance in a SEPARATE, already-committed transaction, " +
+		"so a fault leaves them having paid for a trade that produced no fill and moved no curve",
 	"clock_jump_trusted": "the idempotency KEY is derived from the wall clock, so a clock jump makes a replay look like a new command and the deposit posts twice. " +
 		"Deriving only the CONTENT from the clock is NOT a usable control: the ledger refuses that as INVALID_IDEMPOTENCY_REUSE, so the invariant holds either way and the test cannot fail",
 }

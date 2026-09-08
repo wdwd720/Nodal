@@ -33,6 +33,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-18 | P2 | NEW | fixed | The adversarial-coverage summary contradicted the evidence tables in its own document |
 | F-19 | P3 | NEW | fixed | A Route field called `MaxAgentAuthority` held a minimum, inviting a backwards gate |
 | F-20 | P2 | BASELINE | fixed | Any failure to read `/v1/me` told the customer they were signed out, including a rate limit |
+| F-21 | P2 | NEW | fixed | A chaos negative control could not fail, so the guard it defended was unproven |
+| F-22 | P3 | NEW | fixed | A load script reported idempotency conflicts as price changes |
 
 ---
 
@@ -397,6 +399,52 @@ production-like environment, which is correct, and the default budget is the rig
 interface that collapses them tells the customer something false at the moment they are least able
 to check it. The same distinction is why the Settlement Compiler separates a policy denial from a
 gate being off (F-17) — this is that principle at the other end of the system.
+
+## F-21 · A chaos negative control could not fail · NEW · P2 · FIXED
+
+**Found by** running the negative control and watching the test PASS.
+
+`test/chaos` holds itself to a rule: every guard carries a named control that
+makes it violate the property it defends, so the assertion can be observed
+firing. "A guard that has never been seen to fail is recorded as unproven."
+
+The first `commerce_partial_write` control consumed the buyer's Credit lots in a
+separate transaction with no posting behind them, on the theory that provenance
+would then claim fewer units than the ledger held. It does not: migration 00711
+(SQLSTATE CR004) refuses a lot event whose journal transaction never touched the
+account, so that drift is **unrepresentable**. The control could not construct
+the fault it was named after, the test passed with it active, and the guard was
+therefore proving nothing.
+
+This is the more dangerous shape of the problem the file's own header warns
+about. A guard nobody exercised is an unknown. A guard whose control silently
+passes is false confidence with a certificate attached.
+
+**Fix.** The control is the mirror image: post the Credit movement and skip the
+consumption, so the ledger says the buyer paid while provenance still claims
+every unit. It now fires, with `VerifyProvenance` producing "buyer provenance
+and ledger diverged after the fault". `native_trade_partial_write` was written
+the same way and was checked the same way. Both are recorded in `breakNames`
+with the reason the mirror image is not usable, so the next person does not
+retry the dead end.
+
+## F-22 · A load script reported idempotency conflicts as price changes · NEW · P3 · FIXED
+
+The first run of `test/load/internal_economy.js` reported 16
+`internal_purchases_refused_price_changed`. No price had changed. The script
+counted refusals by HTTP status, and 409 is three different things on that
+endpoint: the price moved (`CONFLICT`), the same key is still in flight
+(`IDEMPOTENCY_IN_PROGRESS`), or the same key came back with a different body
+(`INVALID_IDEMPOTENCY_REUSE`). What it had actually measured — the shared-key
+iterations racing, and the idempotency store correctly refusing the second —
+was the more interesting result and was the one it threw away.
+
+**Fix.** Refusals are counted by the CODE the backend gave, with a separate
+counter for each. The threshold moved too: it was `http_req_failed < 1%`, which
+counts every expected refusal as a failure and would fail a run in which the
+system behaved perfectly. It is now "never a 5xx" and "always problem+json",
+which are the things that must hold whatever the business answer is. An operator
+who has learned to ignore a red threshold has lost the threshold.
 
 ---
 

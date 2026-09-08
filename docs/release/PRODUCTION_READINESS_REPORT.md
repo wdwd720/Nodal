@@ -161,6 +161,32 @@ OIDC round trip. The run needs the transport rate limits raised
 (`CP_API_RATE_LIMIT_*=100000/1m`) because a 66-test suite is not a person; the limiter correctly
 refuses to be disabled in a production-like environment.
 
+### Fault injection (Stage 20)
+
+| Property | Evidence |
+|---|---|
+| A purchase killed mid-transaction leaves no order, no posting and no moved balance | `TestChaos_APurchaseDiesMidTransaction` — `pg_terminate_backend` on the exact backend, after every write and before COMMIT |
+| A trade killed mid-transaction leaves the state version, the reserves and the constant product untouched | `TestChaos_ATradeDiesMidTransaction` |
+| Eight concurrent buyers survive one of their backends being killed: the buyer pays for exactly the purchases that committed | `TestChaos_ConcurrentPurchasesSurviveABackendBeingKilled` |
+| After every fault, provenance, commerce earnings and the market reserve control account still reconcile | `checkNoDrift` in all three |
+| After every fault the same command retried still succeeds | asserted in all three; a guard that survives by staying broken has not survived |
+| Both new guards have been OBSERVED failing | `CP_CHAOS_BREAK=commerce_partial_write` and `=native_trade_partial_write`, each producing the expected failure |
+| The whole chaos suite runs with nothing skipped | 10/10 with `CP_TEST_REDPANDA_BROKERS` and `CP_TEST_ARCHIVE_ENDPOINT` set; it was 8 passing and 2 skipped |
+
+### Load (Stage 21) — partial, and stated as such
+
+Run here against the real `cmd/api` binary on a seeded local database:
+
+| Measure | Result |
+|---|---|
+| Requests | 3,048 at 101 req/s |
+| Latency | p95 6.5 ms on successful reads; 27.6 ms including refusals |
+| Server errors | none |
+| Refusal shape | every refusal delivered as problem+json |
+| Purchases refused `CAPABILITY_NOT_APPROVED` | 182 — the MARKETPLACE gate is off, which is correct |
+| Purchases refused `IDEMPOTENCY_IN_PROGRESS` | 18 — the shared-key iterations racing, the idempotency store working |
+| Purchases COMMITTED | **none, and this is the gap.** Committing needs the MARKETPLACE gate ACTIVE, which is high risk: three distinct principals, a step-up and four evidence references. A load script that activated its own gate would be one that switched off a control to get a number. |
+
 ### Policy and authority
 
 | Property | Evidence |
@@ -220,7 +246,7 @@ earlier one.
 
 ### Not run
 
-- Chaos and load testing of the new subsystems (Stages 20–21).
+- Load testing of the COMMITTED write path (part of Stage 21) — see the table above for why.
 - The backup/restore drill against the new tables.
 - `govulncheck`, `gosec`, `gitleaks`, `trivy`, SBOM in this session.
 - Terraform validation in this session.

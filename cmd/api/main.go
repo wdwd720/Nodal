@@ -76,6 +76,12 @@ const (
 	envShutdownTimeout     = "CP_API_SHUTDOWN_TIMEOUT"
 	envRequestTimeout      = "CP_API_REQUEST_TIMEOUT"
 
+	// envLegalPolicy selects the Settlement Compiler's legal policy.
+	// CONSERVATIVE (the default, and the only value a production-like
+	// environment accepts) permits simulation and denies every internal
+	// economy product. DEVELOPMENT permits the internal economy so it can be
+	// exercised locally; it is refused outside LOCAL, DEV and TEST.
+	envLegalPolicy      = "CP_API_LEGAL_POLICY"
 	envRateLimitGeneral = "CP_API_RATE_LIMIT_GENERAL"
 	envRateLimitAuth    = "CP_API_RATE_LIMIT_AUTH"
 	envRateLimitQuote   = "CP_API_RATE_LIMIT_QUOTE"

@@ -531,3 +531,70 @@ func ConservativePolicy() Policy {
 		},
 	}
 }
+
+// DevelopmentPolicy is a policy that permits the internal economy so a
+// developer can exercise it locally. It is NOT a legal opinion and is not
+// usable anywhere real: cmd/api refuses to load it outside LOCAL, DEV and
+// TEST, and every rule carries an approval reference that says so in words.
+//
+// # Why this exists rather than a flag that skips the router
+//
+// Domain A is unreachable end to end without SOME policy that permits it, and
+// the conservative default permits nothing — correctly. The tempting shortcut
+// is a development switch that bypasses the router. That would mean the code
+// path a developer exercises is not the code path production runs, and the one
+// thing worth knowing locally is exactly whether the real evaluation permits
+// the thing.
+//
+// So this is a real policy, evaluated by the real router, with real required
+// capabilities. A developer running it still has to activate the gates through
+// the real dual-control flow; this only supplies the standing position that a
+// deployment with lawyers would supply.
+func DevelopmentPolicy() Policy {
+	const ref = "NOT-AN-APPROVAL-LOCAL-DEVELOPMENT-ONLY"
+	allow := func(product string, cap valuedomain.CapabilityKey, why string) Rule {
+		return Rule{
+			Match:              Key{Product: product},
+			Outcome:            Allow,
+			ReasonCode:         "LOCAL_DEVELOPMENT_POLICY",
+			Detail:             why + " This is a development policy and is not a legal determination.",
+			ApprovalReference:  ref,
+			RequiredCapability: cap,
+		}
+	}
+	return Policy{
+		Version: "legal-router-v1-local-development",
+		Rules: []Rule{
+			{
+				Match:             Key{Product: ProductSimulation},
+				Outcome:           Allow,
+				ReasonCode:        "SIMULATION_HAS_NO_ECONOMIC_SUBSTANCE",
+				Detail:            "simulated capital may be used by anyone, anywhere; nothing of value moves",
+				ApprovalReference: "PRODUCT-SIM-001",
+			},
+			allow(ProductCreditPurchase, "CREDIT_PURCHASE",
+				"buying Credits is permitted so a local deployment can be funded."),
+			allow(ProductInternalCommerce, "MARKETPLACE",
+				"the internal marketplace is permitted so the creator economy can be exercised."),
+			allow(ProductNativeAssetCreate, "NATIVE_ASSET_CREATION",
+				"creating a native asset is permitted so the creation flow can be exercised."),
+			allow(ProductNativeMarketTrade, valuedomain.CapNativeMarketTrading,
+				"trading an internal market is permitted so the curve can be exercised."),
+			// Payouts stay DENIED even here. A payout leaves the system, and a
+			// development policy that permitted one would be the first place
+			// somebody copied the wrong rule from.
+			{
+				Match:      Key{Product: ProductPayout},
+				Outcome:    Deny,
+				ReasonCode: "PAYOUT_NOT_APPROVED",
+				Detail: "no payout is approved, and a development policy is not the place to approve one: " +
+					"a payout is the one action that moves value out of the system entirely",
+			},
+			{
+				Outcome:    Deny,
+				ReasonCode: "NO_APPROVAL_ON_RECORD",
+				Detail:     "nothing permits this; the absence of a rule is a refusal, not an omission",
+			},
+		},
+	}
+}

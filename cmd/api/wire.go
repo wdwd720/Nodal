@@ -43,6 +43,7 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/observability"
@@ -260,6 +261,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	hub := stream.NewHub(1024, log)
 	sse := stream.NewHandler(hub, 15*time.Second)
 
+	legalPolicy, err := legalRouterFor(cfg.Env, in.lookup)
+	if err != nil {
+		return nil, err
+	}
+
 	ports, err := httpapi.Wire(httpapi.WireDeps{
 		DB:                database,
 		Clock:             clk,
@@ -303,12 +309,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// cannot establish identity has not established it, and the payout
 			// engine refuses accordingly.
 			Verification: nil,
-			// The Settlement Compiler's legal policy. Nil is the conservative
-			// default and is what this build ships with: it permits simulation
-			// and denies every internal-economy product and every payout.
-			// Replacing it is a policy version with an approval reference on
-			// every permitting rule, not a code change here.
-			LegalRouter: nil,
+			// The Settlement Compiler's legal policy. The default is the
+			// conservative one: it permits simulation and denies every
+			// internal-economy product and every payout. CP_API_LEGAL_POLICY
+			// selects a different one, and legalPolicy refuses anything but
+			// CONSERVATIVE outside LOCAL, DEV and TEST.
+			LegalRouter: legalPolicy,
 			// No jurisdiction determination exists, so every account is
 			// UNKNOWN and the conservative policy refuses accordingly. It is
 			// deliberately NOT inferred from an IP address: that is a legal
@@ -727,4 +733,38 @@ func mergeExecutors(tables ...map[admin.Kind]admin.ExecFunc) map[admin.Kind]admi
 		}
 	}
 	return out
+}
+
+// legalRouterFor builds the Settlement Compiler's policy from
+// CP_API_LEGAL_POLICY.
+//
+// Unset or CONSERVATIVE returns nil, which internal/httpapi reads as the
+// fail-closed default — the absence of a determination, which is what PART
+// LXIII requires a fresh production deployment to start from.
+//
+// DEVELOPMENT returns a policy that permits the internal economy, and is
+// REFUSED in STAGING and PROD. The refusal is an error rather than a silent
+// downgrade to the conservative policy: an operator who asked for a
+// development policy in production has misconfigured something, and starting
+// anyway with different behaviour than they asked for is how that goes
+// unnoticed.
+func legalRouterFor(env config.Environment, lookup func(string) (string, bool)) (*legalrouter.Router, error) {
+	raw, _ := lookup(envLegalPolicy)
+	name := strings.ToUpper(strings.TrimSpace(raw))
+	switch name {
+	case "", "CONSERVATIVE":
+		return nil, nil
+	case "DEVELOPMENT":
+		if env.IsProductionLike() {
+			return nil, fmt.Errorf("%s=DEVELOPMENT: a development legal policy may not be loaded in %s",
+				envLegalPolicy, env)
+		}
+		r, err := legalrouter.New(legalrouter.DevelopmentPolicy())
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", envLegalPolicy, err)
+		}
+		return r, nil
+	default:
+		return nil, fmt.Errorf("%s=%q: expected CONSERVATIVE or DEVELOPMENT", envLegalPolicy, name)
+	}
 }

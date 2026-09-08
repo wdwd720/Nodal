@@ -50,7 +50,7 @@ infra-logs: ## Tail local infra logs
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-.PHONY: build build-web tidy gen sqlc proto openapi-client
+.PHONY: build build-web tidy gen sqlc proto openapi-client seed-economy
 build: ## Build all Go binaries into ./bin
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/ ./cmd/...
 
@@ -100,6 +100,16 @@ migrate-test: ## Migration tests: clean apply, checksum, ledger-preserving down
 
 seed: ## Seed clearly-labelled LOCAL fake users/assets (refused outside LOCAL/DEV/TEST)
 	$(GO) run ./scripts/seed
+
+seed-economy: seed ## Seed the internal economy: Credit asset, Credits, a seller and a catalogue
+	# Domain A is otherwise unreachable in development: no Credit asset means
+	# nobody has Credits, and nothing to buy means the marketplace, the payout
+	# page and the load scripts all measure an empty catalogue.
+	#
+	# It activates NO capability gate. MARKETPLACE is high risk, so switching it
+	# on takes three principals and four evidence references; a script that did
+	# it would be filling a control with fiction. The command prints the steps.
+	$(GO) run ./scripts/seedeconomy
 
 # ---------------------------------------------------------------------------
 # Tests

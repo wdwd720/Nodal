@@ -353,3 +353,45 @@ func TestOutcome_OnlyAllowPermits(t *testing.T) {
 	}
 	require.False(t, Outcome("PROBABLY").Valid())
 }
+
+// TestDevelopmentPolicy_IsValidAndStillRefusesPayouts. A development policy is
+// still a policy: it must validate, it must end in a catch-all deny, every
+// permission must name a capability, and it must not be the place somebody
+// discovers that payouts were switched on.
+func TestDevelopmentPolicy_IsValidAndStillRefusesPayouts(t *testing.T) {
+	p := DevelopmentPolicy()
+	require.NoError(t, p.Validate())
+
+	r, err := New(p)
+	require.NoError(t, err)
+
+	caps := map[valuedomain.CapabilityKey]bool{
+		"MARKETPLACE": true, "CREDIT_PURCHASE": true, "NATIVE_ASSET_CREATION": true,
+		valuedomain.CapNativeMarketTrading: true,
+		valuedomain.CapPayoutReserve:       true, valuedomain.CapPayoutSettle: true,
+	}
+
+	commerce := r.Route(Key{
+		Jurisdiction: "US-CA", Provider: "NONE", Rail: "NATIVE_INTERNAL",
+		Product: ProductInternalCommerce, Asset: "NONE", AgentAuthority: "NONE",
+		ValueOrigin: "NONE", PayoutMode: PayoutModeNone, Compensation: "NONE",
+		Verification: string(valuedomain.VerificationNodalIdentity),
+	}, caps)
+	require.True(t, commerce.Permits(), "%v", commerce)
+
+	payout := r.Route(Key{
+		Jurisdiction: "US-CA", Provider: "sandbox", Rail: "NATIVE_INTERNAL",
+		Product: ProductPayout, Asset: "NONE", AgentAuthority: "NONE",
+		ValueOrigin: string(valuedomain.OriginCreatorEarning), PayoutMode: PayoutModePartnerFiat,
+		Compensation: "NONE", Verification: string(valuedomain.VerificationPayoutKYC),
+	}, caps)
+	require.False(t, payout.Permits(),
+		"a development policy must never be where payouts turn out to be enabled")
+
+	// Every permitting rule names the reference that says what it is.
+	for i, rule := range p.Rules {
+		if rule.Outcome == Allow && rule.Match.Product != ProductSimulation {
+			require.Contains(t, rule.ApprovalReference, "NOT-AN-APPROVAL", "rule %d", i)
+		}
+	}
+}
