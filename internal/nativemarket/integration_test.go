@@ -609,7 +609,11 @@ func TestIntegration_SupplyIsConservedAcrossManyTrades(t *testing.T) {
 // concurrency property of PART LXXII item 2.
 func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing.T) {
 	f := newFixture(t)
-	const workers = 25
+	// A hundred, because PART LXXII item 2 asks for a hundred. It ran at 25
+	// for a while and the coverage table said "100 concurrent native-asset
+	// buys" next to it, which is the sort of small gap between a claim and a
+	// test that F-18 was about.
+	const workers = 100
 	traders := make([]accounts.AccountID, workers)
 	for i := range traders {
 		traders[i] = newAccount(t)

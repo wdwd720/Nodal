@@ -469,6 +469,140 @@ func (s *Service) fail(ctx context.Context, tx pgx.Tx, requestID RequestID, reas
 	return s.transition(ctx, tx, req.ID, StateFailed, reason, "")
 }
 
+// FlagForManualReview sends a payout to a human.
+//
+// It is the one direction that is always safe to offer: it only ever moves a
+// request INTO MANUAL_REVIEW, never out of it, and the transition table still
+// decides whether that is legal from where the request is now. A compliance
+// operator who sees something wrong, or an automated check that cannot decide,
+// uses this; getting back out is ResolveManualReview, which is
+// dual-controlled.
+func (s *Service) FlagForManualReview(
+	ctx context.Context, tx pgx.Tx, requestID RequestID, reason string,
+) (Request, error) {
+	if strings.TrimSpace(reason) == "" {
+		return Request{}, errs.New(errs.CodeValidationFailed,
+			"flagging a payout for review requires a reason")
+	}
+	req, err := s.forUpdate(ctx, tx, requestID)
+	if err != nil {
+		return Request{}, err
+	}
+	if req.State == StateManualReview {
+		return req, nil
+	}
+	return s.transition(ctx, tx, req.ID, StateManualReview, reason, "")
+}
+
+// ManualResolution is what an operator decided about a payout that landed in
+// MANUAL_REVIEW.
+//
+// Note what is NOT here: there is no "declare it settled". A payout is settled
+// when the PROVIDER says it is, and the only ways to learn that are the
+// provider's own lookup and reconciliation. An operator who could mark a
+// payout SETTLED by hand could close a ticket by asserting money moved, and
+// the ledger would then carry a settlement nobody can point at.
+type ManualResolution string
+
+// Manual resolutions.
+const (
+	// ResolveFail concludes the payout did not happen and returns the exact
+	// reserved units to the exact lots they came from.
+	ResolveFail ManualResolution = "FAIL"
+	// ResolveReject concludes the request should not have been accepted and
+	// returns the reservation, without asserting anything about a provider.
+	ResolveReject ManualResolution = "REJECT"
+	// ResolveRetryVerification sends the request back to VERIFIED so it can be
+	// submitted again. It is legal ONLY from MANUAL_REVIEW reached before a
+	// submission, and Resolve refuses it otherwise: a payout that may already
+	// have been sent must never be re-submitted.
+	ResolveRetryVerification ManualResolution = "RETRY"
+)
+
+// Valid reports whether r is declared.
+func (r ManualResolution) Valid() bool {
+	switch r {
+	case ResolveFail, ResolveReject, ResolveRetryVerification:
+		return true
+	}
+	return false
+}
+
+// ResolveManualReview applies an operator's decision to a payout sitting in
+// MANUAL_REVIEW. It is the executing half of the dual-controlled
+// PAYOUT_MANUAL_REVIEW_RESOLVE administrative action; the approval itself is
+// verified by internal/admin before this is reached.
+func (s *Service) ResolveManualReview(
+	ctx context.Context, tx pgx.Tx, requestID RequestID, resolution ManualResolution, reason string,
+) (Request, error) {
+	if !resolution.Valid() {
+		return Request{}, errs.Newf(errs.CodeValidationFailed,
+			"unknown manual payout resolution %q", resolution)
+	}
+	if strings.TrimSpace(reason) == "" {
+		return Request{}, errs.New(errs.CodeValidationFailed,
+			"resolving a payout by hand requires a reason; it is the only record of why")
+	}
+	req, err := s.forUpdate(ctx, tx, requestID)
+	if err != nil {
+		return Request{}, err
+	}
+	if req.State != StateManualReview {
+		return Request{}, errs.Newf(errs.CodeInvalidStateTransition,
+			"this payout is %s, not MANUAL_REVIEW", req.State).
+			WithField("payout_id", requestID.String()).
+			WithField("state", string(req.State))
+	}
+
+	switch resolution {
+	case ResolveFail:
+		return s.fail(ctx, tx, req.ID, reason)
+	case ResolveReject:
+		if req.ReservedQuantity.IsPositive() {
+			if rerr := s.returnReservation(ctx, tx, req, reason); rerr != nil {
+				return Request{}, rerr
+			}
+			if _, uerr := tx.Exec(ctx,
+				`UPDATE payout_requests SET reserved_quantity = 0 WHERE id = $1`, req.ID); uerr != nil {
+				return Request{}, mapError(uerr)
+			}
+		}
+		return s.transition(ctx, tx, req.ID, StateRejected, reason, "")
+	default: // ResolveRetryVerification
+		// A payout that reached MANUAL_REVIEW from SUBMITTED, PROVIDER_PENDING
+		// or PAYOUT_STATUS_UNKNOWN may already exist at the provider. Sending
+		// it back to VERIFIED would make a second submission possible, which
+		// is precisely how a payout gets paid twice.
+		submitted, serr := s.everSubmitted(ctx, tx, req.ID)
+		if serr != nil {
+			return Request{}, serr
+		}
+		if submitted {
+			return Request{}, errs.New(errs.CodeSubmissionStateUnknown,
+				"this payout has already been submitted at least once; it can be failed or reconciled, never retried").
+				WithField("payout_id", requestID.String())
+		}
+		return s.transition(ctx, tx, req.ID, StateVerified, reason, "")
+	}
+}
+
+// everSubmitted reports whether the request has ever been in a state that
+// means a provider call may have happened. It reads the transition history
+// rather than the current state, because the current state is MANUAL_REVIEW
+// either way and the history is what distinguishes the two cases.
+func (s *Service) everSubmitted(ctx context.Context, tx pgx.Tx, id RequestID) (bool, error) {
+	var n int
+	err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM payout_request_transitions
+		  WHERE request_id = $1
+		    AND to_state IN ('SUBMITTED','PROVIDER_PENDING','PAYOUT_STATUS_UNKNOWN','SETTLED')`,
+		id).Scan(&n)
+	if err != nil {
+		return false, mapError(err)
+	}
+	return n > 0, nil
+}
+
 // Cancel returns a payout's value to the user before it has been submitted.
 func (s *Service) Cancel(ctx context.Context, tx pgx.Tx, requestID RequestID, reason string) (Request, error) {
 	if strings.TrimSpace(reason) == "" {

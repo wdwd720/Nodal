@@ -41,6 +41,45 @@ const (
 	// KindAgentPromote promotes an agent up the SHADOW → CANARY → LIMITED →
 	// LIVE ladder (AGENT_RUNTIME.md); the agent package verifies it.
 	KindAgentPromote Kind = "AGENT_PROMOTE"
+
+	// --- the Nodal-native economy (gola.md PARTS XIII-XXI, LXVIII) --------
+	//
+	// These follow one rule, and the asymmetry is deliberate: STOPPING
+	// something is a single operator, RESTARTING it is dual control.
+	//
+	// A control that needs two signatures to stop an incident is a control
+	// nobody reaches for at 3am, and PART XXXII is explicit that halting new
+	// risk must never be harder than taking it. Restarting is the direction
+	// that adds exposure, so that is where the second pair of eyes belongs.
+
+	// KindNativeMarketHalt stops all trading on one internal market.
+	KindNativeMarketHalt Kind = "NATIVE_MARKET_HALT"
+	// KindNativeMarketCloseOnly lets holders sell and refuses new buyers. It
+	// is the softer stop: it does not trap anybody in a position.
+	KindNativeMarketCloseOnly Kind = "NATIVE_MARKET_CLOSE_ONLY"
+	// KindNativeMarketFreeze stops everything including exits. It is the
+	// hardest control in the internal economy and is for a suspected economic
+	// incident, where letting holders out would be letting the first movers
+	// out at everyone else's expense.
+	KindNativeMarketFreeze Kind = "NATIVE_MARKET_FREEZE"
+	// KindNativeMarketResume returns a market to a state that accepts new
+	// risk. Dual control.
+	KindNativeMarketResume Kind = "NATIVE_MARKET_RESUME"
+	// KindNativeAssetModerationVerdict records a moderation decision on a
+	// user-created asset. A verdict does not by itself start trading:
+	// activating a market is a separate, gated act.
+	KindNativeAssetModerationVerdict Kind = "NATIVE_ASSET_MODERATION_VERDICT"
+	// KindNativeAssetDelist permanently removes an asset from the registry's
+	// tradable set.
+	KindNativeAssetDelist Kind = "NATIVE_ASSET_DELIST"
+	// KindCommerceSellerSuspend stops an account taking new orders.
+	KindCommerceSellerSuspend Kind = "COMMERCE_SELLER_SUSPEND"
+	// KindCommerceProductWithdraw takes one product down permanently.
+	KindCommerceProductWithdraw Kind = "COMMERCE_PRODUCT_WITHDRAW"
+	// KindPayoutManualReviewResolve applies an operator's decision to a payout
+	// stuck in MANUAL_REVIEW. It can fail, reject or retry one; it can NEVER
+	// declare one settled, because the provider is authoritative for that.
+	KindPayoutManualReviewResolve Kind = "PAYOUT_MANUAL_REVIEW_RESOLVE"
 )
 
 // KindSpec is the policy attached to a kind.
@@ -119,6 +158,59 @@ var kindSpecs = map[Kind]KindSpec{
 	KindAgentPromote: {
 		RequiresDual: true, ProposePermission: security.PermAgentPromote, ApprovePermission: security.PermAgentPromoteApprove,
 		StepUpMaxAge: stepUpStandard, Expiry: 24 * time.Hour,
+	},
+
+	// --- the Nodal-native economy ----------------------------------------
+
+	// Stopping: one operator, short expiry. A halt proposed yesterday is not
+	// a halt anybody still wants executed today.
+	KindNativeMarketHalt: {
+		RequiresDual: false, ProposePermission: security.PermNativeMarketHalt,
+		StepUpMaxAge: stepUpStandard, Expiry: time.Hour,
+	},
+	KindNativeMarketCloseOnly: {
+		RequiresDual: false, ProposePermission: security.PermNativeMarketHalt,
+		StepUpMaxAge: stepUpStandard, Expiry: time.Hour,
+	},
+	KindNativeMarketFreeze: {
+		// The hardest stop still needs only one operator. Freezing traps
+		// holders, which is exactly why it must be reachable instantly when
+		// the alternative is letting the first movers out.
+		RequiresDual: false, ProposePermission: security.PermNativeMarketHalt,
+		StepUpMaxAge: stepUpSensitive, Expiry: time.Hour,
+	},
+	// Restarting: dual control, with a dedicated approve-side permission that
+	// no standing role holds. Halting is one operator's call at 3am;
+	// restarting a market after an economic incident is a decision two people
+	// should be awake for.
+	KindNativeMarketResume: {
+		RequiresDual: true, ProposePermission: security.PermNativeMarketHalt,
+		ApprovePermission: security.PermNativeMarketResume,
+		StepUpMaxAge:      stepUpSensitive, Expiry: 4 * time.Hour,
+	},
+	KindNativeAssetModerationVerdict: {
+		RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,
+		StepUpMaxAge: stepUpStandard, Expiry: 24 * time.Hour,
+	},
+	KindNativeAssetDelist: {
+		RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,
+		StepUpMaxAge: stepUpStandard, Expiry: time.Hour,
+	},
+	KindCommerceSellerSuspend: {
+		RequiresDual: false, ProposePermission: security.PermCommerceModerate,
+		StepUpMaxAge: stepUpStandard, Expiry: time.Hour,
+	},
+	KindCommerceProductWithdraw: {
+		RequiresDual: false, ProposePermission: security.PermCommerceModerate,
+		StepUpMaxAge: stepUpStandard, Expiry: time.Hour,
+	},
+	// Resolving a payout by hand decides what happens to money somebody is
+	// waiting for, so it is the one Domain A kind that is dual-controlled in
+	// both directions.
+	KindPayoutManualReviewResolve: {
+		RequiresDual: true, ProposePermission: security.PermPayoutReview,
+		ApprovePermission: security.PermPayoutApprove,
+		StepUpMaxAge:      stepUpSensitive, Expiry: 4 * time.Hour,
 	},
 }
 

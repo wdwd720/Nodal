@@ -75,8 +75,14 @@ const (
 	CodeRiskDailyLoss           Code = "RISK_DAILY_LOSS"
 	CodeEligibilityJurisdiction Code = "ELIGIBILITY_JURISDICTION"
 	CodeCapabilityNotApproved   Code = "CAPABILITY_NOT_APPROVED"
-	CodeStaleMarketData         Code = "STALE_MARKET_DATA"
-	CodeKillSwitchActive        Code = "KILL_SWITCH_ACTIVE"
+	// CodeVerificationRequired: the action would be permitted at a higher
+	// level of FINANCIAL identity verification, which is a different thing
+	// from a recent strong authentication (goal PART XLVII) -- hence a
+	// separate code from STEP_UP_REQUIRED. It is deliberately distinct from
+	// FORBIDDEN because it has a next step the user can actually take.
+	CodeVerificationRequired Code = "VERIFICATION_REQUIRED"
+	CodeStaleMarketData      Code = "STALE_MARKET_DATA"
+	CodeKillSwitchActive     Code = "KILL_SWITCH_ACTIVE"
 	// CodeNoValidPlan: the settlement compiler found no execution plan that
 	// satisfies every constraint. A legitimate outcome (goal PART 40).
 	CodeNoValidPlan Code = "NO_VALID_PLAN"
@@ -231,6 +237,7 @@ var registry = map[Code]codeInfo{
 	CodeRiskDailyLoss:              {http.StatusUnprocessableEntity, "Daily loss limit reached"},
 	CodeEligibilityJurisdiction:    {http.StatusUnprocessableEntity, "Not eligible in this jurisdiction"},
 	CodeCapabilityNotApproved:      {http.StatusUnprocessableEntity, "Capability not approved"},
+	CodeVerificationRequired:       {http.StatusUnprocessableEntity, "Identity verification required"},
 	CodeStaleMarketData:            {http.StatusUnprocessableEntity, "Stale market data"},
 	CodeKillSwitchActive:           {http.StatusUnprocessableEntity, "Kill switch active"},
 	CodeNoValidPlan:                {http.StatusUnprocessableEntity, "No valid execution plan"},
@@ -294,6 +301,7 @@ var allCodes = []Code{
 	CodeRiskDailyLoss,
 	CodeEligibilityJurisdiction,
 	CodeCapabilityNotApproved,
+	CodeVerificationRequired,
 	CodeStaleMarketData,
 	CodeKillSwitchActive,
 	CodeNoValidPlan,

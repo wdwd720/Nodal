@@ -14,6 +14,9 @@ import (
 var declaredKinds = []Kind{
 	KindCapabilityGateApprove, KindKillSwitchRelease, KindLedgerCorrection, KindReconciliationResolveMaterial,
 	KindEnvelopeAuthorityChange, KindAccountUnfreeze, KindWithdrawalApprove, KindBreakGlassGrant, KindAgentPromote,
+	KindNativeMarketHalt, KindNativeMarketCloseOnly, KindNativeMarketFreeze, KindNativeMarketResume,
+	KindNativeAssetModerationVerdict, KindNativeAssetDelist,
+	KindCommerceSellerSuspend, KindCommerceProductWithdraw, KindPayoutManualReviewResolve,
 }
 
 func TestKindTable_Complete(t *testing.T) {
@@ -89,8 +92,69 @@ func TestKindTable_Golden(t *testing.T) {
 			RequiresDual: true, ProposePermission: security.PermAgentPromote, ApprovePermission: security.PermAgentPromoteApprove,
 			StepUpMaxAge: 15 * time.Minute, Expiry: 24 * time.Hour,
 		},
+
+		// The Nodal-native economy. Stopping is one operator; restarting and
+		// resolving money by hand are two.
+		KindNativeMarketHalt: {
+			RequiresDual: false, ProposePermission: security.PermNativeMarketHalt,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindNativeMarketCloseOnly: {
+			RequiresDual: false, ProposePermission: security.PermNativeMarketHalt,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindNativeMarketFreeze: {
+			RequiresDual: false, ProposePermission: security.PermNativeMarketHalt,
+			StepUpMaxAge: 5 * time.Minute, Expiry: time.Hour,
+		},
+		KindNativeMarketResume: {
+			RequiresDual: true, ProposePermission: security.PermNativeMarketHalt,
+			ApprovePermission: security.PermNativeMarketResume,
+			StepUpMaxAge:      5 * time.Minute, Expiry: 4 * time.Hour,
+		},
+		KindNativeAssetModerationVerdict: {
+			RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,
+			StepUpMaxAge: 15 * time.Minute, Expiry: 24 * time.Hour,
+		},
+		KindNativeAssetDelist: {
+			RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindCommerceSellerSuspend: {
+			RequiresDual: false, ProposePermission: security.PermCommerceModerate,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindCommerceProductWithdraw: {
+			RequiresDual: false, ProposePermission: security.PermCommerceModerate,
+			StepUpMaxAge: 15 * time.Minute, Expiry: time.Hour,
+		},
+		KindPayoutManualReviewResolve: {
+			RequiresDual: true, ProposePermission: security.PermPayoutReview,
+			ApprovePermission: security.PermPayoutApprove,
+			StepUpMaxAge:      5 * time.Minute, Expiry: 4 * time.Hour,
+		},
 	}
 	assert.Equal(t, want, kindSpecs, "the kind policy table changed; review dual-control consequences before updating this golden")
+
+	// The asymmetry that makes the internal economy safe to operate: every
+	// kind that STOPS something is reachable by one operator, and every kind
+	// that restarts it or decides where money goes needs two. A control that
+	// takes two signatures to stop an incident is one nobody reaches for.
+	stops := []Kind{
+		KindNativeMarketHalt, KindNativeMarketCloseOnly, KindNativeMarketFreeze,
+		KindNativeAssetDelist, KindCommerceSellerSuspend, KindCommerceProductWithdraw,
+	}
+	for _, k := range stops {
+		spec, ok := Spec(k)
+		require.True(t, ok, "%s", k)
+		assert.False(t, spec.RequiresDual, "%s stops risk and must not need two signatures", k)
+	}
+	for _, k := range []Kind{KindNativeMarketResume, KindPayoutManualReviewResolve} {
+		spec, ok := Spec(k)
+		require.True(t, ok, "%s", k)
+		assert.True(t, spec.RequiresDual, "%s adds risk or moves money and must need two", k)
+		assert.NotEmpty(t, spec.ApprovePermission, "%s declares dual control with no approve side", k)
+	}
 
 	// ApproverIsNotTarget belongs to exactly the kind whose target_id names a
 	// person. Setting it on a kind whose target is a gate, a switch or an

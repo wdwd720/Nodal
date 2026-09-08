@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
@@ -238,6 +239,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest)
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, clk)
+	// The marketplace gate is resolved from the database on every purchase, so
+	// pulling MARKETPLACE stops sales without a restart. Until it is ACTIVE,
+	// internal/commerce refuses every purchase on its own -- the compiler in
+	// front of it is an addition, not the only check.
+	commerceSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
 
 	// The ledger's value-domain isolation consults the same gate checker every
 	// other capability decision uses, so turning a capability off stops the
@@ -285,6 +292,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			NativeMarkets: nativeMarketSvc,
 			Payouts:       payoutSvc,
 			PayoutEngine:  payoutEngine,
+			Commerce:      commerceSvc,
 			// No payout policy is configured, so the fail-closed default
 			// applies and no origin is withdrawable. Activating one is a
 			// policy version with evidence, not a code change here.
@@ -295,6 +303,18 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// cannot establish identity has not established it, and the payout
 			// engine refuses accordingly.
 			Verification: nil,
+			// The Settlement Compiler's legal policy. Nil is the conservative
+			// default and is what this build ships with: it permits simulation
+			// and denies every internal-economy product and every payout.
+			// Replacing it is a policy version with an approval reference on
+			// every permitting rule, not a code change here.
+			LegalRouter: nil,
+			// No jurisdiction determination exists, so every account is
+			// UNKNOWN and the conservative policy refuses accordingly. It is
+			// deliberately NOT inferred from an IP address: that is a legal
+			// determination wearing a network header's clothes.
+			Jurisdiction: nil,
+			Clock:        clk,
 		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.
@@ -307,7 +327,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// Every other kind answers 422 UNSUPPORTED here: its effect belongs
 		// to the domain endpoint that quotes the approval, not to a second
 		// path through the action table.
-		AdminExecutors: httpapi.AdminExecutors(adminSvc, sessionMgr, killController),
+		AdminExecutors: mergeExecutors(
+			httpapi.AdminExecutors(adminSvc, sessionMgr, killController),
+			httpapi.DomainAExecutors(httpapi.DomainAExecutorDeps{
+				NativeAssets:  nativeAssetSvc,
+				NativeMarkets: nativeMarketSvc,
+				Commerce:      commerceSvc,
+				Payouts:       payoutSvc,
+			}),
+		),
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,
 	})
 	if err != nil {
@@ -683,4 +711,20 @@ func newDroppedEventCounter(meter metric.Meter) (metric.Int64Counter, error) {
 	return meter.Int64Counter("outbox_events_dropped",
 		metric.WithDescription("Domain events that could not be published to the transactional outbox"),
 		metric.WithUnit(observability.UnitCount))
+}
+
+// mergeExecutors joins executor tables, refusing a duplicate kind rather than
+// letting one table silently win. Two executors for one administrative action
+// would mean the effect depended on map iteration order.
+func mergeExecutors(tables ...map[admin.Kind]admin.ExecFunc) map[admin.Kind]admin.ExecFunc {
+	out := make(map[admin.Kind]admin.ExecFunc)
+	for _, t := range tables {
+		for k, fn := range t {
+			if _, dup := out[k]; dup {
+				panic("cmd/api: two executors registered for administrative action " + string(k))
+			}
+			out[k] = fn
+		}
+	}
+	return out
 }

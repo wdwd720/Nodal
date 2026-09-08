@@ -951,6 +951,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/credits/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Credit balance broken down by what may and may not be withdrawn (PART XX)
+         * @description Never returns a single number. A balance is gross, spendable, frozen and payout-eligible, with the reasons the remainder is not, because "18,450 Credits" does not answer "how much may I withdraw".
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Credit balance breakdown */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditBalance"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events/stream": {
         parameters: {
             query?: never;
@@ -1371,6 +1414,323 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Orders an account bought or sold */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description Whose side of the order to list. Defaults to BUYER. */
+                    role?: "BUYER" | "SELLER";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of orders */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalOrderPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal-products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Products currently for sale */
+        get: {
+            parameters: {
+                query?: {
+                    kind?: components["schemas"]["InternalProductKind"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of active products */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalProductPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a product in DRAFT
+         * @description A draft is not for sale. Its terms freeze on publication, so this is the only point at which price, fee and kind can still be changed.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateInternalProductRequest"];
+                };
+            };
+            responses: {
+                /** @description Product created in DRAFT */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalProduct"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal-products/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: components["parameters"]["ProductId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Product */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalProduct"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal-products/{productId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Buy a product with Credits
+         * @description The buyer states the price they were shown. A price that no longer matches is a 409 refusal rather than a surprise charge. An account can never buy from itself, directly or through a seller whose earnings are attributed back to it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    productId: components["parameters"]["ProductId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PurchaseInternalProductRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of a purchase already made */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalOrder"];
+                    };
+                };
+                /** @description Purchased */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalOrder"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                /** @description The price changed, or the product is no longer for sale */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal-products/{productId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish, pause, resume or withdraw a product
+         * @description Publishing freezes price, fee and kind for that version. WITHDRAWN is terminal: a product that can come back is PAUSED, and the two mean different things to a buyer reading their purchase history.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    productId: components["parameters"]["ProductId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetInternalProductStatusRequest"];
+                };
+            };
+            responses: {
+                /** @description Product in its new status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalProduct"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal-sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register the calling account as a seller (PART XVII)
+         * @description Selling is a separate act from holding an account because it is how earning provenance is minted. Registration is idempotent.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RegisterSellerRequest"];
+                };
+            };
+            responses: {
+                /** @description Seller record */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["InternalSeller"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -1402,6 +1762,280 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Native assets that currently accept at least sells */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of native assets */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeAssetPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Create a Nodal-native asset in DRAFT, after content screening (PART XIII) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateNativeAssetRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeAsset"];
+                    };
+                };
+                /** @description Asset created in DRAFT */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeAsset"];
+                    };
+                };
+                409: components["responses"]["Problem"];
+                /** @description Refused by content screening, with every finding named */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    assetId: components["parameters"]["AssetId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Asset with its supply, policy profile and moderation state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeAsset"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Market state, curve, fees and holder concentration (PART LIV) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Market */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeMarket"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute a trade against the internal market */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NativeOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of a fill already executed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeFill"];
+                    };
+                };
+                /** @description Filled */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeFill"];
+                    };
+                };
+                /** @description The market moved past the caller's minimum output */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Price a hypothetical trade against current state (PART XIV)
+         * @description A quote is a record of what the market said at a version. It is not a promise: execution re-prices against current state, and the caller's protection is min_output on the order.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NativeQuoteRequest"];
+                };
+            };
+            responses: {
+                /** @description Quote with full fee and slippage disclosure */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeQuote"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1472,6 +2106,122 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["OrderDetail"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of payout requests */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutRequestPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Request a payout of eligible value (PARTS XVIII-XXI)
+         * @description Eligibility is decided per unit of provenance, not per balance. The response states what was decided, under which policy version, and — when the only obstacle is identity — that verification would suffice.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePayoutRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutRequest"];
+                    };
+                };
+                /** @description Payout request created; see state and decision for what happens next */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutRequest"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payouts/{payoutId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    payoutId: components["parameters"]["PayoutId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Payout request */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutRequest"];
                     };
                 };
                 404: components["responses"]["Problem"];
@@ -1924,6 +2674,56 @@ export interface components {
             /** @enum {string} */
             state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
         };
+        CreateInternalProductRequest: {
+            account_id: components["schemas"]["UUID"];
+            description?: string;
+            kind: components["schemas"]["InternalProductKind"];
+            /** @description The platform share, capped at 3000 (30%) and rounded DOWN on every sale. */
+            platform_fee_bps?: components["schemas"]["BPS"];
+            /** @description In Credit base units. Fixed for this version once published. */
+            price: components["schemas"]["Quantity"];
+            title: string;
+        };
+        CreateNativeAssetRequest: {
+            account_id: components["schemas"]["UUID"];
+            creator_allocation?: components["schemas"]["Quantity"];
+            decimals?: number;
+            description?: string;
+            image_url?: string;
+            max_supply: components["schemas"]["Quantity"];
+            name: string;
+            symbol: string;
+        };
+        CreatePayoutRequest: {
+            account_id: components["schemas"]["UUID"];
+            amount: components["schemas"]["Quantity"];
+            destination_id?: components["schemas"]["UUID"];
+        };
+        /** @description The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other. */
+        CreditBalance: {
+            account_id: components["schemas"]["UUID"];
+            by_finality?: {
+                [key: string]: components["schemas"]["Quantity"];
+            };
+            by_origin?: {
+                [key: string]: components["schemas"]["Quantity"];
+            };
+            frozen: components["schemas"]["Quantity"];
+            gross: components["schemas"]["Quantity"];
+            ineligible: components["schemas"]["Quantity"];
+            /** @description Why the ineligible remainder cannot be withdrawn */
+            ineligible_reasons?: string[];
+            payout_eligible: components["schemas"]["Quantity"];
+            policy_hash?: string;
+            policy_version: string;
+            reversed?: components["schemas"]["Quantity"];
+            spendable: components["schemas"]["Quantity"];
+        };
+        /**
+         * @description Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+         * @enum {string}
+         */
+        CreditOrigin: "PURCHASED" | "PROMOTIONAL" | "REFUND" | "CREATOR_EARNING" | "DATA_SALE_EARNING" | "AGENT_SERVICE_EARNING" | "MARKET_CREATOR_EARNING" | "MARKET_TRADING_PROCEEDS" | "COMPETITION_REWARD" | "ADMIN_ADJUSTMENT" | "PROVIDER_SETTLEMENT";
         Decision: {
             decision: string;
             evaluated_at: components["schemas"]["Timestamp"];
@@ -2039,6 +2839,61 @@ export interface components {
             min_receive?: components["schemas"]["Quantity"];
             quote_freshness_ms?: number;
         };
+        InternalOrder: {
+            buyer_account_id: components["schemas"]["UUID"];
+            created_at?: components["schemas"]["Timestamp"];
+            earning_account_id?: components["schemas"]["UUID"];
+            earning_origin: components["schemas"]["CreditOrigin"];
+            journal_transaction_id?: components["schemas"]["UUID"];
+            order_id: components["schemas"]["UUID"];
+            platform_fee: components["schemas"]["Quantity"];
+            price: components["schemas"]["Quantity"];
+            product_id: components["schemas"]["UUID"];
+            product_version: number;
+            seller_account_id: components["schemas"]["UUID"];
+            seller_proceeds: components["schemas"]["Quantity"];
+        };
+        InternalOrderPage: {
+            items: components["schemas"]["InternalOrder"][];
+        };
+        InternalProduct: {
+            created_at?: components["schemas"]["Timestamp"];
+            description?: string;
+            /** @description The provenance a sale of this product produces. Shown because a seller is entitled to know which category their revenue lands in before they list, and it is decided by the kind alone. */
+            earning_origin: components["schemas"]["CreditOrigin"];
+            kind: components["schemas"]["InternalProductKind"];
+            platform_fee?: components["schemas"]["Quantity"];
+            platform_fee_bps?: components["schemas"]["BPS"];
+            price: components["schemas"]["Quantity"];
+            product_id: components["schemas"]["UUID"];
+            published_at?: components["schemas"]["Timestamp"];
+            seller_account_id: components["schemas"]["UUID"];
+            seller_proceeds?: components["schemas"]["Quantity"];
+            status: components["schemas"]["InternalProductStatus"];
+            /** @description True once published; price, fee and kind can no longer change. */
+            terms_frozen?: boolean;
+            title: string;
+            version: number;
+        };
+        /**
+         * @description What is being sold. This is the ONLY input to the provenance decision, so it is closed rather than free text: a kind nobody has decided the payout treatment of must not be sellable.
+         * @enum {string}
+         */
+        InternalProductKind: "DATA" | "AGENT_SERVICE" | "COMPUTE" | "STRATEGY_TEMPLATE" | "RESEARCH" | "API_ACCESS" | "COMPETITION_ENTRY" | "CREATOR_PRODUCT";
+        InternalProductPage: {
+            items: components["schemas"]["InternalProduct"][];
+        };
+        /** @enum {string} */
+        InternalProductStatus: "DRAFT" | "ACTIVE" | "PAUSED" | "WITHDRAWN";
+        InternalSeller: {
+            account_id: components["schemas"]["UUID"];
+            created_at?: components["schemas"]["Timestamp"];
+            display_name: string;
+            payout_account_id?: components["schemas"]["UUID"];
+            /** @enum {string} */
+            status: "ACTIVE" | "SUSPENDED" | "CLOSED";
+            suspended_reason?: string;
+        };
         JournalTransaction: {
             content_hash: string;
             description?: string;
@@ -2086,6 +2941,125 @@ export interface components {
             /** @default * */
             scope_id: string;
         };
+        NativeAsset: {
+            activated_at?: components["schemas"]["Timestamp"];
+            asset_id: components["schemas"]["UUID"];
+            created_at?: components["schemas"]["Timestamp"];
+            creator_account_id: components["schemas"]["UUID"];
+            description?: string;
+            economics_locked_at?: components["schemas"]["Timestamp"];
+            image_url?: string;
+            moderation_notes?: string;
+            /** @enum {string} */
+            moderation_state: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+            name: string;
+            policy: components["schemas"]["NativeAssetPolicy"];
+            /** @enum {string} */
+            status: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "DELISTED" | "REJECTED";
+            supply: components["schemas"]["NativeSupply"];
+            symbol: string;
+        };
+        NativeAssetPage: {
+            items: components["schemas"]["NativeAsset"][];
+        };
+        /** @description The stated position on this asset (PART XXXIV). Every field is a decision, never a default: "we never decided" and "we decided no" are different facts and the product must not conflate them. */
+        NativeAssetPolicy: {
+            cashout_eligible: boolean;
+            creator_earning_eligible?: boolean;
+            internal_only: boolean;
+            jurisdiction_policy?: string;
+            market_proceeds_eligible?: boolean;
+            marketing_restrictions?: string;
+            minimum_age: number;
+            transferable: boolean;
+        };
+        NativeFill: {
+            /** @description Surveillance findings this trade raised. They never block it. */
+            alerts?: {
+                kind?: string;
+                reason?: string;
+                /** @enum {string} */
+                severity?: "INFO" | "WARN" | "CRITICAL";
+            }[];
+            asset_reserve_after?: components["schemas"]["Quantity"];
+            assets_in?: components["schemas"]["Quantity"];
+            assets_out?: components["schemas"]["Quantity"];
+            creator_fee?: components["schemas"]["Quantity"];
+            credits_in?: components["schemas"]["Quantity"];
+            credits_out?: components["schemas"]["Quantity"];
+            effective_price?: components["schemas"]["Quantity"];
+            fill_id: components["schemas"]["UUID"];
+            market_id: components["schemas"]["UUID"];
+            platform_fee?: components["schemas"]["Quantity"];
+            price_scale?: number;
+            real_credit_reserve_after?: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            side: "BUY" | "SELL";
+            slippage_bps?: components["schemas"]["BPS"];
+            /** Format: int64 */
+            state_version_after: number;
+        };
+        NativeMarket: {
+            asset_id: components["schemas"]["UUID"];
+            asset_reserve: components["schemas"]["Quantity"];
+            circulating_supply?: components["schemas"]["Quantity"];
+            creator_fee_bps: components["schemas"]["BPS"];
+            initial_asset_reserve?: components["schemas"]["Quantity"];
+            market_id: components["schemas"]["UUID"];
+            platform_fee_bps: components["schemas"]["BPS"];
+            price_scale?: number;
+            real_credit_reserve: components["schemas"]["Quantity"];
+            spot_price?: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            state_version: number;
+            /** @enum {string} */
+            status: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
+            /** @description Holder concentration, which is the number a buyer most needs to see */
+            top_holders?: {
+                account_id?: components["schemas"]["UUID"];
+                quantity?: components["schemas"]["Quantity"];
+            }[];
+            virtual_credit_reserve?: components["schemas"]["Quantity"];
+        };
+        NativeOrderRequest: {
+            account_id: components["schemas"]["UUID"];
+            amount: components["schemas"]["Quantity"];
+            /** @description The trade is refused if it would return less than this. It is checked against a freshly computed fill, not against whatever a quote said, because this is the number the caller actually agreed to. */
+            min_output: components["schemas"]["Quantity"];
+            quote_id?: components["schemas"]["UUID"];
+            /** @enum {string} */
+            side: "BUY" | "SELL";
+        };
+        NativeQuote: {
+            creator_fee?: components["schemas"]["Quantity"];
+            effective_price?: components["schemas"]["Quantity"];
+            expected_output: components["schemas"]["Quantity"];
+            expires_at: components["schemas"]["Timestamp"];
+            input_amount: components["schemas"]["Quantity"];
+            market_id: components["schemas"]["UUID"];
+            platform_fee?: components["schemas"]["Quantity"];
+            price_scale?: number;
+            quote_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            side: "BUY" | "SELL";
+            slippage_bps?: components["schemas"]["BPS"];
+            spot_price_before?: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            state_version: number;
+        };
+        NativeQuoteRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Credits for a BUY, asset base units for a SELL */
+            amount: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            side: "BUY" | "SELL";
+        };
+        NativeSupply: {
+            creator_allocation: components["schemas"]["Quantity"];
+            max_supply: components["schemas"]["Quantity"];
+            pool_supply: components["schemas"]["Quantity"];
+            treasury_allocation: components["schemas"]["Quantity"];
+        };
         Order: {
             account_id: components["schemas"]["UUID"];
             created_at: components["schemas"]["Timestamp"];
@@ -2126,6 +3100,29 @@ export interface components {
         Page: {
             next_cursor: string | null;
         };
+        PayoutRequest: {
+            account_id: components["schemas"]["UUID"];
+            created_at?: components["schemas"]["Timestamp"];
+            destination_id?: components["schemas"]["UUID"];
+            eligibility_reasons?: string[];
+            /** @description How much of the request the policy permitted, present on creation */
+            eligible_quantity?: components["schemas"]["Quantity"];
+            failure_reason?: string;
+            payout_id: components["schemas"]["UUID"];
+            policy_hash?: string;
+            policy_version: string;
+            requested_quantity: components["schemas"]["Quantity"];
+            required_verification?: string;
+            reserved_quantity: components["schemas"]["Quantity"];
+            settled_quantity?: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            state: "DRAFT" | "ELIGIBILITY_CHECK" | "VERIFICATION_REQUIRED" | "VERIFICATION_PENDING" | "VERIFIED" | "SUBMITTED" | "PROVIDER_PENDING" | "PAYOUT_STATUS_UNKNOWN" | "SETTLED" | "FAILED" | "REJECTED" | "REVERSED" | "MANUAL_REVIEW";
+            /** @description True when the only obstacle is identity verification. It is a different answer from "no" and the product must present it as one. */
+            verification_would_suffice?: boolean;
+        };
+        PayoutRequestPage: {
+            items: components["schemas"]["PayoutRequest"][];
+        };
         Principal: {
             account_ids: components["schemas"]["UUID"][];
             /** @enum {string} */
@@ -2162,6 +3159,11 @@ export interface components {
             role: string;
             /** @enum {string} */
             verification: "CODE_COMPLETE" | "CONTRACT_TESTED" | "SANDBOX_VERIFIED" | "CANARY_VERIFIED" | "LIVE_VERIFIED" | "BLOCKED_EXTERNAL";
+        };
+        PurchaseInternalProductRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description What the buyer was shown. The purchase is refused if it no longer matches, so a stale listing is a refusal, never a surprise charge. */
+            expected_price: components["schemas"]["Quantity"];
         };
         /**
          * @description Exact asset base units as an integer string
@@ -2251,6 +3253,12 @@ export interface components {
             evidence_ref: string;
             reason: string;
         };
+        RegisterSellerRequest: {
+            account_id: components["schemas"]["UUID"];
+            display_name: string;
+            /** @description Where earnings are attributed. Omit for the selling account itself, which is the ordinary case. */
+            payout_account_id?: components["schemas"]["UUID"];
+        };
         SessionSummary: {
             created_at: components["schemas"]["Timestamp"];
             current?: boolean;
@@ -2261,6 +3269,9 @@ export interface components {
             last_seen_at: components["schemas"]["Timestamp"];
             revoked_at?: components["schemas"]["Timestamp"];
             user_agent?: string;
+        };
+        SetInternalProductStatusRequest: {
+            status: components["schemas"]["InternalProductStatus"];
         };
         StartDepositRequest: {
             account_id: components["schemas"]["UUID"];
@@ -2403,6 +3414,7 @@ export interface components {
     };
     parameters: {
         AccountId: components["schemas"]["UUID"];
+        AssetId: components["schemas"]["UUID"];
         Cursor: string;
         DepositId: components["schemas"]["UUID"];
         /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
@@ -2410,7 +3422,10 @@ export interface components {
         InstrumentId: components["schemas"]["UUID"];
         IntentId: components["schemas"]["UUID"];
         Limit: number;
+        MarketId: components["schemas"]["UUID"];
         OrderId: components["schemas"]["UUID"];
+        PayoutId: components["schemas"]["UUID"];
+        ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];
     };
     requestBodies: never;

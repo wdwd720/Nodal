@@ -26,6 +26,12 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-11 | P2 | NEW | fixed | Two states in the payout machine were unreachable, one of them needed |
 | F-12 | P2 | NEW | fixed | `RailHostedPartner` reported itself implemented with no adapter behind it |
 | F-13 | P3 | NEW | fixed | The market fill test asserted absolute balances on a shared account |
+| F-14 | P1 | NEW | fixed | The readiness report claimed a `-race` run that cannot happen on this host |
+| F-15 | P1 | NEW | fixed | Internal commerce shipped with no capability gate of its own |
+| F-16 | P2 | BASELINE | fixed | `MARKETPLACE` was low risk while gating the minting of withdrawable provenance |
+| F-17 | P2 | NEW | fixed | A gate being off was reported as a policy refusal, sending operators to the wrong fix |
+| F-18 | P2 | NEW | fixed | The adversarial-coverage summary contradicted the evidence tables in its own document |
+| F-19 | P3 | NEW | fixed | A Route field called `MaxAgentAuthority` held a minimum, inviting a backwards gate |
 
 ---
 
@@ -170,6 +176,172 @@ Every market quotes against the same Credit asset, so the platform's `MARKET_RES
 accounts are shared by every market — and, in a test, by every test that ran before. Asserting an
 absolute balance passed only on a virgin database. The test now asserts deltas, and the shared-account
 property became the `VerifyReserves` control-account invariant rather than being worked around.
+
+## F-14 · The readiness report claimed a race-detector run that cannot happen on this host · NEW · P1 · FIXED
+
+**Found by** trying to run `go test -race` over `internal/commerce` and getting
+`cgo: C compiler "gcc" not found`. There is no C compiler on this machine — `gcc`, `clang` and `cc`
+are all absent — so `go test -race` cannot have succeeded here at any point.
+
+`docs/release/PRODUCTION_READINESS_REPORT.md` nonetheless carried a row reading
+
+> | Race | `-race` over credit, nativemarket, payout | ok |
+
+and a claim that the hundred-concurrent-spends test had run "also under `-race`". Neither was
+executed. This is worse than an untested code path: the whole purpose of that document is that every
+row has an executable command behind it, and a row that does not is a licence for the reader to stop
+checking the others.
+
+**Why it happened.** `-race` is in `make race` and in CI, both of which run on Linux where cgo works.
+I recorded the *intent* of that pipeline as a *result* of this session.
+
+**Fix, in four parts.**
+
+1. The report was corrected to state that the race detector had not run here, name the reason, and
+   mark the row as delegated to CI rather than as passed.
+2. `internal/{credit,nativemarket,payout,commerce}` were added to the CI integration-race loop and to
+   `make integration-race`. They were absent, so even in CI those four packages — the ones with the
+   database-backed concurrency properties of the internal economy — had never been raced. Fixing the
+   false claim without fixing that would have been cosmetic.
+3. The concurrency properties that motivated the claim are also asserted without the race detector,
+   by outcome rather than by instrumentation: 100 concurrent spends against a balance that funds 10
+   yield exactly 10 successes, and 10 concurrent purchases against a balance that funds 2 yield
+   exactly 2.
+4. **A C compiler was then installed on the host and the run was actually executed.** It did not
+   work immediately: the toolchain had been installed under a path containing a space
+   (`C:\Users\Mihir Modi\...`), and the MinGW driver embeds its own unquoted path in a linker-script
+   argument, so `ld` received `C:/Users/Mihir` and refused with "linker script file ... appears
+   multiple times". A directory junction does not fix it — gcc canonicalises through it — so the
+   toolchain was copied to a space-free path. `internal/{credit,nativemarket,payout,commerce}` and
+   the financial core then passed under `-race` on this host, and the report's row says so with the
+   command that produced it.
+
+**Two lessons, not one.** The first is the obvious one: never record an intended command as an
+executed one. The second is the reason the first is easy to get wrong — the fix looked impossible
+("no compiler on this host"), and an obstacle that looks environmental is exactly the kind a report
+quietly routes around instead of removing.
+
+**The general lesson, recorded because it will recur.** A readiness document must distinguish "this
+command was run and passed here" from "this command runs in CI" from "this command is intended".
+Collapsing the three is how a launch package becomes decorative. Every row in
+`PRODUCTION_READINESS_REPORT.md` §2 now carries which of the three it is.
+
+## F-15 · Internal commerce shipped with no capability gate of its own · NEW · P1 · FIXED
+
+**Found by** writing the Settlement Compiler's routing table and having to answer "which capability
+gates PURCHASE_INTERNAL_SERVICE?" -- and finding that the honest answer was none.
+
+Stage 8 reasoned that a purchase is a single-domain movement inside `INTERNAL_CREDIT`, so the
+ledger's isolation check requires no capability for it. That reasoning is correct and it answered the
+wrong question. The isolation check asks "may value cross this boundary"; nobody had asked "may this
+deployment run a user-to-user marketplace at all". The result was that internal commerce -- the only
+legitimate way `CREATOR_EARNING` / `DATA_SALE_EARNING` / `AGENT_SERVICE_EARNING` provenance comes
+into existence -- would have been live on a fresh deployment with no gate, no policy and no decision.
+
+Every other Domain A action had a gate. Commerce did not, precisely because its *isolation* story was
+the simplest.
+
+**Fix.** `internal/commerce` now takes a `CapabilityResolver` and refuses a purchase unless
+`MARKETPLACE` is ACTIVE. It is checked in the DOMAIN SERVICE, not only in the compiler at the edge: a
+gate that lives at the HTTP boundary is one a worker or a script walks around.
+`TestIntegration_WithoutTheMarketplaceCapabilityNothingSells` proves the refusal for an unconfigured
+resolver and for an explicitly inactive gate, and proves the same purchase commits once it is on --
+so the refusal is about the gate and nothing else.
+`TestIntegration_ARepeatedPurchaseStopsWorkingWhenTheGateIsPulled` proves the gate is checked before
+the idempotency lookup: a replay is not a different act, and it must not keep working after the
+marketplace is switched off.
+
+**The general lesson.** "This movement needs no capability" and "this product needs no approval" are
+different sentences. The first is about the ledger; the second is about the business. Answering the
+first does not answer the second, and Domain A had exactly one place where the two came apart.
+
+## F-16 · `MARKETPLACE` was low risk while gating the minting of withdrawable provenance · BASELINE · P2 · FIXED
+
+`gates.IsHighRisk` classified `MARKETPLACE` as low risk. That was defensible when the capability was
+a placeholder meaning "users can sell things some day". It is not defensible now that it gates
+internal commerce, because exercising it does two things the function's own stated criterion covers:
+it moves Credits between users, and it mints the creator-earning provenance a payout policy may one
+day permit to be withdrawn.
+
+Low risk means no legal-review, provider-contract, risk-approval or security-approval reference is
+required to propose the gate. It still requires dual authorization -- so this was never a
+one-person switch -- but it was a switch two people could throw with no evidence attached to the
+only path by which withdrawable provenance is created.
+
+**Fix.** `MARKETPLACE` is high risk, with the reason recorded next to it. The three tests that used
+it as their low-risk exemplar now use `SOCIAL_DATA_PERSISTENCE`, which is genuinely low risk and
+stays a real test of the low-risk path rather than an assertion that happens to pass.
+
+## F-17 · A gate being off was reported as a policy refusal · NEW · P2 · FIXED
+
+**Found by** an HTTP integration test asserting the status code of a refused purchase and getting
+403 where 422 was expected.
+
+The legal router correctly turns an ALLOW whose required gate is inactive into a DENY -- policy and
+gate must agree. The first version of the compiler read that DENY as `LEGAL_ROUTER_DENIED`, so a
+deployment whose policy already permitted internal commerce and had simply not activated the gate was
+told "no approval on record permits this action". An operator reading that would go and edit a policy
+that was already correct.
+
+**Fix.** The compiler now distinguishes them: a router DENY whose reason code is
+`CAPABILITY_NOT_ACTIVE` produces the capability reason only, with the capability named, because
+activating it is the actual next step. A policy that denies on the merits still produces
+`LEGAL_ROUTER_DENIED`, and a fresh deployment produces both. `TestCompile_AGateBeingOffIsNotAPolicyRefusal`
+pins all three cases.
+
+The refusal precedence at the HTTP edge follows the same principle and is documented where it is
+written: rail-not-implemented, then policy, then gate, then verification, then provider -- the order
+in which the obstacles would actually have to be removed. Every reason is still in the response; the
+ordering only decides which one leads.
+
+## F-18 · The adversarial-coverage summary contradicted its own document · NEW · P2 · FIXED
+
+**Found by** trying to write the per-item mapping and checking each claim instead of copying the
+summary sentence.
+
+`PRODUCTION_READINESS_REPORT.md` summarised PART LXXII's thirty required adversarial tests in one
+sentence: "items 1–4, 7–11, 15–17, 20–22, 28 have named tests; items 5, 6, 12–14, 18, 19, 23–27,
+29, 30 do not yet". Four of those placements were wrong, in both directions:
+
+- Item 6 (provider timeout after success) was listed as missing. `TestIntegration_AProviderTimeoutDoesNotDuplicateThePayout`
+  is cited by name **in the payout evidence table of the same document, sixty lines above**.
+- Item 12 (hidden supply increase) was listed as missing.
+  `TestIntegration_ACreatorCannotChangeEconomicsAfterLaunch` covers it, and is also cited above.
+- Item 13 (self-trade) was listed as missing. The surveillance test raises `CREATOR_SELF_DEALING`.
+- Items 26 and 27 were listed as missing and were covered by tests that predate this migration.
+
+Nothing was untested that the summary said was tested — the error ran the safe way — but that is
+luck, not a property of the process. The sentence was written by recalling what had been built rather
+than by checking, which is the same failure mode as F-14 wearing different clothes.
+
+**Fix.** The sentence is replaced by a thirty-row table in `PRODUCTION_READINESS_REPORT.md` §3a, one
+row per required scenario, each naming the test. Three items (5, 14, 23) genuinely have no test and
+are named, with what each would take. A summary a reader cannot check is worse than a table they can.
+
+**And then applied to the rest of the document.** Every "not built" claim was re-checked the same
+way, which immediately caught another: the report said `apps/admin` had no pages driving the nine new
+administrative actions. It has one. The console's propose form is generated from `authority.json`,
+which now lists all nine, and carries the free-form params field the two parameterised kinds need, so
+they are operable today. The corrected claim is narrower and true: there is no kind-SPECIFIC UI, so
+an operator pastes a uuid where a picker belongs.
+
+## F-19 · A `Route` field called `MaxAgentAuthority` held a minimum · NEW · P3 · FIXED
+
+**Found by** re-reading `internal/settlement/compiler.go` looking for exactly this: a name that says
+one thing while the value says another.
+
+`Route.MaxAgentAuthority` was populated from `agentauthority.MinimumLevel(...)` — the LOWEST level at
+which an action becomes available — and documented as "the highest authority level that may execute
+this action". Nothing consumed it yet, which is the only reason it was harmless. The obvious way to
+consume it would have been `if agent.Level <= route.MaxAgentAuthority`, which is the exact inversion
+of the intended check and would have permitted only the agents that should have been refused.
+
+**Fix.** Renamed to `MinAgentAuthority`, documented as a floor, and pinned by
+`TestCompile_MinAgentAuthorityIsAFloorNotACeiling`: an agent at exactly that level may act, one below
+may not, and a permanently forbidden action has no minimum at all because no level permits it.
+
+**Why P3 and not P2.** No caller existed. Recorded anyway, because "nothing uses it yet" is a
+statement about today and the name would have outlived the memory of what it meant.
 
 ---
 

@@ -122,7 +122,12 @@ func TestCapabilities_And_HighRisk(t *testing.T) {
 	high := map[Capability]bool{
 		LiveFunding: true, LiveManualTrading: true, LiveAgentTrading: true, Withdrawals: true,
 		Securities: true, CEXTrading: true, CrossChain: true, PredictionMarkets: true,
-		SocialDataPersistence: false, Marketplace: false,
+		SocialDataPersistence: false,
+
+		// MARKETPLACE gates internal commerce, which moves Credits between users
+		// and mints creator-earning provenance. One approver must not be able to
+		// switch that on.
+		Marketplace: true,
 
 		// The internal economy. High risk where exercising the capability
 		// moves value a user could believe is theirs, or changes who decides
@@ -224,7 +229,7 @@ func TestEvaluate_EachConditionFailsWithDistinctReason(t *testing.T) {
 
 func TestEvaluate_LowRiskDoesNotRequireEvidenceRefs(t *testing.T) {
 	g := validActiveGate()
-	g.Capability = Marketplace
+	g.Capability = SocialDataPersistence
 	g.LegalReviewRef, g.ProviderContractRef, g.RiskApprovalRef, g.SecurityApprovalRef = "", "", "", ""
 	v := Evaluate(&g, true, t0)
 	assert.True(t, v.Active, v.Reason)
@@ -456,7 +461,7 @@ func TestRules_SamePrincipalCannotApproveAndActivate(t *testing.T) {
 }
 
 func TestRules_ApplyToLowRiskToo(t *testing.T) {
-	g := Gate{Capability: Marketplace, State: StateApproved, ProposedBy: "prop", Approvers: []Approver{
+	g := Gate{Capability: SocialDataPersistence, State: StateApproved, ProposedBy: "prop", Approvers: []Approver{
 		{UserID: "prop", Step: StepPropose}, {UserID: "appr", Step: StepApprove},
 	}}
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(activateRule(&g, "appr")))
@@ -490,7 +495,7 @@ func TestProposal_Normalize(t *testing.T) {
 		assert.Equalf(t, errs.CodeValidationFailed, errs.CodeOf(err), "%s: %v", name, err)
 	}
 	// Low-risk capabilities need a reason but not the four references.
-	_, err = Proposal{Reason: "marketplace beta"}.normalize(Marketplace, t0)
+	_, err = Proposal{Reason: "social beta"}.normalize(SocialDataPersistence, t0)
 	assert.NoError(t, err)
 }
 

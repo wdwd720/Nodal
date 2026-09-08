@@ -672,3 +672,167 @@ func TestIntegration_OpenRequestsAreWhatAReconcilerSweeps(t *testing.T) {
 	}
 	require.True(t, found, "an unresolved payout must appear in the sweep")
 }
+
+// ---------------------------------------------------------------------------
+// Manual review (gola.md Stage 17)
+// ---------------------------------------------------------------------------
+
+// toManualReview drives a request into MANUAL_REVIEW through the real state
+// machine rather than by writing the row, so the history the resolver reads is
+// the history a real incident would leave.
+func (f *fixture) toManualReview(req payout.Request, reason string) payout.Request {
+	f.t.Helper()
+	var out payout.Request
+	require.NoError(f.t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			out, err = f.svc.FlagForManualReview(ctx, tx, req.ID, reason)
+			return err
+		}))
+	return out
+}
+
+func (f *fixture) resolve(id payout.RequestID, r payout.ManualResolution, reason string) (payout.Request, error) {
+	var out payout.Request
+	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var rerr error
+			out, rerr = f.svc.ResolveManualReview(ctx, tx, id, r, reason)
+			return rerr
+		})
+	return out, err
+}
+
+// TestIntegration_FailingAManualReviewReturnsTheExactUnits: resolving a stuck
+// payout as FAILED gives the user back exactly what was reserved, to exactly
+// the lots it came from.
+func TestIntegration_FailingAManualReviewReturnsTheExactUnits(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+	require.Equal(t, "400", req.ReservedQuantity.String())
+
+	before := f.balance(ledger.CodeCreditBalance)
+	stuck := f.toManualReview(req, "provider settled and the settlement could not be recorded")
+	require.Equal(t, payout.StateManualReview, stuck.State)
+
+	resolved, err := f.resolve(req.ID, payout.ResolveFail, "provider confirmed no payment was made")
+	require.NoError(t, err)
+	require.Equal(t, payout.StateFailed, resolved.State)
+	require.Equal(t, "0", resolved.ReservedQuantity.String())
+
+	after := f.balance(ledger.CodeCreditBalance)
+	require.Equal(t, "400", after.Sub(before).String(), "the exact reserved units come back")
+	require.NoError(t, f.credits.VerifyProvenance(f.ctx, testDB, f.account))
+}
+
+// TestIntegration_AManualReviewCanNeverBeDeclaredSettled. The provider is
+// authoritative for settlement. An operator who could assert it by hand could
+// close a ticket by claiming money moved.
+func TestIntegration_AManualReviewCanNeverBeDeclaredSettled(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+	f.toManualReview(req, "stuck")
+
+	for _, bad := range []payout.ManualResolution{"SETTLED", "SETTLE", "PAID", "", "settled"} {
+		_, err := f.resolve(req.ID, bad, "closing the ticket")
+		require.Error(t, err, "resolution %q must be refused", bad)
+		require.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	}
+	current, err := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, err)
+	require.Equal(t, payout.StateManualReview, current.State, "nothing moved")
+}
+
+// TestIntegration_AResolutionRequiresAReason: the reason is the only record of
+// why a human overrode a machine.
+func TestIntegration_AResolutionRequiresAReason(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+	f.toManualReview(req, "stuck")
+
+	_, err = f.resolve(req.ID, payout.ResolveFail, "   ")
+	require.Error(t, err)
+	require.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}
+
+// TestIntegration_APayoutThatMayHaveBeenSubmittedCannotBeRetried is the
+// property the whole resolution API exists to protect. A payout that reached
+// MANUAL_REVIEW from SUBMITTED may already exist at the provider; sending it
+// back to VERIFIED would make a second submission possible.
+func TestIntegration_APayoutThatMayHaveBeenSubmittedCannotBeRetried(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+
+	// Never submitted: a retry is legitimate.
+	f.toManualReview(req, "eligibility needed a human")
+	retried, err := f.resolve(req.ID, payout.ResolveRetryVerification, "human confirmed eligibility")
+	require.NoError(t, err)
+	require.Equal(t, payout.StateVerified, retried.State)
+
+	// Now submit it, force it back to MANUAL_REVIEW, and the same retry is
+	// refused -- because the provider may already hold it.
+	f.provider.TimeoutNext()
+	_, _ = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	f.toManualReview(req, "submission outcome unknown")
+
+	_, err = f.resolve(req.ID, payout.ResolveRetryVerification, "let us just try again")
+	require.Error(t, err, "a payout that may already be at the provider must never be retried")
+	require.Equal(t, errs.CodeSubmissionStateUnknown, errs.CodeOf(err))
+
+	current, err := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, err)
+	require.Equal(t, payout.StateManualReview, current.State)
+}
+
+// TestIntegration_APayoutIsRefusedWhileTheFundingIsDisputed is PART LXXII item
+// 9: a payout request during a pending chargeback.
+//
+// The user's Credits are still there and still spendable inside the system.
+// What has changed is that the money behind them is being clawed back, and
+// paying out against a disputed funding is how a platform pays the same money
+// twice — once to the user and once back to the card network.
+func TestIntegration_APayoutIsRefusedWhileTheFundingIsDisputed(t *testing.T) {
+	f := newFixture(t)
+	lot := f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+
+	// While settled, the policy permits it.
+	req, dec, err := f.create(400, f.input())
+	require.NoError(t, err)
+	require.Equal(t, "400", req.ReservedQuantity.String(), "reasons=%v", dec.ReasonStrings())
+
+	// A chargeback opens on the funding behind those Credits.
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			return f.credits.SetFinality(ctx, tx, lot.ID, valuedomain.FinalityDisputed,
+				credit.Reference{Type: "test_dispute", ID: uuid.NewString()}, "chargeback opened")
+		}))
+
+	// A NEW payout against the remaining balance is refused. A refusal is a
+	// DECISION here, not an error -- the request exists, in REJECTED, with the
+	// reasons attached -- and the reason names the funding state rather than
+	// reporting a bare shortfall.
+	rejected, dec2, err := f.create(400, f.input())
+	require.NoError(t, err)
+	require.False(t, dec2.Sufficient(), "disputed funding must not be payable")
+	require.Equal(t, payout.StateRejected, rejected.State)
+	require.Contains(t, dec2.Reasons, valuedomain.ReasonFundingNotFinal,
+		"the refusal must say the funding is not final, not just 'insufficient': %v", dec2.ReasonStrings())
+	require.Equal(t, "0", rejected.ReservedQuantity.String(),
+		"a rejected payout reserves nothing")
+
+	// And the first payout, already reserved, is not silently settled by the
+	// dispute: it is still holding its reservation for a human or a
+	// reconciliation to resolve.
+	current, err := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, err)
+	require.False(t, current.State.Terminal(), "a dispute must not terminate a payout by itself")
+	require.Equal(t, "400", current.ReservedQuantity.String())
+}

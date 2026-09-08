@@ -140,7 +140,12 @@ integration-list: ## List the integration packages inttest would run
 	$(GO) run ./scripts/inttest -list
 
 integration-race: ## Race detector over the financial core WITH the integration tag
-	$(GO) run ./scripts/inttest -race -pkg '^\./internal/(capital|ledger|execution|reconciliation|event|settlement|signing)'
+	# The internal-economy packages are in this list because their concurrency
+	# properties are database-backed and therefore invisible to `make race`,
+	# which runs without the integration tag: the credit consumption lock, the
+	# market's stale-version refusal, the payout reservation and the commerce
+	# purchase all race for the same rows.
+	$(GO) run ./scripts/inttest -race -pkg '^\./internal/(capital|ledger|execution|reconciliation|event|settlement|signing|credit|nativemarket|payout|commerce)'
 
 e2e: ## API-level end-to-end tests
 	$(GO) test -count=1 -timeout=30m -tags=integration,e2e ./test/e2e/...

@@ -25,6 +25,25 @@ Format per PART XCI: claim · evidence · test performed · result · defect · 
 | Chaos | `go test -tags=integration,chaos ./test/chaos/...` | ok |
 | Contract | `go test ./test/contract/...` | 6 packages ok (eventtopics, helius, jupiter, privy, solanarpc, stripe) |
 | Security | `go test -tags=integration ./test/security/` | **1 failure** → AUD-002 |
+| Race | `go test -race` | **could not run** at the time of this pass — no C compiler on the host → F-14 |
+
+### A.2 Re-executed after the internal economy was built
+
+The suites above were run against the baseline. They were re-run after Stages 8, 12 and 17, because a
+migration that does not re-prove the baseline has only proved the new part.
+
+| Suite | Command | Result |
+|---|---|---|
+| Integration | `go run ./scripts/inttest` — every `//go:build integration` package, one fresh database each | 46/46 ok |
+| Race | `go run ./scripts/inttest -race` over `credit, nativemarket, payout, commerce` | 4/4 ok |
+| Race | the same over `capital, ledger, execution, reconciliation, event, settlement, signing, httpapi` | ok |
+| Unit | `go test ./internal/... ./cmd/... ./scripts/...` | all ok |
+| Vet | `go vet ./...` and `go vet -tags=integration ./...` | exit 0 |
+
+The race rows are the ones worth reading twice. They were previously reported as passing and had not
+been executed at all (F-14); a C compiler was then installed, the install turned out to be broken by a
+space in its own path, and the underlying problem was fixed rather than worked around. An obstacle
+that looks environmental is exactly the kind a report quietly routes around.
 
 ## B. Findings
 
@@ -195,3 +214,8 @@ Stated explicitly so that no reader mistakes silence for a pass:
 - The adversarial test list of PART LXXII (30 scenarios) — items 1–30 are being implemented alongside
   the subsystems they attack; coverage is tracked in `docs/audit/AUDIT_FINDINGS.md`.
 - Frontend honesty review (PART LXXV) — the Domain A surfaces do not exist yet.
+- Domain C has not been re-expressed as a `FinancialIntent`. The compiler routes external trades
+  correctly; the older `IntentSnapshot` path is still how they arrive, so two intent shapes coexist.
+- The nine Domain A administrative actions have been proved over HTTP against real services, and not
+  against a hostile operator: there is no test yet that a suspended seller's *own* session cannot
+  un-suspend them through some other route.

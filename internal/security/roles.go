@@ -127,6 +127,11 @@ const (
 	PermNativeMarketHalt Permission = "native_market:halt"
 	// PermNativeMarketSurveil reads surveillance alerts.
 	PermNativeMarketSurveil Permission = "native_market:surveil"
+	// PermNativeMarketResume returns a halted, close-only or frozen market to
+	// a state that accepts new risk. It is the approve half of a
+	// dual-controlled action and no standing role holds it: halting is one
+	// operator's call, and restarting after an economic incident is not.
+	PermNativeMarketResume Permission = "native_market:resume"
 
 	// PermPayoutCreate requests a payout of eligible value.
 	PermPayoutCreate Permission = "payout:create"
@@ -137,6 +142,25 @@ const (
 	// PermPayoutApprove is the approve half of a dual-controlled payout
 	// release. No standing role holds it.
 	PermPayoutApprove Permission = "payout:approve"
+
+	// --- internal commerce (gola.md PART XVII) ----------------------------
+	//
+	// Selling is separated from buying because they are different exposures.
+	// A buyer spends Credits; a seller MINTS provenance -- the earning origins
+	// that a payout policy may one day permit to be withdrawn. A deployment
+	// that has not decided how it feels about creator payouts can therefore
+	// let people buy from each other while granting nobody the ability to
+	// become a seller.
+
+	// PermCommerceRead reads the product catalogue and one's own orders.
+	PermCommerceRead Permission = "commerce:read"
+	// PermCommerceBuy purchases an internal product.
+	PermCommerceBuy Permission = "commerce:buy"
+	// PermCommerceSell registers as a seller and lists products for sale.
+	PermCommerceSell Permission = "commerce:sell"
+	// PermCommerceModerate suspends a seller or withdraws a product. It is the
+	// operator side and no customer role holds it.
+	PermCommerceModerate Permission = "commerce:moderate"
 )
 
 var allPermissions = []Permission{
@@ -160,8 +184,9 @@ var allPermissions = []Permission{
 	PermBreakGlassRequest, PermBreakGlassApprove,
 	PermCreditRead, PermCreditPurchase, PermCreditAdjust,
 	PermNativeAssetCreate, PermNativeAssetRead, PermNativeAssetModerate,
-	PermNativeMarketTrade, PermNativeMarketHalt, PermNativeMarketSurveil,
+	PermNativeMarketTrade, PermNativeMarketHalt, PermNativeMarketSurveil, PermNativeMarketResume,
 	PermPayoutCreate, PermPayoutRead, PermPayoutReview, PermPayoutApprove,
+	PermCommerceRead, PermCommerceBuy, PermCommerceSell, PermCommerceModerate,
 }
 
 var allRoles = []Role{
@@ -184,6 +209,7 @@ var dualControlPermissions = []Permission{
 	PermReconciliationApprove,
 	PermEnvelopeApprove,
 	PermAgentPromoteApprove,
+	PermNativeMarketResume,
 }
 
 // agentOnlyPermissions are intrinsic to ActorType AGENT and are never
@@ -211,7 +237,7 @@ var agentPermissions = []Permission{
 var reads = []Permission{
 	PermAccountRead, PermTradeRead, PermFundingRead, PermStrategyRead,
 	PermLedgerRead, PermReconciliationRead, PermRiskRead, PermGateRead,
-	PermCreditRead, PermNativeAssetRead, PermPayoutRead,
+	PermCreditRead, PermNativeAssetRead, PermPayoutRead, PermCommerceRead,
 }
 
 // ownSession lets every human manage the sessions of their own subject
@@ -239,20 +265,24 @@ var RolePermissions = map[Role][]Permission{
 			PermNativeAssetCreate, PermNativeAssetRead,
 			PermNativeMarketTrade,
 			PermPayoutCreate, PermPayoutRead,
+			// Commerce: a customer may browse, buy, and offer things of their
+			// own for sale. Selling is granted here and gated separately,
+			// because becoming a seller is how earning provenance is minted.
+			PermCommerceRead, PermCommerceBuy, PermCommerceSell,
 		},
 		ownSession,
 	),
 	RoleSupportReadOnly: operatorBase,
 	RoleOperations: union(operatorBase, []Permission{
 		PermAgentPause, PermAgentPromote, PermProviderDisable, PermKillActivate, PermInstrumentStatusWrite, PermReconciliationResolve,
-		PermNativeMarketHalt, PermNativeMarketSurveil, PermPayoutReview,
+		PermNativeMarketHalt, PermNativeMarketSurveil, PermPayoutReview, PermCommerceModerate,
 	}),
 	RoleRisk: union(operatorBase, []Permission{
 		PermRiskPolicyWrite, PermKillActivate, PermInstrumentStatusWrite, PermGatePropose, PermEnvelopeAuthorityWrite, PermAgentPromote,
 	}),
 	RoleCompliance: union(operatorBase, []Permission{
 		PermNativeAssetModerate, PermNativeMarketSurveil, PermNativeMarketHalt, PermPayoutReview,
-		PermAccountFreeze, PermGatePropose, PermWithdrawalReview,
+		PermAccountFreeze, PermGatePropose, PermWithdrawalReview, PermCommerceModerate,
 	}),
 	RoleFinance: union(operatorBase, []Permission{
 		PermLedgerPostCorrection, PermReconciliationResolve, PermWithdrawalReview,

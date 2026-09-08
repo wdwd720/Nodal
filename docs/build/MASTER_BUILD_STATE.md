@@ -42,42 +42,150 @@ migration.
 | 5 | Native asset registry, moderation, lifecycle | **done** (`internal/nativeasset`, migration 00712) |
 | 6 | Native market engine (constant product, virtual reserve) | **done** (`internal/nativemarket`, migration 00712) |
 | 7 | Market surveillance | **done** (`nativemarket/surveillance.go`) |
-| 8 | Internal commerce / creator economy | **not started** |
+| 8 | Internal commerce / creator economy | **done** (`internal/commerce`, migration 00715) |
 | 9 | Payout eligibility, provider architecture, reconciliation | **done** (`internal/payout`, migration 00713) |
 | 10 | Hosted partner rail | **not started** — and see BLOCKERS B-05 |
 | 11 | Self-custodial onchain rail | **kept as-is**, re-classified as one rail among several |
-| 12 | Rails unified behind FinancialIntent | **not started** |
+| 12 | Rails unified behind FinancialIntent | **done** (`settlement.FinancialIntent`, `settlement.Compile`, wired in front of every Domain A command) |
 | 13 | LegalCapabilityRouter, composite capability key | **done** (`internal/legalrouter`, gates extended, migration 00714) |
 | 14 | Agent authority levels | **done** (`internal/agentauthority`) |
 | 15 | Reality / Prediction / Proof integration with Domain A | **not started** |
 | 16 | Frontend | **not started** |
-| 17 | Admin tooling for Domain A | **not started** |
+| 17 | Admin tooling for Domain A | **done** (9 administrative action kinds + executors; `internal/httpapi/executors_domaina.go`) |
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
 | 20–24 | Chaos, load, provider sandbox, re-audit, launch package | **not started** |
 
-API surface: 10 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
-into `cmd/api`, and covered by the existing deny-by-default authorization invariants.
+API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
+into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
+59, up from 42 at the baseline; capabilities: 20, of which 9 are high-risk.
+
+### Stage 8 as built
+
+`internal/commerce` + migration 00715. The requirement PART XVII actually turns on is one sentence —
+creator revenue must carry provenance distinct from speculative trading proceeds — and everything
+else follows from making that sentence structurally true:
+
+- A product's **kind** is the only input to the provenance decision, the mapping is a fixed table,
+  and the resulting origin is stored on the order rather than re-derived. No request body anywhere
+  in the API has a field for an origin.
+- **Self-dealing is refused twice.** Buying from yourself would convert Credits no policy will ever
+  release into creator-earning provenance one day might, which is the most valuable thing an
+  attacker could do here. Go refuses it with a comprehensible error; two named CHECK constraints
+  refuse it for the schema owner.
+- **The order is not the authority on what was paid.** A deferred trigger reads the journal entries
+  and refuses at COMMIT any order whose stated price or proceeds the posting does not show (IC001).
+- **Terms freeze on publication** (IC002) and orders are immutable.
+- An earning is issued **REVERSIBLE, not SETTLED**: the Credits behind it may still be inside a card
+  dispute window, and an earning cannot be more final than the money behind it. It is spendable,
+  which is what a marketplace needs, and not payout-eligible, which is the conservative half.
+- A purchase is a **single-domain movement** and commits with no capability active. If it ever
+  needed one, that would mean a conversion had crept into the path.
+
+JOURNEY C can now be walked end to end: buy Credits → list a dataset → sell it → hold
+`DATA_SALE_EARNING` → request a payout and be told, per unit of provenance, what the policy permits.
+The last step still ends in a refusal on a fresh deployment, which is correct: no payout capability
+is active and the default policy permits no origin.
+
+### Stage 12 as built
+
+`internal/settlement/financialintent.go` and `compiler.go`, plus
+`internal/httpapi/wiring_compiler.go`.
+
+**The problem.** `V1Planner` compiles one rail shape: a self-custodial on-chain spot swap. That was
+the whole system when it was written and is not the whole system now. Domain A executes on Nodal's
+own ledger, Domain B against simulated markets, and a payout leaves the system entirely — four
+settlement models with four authoritative balance sources. A planner that knows one of them cannot
+be "the only route from a typed intent to execution", which is the property the compiler exists to
+have.
+
+**What was built.**
+
+- **`FinancialIntent`** (PART XXV): the typed request every manual and agent action produces, with a
+  DECLARED capital domain, an action type from PART XXV's list, and a typed subject. It sits beside
+  `IntentSnapshot` rather than replacing it: the V1 projection is an instrument, a USD notional and a
+  venue, which cannot describe "buy 500 Credits of this creator's token" without most of its fields
+  becoming meaningless.
+- **`Compile`** (PART XXVI): pure, deterministic, and total over a routing table that
+  `ValidateCompiler` proves covers every declared action exactly once. It determines value domain,
+  legal rail, provider, executor, required capabilities, required verification, required
+  confirmation, quote and reservation requirements, risk evaluation, agent authority,
+  authoritative balance source and reconciliation method — and returns every applicable refusal at
+  once, sorted, so a caller is never told one problem per attempt.
+- **The refusals that matter.** An unimplemented rail is refused before any policy question, so
+  hosted trading cannot be routed to machinery that does not exist however permissive a policy is.
+  An agent can never request a payout, at any level, with every capability active. A declared domain
+  that disagrees with the action is a refusal, never a correction.
+- **Wired in front of every Domain A command**: native-market execute, native-asset create, internal
+  purchase and payout create all compile first. A refusal carries the policy version, the rule index
+  that produced it, and the capability that would have to be activated.
+
+**Why internal rails get a Route and not a seventeen-step Plan.** Durable per-step state exists
+because an external settlement can be half-done — submitted, result unknown. An internal-ledger
+settlement is one database transaction that either commits or does not. Wrapping it in a DAG would
+add failure modes rather than remove them. What must not be skipped is everything IN FRONT of
+execution, and that is what `Route` carries.
+
+**What this does not replace.** The ledger still refuses a cross-domain posting with no capability;
+`internal/commerce` still refuses a purchase with `MARKETPLACE` off; the payout engine still decides
+eligibility per unit of provenance. A gate that exists only at the edge is one a worker walks
+around, so the compiler is an addition and never a substitution — F-15 is the finding that made that
+rule concrete.
+
+**Still on the V1 planner.** External spot swaps (Domain C) are unchanged: the compiler routes them
+to `ExecutorExternalPlan` and `V1Planner` does its job. Compiling a Domain C intent through
+`FinancialIntent` end to end — replacing the direct `IntentSnapshot` path — is the remaining half of
+this stage and is not done.
+
+### Stage 17 as built
+
+Nine administrative action kinds and their executors, on the existing
+dual-control machinery in `internal/admin`.
+
+**The problem.** Every control in Domain A existed and none of them had an
+operator interface. A market could be halted, an asset delisted, a seller
+suspended and a stuck payout resolved — by running SQL. A control reachable
+only by hand-written SQL has no audit trail, no dual-control story and no
+reason attached, which in an incident is barely a control.
+
+**The rule the table encodes.** Stopping is one operator; restarting is two.
+
+| Kind | Signatures | Why |
+|---|---|---|
+| `NATIVE_MARKET_HALT` / `CLOSE_ONLY` / `FREEZE` | one | A control that needs two signatures to stop an incident is one nobody reaches for at 3am. PART XXXII: halting new risk must never be harder than taking it. |
+| `NATIVE_MARKET_RESUME` | two | Restarting is the direction that adds exposure. |
+| `NATIVE_ASSET_MODERATION_VERDICT` | one | A content judgement. Recording APPROVED does not start trading. |
+| `NATIVE_ASSET_DELIST` | one | Risk-reducing and terminal. |
+| `COMMERCE_SELLER_SUSPEND` / `PRODUCT_WITHDRAW` | one | Risk-reducing. Suspension stops new orders and touches nothing already earned. |
+| `PAYOUT_MANUAL_REVIEW_RESOLVE` | two | It decides what happens to money somebody is waiting for. |
+
+**What the payout resolver deliberately cannot do.** There is no resolution
+that declares a payout SETTLED. The provider is authoritative for settlement,
+and an operator who could assert it by hand could close a ticket by claiming
+money moved. The resolutions are FAIL (return the exact reserved units to the
+exact lots), REJECT and RETRY — and RETRY is refused outright if the request
+has ever been in a state where a provider call may have happened, because
+sending it back to VERIFIED is how a payout gets paid twice.
+
+**One new permission.** `native_market:resume` is the approve half of restarting
+a market and is a dual-control permission: no standing role holds it, so it
+requires a live break-glass elevation, exactly like releasing a kill switch.
+Permissions are now 60.
+
+**What the console already does.** `apps/admin`'s propose form is generated from
+`authority.json`, which now lists all nine kinds, and it carries a free-form
+params field. So every one of these is proposable, approvable and executable
+from the existing dual-control queue today — including the two that take
+params. What is missing is kind-SPECIFIC UI: a market picker instead of a
+pasted uuid, a moderation-state dropdown instead of hand-written JSON. That is
+Stage 16 work and a usability risk, not a missing control.
 
 ## 0.3 Next exact work, in order
 
-1. **Stage 8 — internal commerce.** `InternalProduct`, `InternalSeller`, `InternalCommerceOrder`,
-   `InternalPayoutAttribution` (PART XVII). Creator revenue must land with origins
-   `CREATOR_EARNING` / `DATA_SALE_EARNING` / `AGENT_SERVICE_EARNING`, which
-   `internal/credit` already understands and `internal/payout` already treats separately from
-   speculative proceeds. This is the last piece needed for JOURNEY C.
-2. **Stage 12 — route Domain A through the Settlement Compiler.** `internal/settlement` currently
-   compiles one rail shape. It needs to dispatch on `valuedomain.CapitalRail`, and
-   `internal/intent.FinancialIntent` needs the action types for native assets, internal services and
-   payout (PART XXV). Until then Domain A commands bypass the compiler, which is the largest
-   architectural gap remaining.
-3. **Stage 17 — admin workflows** for freeze market, close-only, disable asset, moderation verdict
-   and payout manual review. `internal/admin` already has the dual-control machinery; these are new
-   action kinds.
-4. **Stage 16 — frontend.** The API exists; `apps/web` has no Domain A surface. PART LII's rule
+1. **Stage 16 — frontend.** The API exists; `apps/web` has no Domain A surface. PART LII's rule
    (Nodal Economy / Simulated / Real Capital never summed) has to be structural in the UI, not a
    styling choice.
-5. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
+2. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
 
 ## 0.4 Verification commands that matter
 

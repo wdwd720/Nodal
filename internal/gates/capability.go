@@ -98,6 +98,16 @@ func IsHighRisk(c Capability) bool {
 		AgentBoundedDiscretion, AgentAutonomousSelection, AgentAutonomousPortfolio:
 		return true
 
+	// MARKETPLACE was classified as low risk when it meant a vague future
+	// "users can sell things". It now gates internal commerce, and exercising
+	// it does two things that meet the criterion above exactly: it moves
+	// Credits between users, and it MINTS the creator-earning provenance that
+	// a payout policy may one day permit to be withdrawn. Leaving it low risk
+	// would let one approver switch on the only legitimate way withdrawable
+	// provenance comes into existence.
+	case Marketplace:
+		return true
+
 		// NativeAssetCreation is deliberately NOT high risk. Creating a draft
 		// asset moves nothing; it is gated because publication is a content and
 		// jurisdiction question, and it needs a legal review reference. Demanding

@@ -278,7 +278,8 @@ jobs:
         run: |
           set -euo pipefail
           fails=0
-          for pkg in ./internal/capital/... ./internal/ledger/... ./internal/execution/...                      ./internal/reconciliation/... ./internal/event/... ./internal/settlement/...                      ./internal/signing/...; do
+          for pkg in ./internal/capital/... ./internal/ledger/... ./internal/execution/...                      ./internal/reconciliation/... ./internal/event/... ./internal/settlement/...                      ./internal/signing/... \
+                     ./internal/credit/... ./internal/nativemarket/... ./internal/payout/... ./internal/commerce/...; do
             name="race_$(echo "$pkg" | tr '/.-' '___' | tail -c 30)"
             echo "::group::race $pkg"
             eval "$(go run ./scripts/testdb -name "$name" -export)"

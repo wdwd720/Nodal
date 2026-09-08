@@ -1,7 +1,23 @@
 // Package settlement is the Settlement Compiler and its executor (goal PARTS
-// 38, 39, 40, 46, 106, 107, 220, 228, 230; SETTLEMENT_COMPILER.md; ADR-0014).
-// It is the only route from a typed intent to an external execution: no
-// worker, API or script submits a transaction without a plan produced here.
+// 38, 39, 40, 46, 106, 107, 220, 228, 230; gola.md PARTS XXV-XXVI;
+// SETTLEMENT_COMPILER.md; ADR-0014). It is the only route from a typed intent
+// to an execution: no worker, API or script submits a transaction or moves
+// value on any rail without a decision produced here.
+//
+// # Two layers
+//
+// Compile (compiler.go) is the rail dispatch. It takes a FinancialIntent --
+// the typed request gola.md PART XXV requires every manual and agent action to
+// take -- and decides, deterministically and from one table, everything PART
+// XXVI lists: value domain, legal rail, provider, eligibility, policy,
+// reservation and quote requirements, risk evaluation, execution authority,
+// required confirmation and reconciliation method. It refuses an unimplemented
+// rail before any policy question, and it is pure: no clock, no database, no
+// network.
+//
+// V1Planner (planner.go) is what happens after Compile routes an intent to the
+// external plan executor: the fixed step DAG of PART 38, for the one rail it
+// serves. Everything below describes that layer.
 //
 // # Responsibilities
 //

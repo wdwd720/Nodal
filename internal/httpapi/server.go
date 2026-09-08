@@ -62,6 +62,7 @@ type Ports struct {
 	NativeAssets  NativeAssetsPort
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
+	Commerce      CommercePort
 	Health        HealthPort
 	Idempotency   IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.

@@ -16,6 +16,7 @@ var goldenPermissions = []string{
 	"credit:adjust", "credit:purchase", "credit:read",
 	"agent:pause", "agent:promote", "agent:promote_approve", "agent:run",
 	"break_glass:approve", "break_glass:request",
+	"commerce:buy", "commerce:moderate", "commerce:read", "commerce:sell",
 	"envelope:approve", "envelope:authority_write",
 	"funding:create", "funding:read",
 	"gate:approve", "gate:propose", "gate:read",
@@ -24,7 +25,7 @@ var goldenPermissions = []string{
 	"kill:activate", "kill:release",
 	"ledger:approve_correction", "ledger:post_correction", "ledger:read",
 	"native_asset:create", "native_asset:moderate", "native_asset:read",
-	"native_market:halt", "native_market:surveil", "native_market:trade",
+	"native_market:halt", "native_market:resume", "native_market:surveil", "native_market:trade",
 	"payout:approve", "payout:create", "payout:read", "payout:review",
 	"prediction:commit",
 	"provider:disable", "provider:enable",
@@ -46,6 +47,7 @@ var goldenMatrix = map[string][]string{
 	// capability gate and legal-router question, checked independently.
 	"CUSTOMER": {
 		"account:read", "agent:pause",
+		"commerce:buy", "commerce:read", "commerce:sell",
 		"credit:purchase", "credit:read",
 		"funding:create", "funding:read",
 		"native_asset:create", "native_asset:read", "native_market:trade",
@@ -54,13 +56,14 @@ var goldenMatrix = map[string][]string{
 		"strategy:read", "strategy:write", "trade:create", "trade:read", "withdrawal:create",
 	},
 	"SUPPORT_READ_ONLY": {
-		"account:read", "account:read_any", "credit:read", "funding:read", "gate:read", "ledger:read",
-		"native_asset:read", "payout:read",
+		"account:read", "account:read_any", "commerce:read", "credit:read", "funding:read", "gate:read",
+		"ledger:read", "native_asset:read", "payout:read",
 		"reconciliation:read", "risk:read", "session:list_own", "session:revoke_own",
 		"strategy:read", "trade:read",
 	},
 	"OPERATIONS": {
 		"account:read", "account:read_any", "agent:pause", "agent:promote",
+		"commerce:moderate", "commerce:read",
 		"credit:read", "funding:read", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:read",
 		"native_asset:read", "native_market:halt", "native_market:surveil",
@@ -69,7 +72,8 @@ var goldenMatrix = map[string][]string{
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read",
 	},
 	"RISK": {
-		"account:read", "account:read_any", "agent:promote", "credit:read", "envelope:authority_write",
+		"account:read", "account:read_any", "agent:promote", "commerce:read", "credit:read",
+		"envelope:authority_write",
 		"funding:read", "gate:propose", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:read",
 		"native_asset:read", "payout:read", "reconciliation:read",
@@ -80,21 +84,24 @@ var goldenMatrix = map[string][]string{
 	// conduct, so it holds the moderation and surveillance permissions and the
 	// halt that follows from them.
 	"COMPLIANCE": {
-		"account:freeze", "account:read", "account:read_any", "credit:read", "funding:read", "gate:propose",
-		"gate:read", "ledger:read",
+		"account:freeze", "account:read", "account:read_any",
+		"commerce:moderate", "commerce:read",
+		"credit:read", "funding:read", "gate:propose", "gate:read", "ledger:read",
 		"native_asset:moderate", "native_asset:read", "native_market:halt", "native_market:surveil",
 		"payout:read", "payout:review",
 		"reconciliation:read", "risk:read",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read", "withdrawal:review",
 	},
 	"FINANCE": {
-		"account:read", "account:read_any", "credit:read", "funding:read", "gate:read", "ledger:post_correction",
+		"account:read", "account:read_any", "commerce:read", "credit:read", "funding:read", "gate:read",
+		"ledger:post_correction",
 		"ledger:read", "native_asset:read", "payout:read",
 		"reconciliation:read", "reconciliation:resolve", "risk:read",
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read", "withdrawal:review",
 	},
 	"SECURITY": {
-		"account:read", "account:read_any", "break_glass:approve", "credit:read", "funding:read",
+		"account:read", "account:read_any", "break_glass:approve", "commerce:read", "credit:read",
+		"funding:read",
 		"gate:read", "kill:activate",
 		"ledger:read", "native_asset:read", "payout:read", "provider:disable",
 		"reconciliation:read", "risk:read",
@@ -106,6 +113,7 @@ var goldenMatrix = map[string][]string{
 	"ADMIN": {
 		"account:freeze", "account:read", "account:read_any", "admin:audit_read", "agent:pause", "agent:promote",
 		"break_glass:approve", "break_glass:request",
+		"commerce:buy", "commerce:moderate", "commerce:read", "commerce:sell",
 		"credit:purchase", "credit:read",
 		"envelope:authority_write", "funding:create", "funding:read", "gate:propose", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:post_correction", "ledger:read",
@@ -118,7 +126,7 @@ var goldenMatrix = map[string][]string{
 	},
 	"BREAK_GLASS": {
 		"agent:promote_approve", "credit:adjust", "envelope:approve", "gate:approve", "kill:release",
-		"ledger:approve_correction", "payout:approve",
+		"ledger:approve_correction", "native_market:resume", "payout:approve",
 		"reconciliation:approve", "withdrawal:approve",
 	},
 }
@@ -126,7 +134,7 @@ var goldenMatrix = map[string][]string{
 // goldenDualControl are the approve-side permissions no standing role holds.
 var goldenDualControl = []string{
 	"agent:promote_approve", "credit:adjust", "envelope:approve", "gate:approve", "kill:release",
-	"ledger:approve_correction", "payout:approve",
+	"ledger:approve_correction", "native_market:resume", "payout:approve",
 	"reconciliation:approve", "withdrawal:approve",
 }
 
@@ -170,8 +178,18 @@ func TestGoldenMatrix_PermissionListClosed(t *testing.T) {
 	// trade:* and withdrawal:* because the internal economy is a different
 	// legal animal, and a deployment must be able to grant one without the
 	// other.
-	if len(got) != 55 {
-		t.Fatalf("expected 55 permissions, got %d", len(got))
+	//
+	// 59 after internal commerce: commerce:{read,buy,sell,moderate}. Buying and
+	// selling are separate because they are different exposures -- a buyer
+	// spends Credits, a seller MINTS the earning provenance a payout policy may
+	// one day permit to be withdrawn -- so a deployment can allow people to buy
+	// from each other while granting nobody the ability to sell.
+	//
+	// 60 after the Domain A admin workflows: native_market:resume, the approve
+	// half of restarting a halted market. Stopping stays one operator;
+	// restarting is the direction that adds exposure.
+	if len(got) != 60 {
+		t.Fatalf("expected 60 permissions, got %d", len(got))
 	}
 	for _, p := range goldenPermissions {
 		if !Permission(p).Valid() {

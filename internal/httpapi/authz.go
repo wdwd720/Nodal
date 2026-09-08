@@ -130,6 +130,21 @@ var operationPolicies = map[string]operationPolicy{
 	"GetPayouts":                      {AnyOf: perms(security.PermPayoutRead)},
 	"GetPayoutsPayoutId":              {AnyOf: perms(security.PermPayoutRead)},
 
+	// --- internal commerce (gola.md PART XVII) ----------------------------
+	//
+	// Buying and selling are separate permissions because they are different
+	// exposures. A buyer spends Credits; a seller MINTS the earning provenance
+	// that a payout policy may one day permit to be withdrawn. A deployment
+	// that has not decided how it feels about creator payouts can let people
+	// buy from each other while granting nobody the ability to sell.
+	"PostInternalSellers":                 {AnyOf: perms(security.PermCommerceSell), Mutating: true},
+	"PostInternalProducts":                {AnyOf: perms(security.PermCommerceSell), Mutating: true},
+	"PostInternalProductsProductIdStatus": {AnyOf: perms(security.PermCommerceSell), Mutating: true},
+	"GetInternalProducts":                 {AnyOf: perms(security.PermCommerceRead)},
+	"GetInternalProductsProductId":        {AnyOf: perms(security.PermCommerceRead)},
+	"PostInternalProductsProductIdOrders": {AnyOf: perms(security.PermCommerceBuy), Mutating: true},
+	"GetInternalOrders":                   {AnyOf: perms(security.PermCommerceRead)},
+
 	// --- trading ----------------------------------------------------------
 	"PostQuotesPreview":         {AnyOf: perms(security.PermTradeRead)},
 	"PostIntents":               {AnyOf: perms(security.PermTradeCreate), Mutating: true},

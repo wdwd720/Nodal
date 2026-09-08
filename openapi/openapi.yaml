@@ -676,6 +676,137 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/PayoutRequest" } } }
         "404": { $ref: "#/components/responses/Problem" }
 
+  # ---------------------------------------------------------------------
+  # Internal commerce: the creator economy (PART XVII).
+  #
+  # The product KIND decides the provenance of the seller's earning, so it is
+  # required and closed: DATA sales become DATA_SALE_EARNING, agent services
+  # become AGENT_SERVICE_EARNING, everything else becomes CREATOR_EARNING.
+  # A client cannot choose the provenance, and no response invites it to.
+  # ---------------------------------------------------------------------
+  /internal-sellers:
+    post:
+      tags: [commerce]
+      summary: Register the calling account as a seller (PART XVII)
+      description: >-
+        Selling is a separate act from holding an account because it is how
+        earning provenance is minted. Registration is idempotent.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegisterSellerRequest" } } }
+      responses:
+        "200":
+          description: Seller record
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalSeller" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /internal-products:
+    post:
+      tags: [commerce]
+      summary: Create a product in DRAFT
+      description: >-
+        A draft is not for sale. Its terms freeze on publication, so this is the
+        only point at which price, fee and kind can still be changed.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateInternalProductRequest" } } }
+      responses:
+        "201":
+          description: Product created in DRAFT
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalProduct" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [commerce]
+      summary: Products currently for sale
+      parameters:
+        - { in: query, name: kind, schema: { $ref: "#/components/schemas/InternalProductKind" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of active products
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalProductPage" } } }
+
+  /internal-products/{productId}:
+    get:
+      tags: [commerce]
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "200":
+          description: Product
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalProduct" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /internal-products/{productId}/status:
+    post:
+      tags: [commerce]
+      summary: Publish, pause, resume or withdraw a product
+      description: >-
+        Publishing freezes price, fee and kind for that version. WITHDRAWN is
+        terminal: a product that can come back is PAUSED, and the two mean
+        different things to a buyer reading their purchase history.
+      parameters:
+        - { $ref: "#/components/parameters/ProductId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SetInternalProductStatusRequest" } } }
+      responses:
+        "200":
+          description: Product in its new status
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalProduct" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /internal-products/{productId}/orders:
+    post:
+      tags: [commerce]
+      summary: Buy a product with Credits
+      description: >-
+        The buyer states the price they were shown. A price that no longer
+        matches is a 409 refusal rather than a surprise charge. An account can
+        never buy from itself, directly or through a seller whose earnings are
+        attributed back to it.
+      parameters:
+        - { $ref: "#/components/parameters/ProductId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseInternalProductRequest" } } }
+      responses:
+        "201":
+          description: Purchased
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalOrder" } } }
+        "200":
+          description: Idempotent replay of a purchase already made
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalOrder" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: The price changed, or the product is no longer for sale
+          content:
+            application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /internal-orders:
+    get:
+      tags: [commerce]
+      summary: Orders an account bought or sold
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - in: query
+          name: role
+          description: Whose side of the order to list. Defaults to BUYER.
+          schema: { type: string, enum: [BUYER, SELLER] }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of orders
+          content: { application/json: { schema: { $ref: "#/components/schemas/InternalOrderPage" } } }
+
   /healthz:
     get:
       tags: [system]
@@ -750,6 +881,7 @@ components:
     AssetId: { in: path, name: assetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     MarketId: { in: path, name: marketId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     PayoutId: { in: path, name: payoutId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    ProductId: { in: path, name: productId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
     Problem:
       description: Structured error
@@ -779,6 +911,17 @@ components:
     Timestamp:
       type: string
       format: date-time
+    CreditOrigin:
+      type: string
+      description: >-
+        Where a unit of Credits came from. This is the distinction the whole
+        payout architecture rests on: earning a dataset sale and profiting from
+        an internal market are different activities, and a policy that permits
+        one must not thereby permit the other. It is closed, and never inferred
+        from anything but the event that produced the units.
+      enum: [PURCHASED, PROMOTIONAL, REFUND, CREATOR_EARNING, DATA_SALE_EARNING,
+             AGENT_SERVICE_EARNING, MARKET_CREATOR_EARNING, MARKET_TRADING_PROCEEDS,
+             COMPETITION_REWARD, ADMIN_ADJUSTMENT, PROVIDER_SETTLEMENT]
     # --- Nodal-native economy --------------------------------------------
     CreditBalance:
       type: object
@@ -1026,6 +1169,135 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/PayoutRequest" }
+
+    InternalProductKind:
+      type: string
+      description: >-
+        What is being sold. This is the ONLY input to the provenance decision,
+        so it is closed rather than free text: a kind nobody has decided the
+        payout treatment of must not be sellable.
+      enum: [DATA, AGENT_SERVICE, COMPUTE, STRATEGY_TEMPLATE, RESEARCH, API_ACCESS,
+             COMPETITION_ENTRY, CREATOR_PRODUCT]
+
+    InternalProductStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, PAUSED, WITHDRAWN]
+
+    RegisterSellerRequest:
+      type: object
+      required: [account_id, display_name]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        display_name: { type: string, minLength: 1, maxLength: 120 }
+        payout_account_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            Where earnings are attributed. Omit for the selling account itself,
+            which is the ordinary case.
+
+    InternalSeller:
+      type: object
+      required: [account_id, display_name, status]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        display_name: { type: string }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        payout_account_id: { $ref: "#/components/schemas/UUID" }
+        suspended_reason: { type: string }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    CreateInternalProductRequest:
+      type: object
+      required: [account_id, kind, title, price]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/InternalProductKind" }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 5000 }
+        price:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: In Credit base units. Fixed for this version once published.
+        platform_fee_bps:
+          allOf: [{ $ref: "#/components/schemas/BPS" }]
+          description: The platform share, capped at 3000 (30%) and rounded DOWN on every sale.
+
+    SetInternalProductStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/InternalProductStatus" }
+
+    InternalProduct:
+      type: object
+      required: [product_id, seller_account_id, kind, title, price, version, status, earning_origin]
+      properties:
+        product_id: { $ref: "#/components/schemas/UUID" }
+        seller_account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/InternalProductKind" }
+        title: { type: string }
+        description: { type: string }
+        price: { $ref: "#/components/schemas/Quantity" }
+        platform_fee: { $ref: "#/components/schemas/Quantity" }
+        seller_proceeds: { $ref: "#/components/schemas/Quantity" }
+        platform_fee_bps: { $ref: "#/components/schemas/BPS" }
+        version: { type: integer }
+        status: { $ref: "#/components/schemas/InternalProductStatus" }
+        earning_origin:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            The provenance a sale of this product produces. Shown because a
+            seller is entitled to know which category their revenue lands in
+            before they list, and it is decided by the kind alone.
+        terms_frozen:
+          type: boolean
+          description: True once published; price, fee and kind can no longer change.
+        published_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    InternalProductPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/InternalProduct" }
+
+    PurchaseInternalProductRequest:
+      type: object
+      required: [account_id, expected_price]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        expected_price:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: >-
+            What the buyer was shown. The purchase is refused if it no longer
+            matches, so a stale listing is a refusal, never a surprise charge.
+
+    InternalOrder:
+      type: object
+      required: [order_id, product_id, product_version, buyer_account_id, seller_account_id,
+                 price, platform_fee, seller_proceeds, earning_origin]
+      properties:
+        order_id: { $ref: "#/components/schemas/UUID" }
+        product_id: { $ref: "#/components/schemas/UUID" }
+        product_version: { type: integer }
+        buyer_account_id: { $ref: "#/components/schemas/UUID" }
+        seller_account_id: { $ref: "#/components/schemas/UUID" }
+        earning_account_id: { $ref: "#/components/schemas/UUID" }
+        price: { $ref: "#/components/schemas/Quantity" }
+        platform_fee: { $ref: "#/components/schemas/Quantity" }
+        seller_proceeds: { $ref: "#/components/schemas/Quantity" }
+        earning_origin: { $ref: "#/components/schemas/CreditOrigin" }
+        journal_transaction_id: { $ref: "#/components/schemas/UUID" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+
+    InternalOrderPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/InternalOrder" }
 
     Problem:
       type: object
