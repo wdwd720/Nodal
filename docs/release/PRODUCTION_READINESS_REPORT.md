@@ -226,6 +226,18 @@ number would need a larger seed, and it would still be a laptop number.
 | A deployment that wired no policy refuses real capital rather than permitting it | `Ports.SettlementPolicy` is a struct whose ZERO VALUE is the conservative deployment |
 | The deployment's OWN policy is the one that answers, not the default | `TestWire_CarriesTheDeploymentsSettlementPolicy` (observed failing without the wiring) and `TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler` — this is F-24 |
 
+### A native market can be launched (F-28)
+
+| Property | Evidence |
+|---|---|
+| A creator can submit their own DRAFT for review | `POST /native-assets/{assetId}/submit`; a stranger gets NOT_FOUND, not FORBIDDEN |
+| Launching a market takes two people, and then the market trades | `TestIntegration_LaunchingAMarketTakesTwoPeopleAndThenItTrades` — the whole chain through the real surfaces, ending in a buy |
+| A moderation verdict does not start trading | same test: the asset is still PENDING_REVIEW after APPROVED |
+| A DRAFT cannot be launched | `TestIntegration_ADraftCannotBeLaunched` — submitting is what freezes the economics |
+| A launch with no opening price is refused | `TestIntegration_ALaunchWithNoOpeningPriceIsRefused` — missing, zero and unparseable |
+| One approval mints one supply | the mint is keyed by the approval id |
+| The market opens with the economics that were APPROVED | asserted against the params hash `Execute` re-verifies |
+
 ### Reality, Prediction and Proof over Domain A (Stage 15)
 
 | Property | Evidence |

@@ -69,6 +69,18 @@ const (
 	// user-created asset. A verdict does not by itself start trading:
 	// activating a market is a separate, gated act.
 	KindNativeAssetModerationVerdict Kind = "NATIVE_ASSET_MODERATION_VERDICT"
+	// KindNativeMarketLaunch is that separate act: it activates an approved
+	// asset and opens its market.
+	//
+	// It is the most consequential action in the internal economy, because it
+	// is the only one that MINTS. Every unit of the asset that will ever exist
+	// is created in the posting this action triggers, and after it the
+	// economics are locked forever. Dual control, and the tightest step-up
+	// window: this is a decision to start an economy, not to adjust one.
+	//
+	// It is deliberately not the moderation verdict. A content decision — "this
+	// asset is not abusive" — must not be able to become an economic one.
+	KindNativeMarketLaunch Kind = "NATIVE_MARKET_LAUNCH"
 	// KindNativeAssetDelist permanently removes an asset from the registry's
 	// tradable set.
 	KindNativeAssetDelist Kind = "NATIVE_ASSET_DELIST"
@@ -191,6 +203,16 @@ var kindSpecs = map[Kind]KindSpec{
 	KindNativeAssetModerationVerdict: {
 		RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,
 		StepUpMaxAge: stepUpStandard, Expiry: 24 * time.Hour,
+	},
+	// Launching mints. It is proposed by whoever may halt a market -- the
+	// operator responsible for the venue -- and approved by whoever may resume
+	// one, which is the same pairing that guards every other addition of risk.
+	// The expiry is short because an approval to launch is an approval of THESE
+	// economics at THIS moment.
+	KindNativeMarketLaunch: {
+		RequiresDual: true, ProposePermission: security.PermNativeMarketHalt,
+		ApprovePermission: security.PermNativeMarketResume,
+		StepUpMaxAge:      stepUpSensitive, Expiry: time.Hour,
 	},
 	KindNativeAssetDelist: {
 		RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,

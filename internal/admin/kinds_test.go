@@ -14,7 +14,7 @@ import (
 var declaredKinds = []Kind{
 	KindCapabilityGateApprove, KindKillSwitchRelease, KindLedgerCorrection, KindReconciliationResolveMaterial,
 	KindEnvelopeAuthorityChange, KindAccountUnfreeze, KindWithdrawalApprove, KindBreakGlassGrant, KindAgentPromote,
-	KindNativeMarketHalt, KindNativeMarketCloseOnly, KindNativeMarketFreeze, KindNativeMarketResume,
+	KindNativeMarketHalt, KindNativeMarketCloseOnly, KindNativeMarketFreeze, KindNativeMarketResume, KindNativeMarketLaunch,
 	KindNativeAssetModerationVerdict, KindNativeAssetDelist,
 	KindCommerceSellerSuspend, KindCommerceProductWithdraw, KindPayoutManualReviewResolve,
 }
@@ -115,6 +115,15 @@ func TestKindTable_Golden(t *testing.T) {
 		KindNativeAssetModerationVerdict: {
 			RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,
 			StepUpMaxAge: 15 * time.Minute, Expiry: 24 * time.Hour,
+		},
+		// Launching is the only action in the internal economy that MINTS, and
+		// it locks the economics forever. Dual control, five-minute step-up,
+		// one-hour expiry: an approval to launch is an approval of THESE
+		// economics at THIS moment.
+		KindNativeMarketLaunch: {
+			RequiresDual: true, ProposePermission: security.PermNativeMarketHalt,
+			ApprovePermission: security.PermNativeMarketResume,
+			StepUpMaxAge:      5 * time.Minute, Expiry: time.Hour,
 		},
 		KindNativeAssetDelist: {
 			RequiresDual: false, ProposePermission: security.PermNativeAssetModerate,

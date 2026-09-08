@@ -459,6 +459,15 @@
       "requires_break_glass_approval": false
     },
     {
+      "kind": "NATIVE_MARKET_LAUNCH",
+      "requires_dual": true,
+      "propose_permission": "native_market:halt",
+      "approve_permission": "native_market:resume",
+      "step_up_max_age_seconds": 300,
+      "expiry_seconds": 3600,
+      "requires_break_glass_approval": true
+    },
+    {
       "kind": "NATIVE_MARKET_RESUME",
       "requires_dual": true,
       "propose_permission": "native_market:halt",
@@ -848,6 +857,7 @@
         "NATIVE_MARKET_CLOSE_ONLY",
         "NATIVE_MARKET_FREEZE",
         "NATIVE_MARKET_HALT",
+        "NATIVE_MARKET_LAUNCH",
         "NATIVE_MARKET_RESUME",
         "PAYOUT_MANUAL_REVIEW_RESOLVE",
         "RECONCILIATION_RESOLVE_MATERIAL",

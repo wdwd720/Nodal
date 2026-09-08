@@ -33,6 +33,11 @@ type NativeAssetsPort interface {
 	Create(ctx context.Context, r CreateNativeAsset) (nativeasset.Asset, nativeasset.Verdict, error)
 	Get(ctx context.Context, assetID assets.AssetID) (nativeasset.Asset, error)
 	ListTradable(ctx context.Context, limit int) ([]nativeasset.Asset, error)
+	// Submit moves the CREATOR's own DRAFT to PENDING_REVIEW. It is the
+	// creator's act and nobody else's: an operator who could submit on their
+	// behalf could launch a draft its creator was still editing, and the
+	// economics stay editable until the asset goes live.
+	Submit(ctx context.Context, accountID accounts.AccountID, assetID assets.AssetID) (nativeasset.Asset, error)
 }
 
 // CreateNativeAsset is the command behind POST /native-assets.

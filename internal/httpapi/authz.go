@@ -116,11 +116,16 @@ var operationPolicies = map[string]operationPolicy{
 	// be able to grant real-asset trading without granting the launch of
 	// speculative internal ones, and the reverse. Tenant scoping is a separate
 	// per-request check, as everywhere else.
-	"GetCreditsBalance":        {AnyOf: perms(security.PermCreditRead)},
-	"PostNativeAssets":         {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
-	"GetNativeAssets":          {AnyOf: perms(security.PermNativeAssetRead)},
-	"GetNativeAssetsAssetId":   {AnyOf: perms(security.PermNativeAssetRead)},
-	"GetNativeMarketsMarketId": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetCreditsBalance": {AnyOf: perms(security.PermCreditRead)},
+	"PostNativeAssets":  {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
+	// Submitting your own draft for review is the same authority as creating
+	// it: the creator is asking for a decision, not making one. Who may submit
+	// WHICH asset is an ownership question and is answered per request, not by
+	// a permission.
+	"PostNativeAssetsAssetIdSubmit": {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
+	"GetNativeAssets":               {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeAssetsAssetId":        {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketId":      {AnyOf: perms(security.PermNativeAssetRead)},
 	// A native-market quote is persisted -- it is the record of what the user
 	// was shown, with the state version it was priced against -- so it is a
 	// command with an idempotency key, not a read that happens to write.

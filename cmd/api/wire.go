@@ -352,6 +352,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				NativeMarkets: nativeMarketSvc,
 				Commerce:      commerceSvc,
 				Payouts:       payoutSvc,
+				Credits:       creditSvc,
 			}),
 		),
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,

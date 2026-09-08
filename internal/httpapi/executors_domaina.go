@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -11,7 +12,9 @@ import (
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/payout"
@@ -47,11 +50,15 @@ type DomainAExecutorDeps struct {
 	NativeMarkets *nativemarket.Service
 	Commerce      *commerce.Service
 	Payouts       *payout.Service
+	// Credits resolves the deployment's Credit asset, which a market is priced
+	// in. Without it NATIVE_MARKET_LAUNCH stays unregistered: a market priced
+	// in nothing is not a market.
+	Credits CreditAssetResolver
 }
 
 // DomainAExecutors returns the executors for the internal economy.
 func DomainAExecutors(d DomainAExecutorDeps) map[admin.Kind]admin.ExecFunc {
-	out := make(map[admin.Kind]admin.ExecFunc, 9)
+	out := make(map[admin.Kind]admin.ExecFunc, 10)
 	if d.NativeMarkets != nil {
 		out[admin.KindNativeMarketHalt] = marketStatusExecutor(d.NativeMarkets,
 			admin.KindNativeMarketHalt, nativemarket.StatusHalted)
@@ -61,6 +68,9 @@ func DomainAExecutors(d DomainAExecutorDeps) map[admin.Kind]admin.ExecFunc {
 			admin.KindNativeMarketFreeze, nativemarket.StatusFrozen)
 		out[admin.KindNativeMarketResume] = marketStatusExecutor(d.NativeMarkets,
 			admin.KindNativeMarketResume, nativemarket.StatusActive)
+	}
+	if d.NativeMarkets != nil && d.NativeAssets != nil && d.Credits != nil {
+		out[admin.KindNativeMarketLaunch] = marketLaunchExecutor(d.NativeAssets, d.NativeMarkets, d.Credits)
 	}
 	if d.NativeAssets != nil {
 		out[admin.KindNativeAssetModerationVerdict] = moderationVerdictExecutor(d.NativeAssets)
@@ -376,4 +386,156 @@ func payoutManualReviewExecutor(svc *payout.Service) admin.ExecFunc {
 			Resolution: string(resolution), Reason: action.Reason, ApprovalID: action.ID.String(),
 		})
 	}
+}
+
+// --- launching a market -----------------------------------------------------
+
+// marketLaunchParams are the economics the proposer wrote down. Execute
+// re-verifies the params hash, so the market that opens has exactly the curve
+// and fees that were approved — not the ones somebody typed at execution time.
+type marketLaunchParams struct {
+	// VirtualCreditReserve sets the opening price: the first unit costs
+	// roughly VirtualCreditReserve / PoolSupply Credits.
+	VirtualCreditReserve string `json:"virtual_credit_reserve"`
+	PlatformFeeBPS       int    `json:"platform_fee_bps"`
+	CreatorFeeBPS        int    `json:"creator_fee_bps"`
+}
+
+type marketLaunchResult struct {
+	AssetID              string `json:"asset_id"`
+	MarketID             string `json:"market_id"`
+	AssetFrom            string `json:"asset_from_status"`
+	AssetTo              string `json:"asset_to_status"`
+	MarketStatus         string `json:"market_status"`
+	VirtualCreditReserve string `json:"virtual_credit_reserve"`
+	PoolSupply           string `json:"pool_supply"`
+	PlatformFeeBPS       int    `json:"platform_fee_bps"`
+	CreatorFeeBPS        int    `json:"creator_fee_bps"`
+	Reason               string `json:"reason"`
+	ApprovalID           string `json:"approval_id"`
+}
+
+// marketLaunchExecutor activates an approved asset and opens its market.
+//
+// It exists because the chain from "a creator made an asset" to "a market
+// trades it" had no middle in any deployment. `nativeasset.Activate` and
+// `nativemarket.Create` were reachable only from tests, and the executor that
+// records a moderation verdict says in its own comment that "activating a
+// market is a separate act" — an act nothing implemented. The trading half of
+// Domain A could not be started (F-28).
+//
+// # What it will not do
+//
+//   - It will not launch an asset moderation has not approved. `Activate`
+//     refuses that itself; this refuses it earlier so the operator gets the
+//     moderation state in the error rather than a transition failure.
+//   - It will not launch a DRAFT. PENDING_REVIEW means the CREATOR submitted
+//     it, which is what freezes the economics for review; launching a draft
+//     would mean launching something its creator was still editing.
+//   - It will not mint twice. `nativemarket.Create` is keyed by the approval
+//     id, so one approval opens one market however many times it is executed,
+//     and a second approval for an asset that already has one gets that market
+//     back rather than a second mint.
+//
+// The order matters: the asset goes ACTIVE first, because `Create` mints the
+// entire supply and an asset that is not live must not have units in
+// existence. If the mint fails, the savepoint takes the activation with it.
+func marketLaunchExecutor(assetsSvc *nativeasset.Service, markets *nativemarket.Service, creditAsset CreditAssetResolver) admin.ExecFunc {
+	return func(ctx context.Context, tx pgx.Tx, params json.RawMessage) (json.RawMessage, error) {
+		action, err := executingAction(ctx, admin.KindNativeMarketLaunch)
+		if err != nil {
+			return nil, err
+		}
+		var p marketLaunchParams
+		if uerr := json.Unmarshal(params, &p); uerr != nil {
+			return nil, errs.Wrap(uerr, errs.CodeValidationFailed,
+				"a market launch's params must be {virtual_credit_reserve, platform_fee_bps, creator_fee_bps}")
+		}
+		reserve, perr := money.ParseQuantity(strings.TrimSpace(p.VirtualCreditReserve))
+		if perr != nil || !reserve.IsPositive() {
+			return nil, errs.New(errs.CodeValidationFailed,
+				"virtual_credit_reserve must be a positive integer string of Credit base units; "+
+					"it sets the opening price and there is no default worth guessing")
+		}
+		assetID, err := assets.ParseAssetID(action.TargetID)
+		if err != nil {
+			return nil, errs.Wrap(err, errs.CodeValidationFailed,
+				"this action's target is not an asset id")
+		}
+		asset, err := assetsSvc.Get(ctx, tx, assetID)
+		if err != nil {
+			return nil, err
+		}
+		if !asset.Moderation.PermitsActivation() {
+			return nil, errs.Newf(errs.CodeForbidden,
+				"an asset whose moderation state is %s cannot be launched", asset.Moderation).
+				WithField("asset_id", assetID.String()).
+				WithField("moderation_state", string(asset.Moderation))
+		}
+		if asset.Status != nativeasset.StatusPendingReview && asset.Status != nativeasset.StatusActive {
+			return nil, errs.Newf(errs.CodeInvalidStateTransition,
+				"only an asset its creator has submitted for review can be launched; this one is %s", asset.Status).
+				WithField("asset_id", assetID.String()).
+				WithField("status", string(asset.Status))
+		}
+		creditAssetID, err := creditAsset.AssetID(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+
+		before := asset.Status
+		live, err := assetsSvc.Activate(ctx, tx, assetID, action.Reason)
+		if err != nil {
+			return nil, err
+		}
+		market, err := markets.Create(ctx, tx, nativemarket.CreateRequest{
+			AssetID:              assetID,
+			CreditAssetID:        creditAssetID,
+			CreatorID:            asset.CreatorAccountID,
+			PoolSupply:           asset.Supply.PoolSupply(),
+			CreatorAllocation:    asset.Supply.CreatorAllocation,
+			TreasuryAllocation:   asset.Supply.TreasuryAllocation,
+			VirtualCreditReserve: reserve,
+			Fees: nativemarket.Fees{
+				PlatformBPS: money.BPS(p.PlatformFeeBPS),
+				CreatorBPS:  money.BPS(p.CreatorFeeBPS),
+			},
+			// Keyed by the APPROVAL, so one approval mints one supply.
+			IdempotencyKey: "native_market_launch:" + action.ID.String(),
+			EffectiveAt:    activatedAt(live),
+		})
+		if err != nil {
+			return nil, err
+		}
+		open, err := markets.SetStatus(ctx, tx, market.ID, nativemarket.StatusActive, action.Reason)
+		if err != nil {
+			return nil, err
+		}
+		return encode(marketLaunchResult{
+			AssetID: assetID.String(), MarketID: open.ID.String(),
+			AssetFrom: string(before), AssetTo: string(live.Status),
+			MarketStatus:         string(open.Status),
+			VirtualCreditReserve: reserve.String(),
+			PoolSupply:           asset.Supply.PoolSupply().String(),
+			PlatformFeeBPS:       p.PlatformFeeBPS, CreatorFeeBPS: p.CreatorFeeBPS,
+			Reason: action.Reason, ApprovalID: action.ID.String(),
+		})
+	}
+}
+
+// activatedAt is the instant the asset went live, which is what the mint is
+// dated by. It cannot be nil after a successful Activate; the fallback exists
+// so a future change to that cannot silently date the mint at the zero time.
+func activatedAt(a nativeasset.Asset) time.Time {
+	if a.ActivatedAt != nil {
+		return a.ActivatedAt.UTC()
+	}
+	return time.Now().UTC()
+}
+
+// CreditAssetResolver reports the deployment's Credit asset. internal/credit
+// supplies it; a deployment without one cannot launch a market, which is the
+// correct answer rather than a market priced in nothing.
+type CreditAssetResolver interface {
+	AssetID(ctx context.Context, q db.Querier) (assets.AssetID, error)
 }

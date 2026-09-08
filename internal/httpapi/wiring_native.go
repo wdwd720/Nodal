@@ -227,6 +227,35 @@ func (a nativeAssetsAdapter) Create(ctx context.Context, r CreateNativeAsset) (n
 	return asset, verdict, err
 }
 
+// Submit moves the creator's own DRAFT to PENDING_REVIEW.
+//
+// The ownership check is here rather than in internal/nativeasset because it is
+// an authorization question about the CALLER, and the domain service is asked
+// the same question by an operator path where the answer is different. What the
+// domain refuses is the transition; what this refuses is the person.
+func (a nativeAssetsAdapter) Submit(ctx context.Context, accountID accounts.AccountID, assetID assets.AssetID) (nativeasset.Asset, error) {
+	var out nativeasset.Asset
+	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		current, gerr := a.deps.NativeAssets.Get(ctx, tx, assetID)
+		if gerr != nil {
+			return gerr
+		}
+		if current.CreatorAccountID != accountID {
+			// Deliberately NOT_FOUND rather than FORBIDDEN. Telling a stranger
+			// that an asset exists but is not theirs is a membership oracle,
+			// and TestIDOR_ForeignAndAbsentAccountsAreIndistinguishable holds
+			// the same line elsewhere.
+			return errs.New(errs.CodeNotFound, "no such asset").
+				WithField("asset_id", assetID.String())
+		}
+		var serr error
+		out, serr = a.deps.NativeAssets.SetStatus(ctx, tx, assetID, nativeasset.StatusPendingReview,
+			"submitted for review by its creator")
+		return serr
+	})
+	return out, err
+}
+
 func (a nativeAssetsAdapter) Get(ctx context.Context, assetID assets.AssetID) (nativeasset.Asset, error) {
 	return a.deps.NativeAssets.Get(ctx, a.db, assetID)
 }

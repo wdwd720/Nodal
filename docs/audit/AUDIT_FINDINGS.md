@@ -40,6 +40,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-25 | P3 | BASELINE | fixed | The readiness report named a test that does not exist, and 609 such names were hand-checked once |
 | F-26 | P1 | BASELINE | fixed | Two required inputs were never supplied, so the internal economy was unreachable in every deployment |
 | F-27 | P1 | BASELINE | fixed | A capability check inside a financial transaction read through the pool, deadlocking it under concurrency |
+| F-28 | P1 | BASELINE | fixed | No deployment could launch a native market: the act every document called separate was never built |
 
 ---
 
@@ -686,6 +687,53 @@ capability.
 with a pool of TWO, which makes the failure certain rather than probable.
 **Observed failing** — hanging until its own deadline — with the resolver put
 back on the pool.
+
+## F-28 · No deployment could launch a native market · BASELINE · P1 · FIXED
+
+**Found by** continuing the re-audit the same way F-26 and F-27 were found:
+driving the other half of Domain A through a live API instead of reading it.
+
+`POST /v1/native-assets` creates an asset in DRAFT. Nothing could move it after
+that. `nativeasset.SetStatus`, `nativeasset.Activate` and `nativemarket.Create`
+had no caller outside tests — no HTTP route, no administrative action kind, no
+executor. So a creator could publish an asset and no operator in any deployment
+could ever open its market.
+
+The moderation-verdict executor even says so in its own comment: "Recording
+APPROVED does not start trading. Activating a market is a separate act behind
+its own capability." The separation is right. The separate act did not exist.
+
+Every existing test built its market by calling the services directly, which is
+exactly why nobody noticed that no operator could. This is F-26's shape a second
+time: a path that only tests can walk looks finished from inside the tests.
+
+**Fix — the two halves of the chain, kept apart on purpose.**
+
+- **The creator's half.** `POST /v1/native-assets/{assetId}/submit` moves the
+  creator's own DRAFT to PENDING_REVIEW. Only the creator, and only their own:
+  a stranger gets NOT_FOUND rather than FORBIDDEN, because telling somebody an
+  asset exists but is not theirs is a membership oracle. Submitting is what
+  freezes the economics for review, so an operator cannot launch a draft its
+  creator is still editing.
+- **The operator's half.** `NATIVE_MARKET_LAUNCH` is a new administrative
+  action kind: **dual control**, a five-minute step-up window and a one-hour
+  expiry. It is the only action in the internal economy that MINTS — every unit
+  that will ever exist is created by the posting it triggers, and the economics
+  lock behind it — so it is proposed by whoever may halt a market and approved
+  by whoever may resume one, the same pairing that guards every other addition
+  of risk. An approval to launch is an approval of THESE economics at THIS
+  moment, which is what the short expiry is for.
+
+The executor refuses an asset moderation has not approved, refuses a DRAFT with
+the reason, refuses a missing or non-positive opening price (there is no default
+worth guessing — a default would price somebody's asset for them), and is keyed
+by the APPROVAL id, so one approval mints one supply however many times it is
+executed.
+
+Three tests drive the whole chain through the real surfaces — creator submits,
+compliance approves the content, two operators launch, and then somebody buys —
+because a launch that produced an unusable market would satisfy every assertion
+about states.
 
 ## Findings deliberately NOT raised
 

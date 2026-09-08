@@ -83,6 +83,7 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 			NativeAssets:  assetSvc,
 			NativeMarkets: marketSvc,
 			Commerce:      commerceSvc,
+			Credits:       credits,
 		}),
 	}
 
@@ -554,4 +555,222 @@ func TestIntegration_ADeploymentWithoutTheInternalEconomyRegistersNoExecutors(t 
 	} {
 		require.Contains(t, partial, k)
 	}
+}
+
+// --- helpers for the launch chain -------------------------------------------
+
+// newAsset creates one DRAFT asset with a unique name and symbol.
+func (h *domainAHarness) newAsset(t *testing.T) nativeasset.Asset {
+	t.Helper()
+	raw := strings.ReplaceAll(id.New[id.Any]().String(), "-", "")
+	suffix := raw[len(raw)-6:]
+	var out nativeasset.Asset
+	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			a, _, err := h.nativeAssets.CreateDraft(ctx, tx, nativeasset.CreateRequest{
+				CreatorAccountID: h.creator,
+				Name:             "Launchable " + suffix,
+				Symbol:           "LA" + suffix[:4],
+				Description:      "an asset for the launch chain",
+				Supply: nativeasset.SupplyModel{
+					MaxSupply:         qq("1000000000000000"),
+					CreatorAllocation: qq("100000000000000"),
+				},
+			})
+			out = a
+			return err
+		}))
+	return out
+}
+
+func (h *domainAHarness) newDraftAsset(t *testing.T) nativeasset.Asset {
+	t.Helper()
+	return h.newAsset(t)
+}
+
+// newSubmittedAsset is a draft its creator has submitted for review, which is
+// the state a launch may act on.
+func (h *domainAHarness) newSubmittedAsset(t *testing.T) nativeasset.Asset {
+	t.Helper()
+	a := h.newAsset(t)
+	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, err := h.nativeAssets.SetStatus(ctx, tx, a.AssetID, nativeasset.StatusPendingReview,
+				"submitted for review by its creator")
+			return err
+		}))
+	return a
+}
+
+func (h *domainAHarness) assetStatus(t *testing.T, assetID assets.AssetID) nativeasset.Status {
+	t.Helper()
+	a, err := h.nativeAssets.Get(t.Context(), h.db, assetID)
+	require.NoError(t, err)
+	return a.Status
+}
+
+func (h *domainAHarness) marketOf(t *testing.T, assetID assets.AssetID) nativemarket.MarketID {
+	t.Helper()
+	m, err := h.nativeMarkets.MarketByAsset(t.Context(), h.db, assetID)
+	require.NoError(t, err)
+	return m.ID
+}
+
+// fundCredits issues Credits so a buyer can trade.
+func (h *domainAHarness) fundCredits(t *testing.T, account accounts.AccountID, amount string) {
+	t.Helper()
+	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, err := h.credits.Issue(ctx, tx, credit.IssueRequest{
+				AccountID: account, Quantity: qq(amount),
+				Origin: valuedomain.OriginPromotional, Finality: valuedomain.FinalityUnfunded,
+				Reference:      credit.Reference{Type: "test_issue", ID: id.New[id.Any]().String()},
+				IdempotencyKey: "fund-" + id.New[id.Any]().String(),
+				Reason:         "launch chain test", EffectiveAt: h.clk.Now(),
+			})
+			return err
+		}))
+}
+
+// buyOnMarket spends Credits on the market, which is what proves a launched
+// market is usable rather than merely present.
+func (h *domainAHarness) buyOnMarket(t *testing.T, marketID nativemarket.MarketID, buyer accounts.AccountID, credits string) nativemarket.ExecuteResult {
+	t.Helper()
+	var out nativemarket.ExecuteResult
+	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			out, err = h.nativeMarkets.Execute(ctx, tx, nativemarket.ExecuteRequest{
+				MarketID: marketID, AccountID: buyer, Side: nativemarket.Buy,
+				Amount: qq(credits), MinOutput: qq("1"),
+				IdempotencyKey: "buy-" + id.New[id.Any]().String(),
+				EffectiveAt:    h.clk.Now(),
+			})
+			return err
+		}))
+	return out
+}
+
+// TestIntegration_LaunchingAMarketTakesTwoPeopleAndThenItTrades is F-28.
+//
+// The chain from "a creator made an asset" to "a market trades it" had no
+// middle in any deployment. `POST /native-assets` produced a DRAFT;
+// `nativeasset.Activate` and `nativemarket.Create` were reachable only from
+// tests; and the moderation executor's own comment said "activating a market is
+// a separate act" — an act nothing implemented. Every existing test built its
+// market by calling the services directly, which is exactly why nobody noticed
+// that no operator could.
+//
+// This drives the whole chain through the real surfaces: the creator submits,
+// moderation approves, two operators launch, and then somebody buys.
+func TestIntegration_LaunchingAMarketTakesTwoPeopleAndThenItTrades(t *testing.T) {
+	d := openTestDB(t)
+	h := newDomainAHarness(t, d)
+	ops := seedOperator(t, d, security.RoleOperations)
+
+	asset := h.newSubmittedAsset(t)
+
+	// A moderation verdict is one operator — a COMPLIANCE one, because
+	// native_asset:moderate is a content permission and OPERATIONS does not
+	// hold it. It does NOT start trading.
+	mod := seedOperator(t, d, security.RoleCompliance)
+	verdict := proposeWithParams(t, h.as(&mod), admin.KindNativeAssetModerationVerdict,
+		"native_asset", asset.AssetID.String(), map[string]any{"state": "APPROVED", "notes": "reviewed"})
+	require.Equal(t, http.StatusOK, execute(h.as(&mod), verdict.ID).Code)
+	require.Equal(t, nativeasset.StatusPendingReview, h.assetStatus(t, asset.AssetID),
+		"approving content must not by itself start an economy")
+
+	params := map[string]any{
+		"virtual_credit_reserve": "30000000000",
+		"platform_fee_bps":       100,
+		"creator_fee_bps":        50,
+	}
+	launch := proposeWithParams(t, h.as(&ops), admin.KindNativeMarketLaunch,
+		"native_asset", asset.AssetID.String(), params)
+
+	// One operator cannot launch. Launching MINTS: every unit that will ever
+	// exist is created by this action, and the economics lock behind it.
+	res := execute(h.as(&ops), launch.ID)
+	require.NotEqual(t, http.StatusOK, res.Code, "an unapproved launch must not mint; body=%s", res.Body.String())
+	require.Equal(t, nativeasset.StatusPendingReview, h.assetStatus(t, asset.AssetID))
+
+	// Nor can the proposer approve their own.
+	self := elevate(ops, testNow.Add(time.Hour))
+	require.Equal(t, http.StatusForbidden, decide(h.as(&self), launch.ID, "approve", "approving my own").Code)
+
+	approver := elevate(seedOperator(t, d, security.RoleOperations), testNow.Add(time.Hour))
+	require.Equal(t, http.StatusOK, decide(h.as(&approver), launch.ID, "approve", "second pair of eyes").Code)
+
+	res = execute(h.as(&ops), launch.ID)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	require.Equal(t, nativeasset.StatusActive, h.assetStatus(t, asset.AssetID))
+
+	marketID := h.marketOf(t, asset.AssetID)
+	m, err := h.nativeMarkets.Market(t.Context(), h.db, marketID)
+	require.NoError(t, err)
+	require.Equal(t, nativemarket.StatusActive, m.Status)
+	require.Equal(t, "30000000000", m.Curve.VirtualCreditReserve.String(),
+		"the market opens with the economics that were APPROVED, not ones supplied at execution")
+	require.EqualValues(t, 100, int(m.Fees.PlatformBPS))
+	require.EqualValues(t, 50, int(m.Fees.CreatorBPS))
+
+	// And it trades. A launch that produced an unusable market would satisfy
+	// every assertion above.
+	buyer := seedCustomerAccount(t, d)
+	h.fundCredits(t, buyer, "5000000000")
+	fill := h.buyOnMarket(t, marketID, buyer, "1000000000")
+	require.True(t, fill.Fill.AssetsOut.IsPositive(), "the first buyer must receive units")
+}
+
+// TestIntegration_ADraftCannotBeLaunched: PENDING_REVIEW means the CREATOR
+// submitted it, which is what freezes the economics for review. An operator who
+// could launch a draft would be launching something its creator was still
+// editing.
+func TestIntegration_ADraftCannotBeLaunched(t *testing.T) {
+	d := openTestDB(t)
+	h := newDomainAHarness(t, d)
+	ops := seedOperator(t, d, security.RoleOperations)
+
+	draft := h.newDraftAsset(t)
+	launch := proposeWithParams(t, h.as(&ops), admin.KindNativeMarketLaunch,
+		"native_asset", draft.AssetID.String(), map[string]any{
+			"virtual_credit_reserve": "30000000000", "platform_fee_bps": 100, "creator_fee_bps": 50,
+		})
+	approver := elevate(seedOperator(t, d, security.RoleOperations), testNow.Add(time.Hour))
+	require.Equal(t, http.StatusOK, decide(h.as(&approver), launch.ID, "approve", "ok").Code)
+
+	res := execute(h.as(&ops), launch.ID)
+	require.NotEqual(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	require.Contains(t, res.Body.String(), "submitted for review")
+	require.Equal(t, nativeasset.StatusDraft, h.assetStatus(t, draft.AssetID))
+}
+
+// TestIntegration_ALaunchWithNoOpeningPriceIsRefused: virtual_credit_reserve
+// sets the opening price and there is no default worth guessing. A launch that
+// defaulted it would price somebody's asset for them.
+func TestIntegration_ALaunchWithNoOpeningPriceIsRefused(t *testing.T) {
+	d := openTestDB(t)
+	h := newDomainAHarness(t, d)
+	ops := seedOperator(t, d, security.RoleOperations)
+
+	asset := h.newSubmittedAsset(t)
+	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, err := h.nativeAssets.SetModeration(ctx, tx, asset.AssetID, nativeasset.ModerationApproved, "fixture")
+			return err
+		}))
+
+	for _, bad := range []map[string]any{
+		{"platform_fee_bps": 100, "creator_fee_bps": 50},
+		{"virtual_credit_reserve": "0", "platform_fee_bps": 100, "creator_fee_bps": 50},
+		{"virtual_credit_reserve": "not a number", "platform_fee_bps": 100, "creator_fee_bps": 50},
+	} {
+		launch := proposeWithParams(t, h.as(&ops), admin.KindNativeMarketLaunch,
+			"native_asset", asset.AssetID.String(), bad)
+		approver := elevate(seedOperator(t, d, security.RoleOperations), testNow.Add(time.Hour))
+		require.Equal(t, http.StatusOK, decide(h.as(&approver), launch.ID, "approve", "ok").Code)
+		res := execute(h.as(&ops), launch.ID)
+		require.NotEqual(t, http.StatusOK, res.Code, "params %v must be refused; body=%s", bad, res.Body.String())
+	}
+	require.Equal(t, nativeasset.StatusPendingReview, h.assetStatus(t, asset.AssetID))
 }

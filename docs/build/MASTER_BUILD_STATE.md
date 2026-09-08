@@ -51,7 +51,7 @@ migration.
 | 14 | Agent authority levels | **done** (`internal/agentauthority`) |
 | 15 | Reality / Prediction / Proof integration with Domain A | **done** — prices, instrument, audit events; see below |
 | 16 | Frontend | **done for Domain A** (5 pages incl. Create Asset and trading, honesty rules enforced, 69 browser tests) |
-| 17 | Admin tooling for Domain A | **done** (9 administrative action kinds + executors; `internal/httpapi/executors_domaina.go`) |
+| 17 | Admin tooling for Domain A | **done** (10 administrative action kinds + executors; the tenth, NATIVE_MARKET_LAUNCH, is F-28) |
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
 | 20 | Chaos / fault injection | **done for Domain A** (3 tests, 2 negative controls; whole suite 10/10 with nothing skipped) |
@@ -521,6 +521,30 @@ Three defects stacked so the third was unobservable until the first two were
 fixed. After the fixes: p95 469 ms, 10.3 ms on successful requests, 31 purchases
 committed — the entire seeded balance — and the buyer's Credits down by exactly
 those 31 purchases.
+
+### The re-audit kept finding the same shape (F-28)
+
+F-26 and F-27 were found by RUNNING the internal economy instead of reading it.
+Continuing that method into the other half of Domain A found a third:
+
+`POST /v1/native-assets` creates a DRAFT, and nothing in any deployment could
+move it. `nativeasset.Activate` and `nativemarket.Create` had no caller outside
+tests — no route, no action kind, no executor — so no operator could ever open a
+market. The moderation executor's own comment said "activating a market is a
+separate act behind its own capability", and that act had never been built.
+
+Every existing test built its market by calling the services directly. That is
+why nobody noticed: **a path only tests can walk looks finished from inside the
+tests.** It is the same shape as F-26, and worth naming as a class rather than
+three incidents — the audit question that keeps paying is not "is this correct"
+but "can anybody actually reach it".
+
+The chain now has both halves, kept apart on purpose: the creator submits
+(`POST /native-assets/{assetId}/submit`, their own draft only, NOT_FOUND for a
+stranger), and two operators launch (`NATIVE_MARKET_LAUNCH`, dual control,
+five-minute step-up, one-hour expiry, keyed by the approval so one approval
+mints one supply). Launching is the only action in the internal economy that
+mints, and the economics lock behind it.
 
 ## 0.3 Next exact work, in order
 
