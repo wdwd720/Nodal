@@ -1,6 +1,7 @@
 package inspect_test
 
 import (
+	"bytes"
 	"sort"
 	"testing"
 
@@ -25,6 +26,20 @@ func TestProp_ByteFlipsNeverApprove(t *testing.T) {
 		for i := 0; i < n; i++ {
 			pos := rapid.IntRange(0, len(raw)-1).Draw(rt, "pos")
 			raw[pos] ^= byte(rapid.IntRange(1, 255).Draw(rt, "xor"))
+		}
+		// Two flips of the same bit cancel, and the result is the golden
+		// message unchanged -- which the inspector approves, correctly. The
+		// property is about MUTATED transactions and a bitwise-identical one is
+		// not mutated.
+		//
+		// This matters more than it looks. rapid shrinks toward small values,
+		// so the shrinker drives every failure toward flips=2, pos=0, xor=1 --
+		// the degenerate case. Without this guard a REAL defect would be
+		// shrunk into "identical bytes approved" and reported with an
+		// explanation that has nothing to do with it. Discarding the case here
+		// keeps the shrinker away from it.
+		if bytes.Equal(raw, golden) {
+			return
 		}
 		tx, err := inspect.Decode(raw)
 		if err != nil {

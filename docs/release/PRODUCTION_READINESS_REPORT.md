@@ -226,6 +226,21 @@ number would need a larger seed, and it would still be a laptop number.
 | A deployment that wired no policy refuses real capital rather than permitting it | `Ports.SettlementPolicy` is a struct whose ZERO VALUE is the conservative deployment |
 | The deployment's OWN policy is the one that answers, not the default | `TestWire_CarriesTheDeploymentsSettlementPolicy` (observed failing without the wiring) and `TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler` — this is F-24 |
 
+### One randomised test found on this commit (F-30)
+
+`TestProp_ByteFlipsNeverApprove` failed on a commit that had just passed the
+full integration sweep — randomised tests do that, because the seed changes
+every run. It had drawn two flips of the same bit, which cancel, so the
+"mutated" transaction was byte-identical to the golden one and the inspector
+approved it correctly.
+
+The false alarm was the small half. rapid shrinks toward small values, so
+`flips=2, pos=0, xor=1` is where the shrinker goes from ANY failure — a real
+defect would have been shrunk into "identical bytes approved" and reported with
+an explanation that had nothing to do with it. The case is now discarded, and
+both controls were run: swallowing every case leaves the test passing while
+proving nothing, and an inspector that approves everything still fails it.
+
 ### Security and supply-chain scans, run on this commit
 
 | Scan | Result |

@@ -42,6 +42,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-27 | P1 | BASELINE | fixed | A capability check inside a financial transaction read through the pool, deadlocking it under concurrency |
 | F-28 | P1 | BASELINE | fixed | No deployment could launch a native market: the act every document called separate was never built |
 | F-29 | P2 | BASELINE | fixed | A user could reserve their Credits in a payout request and had no way to release them |
+| F-30 | P2 | BASELINE | fixed | A property test could fail on a no-op mutation, and its shrinker would mis-explain any real failure |
 
 ---
 
@@ -788,6 +789,43 @@ must pass a transaction as its second argument, and the calling file must import
 the declaring package. It was then observed failing on both defects it was
 written for — `payout.Cancel` with the endpoint removed, and
 `nativeasset.Activate` with the launch executor removed.
+
+## F-30 · A property test's shrinker would have mis-explained a real defect · BASELINE · P2 · FIXED
+
+**Found by** `go test ./...` failing on a commit that had just passed the full
+integration sweep. Randomised tests do that: the seed changes every run.
+
+`TestProp_ByteFlipsNeverApprove` asserts that flipping bytes of a golden
+transaction never yields an approval from the signing inspector. It drew 2
+flips, both at position 0, both XOR 1 — and two flips of the same bit cancel.
+The "mutated" message was byte-identical to the golden one, the inspector
+approved it, correctly, and the test called that a security failure.
+
+The false alarm is the small half. The dangerous half is what rapid does next:
+**it shrinks toward small values**, so `flips=2, pos=0, xor=1` is where the
+shrinker goes from ANY failure it finds. A real defect — an inspector that
+approved some genuinely mutated transaction — would have been shrunk into
+"identical bytes approved" and reported with an explanation that had nothing to
+do with it. The engineer who chased it would have found a test bug, fixed the
+test, and never seen the defect.
+
+That is the same shape as F-21 pointing the other way. F-21 was a control that
+could not fail; this is a control that fails for the wrong reason and hides the
+right one.
+
+**Fix.** The case is discarded when the mutation cancels out, with the reasoning
+in the code, because the property is about MUTATED transactions and a
+bitwise-identical one is not mutated. Discarding it also keeps the shrinker away
+from it.
+
+**Both controls were run.** Making the guard swallow every case leaves the test
+passing while proving nothing — which is why the guard is `bytes.Equal` and not
+anything broader. Making the inspector approve everything makes the test fail,
+so the property still catches what it is for. The property was then run six
+times at 3,000 checks each, and the whole property tier three times over.
+
+The stale `testdata/rapid/...fail` file rapid wrote is deleted: left in place it
+pins every future run to the degenerate case.
 
 ## Findings deliberately NOT raised
 
