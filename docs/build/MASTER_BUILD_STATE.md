@@ -1530,3 +1530,32 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
   The recurring class this session: **a document is a control, and a control
   nobody executes decays to a claim.** Every fix above replaced a careful read
   with a check that runs.
+
+- **2026-09-08 S2 (continued) — the invariants under the documents**: F-58
+  through F-62. The first batch made the documents true; this one goes after
+  what they describe. **F-58**: `GT003` — the guard 00716 calls "the line
+  that holds when the Go check is bypassed" — had five raise sites and no
+  assertion anywhere; it has seven now. The five value-domain SQLSTATEs appeared
+  in no Go file at all, so a posting refused for moving Credits into real
+  capital came back `INTERNAL`. Four documented codes were raised by nothing;
+  00722 withdraws them and records what actually enforces each on the schema
+  object itself, and `TestIntegration_EveryDocumentedSQLStateIsRaised` now fails
+  on any code that is neither raised nor withdrawn — it caught a fifth case
+  in migration 00720, written the same afternoon. **F-59**: the prediction
+  resolver bounded its price reads from above and not from below, so a dead feed
+  scored every open prediction FLAT, permanently. **F-60**: a calibration
+  snapshot reported the count that survived its own inner join, so a promotion
+  decision could cite a sample of six drawn from six hundred; 00721 adds the
+  window's population and what was scored of it. **F-61**: `position_lots` could
+  be refilled by a single UPDATE that satisfied every constraint, on the table
+  holding cost basis — while `credit_lots`, doing the same job for Credits,
+  has had a guard all along. **F-62**: the reality pipeline handed `Normalize` a
+  fresh clock while the archive returned the original meta, so ClickHouse's
+  version column stayed put and the column it replaces moved.
+
+  Two things worth keeping from how this went. Migration 00720's header
+  documented a `PL002` that was really a CHECK raising 23514 — F-58's own
+  defect, committed in the next migration after writing it up, and caught by the
+  check written for it. And the first GT003 test drove `cp_app`, which is
+  refused by privilege before the guard is reached: it would have passed on
+  SQLSTATE 42501 and proven nothing about the control it names.

@@ -490,6 +490,7 @@ export const nativeMarketSpec: Spec = {
     circulating_supply: "quantity",
     spot_price: "quantity",
     price_scale: "integer",
+    asset_decimals: "integer",
   },
   arrays: {
     top_holders: {
@@ -514,6 +515,7 @@ export const nativeQuoteSpec: Spec = {
     spot_price_before: "quantity",
     effective_price: "quantity",
     price_scale: "integer",
+    asset_decimals: "integer",
     slippage_bps: "integer",
   },
 };
@@ -529,6 +531,7 @@ export const nativeFillSpec: Spec = {
     creator_fee: "quantity",
     effective_price: "quantity",
     price_scale: "integer",
+    asset_decimals: "integer",
     slippage_bps: "integer",
     real_credit_reserve_after: "quantity",
     asset_reserve_after: "quantity",

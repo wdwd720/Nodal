@@ -286,6 +286,7 @@ func (s *Server) GetNativeMarketsMarketId(ctx context.Context, request api.GetNa
 		CirculatingSupply:    ptr(qtyString(v.CirculatingSupply())),
 		SpotPrice:            ptr(qtyString(spot)),
 		PriceScale:           ptr(scale),
+		AssetDecimals:        ptr(v.AssetDecimals),
 		PlatformFeeBps:       int(v.Market.Fees.PlatformBPS),
 		CreatorFeeBps:        int(v.Market.Fees.CreatorBPS),
 		StateVersion:         v.State.Version,
@@ -317,24 +318,35 @@ func (s *Server) PostNativeMarketsMarketIdQuotes(ctx context.Context, request ap
 	// so it goes through the same idempotent command path as every other write
 	// rather than being treated as a read that happens to insert a row.
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
-		func(ctx context.Context) (nativemarket.Quote, commandMeta, error) {
+		func(ctx context.Context) (NativeQuoteView, commandMeta, error) {
 			out, qerr := s.opts.Ports.NativeMarkets.Quote(ctx, nativemarket.QuoteRequest{
 				MarketID: marketID, AccountID: accountID,
 				Side: nativemarket.Side(request.Body.Side), Amount: amount,
 			})
 			if qerr != nil {
-				return nativemarket.Quote{}, commandMeta{}, qerr
+				return NativeQuoteView{}, commandMeta{}, qerr
 			}
 			return out, commandMeta{
 				Status:       http.StatusOK,
 				ResourceType: "native_quote",
-				ResourceID:   out.ID.String(),
+				ResourceID:   out.Quote.ID.String(),
 			}, nil
 		})
 	if err != nil {
 		return nil, err
 	}
-	q := res.Value
+	// A replayed record written before the response type gained the asset scale
+	// unmarshals into a zero-valued view, because runCommand stores the command
+	// value as JSON and reads it back into whatever type the handler now asks
+	// for. Records live 24 hours, so the window is bounded and the answer would
+	// otherwise be a quote of zero for zero -- which a client would act on.
+	// Refusing is the only honest reply: the original response no longer exists
+	// in a form this build can return.
+	if res.Value.Quote.ID.IsZero() {
+		return nil, errs.New(errs.CodeConflict,
+			"this idempotency key was used before the quote response changed shape; retry with a new key")
+	}
+	q := res.Value.Quote
 	scale := nativemarket.PriceScale
 	return api.PostNativeMarketsMarketIdQuotes200JSONResponse(api.NativeQuote{
 		QuoteId:         uuid.MustParse(q.ID.String()),
@@ -347,6 +359,7 @@ func (s *Server) PostNativeMarketsMarketIdQuotes(ctx context.Context, request ap
 		SpotPriceBefore: ptr(qtyString(q.SpotPriceBefore)),
 		EffectivePrice:  ptr(qtyString(q.EffectivePrice)),
 		PriceScale:      ptr(scale),
+		AssetDecimals:   ptr(res.Value.AssetDecimals),
 		SlippageBps:     ptr(int(q.SlippageBPS)),
 		StateVersion:    q.StateVersion,
 		ExpiresAt:       q.ExpiresAt,
@@ -398,10 +411,10 @@ func (s *Server) PostNativeMarketsMarketIdOrders(ctx context.Context, request ap
 			if eerr != nil {
 				return api.NativeFill{}, commandMeta{}, eerr
 			}
-			return toAPINativeFill(out), commandMeta{
+			return toAPINativeFill(out.Result, out.AssetDecimals), commandMeta{
 				Status:       http.StatusCreated,
 				ResourceType: "native_fill",
-				ResourceID:   out.FillID.String(),
+				ResourceID:   out.Result.FillID.String(),
 			}, nil
 		})
 	if err != nil {
@@ -413,7 +426,7 @@ func (s *Server) PostNativeMarketsMarketIdOrders(ctx context.Context, request ap
 	return api.PostNativeMarketsMarketIdOrders201JSONResponse(res.Value), nil
 }
 
-func toAPINativeFill(r nativemarket.ExecuteResult) api.NativeFill {
+func toAPINativeFill(r nativemarket.ExecuteResult, assetDecimals int) api.NativeFill {
 	alerts := make([]struct {
 		Kind     *string                       `json:"kind,omitempty"`
 		Reason   *string                       `json:"reason,omitempty"`
@@ -442,6 +455,7 @@ func toAPINativeFill(r nativemarket.ExecuteResult) api.NativeFill {
 		CreatorFee:             ptr(qtyString(r.Fill.CreatorFee)),
 		EffectivePrice:         ptr(qtyString(r.Fill.EffectivePrice)),
 		PriceScale:             ptr(scale),
+		AssetDecimals:          ptr(assetDecimals),
 		SlippageBps:            ptr(int(r.Fill.SlippageBPS())),
 		RealCreditReserveAfter: ptr(qtyString(r.Fill.StateAfter.RealCreditReserve)),
 		AssetReserveAfter:      ptr(qtyString(r.Fill.StateAfter.AssetReserve)),

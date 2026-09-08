@@ -88,16 +88,28 @@ func (s CalibrationScope) regime() string {
 // behaved. Predicted quality and realized return are separate columns and are
 // never combined: a high return is not evidence of good calibration (PART 73).
 type CalibrationRow struct {
-	ID                    SnapshotID
-	StrategyVersionID     string
-	AgentID               string
-	Mode                  Mode
-	WindowStart           time.Time
-	WindowEnd             time.Time
-	RegimeLabel           string
-	BucketLower           ir.Decimal
-	BucketUpper           ir.Decimal
-	NPredictions          int
+	ID                SnapshotID
+	StrategyVersionID string
+	AgentID           string
+	Mode              Mode
+	WindowStart       time.Time
+	WindowEnd         time.Time
+	RegimeLabel       string
+	BucketLower       ir.Decimal
+	BucketUpper       ir.Decimal
+	NPredictions      int
+	// WindowPredictions is every prediction committed in the window and in
+	// scope, resolved or not. WindowScored is how many of them carried an
+	// outcome and entered the statistics.
+	//
+	// The difference is the sample this snapshot could not see, and until F-60
+	// it was invisible: the source query inner-joins outcomes, so unresolved
+	// predictions are dropped before Go sees a row, and nothing counted them.
+	// NPredictions is per bucket and counts survivors, so it could not reveal
+	// the loss either -- a reader could not tell 6 of 6 from 6 of 600, while a
+	// promotion decision cites one of these rows by foreign key.
+	WindowPredictions     int
+	WindowScored          int
 	MeanPredicted         ir.Decimal
 	RealizedFrequency     ir.Decimal
 	BrierMean             ir.Decimal
@@ -145,6 +157,23 @@ SELECT p.probability_direction::text, p.confidence::text, p.expected_return_bps,
    AND p.direction IS NOT NULL
    AND ($5::uuid IS NULL OR p.agent_id = $5::uuid)
    AND ($6::text IS NULL OR o.regime_label = $6::text)`
+
+// calibrationPopulationSQL counts the predictions the window holds, on the same
+// scope as the source query above but WITHOUT the outcome join. It is the
+// denominator the statistics are silent about.
+//
+// The regime filter is deliberately absent here. A regime is a property of the
+// outcome, so an unresolved prediction has none, and filtering on it would
+// re-introduce exactly the exclusion this count exists to expose.
+const calibrationPopulationSQL = `
+SELECT count(*)
+  FROM predictions p
+ WHERE p.strategy_version_id = $1
+   AND p.mode = $2
+   AND p.committed_at >= $3
+   AND p.committed_at < $4
+   AND p.direction IS NOT NULL
+   AND ($5::uuid IS NULL OR p.agent_id = $5::uuid)`
 
 // sample is one resolved prediction in the aggregation.
 type sample struct {
@@ -210,6 +239,24 @@ func (c *PGCalibrator) Compute(ctx context.Context, q db.Querier, scope Calibrat
 		return nil, errs.Wrap(err, errs.CodeInternal, "prediction: iterate calibration source")
 	}
 
+	scored := 0
+	for _, b := range buckets {
+		scored += len(b)
+	}
+	var population int
+	if err := q.QueryRow(ctx, calibrationPopulationSQL, scope.StrategyVersionID, string(scope.Mode),
+		scope.WindowStart.UTC(), scope.WindowEnd.UTC(), agentFilter).Scan(&population); err != nil {
+		return nil, errs.Wrap(err, errs.CodeInternal, "prediction: count calibration population")
+	}
+	if population < scored {
+		// The two queries disagree about a window neither of them writes to.
+		// Refusing is right: a snapshot claiming to have scored more
+		// predictions than the window held would be worse than none, and the
+		// database CHECK would refuse the row anyway.
+		return nil, errs.Newf(errs.CodeInternal,
+			"prediction: scored %d predictions in a window holding %d", scored, population)
+	}
+
 	out := make([]CalibrationRow, 0, n)
 	for i, bucket := range buckets {
 		if len(bucket) == 0 {
@@ -219,6 +266,8 @@ func (c *PGCalibrator) Compute(ctx context.Context, q db.Querier, scope Calibrat
 		if err != nil {
 			return nil, err
 		}
+		row.WindowPredictions = population
+		row.WindowScored = scored
 		out = append(out, row)
 	}
 	return out, nil
@@ -469,14 +518,16 @@ func bucketBounds(idx, n int) (lower, upper ir.Decimal, err error) {
 const insertCalibrationSQL = `
 INSERT INTO calibration_snapshots (
     id, strategy_version_id, agent_id, mode, window_start, window_end, regime_label,
-    bucket_lower, bucket_upper, n_predictions, mean_predicted, realized_frequency,
+    bucket_lower, bucket_upper, n_predictions, window_predictions, window_scored,
+    mean_predicted, realized_frequency,
     brier_mean, log_loss_mean, expected_return_bps_mean, realized_return_bps_mean,
     confidence_mean, abs_error_bps_mean, computer_version, computed_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7,
-    $8::numeric, $9::numeric, $10, $11::numeric, $12::numeric,
-    $13::numeric, $14::numeric, $15, $16,
-    $17::numeric, $18, $19, $20
+    $8::numeric, $9::numeric, $10, $11, $12,
+    $13::numeric, $14::numeric,
+    $15::numeric, $16::numeric, $17, $18,
+    $19::numeric, $20, $21, $22
 )`
 
 // Persist appends the snapshot rows. calibration_snapshots is append-only:
@@ -489,6 +540,14 @@ func (c *PGCalibrator) Persist(ctx context.Context, tx pgx.Tx, rows []Calibratio
 	for _, r := range rows {
 		if r.NPredictions < 0 {
 			return errs.New(errs.CodeValidationFailed, "prediction: negative bucket count")
+		}
+		// A row that does not state its sample is refused here rather than at
+		// the database, so the message names the snapshot rather than the
+		// constraint. Compute always sets both; a caller assembling a row by
+		// hand has to as well.
+		if r.WindowScored < 0 || r.WindowPredictions < r.WindowScored {
+			return errs.Newf(errs.CodeValidationFailed,
+				"prediction: snapshot claims %d scored of %d in the window", r.WindowScored, r.WindowPredictions)
 		}
 		expected, err := bpsColumn("expected_return_bps_mean", r.ExpectedReturnBPSMean)
 		if err != nil {
@@ -505,6 +564,7 @@ func (c *PGCalibrator) Persist(ctx context.Context, tx pgx.Tx, rows []Calibratio
 		_, err = tx.Exec(ctx, insertCalibrationSQL,
 			r.ID, r.StrategyVersionID, nullUUID(r.AgentID), string(r.Mode), r.WindowStart, r.WindowEnd, r.RegimeLabel,
 			r.BucketLower.String(), r.BucketUpper.String(), r.NPredictions,
+			r.WindowPredictions, r.WindowScored,
 			decimalOrNil(r.MeanPredicted), decimalOrNil(r.RealizedFrequency),
 			decimalOrNil(r.BrierMean), decimalOrNil(r.LogLossMean),
 			expected, realized,

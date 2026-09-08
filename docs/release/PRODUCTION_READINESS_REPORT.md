@@ -471,6 +471,34 @@ and the `integration` job now runs `make infra-up` and sets it. Observed in both
 `TestIntegration_S3_PutGetHeadListRoundTrip` fails naming the variable when the endpoint is absent
 and the promise is set, and passes when it is present.
 
+### Controls that were written and never exercised (F-58 to F-62)
+
+Six database guards and one derivation were believed rather than observed. Each
+is now driven, and each was watched failing first.
+
+| What was believed | What was true |
+|---|---|
+| `GT003` refuses a high-risk gate with missing evidence or a closed window | five raise sites, no assertion in any Go file; the nearest test asserts the **Go** layer's refusal and would pass with the SQL guard deleted |
+| a value-domain refusal reaches the caller classified | the five VD codes appeared in no Go file; moving Credits into real capital returned `INTERNAL` |
+| the prediction resolver scores against the market | no lower bound on price age; a dead feed scored every open prediction FLAT, into an append-only table |
+| a calibration snapshot describes a window | it reported the count that survived an inner join; a promotion could cite six of six hundred |
+| `position_lots` is guarded like `credit_lots` | one UPDATE refilled a consumed cost-basis lot past every constraint |
+| replaying an event is idempotent downstream | the ReplacingMergeTree version column was frozen while the column it replaces moved, across monthly partitions |
+
+Two of the fixes are worth reading for the method rather than the defect. The
+first GT003 test drove `cp_app` and was refused by **privilege** — SQLSTATE
+42501 — before ever reaching the guard: it would have passed and proven
+nothing, which is F-53's lesson arriving again. And migration 00720's header
+documented a SQLSTATE that was really a CHECK raising 23514 — F-58's exact
+defect, committed in the very next migration after writing F-58 up, and caught
+by `TestIntegration_EveryDocumentedSQLStateIsRaised`, which was written for it.
+
+That check is the durable part: a code a migration header names must be raised
+somewhere, or withdrawn in a later migration that says what enforces the
+invariant instead — and
+`TestIntegration_TheWithdrawnInvariantsAreStillEnforced` drives all four
+withdrawn invariants so "withdrawn" cannot quietly become "abandoned".
+
 ### Documents as controls (F-54, F-55)
 
 A readiness decision is made from documents, so the documents were audited the way the code has

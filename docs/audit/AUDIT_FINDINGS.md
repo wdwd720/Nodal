@@ -81,11 +81,11 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-55 | P1 | BASELINE | fixed | Every runbook described a system that predates the build: 140 PENDING markers, and every package, binary and route they named exists |
 | F-56 | P2 | BASELINE | fixed | Provider webhook evidence was mutable by the application role, including the payload hash and the signature flag |
 | F-57 | P1 | BASELINE | fixed | Five subsystems' integration tests skipped silently in CI, and fifteen VERIFIED rows cited them as evidence |
-| F-58 | P2 | BASELINE | part | GT003 and the value-domain family are now covered; four documented-but-never-raised codes remain |
+| F-58 | P2 | BASELINE | fixed | Four documented SQLSTATEs were never raised and five raised families were never handled in Go |
 | F-59 | P1 | BASELINE | fixed | The prediction resolver applied no maximum price age, so a dead feed scored every prediction FLAT |
-| F-60 | P2 | BASELINE | open | Calibration drops unresolvable predictions silently and reports a denominator that hides it |
-| F-61 | P2 | BASELINE | open | `position_lots` has no database invariant tying status to quantity, and open quantity can be raised |
-| F-62 | P3 | BASELINE | open | `normalized_events` replaces a column that varies between copies of the same event |
+| F-60 | P2 | BASELINE | fixed | Calibration dropped unresolvable predictions silently and reported a denominator that hid it |
+| F-61 | P2 | BASELINE | fixed | `position_lots` had no database invariant tying status to quantity, and open quantity could be raised |
+| F-62 | P3 | BASELINE | fixed | `normalized_events` replaced a column that varied between copies of the same event |
 
 ---
 
@@ -1557,12 +1557,43 @@ indication anything was wrong.
 constant `CREDIT_DECIMALS = 6` now says in a comment that prices are not on that
 scale and that the scale is a fact about the asset which the API states.
 
-**Not fixed here, and recorded:** the same page scales `circulating_supply`,
+**Closed 2026-09-08.** See the update at the end of this entry.
+
+**Was not fixed here, and recorded:** the same page scaled `circulating_supply`,
 `asset_reserve`, the holder table and a quote's `expected_output` — all ASSET
 units — by the same hardcoded Credit scale. They are accidentally right today
 because the asset-creation screen also hardcodes six decimals and sends it, so
 every asset made through the interface has six. An asset created through the API
 with any other value renders wrong by a power of ten, and nothing would say so.
+
+**Update, 2026-09-08 — the recorded remainder is closed.**
+
+The asset quantities were left because they were accidentally right: the
+creation screen also sends six decimals, so `CREDIT_DECIMALS` matched. They were
+wrong for any creator who asked for anything else, by a factor of ten to the
+difference, on exactly the supply and concentration figures a buyer judges a
+market by.
+
+The API could not have been used correctly, because it never stated the scale:
+neither `NativeMarket` nor `NativeAsset` carried it, though
+`CreateNativeAssetRequest` accepts it. So the fix is a fact, not a constant:
+`asset_decimals` on `NativeMarket`, `NativeQuote` and `NativeFill`, read from
+the asset registry in the same transaction the quote or fill was computed in.
+`MarketView` gained the field and the port gained `NativeQuoteView` and
+`NativeExecuteView` — the domain types stay free of a registry fact.
+
+On the page, `circulating_supply`, `asset_reserve` and every holder's balance
+now render at `asset_decimals`, and a BUY quote's `expected_output` does while a
+SELL's stays in Credits, because that is which side the asset is on.
+`CREDIT_DECIMALS` keeps its name and its comment now says the one thing it may
+be used for.
+
+**Evidence.** `TestIntegration_TheMarketResponseStatesItsAssetsScale` and
+`TestIntegration_TheQuoteStatesTheScaleOfItsAssetSide` launch a market whose
+asset has **nine** decimals — chosen so that a hardcoded six cannot pass —
+and assert the response states nine, and that the asset scale and the price
+scale are different numbers. The fixture checks the registry rather than what it
+asked for.
 
 ## F-45 · The browser suite's own unit tests had been failing · NEW · P2 · FIXED
 
@@ -2148,7 +2179,7 @@ with the endpoint, it passes. All five packages then run green against the live
 stack — `internal/reality` 36 passes and zero skips, with the two
 look-ahead-leakage tests among them.
 
-## F-58 · Documented SQLSTATEs that are never raised, and raised ones nothing handles · BASELINE · P2 · OPEN
+## F-58 · Documented SQLSTATEs that nothing raised, and raised ones nothing handled · BASELINE · P2 · FIXED
 
 **Claim under test.** Each migration's `-- Custom SQLSTATEs:` header names the
 codes its triggers raise, and the application classifies them.
@@ -2222,12 +2253,53 @@ fires is the F-26 shape: a control believed because it was written.
   there with or without a mapping. Nothing asserted on the classification, which
   is what the customer and the on-call engineer actually see.
 
-**Still open.** The four documented-but-never-raised codes (`CR002`, `CR005`,
-`PO002`, `PO004`) and `PO003`'s misdescription. Each labels an invariant that
-holds, so nothing is unguarded; what is missing is the ability to tell these
-refusals apart from any other unique or check violation. `BT001` and the
-test-only `GT001`/`GT002`/`GT004`/`GT005`/`AU002` are lower: they are asserted
-somewhere, just not in production code.
+**The four fictions are withdrawn, not implemented, and that is a decision
+rather than a shrug.**
+
+Migration 00722 withdraws `CR002`, `CR005`, `PO002` and `PO004` and records what
+actually enforces each invariant — as a `COMMENT ON` the schema object that
+holds it, so a `\d+` or a schema dump carries the correction rather than a
+sentence in a file nobody greps.
+
+Implementing them would cost more than the fiction does. Making `CR002` real
+means replacing `forbid_mutation` on three live tables with a credit-specific
+function, changing what `db.IsImmutableRow` sees for those tables, to buy a more
+specific name for a refusal that is already correct and already tested. Making
+`PO002` real means a second copy of a state machine the CHECK and the AU001
+transition binding already enforce — and a second copy is a second thing to
+drift. The cost of the fiction was never a missing control; it was that an
+application cannot tell these refusals apart from any other unique or check
+violation.
+
+What makes it a correction rather than an excuse is the pair of controls:
+
+- `TestIntegration_EveryDocumentedSQLStateIsRaised` fails on any code a
+  migration header documents that nothing raises and no later migration
+  withdraws. Observed failing with 00722's withdrawal line removed, naming
+  exactly those four and no others; passing with it back.
+- `TestIntegration_TheWithdrawnInvariantsAreStillEnforced` drives all four
+  invariants and watches each refusal: a second Credit asset (23505), a payout
+  state outside the set (23514), a legal state change with no transition row
+  (AU001), settling more than was reserved and reserving more than was requested
+  (23514). A withdrawal that was really an abandonment fails here.
+
+`CR002` is the one honest exception in that test, and it is stated as such: it
+asserts that the three credit tables carry the `forbid_mutation` trigger, with
+the correct BEFORE/ROW/UPDATE/DELETE bits, because driving a real credit lot
+needs a journal transaction with balanced entries — a fixture belonging to
+`internal/credit`, not to a migration test. The function's refusal is already
+driven directly by `TestIntegration_Migrations`. Two halves, stated as two
+halves.
+
+The census caught a fifth case immediately: migration 00720, written in the same
+session, documented a `PL002` that is a CHECK raising 23514. The header was
+corrected before it landed.
+
+**Still open, and smaller.** `PO003` is documented as "provenance mismatch" and
+all three of its raise sites emit `PAYOUT_ALLOCATION_IMMUTABLE`; the Go handler
+agrees with the SQL and contradicts the header, so the behaviour is right and
+the name is wrong. `BT001` and the test-only `GT001`/`GT002`/`GT004`/`GT005`/
+`AU002` are asserted somewhere, just not in production code.
 
 ## F-59 · The prediction resolver applied no maximum price age · BASELINE · P1 · FIXED
 
@@ -2299,7 +2371,7 @@ means retried forever. That is the right behaviour for a resolver — it must
 not invent a score — but it needs the accounting in F-60 to be visible
 rather than merely absent.
 
-## F-60 · Calibration drops predictions silently, and its denominator hides it · BASELINE · P2 · OPEN
+## F-60 · Calibration dropped predictions silently, and its denominator hid it · BASELINE · P2 · FIXED
 
 **Claim under test.** A calibration snapshot describes how a strategy version
 performed over a window.
@@ -2338,7 +2410,40 @@ The empty-bucket skip is documented as deliberate, and the reasoning is right:
 and 'perfectly calibrated' are not the same statement." That reasoning simply
 was not carried through to the predictions the query dropped.
 
-## F-61 · `position_lots` has no database invariant beyond per-row bounds · BASELINE · P2 · OPEN
+**Fix.** Migration 00721 adds `window_predictions` and `window_scored` to
+`calibration_snapshots`, and `Compute` counts the window's population with a
+second query that deliberately does **not** carry the outcome join. The regime
+filter is left off that count too: a regime is a property of the outcome, so an
+unresolved prediction has none and filtering on it would re-introduce the very
+exclusion the count exists to expose.
+
+Every row of one computation carries the same two figures, which looks redundant
+and is not: a promotion cites **one** row by foreign key, so that row has to be
+self-describing.
+
+The columns are NULLable, and that is the honest choice rather than a
+convenience. A row written before this migration was computed without the
+figure; a default of zero would assert that nothing was dropped, which is
+precisely the false statement at issue. New rows always carry both, which two
+CHECK constraints require, and `Persist` refuses a row that does not so the
+message names the snapshot rather than the constraint.
+
+**Evidence.** `TestIntegration_CalibrationStatesWhatItCouldNotScore` builds six
+predictions and resolves two, then asserts the snapshot says **6 and 2** and
+that the buckets partition exactly the two -- a number the old code could not
+produce, since it only ever counted survivors. It reads the figures back out of
+the persisted row, which is what a promotion decision reads.
+`TestIntegration_CalibrationSampleIsNotVacuous` is the positive signal: with
+nothing dropped the two numbers must agree, so a `WindowPredictions` that had
+silently collapsed onto `WindowScored` fails one test or the other.
+
+**Not fixed, and recorded.** The per-statistic divergence remains: `NPredictions`
+sits beside four means computed over four different divisors (`hitCount`,
+`brierCount`, `logCount`, `len(bucket)`), and an unset statistic still persists
+as NULL. That is a narrower problem than the sample loss and it needs a decision
+about what a partially-scored bucket should report, not just a column.
+
+## F-61 · `position_lots` had no database invariant beyond per-row bounds · BASELINE · P2 · FIXED
 
 **Claim under test.** Provenance lots are held to their invariants by the
 database, as the credit lots beside them are.
@@ -2369,7 +2474,40 @@ reference in a test is a `SELECT`, and the concurrency test drives
 `e.Dispose`, so it proves the Go compare-and-set rather than a database
 constraint.
 
-## F-62 · `normalized_events` replaces a column that varies between copies · BASELINE · P3 · OPEN
+**Fix.** Migration 00720, in the shape `credit_lots` already had:
+
+- `position_lots_status_matches_quantity` states `(status = 'CLOSED') =
+  (quantity_open = 0)` as a CHECK. Both operands are NOT NULL, so the expression
+  can never be NULL, which is F-50's lesson.
+- `cp_position_lot_guard` raises `PL001` on an open quantity that rises, and on
+  any change to `quantity_original`, `acquired_at` or `cost_basis_usd_minor` --
+  the columns a FIFO ordering and a realized gain are computed from. Moving
+  `acquired_at` reorders every disposal that has not happened yet.
+- The UPDATE grant narrows to `quantity_open` and `status`, so the application
+  is refused by privilege before a trigger is reached.
+
+`updated_at` is deliberately not granted: the `set_updated_at` BEFORE trigger
+assigns it and PostgreSQL checks column privileges against the statement's SET
+list rather than what a trigger writes. That was verified by running the
+disposal path, not reasoned about, and
+`TestIntegration_DisposalStillWorksUnderTheGuard` asserts `updated_at >
+created_at` so a wrong answer surfaces as a failure rather than as a stopped
+clock.
+
+The header of 00720 originally documented a second code, `PL002`, for the CHECK
+-- which raises 23514 and not a custom code at all. Writing F-58 in the same
+session is what caught it. A header that names a code has to be a header whose
+migration raises it.
+
+**Evidence.** Five tests, observed failing with the trigger dropped, the CHECK
+dropped and the table-wide grant restored: the consumed lot was refilled, the
+cost basis was edited, the acquisition time was moved back a day, the status was
+decoupled from the quantity, and `cp_app` did all of it.
+`TestIntegration_DisposalStillWorksUnderTheGuard` is the positive control, and
+it is the reason the grant names exactly two columns -- one too few would pass
+every refusal above and silently break the only path that writes these rows.
+
+## F-62 · `normalized_events` replaced a column that varied between copies · BASELINE · P3 · FIXED
 
 **Claim under test.** Re-ingesting an event is idempotent, as
 `reality.Pipeline`'s doc comment says: "Every step is idempotent downstream
@@ -2413,6 +2551,51 @@ the opposite. The pipeline-level test does exercise the real path but runs on a
 fake clock that is never advanced between the delivery and the redelivery, so
 both normalisations produce identical timestamps and the divergence cannot
 appear. Two tests, neither able to see it: the F-26 shape again.
+
+**Fix, and why it is in Go rather than the DDL.** The obvious repairs are to
+the table — put `decision_available_at` in the sort key, or partition on the
+version column instead. Neither can be deployed: `EnsureSchema` applies the DDL
+with `CREATE TABLE IF NOT EXISTS`, so a new key never reaches a table that
+already exists. A fix that cannot reach a running deployment is not a fix.
+
+The root cause is in the pipeline anyway. `Ingest` handed `Normalize` a fresh
+`clk.Now()` on every pass while `PutMeta` returned the original archived meta,
+so the version column was frozen and the replaced column was not. It now derives
+`normalized_at` from the archived `platform_received_at`, which makes every pass
+produce byte-identical timestamps — and that is what makes the replacement
+well-defined, whatever the sort key is.
+
+It is also the more honest reading of the policy. `AvailabilityPolicy` already
+adds `FeatureLatency` and `PipelineLatency` as *configured* allowances for
+processing time, so a wall-clock `normalized_at` was charging real latency on
+top of the modelled latency — inconsistently, and only on the first pass.
+
+`reality.Dedup`'s comment, which claimed to match ReplacingMergeTree, is
+corrected: it keeps the first occurrence, the engine keeps the last. The two
+agree now because the copies are identical; before, a bus consumer and a
+ClickHouse reader could resolve the same event to opposite values with neither
+of them wrong.
+
+**Evidence.** `TestIntegration_ReplayingAnEventProducesTheSameTimestamps`
+re-ingests one event twice with an **advancing** clock — five minutes, then
+forty days — and asserts every timestamp and the monthly partition are
+unchanged. Observed failing with the wall clock restored:
+`decision_available_at` moved from `12:00:00.755` to `12:05:00.755`, and on the
+second replay to **October**, a different partition that `FINAL` cannot collapse
+across, while `platform_received_at` stayed exactly where it was.
+
+`TestIntegration_ADifferentEventStillGetsItsOwnTimestamps` is the positive
+control: a pipeline that had simply frozen every timestamp would pass every
+assertion above and record a stream in which nothing ever happens at a different
+time. `TestReplayDeterminismIsAPropertyOfTheDerivation` states the rule without
+a database and asserts that a later `normalizedAt` *would* have moved the
+result — so the determinism test is not passing on a derivation that ignores
+its input.
+
+**What is still true.** There are still no production readers:
+`internal/backtest` and `internal/performance` do not exist, and both readers of
+`decision_available_at` have only test callers. This was fixed now because the
+defect becomes invisible the moment something reads it.
 
 ## Findings deliberately NOT raised
 

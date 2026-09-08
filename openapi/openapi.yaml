@@ -1098,7 +1098,19 @@ components:
         asset_reserve: { $ref: "#/components/schemas/Quantity" }
         circulating_supply: { $ref: "#/components/schemas/Quantity" }
         spot_price: { $ref: "#/components/schemas/Quantity" }
-        price_scale: { type: integer }
+        price_scale:
+          type: integer
+          description: Scale of spot_price. This is the price scale, not the asset's.
+        asset_decimals:
+          type: integer
+          minimum: 0
+          maximum: 18
+          description: >-
+            Scale of every ASSET quantity here -- asset_reserve, initial_asset_reserve,
+            circulating_supply and each top holder's quantity. It is a fact about the
+            asset, fixed at creation, and it is NOT the Credit scale: a client that
+            assumes one is right only while a creator happens to choose six decimals
+            (F-44).
         platform_fee_bps: { $ref: "#/components/schemas/BPS" }
         creator_fee_bps: { $ref: "#/components/schemas/BPS" }
         state_version: { type: integer, format: int64 }
@@ -1135,6 +1147,14 @@ components:
         spot_price_before: { $ref: "#/components/schemas/Quantity" }
         effective_price: { $ref: "#/components/schemas/Quantity" }
         price_scale: { type: integer }
+        asset_decimals:
+          type: integer
+          minimum: 0
+          maximum: 18
+          description: >-
+            Scale of whichever of input_amount and expected_output is in asset units.
+            On a BUY the input is Credits and the output is the asset; on a SELL it is
+            the other way round. Fees and prices are always Credits, at price_scale.
         slippage_bps: { $ref: "#/components/schemas/BPS" }
         state_version: { type: integer, format: int64 }
         expires_at: { $ref: "#/components/schemas/Timestamp" }
@@ -1169,6 +1189,13 @@ components:
         creator_fee: { $ref: "#/components/schemas/Quantity" }
         effective_price: { $ref: "#/components/schemas/Quantity" }
         price_scale: { type: integer }
+        asset_decimals:
+          type: integer
+          minimum: 0
+          maximum: 18
+          description: >-
+            Scale of the asset quantities here -- filled_quantity and
+            asset_reserve_after. Credits (fees, reserves, prices) are not on it.
         slippage_bps: { $ref: "#/components/schemas/BPS" }
         real_credit_reserve_after: { $ref: "#/components/schemas/Quantity" }
         asset_reserve_after: { $ref: "#/components/schemas/Quantity" }

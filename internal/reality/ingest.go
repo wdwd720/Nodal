@@ -329,8 +329,30 @@ func (p *Pipeline) Ingest(ctx context.Context, raw RawObject) (IngestResult, err
 	}
 	res := IngestResult{ObjectID: ref.ObjectID, Duplicate: ref.Duplicate}
 
-	// 2. Normalize (pure).
-	events, err := p.deps.Normalizer.Normalize(meta, raw.Body, p.clk.Now())
+	// 2. Normalize (pure), from the ARCHIVED receipt time rather than the wall
+	//    clock (F-62).
+	//
+	//    The pipeline is at-least-once, and its own doc comment above claims
+	//    every step is idempotent downstream because ClickHouse's
+	//    ReplacingMergeTree collapses duplicates. It could not, for a reason
+	//    that only shows up on a replay: PutMeta returns the ORIGINAL meta for
+	//    an event already archived, so platform_received_at -- which is the
+	//    engine's VERSION column -- is frozen, while a fresh clock read made
+	//    normalized_at, and therefore decision_available_at, strictly later.
+	//    The version did not move and the replaced column did, so two rows with
+	//    the same sort key carried different values and which survived was
+	//    decided at merge time rather than by the data. Worse, the table
+	//    partitions on decision_available_at, so a replay landing in a
+	//    different month produced two rows FINAL cannot collapse at all.
+	//
+	//    Deriving it from the archived receipt makes every pass produce
+	//    byte-identical timestamps, which is what makes the replacement
+	//    well-defined. It is also the more honest reading of the policy:
+	//    AvailabilityPolicy already adds FeatureLatency and PipelineLatency as
+	//    configured allowances for processing time, so a wall-clock
+	//    normalized_at was charging real latency on top of the modelled
+	//    latency, inconsistently and only on the first pass.
+	events, err := p.deps.Normalizer.Normalize(meta, raw.Body, meta.Timestamps.PlatformReceivedAt)
 	if err != nil {
 		return res, err
 	}

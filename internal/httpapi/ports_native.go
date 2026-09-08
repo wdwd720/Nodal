@@ -57,8 +57,24 @@ type CreateNativeAsset struct {
 // NativeMarketsPort prices and executes internal market trades.
 type NativeMarketsPort interface {
 	Market(ctx context.Context, marketID nativemarket.MarketID) (MarketView, error)
-	Quote(ctx context.Context, r nativemarket.QuoteRequest) (nativemarket.Quote, error)
-	Execute(ctx context.Context, r nativemarket.ExecuteRequest) (nativemarket.ExecuteResult, error)
+	Quote(ctx context.Context, r nativemarket.QuoteRequest) (NativeQuoteView, error)
+	Execute(ctx context.Context, r nativemarket.ExecuteRequest) (NativeExecuteView, error)
+}
+
+// NativeQuoteView and NativeExecuteView pair a domain result with the scale of its asset
+// side. The scale lives in the asset registry rather than on the market, so the
+// domain types do not carry it and the transport layer would otherwise have to
+// guess -- which is what F-44 was: the page rendered asset quantities at the
+// Credit's six decimals, correct only while a creator happens to choose six.
+type NativeQuoteView struct {
+	Quote         nativemarket.Quote
+	AssetDecimals int
+}
+
+// NativeExecuteView is the same for a completed trade.
+type NativeExecuteView struct {
+	Result        nativemarket.ExecuteResult
+	AssetDecimals int
 }
 
 // MarketView is a market together with the state and concentration a buyer
@@ -67,6 +83,12 @@ type MarketView struct {
 	Market  nativemarket.Market
 	State   nativemarket.State
 	Holders []nativemarket.Holding
+	// AssetDecimals is the scale of every asset quantity in this view: the
+	// reserves, the circulating supply and each holder's balance. It is a fact
+	// about the asset, and it is NOT the Credit scale -- the page showed all of
+	// them at the Credit's six decimals, which is right only while a creator
+	// happens to choose six (F-44).
+	AssetDecimals int
 }
 
 // CirculatingSupply is what holders collectively hold: everything the curve

@@ -291,20 +291,47 @@ func (a nativeMarketsAdapter) Market(ctx context.Context, marketID nativemarket.
 	if err != nil {
 		return MarketView{}, err
 	}
-	return MarketView{Market: m, State: st, Holders: holders}, nil
+	// The scale comes from the asset registry rather than a constant. A native
+	// asset may be created with up to eighteen decimals; six is only the
+	// default, and reading it is the difference between a quantity and a
+	// quantity wrong by a factor of a million.
+	asset, err := assets.NewRepository().Get(ctx, a.db, m.AssetID)
+	if err != nil {
+		return MarketView{}, err
+	}
+	return MarketView{Market: m, State: st, Holders: holders, AssetDecimals: int(asset.Decimals)}, nil
 }
 
-func (a nativeMarketsAdapter) Quote(ctx context.Context, r nativemarket.QuoteRequest) (nativemarket.Quote, error) {
+func (a nativeMarketsAdapter) Quote(ctx context.Context, r nativemarket.QuoteRequest) (NativeQuoteView, error) {
 	var q nativemarket.Quote
+	var decimals int
 	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		var qerr error
-		q, qerr = a.deps.NativeMarkets.Quote(ctx, tx, r)
+		if q, qerr = a.deps.NativeMarkets.Quote(ctx, tx, r); qerr != nil {
+			return qerr
+		}
+		decimals, qerr = a.assetDecimals(ctx, tx, r.MarketID)
 		return qerr
 	})
-	return q, err
+	return NativeQuoteView{Quote: q, AssetDecimals: decimals}, err
 }
 
-func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.ExecuteRequest) (nativemarket.ExecuteResult, error) {
+// assetDecimals reads the scale of the asset a market trades. It is read inside
+// the caller's transaction so the figure describes the same market state the
+// quote or fill was computed from.
+func (a nativeMarketsAdapter) assetDecimals(ctx context.Context, q db.Querier, marketID nativemarket.MarketID) (int, error) {
+	m, err := a.deps.NativeMarkets.Market(ctx, q, marketID)
+	if err != nil {
+		return 0, err
+	}
+	asset, err := assets.NewRepository().Get(ctx, q, m.AssetID)
+	if err != nil {
+		return 0, err
+	}
+	return int(asset.Decimals), nil
+}
+
+func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.ExecuteRequest) (NativeExecuteView, error) {
 	// The Settlement Compiler decides first. Everything below this line --
 	// the market engine, the ledger's domain isolation, the invariant
 	// triggers -- still runs; this is the layer that decides whether the
@@ -312,7 +339,7 @@ func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.Execut
 	// every other Domain A command passes through.
 	m, err := a.deps.NativeMarkets.Market(ctx, a.db, r.MarketID)
 	if err != nil {
-		return nativemarket.ExecuteResult{}, err
+		return NativeExecuteView{}, err
 	}
 	action := settlement.ActionBuyNativeAsset
 	if r.Side == nativemarket.Sell {
@@ -329,7 +356,7 @@ func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.Execut
 		IdempotencyKey: r.IdempotencyKey,
 		CorrelationID:  r.CorrelationID,
 	}); cerr != nil {
-		return nativemarket.ExecuteResult{}, cerr
+		return NativeExecuteView{}, cerr
 	}
 
 	// The deployment's clock, not the client's. `EffectiveAt` is the instant a
@@ -346,13 +373,17 @@ func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.Execut
 	r.EffectiveAt = a.deps.now()
 
 	var res nativemarket.ExecuteResult
+	var decimals int
 	err = a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		var eerr error
-		res, eerr = a.deps.NativeMarkets.Execute(ctx, tx, r)
+		if res, eerr = a.deps.NativeMarkets.Execute(ctx, tx, r); eerr != nil {
+			return eerr
+		}
+		decimals, eerr = a.assetDecimals(ctx, tx, r.MarketID)
 		return eerr
 	})
 	a.recordRiskRefusal(ctx, err)
-	return res, err
+	return NativeExecuteView{Result: res, AssetDecimals: decimals}, err
 }
 
 // recordRiskRefusal persists a risk REJECT that the trade's own transaction

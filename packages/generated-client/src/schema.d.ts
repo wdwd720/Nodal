@@ -1890,6 +1890,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/native-assets/{assetId}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit your own DRAFT asset for moderation review (PART XIII)
+         * @description Only the creator may submit, and only their own DRAFT. Submitting is what freezes the asset's economics for review: an operator must not be able to launch a draft its creator is still editing, so the creator's act and the operator's are kept apart.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    assetId: components["parameters"]["AssetId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        account_id: components["schemas"]["UUID"];
+                    };
+                };
+            };
+            responses: {
+                /** @description Asset is PENDING_REVIEW */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeAsset"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-markets/{marketId}": {
         parameters: {
             query?: never;
@@ -2229,6 +2282,67 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payouts/{payoutId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel your own payout request before it has been submitted
+         * @description Returns the reserved Credits to the exact lots they came from, with their provenance intact. A request that has been SUBMITTED cannot be cancelled: it may already have been paid, and the only honest way out of that is reconciliation.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    payoutId: components["parameters"]["PayoutId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        account_id: components["schemas"]["UUID"];
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Request is REJECTED and the reservation is returned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutRequest"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                /** @description Already submitted; resolve it by reconciliation instead */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2981,6 +3095,8 @@ export interface components {
                 /** @enum {string} */
                 severity?: "INFO" | "WARN" | "CRITICAL";
             }[];
+            /** @description Scale of the asset quantities here -- filled_quantity and asset_reserve_after. Credits (fees, reserves, prices) are not on it. */
+            asset_decimals?: number;
             asset_reserve_after?: components["schemas"]["Quantity"];
             assets_in?: components["schemas"]["Quantity"];
             assets_out?: components["schemas"]["Quantity"];
@@ -3000,6 +3116,8 @@ export interface components {
             state_version_after: number;
         };
         NativeMarket: {
+            /** @description Scale of every ASSET quantity here -- asset_reserve, initial_asset_reserve, circulating_supply and each top holder's quantity. It is a fact about the asset, fixed at creation, and it is NOT the Credit scale: a client that assumes one is right only while a creator happens to choose six decimals (F-44). */
+            asset_decimals?: number;
             asset_id: components["schemas"]["UUID"];
             asset_reserve: components["schemas"]["Quantity"];
             circulating_supply?: components["schemas"]["Quantity"];
@@ -3007,6 +3125,7 @@ export interface components {
             initial_asset_reserve?: components["schemas"]["Quantity"];
             market_id: components["schemas"]["UUID"];
             platform_fee_bps: components["schemas"]["BPS"];
+            /** @description Scale of spot_price. This is the price scale, not the asset's. */
             price_scale?: number;
             real_credit_reserve: components["schemas"]["Quantity"];
             spot_price?: components["schemas"]["Quantity"];
@@ -3031,6 +3150,8 @@ export interface components {
             side: "BUY" | "SELL";
         };
         NativeQuote: {
+            /** @description Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, at price_scale. */
+            asset_decimals?: number;
             creator_fee?: components["schemas"]["Quantity"];
             effective_price?: components["schemas"]["Quantity"];
             expected_output: components["schemas"]["Quantity"];

@@ -102,8 +102,16 @@ func validateDedupID(s string) error {
 
 // Dedup collapses events with the same (source, event_type, dedup_id),
 // keeping the first occurrence in order. It is what every consumer of the
-// stream must do (PART 199) and what ClickHouse's ReplacingMergeTree does
-// at merge time.
+// stream must do (PART 199).
+//
+// It is NOT what ClickHouse's ReplacingMergeTree does, which this comment used
+// to claim: the engine keeps the row with the highest version, or the last
+// inserted when versions tie. The two agree only while the copies are identical
+// -- which they now are, because the pipeline derives every timestamp from the
+// archived receipt rather than a fresh clock (F-62). Before that they could
+// differ, and a bus consumer and a ClickHouse reader would have resolved the
+// same event to opposite values of decision_available_at with neither of them
+// wrong.
 func Dedup(events []NormalizedEvent) []NormalizedEvent {
 	type key struct{ source, eventType, dedup string }
 	seen := make(map[key]struct{}, len(events))

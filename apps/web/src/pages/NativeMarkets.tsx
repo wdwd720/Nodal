@@ -34,13 +34,24 @@ import { Bps, Qty } from "../components/Money.tsx";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../lib/honesty.ts";
 import { useActiveAccountId } from "../session.tsx";
 
-// Prices are NOT on this scale. A price is an integer scaled by the market's own
-// `price_scale`, which the API returns on every market and every quote and which
-// is eighteen, not six. Rendering one with DecimalValue -- which only inserts
-// thousands separators -- showed a fraction-of-a-Credit price as a sixteen-digit
-// number of Credits, on the emphasised Price field and on the Effective price of
-// a live quote (F-44). Use `Qty` with the scale the response carries, never a
-// constant: the scale is a fact about the asset and the API states it.
+// The Credit's own scale, and the ONLY thing it may be used for: quantities
+// denominated in Credits.
+//
+// Two other scales appear on this page and neither is this one. A price is an
+// integer at the market's `price_scale`, which is eighteen. An asset quantity is
+// at the asset's `asset_decimals`, which a creator chooses and which may be
+// anything up to eighteen.
+//
+// Both were rendered at six. The price was fixed first (F-44): a
+// fraction-of-a-Credit price appeared as a sixteen-digit number of Credits on
+// the emphasised Price field. The asset quantities were left, and recorded as
+// left, because they were accidentally right -- the asset-creation screen also
+// sends six. They are wrong the moment a creator asks for anything else, by a
+// factor of ten to the difference, on the supply and holder figures a buyer
+// judges concentration from.
+//
+// So: `Qty` with the scale the response carries, never a constant, unless the
+// quantity really is Credits.
 const CREDIT_DECIMALS = 6;
 
 /** What each asset status means for somebody deciding whether to trade. */
@@ -209,7 +220,7 @@ function MarketDetail(props: { readonly assetId: string }): ReactNode {
                 <Pill tone={STATUS_COPY[m.status]?.tone ?? "neutral"}>{m.status}</Pill>
               </Field>
               <Field label="In circulation" note="Everything the curve has sold.">
-                <Qty value={m.circulating_supply} decimals={CREDIT_DECIMALS} />
+                <Qty value={m.circulating_supply} decimals={m.asset_decimals} absent="no asset scale" />
               </Field>
               <Field
                 label="Credits in the reserve"
@@ -221,7 +232,7 @@ function MarketDetail(props: { readonly assetId: string }): ReactNode {
                 <Qty value={m.virtual_credit_reserve} decimals={CREDIT_DECIMALS} symbol="Credits" />
               </Field>
               <Field label="Unsold supply" note="Still held by the curve.">
-                <Qty value={m.asset_reserve} decimals={CREDIT_DECIMALS} />
+                <Qty value={m.asset_reserve} decimals={m.asset_decimals} absent="no asset scale" />
               </Field>
               <Field label="Platform fee">
                 <Bps value={m.platform_fee_bps} />
@@ -267,7 +278,7 @@ function Holders(props: { readonly market: NativeMarket }): ReactNode {
             <Identifier value={holder.account_id} />
           </td>
           <td>
-            <Qty value={holder.quantity} decimals={CREDIT_DECIMALS} />
+            <Qty value={holder.quantity} decimals={props.market.asset_decimals} absent="no asset scale" />
           </td>
         </tr>
       ))}
@@ -374,7 +385,15 @@ function TradePanel(props: { readonly market: NativeMarket }): ReactNode {
         <>
           <FieldGrid columns={3}>
             <Field label="You would receive" note="At the state version priced against, and not a promise." emphasis>
-              <Qty value={quote.data.expected_output} decimals={CREDIT_DECIMALS} />
+              {side === "BUY" ? (
+                <Qty
+                  value={quote.data.expected_output}
+                  decimals={quote.data.asset_decimals}
+                  absent="no asset scale"
+                />
+              ) : (
+                <Qty value={quote.data.expected_output} decimals={CREDIT_DECIMALS} symbol="Credits" />
+              )}
             </Field>
             <Field label="Platform fee">
               <Qty value={quote.data.platform_fee} decimals={CREDIT_DECIMALS} symbol="Credits" />
