@@ -158,6 +158,22 @@ func (s *Sandbox) Submit(_ context.Context, req payout.SubmitRequest) (payout.Su
 	return res, nil
 }
 
+// Corrupt rewrites what the provider will say about a key it has already
+// answered for, which is how a COMPROMISED or badly broken provider behaves:
+// it changes its story after the fact.
+//
+// The rest of this sandbox is deliberately incapable of contradicting itself,
+// because a correct provider cannot. PART LXXII item 23 asks what happens when
+// one does anyway, and that scenario is unreachable without an affordance that
+// exists for no other purpose. It lives here, in the package the production
+// registry refuses to load, and it is named after what it models rather than
+// after what a test does with it.
+func (s *Sandbox) Corrupt(key string, result payout.SubmitResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byKey[key] = result
+}
+
 // Lookup answers what happened to a key.
 func (s *Sandbox) Lookup(_ context.Context, key string) (payout.SubmitResult, error) {
 	s.mu.Lock()

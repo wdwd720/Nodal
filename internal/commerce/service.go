@@ -10,11 +10,13 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -51,8 +53,16 @@ const CapMarketplace valuedomain.CapabilityKey = "MARKETPLACE"
 type Service struct {
 	poster  Poster
 	credits Credits
+	auditor Audit
 	clk     clock.Clock
 	caps    CapabilityResolver
+}
+
+// Audit is the part of internal/audit this package uses. It appends inside
+// the caller's transaction, so a purchase's audit row commits with the
+// purchase or not at all.
+type Audit interface {
+	Append(ctx context.Context, tx pgx.Tx, e audit.Event) (audit.Appended, error)
 }
 
 // NewService returns a Service. No argument may be nil.
@@ -61,11 +71,11 @@ type Service struct {
 // active and no purchase will commit. That is the correct default: a
 // deployment that has not decided whether it runs a user-to-user marketplace
 // has not decided yes.
-func NewService(poster Poster, credits Credits, clk clock.Clock) *Service {
-	if poster == nil || credits == nil || clk == nil {
-		panic("commerce: NewService requires a poster, a credit service and a clock")
+func NewService(poster Poster, credits Credits, auditor Audit, clk clock.Clock) *Service {
+	if poster == nil || credits == nil || auditor == nil || clk == nil {
+		panic("commerce: NewService requires a poster, a credit service, an audit writer and a clock")
 	}
-	return &Service{poster: poster, credits: credits, clk: clk}
+	return &Service{poster: poster, credits: credits, auditor: auditor, clk: clk}
 }
 
 // SetCapabilityResolver attaches the deployment's gate state. Passing nil
@@ -447,7 +457,55 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 		return Order{}, mapError(err)
 	}
 	o.CreatedAt = o.CreatedAt.UTC()
+
+	// Proof (STAGE 15; PARTS 87-88). The order goes into BOTH parties' audit
+	// streams, in this transaction with the money: a purchase is one event to
+	// the buyer and a different one to the earner, and each is entitled to
+	// prove their own half without being handed the other's history.
+	if err := s.recordOrder(ctx, tx, o, p); err != nil {
+		return Order{}, err
+	}
 	return o, nil
+}
+
+// recordOrder appends the order to the buyer's and the earner's audit streams.
+func (s *Service) recordOrder(ctx context.Context, tx pgx.Tx, o Order, p Product) error {
+	actorType, actorID := actorFrom(ctx)
+	payload, err := json.Marshal(map[string]any{
+		"order_id":               o.ID.String(),
+		"product_id":             o.ProductID.String(),
+		"product_version":        o.ProductVersion,
+		"product_kind":           string(p.Kind),
+		"buyer_account_id":       o.BuyerAccountID.String(),
+		"seller_account_id":      o.SellerAccountID.String(),
+		"earning_account_id":     o.EarningAccountID.String(),
+		"price":                  o.Price.String(),
+		"platform_fee":           o.PlatformFee.String(),
+		"seller_proceeds":        o.SellerProceeds.String(),
+		"earning_origin":         string(o.EarningOrigin),
+		"journal_transaction_id": o.JournalTxID.String(),
+	})
+	if err != nil {
+		return errs.Wrap(err, errs.CodeInternal, "commerce: encode order audit payload")
+	}
+	for _, ev := range []audit.Event{
+		{
+			Stream: audit.AccountStream(o.BuyerAccountID.String()),
+			Action: "internal_commerce.purchase", Reason: "internal marketplace purchase",
+		},
+		{
+			Stream: audit.AccountStream(o.EarningAccountID.String()),
+			Action: "internal_commerce.sale", Reason: "internal marketplace sale",
+		},
+	} {
+		ev.ActorType, ev.ActorID = actorType, actorID
+		ev.ResourceType, ev.ResourceID = "internal_commerce_order", o.ID.String()
+		ev.Payload, ev.OccurredAt = payload, o.CreatedAt
+		if _, err := s.auditor.Append(ctx, tx, ev); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func orEmpty(m map[string]any) map[string]any {
@@ -479,4 +537,13 @@ func mapError(err error) error {
 		return mapped
 	}
 	return errs.Wrap(err, errs.CodeInternal, "commerce: database error")
+}
+
+// actorFrom reports the principal on the context, or the system actor when
+// there is none. A purchase always has an actor; a seeding script does not.
+func actorFrom(ctx context.Context) (string, string) {
+	if p, ok := security.PrincipalFrom(ctx); ok && p.SubjectID != "" {
+		return string(p.ActorType), p.SubjectID
+	}
+	return "SYSTEM", "commerce-service"
 }

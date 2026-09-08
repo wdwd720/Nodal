@@ -49,7 +49,7 @@ migration.
 | 12 | Rails unified behind FinancialIntent | **done** (`settlement.FinancialIntent`, `settlement.Compile`, wired in front of every Domain A command) |
 | 13 | LegalCapabilityRouter, composite capability key | **done** (`internal/legalrouter`, gates extended, migration 00714) |
 | 14 | Agent authority levels | **done** (`internal/agentauthority`) |
-| 15 | Reality / Prediction / Proof integration with Domain A | **not started** |
+| 15 | Reality / Prediction / Proof integration with Domain A | **done** — prices, instrument, audit events; see below |
 | 16 | Frontend | **done for Domain A** (5 pages incl. Create Asset and trading, honesty rules enforced, 69 browser tests) |
 | 17 | Admin tooling for Domain A | **done** (9 administrative action kinds + executors; `internal/httpapi/executors_domaina.go`) |
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
@@ -308,11 +308,80 @@ unexercisable outside a test binary:
   silent downgrade — and it still denies payouts, because a development policy
   must never be where somebody discovers payouts were switched on.
 
+### Stage 15 as built — Reality, Prediction and Proof over Domain A
+
+All three subsystems already existed and already worked. What did not exist was
+any way for them to SEE the Nodal-native economy, and that was the whole gap:
+
+- **no prices.** `asset_prices` had nothing from a native market, so
+  `prediction.PGPriceReader` could not resolve an outcome on one.
+- **no instrument.** Predictions, strategy IR and the rest of the platform name
+  tradable things by instrument id. A native market had no row, so it could not
+  be named at all and the prediction ledger was Domain B and C only.
+- **no audit events.** `internal/commerce` and `internal/nativemarket` wrote
+  none, so the Merkle checkpoints and PART 88 proof bundles covered every rail
+  EXCEPT the economy this product is built on.
+
+Three integrations, each inside the transaction of the act it describes,
+because being in that transaction is the substance of the claim rather than a
+detail of it:
+
+1. **Reality.** Every fill publishes the market's post-trade SPOT price, and
+   market creation publishes the opening price. `observed_at` equals
+   `received_at` deliberately: Nodal is the venue and observed the trade by
+   executing it, so a gap between the two would be an invented provider lag,
+   and an invented lag is exactly what lets a backtest believe a price was
+   knowable before it existed. `raw_ref` carries the fill id, so no price
+   exists without the trade that set it.
+
+   The published number is `SpotAfter` — the marginal price the NEXT trader
+   faces — not `EffectivePrice`, which moves with the size of this particular
+   order. A series built from effective prices would score order sizing rather
+   than the market.
+
+2. **Prediction.** A market is registered as a `SPOT_PAIR` instrument of
+   (native asset / Credit). Predictions on Domain A then go through the REAL
+   ledger and the REAL resolver, with no Domain A special case anywhere in
+   `internal/prediction`.
+
+3. **Proof.** A fill is appended to the trader's audit stream; a purchase is
+   appended to BOTH parties' streams, because a purchase is one event to the
+   buyer and a different one to the earner and each is entitled to prove their
+   own half without being handed the other's history.
+
+**Two things this DOES NOT do**, stated rather than left to inference:
+
+- The instrument is created `HALTED` and its status is not mirrored from the
+  market afterwards. A market is created PENDING, so ACTIVE would be false at
+  that moment; of the two ways to be wrong, a registry that understates
+  tradability is the safe one. Mirroring is named work.
+- Domain A does not go through `internal/reality`'s ingest pipeline. That
+  pipeline exists for external feeds — a raw archive, provider clocks, dedup,
+  gap detection — and pushing our own database through it would mean inventing
+  a "provider" for ourselves. What Domain A takes from PART XLII is the
+  timestamp discipline, which is the part that is actually true here.
+
+### One defect this work introduced and one it exposed
+
+`asset_prices` identity is `(asset, quote, source, observed_at)` and the table
+is append-only — `cp_app` holds no UPDATE grant, which is deliberate. The first
+attempt to publish prices tried to upsert, and the missing grant caught it. The
+second attempt nudged colliding stamps forward by a nanosecond, which
+`timestamptz` stores as the same instant. The step is a microsecond, and it can
+only move a price LATER, never earlier — the conservative direction.
+
+`TestIntegration_ATradeIsADeclaredCrossDomainConversion` read "the most recent
+NATIVE_TRADE row in the database" and was only correct while no other test
+traded later on a faster clock. It is now scoped to its own fill.
+
 ## 0.3 Next exact work, in order
 
-1. **Stage 15** — Reality Engine and Prediction Ledger integrated with Domain A.
-2. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.
-3. **The three uncovered PART LXXII items** (5, 14, 23), named in the readiness report.
+1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.
+3. **Stage 12's second half** — expressing Domain C as a `FinancialIntent` through the same compiler.
+
+The PART LXXII adversarial list is complete: thirty of thirty, item by item in the readiness report
+§3a. The last three (out-of-order webhook, cross-account wash trading, contradictory provider status)
+closed after this document last said they were open, and closing item 23 found F-23.
 
 ## 0.4 Verification commands that matter
 

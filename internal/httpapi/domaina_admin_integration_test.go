@@ -25,11 +25,13 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -67,8 +69,8 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	credits := credit.NewService(led, clk)
 
 	assetSvc := nativeasset.NewService(clk, nil)
-	marketSvc := nativemarket.NewService(led, credits, clk)
-	commerceSvc := commerce.NewService(led, credits, clk)
+	marketSvc := nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
+	commerceSvc := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	commerceSvc.SetCapabilityResolver(commerceCaps{commerce.CapMarketplace: true})
 
 	adminSvc := admin.NewService(clk, audit.NewWriter())
@@ -544,7 +546,7 @@ func TestIntegration_ADeploymentWithoutTheInternalEconomyRegistersNoExecutors(t 
 	partial := DomainAExecutors(DomainAExecutorDeps{NativeMarkets: nativemarket.NewService(
 		ledger.NewService(clock.NewFake(testNow), "x"),
 		credit.NewService(ledger.NewService(clock.NewFake(testNow), "x"), clock.NewFake(testNow)),
-		clock.NewFake(testNow))})
+		valuation.NewPriceStore(clock.NewFake(testNow)), audit.NewWriter(), instruments.NewRepository(), clock.NewFake(testNow))})
 	require.Len(t, partial, 4, "the four market controls and nothing else")
 	for _, k := range []admin.Kind{
 		admin.KindNativeMarketHalt, admin.KindNativeMarketCloseOnly,

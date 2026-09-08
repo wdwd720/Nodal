@@ -14,6 +14,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/config"
@@ -122,7 +123,7 @@ func newCommerceHarnessWith(
 	clk := clock.System()
 	led := ledger.NewService(clk, "httpapi-commerce-itest")
 	credits := credit.NewService(led, clk)
-	svc := commerce.NewService(led, credits, clk)
+	svc := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	svc.SetCapabilityResolver(caps)
 
 	sellerUser, sellerAccount := seedAccount(t, d)
@@ -590,7 +591,7 @@ func TestIntegration_JurisdictionTurningBlockedMidSessionStopsTheNextPurchase(t 
 	clk := clock.System()
 	led := ledger.NewService(clk, "httpapi-commerce-itest")
 	credits := credit.NewService(led, clk)
-	svc := commerce.NewService(led, credits, clk)
+	svc := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	svc.SetCapabilityResolver(caps)
 
 	sellerUser, sellerAccount := seedAccount(t, d)

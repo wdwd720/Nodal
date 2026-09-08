@@ -17,14 +17,17 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
+	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -147,7 +150,7 @@ func newFixture(t *testing.T) *fixture {
 		creator:     newAccount(t),
 		trader:      newAccount(t),
 	}
-	f.svc = NewService(led, credits, clk)
+	f.svc = NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
 
 	suffix := uuid.NewString()[:6]
 	require.NoError(t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
@@ -756,15 +759,18 @@ func requireAlert(t *testing.T, alerts []Alert, want AlertKind) {
 
 func TestIntegration_ATradeIsADeclaredCrossDomainConversion(t *testing.T) {
 	f := newFixture(t)
-	_, err := f.buy(f.trader, 1_000_000_000, money.Quantity{})
+	buy, err := f.buy(f.trader, 1_000_000_000, money.Quantity{})
 	require.NoError(t, err)
 
+	// Scoped to THIS fill's journal transaction. The query used to take the
+	// most recent NATIVE_TRADE row in the database, which is only this trade
+	// while no other test has traded later on a faster clock.
 	var from, to string
 	require.NoError(t, testDB.QueryRow(f.ctx,
-		`SELECT coalesce(conversion_from,''), coalesce(conversion_to,'')
-		   FROM journal_transactions
-		  WHERE kind = 'NATIVE_TRADE' AND conversion_from IS NOT NULL
-		  ORDER BY posted_at DESC LIMIT 1`).Scan(&from, &to))
+		`SELECT coalesce(jt.conversion_from,''), coalesce(jt.conversion_to,'')
+		   FROM journal_transactions jt
+		   JOIN native_market_fills fl ON fl.journal_transaction_id = jt.id
+		  WHERE fl.id = $1 AND jt.kind = 'NATIVE_TRADE'`, buy.FillID).Scan(&from, &to))
 	require.Equal(t, string(valuedomain.InternalCredit), from)
 	require.Equal(t, string(valuedomain.InternalNativeAsset), to)
 }
@@ -794,4 +800,109 @@ func mustJournalTx(t *testing.T) string {
 	require.NoError(t, testDB.QueryRow(context.Background(),
 		`SELECT id::text FROM journal_transactions ORDER BY posted_at DESC LIMIT 1`).Scan(&id))
 	return id
+}
+
+// secondAccountFor creates another account owned by the same user as an
+// existing one, which is the only "same controlled actor" this system can
+// prove.
+func secondAccountFor(t *testing.T, existing accounts.AccountID) accounts.AccountID {
+	t.Helper()
+	var owner accounts.UserID
+	require.NoError(t, testDB.QueryRow(context.Background(),
+		`SELECT owner_user_id FROM accounts WHERE id = $1`, existing).Scan(&owner))
+	acct, err := accounts.NewRepository().CreateAccount(context.Background(), testDB, owner, accounts.KindCustomer)
+	require.NoError(t, err)
+	return acct.ID
+}
+
+// TestIntegration_WashTradingAcrossTwoAccountsOfOneUserIsDetected is PART LXXII
+// item 14: two accounts under the same controlled actor wash-trading, where
+// detectable.
+//
+// The qualifier matters. Shared ownership is a recorded fact and is the only
+// form of common control this system can prove; coordination between two
+// people who merely know each other is invisible here, and the alert says so
+// rather than implying a reach it does not have.
+//
+// The alert is CRITICAL and still does not block. Blocking on a surveillance
+// heuristic is a denial-of-service vector against creators, and the operator
+// controls that DO stop a market are the ones somebody chose.
+func TestIntegration_WashTradingAcrossTwoAccountsOfOneUserIsDetected(t *testing.T) {
+	f := newFixture(t)
+	other := secondAccountFor(t, f.trader)
+	f.fund(other, 50_000_000_000)
+
+	// The second account acquires a position first. Wash trading needs both
+	// sides to be possible, and in an AMM a seller must already hold units.
+	stock, err := f.buy(other, 2_000_000_000, money.Quantity{})
+	require.NoError(t, err)
+	requireNoAlert(t, stock.Alerts, AlertWashTrade)
+
+	// The first account buys, which is one side of the wash.
+	buy, err := f.buy(f.trader, 2_000_000_000, money.Quantity{})
+	require.NoError(t, err)
+	requireNoAlert(t, buy.Alerts, AlertWashTrade)
+
+	// The OTHER account, same owner, sells inside the window. One actor has
+	// now taken both sides of the same market, manufacturing volume and a
+	// price without transferring risk to anybody outside itself.
+	sell, err := f.sell(other, stock.Fill.AssetsOut, money.Quantity{})
+	require.NoError(t, err, "the trade is not blocked; it is recorded and flagged")
+	requireAlert(t, sell.Alerts, AlertWashTrade)
+
+	stored, err := f.svc.Alerts(f.ctx, testDB, f.market.ID, 50)
+	require.NoError(t, err)
+	var wash *Alert
+	for i := range stored {
+		if stored[i].Kind == AlertWashTrade {
+			wash = &stored[i]
+			break
+		}
+	}
+	require.NotNil(t, wash, "the alert must be persisted, not only returned")
+	require.Equal(t, SeverityCritical, wash.Severity)
+	require.Equal(t, f.trader.String(), wash.Detail["other_account_id"],
+		"the alert must name the other account so a reviewer can check the claim")
+	require.NotEmpty(t, wash.Detail["shared_owner_user_id"])
+	require.Contains(t, wash.Detail["detection_basis"], "shared account ownership")
+	require.NotNil(t, wash.FillID)
+}
+
+// TestIntegration_TwoUnrelatedAccountsTradingIsNotWashTrading is the control
+// that makes the test above mean something. A CRITICAL accusation that a
+// coincidence can trigger is worse than no detector: it teaches reviewers to
+// dismiss the alert.
+func TestIntegration_TwoUnrelatedAccountsTradingIsNotWashTrading(t *testing.T) {
+	f := newFixture(t)
+	stranger := newAccount(t) // a different user entirely
+	f.fund(stranger, 50_000_000_000)
+
+	// The stranger acquires a position, the fixture's trader buys, and the
+	// stranger sells inside the window — the same SHAPE as the wash above,
+	// with the one difference that matters: different owners.
+	stock, err := f.buy(stranger, 2_000_000_000, money.Quantity{})
+	require.NoError(t, err)
+
+	buy, err := f.buy(f.trader, 2_000_000_000, money.Quantity{})
+	require.NoError(t, err)
+	requireNoAlert(t, buy.Alerts, AlertWashTrade)
+
+	sell, err := f.sell(stranger, stock.Fill.AssetsOut, money.Quantity{})
+	require.NoError(t, err)
+	requireNoAlert(t, sell.Alerts, AlertWashTrade)
+
+	// The stranger's own buy-then-sell is still a rapid round trip, which is a
+	// different and lesser finding. Both detectors firing on the same trade
+	// would mean the wash detector had learned nothing the round-trip detector
+	// did not already know.
+	requireAlert(t, sell.Alerts, AlertRapidRoundTrip)
+}
+
+func requireNoAlert(t *testing.T, alerts []Alert, unwanted AlertKind) {
+	t.Helper()
+	for _, a := range alerts {
+		if a.Kind == unwanted {
+			t.Fatalf("did not expect a %s alert, got %v", unwanted, alerts)
+		}
+	}
 }

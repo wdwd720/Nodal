@@ -836,3 +836,180 @@ func TestIntegration_APayoutIsRefusedWhileTheFundingIsDisputed(t *testing.T) {
 	require.False(t, current.State.Terminal(), "a dispute must not terminate a payout by itself")
 	require.Equal(t, "400", current.ReservedQuantity.String())
 }
+
+// TestIntegration_ACompromisedProviderCannotRewriteAFinishedPayout is PART
+// LXXII item 23.
+//
+// The scenario is a provider that changes its story after the fact: it settled
+// a payout and now says it failed, or it failed one and now says it settled.
+// Either could be a compromise, a bug or a bad migration on their side; from
+// here they are indistinguishable, and the only safe reading of "the provider
+// contradicts itself" is that the provider is currently not authoritative.
+//
+// So the recorded outcome does not move. It is not re-posted, not reversed and
+// not quietly corrected — every one of those would let whoever controls the
+// provider's responses move Nodal's money by lying twice. What DOES happen is
+// that the contradiction is recorded and surfaced as an error, because the
+// failure this test was written after was the opposite one: Reconcile returned
+// early on a finished payout without asking anything, so a provider that
+// changed its answer left no trace at all.
+func TestIntegration_ACompromisedProviderCannotRewriteAFinishedPayout(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+
+	// The platform PAYOUT_SETTLED account is shared by every payout in this
+	// database, so what matters is the change this payout makes to it.
+	beforeSubmit := f.platformBalance(ledger.CodePayoutSettled)
+	settled, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	require.Equal(t, payout.StateSettled, settled.State)
+	require.NotEmpty(t, settled.ProviderIdempotencyKey)
+	afterSubmit := f.platformBalance(ledger.CodePayoutSettled)
+	require.Equal(t, "400", afterSubmit.Sub(beforeSubmit).String())
+
+	// The provider now says it failed.
+	f.provider.Corrupt(settled.ProviderIdempotencyKey, payout.SubmitResult{
+		Status: payout.ProviderFailed, RawStatus: "failed",
+		FailureReason: "no such payout",
+	})
+
+	after, err := f.svc.Reconcile(f.ctx, testDB, req.ID)
+	require.Error(t, err, "a provider contradicting a settled payout must not pass in silence")
+	require.Equal(t, errs.CodeReconciliationRequired, errs.CodeOf(err))
+	require.Contains(t, err.Error(), "recorded as settled")
+
+	require.Equal(t, payout.StateSettled, after.State,
+		"the recorded outcome must not follow the provider's new story")
+	require.Equal(t, "400", after.SettledQuantity.String())
+	require.Equal(t, afterSubmit.String(), f.platformBalance(ledger.CodePayoutSettled).String(),
+		"no compensating posting may be made on the word of a contradictory provider")
+	require.Equal(t, "0", f.balance(ledger.CodePayoutReserved).String())
+	require.Equal(t, "600", f.balance(ledger.CodeCreditBalance).String(),
+		"the customer's Credits must not come back because the provider changed its mind")
+	require.NoError(t, f.svc.VerifyReservations(f.ctx, testDB, f.creditAsset))
+	require.NoError(t, f.credits.VerifyProvenance(f.ctx, testDB, f.account))
+
+	// And the contradiction is on file. An operator who has to decide what
+	// really happened needs the provider's own words, not our summary of them.
+	require.Equal(t, 1, f.providerEvents(req.ID, "failed"),
+		"the contradictory answer must be recorded as a provider event")
+}
+
+// TestIntegration_AProviderClaimingItPaidAFailedPayoutIsNotBelieved is the
+// other direction, and the more expensive one: the reservation has already
+// been returned to the customer, so believing the provider would mean the
+// units are spendable AND gone.
+func TestIntegration_AProviderClaimingItPaidAFailedPayoutIsNotBelieved(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+
+	settledBefore := f.platformBalance(ledger.CodePayoutSettled)
+	f.provider.FailNext("account closed at the receiving bank")
+	failed, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	require.Equal(t, payout.StateFailed, failed.State)
+	require.Equal(t, "1000", f.balance(ledger.CodeCreditBalance).String())
+
+	f.provider.Corrupt(failed.ProviderIdempotencyKey, payout.SubmitResult{
+		Status: payout.ProviderSettled, ProviderReference: "sbx-invented", RawStatus: "settled",
+	})
+
+	after, err := f.svc.Reconcile(f.ctx, testDB, req.ID)
+	require.Error(t, err)
+	require.Equal(t, errs.CodeReconciliationRequired, errs.CodeOf(err))
+	require.Contains(t, err.Error(), "recorded as failed")
+
+	require.Equal(t, payout.StateFailed, after.State)
+	require.Equal(t, "0", after.SettledQuantity.String())
+	require.Equal(t, "1000", f.balance(ledger.CodeCreditBalance).String(),
+		"the returned units stay returned")
+	require.Equal(t, settledBefore.String(), f.platformBalance(ledger.CodePayoutSettled).String(),
+		"nothing may be posted as settled on a claim that contradicts our record")
+	require.NoError(t, f.svc.VerifyReservations(f.ctx, testDB, f.creditAsset))
+	require.NoError(t, f.credits.VerifyProvenance(f.ctx, testDB, f.account))
+	require.Equal(t, 1, f.providerEvents(req.ID, "settled"))
+}
+
+// TestIntegration_AProviderSwappingTheReferenceOfASettledPayoutContradictsItself:
+// the status still says SETTLED, so nothing looks wrong at a glance, but the
+// payout being described is a different one. This is what a compromised
+// provider stitching two payouts together looks like.
+func TestIntegration_AProviderSwappingTheReferenceOfASettledPayoutContradictsItself(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+
+	settled, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	require.NotEmpty(t, settled.ProviderReference)
+
+	f.provider.Corrupt(settled.ProviderIdempotencyKey, payout.SubmitResult{
+		Status: payout.ProviderSettled, ProviderReference: "sbx-somebody-elses-payout",
+		RawStatus: "settled",
+	})
+
+	after, err := f.svc.Reconcile(f.ctx, testDB, req.ID)
+	require.Error(t, err)
+	require.Equal(t, errs.CodeReconciliationRequired, errs.CodeOf(err))
+	require.Contains(t, err.Error(), "different reference")
+	require.Equal(t, payout.StateSettled, after.State)
+	require.Equal(t, settled.ProviderReference, after.ProviderReference,
+		"the reference on file is the one recorded when the payout settled")
+}
+
+// TestIntegration_AProviderThatAgreesWithASettledPayoutIsNotAContradiction is
+// the control. Without it the three tests above would also pass against a
+// Reconcile that called every terminal payout a contradiction, which would be
+// an alarm with no information in it.
+func TestIntegration_AProviderThatAgreesWithASettledPayoutIsNotAContradiction(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(400, f.input())
+	require.NoError(t, err)
+
+	settled, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	require.Equal(t, payout.StateSettled, settled.State)
+	settledOut := f.platformBalance(ledger.CodePayoutSettled)
+
+	after, err := f.svc.Reconcile(f.ctx, testDB, req.ID)
+	require.NoError(t, err, "an agreeing provider is not a contradiction")
+	require.Equal(t, payout.StateSettled, after.State)
+	require.Equal(t, settledOut.String(), f.platformBalance(ledger.CodePayoutSettled).String(),
+		"re-reconciling a settled payout must not post it twice")
+	require.Equal(t, 2, f.providerEvents(req.ID, "settled"),
+		"the agreeing answer is recorded too — the submission's and the reconcile's; "+
+			"only the interpretation of a disagreeing one differs")
+}
+
+// platformBalance reads a platform-side ledger balance for the credit asset.
+func (f *fixture) platformBalance(code ledger.Code) money.Quantity {
+	f.t.Helper()
+	var raw string
+	require.NoError(f.t, testDB.QueryRow(f.ctx,
+		`SELECT coalesce((SELECT b.balance FROM ledger_accounts la
+		    JOIN ledger_balances b ON b.ledger_account_id = la.id
+		   WHERE la.owner_type='PLATFORM' AND la.code=$1 AND la.asset_id=$2), 0)::text`,
+		string(code), f.creditAsset).Scan(&raw))
+	v, err := money.ParseQuantity(raw)
+	require.NoError(f.t, err)
+	return v
+}
+
+// providerEvents counts recorded provider events for a request with a raw
+// status. It reads the audit trail rather than the service's return value,
+// because "the contradiction was recorded" is a claim about the database.
+func (f *fixture) providerEvents(id payout.RequestID, rawStatus string) int {
+	f.t.Helper()
+	var n int
+	require.NoError(f.t, testDB.QueryRow(f.ctx,
+		`SELECT count(*) FROM payout_provider_events
+		  WHERE request_id = $1 AND provider_status = $2 AND direction = 'RESPONSE'`,
+		id, rawStatus).Scan(&n))
+	return n
+}

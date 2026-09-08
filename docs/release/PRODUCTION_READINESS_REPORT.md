@@ -8,7 +8,7 @@ are not synonyms and this report does not treat them as such.
 
 | Level | Status |
 |---|---|
-| **CODE READY** | **NO** — Stage 10 is externally blocked; Stage 15 and Stages 20–24 are not built |
+| **CODE READY** | **NO** — Stage 10 is externally blocked; Stage 21 is partial and Stages 22–24 are not built |
 | **SANDBOX READY** | **PARTIAL** — the internal economy runs end to end against a sandbox payout provider; no external provider sandbox is integrated |
 | **STAGING READY** | **NO** — no staging deployment of the new subsystems has been exercised |
 | **PROVIDER READY** | **NO** — no payout or hosted provider contract exists (BLOCKERS B-01, B-05) |
@@ -187,6 +187,22 @@ Run here against the real `cmd/api` binary on a seeded local database:
 | Purchases refused `IDEMPOTENCY_IN_PROGRESS` | 18 — the shared-key iterations racing, the idempotency store working |
 | Purchases COMMITTED | **none, and this is the gap.** Committing needs the MARKETPLACE gate ACTIVE, which is high risk: three distinct principals, a step-up and four evidence references. A load script that activated its own gate would be one that switched off a control to get a number. |
 
+### Reality, Prediction and Proof over Domain A (Stage 15)
+
+| Property | Evidence |
+|---|---|
+| Every fill publishes the market's post-trade spot price, in the trade's transaction | `TestIntegration_ATradePublishesAPriceWhoseKnowledgeTimeIsTheTrade` |
+| A market publishes an opening price at creation, so a prediction made before the first trade is resolvable | same test — without it the resolver refuses, correctly, rather than inventing a price |
+| `observed_at` equals `received_at`, because Nodal is the venue and has no provider clock to lag behind | same test, asserted rather than assumed |
+| Every price names the fill that set it | `raw_ref = native_market_fill:<id>` |
+| Two prices from one market never share an instant, on an append-only table with no UPDATE grant | same test — the stamp is nudged forward by a microsecond, never backward |
+| A native market is registered as a `SPOT_PAIR` instrument, so predictions can name it | `TestIntegration_ANativeMarketIsRegisteredAsAnInstrument` |
+| A prediction on a Domain A market resolves through the REAL ledger and resolver, with no Domain A special case | `TestIntegration_APredictionOnANativeMarketResolvesFromNodalNativePrices` |
+| **No lookahead**: a price received after the horizon end cannot change the outcome | same test, with a control asserting the price really did move afterwards |
+| A native trade is in the trader's audit stream and that stream VERIFIES | `TestIntegration_ATradeIsInTheAccountsVerifiableAuditStream` (`audit.Verifier`) |
+| An audit event cannot commit without its trade | same test: a rolled-back trade leaves the event count unchanged |
+| A purchase is in both parties' audit streams | `internal_commerce.purchase` and `internal_commerce.sale`, written in the purchase's transaction |
+
 ### Policy and authority
 
 | Property | Evidence |
@@ -242,7 +258,9 @@ earlier one.
   a pasted uuid, a moderation-state dropdown rather than hand-written JSON. That is a usability gap,
   not a missing capability, and an operator pasting the wrong uuid into a freeze is the risk it
   leaves open.
-- **Reality Engine and Prediction Ledger are not integrated with Domain A** (Stage 15).
+- **The instrument registry does not mirror a native market's status.** A market's instrument is
+  created HALTED and stays there; halting or delisting the market does not move it. Understating
+  tradability is the safe direction, and it is still wrong.
 
 ### Not run
 
@@ -250,8 +268,6 @@ earlier one.
 - The backup/restore drill against the new tables.
 - `govulncheck`, `gosec`, `gitleaks`, `trivy`, SBOM in this session.
 - Terraform validation in this session.
-- The PART LXXII adversarial list: **27 of 30 covered**, mapped item by item in §6 below. Items 5,
-  14 and 23 are not covered and are named there rather than left to inference.
 
 ### Externally blocked
 
@@ -273,7 +289,7 @@ checked is worse than a table that can.
 | 2 | 100 concurrent native-asset buys | `TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything` |
 | 3 | duplicate order request | `TestIntegration_ExecutionIsIdempotent`, `TestIntegration_APurchaseIsIdempotent` |
 | 4 | duplicate webhook | `TestProp_DuplicateWebhookOneEffect`, `TestContract_DuplicateWebhook` |
-| 5 | out-of-order webhook | **none** |
+| 5 | out-of-order webhook | `TestIntegration_OutOfOrderWebhooksNeverMoveADepositBackwards` — the newest event delivered first, then both older ones; plus `TestIntegration_ARejectionArrivingAfterConfirmationEscalates` |
 | 6 | provider timeout after success | `TestIntegration_AProviderTimeoutDoesNotDuplicateThePayout` |
 | 7 | process crash after provider success | `TestIntegration_Part49_CrashRecovery`, `TestExecutor_ResumeAfterCrash_SubmitRunningNeverResubmits` |
 | 8 | chargeback after Credits spent | `TestIntegration_ChargebackAfterTheCreditsAreSpent` |
@@ -282,7 +298,7 @@ checked is worse than a table that can.
 | 11 | payout using ineligible trading proceeds | `TestIntegration_PayoutEnforcesProvenance` |
 | 12 | market creator attempting hidden supply increase | `TestIntegration_ACreatorCannotChangeEconomicsAfterLaunch` — "raise max supply", through the migration role |
 | 13 | self-trade | `TestIntegration_SurveillanceRaisesAlertsWithoutBlocking` — `CREATOR_SELF_DEALING` raised, trade not blocked |
-| 14 | two accounts under one controlled actor wash-trading | **none** — the `WASH_TRADE` alert kind exists and nothing proves it fires |
+| 14 | two accounts under one controlled actor wash-trading | `TestIntegration_WashTradingAcrossTwoAccountsOfOneUserIsDetected`, with `TestIntegration_TwoUnrelatedAccountsTradingIsNotWashTrading` as the control |
 | 15 | stale quote | `TestContract_Order_StaleQuote`, `TestIntegration_QuotesAreRecordedAndExpire` |
 | 16 | market state changes between quote and execution | `TestIntegration_AStaleFillIsRefusedByTheDatabase` (SQLSTATE NM002) |
 | 17 | integer overflow | `TestCurve_ExtremeSizesDoNotOverflow`, and `money` is integer-only by construction |
@@ -291,7 +307,7 @@ checked is worse than a table that can.
 | 20 | malicious huge quantity | same — and it asserts the compiler does NOT cap: affordability is the ledger's question |
 | 21 | replay old request | `TestIntegration_IdempotentReplayIsPersisted`, `TestRecordedRejectionIsReplayedNotReExecuted` |
 | 22 | modify idempotency payload | `TestIntegration_IdempotencyKeyReuseWithADifferentBodyConflicts` |
-| 23 | compromised provider sends contradictory status | **none** |
+| 23 | compromised provider sends contradictory status | `TestIntegration_ACompromisedProviderCannotRewriteAFinishedPayout` and three more, including the agreeing-provider control (F-23) |
 | 24 | agent tries to withdraw | `TestCompile_AnAgentCanNeverRequestAPayout` — every level, every capability active |
 | 25 | agent attempts prohibited asset | `TestCompile_AnAgentIsRefusedAProhibitedAsset` — with a human and a different asset as controls |
 | 26 | agent attempts limit escalation | `TestPermits_ForbiddenActionsAreRefusedAtEveryLevelWithEveryCapability` (`CHANGE_OWN_LIMITS`) |
@@ -300,16 +316,34 @@ checked is worse than a table that can.
 | 29 | legal capability missing | `TestCompile_AFreshDeploymentPermitsOnlySimulation`, `TestIntegration_TheGateAndThePolicyMustBothAgree` |
 | 30 | jurisdiction turns blocked mid-session | `TestIntegration_JurisdictionTurningBlockedMidSessionStopsTheNextPurchase` — same session, same cookie, next command refused |
 
-The three gaps, stated as work rather than as risk acceptance:
+**30 of 30.** The three that were open in the previous version of this document are now closed, and
+none of them closed by writing a test around what the code already did:
 
-- **5 — out-of-order webhook.** Duplicate delivery is covered; delivery in the wrong ORDER is not.
-  The event store is append-only and consumers are idempotent, so the likely outcome is correct; that
-  is a prediction, not a test.
-- **14 — wash trading across two accounts under one actor.** The alert kind exists. Detecting shared
-  control is the hard half and nothing implements it, so the test would currently assert nothing.
-- **23 — contradictory provider status.** A provider that says SETTLED and then FAILED. `Reconcile`
-  returns early on a terminal state, so the contradiction is not reachable through it today; proving
-  the system refuses to act on one needs a provider double that can contradict itself.
+- **5 — out-of-order webhook.** The property proved is not "events arrive in order", which no test
+  can make true. It is that a deposit's status is a function of the furthest point the provider has
+  ever reported, never of the last packet received: the confirmation is delivered first, the two
+  earlier events after it, and the states the deposit never entered are left unstamped and
+  untransitioned. A straggler arriving after the money is AVAILABLE posts nothing. The one
+  out-of-order case that must not be a silent no-op — a rejection after a confirmation — escalates
+  to REVIEW_REQUIRED, because one of those two provider statements is false and nothing here can
+  tell which.
+- **14 — wash trading across two accounts under one actor.** A `WASH_TRADE` alert now fires when a
+  DIFFERENT account with the SAME `owner_user_id` took the opposite side of the same market inside
+  the round-trip window. Shared ownership is a recorded fact and is the only form of common control
+  this system can prove; the alert's detail carries `detection_basis` and, deliberately,
+  `what_this_cannot_see` — coordination between accounts owned by different users is invisible here
+  and the alert does not imply otherwise. It is CRITICAL and does not block, because blocking on a
+  surveillance heuristic is a denial-of-service vector against creators.
+- **23 — contradictory provider status.** Reaching the scenario at all exposed F-23: `Reconcile`
+  returned early on a terminal payout without asking the provider anything, so an operator got a
+  `nil` error that read as confirmation of a check that never happened. The provider is now asked,
+  its answer is recorded as a provider event whatever it says, and a definite contradiction is
+  surfaced as an error. **No state moves** — that is the control, and it is what stops whoever
+  controls the provider's responses from moving Nodal's money by lying twice.
+
+Each of the three carries a control that fails if the detector is trivial: a stranger trading the
+same shape is not wash trading, and a provider that agrees with a settled payout is not a
+contradiction.
 
 ## 4. The capability state of a fresh deployment
 

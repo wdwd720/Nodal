@@ -43,6 +43,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/credit"
@@ -160,7 +161,7 @@ func run() error {
 	clk := clock.System()
 	led := ledger.NewService(clk, "seedeconomy")
 	credits := credit.NewService(led, clk)
-	com := commerce.NewService(led, credits, clk)
+	com := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	// The seeder writes the CATALOGUE, never a sale, so it needs no capability
 	// resolver: publishing a product moves nothing. A purchase would, and the
 	// marketplace gate would refuse it — correctly, and the printed steps below

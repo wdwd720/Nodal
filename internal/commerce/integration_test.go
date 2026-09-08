@@ -19,6 +19,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/credit"
@@ -151,7 +152,7 @@ func newFixture(t *testing.T) *fixture {
 	// TestIntegration_WithoutTheMarketplaceCapabilityNothingSells proves the
 	// gate is load-bearing rather than decorative.
 	credits := credit.NewService(led, clk)
-	svc := commerce.NewService(led, credits, clk)
+	svc := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	svc.SetCapabilityResolver(activeCaps{commerce.CapMarketplace: true})
 	return &fixture{
 		t: t, ctx: ctx, clk: clk, led: led, credits: credits,
@@ -861,7 +862,7 @@ func TestIntegration_WithoutTheMarketplaceCapabilityNothingSells(t *testing.T) {
 	p := f.list(commerce.KindData, 1_000, 0)
 
 	// Listing and publishing are fine: they move no value. Buying is not.
-	closed := commerce.NewService(f.led, f.credits, f.clk) // no resolver at all
+	closed := commerce.NewService(f.led, f.credits, audit.NewWriter(), f.clk) // no resolver at all
 	shut := &fixture{t: t, ctx: f.ctx, clk: f.clk, led: f.led, credits: f.credits,
 		svc: closed, buyer: f.buyer, seller: f.seller, asset: f.asset}
 
@@ -870,7 +871,7 @@ func TestIntegration_WithoutTheMarketplaceCapabilityNothingSells(t *testing.T) {
 	require.Equal(t, errs.CodeCapabilityNotApproved, errs.CodeOf(err))
 
 	// Explicitly inactive is the same answer as unconfigured.
-	off := commerce.NewService(f.led, f.credits, f.clk)
+	off := commerce.NewService(f.led, f.credits, audit.NewWriter(), f.clk)
 	off.SetCapabilityResolver(activeCaps{commerce.CapMarketplace: false})
 	shut.svc = off
 	_, err = shut.purchase(p, f.buyer, q(1_000), "offgate-"+uuid.NewString())
@@ -905,7 +906,7 @@ func TestIntegration_ARepeatedPurchaseStopsWorkingWhenTheGateIsPulled(t *testing
 	_, err := f.purchase(p, f.buyer, q(500), key)
 	require.NoError(t, err)
 
-	off := commerce.NewService(f.led, f.credits, f.clk)
+	off := commerce.NewService(f.led, f.credits, audit.NewWriter(), f.clk)
 	off.SetCapabilityResolver(activeCaps{commerce.CapMarketplace: false})
 	shut := &fixture{t: t, ctx: f.ctx, clk: f.clk, led: f.led, credits: f.credits,
 		svc: off, buyer: f.buyer, seller: f.seller, asset: f.asset}

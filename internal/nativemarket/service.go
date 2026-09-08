@@ -8,13 +8,16 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -32,19 +35,57 @@ type Credits interface {
 	RecordLot(ctx context.Context, tx pgx.Tx, r credit.RecordLotRequest) (credit.Lot, error)
 }
 
+// Prices is the part of internal/valuation this package uses.
+//
+// A native market is Nodal's own venue, so this package is the SOURCE of these
+// observations rather than a consumer of somebody else's feed. See reality.go
+// for what that means for the timestamps.
+type Prices interface {
+	RecordPrice(ctx context.Context, q db.Querier, o valuation.PriceObservation) (valuation.RecordedPrice, error)
+}
+
+// Audit is the part of internal/audit this package uses. Appending inside the
+// caller's transaction is the requirement, not a convenience: an audit row
+// that can commit without its trade is a record that can disagree with what
+// happened.
+type Audit interface {
+	Append(ctx context.Context, tx pgx.Tx, e audit.Event) (audit.Appended, error)
+}
+
+// Instruments is the part of internal/instruments this package uses.
+//
+// A Domain A market is registered as a SPOT_PAIR of (native asset / Credit)
+// so the rest of the platform can NAME it. Without a row here the prediction
+// ledger cannot reference a native market at all — predictions are keyed by
+// instrument — and the Reality/Prediction machinery would stay Domain B and C
+// only, which is the gap STAGE 15 exists to close.
+type Instruments interface {
+	CreateSpotPair(ctx context.Context, tx pgx.Tx, spec instruments.SpotPairSpec) (instruments.Instrument, error)
+}
+
 // Service runs native markets.
 type Service struct {
-	poster  Poster
-	credits Credits
-	clk     clock.Clock
+	poster      Poster
+	credits     Credits
+	prices      Prices
+	auditor     Audit
+	instruments Instruments
+	clk         clock.Clock
 }
 
 // NewService returns a Service. No argument may be nil.
-func NewService(poster Poster, credits Credits, clk clock.Clock) *Service {
-	if poster == nil || credits == nil || clk == nil {
-		panic("nativemarket: NewService requires a poster, a credit service and a clock")
+//
+// The price store and the audit writer are required rather than optional
+// because a market that trades without publishing its price or its audit row
+// is a market whose history cannot be verified afterwards, and "it was not
+// configured" is not a thing anyone should be able to discover later. Tests
+// that do not care still have to pass a store; internal/audit and
+// internal/valuation both work against any pgx transaction.
+func NewService(poster Poster, credits Credits, prices Prices, auditor Audit, insts Instruments, clk clock.Clock) *Service {
+	if poster == nil || credits == nil || prices == nil || auditor == nil || insts == nil || clk == nil {
+		panic("nativemarket: NewService requires a poster, a credit service, a price store, an audit writer, an instrument registry and a clock")
 	}
-	return &Service{poster: poster, credits: credits, clk: clk}
+	return &Service{poster: poster, credits: credits, prices: prices, auditor: auditor, instruments: insts, clk: clk}
 }
 
 // Create opens a market and mints the asset's entire supply, once.
@@ -133,6 +174,21 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest) (Marke
 		return Market{}, mapError(err)
 	}
 	m.CreatedAt, m.UpdatedAt = m.CreatedAt.UTC(), m.UpdatedAt.UTC()
+
+	// The opening price, before anybody has traded. Without it a prediction
+	// committed on a market's first day has no price at or before its own
+	// commit instant and cannot be resolved at all -- the resolver would
+	// rightly refuse rather than invent one.
+	opening := SpotPrice(m.Curve, State{
+		RealCreditReserve: money.Quantity{},
+		AssetReserve:      m.Curve.InitialAssetReserve,
+	})
+	if err := s.publishPrice(ctx, tx, m, opening, r.EffectiveAt, "native_market:"+m.ID.String()); err != nil {
+		return Market{}, err
+	}
+	if err := s.registerInstrument(ctx, tx, m, r); err != nil {
+		return Market{}, err
+	}
 	return m, nil
 }
 
@@ -317,6 +373,15 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 		st.Version, fill.StateAfter.RealCreditReserve.String(), fill.StateAfter.AssetReserve.String(),
 		quoteID, post.TransactionID, r.IdempotencyKey); err != nil {
 		return ExecuteResult{}, mapError(err)
+	}
+
+	// Reality and proof, in this transaction with the trade (see reality.go).
+	at := s.clk.Now()
+	if err := s.publishPrice(ctx, tx, m, fill.SpotAfter, at, "native_market_fill:"+fillID.String()); err != nil {
+		return ExecuteResult{}, err
+	}
+	if err := s.recordFill(ctx, tx, m, r, fill, fillID, post.TransactionID.String(), at); err != nil {
+		return ExecuteResult{}, err
 	}
 
 	alerts, err := s.surveil(ctx, tx, m, r, fill, fillID, creatorID)

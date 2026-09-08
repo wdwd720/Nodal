@@ -230,7 +230,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// though the feature did not exist.
 	creditSvc := credit.NewService(ledgerSvc, clk)
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
-	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, clk)
+	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk)
 
 	// Payout providers. A registry built with allowSandbox=false refuses any
 	// provider with no contract reference, which is the programmatic assertion
@@ -240,7 +240,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest)
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
-	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, clk)
+	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, audit.NewWriter(), clk)
 	// The marketplace gate is resolved from the database on every purchase, so
 	// pulling MARKETPLACE stops sales without a restart. Until it is ACTIVE,
 	// internal/commerce refuses every purchase on its own -- the compiler in

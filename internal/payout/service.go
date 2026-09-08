@@ -15,6 +15,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -697,7 +698,7 @@ func (s *Service) Reconcile(ctx context.Context, d *db.DB, requestID RequestID) 
 		return Request{}, err
 	}
 	if req.State.Terminal() {
-		return req, nil
+		return s.checkTerminalAgainstProvider(ctx, d, req)
 	}
 	if req.ProviderIdempotencyKey == "" {
 		return Request{}, errs.New(errs.CodeReconciliationRequired,
@@ -715,6 +716,85 @@ func (s *Service) Reconcile(ctx context.Context, d *db.DB, requestID RequestID) 
 			"the provider could not say what happened to this payout; the reservation is retained")
 	}
 	return s.applyProviderResult(ctx, d, requestID, req.Provider, result, nil)
+}
+
+// checkTerminalAgainstProvider asks the provider what it now says about a
+// payout that is already finished, and refuses to act on a different answer.
+//
+// PART LXXII item 23 is a compromised provider sending a contradictory status.
+// The danger is not the first lie, it is a later one rewriting a settled fact,
+// and the state machine already makes that impossible: FAILED and REJECTED
+// have no outgoing transitions at all, and SETTLED leads only to REVERSED,
+// which is a clawback with its own compensating postings rather than a change
+// of story. So nothing here moves a state.
+//
+// What was wrong before is the opposite failure. Reconcile returned early on a
+// terminal request without asking anything, so a provider that changed its
+// answer was never heard and left no trace. An operator asking "what does the
+// provider say about this settled payout" got silence that looked like
+// agreement. The answer is now fetched, recorded as a provider event, and a
+// contradiction is returned as an error somebody has to look at.
+func (s *Service) checkTerminalAgainstProvider(ctx context.Context, d *db.DB, req Request) (Request, error) {
+	if req.ProviderIdempotencyKey == "" || req.State == StateReversed {
+		// Nothing external was ever keyed under this request, or the reversal
+		// is already the record of a settlement being undone.
+		return req, nil
+	}
+	provider, err := s.providers.Get(req.Provider)
+	if err != nil {
+		return req, err
+	}
+	result, lookupErr := provider.Lookup(ctx, req.ProviderIdempotencyKey)
+	if lookupErr != nil {
+		// A finished payout is not made unsafe by a provider that will not
+		// answer; there is no reservation left to hold or release. Say so
+		// rather than reporting agreement that was never obtained.
+		return req, errs.Wrap(lookupErr, errs.CodeReconciliationRequired,
+			"the provider could not say what happened to this finished payout; its recorded outcome is unchanged").
+			WithField("payout_id", req.ID.String())
+	}
+	if err := d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		return s.recordProviderEvent(ctx, tx, req.ID, req.Provider, "RESPONSE", result, nil)
+	}); err != nil {
+		return req, err
+	}
+	contradiction := terminalContradiction(req, result)
+	if contradiction == "" {
+		return req, nil
+	}
+	observability.LoggerFrom(ctx).ErrorContext(ctx, "payout: provider contradicts a finished payout",
+		"payout_id", req.ID.String(), "recorded_state", string(req.State),
+		"provider_status", string(result.Status), "provider_raw_status", result.RawStatus)
+	return req, errs.New(errs.CodeReconciliationRequired, contradiction).
+		WithField("payout_id", req.ID.String()).
+		WithField("recorded_state", string(req.State)).
+		WithField("provider_status", string(result.Status))
+}
+
+// terminalContradiction names the way a provider's current answer disagrees
+// with a finished payout, or "" when the two can be reconciled.
+//
+// Only definite disagreements count. A provider that has gone back to
+// ACCEPTED after settling is not treated as contradicting itself, because
+// read-after-write lag on the provider's side produces exactly that, and an
+// alarm a coincidence can trigger is one operators learn to ignore.
+func terminalContradiction(req Request, result SubmitResult) string {
+	switch req.State {
+	case StateSettled:
+		if result.Status == ProviderFailed {
+			return "the provider now reports this payout failed, and it is recorded as settled with the postings to match"
+		}
+		if result.Status == ProviderSettled && req.ProviderReference != "" &&
+			result.ProviderReference != "" && req.ProviderReference != result.ProviderReference {
+			return "the provider now reports a different reference for this settled payout"
+		}
+	case StateFailed, StateRejected:
+		if result.Status == ProviderSettled {
+			return "the provider now reports this payout settled, and it is recorded as " +
+				strings.ToLower(string(req.State)) + " with the reservation returned"
+		}
+	}
+	return ""
 }
 
 // OpenRequests returns payouts that hold value and are not finished, which is

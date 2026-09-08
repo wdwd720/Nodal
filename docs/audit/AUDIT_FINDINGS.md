@@ -35,6 +35,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-20 | P2 | BASELINE | fixed | Any failure to read `/v1/me` told the customer they were signed out, including a rate limit |
 | F-21 | P2 | NEW | fixed | A chaos negative control could not fail, so the guard it defended was unproven |
 | F-22 | P3 | NEW | fixed | A load script reported idempotency conflicts as price changes |
+| F-23 | P2 | NEW | fixed | Reconciling a finished payout asked the provider nothing and reported agreement it never obtained |
 
 ---
 
@@ -318,8 +319,10 @@ luck, not a property of the process. The sentence was written by recalling what 
 than by checking, which is the same failure mode as F-14 wearing different clothes.
 
 **Fix.** The sentence is replaced by a thirty-row table in `PRODUCTION_READINESS_REPORT.md` §3a, one
-row per required scenario, each naming the test. Three items (5, 14, 23) genuinely have no test and
-are named, with what each would take. A summary a reader cannot check is worse than a table they can.
+row per required scenario, each naming the test. Three items (5, 14, 23) genuinely had no test and
+were named, with what each would take. A summary a reader cannot check is worse than a table they
+can. All three were closed afterwards — item 23 by way of F-23 — and the table is now thirty of
+thirty.
 
 **And then applied to the rest of the document.** Every "not built" claim was re-checked the same
 way, which immediately caught another: the report said `apps/admin` had no pages driving the nine new
@@ -447,6 +450,57 @@ which are the things that must hold whatever the business answer is. An operator
 who has learned to ignore a red threshold has lost the threshold.
 
 ---
+
+## F-23 · Reconciling a finished payout reported agreement it never obtained · NEW · P2 · FIXED
+
+**Found by** writing PART LXXII item 23 — a compromised provider sending a
+contradictory status — and discovering the scenario was not reachable, which is
+a different thing from being handled.
+
+`Service.Reconcile` opened with:
+
+```go
+if req.State.Terminal() {
+    return req, nil
+}
+```
+
+That guard is right about the state machine and wrong about the operator. Not
+moving a settled or failed payout on the word of a provider is the whole point:
+`FAILED` and `REJECTED` have no outgoing transitions and `SETTLED` leads only to
+`REVERSED`, so a provider that changes its story cannot move Nodal's money by
+lying twice. But the early return also meant the provider was never ASKED. An
+operator who reconciled a settled payout got `err == nil` and the request back,
+which reads as "the provider confirms it", and the provider had not been
+contacted at all. A contradictory answer left no trace anywhere.
+
+That is the same shape as F-14 and F-20: not a wrong action, a **false report**
+of a check that did not happen.
+
+**Fix.** A terminal request with a provider key is now looked up, the answer is
+recorded as a `payout_provider_events` row whatever it says, and a definite
+disagreement — settled-now-failed, failed-now-settled, or settled under a
+different provider reference — is returned as `CodeReconciliationRequired` and
+logged at ERROR. **No state moves**, because that is the control; what changed
+is that the contradiction is now visible instead of discarded.
+
+A provider that has gone back to `ACCEPTED` after settling is deliberately NOT
+called a contradiction: read-after-write lag on the provider's side produces
+exactly that, and an alarm a coincidence can trigger is one operators learn to
+ignore. The same reasoning governs the wash-trade detector added for item 14.
+
+Four tests, including the control that fails if every terminal reconcile is
+called a contradiction:
+
+- `TestIntegration_ACompromisedProviderCannotRewriteAFinishedPayout`
+- `TestIntegration_AProviderClaimingItPaidAFailedPayoutIsNotBelieved`
+- `TestIntegration_AProviderSwappingTheReferenceOfASettledPayoutContradictsItself`
+- `TestIntegration_AProviderThatAgreesWithASettledPayoutIsNotAContradiction`
+
+Reaching the scenario at all needed a provider double that can contradict
+itself. `payouttest.Sandbox` is deliberately incapable of it, because a correct
+provider is; the affordance is a single `Corrupt` method, named after what it
+models, in the package the production registry refuses to load.
 
 ## Findings deliberately NOT raised
 

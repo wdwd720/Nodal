@@ -794,3 +794,128 @@ func TestIntegration_GetDeposit_TenantScoped(t *testing.T) {
 	_, err = f.svc.GetDeposit(f.ctx, res.Deposit.ID)
 	require.Equal(t, errs.CodeUnauthenticated, errs.CodeOf(err))
 }
+
+// TestIntegration_OutOfOrderWebhooksNeverMoveADepositBackwards is PART LXXII
+// item 5.
+//
+// Item 4 is duplicate delivery and has its own tests. This is the other half
+// and the one that actually loses money if it is wrong: providers deliver
+// webhooks over independent HTTP connections with independent retries, so the
+// event generated LAST routinely arrives FIRST. A system that applies whatever
+// it was handed most recently will happily walk a confirmed deposit back to
+// "awaiting the customer" and then re-confirm it, posting twice.
+//
+// The property is not "events arrive in order" — they do not, and nothing here
+// can make them. It is that the deposit's status is a function of the furthest
+// point the provider has ever reported, never of the last packet received.
+func TestIntegration_OutOfOrderWebhooksNeverMoveADepositBackwards(t *testing.T) {
+	f := newFixture(t)
+	res := f.start("ooo")
+	sid, depositID := res.Session.ID, res.Deposit.ID
+
+	// Take a snapshot of each stage WITHOUT delivering it, so the deliveries
+	// below are genuinely the provider's earlier statements arriving late
+	// rather than a rewritten present.
+	snap := func(status funding.ProviderStatus, raw string, opts ...func(*funding.Session)) funding.Session {
+		f.provider.SetStatus(sid, status, raw, opts...)
+		s, err := f.provider.GetSession(f.ctx, sid)
+		require.NoError(t, err)
+		return s
+	}
+	action := snap(funding.ProviderStatusCustomerActionRequired, "requires_payment")
+	processing := snap(funding.ProviderStatusProcessing, "fulfillment_processing")
+	confirmed := snap(funding.ProviderStatusConfirmed, "fulfillment_complete", func(s *funding.Session) {
+		s.DestinationAmount, s.TransactionID = "100.000000", "cxt_ooo"
+	})
+
+	deliver := func(name string, s funding.Session) funding.ApplyResult {
+		return f.apply(funding.WebhookEvent{
+			Identity: webhook.Identity{
+				Provider: "fake", EventID: "evt_ooo_" + name, EventType: "session.updated",
+				SignedAt: f.clk.Now(), PublishedAt: f.clk.Now(),
+			},
+			Session: s, SessionKnown: true,
+		})
+	}
+
+	// Backwards: the newest event first, then the two older ones.
+	r := deliver("confirmed", confirmed)
+	require.Equal(t, funding.ApplyApplied, r.Outcome)
+	require.Equal(t, funding.StatusProviderConfirmed, r.Deposit.Status)
+
+	r = deliver("processing", processing)
+	require.Equal(t, funding.ApplyNoOp, r.Outcome, "a late earlier event must not be applied")
+	require.Equal(t, funding.StatusProviderConfirmed, r.Deposit.Status)
+	require.Contains(t, r.Reason, "does not advance")
+
+	r = deliver("action", action)
+	require.Equal(t, funding.ApplyNoOp, r.Outcome)
+	require.Equal(t, funding.StatusProviderConfirmed, r.Deposit.Status)
+
+	// The deposit records the states it actually entered, not the ones the
+	// provider mentioned afterwards. Skipping forward is legal precisely
+	// because webhooks are unordered; skipping BACKWARD is not a thing.
+	d := f.deposit(depositID)
+	require.Equal(t, funding.StatusProviderConfirmed, d.Status)
+	require.NotNil(t, d.ProviderConfirmedAt)
+	var processingAt, actionAt *time.Time
+	require.NoError(t, testDB.QueryRow(f.ctx,
+		`SELECT provider_processing_at, customer_action_at FROM deposits WHERE id = $1`,
+		depositID).Scan(&processingAt, &actionAt))
+	require.Nil(t, processingAt, "a state the deposit never entered must not be stamped")
+	require.Nil(t, actionAt)
+
+	require.Equal(t, 1, f.count(
+		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status = 'PROVIDER_CONFIRMED'`, depositID))
+	require.Equal(t, 0, f.count(
+		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status IN ('PROVIDER_PROCESSING','CUSTOMER_ACTION_REQUIRED')`, depositID))
+
+	// And the out-of-order stream still ends where an ordered one would, with
+	// the customer credited exactly once.
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		return f.svc.RecordSettlement(ctx, tx, depositID, q(100*oneUSDC), "sig-ooo", 7)
+	}))
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		rec, err := f.svc.Reconcile(ctx, tx, depositID)
+		require.True(t, rec.Agreed)
+		return err
+	}))
+	require.NoError(t, f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		return f.svc.MarkAvailable(ctx, tx, depositID, f.cfg.Availability)
+	}))
+	require.Equal(t, q(100*oneUSDC).String(), f.balance(ledger.CodeWallet).String())
+
+	// A straggler arriving after the money is available changes nothing. This
+	// is the delivery that would be most expensive to get wrong, because by
+	// now there are postings behind the deposit.
+	r = deliver("confirmed-again", confirmed)
+	require.Equal(t, funding.ApplyNoOp, r.Outcome)
+	require.Equal(t, funding.StatusAvailable, r.Deposit.Status)
+	require.Equal(t, q(100*oneUSDC).String(), f.balance(ledger.CodeWallet).String(),
+		"a late webhook must not post a second credit")
+	require.Equal(t, 1, f.count(
+		`SELECT count(*) FROM deposit_transitions WHERE deposit_id = $1 AND to_status = 'PROVIDER_CONFIRMED'`, depositID))
+}
+
+// TestIntegration_ARejectionArrivingAfterConfirmationEscalates covers the one
+// out-of-order case that must NOT be a silent no-op.
+//
+// A rejection is not on the main chain, so the rank comparison that discards
+// stale forward states says nothing about it. If the provider says "delivered"
+// and then "rejected", one of those two statements is false and there is no
+// way to tell which from here — so the deposit goes to a human rather than
+// being failed on the second statement or ignored on the strength of the
+// first. Failing it would strand a deposit whose crypto may already be on
+// chain; ignoring it would discard a report of fraud.
+func TestIntegration_ARejectionArrivingAfterConfirmationEscalates(t *testing.T) {
+	f := newFixture(t)
+	d := f.confirmed("rej-after", "100.000000")
+	require.Equal(t, funding.StatusProviderConfirmed, d.Status)
+
+	r := f.providerEvent(d.ProviderSessionID, funding.ProviderStatusRejected, "rejected")
+	require.Equal(t, funding.ApplyApplied, r.Outcome)
+	require.Equal(t, funding.StatusReviewRequired, r.Deposit.Status,
+		"a contradiction between two provider statements is a question for a human")
+	require.Contains(t, r.Reason, "rejection after confirmation")
+	require.True(t, f.balance(ledger.CodeWallet).IsZero(), "an escalation posts nothing")
+}

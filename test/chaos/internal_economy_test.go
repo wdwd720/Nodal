@@ -14,14 +14,17 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -130,7 +133,7 @@ func newInternalWorld(t *testing.T, fundBuyer int64) *internalWorld {
 	led := ledger.NewService(clk, "chaos-internal")
 	led.SetCapabilityResolver(caps)
 	credits := credit.NewService(led, clk)
-	com := commerce.NewService(led, credits, clk)
+	com := commerce.NewService(led, credits, audit.NewWriter(), clk)
 	com.SetCapabilityResolver(caps)
 
 	_, buyer := newAccount(t)
@@ -139,7 +142,7 @@ func newInternalWorld(t *testing.T, fundBuyer int64) *internalWorld {
 	w := &internalWorld{
 		t: t, ctx: ctx, clk: clk,
 		ledger: led, credits: credits, commerce: com,
-		assetSvc: nativeasset.NewService(clk, nil), markets: nativemarket.NewService(led, credits, clk),
+		assetSvc: nativeasset.NewService(clk, nil), markets: nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(), instruments.NewRepository(), clk),
 		creditAsset: chaosCreditAsset(t), buyer: buyer, seller: seller,
 	}
 
