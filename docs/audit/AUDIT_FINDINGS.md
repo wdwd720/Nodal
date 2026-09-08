@@ -914,6 +914,30 @@ cannot tell you: that the data loaded at all.
 The client-side fix itself is somebody's uncommitted work and is left where it
 was found; this finding is about the test that let it through.
 
+**And then the type system was made to catch the class.** `validatedList` took
+`unknown`, which threw away what the generated client already knew: it types
+`/native-assets` as `{ items: NativeAsset[] } | undefined` and `/accounts` as
+`Account[] | undefined`. Calling `validatedList` on a paged response therefore
+compiled cleanly and threw on every page load.
+
+The parameter is now `readonly unknown[] | undefined`. Putting the committed
+version back produces a compile error on the exact line:
+
+    Argument of type '{ items: {...}[] } | undefined' is not assignable to
+    parameter of type 'readonly unknown[] | undefined'
+
+So the failure moves from a customer's screen, past the browser test that could
+not see it, to `tsc`. A browser test that catches this is worth having; a
+compiler that makes it unwritable is worth more.
+
+**A note on how the other endpoints were checked.** I wrote a script comparing
+every client parse against the OpenAPI response shape. Its first version
+reported `/assets` as a mismatch — a false positive: `/assets` answers an inline
+`type: array` and the script had looked up the ITEM schema and found `items:`
+inside it. Corrected, it then skipped most paths for a different regex reason.
+Two wrong answers in opposite directions from the same script is a good argument
+for the type change above and against the script, which is not kept.
+
 ## Findings deliberately NOT raised
 
 Stated so their absence is a decision rather than an oversight:

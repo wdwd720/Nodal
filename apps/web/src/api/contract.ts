@@ -140,8 +140,20 @@ export function validated<T>(value: unknown, spec: Spec, path: string): T {
   return value as T;
 }
 
-/** Validates every element of a top-level array response. */
-export function validatedList<T>(value: unknown, spec: Spec, path: string): T[] {
+/**
+ * Validates every element of a top-level array response.
+ *
+ * The parameter is `readonly unknown[] | undefined` and not `unknown`, which is
+ * the whole point. The generated client already knows that `/native-assets`
+ * answers `{ items: NativeAsset[] }` and `/accounts` answers `Account[]`; when
+ * this took `unknown` it threw that knowledge away, and calling it on a paged
+ * response compiled cleanly and threw at runtime on every page load. That was
+ * F-32, and it reached the browser tests, which could not see it either.
+ *
+ * With the parameter typed, `validatedList(data, ...)` on a paged endpoint is a
+ * compile error, and the failure moves from a customer's screen to `tsc`.
+ */
+export function validatedList<T>(value: readonly unknown[] | undefined, spec: Spec, path: string): T[] {
   if (!Array.isArray(value)) throw new ContractViolation(path, "expected an array");
   value.forEach((item, index) => {
     checkObject(item, spec, `${path}[${String(index)}]`);

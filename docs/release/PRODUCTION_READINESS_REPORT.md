@@ -302,6 +302,7 @@ proven backup.
 | A client that mis-parses a response fails the test | **observed failing**: with the paged-response handling put back to the committed version, `Native Markets renders` fails |
 | The assertion waits for the page to settle first | a negative assertion evaluated before the query resolves passes instantly and proves nothing; the first attempt at this fix did exactly that |
 | A REFUSAL still passes | asserting no refusal appeared would demand the interface lie; what is asserted is that the data loaded |
+| The same class cannot be written again | `validatedList` takes `readonly unknown[] \| undefined`, so calling it on a paged response is a **compile error** — observed, naming the exact line |
 
 Until this session the test asserted the heading was visible, that there was
 exactly one of it, and that no formatter had given up. All three pass on a page
