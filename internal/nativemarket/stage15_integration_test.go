@@ -149,9 +149,9 @@ func TestIntegration_ANativeMarketIsRegisteredAsAnInstrument(t *testing.T) {
 	require.Equal(t, f.creditAsset, ins.SettlementAssetID)
 	require.Equal(t, "native-market:"+f.market.ID.String(), ins.PolicyRef,
 		"the instrument names the market it came from")
-	require.Equal(t, "HALTED", string(ins.Status),
-		"a market is created PENDING; the registry does not yet mirror its later status, "+
-			"and understating tradability is the safe direction to be wrong in")
+	require.Equal(t, "ACTIVE", string(ins.Status),
+		"the fixture launches its market, and the registry follows it: the instrument "+
+			"is created HALTED with the PENDING market and mirrored to ACTIVE when it opens")
 }
 
 // TestIntegration_APredictionOnANativeMarketResolvesFromNodalNativePrices is
@@ -357,3 +357,39 @@ func (f *fixture) newStrategyScaffold(t *testing.T) strategyScaffold {
 		sc.runID, sc.agentID, sc.versionID, f.trader, hash32(sc.runID), "corr-"+sc.runID)
 	return sc
 }
+
+// TestIntegration_HaltingAMarketHaltsItsInstrument closes a gap the readiness
+// report named: the platform's instrument registry could say an asset was
+// ACTIVE while its market was halted.
+//
+// Two sources for "what may be traded" eventually disagree, and the
+// disagreement is discovered by something moving that should not have. This
+// package already refuses that shape for capabilities; the registry gets the
+// same treatment.
+func TestIntegration_HaltingAMarketHaltsItsInstrument(t *testing.T) {
+	f := newFixture(t)
+	require.Equal(t, "ACTIVE", string(f.instrumentFor(t).Status),
+		"the fixture launches its market, so the instrument follows it live")
+
+	for _, step := range []struct {
+		market nativeMarketStatus
+		want   string
+	}{
+		{StatusCloseOnly, "CLOSE_ONLY"},
+		{StatusHalted, "HALTED"},
+		{StatusActive, "ACTIVE"},
+		{StatusFrozen, "HALTED"}, // the registry has no word for "no exits either"
+	} {
+		require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, err := f.svc.SetStatus(ctx, tx, f.market.ID, step.market, "registry mirroring test")
+				return err
+			}))
+		require.Equal(t, step.want, string(f.instrumentFor(t).Status),
+			"market %s must leave the instrument %s", step.market, step.want)
+	}
+}
+
+// nativeMarketStatus is a local alias so the table above reads as a list of
+// market states rather than of strings.
+type nativeMarketStatus = Status

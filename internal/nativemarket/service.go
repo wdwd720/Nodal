@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/credit"
@@ -61,6 +62,8 @@ type Audit interface {
 // only, which is the gap STAGE 15 exists to close.
 type Instruments interface {
 	CreateSpotPair(ctx context.Context, tx pgx.Tx, spec instruments.SpotPairSpec) (instruments.Instrument, error)
+	GetBySpotPair(ctx context.Context, q db.Querier, base, quote assets.AssetID) (instruments.Instrument, error)
+	TransitionStatus(ctx context.Context, tx pgx.Tx, id instruments.InstrumentID, ch instruments.StatusChange) (instruments.Instrument, error)
 }
 
 // Service runs native markets.
@@ -226,6 +229,12 @@ func (s *Service) SetStatus(ctx context.Context, tx pgx.Tx, marketID MarketID, t
 		return Market{}, mapError(err)
 	}
 	m.Status = to
+	// Keep the platform's instrument registry agreeing with the venue. See
+	// reality.go: two sources for "what may be traded" eventually disagree,
+	// and the disagreement is found by something moving that should not have.
+	if err := s.mirrorInstrumentStatus(ctx, tx, m, to, reason); err != nil {
+		return Market{}, err
+	}
 	return m, nil
 }
 

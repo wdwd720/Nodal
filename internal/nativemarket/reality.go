@@ -187,14 +187,13 @@ func (s *Service) recordFill(ctx context.Context, tx pgx.Tx, m Market, r Execute
 // ledger could not reference a native market at all, and PARTS XLII–XLIII
 // would apply to Domain B and C only.
 //
-// # The status is HALTED, and that is not a bug
+// # It opens HALTED
 //
 // A market is created PENDING and becomes tradable later, so ACTIVE would be
-// false at this moment. The registry does not yet mirror the market's later
-// status changes — that is named work, not a claim — and of the two ways to be
-// wrong, a registry that understates tradability is the safe one. A halted
-// market whose instrument still said ACTIVE would be an overstatement pointing
-// the other way.
+// false at this moment. Every later change of the market's status is mirrored
+// onto the instrument by mirrorInstrumentStatus, so the registry and the venue
+// do not drift apart -- and PENDING maps to HALTED for the same reason ACTIVE
+// would have been wrong: nothing may trade yet.
 func (s *Service) registerInstrument(ctx context.Context, tx pgx.Tx, m Market, r CreateRequest) error {
 	var (
 		symbol    string
@@ -223,5 +222,81 @@ func (s *Service) registerInstrument(ctx context.Context, tx pgx.Tx, m Market, r
 		// so this is a replay of the same creation, not a second market.
 		return nil
 	}
+	return err
+}
+
+// instrumentStatusFor maps a market's status onto the registry's vocabulary.
+//
+// The two tables are not the same and the differences are the interesting part:
+//
+//   - PENDING has no registry equivalent, because "created but not trading" is
+//     what HALTED means there.
+//   - FROZEN maps to HALTED too. The registry has no word for "holders cannot
+//     exit either", and inventing one would be claiming the registry knows
+//     something it does not. Both say the same operative thing: nothing may
+//     trade.
+//   - DELISTED is terminal on both sides.
+//
+// Where the market's vocabulary is finer than the registry's, the mapping
+// loses detail in the direction of caution: every market state that is not
+// fully open maps to a registry state that permits no new exposure.
+func instrumentStatusFor(s Status) (assets.Status, bool) {
+	switch s {
+	case StatusActive:
+		return assets.StatusActive, true
+	case StatusCloseOnly:
+		return assets.StatusCloseOnly, true
+	case StatusPending, StatusHalted, StatusFrozen:
+		return assets.StatusHalted, true
+	case StatusDelisted:
+		return assets.StatusDelisted, true
+	}
+	return "", false
+}
+
+// mirrorInstrumentStatus moves the market's instrument to match the market.
+//
+// The registry is the platform's answer to "what may be traded", and a venue
+// that halted its own market while the registry still said ACTIVE would be two
+// sources disagreeing about the same fact. This package already refuses that
+// shape for capabilities -- "a second source would eventually disagree with the
+// first, and the disagreement would be discovered by something moving that
+// should not have" -- and the registry deserves the same treatment.
+//
+// A market with no instrument is not an error. Markets created before the
+// registry row existed are real, and refusing to halt one because its
+// bookkeeping is incomplete would make the registry a reason not to stop a
+// market. Stopping must never be the harder path.
+func (s *Service) mirrorInstrumentStatus(ctx context.Context, tx pgx.Tx, m Market, to Status, reason string) error {
+	want, ok := instrumentStatusFor(to)
+	if !ok {
+		return nil
+	}
+	ins, err := s.instruments.GetBySpotPair(ctx, tx, m.AssetID, m.CreditAssetID)
+	if err != nil {
+		if errs.CodeOf(err) == errs.CodeNotFound {
+			return nil
+		}
+		return err
+	}
+	if ins.Status == want {
+		return nil
+	}
+	if !assets.CanTransition(ins.Status, want) {
+		// The registry's own table refuses this step. That is information, not
+		// an obstacle to route around: the market has already moved, and the
+		// registry says its path there was not one it recognises. Reported, so
+		// somebody can reconcile the two rather than discovering the drift
+		// later.
+		return errs.Newf(errs.CodeInvalidStateTransition,
+			"the market moved to %s but its instrument cannot go %s -> %s", to, ins.Status, want).
+			WithField("market_id", m.ID.String()).
+			WithField("instrument_id", ins.ID.String())
+	}
+	actorType, actorID := actorFrom(ctx)
+	_, err = s.instruments.TransitionStatus(ctx, tx, ins.ID, instruments.StatusChange{
+		To: want, ActorType: actorType, ActorID: actorID,
+		Reason: "native market " + string(to) + ": " + reason,
+	})
 	return err
 }

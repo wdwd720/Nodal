@@ -624,6 +624,13 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 	}
 
 	var ok, failed atomic.Int64
+	// firstErr keeps one failure to report. "4 failed" with no reason is a
+	// result nobody can act on, and this test discarded every error until a
+	// run failed and there was nothing to look at.
+	var (
+		errMu    sync.Mutex
+		firstErr error
+	)
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i := 0; i < workers; i++ {
@@ -633,6 +640,11 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 			<-start
 			if _, err := f.buy(traders[idx], 1_000_000_000, money.Quantity{}); err != nil {
 				failed.Add(1)
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				errMu.Unlock()
 				return
 			}
 			ok.Add(1)
@@ -642,7 +654,7 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 	wg.Wait()
 
 	require.EqualValues(t, workers, ok.Load(),
-		"every funded buyer should succeed; %d failed", failed.Load())
+		"every funded buyer should succeed; %d failed, first error: %v", failed.Load(), firstErr)
 
 	st, err := f.svc.State(f.ctx, testDB, f.market.ID)
 	require.NoError(t, err)

@@ -7,6 +7,10 @@ Findings in **existing code** are marked `BASELINE`. Findings in code written du
 are marked `NEW` — they are recorded with the same weight, because a defect found in your own work an
 hour after writing it is the same defect it would have been in six months.
 
+One finding is **OPEN**: F-31, a concurrency failure seen once and not reproduced. It is in the table
+with everything else rather than in a footnote, because a register that only records what was fixed
+is a register that rewards not looking.
+
 The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 
 ---
@@ -43,6 +47,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-28 | P1 | BASELINE | fixed | No deployment could launch a native market: the act every document called separate was never built |
 | F-29 | P2 | BASELINE | fixed | A user could reserve their Credits in a payout request and had no way to release them |
 | F-30 | P2 | BASELINE | fixed | A property test could fail on a no-op mutation, and its shrinker would mis-explain any real failure |
+| F-31 | P3 | NEW | **OPEN, unreproduced** | Four of a hundred concurrent buyers failed once, on a loaded machine, and the test discarded the reason |
 
 ---
 
@@ -826,6 +831,43 @@ times at 3,000 checks each, and the whole property tier three times over.
 
 The stale `testdata/rapid/...fail` file rapid wrote is deleted: left in place it
 pins every future run to the degenerate case.
+
+## F-31 · Four concurrent buyers failed once and nobody can say why · NEW · P3 · OPEN
+
+**Status: open and unreproduced.** Recorded rather than closed, because "it
+passed the next eight times" is not a diagnosis.
+
+`TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything` runs 100
+concurrent buys against one market. On one run it reported `every funded buyer
+should succeed; 4 failed`, and passed on the immediately following run against
+the same database.
+
+**Nobody can say why, and that is the finding.** The test counted failures and
+threw the errors away, so a failure produced a number with no cause attached.
+That is now fixed — it keeps the first error and reports it — but the run that
+failed is gone and the message with it.
+
+What is known:
+
+- The failing run took 24.2s against 16–20s for every subsequent run, on a
+  machine that was simultaneously serving a k6 load test and another suite.
+  A timeout under contention (`lock_timeout` is 5s, `statement_timeout` 30s)
+  is the most likely explanation.
+- It did not recur in eight consecutive full-suite runs or six runs of the test
+  alone, against the same database.
+- The run's OTHER assertions are the ones that would matter: the state version
+  moved once per trade, the curve invariant held, and supply reconciled. Those
+  are not reported as failing, which means the four buys that failed left
+  nothing behind — consistent with a refused transaction rather than a partial
+  one.
+
+**Why it is P3 and not higher.** Every financial invariant in that test passed.
+A buy that fails is a buy that did not happen, which is the correct outcome of a
+timeout; the money property this test exists to defend was not violated. What is
+unproven is whether the cause was environmental.
+
+**What would close it.** The error text from a recurrence. The test now captures
+it, and CI runs this suite on every commit.
 
 ## Findings deliberately NOT raised
 

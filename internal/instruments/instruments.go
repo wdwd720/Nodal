@@ -344,6 +344,24 @@ func (r *Repository) List(ctx context.Context, q db.Querier, limit int) ([]Instr
 }
 
 // StatusChange is an audited instrument status transition request.
+// GetBySpotPair returns the SPOT_PAIR instrument for a (base, quote) pair.
+//
+// It exists so a venue can keep the registry honest about its own market
+// without holding an instrument id: `nativemarket` knows its asset and its
+// Credit asset, and that pair is unique for a spot pair by construction.
+func (r *Repository) GetBySpotPair(ctx context.Context, q db.Querier, base, quote assets.AssetID) (Instrument, error) {
+	i, err := scanInstrument(q.QueryRow(ctx,
+		`SELECT `+instrumentColumns+` FROM instruments
+		  WHERE type = 'SPOT_PAIR' AND base_asset_id = $1 AND quote_asset_id = $2`, base, quote))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Instrument{}, errs.New(errs.CodeNotFound, "instrument not found")
+		}
+		return Instrument{}, fmt.Errorf("instruments: get spot pair: %w", err)
+	}
+	return i, nil
+}
+
 type StatusChange struct {
 	To            Status
 	ActorType     string

@@ -294,6 +294,20 @@ proven backup.
 | The eleven exemptions each name a real external blocker | `TestReachability_EveryExemptionNamesABlocker` — checked against `BLOCKERS.md` |
 | The check was observed failing on both defects it was written for | `payout.Cancel` and `nativeasset.Activate`, with their callers removed |
 
+### The registry and the venue cannot disagree
+
+| Property | Evidence |
+|---|---|
+| Halting, closing, freezing or resuming a market moves its instrument with it | `TestIntegration_HaltingAMarketHaltsItsInstrument` — CLOSE_ONLY, HALTED, ACTIVE and FROZEN in one sequence |
+| FROZEN maps to HALTED, because the registry has no word for "no exits either" | same test; the mapping loses detail only in the direction of permitting less |
+| A market with no instrument still halts | `mirrorInstrumentStatus` treats a missing row as nothing to do: stopping must never be the harder path |
+| A registry transition the registry itself refuses is reported, not routed around | the error names both ids so the two can be reconciled |
+
+This closes a gap the previous version of this report named: the registry could
+say an asset was ACTIVE while its market was halted. Two sources for "what may
+be traded" eventually disagree, and the disagreement is discovered by something
+moving that should not have.
+
 ### A native market can be launched (F-28)
 
 | Property | Evidence |
@@ -357,6 +371,20 @@ earlier one.
 
 ## 3. What is NOT ready, stated plainly
 
+### Open findings
+
+**F-31 — four of a hundred concurrent buyers failed once, and nobody can say why.**
+The run took 24.2s against 16–20s for every subsequent run, on a machine
+simultaneously serving a load test; it did not recur in eight full-suite runs or
+six runs of the test alone. Every financial invariant in that run passed — the
+state version moved once per trade, the curve invariant held, supply reconciled
+— so the four buys that failed left nothing behind, which is what a refused
+transaction looks like rather than a partial one.
+
+It is P3 and open. The test discarded its errors, so the run that failed
+produced a number with no cause attached; it now keeps the first error. What
+would close this is the error text from a recurrence, not another clean run.
+
 ### Not built
 
 - **Hosted partner rail** (Stage 10). Declared, `Implemented() == false`, no adapter.
@@ -378,9 +406,6 @@ earlier one.
   a pasted uuid, a moderation-state dropdown rather than hand-written JSON. That is a usability gap,
   not a missing capability, and an operator pasting the wrong uuid into a freeze is the risk it
   leaves open.
-- **The instrument registry does not mirror a native market's status.** A market's instrument is
-  created HALTED and stays there; halting or delisting the market does not move it. Understating
-  tradability is the safe direction, and it is still wrong.
 
 ### Not run
 
