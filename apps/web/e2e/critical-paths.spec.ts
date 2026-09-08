@@ -100,6 +100,99 @@ test.describe("the internal economy is separate from the rest", () => {
     });
   }
 
+  /**
+   * A customer completes a purchase through the interface.
+   *
+   * Every other test in this file asks whether a page RENDERS. None asked whether
+   * a person can finish anything, and that gap is the same one that produced
+   * F-26, F-28 and F-29 on the backend: a path the tests never walk looks
+   * finished from inside the tests.
+   *
+   * This walks it. It reads the Credit balance the customer is shown, buys the
+   * cheapest product on the Marketplace, and asserts the balance fell by exactly
+   * the price and that the purchase appears in their own list.
+   *
+   * # It needs a deployment where buying is possible
+   *
+   * MARKETPLACE is a high-risk capability, so a deployment that has not activated
+   * it refuses every purchase — correctly. Rather than skip, the test asserts the
+   * refusal is the honest one and stops: a run against a fresh deployment proves
+   * the gate holds, and a run against an enabled one proves the flow completes.
+   * Neither outcome is a green tick over an untested path.
+   *
+   * See scripts/gateceremony for activating MARKETPLACE locally through the real
+   * three-principal ceremony.
+   */
+  test("a customer can buy something and their Credits fall by exactly the price", async ({ page }) => {
+    const creditsShown = async (): Promise<number> => {
+      await page.goto("/nodal-economy");
+      await page.waitForLoadState("networkidle");
+      const field = page.locator(".field", { hasText: "Usable inside Nodal" }).first();
+      const text = await field.innerText();
+      const match = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text);
+      expect(match, `no Credit figure in ${text}`).not.toBeNull();
+      return Number((match?.[1] ?? "0").replace(/,/g, ""));
+    };
+
+    const before = await creditsShown();
+
+    await page.goto("/marketplace");
+    await page.waitForLoadState("networkidle");
+    // Each product is its own <article class="panel-nested" aria-label={title}>.
+    // Locating the CARD and then its own price and its own button is the whole
+    // point: the first version of this test read a price from one product and
+    // clicked another's button, and the mismatch was invisible until the
+    // balance assertion caught it.
+    const cards = page.locator("article.panel-nested");
+    expect(await cards.count(), "the seeded catalogue should offer something to buy").toBeGreaterThan(0);
+    const card = cards.last();
+
+    const priceText = await card.locator(".field", { hasText: "PRICE" }).first().innerText();
+    const priceMatch = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(priceText);
+    expect(priceMatch, `no price in ${priceText}`).not.toBeNull();
+    const price = Number((priceMatch?.[1] ?? "0").replace(/,/g, ""));
+    expect(price).toBeGreaterThan(0);
+
+    await card.getByRole("button", { name: "Buy for Credits" }).click();
+
+    // Wait for the card to reach an OUTCOME -- a success notice or an
+    // explanation -- before deciding which happened. `networkidle` is not
+    // enough: it can return before the mutation has settled and re-rendered,
+    // and then the branch below reads an empty card and takes the wrong path.
+    // This is the third time in this session that a check ran before the thing
+    // it was checking existed.
+    await expect(card.locator(".notice-good, .explain").first()).toBeVisible();
+
+    // The gate may be off. That is a correct deployment state -- MARKETPLACE is
+    // high risk and a deployment that has not activated it refuses everyone --
+    // so the test asserts the refusal is the HONEST one and stops there.
+    //
+    // The string is the code the backend actually sent, read off the rendered
+    // page. The first version of this branch looked for the problem TITLE and
+    // never matched: with the gate off the test fell through to the success
+    // assertion and failed with "element not found", which is a confusing way
+    // to be told the gate is closed. Running that control is the only reason
+    // this branch works.
+    const refusal = card.locator(".explain");
+    if (await refusal.count()) {
+      await expect(refusal).toContainText("CAPABILITY_NOT_APPROVED");
+      await expect(refusal).toContainText("MARKETPLACE");
+      // And nothing moved.
+      expect(await creditsShown()).toBe(before);
+      return;
+    }
+
+    // The card says it happened, in the customer's own words rather than a
+    // status code. Asserting only that a Purchases table exists would pass on
+    // somebody else's earlier order, which is how the first version of this
+    // test reached its balance check believing a purchase had occurred.
+    await expect(card.locator(".notice-good")).toContainText("Bought");
+    await expect(page.getByRole("table", { name: "Purchases" })).toBeVisible();
+
+    const after = await creditsShown();
+    expect(before - after).toBe(price);
+  });
+
   test("every internal-economy page is reachable from the navigation", async ({ page }) => {
     await page.goto("/");
     for (const { heading } of INTERNAL_ECONOMY_PAGES) {

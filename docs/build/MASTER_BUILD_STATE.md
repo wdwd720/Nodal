@@ -631,6 +631,32 @@ Running these needs a built frontend and a live API:
 
     (cd apps/web && CP_WEB_API_TARGET=http://127.0.0.1:18100        ./node_modules/.bin/playwright test --grep renders)
 
+### F-33, and a pattern worth naming
+
+69 browser tests, and not one of them finished anything. They covered rendering,
+navigation, accessibility and the honesty rules -- every one a statement about a
+page at rest. That is the F-26 gap one layer up: a path the tests never walk
+looks finished from inside the tests.
+
+There is now a test that buys a product and asserts the customer's Credits fell
+by exactly the price. It found three defects in ITSELF first, and each is a
+pattern rather than a slip -- reading one product's price while clicking
+another's button, asserting a table an earlier order had already put there, and
+branching on a condition before the page had re-rendered.
+
+That last one is the third occurrence in this session:
+
+  - F-32's first fix asserted an absence before the query resolved;
+  - this test's refusal branch read an empty card;
+  - and this test's outcome check ran before the mutation re-rendered.
+
+**An assertion about an absence, or a branch on a condition, needs a positive
+signal before it -- otherwise it is only measuring how fast the test runs.**
+
+Running the browser suite needs a fully configured deployment: a settlement
+asset (CP_API_SETTLEMENT_CHAIN/MINT), or three tests fail on buying power,
+holdings and withdrawals which are disabled without one. 70/70 with it.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

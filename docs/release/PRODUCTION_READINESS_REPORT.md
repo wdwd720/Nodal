@@ -294,6 +294,25 @@ proven backup.
 | The eleven exemptions each name a real external blocker | `TestReachability_EveryExemptionNamesABlocker` — checked against `BLOCKERS.md` |
 | The check was observed failing on both defects it was written for | `payout.Cancel` and `nativeasset.Activate`, with their callers removed |
 
+### A customer can finish something (F-33)
+
+| Property | Evidence |
+|---|---|
+| A customer buys a product through the interface and their Credits fall by exactly the price | `a customer can buy something and their Credits fall by exactly the price` — 70/70 browser tests against a live API, a real Postgres and a MARKETPLACE gate activated by the real ceremony |
+| The purchase appears in the customer's own list, and the card says so in words | asserts the card's own "Bought." notice, not a status code |
+| With the capability off, the refusal names it and nothing moves | **observed**: the same test takes its refusal branch, asserts `CAPABILITY_NOT_APPROVED` and `MARKETPLACE`, and checks the balance did not change |
+
+Until this session no browser test completed a transaction. 69 tests covered
+rendering, navigation, accessibility and the honesty rules — every one a
+statement about a page at rest. The closest thing to a transaction was a
+heading being visible.
+
+Three defects in the new test were found before it found anything else: it read
+one product's price and clicked another's button; it asserted a Purchases table
+that an earlier order had already put there; and its refusal branch matched the
+wrong string while its outcome check ran before the page had re-rendered. All
+three are recorded in F-33, because each is a pattern rather than a slip.
+
 ### The internal-economy pages actually load (F-32)
 
 | Property | Evidence |

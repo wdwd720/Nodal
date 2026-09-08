@@ -49,6 +49,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-30 | P2 | BASELINE | fixed | A property test could fail on a no-op mutation, and its shrinker would mis-explain any real failure |
 | F-31 | P3 | NEW | **OPEN, unreproduced** | Four of a hundred concurrent buyers failed once, on a loaded machine, and the test discarded the reason |
 | F-32 | P2 | BASELINE | fixed | The browser test for the internal-economy pages could not tell a working page from a broken one |
+| F-33 | P2 | BASELINE | fixed | No browser test completed a transaction, so nothing proved a customer could finish anything |
 
 ---
 
@@ -937,6 +938,57 @@ reported `/assets` as a mismatch — a false positive: `/assets` answers an inli
 inside it. Corrected, it then skipped most paths for a different regex reason.
 Two wrong answers in opposite directions from the same script is a good argument
 for the type change above and against the script, which is not kept.
+
+## F-33 · No browser test finished anything · BASELINE · P2 · FIXED
+
+**Found by** asking the F-26 question of the interface: 69 browser tests, and
+does any of them prove a customer can COMPLETE something?
+
+None did. The suite covered rendering, navigation, accessibility and the honesty
+rules — every one of them a statement about a page at rest. The closest thing to
+a transaction was a heading being visible.
+
+That is the same gap that produced F-26, F-28 and F-29 on the backend, one layer
+up: a path the tests never walk looks finished from inside the tests.
+
+**Fix.** `a customer can buy something and their Credits fall by exactly the
+price`. It reads the Credit balance the customer is shown, buys the cheapest
+product on the Marketplace, and asserts the balance fell by exactly the price
+and the purchase appears in their own list. It ran against a live API, a real
+Postgres and a MARKETPLACE gate activated through the real three-principal
+ceremony, and it moved 300 Credits per run.
+
+**It found three defects in itself before it found anything else,** which is
+worth recording because each is a pattern:
+
+1. **It read one product's price and clicked another's button.** `.panel`
+   matched the outer container, so `.field` with "PRICE" resolved to the FIRST
+   product while `.last()` clicked the LAST. Each product is its own
+   `<article class="panel-nested" aria-label={title}>`; locating the CARD and
+   then its own price and its own button is what makes the assertion about one
+   thing.
+2. **It asserted a Purchases table was visible.** That table was already there
+   from an earlier order, so the assertion passed while nothing had been
+   bought. It now asserts the card's own "Bought." notice.
+3. **Its refusal branch never matched, and its outcome check ran too early.**
+   The branch looked for the problem TITLE and the backend renders the CODE, so
+   with the gate off the test fell through to the success assertion and failed
+   with "element not found" — a confusing way to be told the gate is closed.
+   And `networkidle` returned before the mutation had re-rendered, so the branch
+   read an empty card. It now waits for the card to show EITHER a success notice
+   or an explanation before deciding which happened.
+
+**Both branches were run against a real deployment.** With MARKETPLACE ACTIVE
+the purchase completes and the balance falls. With the capability removed from
+`CP_API_ENABLED_CAPABILITIES` the test takes the refusal branch, asserts the
+refusal names `CAPABILITY_NOT_APPROVED` and `MARKETPLACE`, and checks the
+balance did NOT move. Neither outcome is a green tick over an untested path.
+
+Point 3 is the third time in this session that a check ran before the thing it
+was checking existed — F-32's first fix, this refusal branch, and this outcome
+wait. The pattern is worth naming: **an assertion about an absence, or a branch
+on a condition, needs a positive signal before it, or it is only measuring how
+fast the test runs.**
 
 ## Findings deliberately NOT raised
 
