@@ -29,6 +29,7 @@ export const NAV_ITEMS: ReadonlyArray<{ readonly to: string; readonly label: str
   { to: "/nodal-economy", label: "Nodal Economy" },
   { to: "/marketplace", label: "Marketplace" },
   { to: "/native-markets", label: "Native Markets" },
+  { to: "/create-asset", label: "Create asset" },
   { to: "/payouts", label: "Payouts" },
   { to: "/trade", label: "Trade" },
   { to: "/portfolio", label: "Portfolio" },

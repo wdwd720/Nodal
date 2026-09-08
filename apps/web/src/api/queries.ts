@@ -579,6 +579,46 @@ export function useNativeAssets(limit = 50): UseQueryResult<NativeAsset[]> {
   });
 }
 
+export interface CreateNativeAssetRequest {
+  readonly accountId: string;
+  readonly name: string;
+  readonly symbol: string;
+  readonly description: string;
+  readonly maxSupply: string;
+  readonly creatorAllocation: string;
+  readonly decimals: number;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Creating an asset publishes something with the creator's name on it and
+ * fixes its economics permanently, so the key is created once when they
+ * confirm — a retry of the same confirmation must never make a second asset.
+ */
+export function useCreateNativeAsset(): UseMutationResult<NativeAsset, unknown, CreateNativeAssetRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (r: CreateNativeAssetRequest) => {
+      const { data } = await api.POST("/native-assets", {
+        ...idempotent(r.idempotencyKey),
+        body: {
+          account_id: r.accountId,
+          name: r.name,
+          symbol: r.symbol,
+          description: r.description,
+          max_supply: r.maxSupply,
+          creator_allocation: r.creatorAllocation,
+          decimals: r.decimals,
+        },
+      });
+      return validated<NativeAsset>(data, nativeAssetSpec, "/native-assets");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: nodalKeys.nativeAssets });
+    },
+  });
+}
+
 export function useNativeAsset(assetId: string | undefined): UseQueryResult<NativeAsset> {
   return useQuery({
     queryKey: nodalKeys.nativeAsset(assetId ?? ""),

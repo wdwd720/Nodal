@@ -31,6 +31,7 @@ const INTERNAL_ECONOMY_PAGES: ReadonlyArray<{ readonly path: string; readonly he
   { path: "/nodal-economy", heading: "Nodal Economy" },
   { path: "/marketplace", heading: "Marketplace" },
   { path: "/native-markets", heading: "Native Markets" },
+  { path: "/create-asset", heading: "Create asset" },
   { path: "/payouts", heading: "Payouts" },
 ];
 

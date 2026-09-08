@@ -50,7 +50,7 @@ migration.
 | 13 | LegalCapabilityRouter, composite capability key | **done** (`internal/legalrouter`, gates extended, migration 00714) |
 | 14 | Agent authority levels | **done** (`internal/agentauthority`) |
 | 15 | Reality / Prediction / Proof integration with Domain A | **not started** |
-| 16 | Frontend | **done for Domain A** (4 pages, honesty rules enforced, 66 browser tests) |
+| 16 | Frontend | **done for Domain A** (5 pages incl. Create Asset and trading, honesty rules enforced, 69 browser tests) |
 | 17 | Admin tooling for Domain A | **done** (9 administrative action kinds + executors; `internal/httpapi/executors_domaina.go`) |
 | 18 | Infrastructure / IAM hardening | pre-existing, audited |
 | 19 | Property testing / fuzzing | **partial** — curve fuzzer (4.7M execs), exhaustive isolation property, credit torture test |
@@ -220,14 +220,28 @@ are, and a page showing a user-created asset must carry the risk statement.
 was baseline behaviour, it was self-concealing, and it took the fix to make the
 cause visible.
 
-**Not built.** Create Asset (PART LIII) has no UI; the API exists and the flow
-is a form this stage did not reach. Native-market trading is read-only in the
-UI — quote and order hooks exist and no page places an order yet.
+**Create Asset (PART LIII)** is two steps, not one form. Step one collects;
+step two shows the creator the exact numbers that become permanent — in base
+units, with what each one means — and asks them to confirm THAT, with an
+idempotency key created at the moment of confirming so a double-click cannot
+publish two assets. It says plainly that this creates a DRAFT, that somebody
+else decides whether it is published, and that Nodal has made no judgement
+about it as an investment.
+
+**Trading (PART LIV)** is deliberately shaped around the fact that a quote is a
+record and not an offer. The customer is never asked to agree to the quote:
+they state the minimum they will accept, which travels with the order and is
+checked against a freshly computed fill. The minimum field starts EMPTY and is
+never defaulted to the quoted output, because a default equal to the quote is a
+slippage tolerance of zero wearing a protection's clothes, and every trade
+would fail.
+
+**Not built.** Nothing for Domain A. The remaining frontend gaps are outside
+the internal economy.
 
 ## 0.3 Next exact work, in order
 
-1. **Stage 16 remainder** — Create Asset (PART LIII) and native-market trading in the UI.
-2. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
+1. **Stages 20–21 — chaos and load** for the new subsystems, then the re-audit and evidence package.
 
 ## 0.4 Verification commands that matter
 

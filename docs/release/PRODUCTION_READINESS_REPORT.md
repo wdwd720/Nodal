@@ -8,7 +8,7 @@ are not synonyms and this report does not treat them as such.
 
 | Level | Status |
 |---|---|
-| **CODE READY** | **NO** — Stage 10 is externally blocked, Stage 15 and Stages 20–24 are not built, and Stage 16 covers the internal economy but not asset creation or in-UI trading |
+| **CODE READY** | **NO** — Stage 10 is externally blocked; Stage 15 and Stages 20–24 are not built |
 | **SANDBOX READY** | **PARTIAL** — the internal economy runs end to end against a sandbox payout provider; no external provider sandbox is integrated |
 | **STAGING READY** | **NO** — no staging deployment of the new subsystems has been exercised |
 | **PROVIDER READY** | **NO** — no payout or hosted provider contract exists (BLOCKERS B-01, B-05) |
@@ -151,8 +151,11 @@ Each row is a property with an executable test behind it, not a claim.
 | The four internal-economy pages render, have one `h1`, and are reachable from the navigation | `the internal economy is separate from the rest` |
 | Every route passes the rendered-text honesty scan and the WCAG A/AA automated scan | `honesty.spec.ts`, `accessibility.spec.ts` — 13 routes each |
 | A failure to reach the backend is never reported as being signed out | F-20; only a 401 renders the sign-in screen |
+| A creator sees the exact immutable economics before publishing, and confirms those rather than the form | `CreateAsset` is two steps; the confirmation carries a key created at that moment |
+| The order form never defaults the minimum output to the quote | it starts empty; a default equal to the quote is a zero slippage tolerance that would refuse every trade |
+| Create Asset and the market pages pass the rendered-text honesty scan and the WCAG scan | both suites cover `/create-asset` |
 
-Browser suite: **66 tests, three consecutive clean runs at ~52 s**, against a production `vite build`
+Browser suite: **69 tests, consecutive clean runs**, against a production `vite build`
 served by `vite preview`, proxying to the real `cmd/api` on a seeded database. Sign-in is the real
 OIDC round trip. The run needs the transport rate limits raised
 (`CP_API_RATE_LIMIT_*=100000/1m`) because a 66-test suite is not a person; the limiter correctly
@@ -206,10 +209,6 @@ earlier one.
   entry point, so `intent.TradeIntent` and `settlement.FinancialIntent` currently coexist.
 - **The risk kernel is not yet an input to the Domain A route.** `Route.RequiresRiskEvaluation` is
   determined and recorded; nothing consumes it for internal trades yet.
-- **Create Asset has no UI** (PART LIII, part of Stage 16). The API exists; the guided flow that
-  shows a creator the immutable economics before they publish does not.
-- **Native-market trading is read-only in the UI.** The quote and order hooks exist and no page
-  places an order, so a customer can see a market and cannot trade it from the interface.
 - **No kind-SPECIFIC admin screens for Domain A** (part of Stage 16). The nine administrative
   actions are fully operable from the existing console today: its propose form is driven by the
   generated `authority.json`, which now lists all nine, and it carries a free-form params field that

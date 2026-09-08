@@ -16,18 +16,23 @@
  */
 import { useState, type ReactNode } from "react";
 
+import { newIdempotencyKey } from "@controlplane/generated-client";
+
 import {
   useNativeAsset,
   useNativeAssets,
   useNativeMarket,
+  useNativeOrder,
+  useNativeQuote,
   type NativeAsset,
   type NativeMarket,
 } from "../api/queries.ts";
-import { AsyncPanel } from "../components/DataState.tsx";
+import { AsyncPanel, Explanation } from "../components/DataState.tsx";
 import { Button } from "../components/Button.tsx";
 import { Disclosure, Field, FieldGrid, Identifier, Page, Panel, Pill, Table } from "../components/Layout.tsx";
 import { Bps, DecimalValue, Qty } from "../components/Money.tsx";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../lib/honesty.ts";
+import { useActiveAccountId } from "../session.tsx";
 
 const CREDIT_DECIMALS = 6;
 
@@ -224,6 +229,8 @@ function MarketDetail(props: { readonly assetId: string }): ReactNode {
 
             <Holders market={m} />
 
+            <TradePanel market={m} />
+
             <Disclosure title="How this price works, and what it does not mean">
               <p>{NATIVE_PRICE_NOTE}</p>
               <p>{NATIVE_ASSET_RISK}</p>
@@ -258,5 +265,186 @@ function Holders(props: { readonly market: NativeMarket }): ReactNode {
         </tr>
       ))}
     </Table>
+  );
+}
+
+/**
+ * Trading against the curve.
+ *
+ * The shape of this is the whole point. A quote is a RECORD of what the market
+ * said at a state version; it is not a promise, and the backend re-prices on
+ * execution. So the customer is never asked to agree to a quote — they are
+ * asked to agree to a MINIMUM they will accept, which travels with the order
+ * and is checked against a freshly computed fill.
+ *
+ * Two things this deliberately does not do:
+ *
+ *   - carry the quote's expected output into `min_output` for the customer. A
+ *     default that equals the quote would be a slippage tolerance of zero
+ *     dressed up as a protection, and every trade would fail. The field starts
+ *     empty and the customer states the number.
+ *   - hide the fees. The platform fee and the creator fee are separate figures
+ *     because they go to different people.
+ */
+function TradePanel(props: { readonly market: NativeMarket }): ReactNode {
+  const accountId = useActiveAccountId();
+  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
+  const [amount, setAmount] = useState("");
+  const [minOutput, setMinOutput] = useState("");
+  const quote = useNativeQuote();
+  const order = useNativeOrder();
+
+  const tradable = props.market.status === "ACTIVE" || (props.market.status === "CLOSE_ONLY" && side === "SELL");
+
+  if (accountId === undefined) {
+    return (
+      <Panel title="Trade" description="No account on this session, so there is nothing to trade with.">
+        <p className="field-note">The backend returned an empty account list.</p>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel
+      title="Trade"
+      description="Priced against the pool at execution, never against a quote."
+    >
+      <form
+        className="stack"
+        onSubmit={(event) => {
+          event.preventDefault();
+          quote.mutate({
+            marketId: props.market.market_id,
+            accountId,
+            side,
+            amount,
+          });
+        }}
+      >
+        <fieldset className="inline-field">
+          <legend>Direction</legend>
+          <label>
+            <input
+              type="radio"
+              name="side"
+              value="BUY"
+              checked={side === "BUY"}
+              onChange={() => setSide("BUY")}
+            />
+            <span>Buy with Credits</span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="side"
+              value="SELL"
+              checked={side === "SELL"}
+              onChange={() => setSide("SELL")}
+            />
+            <span>Sell for Credits</span>
+          </label>
+        </fieldset>
+
+        <label className="inline-field">
+          <span>{side === "BUY" ? "Credits to spend, in base units" : "Units to sell, in base units"}</span>
+          <input value={amount} inputMode="numeric" onChange={(e) => setAmount(e.target.value)} />
+        </label>
+
+        {amount === "" ? (
+          <Button variant="secondary" disabledReason="Enter an amount to price.">
+            Price this trade
+          </Button>
+        ) : (
+          <Button variant="secondary" submit busy={quote.isPending} busyLabel="Pricing…">
+            Price this trade
+          </Button>
+        )}
+      </form>
+
+      {quote.isError && <Explanation error={quote.error} onRetry={() => quote.reset()} />}
+
+      {quote.isSuccess && (
+        <>
+          <FieldGrid columns={3}>
+            <Field label="You would receive" note="At the state version priced against, and not a promise." emphasis>
+              <Qty value={quote.data.expected_output} decimals={CREDIT_DECIMALS} />
+            </Field>
+            <Field label="Platform fee">
+              <Qty value={quote.data.platform_fee} decimals={CREDIT_DECIMALS} symbol="Credits" />
+            </Field>
+            <Field label="Creator fee" note="Paid to whoever created this asset.">
+              <Qty value={quote.data.creator_fee} decimals={CREDIT_DECIMALS} symbol="Credits" />
+            </Field>
+            <Field label="Effective price" note="In Credits. Not converted to a currency.">
+              <DecimalValue value={quote.data.effective_price} /> Credits
+            </Field>
+            <Field label="Price impact">
+              <Bps value={quote.data.slippage_bps} absent="not reported" />
+            </Field>
+            <Field label="Priced at state version" note="The market moves on every trade; execution re-prices.">
+              {String(quote.data.state_version)}
+            </Field>
+          </FieldGrid>
+
+          <p className="field-note">
+            This is a record of what the market said, not an offer. The order below is priced again
+            when it executes, and the only number you are agreeing to is the minimum you state.
+          </p>
+
+          <form
+            className="stack"
+            onSubmit={(event) => {
+              event.preventDefault();
+              order.mutate({
+                marketId: props.market.market_id,
+                accountId,
+                side,
+                amount,
+                minOutput,
+                quoteId: quote.data.quote_id,
+                idempotencyKey: newIdempotencyKey(),
+              });
+            }}
+          >
+            <label className="inline-field">
+              <span>Least you will accept, in base units</span>
+              <input value={minOutput} inputMode="numeric" onChange={(e) => setMinOutput(e.target.value)} />
+            </label>
+            <p className="field-note">
+              Left empty this order will not be sent. The number is yours to choose: the trade is
+              refused if the market would return less, and a number equal to the quote above would
+              refuse almost every trade.
+            </p>
+
+            {order.isError && <Explanation error={order.error} onRetry={() => order.reset()} />}
+
+            {order.isSuccess ? (
+              <p className="notice notice-good" role="status">
+                Filled. The market moved to state version {String(order.data.state_version_after)}.
+              </p>
+            ) : !tradable ? (
+              <Button
+                variant="primary"
+                disabledReason={`This market is ${props.market.status}. It is not accepting this direction.`}
+              >
+                Place the order
+              </Button>
+            ) : minOutput === "" ? (
+              <Button variant="primary" disabledReason="State the least you will accept before ordering.">
+                Place the order
+              </Button>
+            ) : (
+              <Button variant="primary" submit busy={order.isPending} busyLabel="Placing…">
+                Place the order
+              </Button>
+            )}
+          </form>
+        </>
+      )}
+
+      <Disclosure title="What you are trading against">
+        <p>{NATIVE_ASSET_RISK}</p>
+      </Disclosure>
+    </Panel>
   );
 }

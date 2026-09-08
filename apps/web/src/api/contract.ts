@@ -436,12 +436,24 @@ export const creditBalanceSpec: Spec = {
 };
 
 export const nativeAssetSpec: Spec = {
-  required: { asset_id: "uuid", creator_account_id: "uuid", name: "string", symbol: "string", status: "string" },
+  // supply and policy are REQUIRED by the contract and are checked here,
+  // because the create flow shows a creator the exact economics they are about
+  // to make permanent. A response missing them must be an error, not a page
+  // that renders blanks where the numbers a creator agreed to should be.
+  required: {
+    asset_id: "uuid",
+    creator_account_id: "uuid",
+    name: "string",
+    symbol: "string",
+    status: "string",
+    moderation_state: "string",
+    supply: "object",
+    policy: "object",
+  },
   optional: {
     description: "string",
     image_url: "string",
     decimals: "integer",
-    moderation_state: "string",
     moderation_notes: "string",
     economics_locked_at: "timestamp",
     activated_at: "timestamp",

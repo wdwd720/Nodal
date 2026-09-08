@@ -16,6 +16,7 @@ const ROUTES = [
   "/nodal-economy",
   "/marketplace",
   "/native-markets",
+  "/create-asset",
   "/payouts",
   "/trade",
   "/portfolio",

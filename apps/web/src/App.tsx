@@ -8,6 +8,7 @@ import { Activity } from "./pages/Activity.tsx";
 import { AddFunds } from "./pages/AddFunds.tsx";
 import { Agents } from "./pages/Agents.tsx";
 import { Home } from "./pages/Home.tsx";
+import { CreateAsset } from "./pages/CreateAsset.tsx";
 import { Lab } from "./pages/Lab.tsx";
 import { Marketplace } from "./pages/Marketplace.tsx";
 import { NativeMarkets } from "./pages/NativeMarkets.tsx";
@@ -65,6 +66,7 @@ export function App(): ReactNode {
         <Route path="/nodal-economy" element={<NodalEconomy />} />
         <Route path="/marketplace" element={<Marketplace />} />
         <Route path="/native-markets" element={<NativeMarkets />} />
+        <Route path="/create-asset" element={<CreateAsset />} />
         <Route path="/payouts" element={<Payouts />} />
         <Route path="/trade" element={<Trade />} />
         <Route path="/portfolio" element={<Portfolio />} />
