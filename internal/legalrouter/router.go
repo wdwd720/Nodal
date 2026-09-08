@@ -208,6 +208,12 @@ func (o Outcome) Valid() bool {
 // further step. Only ALLOW does.
 func (o Outcome) Permits() bool { return o == Allow }
 
+// ReasonCapabilityNotActive is the reason code the router synthesizes when a
+// policy that PERMITS meets a gate that is off. It is reserved: Policy.Validate
+// refuses a rule that writes it by hand, so a caller reading it knows the gate
+// produced it.
+const ReasonCapabilityNotActive = "CAPABILITY_NOT_ACTIVE"
+
 // Rule is one line of policy: a pattern over the key, an outcome, and the
 // evidence behind it.
 type Rule struct {
@@ -293,6 +299,19 @@ func (p Policy) Validate() error {
 		if strings.TrimSpace(r.ReasonCode) == "" {
 			problems = append(problems, "rule "+itoa(i)+" has no reason code")
 		}
+		// The gate's own reason code is reserved. A rule that wrote it by hand
+		// would be indistinguishable from a refusal the GATE produced, and a
+		// caller that treats the two differently -- the settlement compiler
+		// does -- would read a policy denial as a gate being off.
+		if strings.TrimSpace(r.ReasonCode) == ReasonCapabilityNotActive {
+			problems = append(problems,
+				"rule "+itoa(i)+" uses the reserved reason code "+ReasonCapabilityNotActive+
+					", which only the gate may produce")
+		}
+		// The gate's own reason code is reserved. A rule that wrote it by hand
+		// would be indistinguishable from a refusal the GATE produced, and a
+		// caller that treats the two differently -- the settlement compiler
+		// does -- would read a policy denial as a gate being off.
 		if r.Outcome != Deny {
 			if strings.TrimSpace(r.ApprovalReference) == "" {
 				problems = append(problems,
@@ -354,7 +373,16 @@ type Decision struct {
 	// moment of the decision. An ALLOW rule whose gate is off produces DENY,
 	// and this field is how an operator sees which of the two refused.
 	CapabilityActive bool
-	Key              Key
+	// GateRefusal is true when this DENY came from the GATE and not from the
+	// policy: the matched rule said Allow and its capability is not ACTIVE.
+	//
+	// It is a field rather than a comparison against ReasonCode because a
+	// reason code is a string a policy author can write, and a caller that
+	// discriminated on the string could be handed it by a hand-written Deny
+	// rule. This one cannot be forged: it is set at exactly one place below,
+	// and Policy.Validate refuses a rule that tries to claim the code by name.
+	GateRefusal bool
+	Key         Key
 }
 
 // Permits reports whether the action may proceed now.
@@ -416,7 +444,8 @@ func (r *Router) Route(k Key, activeCaps map[valuedomain.CapabilityKey]bool) Dec
 		// switched on today, and both have to agree.
 		if rule.Outcome == Allow && rule.RequiredCapability != "" && !d.CapabilityActive {
 			d.Outcome = Deny
-			d.ReasonCode = "CAPABILITY_NOT_ACTIVE"
+			d.ReasonCode = ReasonCapabilityNotActive
+			d.GateRefusal = true
 			d.Detail = "policy permits this, and capability " + string(rule.RequiredCapability) +
 				" is not ACTIVE in this environment"
 		}

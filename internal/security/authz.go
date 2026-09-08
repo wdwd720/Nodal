@@ -95,7 +95,8 @@ func RequireAnyAt(ctx context.Context, now func() time.Time, perms ...Permission
 	return fmt.Errorf("%w: missing all of %v", ErrForbidden, perms)
 }
 
-// RequireAccount enforces tenant scoping (PART 92). It returns nil when:
+// RequireAccount enforces tenant scoping for a READ (PART 92). It returns nil
+// when:
 //   - the principal owns accountID (customers, and agents on their single
 //     bound account), or
 //   - the principal is not an agent and holds account:read_any (operators).
@@ -103,6 +104,19 @@ func RequireAnyAt(ctx context.Context, now func() time.Time, perms ...Permission
 // Every other case is ErrCrossTenant; anonymous is ErrUnauthenticated. An
 // empty accountID is always refused. Ownership never depends on timing, so
 // break-glass is irrelevant here.
+//
+// # Reads only
+//
+// The operator override here is `account:read_any` — a READ permission — and
+// for a long time this function was the only tenant check on the WRITE routes
+// too. That was wrong in a way nothing could see: RoleAdmin is every
+// permission except the dual-control and agent-only sets, so it holds
+// `account:read_any` AND `native_market:trade`, `commerce:buy`,
+// `payout:create`, `withdrawal:create` and the rest of the customer surface.
+// Those customer permissions exist so an operator can use their OWN account;
+// combined with the override, one ADMIN session could buy, sell, and reserve
+// a payout out of ANY customer's balance, with no second signature and no
+// admin_actions row. Use RequireAccountOwner for anything that changes state.
 func RequireAccount(ctx context.Context, accountID string) error {
 	p, err := principalFor(ctx)
 	if err != nil {
@@ -121,6 +135,35 @@ func RequireAccount(ctx context.Context, accountID string) error {
 		return nil
 	}
 	return fmt.Errorf("%w: subject %q does not own account %q", ErrCrossTenant, p.SubjectID, accountID)
+}
+
+// RequireAccountOwner enforces tenant scoping for a WRITE. It returns nil only
+// when the principal OWNS accountID.
+//
+// There is no operator override, deliberately. An operator who needs to change
+// a customer's position has the admin plane, where the act needs a reason, a
+// second principal for anything consequential, and a permanent row naming both.
+// A customer endpoint that accepted an operator acting "as" someone would give
+// the same power with none of that, which is what `account:read_any` was
+// silently doing on fourteen write routes.
+//
+// The refusal is ErrCrossTenant, the same as RequireAccount's, so an operator
+// who tries gets the answer a stranger gets. That is the point: on a write
+// there is nothing special about being an operator.
+func RequireAccountOwner(ctx context.Context, accountID string) error {
+	p, err := principalFor(ctx)
+	if err != nil {
+		return err
+	}
+	if accountID == "" {
+		return fmt.Errorf("%w: empty account id", ErrCrossTenant)
+	}
+	if p.OwnsAccount(accountID) {
+		return nil
+	}
+	return fmt.Errorf("%w: subject %q may not act on account %q; "+
+		"changing another account's state is an admin action, not a customer request",
+		ErrCrossTenant, p.SubjectID, accountID)
 }
 
 // RequireStepUp returns nil when the principal authenticated within maxAge

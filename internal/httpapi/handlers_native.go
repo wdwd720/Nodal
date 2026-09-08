@@ -138,7 +138,7 @@ func (s *Server) PostNativeAssets(ctx context.Context, request api.PostNativeAss
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +293,7 @@ func (s *Server) PostNativeMarketsMarketIdQuotes(ctx context.Context, request ap
 	if err != nil {
 		return nil, validationError("marketId", "marketId must be a canonical UUID")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (s *Server) PostNativeMarketsMarketIdOrders(ctx context.Context, request ap
 	if err != nil {
 		return nil, validationError("marketId", "marketId must be a canonical UUID")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func (s *Server) PostPayouts(ctx context.Context, request api.PostPayoutsRequest
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}

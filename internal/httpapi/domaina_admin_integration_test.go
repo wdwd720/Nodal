@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
@@ -124,6 +125,19 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 			Credits:       credits,
 		}),
 	}
+
+	// The customer-facing native-market port, so a test can make a real trade
+	// request over HTTP and not only drive the admin plane. Without it every
+	// customer route on this harness answers UNSUPPORTED, which reads as a
+	// refusal and is not one.
+	ports.NativeMarkets = nativeMarketsAdapter{db: d, deps: NativeEconomyDeps{
+		NativeMarkets: marketSvc,
+		LegalRouter:   mustRouter(t, legalrouter.DevelopmentPolicy()),
+		Capabilities:  commerceCaps{valuedomain.CapNativeMarketTrading: true},
+		Verification:  verifiedAt(valuedomain.VerificationNodalIdentity),
+		Jurisdiction:  fixedJurisdiction("US-CA"),
+		Clock:         clk,
+	}}
 
 	h := &harness{t: t, ports: fx}
 	srv, err := New(Options{

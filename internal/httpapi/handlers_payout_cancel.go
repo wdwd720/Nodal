@@ -27,7 +27,7 @@ func (s *Server) PostPayoutsPayoutIdCancel(ctx context.Context, request api.Post
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}

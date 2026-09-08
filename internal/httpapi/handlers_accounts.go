@@ -19,16 +19,32 @@ const (
 	maxPageLimit     = 200
 )
 
-// accountScope resolves the path account id and enforces tenant scoping. Every
-// account-scoped handler starts here: an operator needs account:read_any, a
-// customer must own the account, and an agent never gets this far.
+// accountScope resolves an account id for a READ and enforces tenant scoping:
+// an operator needs account:read_any, a customer must own the account, and an
+// agent never gets this far.
+//
+// Use accountScopeWrite for anything that changes state. The two are separate
+// because the operator override is a READ permission, and using it to
+// authorize a write let an ADMIN act as any customer (F-36).
 func accountScope(ctx context.Context, u api.AccountId) (accounts.AccountID, error) {
+	return scopedAccount(ctx, u, security.RequireAccount)
+}
+
+// accountScopeWrite resolves an account id for a WRITE. Ownership only: no
+// operator override, because an operator changing a customer's position does
+// it through the admin plane, where it needs a reason, a second principal and
+// a permanent record.
+func accountScopeWrite(ctx context.Context, u api.AccountId) (accounts.AccountID, error) {
+	return scopedAccount(ctx, u, security.RequireAccountOwner)
+}
+
+func scopedAccount(ctx context.Context, u api.AccountId, require func(context.Context, string) error) (accounts.AccountID, error) {
 	var zero accounts.AccountID
 	accountID, err := accounts.ParseAccountID(u.String())
 	if err != nil || accountID.IsZero() {
 		return zero, validationError("accountId", "accountId must be a canonical UUID")
 	}
-	if err := security.RequireAccount(ctx, accountID.String()); err != nil {
+	if err := require(ctx, accountID.String()); err != nil {
 		return zero, err
 	}
 	return accountID, nil

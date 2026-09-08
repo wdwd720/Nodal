@@ -534,7 +534,15 @@ func Compile(in CompilerInput) (Route, error) {
 		// is already correct, when the actual next step is activating the
 		// capability -- which the gate check below reports with the
 		// capability named.
-		if r.Legal.ReasonCode != "CAPABILITY_NOT_ACTIVE" {
+		//
+		// The question is asked of the DECISION's own field, not of its reason
+		// code. It used to compare the code against the literal
+		// "CAPABILITY_NOT_ACTIVE", and a reason code is a string a policy
+		// author writes: a hand-written Deny rule carrying that code, with no
+		// RequiredCapability to make step 6 fire, produced a Route with NO
+		// reasons and Permitted true. A policy denial became a permission.
+		// legalrouter now reserves the code and records the fact separately.
+		if !r.Legal.GateRefusal {
 			add(ReasonLegalRouterDenied)
 		}
 	}
@@ -551,6 +559,20 @@ func Compile(in CompilerInput) (Route, error) {
 			add(ReasonCapabilityNotActive)
 			break
 		}
+	}
+
+	// Belt and braces: a router DENY must always leave a reason behind. It
+	// cannot fail to above -- a GateRefusal always names the capability that
+	// step 6 then reports -- but "cannot happen" is exactly what the string
+	// comparison this replaced also assumed, and the cost of being wrong here
+	// is a permissive Route.
+	// Belt and braces: a router DENY must always leave a reason behind. It
+	// cannot fail to above -- a GateRefusal always names the capability that
+	// step 6 then reports -- but "cannot happen" is exactly what the string
+	// comparison this replaced also assumed, and the cost of being wrong here
+	// is a permissive Route.
+	if r.Legal.Outcome == legalrouter.Deny && len(reasons) == 0 {
+		add(ReasonLegalRouterDenied)
 	}
 
 	// --- 7. The deadline ----------------------------------------------------

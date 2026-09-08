@@ -52,6 +52,11 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-33 | P2 | BASELINE | fixed | No browser test completed a transaction, so nothing proved a customer could finish anything |
 | F-34 | P1 | BASELINE | fixed | The whole risk kernel was unreachable: no deployment wrote a policy and nothing evaluated one |
 | F-35 | P2 | BASELINE | fixed | `make lint` had never passed either: 70 findings, 56 of them a linter arbitrating British English |
+| F-36 | P1 | BASELINE | fixed | A read permission authorized writes: one ADMIN session could trade, buy and reserve payouts out of any customer's balance |
+| F-37 | P1 | BASELINE | fixed | `POST /v1/native-markets/{id}/orders` had never worked in any deployment — no caller set `effective_at` |
+| F-38 | P1 | BASELINE | fixed | A policy DENY carrying the gate's reason code became a PERMITTED route |
+| F-39 | P2 | BASELINE | fixed | The no-float linter never looked at the internal economy |
+| F-40 | P2 | NEW | fixed | This register claimed a database guarantee that the trigger it named does not make |
 
 ---
 
@@ -429,11 +434,20 @@ firing. "A guard that has never been seen to fail is recorded as unproven."
 
 The first `commerce_partial_write` control consumed the buyer's Credit lots in a
 separate transaction with no posting behind them, on the theory that provenance
-would then claim fewer units than the ledger held. It does not: migration 00711
-(SQLSTATE CR004) refuses a lot event whose journal transaction never touched the
-account, so that drift is **unrepresentable**. The control could not construct
-the fault it was named after, the test passed with it active, and the guard was
+would then claim fewer units than the ledger held. It could not construct the
+fault it was named after, the test passed with it active, and the guard was
 therefore proving nothing.
+
+**CORRECTION (F-40).** This paragraph used to say the reason was migration
+00711's SQLSTATE CR004, "which refuses a lot EVENT whose journal transaction
+never touched the account, so that drift is unrepresentable". That is false, and
+it is exactly the kind of false statement this register exists to catch. CR004
+is raised only by `cp_credit_lot_open`, the trigger on `credit_lots` INSERT.
+`cp_credit_lot_apply_event` never reads `NEW.journal_transaction_id`, and the
+column is nullable on `credit_lot_events` — a CONSUME event with no posting
+behind it IS accepted by the database. Why the original control did not
+construct the fault is recorded again below, correctly; the sentence claiming a
+database guarantee was written from the wrong trigger and stood for a session.
 
 This is the more dangerous shape of the problem the file's own header warns
 about. A guard nobody exercised is an unknown. A guard whose control silently
@@ -1215,6 +1229,165 @@ found. fmtcheck now passes `-extra`, and the 25 files that difference had been
 hiding are formatted.
 
 `make lint` exits 0.
+
+## F-36 · A read permission authorized writes, and ADMIN holds the customer surface · BASELINE · P1 · FIXED
+
+**Found by** asking an adversarial re-audit of the HTTP authorization surface
+one question: for every handler that takes an id from the request, is ownership
+actually checked? It is — by `security.RequireAccount`, which was the only
+tenant check on the write routes as well as the read ones.
+
+`RequireAccount` returns nil for any non-agent principal holding
+`account:read_any`. That is correct for a read and is what the permission is
+named for. The write routes used the same function.
+
+**Why that is not merely untidy.** `RoleAdmin` is defined as
+`except(allPermissions, dualControl ∪ agentOnly)` — every permission that is not
+an approve-side or agent-intrinsic one. So an ADMIN holds `account:read_any`
+AND `native_market:trade`, `commerce:buy`, `commerce:sell`, `payout:create`,
+`withdrawal:create`, `funding:create` and `credit:purchase`. Those customer
+permissions are there so an operator can use their own account. Combined with
+the read override, one ADMIN session could do this:
+
+    POST /v1/native-markets/{marketId}/orders
+    {"account_id": "<any customer>", "side": "BUY", "amount": "1000000000", ...}
+
+and spend that customer's Credits. Likewise `POST /v1/internal-products/{id}/orders`
+(buys with their Credits), `POST /v1/payouts` (moves their Credits into
+`PAYOUT_RESERVED`), `POST /v1/internal-sellers` (registers them as a seller).
+No second signature, no step-up, no `admin_actions` row, no reason recorded —
+the audit stream shows an operator making a customer's request, which is
+precisely what it would look like if the customer had made it.
+
+**Fourteen write routes were scoped this way.** Every account-scoped
+`POST`/`PUT`/`PATCH`/`DELETE` in the API.
+
+**Fix.** `security.RequireAccountOwner` — ownership only, no operator override —
+and `accountScopeWrite` in the HTTP layer, on all fourteen. An operator who
+needs to change a customer's position uses the admin plane, where the act needs
+a reason, a second principal for anything consequential, and a permanent row
+naming both. Reads are untouched: `account:read_any` still reads any account,
+which is what it is for.
+
+**Made mechanical.** `TestAccountScope_EveryWriteUsesOwnershipOnly` reads this
+package's own source and fails on any mutating handler that scopes through the
+read helper, naming it. Its negative control requires the write helper to be in
+real use, so a green run cannot mean "the regexes stopped matching". Both were
+observed failing.
+
+**And proved over HTTP.**
+`TestIntegration_AnOperatorCannotTradeOutOfACustomersAccount` puts a real ADMIN
+principal on a real market with a real funded customer, asserts 403, asserts the
+balance did not move — and then asserts the same operator can still READ that
+account and still trade out of their OWN. A fix that broke either of those would
+have passed a test that only checked the refusal.
+
+**No test could have caught it.** Every principal in
+`TestIntegration_CommerceRefusesCrossTenantRequests` is a customer; the
+`TestIDOR_*` family uses customers and SUPPORT_READ_ONLY. Nothing anywhere put
+an operator principal on a customer write route with a foreign `account_id` —
+the combination was not modelled, so the suite agreed with the code.
+
+## F-37 · The customer trade route had never worked, in any deployment · BASELINE · P1 · FIXED
+
+**Found by** F-36's test failing for the wrong reason. Proving an operator is
+refused needed a real request through the real port, and the first honest run of
+that request — by the account's own owner — returned
+
+    400 VALIDATION_FAILED: an order needs effective_at
+
+`nativemarket.ExecuteRequest` requires `EffectiveAt`. The handler does not set
+it, because a handler must not invent time. The adapter does not set it either
+— and the payout adapter and the commerce adapter both do, from the deployment
+clock, three files away. So **every** request to `POST
+/v1/native-markets/{marketId}/orders` had been refused since the route was
+written.
+
+**Why nothing noticed, which is the whole lesson.** The path was covered
+everywhere except where it mattered: `internal/nativemarket`'s integration tests
+call `Execute` directly with an `EffectiveAt`; the chaos suite and the restore
+drill do the same; the browser suite buys from the Marketplace, which goes
+through `commerceAdapter`; and `test/load/internal_economy.js` says in its own
+comment that it deliberately does not create native-market trades. Fifty-two
+integration tests, seventy browser tests, a load script and a chaos suite, and
+not one of them sent this request.
+
+That is F-26, F-28, F-29 and F-34 again — **a path only tests can walk looks
+finished from inside the tests** — with a new wrinkle: here the tests walked a
+path *beside* the real one. The domain service was exercised exhaustively; the
+route into it was not exercised at all.
+
+**Fix.** `nativeMarketsAdapter.Execute` stamps `EffectiveAt` from
+`deps.now()`, like its siblings. `TestIntegration_ACustomerCanTradeOverHTTP`
+walks the route as a customer and asserts the Credits that left the account are
+the Credits the fill reports; it was observed failing with the stamp removed.
+
+## F-38 · A policy DENY carrying the gate's reason code became a permission · BASELINE · P1 · FIXED
+
+**Found by** an adversarial re-audit of the settlement compiler, asking which
+inputs produce a permissive `Route`.
+
+F-17 established a real distinction: a DENY the router produced only because a
+capability gate is off is not a policy refusal, and reporting it as
+`LEGAL_ROUTER_DENIED` sends an operator to change a policy that is already
+correct. The compiler drew that distinction by comparing the decision's
+`ReasonCode` against the literal `"CAPABILITY_NOT_ACTIVE"`.
+
+A reason code is a string a policy author writes. `Policy.Validate` required one
+to be non-empty and nothing more — there was no reason-code vocabulary. So a
+hand-authored rule:
+
+    {Match: {Jurisdiction: "US-NY"}, Outcome: Deny, ReasonCode: "CAPABILITY_NOT_ACTIVE"}
+
+validated, matched, and was then read by the compiler as a gate refusal. With no
+`RequiredCapability` on the rule there was nothing for the gate check to catch
+either, so the route came out with **no reasons at all** and `Permitted: true`.
+The deployment's own policy said no and the compiler said yes.
+
+**Two fixes, because one of them is the control and the other is the reason
+nobody can reach it.**
+
+1. `legalrouter.Decision.GateRefusal` — a field set at exactly one place, where
+   the router converts an ALLOW whose gate is off into a DENY. The compiler asks
+   that instead of the string. It cannot be forged, because a `Rule` has no such
+   field.
+2. `ReasonCapabilityNotActive` is reserved: `Policy.Validate` refuses a rule
+   that writes it by hand, naming the rule. Without this, a policy could still
+   make every refusal message lie about which of the policy and the gate
+   refused.
+
+A belt-and-braces line was added with them: a router `Deny` that produced no
+reason at all now adds `LEGAL_ROUTER_DENIED` unconditionally. It cannot fire
+today — "cannot happen" is what the string comparison assumed too, and the cost
+of being wrong is a permissive route.
+
+**Observed failing.** `TestRoute_GateRefusalIsSetOnlyWhereTheGateRefused` fails
+with the field assignment removed, and `TestPolicy_TheGatesReasonCodeIsReserved`
+fails with the reservation removed. The compiler-level test is labelled in its
+own comment as a regression guard rather than a proof, because the exploit can
+no longer be constructed through `legalrouter.New` and it therefore passes
+against the old code as well.
+
+## F-39 · The no-float linter never looked at the internal economy · BASELINE · P2 · FIXED
+
+**Found by** an adversarial re-audit of the money spine sweeping for floats, and
+then asking what stops one being added.
+
+`scripts/lintfin` enforces "no float in a money path" over a hard-coded
+directory list: `money, ledger, capital, risk, positions, valuation, quote,
+settlement`. Every package of the internal economy is absent —
+`internal/credit`, `internal/nativemarket`, `internal/commerce`,
+`internal/payout`, `internal/valuedomain`. Domain A was built after that list
+was written and nobody extended it.
+
+There is no float in any of them today; the sweep confirmed it. What did not
+exist was the control, and "there is no float" and "a float cannot be added
+without the build failing" are different claims — the second is the one the goal
+document asks for.
+
+**Fix.** The five packages are in the list. The linter was run against them and
+is clean, and a deliberately-planted `float64` in a Credit calculation was
+observed failing it.
 
 ## Findings deliberately NOT raised
 

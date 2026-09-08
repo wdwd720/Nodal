@@ -97,7 +97,7 @@ func (s *Server) PostInternalSellers(ctx context.Context, request api.PostIntern
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (s *Server) PostInternalSellers(ctx context.Context, request api.PostIntern
 		// self-dealing check could be walked around, so the caller must own
 		// that account too. The domain refuses the sale as well; this refuses
 		// the setup.
-		payoutID, perr := accountScope(ctx, *request.Body.PayoutAccountId)
+		payoutID, perr := accountScopeWrite(ctx, *request.Body.PayoutAccountId)
 		if perr != nil {
 			return nil, perr
 		}
@@ -143,7 +143,7 @@ func (s *Server) PostInternalProducts(ctx context.Context, request api.PostInter
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (s *Server) PostInternalProductsProductIdOrders(ctx context.Context, reques
 	if err != nil {
 		return nil, validationError("productId", "productId must be a canonical UUID")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}

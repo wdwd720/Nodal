@@ -332,6 +332,19 @@ func (a nativeMarketsAdapter) Execute(ctx context.Context, r nativemarket.Execut
 		return nativemarket.ExecuteResult{}, cerr
 	}
 
+	// The deployment's clock, not the client's. `EffectiveAt` is the instant a
+	// posting is dated, so it is a deployment fact like the payout policy and
+	// the capability set, and the adapter is where those are resolved.
+	//
+	// It was simply absent, and the consequence was total: `ExecuteRequest`
+	// requires it, so every request to POST /native-markets/{id}/orders was
+	// refused VALIDATION_FAILED "an order needs effective_at". The route had
+	// never worked in any deployment. Nothing caught it because nothing drove
+	// this route over HTTP -- the load script says in its own comment that it
+	// does not trade, and the browser suite buys from the marketplace, which
+	// goes through commerceAdapter, which does set it. F-37.
+	r.EffectiveAt = a.deps.now()
+
 	var res nativemarket.ExecuteResult
 	err = a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		var eerr error

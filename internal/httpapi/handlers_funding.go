@@ -28,7 +28,7 @@ func (s *Server) PostFundingDeposits(ctx context.Context, request api.PostFundin
 	if !ok {
 		return nil, errs.New(errs.CodeUnauthenticated, "authentication is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (s *Server) PostWithdrawals(ctx context.Context, request api.PostWithdrawal
 	if !ok {
 		return nil, errs.New(errs.CodeUnauthenticated, "authentication is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}

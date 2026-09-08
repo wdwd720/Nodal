@@ -7,12 +7,14 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -471,11 +473,87 @@ func TestGolden_NoValidPlanReasonsAreClosed(t *testing.T) {
 	require.Equal(t, want, ReasonCodes())
 }
 
-// TestKillSwitchSwitchesUsedByGolden ensures the switch kinds referenced in
-// the corpus are real kinds.
+// TestGolden_KillSwitchKindsValid ensures the switch kinds referenced in the
+// CORPUS are real kinds.
+//
+// It used to iterate killswitch.AllKinds() and assert each was Valid() —
+// membership in the list it had just read from. No edit to either side could
+// make it fail, and it therefore said nothing about the corpus its own name is
+// about. A test that cannot fail is worse than no test: it occupies the space
+// where the real one would go.
+//
+// This reads the kinds the fixtures actually name and checks those, so a
+// renamed kind, or a fixture inventing one, is caught.
 func TestGolden_KillSwitchKindsValid(t *testing.T) {
 	t.Parallel()
-	for _, k := range killswitch.AllKinds() {
-		require.True(t, k.Valid())
+	named := killSwitchKindsInCorpus(t)
+	require.NotEmpty(t, named,
+		"no kill-switch kind appears in the corpus; this test would prove nothing")
+	for _, k := range named {
+		assert.True(t, killswitch.Kind(k).Valid(),
+			"the corpus names kill switch %q, which is not a declared kind", k)
 	}
 }
+
+// killSwitchKindsInCorpus reads every kill-switch "Kind" the fixtures name.
+//
+// It walks the decoded JSON rather than looking under one key, because the
+// corpus states switches in two shapes: an input's own field and a case's
+// `patch.health.active_kill_switches`. A reader that knew only one of those
+// would find nothing in the other and report an empty set — which is how this
+// test came to assert something about a list it never read.
+//
+// It collects a Kind only INSIDE a kill-switch container. The corpus is full of
+// other things with a kind: venues are DEX_AGGREGATOR, assets are NATIVE. A
+// first version took them all and reported them as undeclared kill switches,
+// which would have been a test that fails for a reason nobody can act on.
+func killSwitchKindsInCorpus(t *testing.T) []string {
+	t.Helper()
+	seen := map[string]bool{}
+	var walk func(v any, inSwitches bool)
+	walk = func(v any, inSwitches bool) {
+		switch node := v.(type) {
+		case map[string]any:
+			for k, child := range node {
+				if inSwitches && (k == "Kind" || k == "kind") {
+					if name, ok := child.(string); ok && name != "" {
+						seen[name] = true
+					}
+				}
+				walk(child, inSwitches || killSwitchKey.MatchString(k))
+			}
+		case []any:
+			for _, child := range node {
+				walk(child, inSwitches)
+			}
+		}
+	}
+	for _, root := range []string{filepath.Join("testdata", "inputs"), filepath.Join("testdata", "cases")} {
+		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() || filepath.Ext(path) != ".json" {
+				return err
+			}
+			body, rerr := os.ReadFile(path) // #nosec G304 -- a corpus fixture, walked on purpose
+			if rerr != nil {
+				return rerr
+			}
+			var doc any
+			if json.Unmarshal(body, &doc) != nil {
+				return nil
+			}
+			walk(doc, false)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// killSwitchKey matches the field names under which the corpus states kill
+// switches, in either casing convention it uses.
+var killSwitchKey = regexp.MustCompile(`(?i)kill_?switch`)

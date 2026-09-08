@@ -24,7 +24,7 @@ func (s *Server) PostQuotesPreview(ctx context.Context, request api.PostQuotesPr
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s *Server) PostIntents(ctx context.Context, request api.PostIntentsRequest
 	if !ok {
 		return nil, errs.New(errs.CodeUnauthenticated, "authentication is required")
 	}
-	accountID, err := accountScope(ctx, request.Body.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Body.AccountId)
 	if err != nil {
 		return nil, err
 	}

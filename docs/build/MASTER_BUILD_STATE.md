@@ -733,6 +733,59 @@ gap was hiding are formatted.
 
 `make lint` exits 0.
 
+### Five agents, read-only, and what they found (F-36 to F-40)
+
+The first wave of parallel work in this session was five read-only auditors:
+two on worker reachability, three adversarial on the compiler-and-gates spine,
+the money spine, and the API authorization surface. Every claim below was
+re-verified by reading the code before anything was changed -- an agent's report
+is a lead, not a fact.
+
+**F-36, the worst thing found in this project so far.** `RequireAccount` returns
+nil for any principal holding `account:read_any`, and that was the ONLY tenant
+check on the write routes as well as the read ones. RoleAdmin is every
+permission except the dual-control and agent-only sets, so it holds that read
+override AND `native_market:trade`, `commerce:buy`, `payout:create`,
+`withdrawal:create`. One ADMIN session could trade, buy and reserve a payout out
+of any customer's balance -- no second signature, no admin action, and an audit
+trail that looks exactly like the customer having done it themselves. Fourteen
+write routes. Fixed with an ownership-only scope, a source-level check that no
+mutating handler can use the read one, and an HTTP test that also asserts the
+operator can still READ that account and still trade out of their own.
+
+**F-37, found by F-36's test failing for the wrong reason.** Proving the
+operator was refused needed a real request through the real port, and the first
+honest run -- by the account's own owner -- returned 400 "an order needs
+effective_at". `POST /v1/native-markets/{id}/orders` had never worked in any
+deployment. The handler does not stamp the time (correctly) and the adapter did
+not either, while the payout and commerce adapters both do, three files away.
+
+The lesson is a new wrinkle on the old one: fifty-two integration tests, seventy
+browser tests, a load script and a chaos suite all exercised the domain service
+exhaustively, and none of them sent this request. **The tests walked a path
+BESIDE the real one.**
+
+**F-38.** The compiler distinguished "the gate is off" from "the policy said no"
+by comparing a reason code against a string literal. A reason code is a string a
+policy author writes, so a hand-authored DENY carrying "CAPABILITY_NOT_ACTIVE"
+-- with no RequiredCapability, so nothing else fired either -- produced a Route
+with no reasons and Permitted true. Now the router records the fact in a field a
+Rule cannot set, and Validate reserves the code.
+
+**F-39.** `scripts/lintfin` enforces "no float in a money path" over a directory
+list written before Domain A existed. Credit, nativemarket, commerce, payout and
+valuedomain were never scanned. No float was there; the control was not either.
+
+**F-40.** This register said migration 00711's CR004 "refuses a lot EVENT whose
+journal transaction never touched the account". It does not -- CR004 is raised
+only by the trigger on `credit_lots` INSERT, and `cp_credit_lot_apply_event`
+never reads the column, which is nullable. A false claim about a database
+guarantee, in the document whose job is to be believed.
+
+**Also de-tautologised.** `TestGolden_KillSwitchKindsValid` iterated the
+declared kind list and asserted each was a declared kind. It now reads the kinds
+the corpus actually names, which is what it always claimed to do.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.

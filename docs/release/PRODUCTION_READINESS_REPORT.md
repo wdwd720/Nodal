@@ -82,6 +82,24 @@ had ever been evaluated.
 | Neither limit refuses the opening trade of a market or an account's first purchase | `TestNativeConcentration_TheFirstBuyerOfANewMarketIsNotConcentrated` |
 | An order larger than the balance is refused for that reason, not as a concentration breach | `TestIntegration_AnOrderBiggerThanTheBalanceSaysSo` — observed reporting `RISK_CONCENTRATION` with the affordability guard removed |
 
+### Tenant scoping, and the customer routes
+
+| Property | Evidence |
+|---|---|
+| An operator who may READ any account may not ACT on one | `TestRequireAccountOwner_AnOperatorMayReadAnyAccountAndActOnNone` — the same principal, the same account, opposite answers on the read and the write |
+| No account-scoped write route uses the read-side scope | `TestAccountScope_EveryWriteUsesOwnershipOnly`, with a negative control requiring the write helper to be in real use; both observed failing |
+| An ADMIN cannot trade out of a customer's balance, over HTTP | `TestIntegration_AnOperatorCannotTradeOutOfACustomersAccount` — 403, the balance unmoved, and the same operator still able to read that account and trade out of their own |
+| A customer can trade over HTTP at all | `TestIntegration_ACustomerCanTradeOverHTTP` — the route had never worked in any deployment (F-37); the test was observed failing with the fix removed |
+
+### The legal router and the compiler
+
+| Property | Evidence |
+|---|---|
+| A policy DENY is a refusal whatever reason code it carries | `TestCompile_APolicyDenyIsNeverSwallowed` (regression guard) with `TestPolicy_TheGatesReasonCodeIsReserved` and `TestRoute_GateRefusalIsSetOnlyWhereTheGateRefused` as the observed-failing proofs |
+| A gate refusal is still not reported as a policy refusal | `TestCompile_AGateRefusalIsStillNotAPolicyRefusal` — F-17 stays fixed |
+| An unmatched key claims no gate refusal | `TestRoute_TheUnmatchedFallbackClaimsNoGateRefusal` |
+| The kill-switch kinds the golden corpus names are real kinds | `TestGolden_KillSwitchKindsValid` — it used to iterate the declared list and assert membership in it, which no edit could make fail; it now reads the corpus, and was observed failing on a planted kind |
+
 ### Payouts
 
 | Property | Evidence |
@@ -267,7 +285,7 @@ proving nothing, and an inspector that approves everything still fails it.
 | `gosec` (`make sast`) | **clean** — and it had never been clean: seven findings, every one a suppression that did not satisfy `-nosec-require-justification`, so the target failed for anyone who ran it |
 | `gitleaks` (`make secrets`) | **clean** — one finding, in `internal/gen/api/api.gen.go`, which embeds the OpenAPI document as base64'd gzip; adding two endpoints was enough to trip the entropy rule |
 | `trivy config` (`make iac-scan`) | 0 HIGH/CRITICAL across every terraform module and environment |
-| `make lint` (fmtcheck, vet, staticcheck, golangci-lint, lintfin) | **clean** — and it had never been clean either: 70 findings, 56 of them `misspell` set to the US locale against prose written largely in British English, and 15 committed files that were never gofumpt-formatted (F-35) |
+| `make lint` (fmtcheck, vet, staticcheck, golangci-lint, lintfin) | **clean**, and `lintfin` now covers the internal economy — its no-float directory list predated Domain A, so credit, nativemarket, commerce, payout and valuedomain were unenforced (F-39); a planted `float64` was observed failing it. Also — and it had never been clean either: 70 findings, 56 of them `misspell` set to the US locale against prose written largely in British English, and 15 committed files that were never gofumpt-formatted (F-35) |
 | `test/source` (in `make unit`) | **clean** — every text file in the repository, refused for the nine bidi embedding, override and isolate codepoints; the same class had been found three times, each by a tool that could not see the other occurrences |
 | SBOM (`make sbom`) | generated, 6.1 MB SPDX |
 | `terraform validate` | dev, staging and prod all valid; `terraform fmt -check -recursive` clean |

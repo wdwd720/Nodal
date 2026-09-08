@@ -52,9 +52,18 @@ func DefaultConfig(root, module string) Config {
 		Root:     root,
 		Module:   module,
 		ScanDirs: []string{"internal", "cmd"},
+		// Every package that holds or moves a quantity of value. The five
+		// Domain A packages joined after F-39: the list predates the internal
+		// economy, so "no float in a money path" was unenforced across all of
+		// it -- credit, nativemarket, commerce, payout and valuedomain. None of
+		// them contained a float, which is why nobody noticed; "there is none"
+		// and "one cannot be added without the build failing" are different
+		// claims and only the second is a control.
 		FinDirs: []string{
 			"internal/money", "internal/ledger", "internal/capital", "internal/risk",
 			"internal/positions", "internal/valuation", "internal/quote", "internal/settlement",
+			"internal/credit", "internal/nativemarket", "internal/commerce",
+			"internal/payout", "internal/valuedomain",
 		},
 		AgentDirs: []string{"internal/agent", "internal/strategy"},
 		AgentDenied: []string{
