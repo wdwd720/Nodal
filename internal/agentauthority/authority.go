@@ -222,6 +222,10 @@ func (a Action) Valid() bool {
 // level, with any approval, in any jurisdiction. They are compiled in because
 // they are the boundary of the whole agent architecture, and a boundary a
 // config flag can move is not a boundary.
+// #nosec G101 -- these are ACTION NAMES and the reasons an agent may never
+// take them. "AccessSecrets" trips a word-list looking for credentials; the
+// map contains no credential and is compiled in precisely so that nothing can
+// supply one.
 var forbiddenAlways = map[Action]string{
 	ActionWithdraw:           "an agent may never withdraw value; a payout is a user action with its own verification",
 	ActionTransferValue:      "an agent may never transfer value to an arbitrary destination",

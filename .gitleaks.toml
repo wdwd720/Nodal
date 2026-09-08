@@ -31,6 +31,23 @@ paths = [
   '''(^|/)testdata/.*\.golden$''',
 ]
 
+# Generated code. oapi-codegen embeds the OpenAPI document as base64'd gzip, and
+# protoc-gen-go embeds raw descriptors; both are long high-entropy runs that the
+# generic-api-key rule reads as credentials. Adding two endpoints to
+# openapi.yaml was enough to make `make secrets` red.
+#
+# Nothing in internal/gen is hand-written and `make gen` overwrites any
+# annotation placed there, so the path is the only stable place to record the
+# decision -- the same argument `make sast` already makes with
+# -exclude-generated. The SOURCES these files are generated from
+# (openapi/openapi.yaml, proto/**) are scanned normally, which is where a real
+# secret would have to be introduced first.
+[[allowlists]]
+description = "Generated code: embedded specs and descriptors are high-entropy, not secret"
+paths = [
+  '''^internal/gen/''',
+]
+
 # Deliberately fake credential material in tests and fixtures.
 #
 # Several suites exist precisely to prove that credentials are refused, masked

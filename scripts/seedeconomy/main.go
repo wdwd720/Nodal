@@ -59,7 +59,7 @@ const (
 	devIssuer = "devidp"
 	// localAppDSN is the LOCAL docker-compose credential. seedeconomy is a
 	// local-only developer script and refuses a non-local host below.
-	localAppDSN = "postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable" // #nosec G101
+	localAppDSN = "postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable" // #nosec G101 -- the LOCAL docker-compose credential, not a secret; run() refuses any non-local database host before this is used
 	// seedEpoch is fixed, not the wall clock: internal/ledger includes
 	// effective_at in the posting content hash, so a moving timestamp under a
 	// fixed idempotency key is refused as INVALID_IDEMPOTENCY_REUSE on the

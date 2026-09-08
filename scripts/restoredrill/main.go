@@ -103,6 +103,12 @@ func run() int {
 	if err := seed(ctx, src.AppDSN); err != nil {
 		return fail(fmt.Errorf("seed: %w", err))
 	}
+	// The internal economy, through the real services. Without this every
+	// Domain A table restored EMPTY and the row-count comparison compared zero
+	// with zero -- a backup proven only on tables nobody uses.
+	if err := seedDomainA(ctx, src.AppDSN); err != nil {
+		return fail(fmt.Errorf("seed domain a: %w", err))
+	}
 	step("provisioned and seeded %s", src.Name)
 
 	// 2. Backup.

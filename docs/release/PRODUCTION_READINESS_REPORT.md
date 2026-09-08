@@ -226,6 +226,49 @@ number would need a larger seed, and it would still be a laptop number.
 | A deployment that wired no policy refuses real capital rather than permitting it | `Ports.SettlementPolicy` is a struct whose ZERO VALUE is the conservative deployment |
 | The deployment's OWN policy is the one that answers, not the default | `TestWire_CarriesTheDeploymentsSettlementPolicy` (observed failing without the wiring) and `TestIntegration_AConfiguredPolicyActuallyReachesTheIntentCompiler` — this is F-24 |
 
+### Security and supply-chain scans, run on this commit
+
+| Scan | Result |
+|---|---|
+| `govulncheck ./...` | no vulnerability this code calls; 1 in a required module nothing reaches |
+| `gosec` (`make sast`) | **clean** — and it had never been clean: seven findings, every one a suppression that did not satisfy `-nosec-require-justification`, so the target failed for anyone who ran it |
+| `gitleaks` (`make secrets`) | **clean** — one finding, in `internal/gen/api/api.gen.go`, which embeds the OpenAPI document as base64'd gzip; adding two endpoints was enough to trip the entropy rule |
+| `trivy config` (`make iac-scan`) | 0 HIGH/CRITICAL across every terraform module and environment |
+| SBOM (`make sbom`) | generated, 6.1 MB SPDX |
+| `terraform validate` | dev, staging and prod all valid; `terraform fmt -check -recursive` clean |
+
+Two of those are worth more than a tick.
+
+**`make sast` had never passed.** Its flags require every `#nosec` to name the
+rule it silences AND state the invariant that makes it safe, and seven
+suppressions predating this session said only `#nosec G101` or nothing at all. A
+scan target that fails is a scan nobody runs. The seventh was the best of them:
+`internal/nativeasset/moderation.go` was flagged for Trojan Source because it
+contains bidirectional control characters — it is the code that REFUSES them in
+user-supplied asset names. They are now written as `'‪'` escapes, which
+removes the characters from the source and reads better anyway: a reviewer can
+see which codepoint each one is instead of an invisible glyph.
+
+**`make secrets` was red for a generated file.** `internal/gen` is allowlisted
+by path with the reason, which is the same argument `make sast` already makes
+with `-exclude-generated`: nothing there is hand-written, `make gen` overwrites
+any annotation, and the SOURCES those files are generated from are scanned
+normally — which is where a real secret would have to be introduced first.
+
+### Backup and restore, over Domain A data
+
+| Property | Evidence |
+|---|---|
+| A backup of a database holding a live internal economy restores complete | `make restore-drill`: 118 tables, row counts match, journal hashes match on both sides, zero balance drift |
+| The restored copy carries the Domain A tables with DATA in them | 1 native-market fill, 1 commerce order, 4 credit lots, 2 lot events, 2 published prices, 1 market, 1 instrument, 3 audit events |
+| The fixture is made the way the application makes it | `scripts/restoredrill/domaina.go` drives the REAL services, so the restored rows satisfy the deferred balance triggers, CR004, AU001, IC001 and the terms-frozen guard by having been written through them |
+| Migration state survives | source and restored both at version 715, checksums verified on the restored copy |
+
+Until this session the drill's fixture was users, accounts, one asset and 25
+journal transactions. Every Domain A table restored EMPTY, so "row counts match"
+compared zero with zero. A backup proven only on tables nobody uses is not a
+proven backup.
+
 ### Every method that moves money can be reached (F-29)
 
 | Property | Evidence |
@@ -327,9 +370,6 @@ earlier one.
 ### Not run
 
 - A committed-throughput number not bounded by seed data (part of Stage 21) — see the table above.
-- The backup/restore drill against the new tables.
-- `govulncheck`, `gosec`, `gitleaks`, `trivy`, SBOM in this session.
-- Terraform validation in this session.
 
 ### Externally blocked
 

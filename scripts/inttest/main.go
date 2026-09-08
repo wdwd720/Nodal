@@ -143,6 +143,9 @@ func run() int {
 		}
 		args = append(args, pkg)
 
+		// #nosec G204 -- args are built here from a fixed list of flags and a
+		// package path this program enumerated from the filesystem. Nothing in
+		// them comes from a network or a user.
 		cmd := exec.CommandContext(ctx, "go", args...)
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), env...)
@@ -276,6 +279,8 @@ func dbName(pkg string) string {
 // provision runs scripts/testdb and parses the `export NAME=value` lines it
 // prints, returning them as environment entries.
 func provision(ctx context.Context, root, name string) ([]string, error) {
+	// #nosec G204 -- a constant command line; `name` is derived from a package
+	// path this program enumerated, not from input.
 	cmd := exec.CommandContext(ctx, "go", "run", "./scripts/testdb", "-name", name, "-export")
 	cmd.Dir = root
 	cmd.Stderr = os.Stderr
@@ -301,6 +306,8 @@ func provision(ctx context.Context, root, name string) ([]string, error) {
 // drop removes a package's database. A failure here is reported and ignored:
 // leaking a local test database is untidy, not a test result.
 func drop(ctx context.Context, root, name string) {
+	// #nosec G204 -- a constant command line; `name` is derived from a package
+	// path this program enumerated, not from input.
 	cmd := exec.CommandContext(ctx, "go", "run", "./scripts/testdb", "-name", name, "-drop")
 	cmd.Dir = root
 	if err := cmd.Run(); err != nil {

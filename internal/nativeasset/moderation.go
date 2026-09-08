@@ -308,8 +308,14 @@ func hasControlOrFormat(s string) bool {
 func hasBidiOverride(s string) bool {
 	for _, r := range s {
 		switch r {
-		case '‪', '‫', '‬', '‭', '‮',
-			'⁦', '⁧', '⁨', '⁩', '‏', '‎':
+		// Written as escapes, not as the characters themselves. This is the
+		// code that REFUSES bidirectional control characters in user content,
+		// and a scanner looking for Trojan Source flagged the whole file for
+		// containing the very things it exists to block. Escapes are also
+		// simply more readable: a reviewer can see which codepoint each one
+		// is instead of an invisible glyph.
+		case '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
+			'\u2066', '\u2067', '\u2068', '\u2069', '\u200f', '\u200e':
 			return true
 		}
 	}

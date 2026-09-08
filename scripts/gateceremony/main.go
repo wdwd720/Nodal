@@ -64,7 +64,7 @@ import (
 
 // localAppDSN is the LOCAL docker-compose credential; a non-local host is
 // refused below.
-const localAppDSN = "postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable" // #nosec G101
+const localAppDSN = "postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable" // #nosec G101 -- the LOCAL docker-compose credential, not a secret; run() refuses any non-local database host and any environment but LOCAL/DEV/TEST
 
 func main() {
 	if err := run(); err != nil {

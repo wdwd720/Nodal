@@ -568,6 +568,46 @@ It runs in the fast tier alongside `test/docs`, because an unreachable control
 and a broken citation should be caught by the same run that catches a broken
 package.
 
+### The scans that had never been run, and the one that had never passed
+
+`make sast` fails today for anyone who runs it, and did before this session:
+its flags require every `#nosec` to name the rule it silences AND state the
+invariant that makes it safe, and seven suppressions said only `#nosec G101` or
+nothing. A scan target that fails is a scan nobody runs, so the flags were
+doing the opposite of their job.
+
+All seven are now justified or removed. The best of them was
+`internal/nativeasset/moderation.go`, flagged for Trojan Source because it
+contains bidirectional control characters — it is the code that REFUSES them in
+user-supplied asset names. They are now `'‪'` escapes: the characters are
+gone from the source and a reviewer can see which codepoint each one is instead
+of an invisible glyph.
+
+`make secrets` was red on `internal/gen/api/api.gen.go`, which embeds the
+OpenAPI document as base64'd gzip; adding two endpoints was enough to trip the
+entropy rule. `internal/gen` is allowlisted by path with the reason.
+
+Also run on this commit: `govulncheck` (nothing this code calls), `trivy config`
+(0 HIGH/CRITICAL), the SBOM, and `terraform validate` across dev, staging and
+prod with `fmt -check` clean.
+
+### The backup drill now proves something about Domain A
+
+Its fixture was users, accounts, one asset and 25 journal transactions. Every
+Domain A table restored EMPTY, so "row counts match" compared zero with zero,
+and the readiness report had to record the drill as not covering the new tables.
+
+`scripts/restoredrill/domaina.go` seeds a live internal economy through the REAL
+services — Credits in provenance lots, a native asset, its market, a trade, a
+seller, a product and a purchase. Going through the services rather than writing
+rows is the point: what the restore has to survive is data shaped the way the
+application makes it, satisfying the deferred balance triggers, CR004, AU001,
+IC001 and the terms-frozen guard by having been written through them.
+
+The restored copy now carries 1 fill, 1 order, 4 credit lots, 2 lot events, 2
+published prices, 1 market, 1 instrument and 3 audit events, with row counts and
+journal hashes matching on both sides.
+
 ## 0.3 Next exact work, in order
 
 1. **Stages 22–24** — the provider sandbox, the re-audit and the evidence package.
