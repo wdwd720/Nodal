@@ -984,6 +984,14 @@ the purchase completes and the balance falls. With the capability removed from
 refusal names `CAPABILITY_NOT_APPROVED` and `MARKETPLACE`, and checks the
 balance did NOT move. Neither outcome is a green tick over an untested path.
 
+**And it would have failed in CI.** The e2e job seeded users and assets but not
+the internal economy, so `/marketplace` had nothing to buy. The new spec would
+have found an empty catalogue on its first CI run — a test that needs data
+nobody creates is another path only its author can walk. The job now runs
+`seedeconomy` and activates MARKETPLACE through `gateceremony`, the same real
+ceremony used locally, and starts the API with the development legal policy and
+the capability enabled.
+
 Point 3 is the third time in this session that a check ran before the thing it
 was checking existed — F-32's first fix, this refusal branch, and this outcome
 wait. The pattern is worth naming: **an assertion about an absence, or a branch

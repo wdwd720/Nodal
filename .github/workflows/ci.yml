@@ -497,6 +497,21 @@ jobs:
           export CP_DATABASE_APP_URL="$CP_TEST_DATABASE_URL"
           export CP_DATABASE_MIGRATE_URL="$CP_TEST_MIGRATE_DATABASE_URL"
           go run ./scripts/seed
+          # The internal economy: a Credit asset, Credits for the dev
+          # customers, a seller and a catalogue. Without it /marketplace has
+          # nothing to buy and the purchase spec has nothing to exercise.
+          go run ./scripts/seedeconomy
+          # MARKETPLACE, through the REAL three-principal ceremony rather than
+          # by writing an ACTIVE row. gateceremony drives gates.Admin, so the
+          # state machine, the permission split, the step-up and all four
+          # evidence references apply, and it refuses any environment but
+          # LOCAL/DEV/TEST and any non-local database host.
+          #
+          # Without it the purchase spec takes its refusal branch: that branch
+          # asserts the refusal names the capability and that no Credits moved,
+          # so CI would still be testing something -- but it would not be
+          # testing that a customer can buy anything, which is the point.
+          go run ./scripts/gateceremony -capability MARKETPLACE             -proposer ci-proposer -approver ci-approver -activator ci-activator             -legal "CI-NOT-A-LEGAL-REVIEW" -contract "CI-NO-PROVIDER-CONTRACT"             -risk "CI-NOT-A-RISK-APPROVAL" -security "CI-NOT-A-SECURITY-REVIEW"             -reason "continuous integration: exercise the committed purchase path"
           # Settlement asset: buying power and holdings answer 422 UNSUPPORTED
           # without it, and the specs assert real figures.
           db="${CP_TEST_DATABASE_URL##*/}"; db="${db%%\?*}"
@@ -509,7 +524,7 @@ jobs:
             echo "CP_API_SETTLEMENT_MINT=${asset#* }"
           } >> "$GITHUB_ENV"
           go build -o bin/api ./cmd/api
-          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             ./bin/api > api.log 2>&1 &
+          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=DEVELOPMENT             CP_API_ENABLED_CAPABILITIES=MARKETPLACE             ./bin/api > api.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -m 2 http://127.0.0.1:18099/v1/healthz >/dev/null; then
               echo "api up"; exit 0
