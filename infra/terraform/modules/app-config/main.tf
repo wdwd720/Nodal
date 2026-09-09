@@ -65,25 +65,8 @@ locals {
     CP_REDIS_URL         = "${local.ref}/redis/url"
     CP_REDIS_REQUIRE_TLS = "true"
 
-    # Redpanda
-    CP_REDPANDA_BROKERS           = var.redpanda.brokers
-    CP_REDPANDA_REQUIRE_TLS       = "true"
-    CP_REDPANDA_SASL_MECHANISM    = var.redpanda.sasl_mechanism
-    CP_REDPANDA_SASL_USERNAME_REF = "${local.ref}/redpanda/sasl-username"
-    CP_REDPANDA_SASL_PASSWORD_REF = "${local.ref}/redpanda/sasl-password"
-
-    # ClickHouse
-    CP_CLICKHOUSE_ADDR         = var.clickhouse.addr
-    CP_CLICKHOUSE_DATABASE     = var.clickhouse.database
-    CP_CLICKHOUSE_USERNAME_REF = "${local.ref}/clickhouse/username"
-    CP_CLICKHOUSE_PASSWORD_REF = "${local.ref}/clickhouse/password"
-    CP_CLICKHOUSE_REQUIRE_TLS  = "true"
-
-    # Temporal
-    CP_TEMPORAL_HOST_PORT         = var.temporal.host_port
-    CP_TEMPORAL_NAMESPACE         = var.temporal.namespace
-    CP_TEMPORAL_TASK_QUEUE_PREFIX = var.temporal.task_queue_prefix
-    CP_TEMPORAL_REQUIRE_TLS       = "true"
+    # Redpanda, ClickHouse and Temporal are merged in below, and only when the
+    # deployment actually has them.
 
     # Archive (S3 via the task role: no static keys, PART 99)
     CP_ARCHIVE_ENDPOINT             = "https://s3.${var.aws_region}.amazonaws.com"
@@ -128,6 +111,49 @@ locals {
     CP_RETENTION_MODEL_IO_DAYS         = tostring(var.retention_days.model_io)
     CP_RETENTION_OPERATIONAL_LOG_DAYS  = tostring(var.retention_days.operational_log)
   }
+}
+
+# ---------------------------------------------------------------------------
+# The dependencies a deployment may not have.
+#
+# internal/config declares dependencies per binary: a variable belonging to an
+# external system is required only of a service that dials it, and cmd/api dials
+# none of these three. An API-only deployment therefore does not need a broker
+# list, an analytics address or a workflow endpoint -- and if this module set
+# them anyway, the task definition would contain four endpoints that will never
+# be contacted, which is configuration that lies and which the next person
+# reads and believes.
+#
+# So each block appears only when its address is non-empty. Leaving one empty is
+# how a deployment says "not this one", and the binaries that genuinely need it
+# still refuse to start without it.
+# ---------------------------------------------------------------------------
+
+locals {
+  redpanda_env = var.redpanda.brokers == "" ? {} : {
+    CP_REDPANDA_BROKERS           = var.redpanda.brokers
+    CP_REDPANDA_REQUIRE_TLS       = "true"
+    CP_REDPANDA_SASL_MECHANISM    = var.redpanda.sasl_mechanism
+    CP_REDPANDA_SASL_USERNAME_REF = "${local.ref}/redpanda/sasl-username"
+    CP_REDPANDA_SASL_PASSWORD_REF = "${local.ref}/redpanda/sasl-password"
+  }
+
+  clickhouse_env = var.clickhouse.addr == "" ? {} : {
+    CP_CLICKHOUSE_ADDR         = var.clickhouse.addr
+    CP_CLICKHOUSE_DATABASE     = var.clickhouse.database
+    CP_CLICKHOUSE_USERNAME_REF = "${local.ref}/clickhouse/username"
+    CP_CLICKHOUSE_PASSWORD_REF = "${local.ref}/clickhouse/password"
+    CP_CLICKHOUSE_REQUIRE_TLS  = "true"
+  }
+
+  temporal_env = var.temporal.host_port == "" ? {} : {
+    CP_TEMPORAL_HOST_PORT         = var.temporal.host_port
+    CP_TEMPORAL_NAMESPACE         = var.temporal.namespace
+    CP_TEMPORAL_TASK_QUEUE_PREFIX = var.temporal.task_queue_prefix
+    CP_TEMPORAL_REQUIRE_TLS       = "true"
+  }
+
+  optional_dependency_env = merge(local.redpanda_env, local.clickhouse_env, local.temporal_env)
 }
 
 # ---------------------------------------------------------------------------

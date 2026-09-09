@@ -95,26 +95,36 @@ variable "provider_slots" {
   }))
 }
 
+# Empty means the deployment does not have this system, and then none of its
+# CP_* variables are set on any task. internal/config requires each of these
+# only of the binaries that dial it, so a stage that runs no relay-worker,
+# market-ingest-worker or workflow-worker leaves them empty -- rather than
+# inventing four endpoints that will never be contacted, which is configuration
+# that lies. A validation below refuses the other half of that mistake: running
+# the binary and not giving it the endpoint.
 variable "redpanda" {
   type = object({
-    brokers        = string
+    brokers        = optional(string, "")
     sasl_mechanism = optional(string, "SCRAM-SHA-256")
   })
+  default = {}
 }
 
 variable "clickhouse" {
   type = object({
-    addr     = string
+    addr     = optional(string, "")
     database = optional(string, "controlplane")
   })
+  default = {}
 }
 
 variable "temporal" {
   type = object({
-    host_port         = string
-    namespace         = string
+    host_port         = optional(string, "")
+    namespace         = optional(string, "")
     task_queue_prefix = optional(string, "cp")
   })
+  default = {}
 }
 
 variable "otel_sidecar_enabled" {
@@ -238,12 +248,23 @@ variable "service_sizing" {
     audit-worker          = { cpu = 256, memory = 512, desired_count = 1 }
     migrate               = { cpu = 256, memory = 512, desired_count = 0 }
   }
+  # A SUBSET of the nine, not a different set. The stack is deployed in stages:
+  # the Credit purchase path is the API, the reconciliation worker and migrate,
+  # and the other six are added as the domains they serve are turned on. What
+  # this refuses is a name that is not a binary, because that silently
+  # provisions a service which will never start.
   validation {
-    condition = toset(keys(var.service_sizing)) == toset([
+    condition = length(setsubtract(toset(keys(var.service_sizing)), toset([
       "api", "relay-worker", "execution-worker", "reconciliation-worker", "market-ingest-worker",
       "agent-worker", "workflow-worker", "audit-worker", "migrate",
-    ])
-    error_message = "service_sizing must cover exactly the nine binaries of SYSTEM.md section 2."
+    ]))) == 0
+    error_message = "service_sizing may name only the nine binaries of SYSTEM.md section 2."
+  }
+  # migrate is not optional at any stage: without it the schema is never
+  # applied, and every service that does start fails on its first query.
+  validation {
+    condition     = contains(keys(var.service_sizing), "api") && contains(keys(var.service_sizing), "migrate")
+    error_message = "Every stage deploys at least the api and migrate."
   }
 }
 

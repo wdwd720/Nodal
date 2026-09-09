@@ -428,12 +428,14 @@ failed refreshing its own topics. They moved to an ARN-scoped statement.
 `REDUNDANT_RESOURCE` on two S3 grants: `arn:aws:s3:::nodal-*` already matches
 object keys, so the `/*` form added nothing. Removed.
 
-**The Path B environment does not exist yet.** These policies were derived from
-the module set in `infra/terraform/modules`, which is what `environments/prod`
-composes. A Path B environment is a different composition, and `terraform plan`
-is the only real test of whether the permissions are complete. Expect at least
-one missing action; the fix is to add it here, scoped, rather than to widen a
-statement to `*`.
+**No plan has been run.** These policies were derived by reading the module set
+in `infra/terraform/modules`, and `terraform plan` is the only real test of
+whether the permissions are complete. Expect at least one missing action; the
+fix is to add it here, scoped, rather than to widen a statement to `*`.
+
+Path B itself is no longer a missing environment. It is `environments/prod`
+deploying three of its nine binaries, which is why what gets added later is
+added to this deployment rather than replacing it.
 
 ## 1c. The scripts, and what is left for a person
 
@@ -597,7 +599,7 @@ Stripe webhook are unaffected.
 | `backend.hcl` from the example | engineering | after step 2 |
 | ACM certificate for `api-nodal.actorvia.xyz` | nodal-terraform + GoDaddy | step 3 |
 | Auth0 tenant, client id and secret | owner | `docs/operations/IDENTITY_PROVIDER.md` |
-| A Path B Terraform environment | engineering | **not written** — see below |
+| A Path B Terraform environment | engineering | **done** — `environments/prod` with three of nine binaries; see `terraform.tfvars.pathb.example` |
 | Container images in ECR | engineering | none exist; no GitHub repository exists |
 | ElastiCache Redis for the API's rate-limit counters | nodal-terraform | required since F-82; see section 5 |
 | Access Analyzer run on the five policies | admin | **done**, section 1b, zero findings |

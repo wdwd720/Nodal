@@ -154,6 +154,20 @@ Secrets Manager, real RDS with TLS — a production-style endpoint that Stripe c
 post to, and a foundation the rest of the stack is added to later rather than
 thrown away.
 
+**And it is not a separate environment.** Forking `environments/prod` would
+duplicate eleven hundred lines that then drift, and both copies would claim the
+same `nodal-prod-*` resource names. Path B is instead `environments/prod` with
+three entries in `service_sizing` rather than nine. `terraform.tfvars.pathb.example`
+is the whole of it. Adding a binary later is a line in that map plus the
+endpoint it dials; a `check` block refuses the half of that mistake where the
+binary is deployed and the endpoint is not.
+
+The same idea reaches the task definitions. `app-config` used to set
+`CP_REDPANDA_*`, `CP_CLICKHOUSE_*` and `CP_TEMPORAL_*` unconditionally, so an
+API-only deployment would have carried four endpoints it never contacts —
+exactly the lie `internal/config` stopped telling. Each block now appears only
+when its address is non-empty.
+
 It still needs: an authenticated non-root AWS role, the state bucket bootstrap,
 an OIDC identity provider for authentication, a hostname, a certificate, and the
 ElastiCache group above.

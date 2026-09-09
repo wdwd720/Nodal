@@ -112,10 +112,13 @@ provider "aws" {
 module "kms" {
   source = "../../modules/kms"
 
-  name_prefix                   = local.name_prefix
-  aws_account_id                = var.aws_account_id
-  aws_region                    = var.aws_region
-  audit_signer_role_arns        = [module.services["audit-worker"].task_role_arn]
+  name_prefix    = local.name_prefix
+  aws_account_id = var.aws_account_id
+  aws_region     = var.aws_region
+  # Only when the audit worker is deployed. The key still exists at every stage
+  # -- it signs the audit chain and the chain outlives any one binary -- but a
+  # stage that runs no audit worker has no role to name here.
+  audit_signer_role_arns        = contains(keys(var.service_sizing), "audit-worker") ? [module.services["audit-worker"].task_role_arn] : []
   audit_verifier_principal_arns = var.auditor_principal_arns
   key_admin_principal_arns      = var.key_admin_principal_arns
   deletion_window_in_days       = 7

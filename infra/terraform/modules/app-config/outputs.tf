@@ -1,6 +1,6 @@
 output "env" {
   description = "CP_* map shared by every binary (merge per-service overrides such as CP_SERVICE_NAME on top)."
-  value       = merge(local.common_env, local.provider_env)
+  value       = merge(local.common_env, local.optional_dependency_env, local.provider_env)
 }
 
 output "readonly_database_url_ref" {

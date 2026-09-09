@@ -1,0 +1,80 @@
+# Path B: the Credit purchase path, in production, and nothing else yet.
+#
+# This is not a different environment. It is `environments/prod` deploying three
+# of its nine binaries, so that what is added later is added to this rather than
+# replacing it. Copy to terraform.tfvars and fill in the four values marked
+# CHANGE ME.
+#
+# What it provisions: VPC, RDS PostgreSQL, the three S3 buckets, ElastiCache for
+# the rate-limit counters, an ALB with WAF and an ACM certificate, Secrets
+# Manager, and Fargate services for cmd/api and cmd/reconciliation-worker plus
+# the migrate task.
+#
+# What it does not: Redpanda, ClickHouse, Temporal, CloudFront, and the six
+# binaries that need them. Those endpoints are left empty on purpose. Empty
+# means "this deployment does not have it", and then none of their CP_*
+# variables are set on any task -- see internal/config/service.go for the same
+# table on the Go side.
+
+aws_account_id = "049286562577"
+aws_region     = "us-east-2"
+
+permissions_boundary_arn = "arn:aws:iam::049286562577:policy/nodal-task-boundary"
+
+# --- the stage --------------------------------------------------------------
+# api and migrate are required at every stage. reconciliation-worker is here
+# because the Credit purchase path needs it: it sweeps settlement windows and
+# reconciles funding against the provider.
+service_sizing = {
+  api                   = { cpu = 1024, memory = 2048, desired_count = 3 }
+  reconciliation-worker = { cpu = 1024, memory = 2048, desired_count = 2 }
+  migrate               = { cpu = 512, memory = 1024, desired_count = 0 }
+}
+
+# --- the dependencies this stage does not have ------------------------------
+# Left at their empty defaults. Naming them here would be four endpoints that
+# will never be contacted.
+#
+# redpanda   = {}
+# clickhouse = {}
+# temporal   = {}
+
+# --- the public name --------------------------------------------------------
+public_base_url     = "https://api-nodal.actorvia.xyz"
+public_product_name = "Nodal"
+cors_origins        = ["https://api-nodal.actorvia.xyz"]
+
+# Requested with `aws acm request-certificate` and validated by a CNAME at
+# GoDaddy BEFORE the record that makes the hostname resolve is published:
+# actorvia.xyz sends HSTS with includeSubDomains and preload, so a name that
+# resolves without a valid certificate fails closed for every visitor.
+acm_certificate_arn = "CHANGE ME" # arn:aws:acm:us-east-2:049286562577:certificate/...
+
+# CloudFront is off. It is a second certificate in us-east-1 and a second cache
+# to reason about, for an API that Stripe posts to directly.
+cloudfront_enabled = false
+
+# --- identity ---------------------------------------------------------------
+# Auth0, chosen in docs/operations/IDENTITY_PROVIDER.md because Cognito emits no
+# amr claim, which makes the step-up condition on CREDIT_PURCHASE permanently
+# unsatisfiable.
+auth = {
+  issuer       = "CHANGE ME" # https://<tenant>.us.auth0.com/
+  client_id    = "CHANGE ME"
+  redirect_url = "https://api-nodal.actorvia.xyz/v1/auth/callback"
+  cookie_name  = "nodal_session"
+  cookie_domain = "api-nodal.actorvia.xyz"
+  session_ttl  = "12h"
+}
+
+# --- CI ---------------------------------------------------------------------
+# Empty until the Nodal GitHub repository exists. While either is empty the
+# deploy role is not created at all, so nothing has to be invented here. The
+# account's existing OIDC provider belongs to another project and is referenced,
+# never managed.
+github_org  = ""
+github_repo = ""
+
+# --- alerting ---------------------------------------------------------------
+sev1_email_endpoints = ["CHANGE ME"]
+sev2_email_endpoints = ["CHANGE ME"]

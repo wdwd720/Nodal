@@ -56,26 +56,34 @@ variable "database" {
   default = {}
 }
 
+# An empty address means the deployment does not have this system, and none of
+# its CP_* variables are then set on any task. It is not an oversight and it is
+# not a placeholder: internal/config requires each of these only of the binaries
+# that dial it, so an API-only deployment leaves all three empty and every
+# binary it runs still starts.
 variable "redpanda" {
   type = object({
-    brokers        = string
+    brokers        = optional(string, "")
     sasl_mechanism = optional(string, "SCRAM-SHA-256")
   })
+  default = {}
 }
 
 variable "clickhouse" {
   type = object({
-    addr     = string
+    addr     = optional(string, "")
     database = optional(string, "controlplane")
   })
+  default = {}
 }
 
 variable "temporal" {
   type = object({
-    host_port         = string
-    namespace         = string
+    host_port         = optional(string, "")
+    namespace         = optional(string, "")
     task_queue_prefix = optional(string, "cp")
   })
+  default = {}
 }
 
 variable "archive" {
