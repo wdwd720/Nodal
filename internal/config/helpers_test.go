@@ -39,6 +39,7 @@ func prodEnv() map[string]string {
 		// distributed one -- which is also what makes CP_REDIS_* required of
 		// the API rather than merely present.
 		"CP_RATELIMIT_BACKEND": "redis",
+		"CP_HTTP_REPLICAS":     "3",
 
 		"CP_REDIS_URL":         "aws-sm://cp/prod/redis-url",
 		"CP_REDIS_REQUIRE_TLS": "true",

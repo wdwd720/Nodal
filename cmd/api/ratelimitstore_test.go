@@ -37,7 +37,7 @@ func TestRateLimitStore_LocalKeepsCountersInTheProcess(t *testing.T) {
 			cfg := &config.Config{
 				Env:       env,
 				Service:   config.ServiceAPI,
-				RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory},
+				RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory, Replicas: 1},
 			}
 			store, failOpen, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
 			require.NoError(t, err)
@@ -50,31 +50,50 @@ func TestRateLimitStore_LocalKeepsCountersInTheProcess(t *testing.T) {
 	}
 }
 
-// TestRateLimitStore_ProductionRefusesTheProcessLocalStore.
+// TestRateLimitStore_RefusesProcessLocalCountersAcrossReplicas.
 //
-// This is the same refusal as config.Validate's, asked one layer down. It is
-// asserted here as well because the two answer different questions: Validate
-// rejects the configuration, and this rejects the store -- so a caller that
-// somehow reached composition with a memory backend in production still does
-// not get a limiter that quietly counts per replica.
-func TestRateLimitStore_ProductionRefusesTheProcessLocalStore(t *testing.T) {
+// The same refusal config.Validate makes, asked one layer down, because the
+// two answer different questions: Validate rejects the configuration and this
+// rejects the store. A caller that somehow reached composition with a memory
+// backend and three declared processes still does not get a limiter that
+// quietly counts per replica.
+//
+// The condition is the replica count and not the environment, so a
+// single-process PROD deployment is admitted and a three-process LOCAL one is
+// not -- which is the whole point of the change.
+func TestRateLimitStore_RefusesProcessLocalCountersAcrossReplicas(t *testing.T) {
 	t.Parallel()
-	for _, env := range []config.Environment{config.EnvStaging, config.EnvProd} {
-		t.Run(string(env), func(t *testing.T) {
+	for _, env := range []config.Environment{config.EnvLocal, config.EnvStaging, config.EnvProd} {
+		t.Run(string(env)+"/three", func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{
 				Env:       env,
 				Service:   config.ServiceAPI,
-				RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory},
+				RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory, Replicas: 3},
 			}
-			require.Error(t, cfg.Validate(), "validation refuses it first")
-			assert.True(t, config.HasViolation(cfg.Validate(), config.RuleDistributedRateLimit))
+			assert.True(t, config.HasViolation(cfg.Validate(), config.RuleDistributedRateLimit),
+				"validation refuses it first, in every environment")
 
 			_, _, _, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
 			require.Error(t, err, "and composition refuses it too, rather than trusting the caller")
-			assert.ErrorIs(t, err, errRateLimitProcessLocalInProduction)
+			assert.ErrorIs(t, err, errRateLimitProcessLocalAcrossReplicas)
 		})
 	}
+
+	// One process in PROD is correct: the configured limit is the enforced
+	// limit, because there is one set of counters.
+	cfg := &config.Config{
+		Env:       config.EnvProd,
+		Service:   config.ServiceAPI,
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory, Replicas: 1},
+	}
+	assert.False(t, config.HasViolation(cfg.Validate(), config.RuleDistributedRateLimit))
+	store, failOpen, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+	require.NoError(t, err, "a single-process production deployment counts correctly in memory")
+	require.NotNil(t, cleanup)
+	cleanup()
+	assert.IsType(t, &ratelimit.MemoryStore{}, store)
+	assert.True(t, failOpen, "a store that cannot fail may be treated as one that will not")
 }
 
 // TestRateLimitStore_MissingOrMalformedRedisConfigurationFails: every way of
@@ -99,7 +118,7 @@ func TestRateLimitStore_MissingOrMalformedRedisConfigurationFails(t *testing.T) 
 			cfg := &config.Config{
 				Env:       config.EnvTest,
 				Service:   config.ServiceAPI,
-				RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis},
+				RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis, Replicas: 1},
 				Redis:     config.RedisConfig{URL: tc.url, RequireTLS: tc.requireTLS},
 			}
 			store, failOpen, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
@@ -123,7 +142,7 @@ func TestRateLimitStore_TheErrorNeverQuotesTheURL(t *testing.T) {
 	cfg := &config.Config{
 		Env:       config.EnvTest,
 		Service:   config.ServiceAPI,
-		RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis},
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis, Replicas: 1},
 		Redis:     config.RedisConfig{URL: config.SecretRef("ftp://user:" + password + "@cache.internal:6379")},
 	}
 	_, _, _, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
@@ -139,7 +158,7 @@ func TestRateLimitStore_AnUnreachableRedisStopsStartup(t *testing.T) {
 	cfg := &config.Config{
 		Env:       config.EnvTest,
 		Service:   config.ServiceAPI,
-		RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis},
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis, Replicas: 1},
 		// Port 1 is reserved and nothing listens on it, so the dial is refused
 		// rather than timing out.
 		Redis: config.RedisConfig{URL: "redis://127.0.0.1:1/0"},
@@ -159,7 +178,7 @@ func TestRateLimitStore_AnUnknownBackendIsRefused(t *testing.T) {
 	cfg := &config.Config{
 		Env:       config.EnvTest,
 		Service:   config.ServiceAPI,
-		RateLimit: config.RateLimitConfig{Backend: config.RateLimitBackend("memcached")},
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitBackend("memcached"), Replicas: 1},
 	}
 	_, _, _, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
 	require.Error(t, err)

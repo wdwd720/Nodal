@@ -236,6 +236,7 @@ module "app_config" {
 
   environment         = local.environment
   aws_region          = var.aws_region
+  http_replicas       = try(var.service_sizing["api"].desired_count, 1)
   secret_name_prefix  = local.secret_prefix
   public_product_name = var.public_product_name
   public_base_url     = var.public_base_url

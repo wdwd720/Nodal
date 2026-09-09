@@ -389,6 +389,8 @@ func specs() []varSpec {
 		req("CP_DATABASE_LOCK_TIMEOUT", secDatabase, "Postgres lock_timeout applied per session.", "5s",
 			setDuration(func(c *Config) *time.Duration { return &c.Database.LockTimeout })),
 
+		only(ServiceAPI, req("CP_HTTP_REPLICAS", secRateLimit, "How many processes of this binary serve HTTP. It decides whether process-local rate-limit counters can enforce the configured limit: one process can, more cannot, because each keeps its own copy of the budget. Whatever runs the deployment -- a task count, a replica count, an instance count -- must agree with this, and a value that understates it produces a limit looser than the one configured.", "1",
+			setInt(func(c *Config) *int { return &c.RateLimit.Replicas }))),
 		only(ServiceAPI, req("CP_RATELIMIT_BACKEND", secRateLimit, "Where transport rate-limit counters live: memory | redis. memory keeps them in the process, so the budget is per replica -- three API tasks with a limit of 100 admit 300 -- which is why STAGING and PROD refuse it. redis shares one budget across every replica and makes CP_REDIS_* required of the API.", "memory",
 			setRateLimitBackend(func(c *Config) *RateLimitBackend { return &c.RateLimit.Backend }))),
 

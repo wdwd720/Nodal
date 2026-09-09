@@ -214,10 +214,14 @@ func (c *Config) Validate() error {
 	// configured number is then not the enforced number, which is worse than a
 	// wrong limit because it reads as a right one.
 	//
-	// So STAGING and PROD require a distributed backend of any binary that
-	// serves HTTP. LOCAL, TEST and DEV may keep the counters in the process:
-	// one replica, and no shared budget to get wrong.
+	// So a binary that serves HTTP must either share its counters or run as a
+	// single process, and it must SAY which -- in every environment, because
+	// three DEV replicas get the limit just as wrong as three PROD ones.
 	if c.Service.ServesHTTP() {
+		if c.RateLimit.Replicas < 1 {
+			add(RuleField, "RateLimit.Replicas",
+				"must be at least 1; a binary that serves HTTP runs at least one process")
+		}
 		switch {
 		case c.RateLimit.Backend == "":
 			// Only reachable outside LOCAL/TEST, where no default is applied.
@@ -230,10 +234,18 @@ func (c *Config) Validate() error {
 		case !c.RateLimit.Backend.IsValid():
 			add(RuleField, "RateLimit.Backend",
 				fmt.Sprintf("unknown backend %q", string(c.RateLimit.Backend)))
-		case prodLike && !c.RateLimit.Backend.Distributed():
+		case c.RateLimit.Replicas > 1 && !c.RateLimit.Backend.Distributed():
+			// The condition is the replica count, not the environment.
+			//
+			// A rate limit is a budget and process-local counters give each
+			// process its own copy, so the configured limit is the enforced
+			// limit exactly when there is one process. The environment was a
+			// proxy for that and was wrong both ways: it refused a correct
+			// single-process production deployment, and permitted an incorrect
+			// three-process DEV one. This refuses the second as well.
 			add(RuleDistributedRateLimit, "RateLimit.Backend",
-				fmt.Sprintf("%q keeps counters in the process, so each replica gets its own budget; STAGING/PROD require redis",
-					string(c.RateLimit.Backend)))
+				fmt.Sprintf("%q keeps counters in the process and this deployment declares %d of them, so a limit of N would admit %d*N; use redis or run one",
+					string(c.RateLimit.Backend), c.RateLimit.Replicas, c.RateLimit.Replicas))
 		}
 	}
 

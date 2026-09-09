@@ -60,6 +60,10 @@ locals {
     # task's memory: a limit of 100 across three tasks would admit 300. This is
     # also what makes CP_REDIS_* required of the API rather than merely present.
     CP_RATELIMIT_BACKEND = "redis"
+    # Declared, not guessed: internal/config refuses process-local rate-limit
+    # counters unless exactly one process serves HTTP, and it cannot see the
+    # task count itself. This must agree with api_autoscaling.min_capacity.
+    CP_HTTP_REPLICAS = tostring(var.http_replicas)
 
     # Redis
     CP_REDIS_URL         = "${local.ref}/redis/url"

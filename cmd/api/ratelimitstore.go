@@ -27,12 +27,12 @@ const redisPingTimeout = 2 * time.Second
 // silently selecting whichever branch came last.
 var errRateLimitBackendUnknown = errors.New("no rate-limit store is wired for this backend")
 
-// errRateLimitProcessLocalInProduction is the same refusal config.Validate
+// errRateLimitProcessLocalAcrossReplicas is the same refusal config.Validate
 // makes, asked one layer down. Both exist because they answer different
 // questions -- Validate rejects the configuration, this rejects the store --
 // and because the consequence of getting past either is a limiter that reports
 // a number it is not enforcing.
-var errRateLimitProcessLocalInProduction = errors.New("process-local rate-limit counters are refused in STAGING/PROD")
+var errRateLimitProcessLocalAcrossReplicas = errors.New("process-local rate-limit counters cannot enforce one budget across several processes")
 
 // rateLimitStore builds the counter store the transport rate limiter uses, and
 // says whether a store failure should allow the request through.
@@ -55,17 +55,27 @@ func newRateLimitStore(ctx context.Context, cfg *config.Config, resolver config.
 	noop := func() {}
 	switch cfg.RateLimit.Backend {
 	case config.RateLimitMemory:
-		if cfg.Env.IsProductionLike() {
-			return nil, false, noop, fmt.Errorf("rate limit: %w: the API runs as more than one task there, and each would keep its own copy of the budget", errRateLimitProcessLocalInProduction)
+		// The replica count, not the environment. One process counting in its
+		// own memory enforces exactly the limit it was given; three do not,
+		// wherever they run.
+		if cfg.RateLimit.Replicas != 1 {
+			return nil, false, noop, fmt.Errorf(
+				"rate limit: %w: this deployment declares %d processes, so a limit of N would admit %d*N",
+				errRateLimitProcessLocalAcrossReplicas, cfg.RateLimit.Replicas, cfg.RateLimit.Replicas)
 		}
 		// Fail open. A MemoryStore.Incr cannot return an error, so this is a
 		// statement about a store that cannot fail rather than a policy for
 		// one that can -- and the environments that reach this branch run a
 		// single process, where there is no shared budget to protect.
+		// Logged at startup because it is an assumption about the world that
+		// the process cannot verify: nothing here can tell whether the
+		// platform really runs one instance. An operator reading this line
+		// alongside a platform that says three has found the bug.
 		log.Info("rate limit counters are process-local",
 			"backend", string(config.RateLimitMemory),
 			"env", string(cfg.Env),
-			"note", "the budget is per replica; STAGING and PROD require redis")
+			"declared_replicas", cfg.RateLimit.Replicas,
+			"note", "correct for exactly one process; the platform must agree")
 		return ratelimit.NewMemoryStore(), true, noop, nil
 
 	case config.RateLimitRedis:

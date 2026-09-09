@@ -78,7 +78,8 @@
 //
 // Rate limiting (cmd/api only):
 //
-//	CP_RATELIMIT_BACKEND            memory | redis (STAGING/PROD require redis)
+//	CP_RATELIMIT_BACKEND            memory | redis
+//	CP_HTTP_REPLICAS                int; memory counters need exactly 1
 //
 // Redis (required of cmd/api when CP_RATELIMIT_BACKEND is redis):
 //

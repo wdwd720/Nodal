@@ -38,7 +38,11 @@ func prodRuleCases() []struct {
 		// rate-limit backend is redis, which the production fixture selects
 		// because STAGING and PROD refuse the per-process alternative.
 		{"redis tls", RuleRedisTLS, ServiceAPI, "Redis.RequireTLS", func(c *Config) { c.Redis.RequireTLS = false }},
-		{"memory rate limit", RuleDistributedRateLimit, ServiceAPI, "RateLimit.Backend", func(c *Config) { c.RateLimit.Backend = RateLimitMemory }},
+		// "memory rate limit" used to be here and cannot be: the rule is no
+		// longer production-only. It fires whenever a binary serving HTTP
+		// declares more than one replica, in every environment, because three
+		// DEV replicas get the limit just as wrong as three PROD ones. Its own
+		// test is TestValidate_TheRateLimitRuleFollowsReplicasNotEnvironment.
 		{"redpanda tls", RuleRedpandaTLS, ServiceRelayWorker, "Redpanda.RequireTLS", func(c *Config) { c.Redpanda.RequireTLS = false }},
 		{"clickhouse tls", RuleClickHouseTLS, ServiceMarketIngestWorker, "ClickHouse.RequireTLS", func(c *Config) { c.ClickHouse.RequireTLS = false }},
 		{"temporal tls", RuleTemporalTLS, ServiceWorkflowWorker, "Temporal.RequireTLS", func(c *Config) { c.Temporal.RequireTLS = false }},
@@ -156,6 +160,10 @@ func TestValidate_LocalAndTestPermitDevelopmentSettings(t *testing.T) {
 			t.Parallel()
 			c := validProdConfig(t)
 			c.Env = env
+			// The rate-limit rule is deliberately not environment-dependent
+			// any more, so this test -- which is about the rules that ARE --
+			// states the single replica that makes it moot.
+			c.RateLimit.Replicas = 1
 			for _, tc := range prodRuleCases() {
 				if tc.rule == RuleOIDCConfigured && strings.Contains(tc.name, "missing") {
 					continue // a structural OIDC rule, not a production-only one
@@ -166,6 +174,71 @@ func TestValidate_LocalAndTestPermitDevelopmentSettings(t *testing.T) {
 			assert.NoError(t, c.Validate(), "every production-only rule is relaxed in %s", env)
 		})
 	}
+}
+
+// TestValidate_TheRateLimitRuleFollowsReplicasNotEnvironment.
+//
+// A rate limit is a budget, and process-local counters give each process its
+// own copy of it. So the configured limit is the enforced limit exactly when
+// there is one process, and the environment was only ever a proxy for that.
+// The proxy was wrong in both directions, and this is the test that says so:
+// a single-process PROD deployment is correct, and a three-process LOCAL one
+// is not.
+func TestValidate_TheRateLimitRuleFollowsReplicasNotEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		env      Environment
+		backend  RateLimitBackend
+		replicas int
+		ok       bool
+	}{
+		{"one process in PROD may count in memory", EnvProd, RateLimitMemory, 1, true},
+		{"three processes in PROD may not", EnvProd, RateLimitMemory, 3, false},
+		{"three processes in LOCAL may not either", EnvLocal, RateLimitMemory, 3, false},
+		{"one process in LOCAL is fine", EnvLocal, RateLimitMemory, 1, true},
+		{"redis is fine at any count", EnvProd, RateLimitRedis, 12, true},
+		{"redis is fine at one", EnvLocal, RateLimitRedis, 1, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := validProdConfigAs(t, ServiceAPI)
+			c.Env = tc.env
+			c.RateLimit.Backend = tc.backend
+			c.RateLimit.Replicas = tc.replicas
+			if tc.env == EnvLocal {
+				// LOCAL relaxes the unrelated production rules; this test is
+				// about one rule and must not be answered by another.
+				c.Telemetry.OTLPInsecure = true
+			}
+			err := c.Validate()
+			if tc.ok {
+				assert.False(t, HasViolation(err, RuleDistributedRateLimit),
+					"the rate-limit rule must not fire: %v", err)
+				return
+			}
+			require.Error(t, err)
+			assert.True(t, HasViolation(err, RuleDistributedRateLimit))
+			assert.Contains(t, err.Error(), "keeps counters in the process")
+		})
+	}
+
+	// And zero replicas is a typo rather than a policy.
+	c := validProdConfigAs(t, ServiceAPI)
+	c.RateLimit.Replicas = 0
+	require.Error(t, c.Validate())
+	assert.Contains(t, ruleText(c.Validate()), "at least 1")
+}
+
+// ruleText flattens a validation error for substring assertions.
+func ruleText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func TestValidate_DevAllowsFakesButNotPlainSecrets(t *testing.T) {

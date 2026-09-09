@@ -141,9 +141,32 @@ func (b RateLimitBackend) IsValid() bool {
 // Distributed reports whether the backend is shared across replicas.
 func (b RateLimitBackend) Distributed() bool { return b == RateLimitRedis }
 
+// EnforcesOneBudget reports whether this configuration enforces the limit it
+// states. True for a distributed backend at any replica count, and for a
+// process-local backend at exactly one replica -- which is the same thing said
+// two ways: one set of counters.
+func (c RateLimitConfig) EnforcesOneBudget() bool {
+	return c.Backend.Distributed() || c.Replicas == 1
+}
+
 // RateLimitConfig configures the transport rate limiter.
 type RateLimitConfig struct {
 	Backend RateLimitBackend
+
+	// Replicas is how many processes of this binary serve HTTP.
+	//
+	// It is here because it is the fact the rate-limit invariant actually
+	// depends on. A rate limit is a budget, and process-local counters give
+	// each process its own copy of it -- so "the configured limit is the
+	// enforced limit" holds if and only if there is exactly one process. The
+	// environment was only ever a proxy for that, and a proxy is wrong in both
+	// directions: it refused a correct single-process production deployment and
+	// permitted an incorrect three-process DEV one.
+	//
+	// A deployment that lies here gets a limit looser than it configured, which
+	// is why it is stated rather than guessed, logged at startup, and pinned by
+	// the platform configuration that decides the real count.
+	Replicas int
 }
 
 // RedisConfig configures Redis (never financial truth).

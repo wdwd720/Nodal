@@ -223,3 +223,17 @@ variable "workflow_worker" {
   })
   default = {}
 }
+
+# How many API processes serve HTTP. internal/config uses it to decide whether
+# process-local rate-limit counters can enforce the configured limit, and a
+# value that understates the real count produces a limit looser than the one
+# configured.
+variable "http_replicas" {
+  type    = number
+  default = 1
+
+  validation {
+    condition     = var.http_replicas >= 1
+    error_message = "A binary that serves HTTP runs at least one process."
+  }
+}
