@@ -1,20 +1,31 @@
 # scripts/aws
 
-Four files, so that deploying does not mean reading commands out of a chat
+Five files, so that deploying does not mean reading commands out of a chat
 window and pasting them back.
 
 | Script | When | Human input |
 |---|---|---|
 | `nodal-bootstrap.ps1` | once, and again whenever something looks wrong | at most one action, named on screen |
 | `nodal-login.ps1` | once per working session | one MFA code |
-| `nodal-tf.ps1` | every Terraform run | none |
+| `nodal-deploy.ps1` | to deploy | none |
+| `nodal-tf.ps1` | any single Terraform command | none |
 | `nodal-credential-process.ps1` | never run by hand | none |
 
 ```powershell
 .\scripts\aws\nodal-bootstrap.ps1     # verify and finish the local setup
 .\scripts\aws\nodal-login.ps1         # one MFA code, good for the hour
-.\scripts\aws\nodal-tf.ps1 plan       # runs as the role, no prompt
+.\scripts\aws\nodal-deploy.ps1        # state bucket, backend, init, plan
+.\scripts\aws\nodal-deploy.ps1 -Apply # and then apply
 ```
+
+`nodal-deploy.ps1` is idempotent at every step, so a run after a failure resumes
+rather than restarts. It creates the state bucket -- the one piece of
+infrastructure Terraform cannot create, because it is where Terraform's own
+state lives -- then reads the bucket's settings back rather than trusting the
+writes, since a bucket that silently lost versioning looks exactly like one that
+has it. It generates `backend.hcl` from the account and region it already knows,
+and it refuses to invent `terraform.tfvars`, which carries the hostname, the
+certificate and the identity provider.
 
 ## The AWS CLI is not in the AssumeRole path, and this is why
 
