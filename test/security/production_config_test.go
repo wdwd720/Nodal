@@ -16,7 +16,7 @@ import (
 func loadLocalDefaults(t *testing.T) *config.Config {
 	t.Helper()
 	env := map[string]string{"CP_ENV": "LOCAL"}
-	cfg, err := config.Load(context.Background(), func(k string) (string, bool) { v, ok := env[k]; return v, ok })
+	cfg, err := config.Load(context.Background(), config.ServiceAPI, func(k string) (string, bool) { v, ok := env[k]; return v, ok })
 	require.NoError(t, err)
 	return cfg
 }
