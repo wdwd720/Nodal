@@ -94,7 +94,7 @@ func TestBucketFor_ClassesMapToBucketsAndLocks(t *testing.T) {
 func TestRetention_ProductionRefusesZeroAuditRetention(t *testing.T) {
 	t.Parallel()
 	load := func(days string) *config.Config {
-		cfg, err := config.Load(context.Background(), config.LookupFromMap(map[string]string{
+		cfg, err := config.Load(context.Background(), config.ServiceMarketIngestWorker, config.LookupFromMap(map[string]string{
 			"CP_ENV": "TEST", "CP_RETENTION_SECURITY_AUDIT_DAYS": days, "CP_RETENTION_FINANCIAL_RECORD_DAYS": days,
 		}))
 		require.NoError(t, err, "TEST accepts zero: the rule is production-only")

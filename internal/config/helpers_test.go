@@ -110,15 +110,31 @@ func withVars(base, overrides map[string]string) map[string]string {
 	return m
 }
 
-func mustLoad(t *testing.T, vars map[string]string) *Config {
+// mustLoadAs loads for a named service. Every test that cares which external
+// dependencies are required says so; the ones that do not use mustLoad.
+func mustLoadAs(t *testing.T, service Service, vars map[string]string) *Config {
 	t.Helper()
-	c, err := Load(context.Background(), LookupFromMap(vars))
+	c, err := Load(context.Background(), service, LookupFromMap(vars))
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	return c
 }
 
+// mustLoad loads as the API, which is the representative deployed binary: it
+// declares the archive and nothing else. A test whose subject is a dependency
+// the API does not use must name the service that does, or it will assert
+// against a rule that correctly did not run.
+func mustLoad(t *testing.T, vars map[string]string) *Config {
+	t.Helper()
+	return mustLoadAs(t, ServiceAPI, vars)
+}
+
 func validProdConfig(t *testing.T) *Config {
 	t.Helper()
 	return mustLoad(t, prodEnv())
+}
+
+func validProdConfigAs(t *testing.T, service Service) *Config {
+	t.Helper()
+	return mustLoadAs(t, service, prodEnv())
 }

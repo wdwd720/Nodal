@@ -54,6 +54,16 @@ That matters because the prod Terraform provisions all of them, and the
 prerequisites for the ones the API does not use are paid third-party
 subscriptions.
 
+**Closed on 2026-09-09.** `internal/config` used to require every dependency of
+every binary, so an API-only deployment had to be given four endpoints it would
+never contact. Requirements are now declared per service: `Load` takes a
+`config.Service`, a variable tagged with a `Dependency` is required only of a
+binary that declares it, and a malformed value still fails closed for everyone.
+`cmd/api` starts in PROD with no Redis, Redpanda, ClickHouse or Temporal
+configured at all, and the workers that use those still refuse to start
+without them. See `internal/config/service.go` for the table and the audit
+behind it.
+
 ## 3. What the prod stack actually requires before it can apply
 
 From `infra/terraform/environments/prod/terraform.tfvars.example`, every value

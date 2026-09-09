@@ -50,6 +50,11 @@ type VarSpec struct {
 	Example string
 	// Secret marks SecretRef-typed variables.
 	Secret bool
+	// Dep names the external dependency this variable configures, when it
+	// configures one. Such a variable is required only of a service that
+	// declares that dependency, and is parsed for any service that supplies
+	// it. Empty means the variable is unconditional.
+	Dep Dependency
 }
 
 type applyFn func(c *Config, raw string) error
@@ -73,9 +78,15 @@ func Vars() []VarSpec {
 // documented LOCAL/TEST defaults where allowed, derives computed fields and
 // runs Validate. Every problem is reported; the first error never hides the
 // rest. A present-but-blank variable counts as absent.
-func Load(ctx context.Context, lookup func(string) (string, bool)) (*Config, error) {
+// The service argument is not optional and has no default. A caller that has
+// not said which binary it is cannot be told what it needs, and guessing on its
+// behalf is exactly how every binary came to require every dependency.
+func Load(ctx context.Context, service Service, lookup func(string) (string, bool)) (*Config, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if !service.Valid() {
+		return nil, fmt.Errorf("config: unknown service %q; every binary must declare which one it is", service)
 	}
 	if lookup == nil {
 		lookup = os.LookupEnv
@@ -89,18 +100,24 @@ func Load(ctx context.Context, lookup func(string) (string, bool)) (*Config, err
 		return nil, &VarError{Name: EnvVarEnvironment, Err: err}
 	}
 
-	c := &Config{Env: env, BuildVersion: BuildVersion}
+	c := &Config{Env: env, Service: service, BuildVersion: BuildVersion}
 	var errs []error
 	for _, s := range specs() {
 		if s.Name == EnvVarEnvironment {
 			continue
 		}
+		// A variable belonging to a dependency this service does not use is
+		// not required of it. It is still PARSED when supplied, so a malformed
+		// value fails closed for every binary rather than only for the ones
+		// that would have dialled it -- a broken broker list is a mistake
+		// whoever set it wants to hear about.
+		required := s.Required && (s.Dep == "" || service.Requires(s.Dep))
 		raw, present := lookup(s.Name)
 		if !present || strings.TrimSpace(raw) == "" {
 			switch {
 			case env.AllowsDefaults() && s.Default != "":
 				raw = s.Default
-			case s.Required:
+			case required:
 				errs = append(errs, &VarError{Name: s.Name, Err: ErrMissingRequired})
 				continue
 			default:
@@ -242,6 +259,14 @@ func secretVar(s varSpec) varSpec {
 	return s
 }
 
+// needs marks a variable as belonging to an external dependency. It is
+// required only of a service that declares that dependency, and is parsed for
+// every service that supplies it.
+func needs(d Dependency, s varSpec) varSpec {
+	s.Dep = d
+	return s
+}
+
 const (
 	secCore       = "Core"
 	secHTTP       = "HTTP"
@@ -319,60 +344,60 @@ func specs() []varSpec {
 		req("CP_DATABASE_LOCK_TIMEOUT", secDatabase, "Postgres lock_timeout applied per session.", "5s",
 			setDuration(func(c *Config) *time.Duration { return &c.Database.LockTimeout })),
 
-		secretVar(req("CP_REDIS_URL", secRedis, "SecretRef to the Redis URL (may embed a password). Redis is never financial truth.", "redis://127.0.0.1:6380/0",
-			setSecret(func(c *Config) *SecretRef { return &c.Redis.URL }))),
-		req("CP_REDIS_REQUIRE_TLS", secRedis, "Require rediss:// (TLS). Must be true in STAGING/PROD.", "false",
-			setBool(func(c *Config) *bool { return &c.Redis.RequireTLS })),
+		needs(DepRedis, secretVar(req("CP_REDIS_URL", secRedis, "SecretRef to the Redis URL (may embed a password). Redis is never financial truth.", "redis://127.0.0.1:6380/0",
+			setSecret(func(c *Config) *SecretRef { return &c.Redis.URL })))),
+		needs(DepRedis, req("CP_REDIS_REQUIRE_TLS", secRedis, "Require rediss:// (TLS). Must be true in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.Redis.RequireTLS }))),
 
-		req("CP_REDPANDA_BROKERS", secRedpanda, "Comma-separated Kafka-protocol broker addresses.", "127.0.0.1:19092",
-			setList(func(c *Config) *[]string { return &c.Redpanda.Brokers })),
-		req("CP_REDPANDA_REQUIRE_TLS", secRedpanda, "Require TLS to brokers. Must be true in STAGING/PROD.", "false",
-			setBool(func(c *Config) *bool { return &c.Redpanda.RequireTLS })),
-		opt("CP_REDPANDA_SASL_MECHANISM", secRedpanda, "SASL mechanism (e.g. SCRAM-SHA-256, SCRAM-SHA-512). Empty disables SASL.", "",
-			setString(func(c *Config) *string { return &c.Redpanda.SASLMechanism })),
-		secretVar(opt("CP_REDPANDA_SASL_USERNAME_REF", secRedpanda, "SecretRef to the SASL username. Required when a SASL mechanism is set.", "",
-			setSecret(func(c *Config) *SecretRef { return &c.Redpanda.SASLUsernameRef }))),
-		secretVar(opt("CP_REDPANDA_SASL_PASSWORD_REF", secRedpanda, "SecretRef to the SASL password. Required when a SASL mechanism is set.", "",
-			setSecret(func(c *Config) *SecretRef { return &c.Redpanda.SASLPasswordRef }))),
+		needs(DepRedpanda, req("CP_REDPANDA_BROKERS", secRedpanda, "Comma-separated Kafka-protocol broker addresses.", "127.0.0.1:19092",
+			setList(func(c *Config) *[]string { return &c.Redpanda.Brokers }))),
+		needs(DepRedpanda, req("CP_REDPANDA_REQUIRE_TLS", secRedpanda, "Require TLS to brokers. Must be true in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.Redpanda.RequireTLS }))),
+		needs(DepRedpanda, opt("CP_REDPANDA_SASL_MECHANISM", secRedpanda, "SASL mechanism (e.g. SCRAM-SHA-256, SCRAM-SHA-512). Empty disables SASL.", "",
+			setString(func(c *Config) *string { return &c.Redpanda.SASLMechanism }))),
+		needs(DepRedpanda, secretVar(opt("CP_REDPANDA_SASL_USERNAME_REF", secRedpanda, "SecretRef to the SASL username. Required when a SASL mechanism is set.", "",
+			setSecret(func(c *Config) *SecretRef { return &c.Redpanda.SASLUsernameRef })))),
+		needs(DepRedpanda, secretVar(opt("CP_REDPANDA_SASL_PASSWORD_REF", secRedpanda, "SecretRef to the SASL password. Required when a SASL mechanism is set.", "",
+			setSecret(func(c *Config) *SecretRef { return &c.Redpanda.SASLPasswordRef })))),
 
-		req("CP_CLICKHOUSE_ADDR", secClickHouse, "ClickHouse host:port.", "127.0.0.1:18123",
-			setString(func(c *Config) *string { return &c.ClickHouse.Addr })),
-		req("CP_CLICKHOUSE_DATABASE", secClickHouse, "ClickHouse database name.", "controlplane",
-			setString(func(c *Config) *string { return &c.ClickHouse.Database })),
-		secretVar(opt("CP_CLICKHOUSE_USERNAME_REF", secClickHouse, "SecretRef to the ClickHouse username.", "cp",
-			setSecret(func(c *Config) *SecretRef { return &c.ClickHouse.UsernameRef }))),
-		secretVar(opt("CP_CLICKHOUSE_PASSWORD_REF", secClickHouse, "SecretRef to the ClickHouse password.", "cp_local",
-			setSecret(func(c *Config) *SecretRef { return &c.ClickHouse.PasswordRef }))),
-		req("CP_CLICKHOUSE_REQUIRE_TLS", secClickHouse, "Require TLS to ClickHouse. Must be true in STAGING/PROD.", "false",
-			setBool(func(c *Config) *bool { return &c.ClickHouse.RequireTLS })),
+		needs(DepClickHouse, req("CP_CLICKHOUSE_ADDR", secClickHouse, "ClickHouse host:port.", "127.0.0.1:18123",
+			setString(func(c *Config) *string { return &c.ClickHouse.Addr }))),
+		needs(DepClickHouse, req("CP_CLICKHOUSE_DATABASE", secClickHouse, "ClickHouse database name.", "controlplane",
+			setString(func(c *Config) *string { return &c.ClickHouse.Database }))),
+		needs(DepClickHouse, secretVar(opt("CP_CLICKHOUSE_USERNAME_REF", secClickHouse, "SecretRef to the ClickHouse username.", "cp",
+			setSecret(func(c *Config) *SecretRef { return &c.ClickHouse.UsernameRef })))),
+		needs(DepClickHouse, secretVar(opt("CP_CLICKHOUSE_PASSWORD_REF", secClickHouse, "SecretRef to the ClickHouse password.", "cp_local",
+			setSecret(func(c *Config) *SecretRef { return &c.ClickHouse.PasswordRef })))),
+		needs(DepClickHouse, req("CP_CLICKHOUSE_REQUIRE_TLS", secClickHouse, "Require TLS to ClickHouse. Must be true in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.ClickHouse.RequireTLS }))),
 
-		req("CP_TEMPORAL_HOST_PORT", secTemporal, "Temporal frontend host:port.", "127.0.0.1:7233",
-			setString(func(c *Config) *string { return &c.Temporal.HostPort })),
-		req("CP_TEMPORAL_NAMESPACE", secTemporal, "Temporal namespace.", "default",
-			setString(func(c *Config) *string { return &c.Temporal.Namespace })),
-		req("CP_TEMPORAL_TASK_QUEUE_PREFIX", secTemporal, "Prefix for every task queue name (lets environments share a cluster safely).", "cp",
-			setString(func(c *Config) *string { return &c.Temporal.TaskQueuePrefix })),
-		req("CP_TEMPORAL_REQUIRE_TLS", secTemporal, "Require TLS to Temporal. Must be true in STAGING/PROD.", "false",
-			setBool(func(c *Config) *bool { return &c.Temporal.RequireTLS })),
+		needs(DepTemporal, req("CP_TEMPORAL_HOST_PORT", secTemporal, "Temporal frontend host:port.", "127.0.0.1:7233",
+			setString(func(c *Config) *string { return &c.Temporal.HostPort }))),
+		needs(DepTemporal, req("CP_TEMPORAL_NAMESPACE", secTemporal, "Temporal namespace.", "default",
+			setString(func(c *Config) *string { return &c.Temporal.Namespace }))),
+		needs(DepTemporal, req("CP_TEMPORAL_TASK_QUEUE_PREFIX", secTemporal, "Prefix for every task queue name (lets environments share a cluster safely).", "cp",
+			setString(func(c *Config) *string { return &c.Temporal.TaskQueuePrefix }))),
+		needs(DepTemporal, req("CP_TEMPORAL_REQUIRE_TLS", secTemporal, "Require TLS to Temporal. Must be true in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.Temporal.RequireTLS }))),
 
-		req("CP_ARCHIVE_ENDPOINT", secArchive, "S3-compatible endpoint URL. Empty in AWS means the regional default; LOCAL points at MinIO.", "http://127.0.0.1:9100",
-			setString(func(c *Config) *string { return &c.Archive.Endpoint })),
-		req("CP_ARCHIVE_REGION", secArchive, "S3 region.", "us-east-1",
-			setString(func(c *Config) *string { return &c.Archive.Region })),
-		req("CP_ARCHIVE_RAW_BUCKET", secArchive, "Bucket for raw provider/market payloads.", "raw-events",
-			setString(func(c *Config) *string { return &c.Archive.RawBucket })),
-		req("CP_ARCHIVE_EVIDENCE_BUCKET", secArchive, "Bucket for provider evidence (requests/responses, receipts).", "provider-evidence",
-			setString(func(c *Config) *string { return &c.Archive.EvidenceBucket })),
-		req("CP_ARCHIVE_AUDIT_BUCKET", secArchive, "WORM bucket for the audit chain. Object Lock must be enabled in STAGING/PROD.", "audit-evidence",
-			setString(func(c *Config) *string { return &c.Archive.AuditBucket })),
-		req("CP_ARCHIVE_OBJECT_LOCK_REQUIRED", secArchive, "Refuse to start unless the audit bucket has Object Lock. Must be true in STAGING/PROD.", "false",
-			setBool(func(c *Config) *bool { return &c.Archive.ObjectLockRequired })),
-		req("CP_ARCHIVE_FORCE_PATH_STYLE", secArchive, "Use path-style S3 addressing (needed for MinIO).", "true",
-			setBool(func(c *Config) *bool { return &c.Archive.ForcePathStyle })),
-		secretVar(opt("CP_ARCHIVE_ACCESS_KEY_REF", secArchive, "SecretRef to a static S3 access key. Leave empty in AWS to use the task IAM role (preferred; goal PART 99).", "cp_minio",
-			setSecret(func(c *Config) *SecretRef { return &c.Archive.AccessKeyRef }))),
-		secretVar(opt("CP_ARCHIVE_SECRET_KEY_REF", secArchive, "SecretRef to a static S3 secret key. Leave empty in AWS to use the task IAM role.", "cp_minio_local",
-			setSecret(func(c *Config) *SecretRef { return &c.Archive.SecretKeyRef }))),
+		needs(DepArchive, req("CP_ARCHIVE_ENDPOINT", secArchive, "S3-compatible endpoint URL. Empty in AWS means the regional default; LOCAL points at MinIO.", "http://127.0.0.1:9100",
+			setString(func(c *Config) *string { return &c.Archive.Endpoint }))),
+		needs(DepArchive, req("CP_ARCHIVE_REGION", secArchive, "S3 region.", "us-east-1",
+			setString(func(c *Config) *string { return &c.Archive.Region }))),
+		needs(DepArchive, req("CP_ARCHIVE_RAW_BUCKET", secArchive, "Bucket for raw provider/market payloads.", "raw-events",
+			setString(func(c *Config) *string { return &c.Archive.RawBucket }))),
+		needs(DepArchive, req("CP_ARCHIVE_EVIDENCE_BUCKET", secArchive, "Bucket for provider evidence (requests/responses, receipts).", "provider-evidence",
+			setString(func(c *Config) *string { return &c.Archive.EvidenceBucket }))),
+		needs(DepArchive, req("CP_ARCHIVE_AUDIT_BUCKET", secArchive, "WORM bucket for the audit chain. Object Lock must be enabled in STAGING/PROD.", "audit-evidence",
+			setString(func(c *Config) *string { return &c.Archive.AuditBucket }))),
+		needs(DepArchive, req("CP_ARCHIVE_OBJECT_LOCK_REQUIRED", secArchive, "Refuse to start unless the audit bucket has Object Lock. Must be true in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.Archive.ObjectLockRequired }))),
+		needs(DepArchive, req("CP_ARCHIVE_FORCE_PATH_STYLE", secArchive, "Use path-style S3 addressing (needed for MinIO).", "true",
+			setBool(func(c *Config) *bool { return &c.Archive.ForcePathStyle }))),
+		needs(DepArchive, secretVar(opt("CP_ARCHIVE_ACCESS_KEY_REF", secArchive, "SecretRef to a static S3 access key. Leave empty in AWS to use the task IAM role (preferred; goal PART 99).", "cp_minio",
+			setSecret(func(c *Config) *SecretRef { return &c.Archive.AccessKeyRef })))),
+		needs(DepArchive, secretVar(opt("CP_ARCHIVE_SECRET_KEY_REF", secArchive, "SecretRef to a static S3 secret key. Leave empty in AWS to use the task IAM role.", "cp_minio_local",
+			setSecret(func(c *Config) *SecretRef { return &c.Archive.SecretKeyRef })))),
 
 		opt("CP_KMS_AUDIT_SIGNING_KEY_ID", secKMS, "KMS key id/ARN used to sign audit records. Required in STAGING/PROD.", "",
 			setString(func(c *Config) *string { return &c.KMS.AuditSigningKeyID })),

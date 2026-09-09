@@ -366,7 +366,7 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 			return inner(k)
 		}
 	}
-	cfg, err := config.Load(ctx, lookup)
+	cfg, err := config.Load(ctx, config.ServiceRelayWorker, lookup)
 	if err != nil {
 		return nil, err
 	}

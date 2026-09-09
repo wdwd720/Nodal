@@ -80,45 +80,75 @@ func TestLoad_LocalAndTestApplyDefaults(t *testing.T) {
 	}
 }
 
+// TestLoad_DefaultsNeverApplyOutsideLocalTest is now per service, and says
+// something stronger than it used to.
+//
+// Before, every binary required every variable, so the expected set was a
+// constant. Now the expected set is exactly the unconditional required
+// variables plus the ones belonging to dependencies THIS service declares --
+// and the test computes both sides from the same tables the loader uses, so a
+// variable tagged with the wrong dependency, or a service given the wrong
+// dependency list, fails here rather than in a deployment.
 func TestLoad_DefaultsNeverApplyOutsideLocalTest(t *testing.T) {
 	t.Parallel()
-	var requiredWithDefault []string
-	for _, s := range Vars() {
-		if s.Required && s.Default != "" {
-			requiredWithDefault = append(requiredWithDefault, s.Name)
-		}
-	}
-	require.NotEmpty(t, requiredWithDefault)
+	for _, service := range AllServices() {
+		for _, env := range []Environment{EnvDev, EnvStaging, EnvProd} {
+			t.Run(string(service)+"/"+string(env), func(t *testing.T) {
+				t.Parallel()
 
-	for _, env := range []Environment{EnvDev, EnvStaging, EnvProd} {
-		t.Run(string(env), func(t *testing.T) {
-			t.Parallel()
-			c, err := Load(context.Background(), LookupFromMap(map[string]string{"CP_ENV": string(env)}))
-			require.Error(t, err)
-			assert.Nil(t, c)
-			got := varErrors(err)
-			for _, name := range requiredWithDefault {
-				require.Contains(t, got, name, "%s must be reported missing in %s", name, env)
-				assert.ErrorIs(t, got[name], ErrMissingRequired, name)
-			}
-			assert.Len(t, got, len(requiredWithDefault), "every missing variable is reported at once")
-			assert.NotContains(t, got, "CP_HTTP_CORS_ORIGINS", "optional variables are not required")
-			assert.NotContains(t, got, "CP_KMS_AUDIT_SIGNING_KEY_ID", "presence in PROD is a validation rule, not a load error")
-		})
+				var want []string
+				for _, s := range Vars() {
+					if !s.Required || s.Default == "" {
+						continue
+					}
+					if s.Dep != "" && !service.Requires(s.Dep) {
+						continue
+					}
+					want = append(want, s.Name)
+				}
+				require.NotEmpty(t, want)
+
+				c, err := Load(context.Background(), service, LookupFromMap(map[string]string{"CP_ENV": string(env)}))
+				require.Error(t, err)
+				assert.Nil(t, c)
+				got := varErrors(err)
+				for _, name := range want {
+					require.Contains(t, got, name, "%s must be reported missing for %s in %s", name, service, env)
+					assert.ErrorIs(t, got[name], ErrMissingRequired, name)
+				}
+				assert.Len(t, got, len(want), "every missing variable is reported at once, and no others")
+				assert.NotContains(t, got, "CP_HTTP_CORS_ORIGINS", "optional variables are not required")
+				assert.NotContains(t, got, "CP_KMS_AUDIT_SIGNING_KEY_ID", "presence in PROD is a validation rule, not a load error")
+
+				// The point of the exercise: a dependency this service does not
+				// use is never demanded of it.
+				for _, d := range AllDependencies() {
+					if service.Requires(d) {
+						continue
+					}
+					for _, s := range Vars() {
+						if s.Dep == d {
+							assert.NotContains(t, got, s.Name,
+								"%s does not use %s and must not be asked for %s", service, d, s.Name)
+						}
+					}
+				}
+			})
+		}
 	}
 }
 
 func TestLoad_EnvironmentIsRequiredAndFailsClosed(t *testing.T) {
 	t.Parallel()
-	_, err := Load(context.Background(), LookupFromMap(map[string]string{}))
+	_, err := Load(context.Background(), ServiceAPI, LookupFromMap(map[string]string{}))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrMissingRequired)
 	assert.Contains(t, err.Error(), "CP_ENV")
 
-	_, err = Load(context.Background(), LookupFromMap(map[string]string{"CP_ENV": "  "}))
+	_, err = Load(context.Background(), ServiceAPI, LookupFromMap(map[string]string{"CP_ENV": "  "}))
 	assert.ErrorIs(t, err, ErrMissingRequired)
 
-	_, err = Load(context.Background(), LookupFromMap(map[string]string{"CP_ENV": "production"}))
+	_, err = Load(context.Background(), ServiceAPI, LookupFromMap(map[string]string{"CP_ENV": "production"}))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnknownEnvironment)
 }
@@ -127,7 +157,7 @@ func TestLoad_ContextCancelled(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Load(ctx, LookupFromMap(map[string]string{"CP_ENV": "LOCAL"}))
+	_, err := Load(ctx, ServiceAPI, LookupFromMap(map[string]string{"CP_ENV": "LOCAL"}))
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -135,7 +165,7 @@ func TestLoad_NilLookupUsesProcessEnvironment(t *testing.T) {
 	// Not parallel: touches the process environment.
 	t.Setenv("CP_ENV", "TEST")
 	t.Setenv("CP_SERVICE_NAME", "from-process-env")
-	c, err := Load(context.Background(), nil)
+	c, err := Load(context.Background(), ServiceAPI, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "from-process-env", c.ServiceName)
 	_, hasEnv := os.LookupEnv("CP_ENV")
@@ -156,7 +186,7 @@ func TestLoad_InvalidValuesAreAllReported(t *testing.T) {
 		"CP_RETENTION_SOCIAL_DATA_DAYS": "30d",
 		"CP_AUTH_CLIENT_SECRET_REF":     "aws-sm://has space",
 	})
-	c, err := Load(context.Background(), LookupFromMap(vars))
+	c, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
 	require.Error(t, err)
 	assert.Nil(t, c)
 	got := varErrors(err)
@@ -178,7 +208,7 @@ func TestLoad_BlankValueCountsAsAbsent(t *testing.T) {
 	assert.Equal(t, "127.0.0.1:8080", c.HTTP.Addr, "blank falls back to the LOCAL default")
 	assert.Empty(t, c.HTTP.CORSOrigins)
 
-	_, err := Load(context.Background(), LookupFromMap(withVars(prodEnv(), map[string]string{"CP_HTTP_ADDR": ""})))
+	_, err := Load(context.Background(), ServiceAPI, LookupFromMap(withVars(prodEnv(), map[string]string{"CP_HTTP_ADDR": ""})))
 	require.Error(t, err)
 	assert.ErrorIs(t, varErrors(err)["CP_HTTP_ADDR"], ErrMissingRequired, "blank is missing in PROD, never defaulted")
 }
@@ -231,7 +261,7 @@ func TestLoad_ValidationErrorsSurface(t *testing.T) {
 	t.Parallel()
 	// A syntactically fine PROD environment with a semantic violation.
 	vars := withVars(prodEnv(), map[string]string{"CP_PROVIDER_SIGNING_MODE": "fake"})
-	c, err := Load(context.Background(), LookupFromMap(vars))
+	c, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
 	require.Error(t, err)
 	assert.Nil(t, c)
 	assert.True(t, HasViolation(err, RuleNoFakeProviders))

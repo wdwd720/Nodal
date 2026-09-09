@@ -53,6 +53,9 @@ const (
 // Load and must be treated as immutable afterwards. There are no
 // map[string]string escape hatches: every setting has a typed field.
 type Config struct {
+	// Service is the binary this configuration was loaded for. It decides
+	// which external dependencies are required: see Service.Requires.
+	Service           Service
 	Env               Environment
 	ServiceName       string
 	PublicProductName string

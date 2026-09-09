@@ -117,6 +117,21 @@ func (c *Config) Validate() error {
 	env := c.Env
 	prodLike := env.IsProductionLike()
 
+	// Which external systems this binary actually uses. An unknown or unset
+	// Service requires nothing, and that is the safe direction here rather than
+	// the dangerous one: Load refuses an unknown service before Validate is
+	// ever reached, so the only way to arrive here without one is a Config
+	// somebody built by hand in a test, which is not a deployment.
+	if c.Service != "" && !c.Service.Valid() {
+		add(RuleField, "Service", fmt.Sprintf("unknown service %q", string(c.Service)))
+		return errors.Join(errs...)
+	}
+	needsRedis := c.Service.Requires(DepRedis)
+	needsRedpanda := c.Service.Requires(DepRedpanda)
+	needsClickHouse := c.Service.Requires(DepClickHouse)
+	needsTemporal := c.Service.Requires(DepTemporal)
+	needsArchive := c.Service.Requires(DepArchive)
+
 	// ---- core --------------------------------------------------------------
 	if c.ServiceName == "" {
 		add(RuleField, "ServiceName", "must not be empty")
@@ -188,16 +203,29 @@ func (c *Config) Validate() error {
 	}
 
 	// ---- redis -------------------------------------------------------------
-	if c.Redis.URL.IsZero() {
-		add(RuleField, "Redis.URL", "must not be empty")
-	}
-	if prodLike && !c.Redis.RequireTLS {
-		add(RuleRedisTLS, "Redis.RequireTLS", "must be true in STAGING/PROD")
+	//
+	// The presence rules below are asked only of a service that declares the
+	// dependency. The FORMAT rules are not conditional: a malformed value is a
+	// mistake whoever set it wants to hear about, whether or not this binary
+	// would have dialled it. That split is why each block tests presence under
+	// `needs` and parses unconditionally.
+	if needsRedis {
+		if c.Redis.URL.IsZero() {
+			add(RuleField, "Redis.URL", "must not be empty")
+		}
+		if prodLike && !c.Redis.RequireTLS {
+			add(RuleRedisTLS, "Redis.RequireTLS", "must be true in STAGING/PROD")
+		}
 	}
 
 	// ---- redpanda ----------------------------------------------------------
-	if len(c.Redpanda.Brokers) == 0 {
-		add(RuleField, "Redpanda.Brokers", "at least one broker is required")
+	if needsRedpanda {
+		if len(c.Redpanda.Brokers) == 0 {
+			add(RuleField, "Redpanda.Brokers", "at least one broker is required")
+		}
+		if prodLike && !c.Redpanda.RequireTLS {
+			add(RuleRedpandaTLS, "Redpanda.RequireTLS", "must be true in STAGING/PROD")
+		}
 	}
 	if c.Redpanda.SASLMechanism != "" {
 		if c.Redpanda.SASLUsernameRef.IsZero() {
@@ -207,33 +235,34 @@ func (c *Config) Validate() error {
 			add(RuleField, "Redpanda.SASLPasswordRef", "required when SASLMechanism is set")
 		}
 	}
-	if prodLike && !c.Redpanda.RequireTLS {
-		add(RuleRedpandaTLS, "Redpanda.RequireTLS", "must be true in STAGING/PROD")
-	}
 
 	// ---- clickhouse --------------------------------------------------------
-	if c.ClickHouse.Addr == "" {
-		add(RuleField, "ClickHouse.Addr", "must not be empty")
-	}
-	if c.ClickHouse.Database == "" {
-		add(RuleField, "ClickHouse.Database", "must not be empty")
-	}
-	if prodLike && !c.ClickHouse.RequireTLS {
-		add(RuleClickHouseTLS, "ClickHouse.RequireTLS", "must be true in STAGING/PROD")
+	if needsClickHouse {
+		if c.ClickHouse.Addr == "" {
+			add(RuleField, "ClickHouse.Addr", "must not be empty")
+		}
+		if c.ClickHouse.Database == "" {
+			add(RuleField, "ClickHouse.Database", "must not be empty")
+		}
+		if prodLike && !c.ClickHouse.RequireTLS {
+			add(RuleClickHouseTLS, "ClickHouse.RequireTLS", "must be true in STAGING/PROD")
+		}
 	}
 
 	// ---- temporal ----------------------------------------------------------
-	if c.Temporal.HostPort == "" {
-		add(RuleField, "Temporal.HostPort", "must not be empty")
-	}
-	if c.Temporal.Namespace == "" {
-		add(RuleField, "Temporal.Namespace", "must not be empty")
-	}
-	if c.Temporal.TaskQueuePrefix == "" {
-		add(RuleField, "Temporal.TaskQueuePrefix", "must not be empty")
-	}
-	if prodLike && !c.Temporal.RequireTLS {
-		add(RuleTemporalTLS, "Temporal.RequireTLS", "must be true in STAGING/PROD")
+	if needsTemporal {
+		if c.Temporal.HostPort == "" {
+			add(RuleField, "Temporal.HostPort", "must not be empty")
+		}
+		if c.Temporal.Namespace == "" {
+			add(RuleField, "Temporal.Namespace", "must not be empty")
+		}
+		if c.Temporal.TaskQueuePrefix == "" {
+			add(RuleField, "Temporal.TaskQueuePrefix", "must not be empty")
+		}
+		if prodLike && !c.Temporal.RequireTLS {
+			add(RuleTemporalTLS, "Temporal.RequireTLS", "must be true in STAGING/PROD")
+		}
 	}
 
 	// ---- archive -----------------------------------------------------------
@@ -242,7 +271,7 @@ func (c *Config) Validate() error {
 			add(RuleField, "Archive.Endpoint", err.Error())
 		}
 	}
-	if prodLike {
+	if prodLike && needsArchive {
 		for name, v := range map[string]string{
 			"Archive.Region":         c.Archive.Region,
 			"Archive.RawBucket":      c.Archive.RawBucket,
@@ -253,6 +282,11 @@ func (c *Config) Validate() error {
 				add(RuleArchiveConfigured, name, "must be set in STAGING/PROD")
 			}
 		}
+		// Object Lock is a compliance control on the audit bucket, and it is
+		// asked of the services that write to an archive. A worker with no
+		// archive being required to declare Object Lock on a bucket it never
+		// touches is not a control; it is a value somebody sets to true to make
+		// a startup error go away, which is how controls stop meaning anything.
 		if !c.Archive.ObjectLockRequired {
 			add(RuleArchiveObjectLock, "Archive.ObjectLockRequired", "audit bucket Object Lock must be required in STAGING/PROD")
 		}

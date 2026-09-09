@@ -218,7 +218,7 @@ func loadConfig(ctx context.Context, lookup func(string) (string, bool), stderr 
 			return inner(k)
 		}
 	}
-	cfg, err := config.Load(ctx, lookup)
+	cfg, err := config.Load(ctx, config.ServiceMarketIngestWorker, lookup)
 	if err != nil {
 		return nil, nil, err
 	}

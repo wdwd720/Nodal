@@ -5,6 +5,13 @@
 //
 //   - Read every CP_* environment variable into the typed Config tree (no
 //     map[string]string escape hatches) via Load.
+//   - Decide, from the Service the caller declares, WHICH external
+//     dependencies that binary must be given. Load takes a Service and has no
+//     default: a caller that has not said what it is cannot be told what it
+//     needs. A variable tagged with a Dependency is required only of a service
+//     that declares that dependency, and is still parsed for any service that
+//     supplies it -- so a malformed value fails closed everywhere while a
+//     missing one is only demanded of the binary that would dial it.
 //   - Decide, from the explicit Environment (LOCAL, TEST, DEV, STAGING, PROD),
 //     which conveniences are permitted. Development defaults are applied only
 //     in LOCAL and TEST; a missing required variable in DEV/STAGING/PROD is a
@@ -24,6 +31,8 @@
 // This package must never
 //
 //   - Apply a default outside LOCAL/TEST.
+//   - Accept an undeclared Service, or treat one as "requires everything".
+//   - Let a dependency's absence pass for a binary that declares it.
 //   - Include a SecretRef (value or location) in Hash, or a plain secret in
 //     Redacted output.
 //   - Parse floating point numbers: TraceSampleRatio stays a decimal string
@@ -262,6 +271,28 @@
 //	CP_RETENTION_SOCIAL_DATA_DAYS
 //	CP_RETENTION_MODEL_IO_DAYS
 //	CP_RETENTION_OPERATIONAL_LOG_DAYS
+//
+// # Per-service dependencies
+//
+// CP_REDIS_*, CP_REDPANDA_*, CP_CLICKHOUSE_*, CP_TEMPORAL_* and CP_ARCHIVE_*
+// belong to an external dependency and are required only of the binaries that
+// use it. The table is Service.Dependencies (service.go), and it is an audit
+// of what each binary actually constructs rather than of what it might one day
+// want:
+//
+//	api                     archive
+//	audit-worker            archive
+//	market-ingest-worker    redpanda, clickhouse, archive
+//	relay-worker            redpanda
+//	workflow-worker         temporal
+//	agent-worker            (postgres only)
+//	execution-worker        (postgres only)
+//	reconciliation-worker   (postgres only)
+//
+// Postgres is deliberately not in the table: every binary that loads
+// configuration uses it, so making it conditional would model a choice nobody
+// has. Redis is in the table and no service declares it, because nothing in
+// the repository constructs a Redis client.
 //
 // Capability.StoreConfigured has no variable: Load derives it from
 // CP_DATABASE_APP_URL. BuildVersion has no variable: it is the package

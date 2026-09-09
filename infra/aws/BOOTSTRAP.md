@@ -139,7 +139,7 @@ Stripe webhook are unaffected.
 | A Path B Terraform environment | engineering | **not written** — see below |
 | Container images in ECR | engineering | none exist; no GitHub repository exists |
 
-## 5. The blocker inside our own code
+## 5. The blocker inside our own code — CLOSED 2026-09-09
 
 A Path B environment cannot simply be `environments/prod` minus some modules,
 and the reason is worth stating precisely.
@@ -155,11 +155,25 @@ contacted, which is configuration that lies and which the next person will
 believe, or the requirement must become conditional on the binary that has the
 dependency.
 
-The second is correct and is the honest fix: the component that needs a
-dependency should be what refuses without it. It is a change to a shared,
-heavily tested package and it is **not done**. It is the next engineering task
-on the Path B route, and it is deliberately not being rushed at the end of a
-session — a config package that fails open is a worse outcome than a delayed
-deployment.
+The second was the fix, and it is done. `Load` now takes a `config.Service`,
+and a variable belonging to an external dependency is required only of a binary
+that declares that dependency. The table lives in `internal/config/service.go`
+and is an audit of what each binary constructs, not of what it might one day
+want.
 
-Until then, a Path B apply is blocked on our own code and not only on AWS.
+Required-ness became conditional; parsing did not. A malformed broker list
+still fails closed for every binary, because it is a mistake whoever set it
+wants to hear about whether or not this process would have dialled it.
+
+So a Path B apply is no longer blocked on our own code. `cmd/api` starts in
+PROD given Postgres, the archive and its own settings, and the workers that
+genuinely need Redpanda, ClickHouse or Temporal still refuse to start without
+them.
+
+One finding came out of the audit and is recorded rather than fixed: **nothing
+in the repository constructs a Redis client.** `ratelimit.NewRedisStore` exists
+with no caller and `cmd/api` chooses the in-memory store. That is a defect
+rather than a simplification -- with `api_autoscaling.min_capacity = 3`, a
+per-task memory store makes every rate limit three times looser than configured
+and twelve times at maximum capacity. It is not on the Path B critical path and
+it is named so that nobody reads the empty Redis column as a design.

@@ -21,7 +21,7 @@ import (
 func localConfig(t *testing.T) *config.Config {
 	t.Helper()
 	env := map[string]string{"CP_ENV": "LOCAL"}
-	cfg, err := config.Load(context.Background(), config.LookupFromMap(env))
+	cfg, err := config.Load(context.Background(), config.ServiceAPI, config.LookupFromMap(env))
 	require.NoError(t, err)
 	return cfg
 }

@@ -51,7 +51,7 @@ func TestExampleEnv_LoadsAsValidLocalConfig(t *testing.T) {
 	vars, err := ParseDotEnv(strings.NewReader(ExampleEnv()))
 	require.NoError(t, err)
 	assert.Len(t, vars, len(Vars()))
-	c, err := Load(context.Background(), LookupFromMap(vars))
+	c, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
 	require.NoError(t, err)
 	assert.Equal(t, EnvLocal, c.Env)
 	assert.Equal(t, "Control Plane", c.PublicProductName, "quoted values round-trip")
@@ -62,7 +62,7 @@ func TestExampleEnv_LoadsAsValidLocalConfig(t *testing.T) {
 
 	// The same file must not be usable as a production configuration.
 	vars["CP_ENV"] = "PROD"
-	_, err = Load(context.Background(), LookupFromMap(vars))
+	_, err = Load(context.Background(), ServiceAPI, LookupFromMap(vars))
 	require.Error(t, err)
 	assert.True(t, HasViolation(err, RuleNoFakeProviders))
 	assert.True(t, HasViolation(err, RuleSecretRefScheme))

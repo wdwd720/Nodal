@@ -105,7 +105,7 @@ func main() {
 // run serves until ctx is cancelled, then drains. It returns the process exit
 // code and never calls os.Exit itself.
 func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.File) int {
-	cfg, err := config.Load(ctx, lookup)
+	cfg, err := config.Load(ctx, config.ServiceAPI, lookup)
 	if err != nil {
 		fmt.Fprintln(stderr, "api: configuration:", err)
 		return exitFailure

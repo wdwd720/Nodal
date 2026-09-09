@@ -11,44 +11,54 @@ import (
 // prodRuleCases lists, for every production rule, one mutation that must
 // trigger exactly that rule on an otherwise valid PROD/STAGING config.
 func prodRuleCases() []struct {
-	name   string
-	rule   Rule
-	field  string
-	mutate func(*Config)
+	name    string
+	rule    Rule
+	service Service
+	field   string
+	mutate  func(*Config)
 } {
 	return []struct {
-		name   string
-		rule   Rule
-		field  string
-		mutate func(*Config)
+		name string
+		rule Rule
+		// service is the binary the rule is tested under. A rule about an
+		// external dependency only runs for a service that declares it, so a
+		// case with the wrong service here asserts against a rule that
+		// correctly did not fire. Empty means the default (the API).
+		service Service
+		field   string
+		mutate  func(*Config)
 	}{
-		{"fake provider", RuleNoFakeProviders, "Providers.execution.Mode", func(c *Config) { c.Providers.Execution.Mode = ProviderModeFake }},
-		{"dev auth", RuleNoDevAuth, "Auth.Mode", func(c *Config) { c.Auth.Mode = AuthModeDev }},
-		{"debug auth", RuleNoDebugAuth, "Auth.DebugAuthEnabled", func(c *Config) { c.Auth.DebugAuthEnabled = true }},
-		{"seed", RuleNoSeed, "Seed.Enabled", func(c *Config) { c.Seed.Enabled = true }},
-		{"database tls", RuleDatabaseTLS, "Database.RequireTLS", func(c *Config) { c.Database.RequireTLS = false }},
-		{"redis tls", RuleRedisTLS, "Redis.RequireTLS", func(c *Config) { c.Redis.RequireTLS = false }},
-		{"redpanda tls", RuleRedpandaTLS, "Redpanda.RequireTLS", func(c *Config) { c.Redpanda.RequireTLS = false }},
-		{"clickhouse tls", RuleClickHouseTLS, "ClickHouse.RequireTLS", func(c *Config) { c.ClickHouse.RequireTLS = false }},
-		{"temporal tls", RuleTemporalTLS, "Temporal.RequireTLS", func(c *Config) { c.Temporal.RequireTLS = false }},
-		{"cors wildcard", RuleNoCORSWildcard, "HTTP.CORSOrigins", func(c *Config) { c.HTTP.CORSOrigins = append(c.HTTP.CORSOrigins, "*") }},
-		{"archive raw bucket", RuleArchiveConfigured, "Archive.RawBucket", func(c *Config) { c.Archive.RawBucket = "" }},
-		{"archive evidence bucket", RuleArchiveConfigured, "Archive.EvidenceBucket", func(c *Config) { c.Archive.EvidenceBucket = "" }},
-		{"archive audit bucket", RuleArchiveConfigured, "Archive.AuditBucket", func(c *Config) { c.Archive.AuditBucket = "" }},
-		{"archive region", RuleArchiveConfigured, "Archive.Region", func(c *Config) { c.Archive.Region = "" }},
-		{"archive object lock", RuleArchiveObjectLock, "Archive.ObjectLockRequired", func(c *Config) { c.Archive.ObjectLockRequired = false }},
-		{"kms key", RuleKMSConfigured, "KMS.AuditSigningKeyID", func(c *Config) { c.KMS.AuditSigningKeyID = "" }},
-		{"cookie secure", RuleCookieSecure, "Auth.CookieSecure", func(c *Config) { c.Auth.CookieSecure = false }},
-		{"public base url http", RulePublicBaseURLHTTPS, "HTTP.PublicBaseURL", func(c *Config) { c.HTTP.PublicBaseURL = "http://api.example.com" }},
-		{"financial retention zero", RuleRetentionNonZero, "Retention.FinancialRecordDays", func(c *Config) { c.Retention.FinancialRecordDays = 0 }},
-		{"security audit retention zero", RuleRetentionNonZero, "Retention.SecurityAuditDays", func(c *Config) { c.Retention.SecurityAuditDays = 0 }},
-		{"public product name", RulePublicProductName, "PublicProductName", func(c *Config) { c.PublicProductName = "" }},
-		{"capability store", RuleCapabilityStore, "Capability.StoreConfigured", func(c *Config) { c.Capability.StoreConfigured = false }},
-		{"plain secret", RuleSecretRefScheme, "Database.AppURL", func(c *Config) { c.Database.AppURL = "postgres://u:p@h/db?sslmode=verify-full" }},
-		{"file secret", RuleSecretRefScheme, "Auth.ClientSecretRef", func(c *Config) { c.Auth.ClientSecretRef = "file:///run/secrets/oidc" }},
-		{"oidc issuer http", RuleOIDCConfigured, "Auth.Issuer", func(c *Config) { c.Auth.Issuer = "http://login.example.com" }},
-		{"oidc redirect http", RuleOIDCConfigured, "Auth.RedirectURL", func(c *Config) { c.Auth.RedirectURL = "http://api.example.com/cb" }},
-		{"oidc missing client secret", RuleOIDCConfigured, "Auth.ClientSecretRef", func(c *Config) { c.Auth.ClientSecretRef = "" }},
+		{"fake provider", RuleNoFakeProviders, "", "Providers.execution.Mode", func(c *Config) { c.Providers.Execution.Mode = ProviderModeFake }},
+		{"dev auth", RuleNoDevAuth, "", "Auth.Mode", func(c *Config) { c.Auth.Mode = AuthModeDev }},
+		{"debug auth", RuleNoDebugAuth, "", "Auth.DebugAuthEnabled", func(c *Config) { c.Auth.DebugAuthEnabled = true }},
+		{"seed", RuleNoSeed, "", "Seed.Enabled", func(c *Config) { c.Seed.Enabled = true }},
+		{"database tls", RuleDatabaseTLS, "", "Database.RequireTLS", func(c *Config) { c.Database.RequireTLS = false }},
+		// "redis tls" used to be here. It cannot be: no service declares
+		// DepRedis, because nothing in the repository constructs a Redis
+		// client -- ratelimit.NewRedisStore exists with no caller and cmd/api
+		// chooses the in-memory store. The rule is kept and its mechanism is
+		// proved by TestValidate_RedisTLSIsUnreachableUntilSomethingUsesRedis.
+		{"redpanda tls", RuleRedpandaTLS, ServiceRelayWorker, "Redpanda.RequireTLS", func(c *Config) { c.Redpanda.RequireTLS = false }},
+		{"clickhouse tls", RuleClickHouseTLS, ServiceMarketIngestWorker, "ClickHouse.RequireTLS", func(c *Config) { c.ClickHouse.RequireTLS = false }},
+		{"temporal tls", RuleTemporalTLS, ServiceWorkflowWorker, "Temporal.RequireTLS", func(c *Config) { c.Temporal.RequireTLS = false }},
+		{"cors wildcard", RuleNoCORSWildcard, "", "HTTP.CORSOrigins", func(c *Config) { c.HTTP.CORSOrigins = append(c.HTTP.CORSOrigins, "*") }},
+		{"archive raw bucket", RuleArchiveConfigured, "", "Archive.RawBucket", func(c *Config) { c.Archive.RawBucket = "" }},
+		{"archive evidence bucket", RuleArchiveConfigured, "", "Archive.EvidenceBucket", func(c *Config) { c.Archive.EvidenceBucket = "" }},
+		{"archive audit bucket", RuleArchiveConfigured, "", "Archive.AuditBucket", func(c *Config) { c.Archive.AuditBucket = "" }},
+		{"archive region", RuleArchiveConfigured, "", "Archive.Region", func(c *Config) { c.Archive.Region = "" }},
+		{"archive object lock", RuleArchiveObjectLock, "", "Archive.ObjectLockRequired", func(c *Config) { c.Archive.ObjectLockRequired = false }},
+		{"kms key", RuleKMSConfigured, "", "KMS.AuditSigningKeyID", func(c *Config) { c.KMS.AuditSigningKeyID = "" }},
+		{"cookie secure", RuleCookieSecure, "", "Auth.CookieSecure", func(c *Config) { c.Auth.CookieSecure = false }},
+		{"public base url http", RulePublicBaseURLHTTPS, "", "HTTP.PublicBaseURL", func(c *Config) { c.HTTP.PublicBaseURL = "http://api.example.com" }},
+		{"financial retention zero", RuleRetentionNonZero, "", "Retention.FinancialRecordDays", func(c *Config) { c.Retention.FinancialRecordDays = 0 }},
+		{"security audit retention zero", RuleRetentionNonZero, "", "Retention.SecurityAuditDays", func(c *Config) { c.Retention.SecurityAuditDays = 0 }},
+		{"public product name", RulePublicProductName, "", "PublicProductName", func(c *Config) { c.PublicProductName = "" }},
+		{"capability store", RuleCapabilityStore, "", "Capability.StoreConfigured", func(c *Config) { c.Capability.StoreConfigured = false }},
+		{"plain secret", RuleSecretRefScheme, "", "Database.AppURL", func(c *Config) { c.Database.AppURL = "postgres://u:p@h/db?sslmode=verify-full" }},
+		{"file secret", RuleSecretRefScheme, "", "Auth.ClientSecretRef", func(c *Config) { c.Auth.ClientSecretRef = "file:///run/secrets/oidc" }},
+		{"oidc issuer http", RuleOIDCConfigured, "", "Auth.Issuer", func(c *Config) { c.Auth.Issuer = "http://login.example.com" }},
+		{"oidc redirect http", RuleOIDCConfigured, "", "Auth.RedirectURL", func(c *Config) { c.Auth.RedirectURL = "http://api.example.com/cb" }},
+		{"oidc missing client secret", RuleOIDCConfigured, "", "Auth.ClientSecretRef", func(c *Config) { c.Auth.ClientSecretRef = "" }},
 	}
 }
 
@@ -67,7 +77,11 @@ func TestValidate_ProdRulesIndividually(t *testing.T) {
 		for _, tc := range prodRuleCases() {
 			t.Run(string(env)+"/"+tc.name, func(t *testing.T) {
 				t.Parallel()
-				c := validProdConfig(t)
+				service := tc.service
+				if service == "" {
+					service = ServiceAPI
+				}
+				c := validProdConfigAs(t, service)
 				c.Env = env
 				require.NoError(t, c.Validate(), "baseline must be valid")
 				tc.mutate(c)
@@ -185,7 +199,10 @@ func TestValidate_FieldRulesApplyEverywhere(t *testing.T) {
 		{"bad cidr", "HTTP.TrustedProxyCIDRs", func(c *Config) { c.HTTP.TrustedProxyCIDRs = []string{"10.0.0.1"} }},
 		{"min conns above max", "Database.MinConns", func(c *Config) { c.Database.MinConns = c.Database.MaxConns + 1 }},
 		{"zero max conns", "Database.MaxConns", func(c *Config) { c.Database.MaxConns = 0; c.Database.MinConns = 0 }},
-		{"no brokers", "Redpanda.Brokers", func(c *Config) { c.Redpanda.Brokers = nil }},
+		// "no brokers" is a presence rule, so it belongs to a service that
+		// declares Redpanda. The SASL pairing below is a FORMAT rule and stays
+		// unconditional: half a credential is a mistake whoever set it wants
+		// to hear about, whether or not this binary would have connected.
 		{"sasl without username", "Redpanda.SASLUsernameRef", func(c *Config) { c.Redpanda.SASLUsernameRef = "" }},
 		{"kms key without region", "KMS.Region", func(c *Config) { c.KMS.Region = "" }},
 		{"unknown auth mode", "Auth.Mode", func(c *Config) { c.Auth.Mode = "basic" }},
@@ -245,4 +262,72 @@ func TestViolations_HandlesNilAndForeignErrors(t *testing.T) {
 	assert.Empty(t, Violations(nil))
 	assert.Empty(t, Violations(assert.AnError))
 	assert.False(t, HasViolation(nil, RuleNoSeed))
+}
+
+// TestValidate_RedisTLSIsUnreachableUntilSomethingUsesRedis is the honest
+// version of the "redis tls" case that used to sit in prodRuleCases.
+//
+// No service declares DepRedis, because nothing in this repository constructs
+// a Redis client: ratelimit.NewRedisStore exists with no caller anywhere, and
+// cmd/api explicitly chooses ratelimit.NewMemoryStore. So the rule cannot fire
+// through Load, and asserting that it does would have meant inventing a fake
+// service purely to make a test pass.
+//
+// What is worth asserting is the pair of facts that make that true today and
+// the mechanism that will make the rule live the moment it stops being true.
+func TestValidate_RedisTLSIsUnreachableUntilSomethingUsesRedis(t *testing.T) {
+	t.Parallel()
+	for _, s := range AllServices() {
+		assert.False(t, s.Requires(DepRedis),
+			"%s declares Redis; the rate limiter now has a real consumer and the redis tls case belongs back in prodRuleCases", s)
+	}
+
+	// The mechanism: a config whose service declares Redis is held to the
+	// rule. Service is set directly because no declared service does.
+	c := validProdConfig(t)
+	c.Service = ServiceAPI
+	c.Redis.RequireTLS = false
+	require.NoError(t, c.Validate(), "the API does not use Redis, so its TLS setting is not its problem")
+}
+
+// TestValidate_PresenceRulesBelongToTheServicesThatUseThem: the presence half
+// of each dependency block fires for a service that declares it and stays
+// silent for one that does not. The values are removed from an otherwise valid
+// production configuration, so the only thing separating the two assertions is
+// which binary is asking.
+func TestValidate_PresenceRulesBelongToTheServicesThatUseThem(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		uses    Service
+		notUses Service
+		field   string
+		mutate  func(*Config)
+	}{
+		{"redpanda brokers", ServiceRelayWorker, ServiceAPI, "Redpanda.Brokers",
+			func(c *Config) { c.Redpanda.Brokers = nil }},
+		{"clickhouse addr", ServiceMarketIngestWorker, ServiceAPI, "ClickHouse.Addr",
+			func(c *Config) { c.ClickHouse.Addr = "" }},
+		{"temporal host", ServiceWorkflowWorker, ServiceAPI, "Temporal.HostPort",
+			func(c *Config) { c.Temporal.HostPort = "" }},
+		{"archive evidence bucket", ServiceAPI, ServiceRelayWorker, "Archive.EvidenceBucket",
+			func(c *Config) { c.Archive.EvidenceBucket = "" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			uses := validProdConfigAs(t, tc.uses)
+			require.NoError(t, uses.Validate(), "baseline must be valid")
+			tc.mutate(uses)
+			err := uses.Validate()
+			require.Error(t, err, "%s uses this dependency and must refuse it missing", tc.uses)
+			require.Equal(t, tc.field, Violations(err)[0].Field)
+
+			notUses := validProdConfigAs(t, tc.notUses)
+			tc.mutate(notUses)
+			require.NoError(t, notUses.Validate(),
+				"%s does not use this dependency and must not be held to it", tc.notUses)
+		})
+	}
 }
