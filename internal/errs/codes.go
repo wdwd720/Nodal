@@ -194,6 +194,19 @@ const (
 	// up; the call was refused before dialing. Fields names the budget.
 	// HTTP 422.
 	CodeBudgetExhausted Code = "BUDGET_EXHAUSTED"
+	// CodeAtCapacity: a deployment-tier ceiling is reached, so the action was
+	// refused before anything was taken -- the launch cohort is full, the
+	// daily transaction ceiling is spent, the money-at-risk ceiling is
+	// reached, or the free-tier database is near its quota. Fields names the
+	// ceiling.
+	//
+	// Deliberately not RATE_LIMITED: nothing about the caller is wrong and
+	// waiting a second will not help. Deliberately not BUDGET_EXHAUSTED,
+	// which is a model or data budget and is the caller's own. Deliberately
+	// not FORBIDDEN or CAPABILITY_NOT_APPROVED: the deployment IS approved to
+	// do this and has simply run out of room, and confusing the two would let
+	// a capacity problem look like a revoked approval. HTTP 503.
+	CodeAtCapacity Code = "AT_CAPACITY"
 	// CodeSecretInModelContext: a model request contained content matching
 	// the secret denylist; the request was refused before leaving the
 	// process (PART 67). HTTP 400.
@@ -279,6 +292,7 @@ var registry = map[Code]codeInfo{
 	CodeStrategyVersionImmutable: {http.StatusConflict, "Compiled strategy versions are immutable"},
 	CodeModelUnavailable:         {http.StatusServiceUnavailable, "Model unavailable"},
 	CodeBudgetExhausted:          {http.StatusUnprocessableEntity, "Budget exhausted"},
+	CodeAtCapacity:               {http.StatusServiceUnavailable, "At capacity"},
 	CodeSecretInModelContext:     {http.StatusBadRequest, "Secret material in model context"},
 
 	CodeArchiveIntegrityViolation: {http.StatusConflict, "Archive integrity violation"},
@@ -337,6 +351,7 @@ var allCodes = []Code{
 	CodeStrategyVersionImmutable,
 	CodeModelUnavailable,
 	CodeBudgetExhausted,
+	CodeAtCapacity,
 	CodeSecretInModelContext,
 	CodeArchiveIntegrityViolation,
 }

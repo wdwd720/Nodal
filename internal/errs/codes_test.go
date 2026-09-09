@@ -72,6 +72,7 @@ var expectedStatus = map[errs.Code]int{
 	errs.CodeStrategyVersionImmutable: http.StatusConflict,
 	errs.CodeModelUnavailable:         http.StatusServiceUnavailable,
 	errs.CodeBudgetExhausted:          http.StatusUnprocessableEntity,
+	errs.CodeAtCapacity:               http.StatusServiceUnavailable,
 	errs.CodeSecretInModelContext:     http.StatusBadRequest,
 
 	errs.CodeArchiveIntegrityViolation: http.StatusConflict,

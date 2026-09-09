@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
@@ -30,6 +31,7 @@ type PurchaseService struct {
 	provider PurchaseProvider
 	pricing  PricingPolicy
 	gates    GateChecker
+	capacity CapacityGuard
 	clk      clock.Clock
 	env      string
 }
@@ -44,12 +46,31 @@ type GateChecker interface {
 	RequireActive(ctx context.Context, q db.Querier, cap gates.Capability) error
 }
 
+// CapacityGuard refuses an action before the infrastructure it needs runs out.
+// *capacity.Guard satisfies it.
+//
+// It is separate from GateChecker because the two answer different questions
+// and have different answers. A gate says whether this deployment is APPROVED
+// to sell Credits, which people decide under dual control. This says whether
+// there is ROOM to do it safely right now, which is measured. A deployment
+// that conflated them would report a full launch tier as a revoked approval,
+// and raising a ceiling would look like granting an approval.
+//
+// It is optional. A deployment with no ceilings passes nil, and the only thing
+// that changes is that no ceiling is enforced -- which is the honest outcome
+// rather than a silent default budget nobody chose.
+type CapacityGuard interface {
+	AdmitAmount(ctx context.Context, q db.Querier, a capacity.Action, amountMinor int64) (capacity.Reading, error)
+}
+
 // PurchaseServiceConfig wires a PurchaseService.
 type PurchaseServiceConfig struct {
 	Credits  *Service
 	Provider PurchaseProvider
 	Pricing  PricingPolicy
 	Gates    GateChecker
+	// Capacity is optional; nil enforces no ceilings.
+	Capacity CapacityGuard
 	Clock    clock.Clock
 	// Environment is stamped onto every provider object and compared against
 	// every inbound event.
@@ -80,7 +101,7 @@ func NewPurchaseService(cfg PurchaseServiceConfig) (*PurchaseService, error) {
 	}
 	return &PurchaseService{
 		credits: cfg.Credits, provider: cfg.Provider, pricing: cfg.Pricing,
-		gates: cfg.Gates, clk: clk, env: cfg.Environment,
+		gates: cfg.Gates, capacity: cfg.Capacity, clk: clk, env: cfg.Environment,
 	}, nil
 }
 
@@ -141,6 +162,20 @@ func (s *PurchaseService) StartPurchase(ctx context.Context, tx pgx.Tx, r StartP
 	// expensive thing to have to undo.
 	if err := s.gates.RequireActive(ctx, tx, gates.CreditPurchase); err != nil {
 		return StartedPurchase{}, err
+	}
+
+	// Then whether there is room. After the gate, because an unapproved
+	// deployment should hear that rather than a capacity number; before
+	// pricing and before the provider, because the provider call is the
+	// expensive thing to undo and because a ceiling reached is not a reason to
+	// have taken somebody's money first.
+	//
+	// The guard reads inside this transaction, so two concurrent purchases
+	// cannot both be admitted against the same headroom.
+	if s.capacity != nil {
+		if _, err := s.capacity.AdmitAmount(ctx, tx, capacity.ActionCreditPurchase, r.Amount.Minor()); err != nil {
+			return StartedPurchase{}, err
+		}
 	}
 
 	// The server decides the Credits. This is the whole defence against a
