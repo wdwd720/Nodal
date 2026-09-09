@@ -48,7 +48,7 @@ cors_origins        = ["https://api-nodal.actorvia.xyz"]
 # GoDaddy BEFORE the record that makes the hostname resolve is published:
 # actorvia.xyz sends HSTS with includeSubDomains and preload, so a name that
 # resolves without a valid certificate fails closed for every visitor.
-acm_certificate_arn = "CHANGE ME" # arn:aws:acm:us-east-2:049286562577:certificate/...
+acm_certificate_arn = "arn:aws:acm:us-east-2:049286562577:certificate/80b0695b-ab4a-490b-a39d-56c04bf30e5f"
 
 # CloudFront is off. It is a second certificate in us-east-1 and a second cache
 # to reason about, for an API that Stripe posts to directly.
@@ -58,9 +58,11 @@ cloudfront_enabled = false
 # Auth0, chosen in docs/operations/IDENTITY_PROVIDER.md because Cognito emits no
 # amr claim, which makes the step-up condition on CREDIT_PURCHASE permanently
 # unsatisfiable.
+# The trailing slash on the issuer is not decoration. go-oidc compares the
+# discovery document's `issuer` byte for byte, and Auth0 publishes it with one.
 auth = {
-  issuer       = "CHANGE ME" # https://<tenant>.us.auth0.com/
-  client_id    = "CHANGE ME"
+  issuer       = "https://dev-wlk8r3o1qrt5g15y.us.auth0.com/"
+  client_id    = "HQzIAkpvR6XHUz06vqbC4RptqEHsq6Gl"
   redirect_url = "https://api-nodal.actorvia.xyz/v1/auth/callback"
   cookie_name  = "nodal_session"
   cookie_domain = "api-nodal.actorvia.xyz"
@@ -74,6 +76,39 @@ auth = {
 # never managed.
 github_org  = ""
 github_repo = ""
+
+# --- sizing -----------------------------------------------------------------
+# environments/prod defaults to a full production footprint: db.r6g.xlarge with
+# a read replica, three cache.r7g.large nodes. That is roughly $1,700/month and
+# it is not what Path B is for. These five values bring the same 283 resources
+# to roughly $450 without touching Multi-AZ, deletion protection, backup
+# retention, NAT redundancy or a single alarm.
+rds_instance_class       = "db.t4g.medium"
+rds_allocated_storage    = 50
+rds_read_replica_count   = 0
+redis_node_type          = "cache.t4g.micro"
+redis_num_cache_clusters = 2
+
+# --- images -----------------------------------------------------------------
+# image_tag is a 40-hex git SHA that release.yml has scanned and signed. ECR is
+# created by this apply, so the first apply runs with the services at
+# desired_count 0, images are pushed, and a second apply scales them up.
+image_tag          = "CHANGE ME"
+db_bootstrap_image = "public.ecr.aws/docker/library/postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685"
+
+# cmd/api refuses to start without both, and the variable's own default fails
+# its own validation, so every deployment states them.
+api = {
+  settlement_chain = "solana"
+  settlement_mint  = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+}
+
+# --- observability and paging -----------------------------------------------
+# Both are required non-empty in PROD and neither can be invented: a fake OTLP
+# host drops every trace silently, and a fake pager URL makes SEV1 alarms fire
+# into nothing, which is worse than having no alarm.
+otlp_endpoint        = "CHANGE ME" # host:port of a TLS OTLP gRPC collector
+sev1_https_endpoints = ["CHANGE ME"]
 
 # --- alerting ---------------------------------------------------------------
 sev1_email_endpoints = ["CHANGE ME"]
