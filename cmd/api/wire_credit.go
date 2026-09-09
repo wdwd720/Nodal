@@ -65,6 +65,25 @@ func wireCreditPurchase(
 		return creditPurchaseWiring{}
 	}
 
+	// One read-only call to confirm the key belongs to the account this
+	// deployment says it does. A key rotated to the wrong Stripe account is
+	// otherwise silent: charges succeed, webhooks arrive, and every one of them
+	// belongs to somebody else's business.
+	//
+	// It is a warning and a disabled path rather than a failed start, for the
+	// same reason everything else here is: a deployment that cannot sell
+	// Credits must still serve the rest of the product. What it must not do is
+	// sell Credits through credentials nobody has checked.
+	if v, ok := prov.(interface {
+		VerifyAccount(context.Context) error
+	}); ok {
+		if verr := v.VerifyAccount(ctx); verr != nil {
+			log.Warn("credit purchase credentials do not match the configured account; selling Credits is disabled",
+				"error", verr.Error())
+			return creditPurchaseWiring{}
+		}
+	}
+
 	// The registry is where a provider that cannot safely sell Credits is
 	// refused: no lookup, no idempotent create, no hosted payment UI, no
 	// dispute events, or -- in production -- no contract reference. It is

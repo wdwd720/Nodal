@@ -720,3 +720,58 @@ func TestCreatePurchase_SendsTheStatementDescriptorSuffix(t *testing.T) {
 	require.NotContains(t, form, "statement_descriptor=",
 		"a card payment may only set the suffix; the static descriptor is the account's")
 }
+
+// ---------------------------------------------------------------------------
+// the account the key actually belongs to
+// ---------------------------------------------------------------------------
+
+func TestVerifyAccount_RefusesAKeyForADifferentAccount(t *testing.T) {
+	t.Parallel()
+	// The silent failure this exists to catch: a key rotated to the wrong
+	// Stripe account. Charges succeed, webhooks arrive, and every one of them
+	// belongs to somebody else's business.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"acct_SOMEBODY_ELSE","object":"account","livemode":false}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvTest, BaseURL: srv.URL,
+		APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+		AccountID: "acct_WE_EXPECTED",
+	})
+	require.NoError(t, err)
+
+	err = c.VerifyAccount(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "acct_SOMEBODY_ELSE")
+	require.Contains(t, err.Error(), "acct_WE_EXPECTED")
+}
+
+func TestVerifyAccount_AcceptsTheConfiguredAccount(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method, "the check must never write")
+		_, _ = w.Write([]byte(`{"id":"acct_WE_EXPECTED","object":"account","livemode":false}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvTest, BaseURL: srv.URL,
+		APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+		AccountID: "acct_WE_EXPECTED",
+	})
+	require.NoError(t, err)
+	require.NoError(t, c.VerifyAccount(context.Background()))
+}
+
+func TestVerifyAccount_NoConfiguredAccountIsARefusalNotAPass(t *testing.T) {
+	t.Parallel()
+	// A deployment that has not said which account it expects has made no
+	// claim this can check. Returning nil would report "verified" for a
+	// verification that never happened.
+	c := testClient(t, "https://example.invalid")
+	err := c.VerifyAccount(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no expected account id is configured")
+}

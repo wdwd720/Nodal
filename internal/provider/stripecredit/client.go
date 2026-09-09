@@ -320,6 +320,45 @@ func (c *Client) GetPurchase(ctx context.Context, ref string) (credit.PurchaseSn
 	return snap, nil
 }
 
+// VerifyAccount checks that the API key really belongs to the account this
+// adapter was configured for.
+//
+// It exists because the configuration says which account we expect and, until
+// this was written, nothing compared that to reality. A key rotated to the
+// wrong Stripe account is silent: charges succeed, webhooks arrive, and every
+// one of them belongs to somebody else's business. The check costs one
+// read-only call at startup and turns that into a refusal to start.
+//
+// A blank AccountID skips the comparison and says so. That is deliberate: a
+// deployment that has not stated which account it expects has not made a claim
+// this can check, and inventing one would be worse than admitting it.
+func (c *Client) VerifyAccount(ctx context.Context) error {
+	if strings.TrimSpace(c.opts.AccountID) == "" {
+		return errs.New(errs.CodeValidationFailed,
+			"stripecredit: no expected account id is configured, so the credentials cannot be checked against one")
+	}
+	raw, err := c.do(ctx, http.MethodGet, "/v1/account", nil, "")
+	if err != nil {
+		return err
+	}
+	var acct struct {
+		ID       string `json:"id"`
+		Livemode bool   `json:"livemode"`
+	}
+	if derr := decodeLoose(raw, &acct); derr != nil || acct.ID == "" {
+		return errs.New(errs.CodeProviderUnavailable, "stripecredit: could not read the account this key belongs to").
+			WithField("provider_error", "malformed_response")
+	}
+	if acct.ID != c.opts.AccountID {
+		return errs.Newf(errs.CodeInternal,
+			"stripecredit: this key belongs to Stripe account %s and this deployment is configured for %s; a key pointed at the wrong account processes somebody else's business silently",
+			acct.ID, c.opts.AccountID).
+			WithField("configured_account", c.opts.AccountID).
+			WithField("key_account", acct.ID)
+	}
+	return nil
+}
+
 // ParseWebhook implements credit.PurchaseProvider.
 func (c *Client) ParseWebhook(_ context.Context, raw []byte, headers http.Header) (credit.PurchaseEvent, error) {
 	return parseWebhook(raw, headers, c.opts.WebhookSecret, c.opts.Clock.Now(),
