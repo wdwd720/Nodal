@@ -28,11 +28,12 @@ const (
 )
 
 type statement struct {
-	Sid       string          `json:"Sid"`
-	Effect    string          `json:"Effect"`
-	Action    json.RawMessage `json:"Action"`
-	Resource  json.RawMessage `json:"Resource"`
-	Condition map[string]any  `json:"Condition"`
+	Sid       string                     `json:"Sid"`
+	Principal map[string]json.RawMessage `json:"Principal"`
+	Effect    string                     `json:"Effect"`
+	Action    json.RawMessage            `json:"Action"`
+	Resource  json.RawMessage            `json:"Resource"`
+	Condition map[string]any             `json:"Condition"`
 }
 
 type policy struct {
@@ -73,7 +74,17 @@ var policies = []string{
 	"nodal-terraform-stack-policy.json",
 	"nodal-terraform-iam-policy.json",
 	"nodal-task-boundary-policy.json",
+	"nodal-operator-policy.json",
 }
+
+// trustPolicy is the role's own trust document. It is not in `policies`
+// because it is a different policy type with a different size limit, and
+// because the thing that can be wrong with it is who it names rather than what
+// it permits.
+const trustPolicy = "nodal-terraform-trust-policy.json"
+
+// maxTrustPolicy is IAM's default limit for an assume-role policy document.
+const maxTrustPolicy = 2048
 
 // TestPolicies_FitInsideIAMsLimit is why the single policy was split. It had
 // grown to 5,786 of 6,144 characters, which is not a limit you discover in a
@@ -176,6 +187,9 @@ func TestPolicies_NamedResourcesAreOursAndOnlyOurs(t *testing.T) {
 				if r == "*" || allowedForeign[r] {
 					continue
 				}
+				if strings.Contains(r, "${aws:username}") {
+					continue // the operator's own user and MFA device, named by variable
+				}
 				require.True(t, strings.HasPrefix(r, "arn:aws:"), "%s: %q", name, r)
 				parts := strings.SplitN(r, ":", 6)
 				require.Len(t, parts, 6, "%s: %q is not a six-field ARN", name, r)
@@ -275,4 +289,77 @@ func slicesContains(hay []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// TestTrust_NamesOnePrincipalAndItIsNotTheWholeAccount.
+//
+// "arn:aws:iam::<account>:root" in a trust policy does not mean the root user.
+// It means every principal in the account, delegating the decision to whatever
+// identity-based policies happen to exist. It is the single easiest way to
+// write a trust policy that is far wider than it reads, so it is refused here
+// by name.
+func TestTrust_NamesOnePrincipalAndItIsNotTheWholeAccount(t *testing.T) {
+	t.Parallel()
+	p, _ := load(t, trustPolicy)
+	compact, err := json.Marshal(p)
+	require.NoError(t, err)
+	assert.Less(t, len(compact), maxTrustPolicy, "trust policies have their own, smaller limit")
+
+	require.Len(t, p.Statement, 1, "one way in, so there is one thing to read")
+	st := p.Statement[0]
+	assert.Equal(t, "Allow", st.Effect)
+	assert.Equal(t, []string{"sts:AssumeRole"}, strs(t, st.Action))
+
+	require.NotEmpty(t, st.Principal, "a trust policy with no principal trusts nothing or everything")
+	for kind, raw := range st.Principal {
+		for _, who := range strs(t, raw) {
+			assert.NotEqual(t, "arn:aws:iam::"+account+":root", who,
+				"%q as a principal is the whole account, not the root user", who)
+			assert.NotEqual(t, "*", who, "a wildcard principal trusts every AWS account there is")
+			assert.NotEqual(t, account, who, "a bare account id is the same delegation as :root")
+			if kind == "AWS" {
+				assert.True(t, strings.HasPrefix(who, "arn:aws:iam::"+account+":"),
+					"%q is not a principal in this account", who)
+			}
+		}
+	}
+}
+
+// TestTrust_RequiresMFA: the principal it names signs in with a password. The
+// role it guards can create and destroy every resource in the stack, so a
+// stolen password must not be enough on its own.
+func TestTrust_RequiresMFA(t *testing.T) {
+	t.Parallel()
+	p, _ := load(t, trustPolicy)
+	st := p.Statement[0]
+	require.NotEmpty(t, st.Condition, "no condition means a password is enough")
+	b, ok := st.Condition["Bool"].(map[string]any)
+	require.True(t, ok, "expected a Bool condition")
+	assert.Equal(t, "true", b["aws:MultiFactorAuthPresent"])
+}
+
+// TestOperator_CanBecomeTheRoleAndDoNothingElse: the operator identity is a
+// doorway, not a set of permissions. Everything it is allowed to do is either
+// assuming the deployment role or looking after its own credentials.
+func TestOperator_CanBecomeTheRoleAndDoNothingElse(t *testing.T) {
+	t.Parallel()
+	p, _ := load(t, "nodal-operator-policy.json")
+	for _, st := range p.Statement {
+		assert.Equal(t, "Allow", st.Effect)
+		for _, a := range strs(t, st.Action) {
+			switch {
+			case a == "sts:AssumeRole":
+			case strings.HasPrefix(a, "iam:") && strings.Contains(a+"|", "MFADevice|"):
+			case a == "iam:ChangePassword" || a == "iam:GetUser" || a == "iam:ListMFADevices":
+			default:
+				t.Errorf("the operator may do %q, which is neither becoming the role nor self-service", a)
+			}
+		}
+		for _, r := range strs(t, st.Resource) {
+			assert.True(t,
+				r == "arn:aws:iam::"+account+":role/nodal-terraform" ||
+					strings.Contains(r, "${aws:username}"),
+				"the operator names %q, which is neither the role nor its own credentials", r)
+		}
+	}
 }

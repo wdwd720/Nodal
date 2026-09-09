@@ -47,8 +47,7 @@
         "s3:ListBucketVersions"
       ],
       "Resource": [
-        "arn:aws:s3:::nodal-*",
-        "arn:aws:s3:::nodal-*/*"
+        "arn:aws:s3:::nodal-*"
       ]
     },
     {
@@ -85,11 +84,9 @@
       "Resource": "arn:aws:secretsmanager:*:049286562577:secret:nodal/*"
     },
     {
-      "Sid": "ReadOurTopicsAndKeys",
+      "Sid": "ReadOurKeys",
       "Effect": "Allow",
       "Action": [
-        "sns:GetTopicAttributes",
-        "sns:GetSubscriptionAttributes",
         "kms:GetKeyPolicy",
         "kms:GetKeyRotationStatus"
       ],
@@ -114,6 +111,15 @@
         "arn:aws:s3:::nodal-terraform-state-049286562577-us-east-2",
         "arn:aws:s3:::nodal-terraform-state-049286562577-us-east-2/*"
       ]
+    },
+    {
+      "Sid": "ReadOurTopicsWhichSNSWillNotLetUsGateOnATag",
+      "Effect": "Allow",
+      "Action": [
+        "sns:GetTopicAttributes",
+        "sns:GetSubscriptionAttributes"
+      ],
+      "Resource": "arn:aws:sns:*:049286562577:nodal-*"
     }
   ]
 }

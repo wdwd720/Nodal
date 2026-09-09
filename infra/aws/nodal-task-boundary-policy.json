@@ -68,7 +68,6 @@
       ],
       "Resource": [
         "arn:aws:s3:::nodal-*",
-        "arn:aws:s3:::nodal-*/*",
         "arn:aws:secretsmanager:*:049286562577:secret:nodal/*",
         "arn:aws:ecs:*:049286562577:service/nodal-*/*"
       ]

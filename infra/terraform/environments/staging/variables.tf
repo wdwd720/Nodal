@@ -327,14 +327,22 @@ variable "github_repo" {
   type = string
 }
 
+# Default false, and it matters. Account 049286562577 already has
+# arn:aws:iam::049286562577:oidc-provider/token.actions.githubusercontent.com,
+# created 2026-09-04 and trusted by bdg-github-deployer for another project's
+# CI. There is one such provider per account per issuer, so creating it here
+# would either fail with EntityAlreadyExists or, worse, take ownership of it --
+# and `terraform destroy` would then delete the thing another project's
+# deployments authenticate against.
 variable "create_github_oidc_provider" {
   type    = bool
-  default = true
+  default = false
 }
 
+# The existing provider, referenced rather than managed.
 variable "github_oidc_provider_arn" {
   type    = string
-  default = null
+  default = "arn:aws:iam::049286562577:oidc-provider/token.actions.githubusercontent.com"
 }
 
 variable "sev1_email_endpoints" {

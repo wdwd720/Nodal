@@ -37,17 +37,6 @@
       ]
     },
     {
-      "Sid": "OIDCProviderForGitHubDeploys",
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateOpenIDConnectProvider",
-        "iam:DeleteOpenIDConnectProvider",
-        "iam:UpdateOpenIDConnectProviderThumbprint",
-        "iam:TagOpenIDConnectProvider"
-      ],
-      "Resource": "arn:aws:iam::049286562577:oidc-provider/token.actions.githubusercontent.com"
-    },
-    {
       "Sid": "PassOurRolesOnlyToTheServicesThatRunThem",
       "Effect": "Allow",
       "Action": "iam:PassRole",
@@ -133,19 +122,23 @@
         "account:*",
         "aws-portal:*",
         "budgets:*",
-        "lightsail:*",
-        "organizations:*",
         "iam:AttachUserPolicy",
         "iam:ChangePassword",
         "iam:CreateAccessKey",
         "iam:CreateLoginProfile",
+        "iam:CreateOpenIDConnectProvider",
         "iam:CreateUser",
         "iam:DeactivateMFADevice",
         "iam:DeleteAccessKey",
+        "iam:DeleteOpenIDConnectProvider",
         "iam:DeleteUser",
         "iam:PutUserPolicy",
+        "iam:RemoveClientIDFromOpenIDConnectProvider",
         "iam:UpdateAccountPasswordPolicy",
-        "iam:UpdateLoginProfile"
+        "iam:UpdateLoginProfile",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "lightsail:*",
+        "organizations:*"
       ],
       "Resource": "*"
     }

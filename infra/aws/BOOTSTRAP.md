@@ -30,7 +30,7 @@ administrator.**
 Done once. It needs the account root or an existing administrator, because
 `bdg-deployer` has no IAM permissions at all.
 
-### No IAM user is created. The chain was tested.
+### No access key is created. The chain was tested.
 
 `~/.aws/credentials` is empty. Both profiles in `~/.aws/config` are
 `login_session` profiles, which is `aws login`: it mirrors a console sign-in
@@ -55,40 +55,136 @@ is the answer we wanted.
 **So the chain is:**
 
 ```
-administrator browser sign-in
-  -> aws login                     (short-lived, refreshed, nothing on disk)
-  -> sts:AssumeRole                (trust policy names the administrator)
-  -> nodal-terraform role          (1-hour credentials, the four policies below)
+nodal-operator browser sign-in, with MFA
+  -> aws login                 (short-lived, refreshed, nothing written to disk)
+  -> sts:AssumeRole            (trust policy names nodal-operator, requires MFA)
+  -> nodal-terraform role      (1-hour credentials, the four policies below)
   -> terraform
 ```
 
-No `nodal-deploy` user. No access key. The earlier draft of this document
-proposed a console-only IAM user as the source principal; the probe made it
-unnecessary, and it is not created.
+The probe settled the mechanism; it did not settle who stands at the front of
+the chain. That needed an inventory of the account, which is the next section,
+and the answer turned out to be a console-only IAM user after all -- for a
+reason that is recorded rather than assumed.
+
+What the probe does rule out is a long-lived access key. There is none on this
+machine today and the chain above needs none.
+
+### What is actually in the account — read on 2026-09-08 as root
+
+The whole inventory, both regions, every service the policies can touch:
+
+| Thing | Owner |
+|---|---|
+| Lightsail instance `bdg-protected-backend` | the other project |
+| IAM user `bdg-deployer`, policies `BDGLightsailDeploy` and `SignInLocalDevelopmentAccess` | the other project |
+| IAM role `bdg-github-deployer` | the other project |
+| OIDC provider `token.actions.githubusercontent.com` | shared, one per account, created for the other project |
+| Two default VPCs, `172.31.0.0/16`, **untagged** | AWS, created automatically |
+
+Nothing else. No EC2 instances, load balancers, RDS, ElastiCache, ECS clusters,
+S3 buckets, secrets, certificates, customer KMS keys, log groups, SNS topics or
+ECR repositories in `us-east-1` or `us-east-2`.
+
+Two consequences worth stating.
+
+**The default VPCs carry no tags**, so the tag gate on every EC2 mutation keeps
+them out of reach. `nodal-terraform` cannot modify or delete them.
+
+**The GitHub OIDC provider is shared and was nearly taken.** There is one
+provider per account per issuer. `var.create_github_oidc_provider` defaulted to
+`true`, so a Nodal apply would have tried to create the one that already exists,
+and a `terraform destroy` would then have deleted the provider the other
+project's deployments authenticate against. The default is now `false` with the
+existing ARN referenced, and the IAM policy no longer grants create, update or
+delete on it — it denies them outright.
 
 ### Which principal the trust policy names
 
-This is the one decision that cannot be made from here, because `bdg-deployer`
-cannot list IAM, Organizations or Identity Center. It is made at bootstrap
-from what is actually in the account, in this order:
+Read from the account rather than assumed:
 
-1. **IAM Identity Center**, if an instance exists. Trust the permission-set
-   role ARN. Fully federated, no IAM user anywhere, and the preferred AWS
-   model.
-2. **An existing non-root administrator IAM user**, if one exists. Trust that
-   user's ARN exactly.
-3. **Root, narrowed by condition**, if neither exists. `"Principal": {"AWS":
-   "arn:aws:iam::049286562577:root"}` in a trust policy means *the whole
-   account*, not the root user, so it is paired with a condition that pins it
-   to the root user itself:
+| | |
+|---|---|
+| IAM Identity Center instance | **none**, in `us-east-1` or `us-east-2` |
+| AWS Organization | **none** — the account is not a member of one |
+| SAML providers | **none** |
+| OIDC providers | one, GitHub Actions, pinned to another project's repository |
+| Non-root IAM users | one, `bdg-deployer`, which belongs to another project |
+| **Root MFA** | **not enabled** |
 
-   ```json
-   "Condition": {"ArnEquals": {"aws:PrincipalArn": "arn:aws:iam::049286562577:root"}}
-   ```
+So there is no federated human identity and no non-root administrator. The
+options in order:
 
-   This is an interim. It requires a root browser session to refresh the role,
-   which should be rare, and it is replaced by option 1 or 2 as soon as one
-   exists.
+1. **IAM Identity Center account instance.** Available for a standalone account
+   and the model AWS prefers. It is also an account-wide service enablement
+   with a durable identity store and a home region fixed at creation, which is
+   a larger and more permanent decision than this bootstrap. Worth doing
+   deliberately, not as a side effect of provisioning one project.
+2. **GitHub OIDC.** The provider already exists, and it is the right answer for
+   CI: a workflow assumes `nodal-terraform` with a `sub` condition pinned to
+   the Nodal repository and no human credential exists at all. It does not help
+   a person running `terraform plan` today, and no Nodal repository exists yet.
+3. **A dedicated IAM user, `nodal-operator`.** Console sign-in only, MFA
+   required, **no access key**. Its entire permission set is assuming
+   `nodal-terraform`, plus looking after its own password and MFA device.
+
+**Chosen: 3, with 2 added when the repository exists.** The concrete technical
+reason for an IAM user, which the alternatives would otherwise be preferred
+over: federated human access requires an identity provider, and this account
+has none for humans. The only one present authenticates a CI job for a
+different project. Absent enabling a new account-wide service, an IAM user is
+the only non-root human principal available.
+
+Root is not in the trust policy. It does not need to be: root can edit the role
+directly, and naming it would either widen the trust to the whole account (see
+below) or make routine Terraform depend on a root session.
+
+**`arn:aws:iam::049286562577:root` in a trust policy does not mean the root
+user.** It means every principal in the account, with the decision delegated to
+whatever identity-based policies happen to exist. A test refuses it by name.
+
+### The trust policy
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OnlyTheNodalOperatorAndOnlyWithMFA",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::049286562577:user/nodal-operator" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "Bool": { "aws:MultiFactorAuthPresent": "true" } }
+    }
+  ]
+}
+```
+
+One principal, one action, and a password alone is not enough.
+
+There is no `aws:MultiFactorAuthAge` condition, deliberately. A console session
+refreshed across a working day would exceed any age limit worth setting and
+break the refresh mid-apply, which trades a real failure for a small gain.
+
+**One property is unverified**: whether credentials from `aws login` carry
+`aws:MultiFactorAuthPresent`. It should, because they mirror a console session,
+and a console sign-in with MFA sets it. It could not be tested in advance,
+because the only administrator today is root and root has no MFA device. The
+first command after creation is the test:
+
+```
+aws sts get-caller-identity --profile nodal-terraform
+```
+
+If that fails on the condition rather than succeeding, the finding is recorded
+here and the condition is reconsidered, not silently deleted.
+
+### Enable MFA on root
+
+Root has no MFA device. It is the only administrator in the account, it can
+create and delete anything including all of this, and it is protected by a
+password alone. This is the largest single risk found in the bootstrap survey
+and it is unrelated to Nodal.
 
 ### What gets created
 
@@ -101,7 +197,9 @@ Six documents and one role. Nothing durable, nothing with a password.
 | Policy | `nodal-terraform-stack` | 5,050 of 6,144 |
 | Policy | `nodal-terraform-iam` | 3,046 of 6,144 |
 | Policy | `nodal-task-boundary` | 2,094 of 6,144 |
+| Policy | `nodal-operator` | inline on the user |
 | Role | `nodal-terraform` | max session 1 hour |
+| User | `nodal-operator` | console + MFA, **no access key** |
 
 The single `nodal-terraform` policy that used to live here reached 5,786 of
 6,144 characters and is gone. The split is by blast radius, not by service:
@@ -118,23 +216,31 @@ The single `nodal-terraform` policy that used to live here reached 5,786 of
 on every role the deployment role creates, and `iam:CreateRole` is conditioned
 on it.
 
-Steps, signed in as an administrator:
+Steps, signed in as root:
 
-1. IAM → Policies → Create policy → JSON, once per file in `infra/aws/`.
-2. IAM → Roles → Create role → Custom trust policy, naming the principal chosen
-   above. Attach the four `nodal-terraform-*` policies. Name it
-   `nodal-terraform`, maximum session duration 1 hour.
+1. Create the five managed policies from `infra/aws/nodal-terraform-*.json` and
+   `nodal-task-boundary-policy.json`.
+2. Create user `nodal-operator`: console access, **no access key**, inline
+   policy `infra/aws/nodal-operator-policy.json`. Enroll an MFA device.
+3. Create role `nodal-terraform` with
+   `infra/aws/nodal-terraform-trust-policy.json`, the four
+   `nodal-terraform-*` policies attached, maximum session duration 1 hour.
 
 Then, in a terminal:
 
 ```
+aws configure set region us-east-2 --profile nodal-operator
+aws configure set login_session arn:aws:iam::049286562577:user/nodal-operator --profile nodal-operator
 aws configure set region us-east-2 --profile nodal-terraform
 aws configure set role_arn arn:aws:iam::049286562577:role/nodal-terraform --profile nodal-terraform
-aws configure set source_profile <the administrator profile> --profile nodal-terraform
+aws configure set source_profile nodal-operator --profile nodal-terraform
+
+aws login --profile nodal-operator
 aws sts get-caller-identity --profile nodal-terraform
 ```
 
-The last line must print the **role** ARN, not the administrator's.
+The last line must print the **role** ARN, not the operator's. Root is not used
+again after step 3.
 
 ## 1a. What the policies allow, and what they cannot reach
 
@@ -228,19 +334,17 @@ the line the policies draw.
 
 ### Not yet done
 
-**AWS IAM Access Analyzer has not been run.** `access-analyzer:ValidatePolicy`
-is denied to `bdg-deployer`, so it cannot be run before the administrator
-session exists. It is the first action of that session, before anything is
-created:
+**Access Analyzer: run on 2026-09-08, all seven documents clean.** It found two
+things first, both fixed before anything was created.
 
-```
-for f in infra/aws/*-policy.json; do
-  aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY \
-    --policy-document "file://$f" --region us-east-2 --profile <admin>
-done
-```
+`ALLOW_WITH_UNSUPPORTED_TAG_CONDITION_KEY_FOR_SERVICE` on the read policy was a
+real defect rather than a style note: `sns:GetTopicAttributes` sat in a
+statement gated on `aws:ResourceTag/Project`, and SNS does not support that
+condition key, so the actions were allowed by nothing and Terraform would have
+failed refreshing its own topics. They moved to an ARN-scoped statement.
 
-Findings are fixed before the policies are created, not after.
+`REDUNDANT_RESOURCE` on two S3 grants: `arn:aws:s3:::nodal-*` already matches
+object keys, so the `/*` form added nothing. Removed.
 
 **The Path B environment does not exist yet.** These policies were derived from
 the module set in `infra/terraform/modules`, which is what `environments/prod`
