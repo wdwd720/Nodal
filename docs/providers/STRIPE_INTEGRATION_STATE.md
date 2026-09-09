@@ -135,20 +135,34 @@ Named rather than implied.
 
 | Item | State | Why |
 |---|---|---|
-| HTTP endpoints for buying Credits | not written | The service exists and nothing exposes it. Needs an OpenAPI change and a route |
+| HTTP endpoints for buying Credits | **done** | `GET /v1/credits/pricing`, `POST /v1/payments`, `GET /v1/payments/{paymentId}` |
+| Composition-root wiring in `cmd/api` | **done** | All-or-nothing; every refusal logs why |
+| Webhook ingestion wired | **done for this provider** | See below |
 | Frontend funding page | not written | Goal Sections 55 and 57 |
 | Frontend payout page | not written | Goal Sections 56 and 57 |
-| Composition-root wiring in `cmd/api` | not written | Config slots exist; nothing constructs the adapters yet |
 | Connect connected-account creation | not written | Blocked on the platform profile, which is a business-model declaration requiring approval |
 | Payout wallet model | not written | See `WALLET_INTEGRATION_STATE.md`; the design question is settled and the code is not |
 | Stripe sandbox integration run | not done | No key is configured. See `STRIPE_BROWSER_SETUP.md` |
 | Reconciliation sweep scheduling | partial | `Reconcile` and `SettleDue` exist; nothing calls them on a timer |
+| Destination-change payout hold | not built | Blocks `PAYOUT_SETTLE`; see `WALLET_INTEGRATION_STATE.md` §2B |
+
+### A gap this workstream found in the existing system
+
+`internal/webhook` is a complete and tested ingestion pipeline, and `cmd/api`
+never populated `Ports.Webhooks` at all. `POST /v1/webhooks/{provider}` has
+existed, with a public authorization policy, answering nothing for every
+provider. **No provider webhook had ever been ingested in this binary.**
+
+The Credit purchase pipeline is now wired. The funding onramp's is deliberately
+not: it is a different product, it is blocked externally with no credentials,
+and changing its behaviour is not this workstream's to do. The gap is named
+here rather than left as an absence.
 
 ## 7. Classification (goal Section 70)
 
 | | |
 |---|---|
-| SOFTWARE_COMPLETE | **FALSE.** Credit purchase is complete to the service boundary; no HTTP surface, no UI, no wiring |
+| SOFTWARE_COMPLETE | **FALSE**, and closer. Credit purchase is complete from HTTP through the ledger, wired, and tested. What remains for this half is the frontend, the reconciliation schedule, and the payout side |
 | STRIPE_SANDBOX_COMPLETE | **FALSE.** No sandbox run has happened |
 | STRIPE_ACCOUNT_CONFIG_COMPLETE | **FALSE.** No Nodal resource exists on the account yet |
 | STRIPE_PRODUCTION_APPROVED | **FALSE.** No restricted-business review has been requested |

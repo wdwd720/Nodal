@@ -120,7 +120,7 @@ When it exists, the endpoint to create is:
 | | |
 |---|---|
 | Name | `NODAL_credit_purchase_live` |
-| URL | *(pending)* |
+| URL | *(pending)* — must end in `/v1/webhooks/stripe_credit`, which is the path the handler is mounted on |
 | Events | `payment_intent.created`, `payment_intent.requires_action`, `payment_intent.processing`, `payment_intent.amount_capturable_updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated` |
 
 That list is `stripecredit.ModelledEventTypes()`, and a test asserts every type

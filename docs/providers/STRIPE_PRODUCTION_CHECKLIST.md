@@ -17,9 +17,9 @@ Legend: **[eng]** engineering, **[user]** the account owner, **[stripe]** Stripe
 |---|---|---|---|
 | 1.1 | Pair the Stripe CLI (`stripe login`) | [user] | **pending** |
 | 1.2 | Decide the production webhook URL for Nodal's API | [user] | **pending** |
-| 1.3 | Wire the adapters in `cmd/api` | [eng] | not started |
-| 1.4 | Expose HTTP endpoints for starting a purchase and reading funding state | [eng] | not started |
-| 1.5 | Mount the webhook handler on the Nodal endpoint path | [eng] | not started |
+| 1.3 | Wire the adapters in `cmd/api` | [eng] | **done** |
+| 1.4 | Expose HTTP endpoints for starting a purchase and reading funding state | [eng] | **done** |
+| 1.5 | Mount the webhook handler on the Nodal endpoint path | [eng] | **done** — `POST /v1/webhooks/stripe_credit` |
 | 1.6 | Store `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in the existing secret store; never in the repo | [user] | not started |
 | 1.7 | Set `CP_PROVIDER_CREDIT_PURCHASE_ACCOUNT_REF=acct_1REGPQALyMyuBFc1` and `..._SHARED_ACCOUNT=true` | [eng] | config exists |
 
@@ -99,7 +99,7 @@ change that; a new policy version does, through its own approval path.
 
 ## The one-line answer
 
-Software can reach Stage 2 without asking anyone for anything except a CLI
-pairing and a URL. Everything past Stage 2 needs a human decision that an agent
+Stage 1 is complete except for the two items that need the owner: a CLI
+pairing and a URL. Software can reach Stage 2 on those alone. Everything past Stage 2 needs a human decision that an agent
 must not make, and the largest of those decisions puts an existing live account
 at risk.
