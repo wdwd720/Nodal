@@ -200,16 +200,20 @@ type Funding struct {
 	FeeAmount         money.USD
 	IdempotencyKey    string
 	LotID             *LotID
-	SettledAt         *time.Time
-	ReversedAt        *time.Time
-	FailureReason     string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// ReversibleAt is when the Credits were minted and the reversibility
+	// window began. It is what the settlement sweep measures from, and what a
+	// funding page needs in order to answer "when does this settle".
+	ReversibleAt  *time.Time
+	SettledAt     *time.Time
+	ReversedAt    *time.Time
+	FailureReason string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 const fundingColumns = `id, account_id, provider, coalesce(provider_reference,''), state, credit_quantity::text,
 	paid_amount_minor, paid_currency, fee_amount_minor, idempotency_key, lot_id,
-	settled_at, reversed_at, coalesce(failure_reason,''), created_at, updated_at`
+	reversible_at, settled_at, reversed_at, coalesce(failure_reason,''), created_at, updated_at`
 
 func scanFunding(row pgx.Row) (Funding, error) {
 	var (
@@ -221,7 +225,7 @@ func scanFunding(row pgx.Row) (Funding, error) {
 	)
 	if err := row.Scan(&f.ID, &f.AccountID, &f.Provider, &f.ProviderReference, &state, &qty,
 		&paid, &f.PaidCurrency, &fee, &f.IdempotencyKey, &f.LotID,
-		&f.SettledAt, &f.ReversedAt, &f.FailureReason, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		&f.ReversibleAt, &f.SettledAt, &f.ReversedAt, &f.FailureReason, &f.CreatedAt, &f.UpdatedAt); err != nil {
 		return Funding{}, err
 	}
 	var err error
@@ -373,6 +377,11 @@ func (s *Service) AdvanceFunding(ctx context.Context, tx pgx.Tx, id FundingID, t
 	}
 	set := `state = $2`
 	switch to {
+	case FundingReversible:
+		// Stamped here rather than derived later, because the settlement
+		// window is measured from it and updated_at -- which a trigger resets
+		// on any write -- is not a record of when anything happened.
+		set += `, reversible_at = coalesce(reversible_at, now())`
 	case FundingSettled:
 		set += `, settled_at = now()`
 	case FundingReversed, FundingRefunded:
@@ -467,8 +476,33 @@ type ReverseResult struct {
 // reversing a market trade because a third party charged back would take value
 // from an innocent counterparty; PART LXXXI forbids it.
 func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, id FundingID, effectiveAt time.Time, reason string) (ReverseResult, error) {
+	return s.reverseTo(ctx, tx, id, effectiveAt, reason, FundingReversed)
+}
+
+// Refund claws back the Credits a funding paid for after WE returned the
+// money.
+//
+// The accounting is identical to Reverse and the meaning is not. A reversal is
+// a third party taking the money back and is a risk signal about the account;
+// a refund is a decision we made, often a support outcome, and carries no such
+// signal. Collapsing the two would make every goodwill refund look like a
+// chargeback in the fraud model, and the fraud model would deserve to be
+// ignored.
+//
+// A funding reaches exactly one terminal state, so this shares Reverse's
+// idempotency keys deliberately: a funding that somehow attempted both would
+// find the posting already made rather than post twice.
+func (s *Service) Refund(ctx context.Context, tx pgx.Tx, id FundingID, effectiveAt time.Time, reason string) (ReverseResult, error) {
+	return s.reverseTo(ctx, tx, id, effectiveAt, reason, FundingRefunded)
+}
+
+func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effectiveAt time.Time, reason string, to FundingState) (ReverseResult, error) {
 	if tx == nil {
 		return ReverseResult{}, errs.New(errs.CodeInternal, "credit: Reverse requires a transaction")
+	}
+	if to != FundingReversed && to != FundingRefunded {
+		return ReverseResult{}, errs.Newf(errs.CodeInternal,
+			"credit: clawback must end in REVERSED or REFUNDED, not %s", to)
 	}
 	f, err := s.Funding(ctx, tx, id)
 	if err != nil {
@@ -476,7 +510,7 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, id FundingID, effectiv
 	}
 	if f.LotID == nil {
 		// Nothing was ever minted; the state change is the whole reversal.
-		if _, err := s.AdvanceFunding(ctx, tx, id, FundingReversed, reason, ""); err != nil {
+		if _, err := s.AdvanceFunding(ctx, tx, id, to, reason, ""); err != nil {
 			return ReverseResult{}, err
 		}
 		return ReverseResult{}, nil
@@ -558,7 +592,7 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, id FundingID, effectiv
 		Reference{Type: "credit_funding", ID: f.ID.String()}, reason); err != nil {
 		return ReverseResult{}, err
 	}
-	if _, err := s.AdvanceFunding(ctx, tx, id, FundingReversed, reason, ""); err != nil {
+	if _, err := s.AdvanceFunding(ctx, tx, id, to, reason, ""); err != nil {
 		return ReverseResult{}, err
 	}
 	return res, nil
