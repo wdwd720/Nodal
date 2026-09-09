@@ -242,6 +242,49 @@ aws sts get-caller-identity --profile nodal-terraform
 The last line must print the **role** ARN, not the operator's. Root is not used
 again after step 3.
 
+## 1b. What exists, as of 2026-09-09
+
+Created as root, in this order, and nothing else was touched.
+
+| Object | ARN |
+|---|---|
+| Policy | `arn:aws:iam::049286562577:policy/nodal-terraform-read` |
+| Policy | `arn:aws:iam::049286562577:policy/nodal-terraform-network` |
+| Policy | `arn:aws:iam::049286562577:policy/nodal-terraform-stack` |
+| Policy | `arn:aws:iam::049286562577:policy/nodal-terraform-iam` |
+| Policy | `arn:aws:iam::049286562577:policy/nodal-task-boundary` |
+| User | `arn:aws:iam::049286562577:user/nodal-operator` |
+| Role | `arn:aws:iam::049286562577:role/nodal-terraform` |
+
+Root MFA was enabled first: `nodal-root-1`, virtual, 2026-09-09T05:26:39Z.
+Root has no access keys.
+
+The user has **no access keys and no login profile**. The password is set by a
+human in the console, not here, and the MFA device is enrolled at the same time.
+The role's `MaxSessionDuration` is 3600 and it carries the four
+`nodal-terraform-*` policies and no inline policy. `nodal-task-boundary` is
+deliberately not attached to anything: it is named by the condition on
+`iam:CreateRole` and applies to the roles Terraform creates.
+
+`bdg-deployer`, `bdg-github-deployer`, `BDGLightsailDeploy`, the GitHub OIDC
+provider and Lightsail were not modified.
+
+### If aws login does not carry the MFA claim
+
+The trust policy requires `aws:MultiFactorAuthPresent`. If credentials from
+`aws login` do not carry it, the requirement does not move. The supported fix is
+to make the AssumeRole call itself MFA-bearing, by naming the device in the
+profile:
+
+```
+aws configure set mfa_serial arn:aws:iam::049286562577:mfa/nodal-operator --profile nodal-terraform
+```
+
+The CLI then passes `SerialNumber` and `TokenCode` to `sts:AssumeRole`, which
+sets `aws:MultiFactorAuthPresent` on the resulting session and satisfies the
+same condition. It prompts for a code once per role session rather than once per
+command.
+
 ## 1a. What the policies allow, and what they cannot reach
 
 ### The two anchors
