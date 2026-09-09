@@ -9,8 +9,21 @@ locals {
   sev2 = [aws_sns_topic.sev2.arn]
 
   ecs_services = toset(var.ecs_service_names)
-  redis_nodes  = toset(var.redis_node_ids)
   rds_replicas = toset(var.rds_replica_identifiers)
+
+  # A map keyed by position, not a set of the ids themselves.
+  #
+  # The ids are built from the replication group's name, which does not exist
+  # until the group is created -- so on a first apply they are unknown at plan
+  # time, and `for_each` over a set of unknown strings cannot be planned at all:
+  # Terraform has no way to know which instances it is about to create. The
+  # stack could therefore never be planned in one pass on a fresh account, which
+  # is the one time a plan matters most.
+  #
+  # How many nodes there are IS known -- it comes from a variable -- so the
+  # position is a stable key and the id becomes an ordinary unknown attribute,
+  # which Terraform is perfectly happy with.
+  redis_nodes = { for i, id in var.redis_node_ids : tostring(i) => id }
 
   # Metrics derived from log content, kept out of the OTLP namespace so a
   # collector misconfiguration can never silently shadow one.
@@ -783,7 +796,11 @@ resource "aws_cloudwatch_metric_alarm" "kill_switch_change" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "liveness_unhealthy" {
-  count               = var.liveness_target_group_arn_suffix == null ? 0 : 1
+  # Not `liveness_target_group_arn_suffix == null`. That suffix comes from a
+  # target group created in the same apply, so the comparison is unknown at plan
+  # time and `count` cannot be unknown. Whether the alarm exists is a decision
+  # the caller can state up front; what it points at is not.
+  count               = var.liveness_alarm_enabled ? 1 : 0
   alarm_name          = "${var.name_prefix}-api-liveness-unhealthy"
   alarm_description   = "SEV1: api targets are failing /v1/healthz, which the process answers without touching any dependency. The container is wedged or dying, not waiting on the database."
   namespace           = "AWS/ApplicationELB"

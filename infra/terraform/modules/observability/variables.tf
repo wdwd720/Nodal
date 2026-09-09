@@ -188,7 +188,17 @@ variable "api_log_group_name" {
 }
 
 variable "liveness_target_group_arn_suffix" {
-  description = "Target group performing the /v1/healthz check. null disables the liveness alarm."
+  description = "Target group performing the /v1/healthz check."
   type        = string
   default     = null
+}
+
+# Separate from the suffix above, and it has to be: the suffix is produced by a
+# target group created in the same apply, so it is unknown while the plan is
+# being made, and `count` may not depend on an unknown value. A deployment that
+# genuinely has no liveness target group sets this false.
+variable "liveness_alarm_enabled" {
+  description = "Create the /v1/healthz liveness alarm. Requires liveness_target_group_arn_suffix."
+  type        = bool
+  default     = true
 }
