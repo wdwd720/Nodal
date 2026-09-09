@@ -395,7 +395,11 @@ module "db_bootstrap" {
 # Deployment identity and alerting
 # ---------------------------------------------------------------------------
 
+# Created only once the repository is known. count rather than a comment,
+# because a module that must not be applied yet should be impossible to apply
+# rather than merely discouraged.
 module "iam_deploy" {
+  count                    = (var.github_org != "" && var.github_repo != "") ? 1 : 0
   source                   = "../../modules/iam-deploy"
   permissions_boundary_arn = var.permissions_boundary_arn
 
@@ -404,6 +408,7 @@ module "iam_deploy" {
   aws_account_id       = var.aws_account_id
   github_org           = var.github_org
   github_repo          = var.github_repo
+  allowed_environments = var.github_deploy_environments
   create_oidc_provider = var.create_github_oidc_provider
   oidc_provider_arn    = var.github_oidc_provider_arn
   ecr_repository_arns  = values(module.ecs_cluster.ecr_repository_arns)

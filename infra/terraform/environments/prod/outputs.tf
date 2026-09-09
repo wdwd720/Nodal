@@ -47,7 +47,7 @@ output "task_role_arns" {
 }
 
 output "deploy_role_arn" {
-  value = module.iam_deploy.deploy_role_arn
+  value = one(module.iam_deploy[*].deploy_role_arn)
 }
 
 output "ecr_repository_urls" {

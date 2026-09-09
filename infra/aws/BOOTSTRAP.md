@@ -246,7 +246,7 @@ aws sts get-caller-identity --profile nodal-terraform
 The last line must print the **role** ARN, not the operator's. Root is not used
 again after step 3.
 
-## 1b. What exists, as of 2026-09-09
+## 1a. What exists, as of 2026-09-09
 
 Created as root, in this order, and nothing else was touched.
 
@@ -324,7 +324,7 @@ sets `aws:MultiFactorAuthPresent` on the resulting session and satisfies the
 same condition. It prompts for a code once per role session rather than once per
 command.
 
-## 1a. What the policies allow, and what they cannot reach
+## 1b. What the policies allow, and what they cannot reach
 
 ### The two anchors
 
@@ -435,6 +435,95 @@ is the only real test of whether the permissions are complete. Expect at least
 one missing action; the fix is to add it here, scoped, rather than to widen a
 statement to `*`.
 
+## 1c. The scripts, and what is left for a person
+
+`scripts/aws/` ends the loop where a person reads a command, pastes it, reads
+the output and decides what to run next. See `scripts/aws/README.md`.
+
+```powershell
+.\scriptsws
+odal-bootstrap.ps1     # verify and finish the local setup
+.\scriptsws
+odal-login.ps1         # one MFA code, good for the hour
+.\scriptsws
+odal-tf.ps1 plan       # runs as the role, no prompt
+```
+
+Two things stay human, and both are human because AWS makes them so.
+
+**Enrolling the MFA device.** `aws iam create-virtual-mfa-device` returns the
+shared secret in its response, so getting it onto a phone means it first exists
+in a variable, a file, a terminal buffer or a shell history. A TOTP seed is a
+permanent credential, unlike the six digits it generates. The console's QR code
+goes from screen to phone and is never written down, so this is one console
+instruction rather than an automated step.
+
+**Typing a code once an hour.** Read without echo and piped to the CLI's own
+stdin prompt, so it is neither displayed nor visible in argv.
+
+### Why aws login alone does not satisfy the trust policy
+
+Established with the IAM policy simulator rather than inferred. The same
+request, against the operator's real policies and the role's real trust
+document:
+
+| `aws:MultiFactorAuthPresent` | Decision |
+|---|---|
+| `true` | allowed, matching the operator's inline policy |
+| `false` | implicitDeny, nothing matched |
+
+So the policies are right and `aws login` credentials simply do not carry the
+claim. The role profile therefore sets `mfa_serial`, which makes the CLI pass
+`SerialNumber` and `TokenCode` to `sts:AssumeRole`. That is the mechanism AWS
+documents for a trust policy that tests for MFA. The condition is satisfied
+rather than avoided, and nothing about it was relaxed.
+
+## 1d. The long-term deployment identity: GitHub, not a person
+
+Human MFA is how a laptop deploys. It is not how production should deploy, and
+the replacement is prepared but deliberately not created.
+
+```
+GitHub Actions workflow
+  -> token.actions.githubusercontent.com          (the provider that ALREADY exists)
+  -> sub pinned to repo + branch + environment
+  -> nodal-prod-github-deploy role
+  -> short-lived STS credentials
+  -> terraform
+```
+
+**The provider is shared and is not ours.** One OIDC provider exists per account
+per issuer, and this account's was created on 2026-09-04 for the other project.
+Nodal references it and never manages it:
+`create_github_oidc_provider` defaults to `false`, the existing ARN is the
+default value of `github_oidc_provider_arn`, and the deployment policy denies
+`iam:CreateOpenIDConnectProvider`, `iam:DeleteOpenIDConnectProvider` and
+`iam:UpdateOpenIDConnectProviderThumbprint` outright.
+
+**Isolation comes from the subject, not from the provider.** Every subject the
+`iam-deploy` module builds is prefixed `repo:<org>/<repo>:`, so the other
+project's workflows cannot assume Nodal's role and Nodal's cannot assume theirs,
+even though both trust the same provider. Their role is pinned to
+`repo:wdwd720/BigDaddyGames:environment:production:ref:refs/heads/product/actorvia-productization`.
+The module now refuses that org and that repository by `validation` block, so
+the isolation is enforced rather than remembered.
+
+**Two subject shapes, because GitHub emits two.** `allowed_refs` pins a branch
+or tag. `allowed_environments` pins a GitHub Environment, which is the only one
+of the two that can carry a required reviewer and a wait timer, and it defaults
+to `production`.
+
+**Not created yet.** `github_org` and `github_repo` default to empty, and the
+module carries `count = (var.github_org != "" && var.github_repo != "") ? 1 : 0`.
+While either is empty the role does not exist and cannot be applied by accident.
+When the Nodal repository exists, the CI trust arrives by setting two variables
+rather than by editing code:
+
+```hcl
+github_org  = "<the Nodal org>"
+github_repo = "<the Nodal repo>"
+```
+
 ## 2. Terraform state bucket — after step 1, and scriptable
 
 Terraform cannot create the bucket that stores its own state, so this is done
@@ -511,7 +600,9 @@ Stripe webhook are unaffected.
 | A Path B Terraform environment | engineering | **not written** — see below |
 | Container images in ECR | engineering | none exist; no GitHub repository exists |
 | ElastiCache Redis for the API's rate-limit counters | nodal-terraform | required since F-82; see section 5 |
-| Access Analyzer run on the five policies | admin | section 1a, before anything is created |
+| Access Analyzer run on the five policies | admin | **done**, section 1b, zero findings |
+| Local bootstrap and login scripts | engineering | **done**, `scripts/aws/` |
+| GitHub OIDC CI deploy role | engineering | prepared, section 1d; not created until the repository is named |
 
 ## 5. The blocker inside our own code — CLOSED 2026-09-09
 

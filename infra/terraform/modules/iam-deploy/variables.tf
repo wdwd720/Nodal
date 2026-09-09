@@ -12,16 +12,45 @@ variable "aws_account_id" {
 
 variable "github_org" {
   type = string
+
+  # Account 049286562577 is shared with another project whose deploy role trusts
+  # the same OIDC provider on repo:wdwd720/BigDaddyGames. Naming that repository
+  # here would let its workflows assume Nodal's role. The check is cheap and the
+  # failure it prevents is silent.
+  validation {
+    condition     = lower(var.github_org) != "wdwd720"
+    error_message = "That organization belongs to another project in this AWS account; see infra/aws/BOOTSTRAP.md."
+  }
 }
 
 variable "github_repo" {
   type = string
+
+  validation {
+    condition     = lower(var.github_repo) != "bigdaddygames"
+    error_message = "That repository belongs to another project in this AWS account; see infra/aws/BOOTSTRAP.md."
+  }
+}
+
+variable "allowed_environments" {
+  description = "GitHub Environments whose jobs may assume the deploy role. An environment can require a reviewer; a branch cannot."
+  type        = list(string)
+  default     = []
 }
 
 variable "allowed_refs" {
   description = "Git refs whose workflows may assume the deploy role (main and release tags only)."
   type        = list(string)
   default     = ["refs/heads/main", "refs/tags/v*"]
+
+  # A trust policy with no subjects at all would be written by Terraform as a
+  # condition matching nothing, which fails closed -- but it fails closed
+  # silently, and a deploy role nobody can assume looks identical to one that is
+  # merely misconfigured. Refuse it here instead.
+  validation {
+    condition     = length(var.allowed_refs) > 0
+    error_message = "Set allowed_refs, or set allowed_environments and pass allowed_refs = [] deliberately."
+  }
 }
 
 variable "create_oidc_provider" {

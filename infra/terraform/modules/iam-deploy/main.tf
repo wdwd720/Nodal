@@ -5,7 +5,18 @@
 
 locals {
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : var.oidc_provider_arn
-  subjects          = [for r in var.allowed_refs : "repo:${var.github_org}/${var.github_repo}:ref:${r}"]
+
+  # Two subject shapes, because GitHub emits two and they protect different
+  # things. A ref subject says the workflow ran on a branch or tag. An
+  # environment subject says it ran against a GitHub Environment, which is the
+  # only one of the two that can carry a required reviewer and a wait timer.
+  #
+  # Both are prefixed with repo:<org>/<repo>:, which is what keeps one project's
+  # workflows out of another project's role even though a single OIDC provider
+  # serves the whole AWS account.
+  ref_subjects = [for r in var.allowed_refs : "repo:${var.github_org}/${var.github_repo}:ref:${r}"]
+  env_subjects = [for e in var.allowed_environments : "repo:${var.github_org}/${var.github_repo}:environment:${e}"]
+  subjects     = concat(local.ref_subjects, local.env_subjects)
 }
 
 resource "aws_iam_openid_connect_provider" "github" {

@@ -303,12 +303,24 @@ variable "waf_rate_limit" {
   default = 2000
 }
 
+# Empty until the Nodal GitHub repository exists. While either is empty the
+# iam-deploy module is not instantiated at all, so a deployment can be applied
+# without inventing a repository name -- and the CI trust arrives later by
+# setting two variables rather than by editing code.
 variable "github_org" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "github_repo" {
-  type = string
+  type    = string
+  default = ""
+}
+
+variable "github_deploy_environments" {
+  description = "GitHub Environments whose jobs may assume the deploy role."
+  type        = list(string)
+  default     = ["production"]
 }
 
 # Default false, and it matters. Account 049286562577 already has
