@@ -15,6 +15,82 @@
 
 ---
 
+# PART -1 — STRIPE PROVIDER ACTIVATION WORKSTREAM (pgf.md)
+
+Started 2026-09-08 from `pgf.md` at the repository root. It is a workstream inside the existing
+architecture, not a new goal: everything in PART 0 onward remains accurate.
+
+## Where the perishable facts live
+
+Read these first when resuming; they hold what a browser session established and cannot be
+rediscovered from the code.
+
+- `docs/providers/STRIPE_CAPABILITY_MATRIX.md` — what Stripe's current documentation actually says,
+  per feature, with citations and an evidence date.
+- `docs/providers/STRIPE_ACCOUNT_STRUCTURE.md` — which account, why, and the risk that choice carries.
+- `docs/providers/STRIPE_BUSINESS_MODEL_REVIEW.md` — Nodal's activities against Stripe's published
+  restricted-business policy.
+- `docs/providers/STRIPE_BROWSER_SETUP.md` — every browser action and its outcome, including what was
+  deliberately not touched.
+- `docs/providers/STRIPE_INTEGRATION_STATE.md` — what the code does and what is not done.
+- `docs/providers/WALLET_INTEGRATION_STATE.md` — where a payout lands and who is authoritative.
+- `docs/providers/STRIPE_PRODUCTION_CHECKLIST.md` — the ordered path to a real payment.
+
+## The four decisions that shaped everything
+
+1. **Nodal runs on the existing Actorvia live account** (`acct_1REGPQALyMyuBFc1`), by the owner's
+   explicit direction, against Stripe's own written rule that independent projects use separate
+   accounts. A separate Nodal account was created and then abandoned; it still exists, empty and
+   unactivated, as `acct_1UDZsoARym5YyR1Q`.
+
+2. **Credits are sold through PaymentIntents, not Checkout.** Actorvia's live webhook already
+   subscribes to `checkout.session.completed`, and Stripe delivers each event to every subscribed
+   endpoint. Checkout would post every Nodal purchase to Actorvia's billing handler.
+
+3. **Every provider event is classified before it is acted on.** On a shared account, Nodal's
+   endpoint receives another product's events. Foreign-event rejection is a correctness requirement
+   here, not a defensive nicety, and the environment half of it is what stops a staging deployment
+   acting on production purchases.
+
+4. **The payout rail is USDC on Base or Polygon, and Stripe holds the destination.** Not Solana.
+   Goal Section 23 anticipated exactly this. Stripe also performs the payout KYC, because the
+   product requires `dashboard: express` and that setting makes Stripe the requirements collector.
+
+## What landed
+
+| Subject | State |
+|---|---|
+| `credit.PurchaseProvider` abstraction and registry | **done** |
+| `credit.PricingPolicy` — versioned, hashed, server-side | **done** |
+| `internal/provider/stripecredit` — PaymentIntents adapter | **done**, CODE_COMPLETE |
+| `internal/provider/stripesig` — one shared signature verifier | **done** |
+| `credit.PurchaseService` — events to ledger effects | **done** |
+| Funding states CANCELED and MANUAL_REVIEW (migration 00728) | **done** |
+| `credit_fundings.reversible_at` (migration 00729) | **done** |
+| `payout.Capabilities` — assets, networks, KYC ownership, availability | **done** |
+| `internal/provider/stripepayout` — stablecoin payout adapter | **done**, and refuses to submit |
+| Config slots `CREDIT_PURCHASE` and `PAYOUT` | **done** |
+| PAY-001 … PAY-006 as integration tests | **done** |
+| HTTP endpoints, frontend, `cmd/api` wiring | **not started** |
+| Connect connected accounts | **blocked** on B-11 |
+| Payout destination-change hold | **not built**, and blocks `PAYOUT_SETTLE` |
+
+## Exact next action
+
+1. The owner runs `stripe login` and decides Nodal's production webhook URL
+   (`STRIPE_BROWSER_SETUP.md` §5 and §6).
+2. Wire the adapters in `cmd/api`; expose the purchase endpoints; mount the webhook handler.
+3. Run Stage 2 of `STRIPE_PRODUCTION_CHECKLIST.md` against Stripe test mode.
+4. Nothing past Stage 2 without the owner: every remaining item is a business-model declaration, a
+   legal attestation, or an application whose denial can affect Actorvia's live capabilities.
+
+## New external blockers
+
+B-09 restricted-business review, B-10 stablecoin payout private preview, B-11 Connect platform
+profile. B-04 narrowed and B-06 is answered for this rail. See `BLOCKERS.md`.
+
+---
+
 # PART 0 — CURRENT GOAL (gola.md) AND STATE
 
 Baseline frozen at `b8da0c4`. Everything below this line describes work done against `gola.md`.

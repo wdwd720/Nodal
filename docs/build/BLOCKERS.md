@@ -86,12 +86,20 @@ permits only simulation, which is the correct starting position rather than a pl
 **Decision needed.** Live credentials and a production account with the payment provider used to sell
 Credits.
 
-**What the code already supports.** `internal/credit` implements the eleven-state funding lifecycle,
-mints on `CAPTURED → REVERSIBLE`, promotes to settled only when the funding settles, and handles
-chargeback with a recorded `DEFICIT` rather than a negative balance. `internal/provider/stripe`
-exists and is contract-tested against recorded fixtures.
+**What the code already supports.** `internal/credit` implements the funding lifecycle — thirteen
+states as of migration 00728 — mints on `CAPTURED → REVERSIBLE`, promotes to settled only when the
+funding settles, and handles chargeback with a recorded `DEFICIT` rather than a negative balance.
+`internal/provider/stripecredit` is the adapter behind `credit.PurchaseProvider`, and
+`credit.PurchaseService` drives the lifecycle from verified provider events. Acceptance criteria
+PAY-001 through PAY-006 are integration tests against a real database.
 
-**Capabilities currently disabled.** `CREDIT_PURCHASE`.
+**What changed on 2026-09-08.** The provider is chosen: Stripe, PaymentIntents, on the existing
+Actorvia account. Credentials are still not configured — `stripe login` is pending — so this
+blocker is narrower than it was but is not closed. See
+`docs/providers/STRIPE_PRODUCTION_CHECKLIST.md` Stage 1.
+
+**Capabilities currently disabled.** `CREDIT_PURCHASE`. Note that B-09 must close first: having
+credentials is not having permission.
 
 ---
 
@@ -118,6 +126,13 @@ unsupported products merely because an interface exists", enforced rather than i
 
 **Decision needed.** Who performs KYC, and whether their verification is accepted by the payout
 provider (the two are not the same question).
+
+**Answered for the Stripe rail, 2026-09-08.** Stripe performs it, and its own verification is by
+definition accepted by itself. With a connected account configured `dashboard: express` — which the
+stablecoin payout product requires anyway — `requirements_collector` computes to `stripe`, so Nodal
+never collects a government identity document at the payout boundary. That is goal Section 16
+satisfied by a required setting rather than by restraint. What remains open is reaching
+`PAYOUT_KYC` at all, which needs B-10 and B-11.
 
 **What the code already supports.** `valuedomain.VerificationLevel` separates Nodal identity from
 financial identity from enhanced diligence. `payout.EligibilityInput` takes the level as an input and
@@ -160,6 +175,82 @@ comma-separated sets, so a determination covering three states is one rule.
 **What the code already supports.** `docs/threat-model/THREAT_MODEL.md`, the `test/security` suite
 (cross-tenant probes, forged sessions, SQL-source constancy analysis, agent escalation, webhook
 forgery), `gosec`, `govulncheck`, `gitleaks` and a supply-chain script, all runnable today.
+
+---
+
+## B-09 — Stripe restricted-business review for stored value and marketplace · BLOCKED_EXTERNAL
+
+**Decision needed.** Stripe's approval to sell Nodal Credits, and to settle creator sales, on
+account `acct_1REGPQALyMyuBFc1`.
+
+**Where requested.** Stripe Dashboard, account status / restricted business review, against the
+business description in `docs/providers/STRIPE_BUSINESS_MODEL_REVIEW.md`.
+
+**Current status.** Not requested. The description is drafted and has not been shown to Stripe.
+
+**What it blocks.** `CREDIT_PURCHASE` and `MARKETPLACE`.
+
+**Why it is a real category and not caution.** Stripe's published policy lists as restricted
+"Preloaded payment cards, gift cards, virtual credits, or other products and services in which a
+monetary value is stored", and "Payment facilitation and aggregation (including receiving settlement
+proceeds for goods or services that you did not provide)". A Nodal Credit is the first sentence and
+internal commerce is the second. There is no reading of the product under which those sentences are
+about something else.
+
+**The account-level risk, stated once.** This review happens against the account that currently runs
+live payments, Treasury with Cross River Bank, and a card issuing programme. A denial does not land
+on an empty account. The owner was told this before any configuration work began and confirmed the
+direction; `docs/providers/STRIPE_ACCOUNT_STRUCTURE.md` records it.
+
+**Evidence required to close.** A written Stripe approval naming the account and the activities.
+
+---
+
+## B-10 — Stripe stablecoin payout private preview · BLOCKED_EXTERNAL
+
+**Decision needed.** Stripe granting this account access to stablecoin payouts for Connect.
+
+**Where requested.** Four steps, in order: be a Connect platform; request private-preview access
+through Stripe sales at https://stripe.com/use-cases/crypto#request-invite; request the feature at
+https://dashboard.stripe.com/stablecoin-payouts/overview; complete the due-diligence questionnaire
+on the account status page.
+
+**Current status.** None of the four has been started. The account is not yet a Connect platform.
+
+**What it blocks.** `PAYOUT_RESERVE` and `PAYOUT_SETTLE`, and with them every crypto payout.
+
+**What the code already supports.** `internal/provider/stripepayout` is written against the
+documented product and reports `Availability: REQUIRES_APPLICATION`, so `Submit` refuses before
+touching the network. `payout.Capabilities` now carries supported assets, supported networks,
+recipient kinds, who performs KYC and who holds the destination, and the registry refuses a crypto
+adapter that names no asset or no network.
+
+**What is known about the product, and is not negotiable by us.** USDC only. Base and Polygon only —
+**not Solana**. US platforms only. Individuals and sole proprietors only; companies and non-profits
+are not supported. 67 recipient countries, excluding the US states of New York and Hawaii.
+
+**Evidence required to close.** Stripe confirming the preview is granted, and **Crypto** showing as
+active in the account's Connect payment method settings.
+
+---
+
+## B-11 — Stripe Connect platform profile · BLOCKED_EXTERNAL
+
+**Decision needed.** Completing the Connect platform profile, which declares the business model to
+Stripe on this account.
+
+**Why external.** It is a business-model declaration with the same review consequences as B-09, and
+goal Section 67 makes it a stop.
+
+**What it blocks.** Every payout, because the recipient model requires connected accounts; and
+`MARKETPLACE` settlement.
+
+**What the code already supports.** The payout architecture assumes the Recipient configuration with
+`dashboard: express`, which is what makes Stripe rather than Nodal responsible for collecting
+identity requirements — the answer to goal Section 16, established from Stripe's own documented
+rule rather than chosen.
+
+**Evidence required to close.** A completed platform profile and Connect showing as configured.
 
 ---
 
