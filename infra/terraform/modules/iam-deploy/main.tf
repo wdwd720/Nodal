@@ -37,6 +37,7 @@ data "aws_iam_policy_document" "trust" {
 }
 
 resource "aws_iam_role" "deploy" {
+  permissions_boundary = var.permissions_boundary_arn
   name                 = "${var.name_prefix}-github-deploy"
   description          = "release.yml deploy identity for ${var.github_org}/${var.github_repo} (${join(", ", var.allowed_refs)})"
   assume_role_policy   = data.aws_iam_policy_document.trust.json

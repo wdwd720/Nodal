@@ -124,7 +124,8 @@ module "kms" {
 }
 
 module "network" {
-  source = "../../modules/network"
+  source                   = "../../modules/network"
+  permissions_boundary_arn = var.permissions_boundary_arn
 
   name_prefix                      = local.name_prefix
   aws_region                       = var.aws_region
@@ -155,7 +156,8 @@ module "s3_evidence" {
 # ---------------------------------------------------------------------------
 
 module "rds" {
-  source = "../../modules/rds"
+  source                   = "../../modules/rds"
+  permissions_boundary_arn = var.permissions_boundary_arn
 
   name_prefix           = local.name_prefix
   subnet_ids            = module.network.private_data_subnet_ids
@@ -286,8 +288,9 @@ module "secrets" {
 # ---------------------------------------------------------------------------
 
 module "services" {
-  source   = "../../modules/ecs-service"
-  for_each = var.service_sizing
+  source                   = "../../modules/ecs-service"
+  permissions_boundary_arn = var.permissions_boundary_arn
+  for_each                 = var.service_sizing
 
   name_prefix    = local.name_prefix
   service_name   = each.key
@@ -341,7 +344,8 @@ module "services" {
 # One-shot role bootstrap (PART 101): runs bootstrap/roles.sql as the RDS
 # master user with role passwords injected from Secrets Manager.
 module "db_bootstrap" {
-  source = "../../modules/ecs-service"
+  source                   = "../../modules/ecs-service"
+  permissions_boundary_arn = var.permissions_boundary_arn
 
   name_prefix    = local.name_prefix
   service_name   = "db-bootstrap"
@@ -392,7 +396,8 @@ module "db_bootstrap" {
 # ---------------------------------------------------------------------------
 
 module "iam_deploy" {
-  source = "../../modules/iam-deploy"
+  source                   = "../../modules/iam-deploy"
+  permissions_boundary_arn = var.permissions_boundary_arn
 
   name_prefix          = local.name_prefix
   aws_region           = var.aws_region

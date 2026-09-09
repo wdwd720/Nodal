@@ -130,8 +130,10 @@ unit: ## Go unit tests
 	# bidirectional control character. All three belong to the fast tier: a
 	# broken citation, an unreachable control and source that renders as
 	# something other than what it is should be caught by the same run that
-	# catches a broken package.
-	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/... ./test/reachability/... ./test/source/...
+	# catches a broken package. ./test/infra is here for the same reason: the
+	# deployment identity's IAM policies are pasted into a console by hand and
+	# fail by permitting too much rather than by erroring.
+	$(GO) test -count=1 -timeout=10m ./internal/... ./cmd/... ./scripts/... ./packages/... ./test/docs/... ./test/infra/... ./test/reachability/... ./test/source/...
 
 property: ## Property-based financial tests (in-memory and database-backed)
 	# Property tests live beside the code they constrain, named Prop*/Property*,

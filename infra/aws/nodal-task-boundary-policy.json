@@ -1,0 +1,110 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TelemetryAndRegistryAuthHaveNoResource",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData",
+        "ecr:GetAuthorizationToken",
+        "ecs:DescribeTaskDefinition",
+        "ecs:ListTaskDefinitions",
+        "ecs:RegisterTaskDefinition",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "xray:PutTelemetryRecords",
+        "xray:PutTraceSegments"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OurImages",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:DescribeImages",
+        "ecr:DescribeRepositories",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:ListImages",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:*:049286562577:repository/nodal-*"
+    },
+    {
+      "Sid": "OurLogsAndTheOneRDSNamesItself",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:PutRetentionPolicy"
+      ],
+      "Resource": [
+        "arn:aws:logs:*:049286562577:log-group:/ecs/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:/aws/vpc/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:/aws/elasticache/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:aws-waf-logs-nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:RDSOSMetrics*"
+      ]
+    },
+    {
+      "Sid": "OurBucketsOurSecretsOurServices",
+      "Effect": "Allow",
+      "Action": [
+        "s3:AbortMultipartUpload",
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:PutObjectRetention",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+        "ecs:DescribeServices",
+        "ecs:UpdateService"
+      ],
+      "Resource": [
+        "arn:aws:s3:::nodal-*",
+        "arn:aws:s3:::nodal-*/*",
+        "arn:aws:secretsmanager:*:049286562577:secret:nodal/*",
+        "arn:aws:ecs:*:049286562577:service/nodal-*/*"
+      ]
+    },
+    {
+      "Sid": "OurKeysOnly",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:Encrypt",
+        "kms:GenerateDataKey",
+        "kms:GenerateDataKeyWithoutPlaintext",
+        "kms:Sign",
+        "kms:Verify"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "nodal"
+        }
+      }
+    },
+    {
+      "Sid": "NoRoleTerraformCreatesMayEverTouchIAMOrTheAccount",
+      "Effect": "Deny",
+      "Action": [
+        "account:*",
+        "aws-portal:*",
+        "budgets:*",
+        "iam:*",
+        "lightsail:*",
+        "organizations:*",
+        "sts:AssumeRole"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

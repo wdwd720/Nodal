@@ -79,3 +79,6 @@ workflow_worker  = { max_activities = 32, max_workflows = 32 }
 
 api_autoscaling      = { min_capacity = 3, max_capacity = 12 }
 relay_lag_thresholds = { sev2_seconds = 120, sev1_seconds = 900 }
+
+# Created once, by hand, before the first apply. See infra/aws/BOOTSTRAP.md.
+permissions_boundary_arn = "arn:aws:iam::049286562577:policy/nodal-task-boundary"

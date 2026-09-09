@@ -11,143 +11,243 @@ CLI profiles use; the whole stack should live in one region).
 ## 0. The one thing that must change first
 
 The `default` CLI profile is `arn:aws:iam::049286562577:root`, and its session
-has expired. **Terraform must not run as root.** Root cannot be constrained by a policy, cannot be revoked
-without changing the account password, and leaves an audit trail that says only
-"the account owner did it".
+has expired. **Terraform must not run as root.** Root cannot be constrained by
+a policy, cannot be revoked without changing the account password, and leaves
+an audit trail that says only "the account owner did it".
 
 The other existing profile, `bdg-deployer`, is scoped to a different project.
-It is denied on EC2, S3, RDS, ECS, ACM, Secrets Manager, ELB, Route 53 and IAM,
-so it cannot be used here and should not be widened — widening it would give
-that project's credentials reach over this one.
+Confirmed by probing it on 2026-09-08: it is denied on EC2, ELB, RDS,
+ElastiCache, ECS, S3, Secrets Manager, ACM, Route 53, CloudWatch Logs, KMS and
+IAM, and can read Lightsail alone. It cannot be used here and must not be
+widened, because widening it would give that project's credentials reach over
+this one.
 
 **A dedicated identity is step 1, and it is the only step that needs an
 administrator.**
 
 ## 1. Create the Terraform identity — NEEDS AN ADMIN SIGN-IN
 
-Everything here is done once. It needs the account root or an existing
-administrator, because `bdg-deployer` has no IAM permissions at all — it cannot
-even list roles, so this document cannot say whether any other administrator
-identity exists.
+Done once. It needs the account root or an existing administrator, because
+`bdg-deployer` has no IAM permissions at all.
 
-### The authentication model already on this machine
+### No IAM user is created. The chain was tested.
 
 `~/.aws/credentials` is empty. Both profiles in `~/.aws/config` are
-`login_session` profiles:
+`login_session` profiles, which is `aws login`: it mirrors a console sign-in
+into short-lived CLI credentials and refreshes them while the refresh token
+lasts. No long-lived access key exists on this machine.
+
+The open question was whether those credentials can be the *source* of an
+`sts:AssumeRole`. They can. Tested on 2026-09-08 with a profile whose
+`source_profile` was the existing `aws login` profile and whose `role_arn`
+named a role that does not exist:
 
 ```
-[default]
-login_session = arn:aws:iam::049286562577:root
-[profile bdg-deployer]
-login_session = arn:aws:iam::049286562577:user/bdg-deployer
+An error occurred (AccessDenied) when calling the AssumeRole operation:
+User: arn:aws:iam::049286562577:user/bdg-deployer is not authorized to
+perform: sts:AssumeRole on resource: .../nodal-terraform-does-not-exist-probe
 ```
 
-That is `aws login`, which mirrors a console sign-in into short-lived CLI
-credentials and refreshes them while the refresh token lasts. **No long-lived
-access key exists on this machine, and none needs to.** Everything below keeps
-that true.
+The CLI resolved the login session into credentials and reached STS with them.
+The only refusal was the IAM authorization on a deliberately absent role, which
+is the answer we wanted.
+
+**So the chain is:**
+
+```
+administrator browser sign-in
+  -> aws login                     (short-lived, refreshed, nothing on disk)
+  -> sts:AssumeRole                (trust policy names the administrator)
+  -> nodal-terraform role          (1-hour credentials, the four policies below)
+  -> terraform
+```
+
+No `nodal-deploy` user. No access key. The earlier draft of this document
+proposed a console-only IAM user as the source principal; the probe made it
+unnecessary, and it is not created.
+
+### Which principal the trust policy names
+
+This is the one decision that cannot be made from here, because `bdg-deployer`
+cannot list IAM, Organizations or Identity Center. It is made at bootstrap
+from what is actually in the account, in this order:
+
+1. **IAM Identity Center**, if an instance exists. Trust the permission-set
+   role ARN. Fully federated, no IAM user anywhere, and the preferred AWS
+   model.
+2. **An existing non-root administrator IAM user**, if one exists. Trust that
+   user's ARN exactly.
+3. **Root, narrowed by condition**, if neither exists. `"Principal": {"AWS":
+   "arn:aws:iam::049286562577:root"}` in a trust policy means *the whole
+   account*, not the root user, so it is paired with a condition that pins it
+   to the root user itself:
+
+   ```json
+   "Condition": {"ArnEquals": {"aws:PrincipalArn": "arn:aws:iam::049286562577:root"}}
+   ```
+
+   This is an interim. It requires a root browser session to refresh the role,
+   which should be rare, and it is replaced by option 1 or 2 as soon as one
+   exists.
 
 ### What gets created
 
-Three objects, and one of them is only a trust relationship.
+Six documents and one role. Nothing durable, nothing with a password.
 
-| | Name | Why |
+| | Name | Size |
 |---|---|---|
-| Managed policy | `nodal-terraform` | `infra/aws/nodal-terraform-policy.json`, unchanged |
-| IAM role | `nodal-terraform` | Holds the policy. Terraform runs as this and nothing else |
-| IAM user | `nodal-deploy` | Console sign-in only. Its **entire** permission set is `sts:AssumeRole` on the role above |
+| Policy | `nodal-terraform-read` | 2,100 of 6,144 |
+| Policy | `nodal-terraform-network` | 1,423 of 6,144 |
+| Policy | `nodal-terraform-stack` | 5,050 of 6,144 |
+| Policy | `nodal-terraform-iam` | 3,046 of 6,144 |
+| Policy | `nodal-task-boundary` | 2,094 of 6,144 |
+| Role | `nodal-terraform` | max session 1 hour |
 
-`nodal-deploy` exists because `aws login` mirrors a *console* session, and only
-a user, root or Identity Center can sign into a console. It is a human
-credential (a password, ideally with MFA), not a machine credential: it holds no
-access key and can do exactly one thing, which is become the role.
+The single `nodal-terraform` policy that used to live here reached 5,786 of
+6,144 characters and is gone. The split is by blast radius, not by service:
 
-The role is where the permissions live, and its credentials are one-hour STS
-tokens. Nothing durable is ever written to disk.
+- **read** is every `Describe`, `List` and `Get`. Most of the characters, none
+  of the risk, and separating it is what leaves room for conditions on the
+  other three.
+- **network** is EC2 and VPC, the one place AWS cannot name a resource before
+  it exists.
+- **stack** is everything the repository names itself.
+- **iam** is the smallest and decides whether the other three matter.
 
-Steps, signed in as root or an administrator:
+`nodal-task-boundary` is not attached to the deployment role. It is the ceiling
+on every role the deployment role creates, and `iam:CreateRole` is conditioned
+on it.
 
-1. IAM → Policies → Create policy → JSON, paste
-   `infra/aws/nodal-terraform-policy.json`, name it **`nodal-terraform`**.
-2. IAM → Roles → Create role → Custom trust policy:
-   ```json
-   {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
-    "Principal":{"AWS":"arn:aws:iam::049286562577:user/nodal-deploy"},
-    "Action":"sts:AssumeRole"}]}
-   ```
-   Attach the `nodal-terraform` policy. Name it **`nodal-terraform`**. Set the
-   maximum session duration to 1 hour.
-3. IAM → Users → Create user **`nodal-deploy`**, **console access enabled**, no
-   access key. Attach one inline policy and nothing else:
-   ```json
-   {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
-    "Action":"sts:AssumeRole",
-    "Resource":"arn:aws:iam::049286562577:role/nodal-terraform"}]}
-   ```
-4. Enable MFA on `nodal-deploy`.
+Steps, signed in as an administrator:
+
+1. IAM → Policies → Create policy → JSON, once per file in `infra/aws/`.
+2. IAM → Roles → Create role → Custom trust policy, naming the principal chosen
+   above. Attach the four `nodal-terraform-*` policies. Name it
+   `nodal-terraform`, maximum session duration 1 hour.
 
 Then, in a terminal:
 
 ```
-aws configure set region us-east-2 --profile nodal-deploy
-aws configure set login_session arn:aws:iam::049286562577:user/nodal-deploy --profile nodal-deploy
 aws configure set region us-east-2 --profile nodal-terraform
 aws configure set role_arn arn:aws:iam::049286562577:role/nodal-terraform --profile nodal-terraform
-aws configure set source_profile nodal-deploy --profile nodal-terraform
-
-aws login --profile nodal-deploy
+aws configure set source_profile <the administrator profile> --profile nodal-terraform
 aws sts get-caller-identity --profile nodal-terraform
 ```
 
-The last line must print the **role** ARN. If the CLI refuses a `login_session`
-profile as a `source_profile`, that is the one thing in this design that has not
-been proven on this machine, and the fallback is stated below rather than
-discovered later.
+The last line must print the **role** ARN, not the administrator's.
 
-### If the role cannot be assumed from an `aws login` profile
+## 1a. What the policies allow, and what they cannot reach
 
-Then create `nodal-terraform` as a console-only **user** with the policy
-attached directly, and no access key:
+### The two anchors
+
+Everything below rests on two facts about the Terraform, and both are enforced
+in code rather than remembered:
+
+- **Every resource is named `nodal-*`.** `var.project` was `"cp"`, which no
+  policy anywhere allowed, so the first apply would have failed on IAM role
+  creation. It is now `"nodal"` with a `validation` block that refuses anything
+  else.
+- **Every resource is tagged `Project=nodal`**, through the provider's
+  `default_tags`.
+
+Names carry the ARN scoping. Tags carry the mutation gates for the resources
+whose names AWS generates.
+
+### Cross-project isolation, stated as properties
+
+The account also holds a Lightsail project: one Ubuntu instance,
+`bdg-protected-backend`, with no VPC peering. Lightsail is denied outright, and
+it is a separate service namespace that `ec2:*` cannot reach in any case.
+
+What is **not** known from here is whether anything else lives in the account.
+`bdg-deployer` can read Lightsail and nothing else: EC2, ELB, RDS, ElastiCache,
+ECS, S3, Secrets Manager, ACM, Route 53, CloudWatch Logs and KMS all return
+AccessDenied. So the policies are written to be safe without knowing, which is
+the better property anyway:
+
+| Service | How an unrelated resource is kept out of reach |
+|---|---|
+| EC2 / VPC | Creates are open, because a VPC has no ARN before it exists. **Every** mutation and deletion is gated on `aws:ResourceTag/Project = nodal`. `ec2:CreateTags` is allowed only as part of a create, via `ec2:CreateAction` |
+| ELB | ARN-scoped to `loadbalancer/app/nodal-*`, `targetgroup/nodal-*`, listeners under those |
+| RDS | ARN-scoped to `db:nodal-*`, `subgrp:nodal-*`, `pg:nodal-*` |
+| ElastiCache | ARN-scoped to `replicationgroup:nodal-*`, `subnetgroup:nodal-*`, `parametergroup:nodal-*` |
+| ECS | ARN-scoped to `cluster/nodal-*` and `service/nodal-*` |
+| S3 | ARN-scoped to `arn:aws:s3:::nodal-*`. The previous policy granted `s3:Get*` on `*`, which was read access to every object in the account |
+| Secrets Manager | ARN-scoped to `secret:nodal/*`. Values are never readable: `GetSecretValue` is not granted to the deployment identity at all |
+| ACM | Certificate ARNs are server-generated, so `RequestCertificate` is open and delete and tag are gated on `Project=nodal` |
+| KMS | `CreateKey` is open for the same reason; every other key action is gated on `Project=nodal` |
+| CloudWatch / logs | ARN-scoped to `alarm:nodal-*`, `dashboard/nodal-*` and the four log-group prefixes the modules actually create |
+| SNS | ARN-scoped to `nodal-*` |
+| ECR | ARN-scoped to `repository/nodal-*` |
+| IAM | `role/nodal-*` and `policy/nodal-*` only, under a permissions boundary |
+| Route 53 | **Removed entirely.** Nothing in `infra/terraform` uses Route 53; DNS is at GoDaddy. The old policy granted read on it for no reason |
+
+### Two privilege escalations that were open, and are not now
+
+The old policy allowed `iam:CreatePolicyVersion` on `policy/nodal-*`. Its own
+policy was named `nodal-terraform`, so a compromised session could have
+published a new version of its own permissions granting itself everything.
+Every other restriction in this document would have been decorative. There is
+now an explicit `Deny` on `iam:*` against `policy/nodal-terraform-*`,
+`policy/nodal-task-boundary` and `role/nodal-terraform`.
+
+The second is subtler and needed a change to the Terraform. An identity that
+can create a role, write its inline policy and set its trust policy can grant
+itself anything in three calls. The fix is a permissions boundary:
+`iam:CreateRole` is allowed only when `iam:PermissionsBoundary` equals
+`nodal-task-boundary`, that boundary denies `iam:*`, `lightsail:*`,
+`organizations:*`, `account:*` and `sts:AssumeRole`, and every
+`aws_iam_role` in the modules now sets `permissions_boundary`. Attaching an
+AWS-managed policy is denied except for the one the RDS module genuinely uses,
+`AmazonRDSEnhancedMonitoringRole`.
+
+### What can still reach an unrelated resource, and why
+
+Stated rather than implied. `test/infra/policy_test.go` fails if this list and
+the policies disagree.
+
+- **Read-only metadata across the account.** `ec2:Describe*`,
+  `elasticloadbalancing:Describe*`, `rds:Describe*`, `ecs:List*` and the rest
+  accept no resource ARN from AWS. They reveal that resources exist and their
+  shape. They return no object content and no secret value.
+- **Creating into someone else's VPC.** `ec2:CreateSubnet`,
+  `ec2:CreateSecurityGroup` and `ec2:CreateVpcEndpoint` take a VPC id, and the
+  condition on a create is evaluated against the resource being created, not
+  the VPC. So a compromised session could add a subnet or a security group to
+  another VPC. It could not attach that security group to anything, because
+  every instance and interface action is absent, and it could not modify or
+  delete anything already there.
+- **Account-wide log delivery.** `logs:CreateLogDelivery` and
+  `logs:PutResourcePolicy` have no resource form. WAF logging to CloudWatch
+  Logs requires them.
+- **A new certificate or KMS key.** Both are server-named, so creation cannot
+  be scoped. Neither touches an existing resource.
+
+Nothing on that list mutates or deletes a resource that already exists. That is
+the line the policies draw.
+
+### Not yet done
+
+**AWS IAM Access Analyzer has not been run.** `access-analyzer:ValidatePolicy`
+is denied to `bdg-deployer`, so it cannot be run before the administrator
+session exists. It is the first action of that session, before anything is
+created:
 
 ```
-aws configure set login_session arn:aws:iam::049286562577:user/nodal-terraform --profile nodal-terraform
-aws login --profile nodal-terraform
+for f in infra/aws/*-policy.json; do
+  aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY \
+    --policy-document "file://$f" --region us-east-2 --profile <admin>
+done
 ```
 
-This is second best and the difference is worth naming. It keeps every property
-that matters — short-lived credentials, no access key, no root, no reach into
-`bdg-deployer` — and loses one: there is no assume-role boundary, so the
-permissions are attached to something that can sign into a console rather than
-to something that must be deliberately assumed.
+Findings are fixed before the policies are created, not after.
 
-**A long-lived access key is not on this list.** It would be needed only if
-`aws login` did not work at all, which it demonstrably does: `bdg-deployer`
-authenticates that way today.
-
-### What the policy allows, and what it deliberately does not
-
-It is broad on create-and-destroy for the services the stack provisions,
-because Terraform genuinely creates VPCs, load balancers, databases and KMS
-keys, and those resources have no name to scope to before they exist.
-
-It is narrow exactly where breadth would be dangerous:
-
-- **IAM is limited to `nodal-*`.** The stack creates its own task roles and
-  nothing else. It cannot touch `bdg-deployer`, the root account, or any role
-  belonging to the other project.
-- **Creating IAM users, access keys and MFA changes is denied outright**, so a
-  compromised Terraform credential cannot mint a second one.
-- **Lightsail, billing, Organizations and account settings are denied**, so it
-  cannot reach the other project or change what the account costs.
-- Service-linked roles are allowed only for the six AWS services that require
-  them.
-
-**ElastiCache was added on 2026-09-08**, because F-82 made a shared rate-limit
-store a production requirement and the policy had no `elasticache:*` at all —
-the first apply would have failed on the subnet group. The document is now
-**5,786 characters excluding whitespace against IAM's 6,144 limit**, so it is
-close to needing to be split into two managed policies. Whoever adds the next
-service should check that number before assuming there is room.
+**The Path B environment does not exist yet.** These policies were derived from
+the module set in `infra/terraform/modules`, which is what `environments/prod`
+composes. A Path B environment is a different composition, and `terraform plan`
+is the only real test of whether the permissions are complete. Expect at least
+one missing action; the fix is to add it here, scoped, rather than to widen a
+statement to `*`.
 
 ## 2. Terraform state bucket — after step 1, and scriptable
 
@@ -216,7 +316,7 @@ Stripe webhook are unaffected.
 
 | Item | Who | State |
 |---|---|---|
-| `nodal-terraform` policy, role and the `nodal-deploy` console user | admin | step 1 |
+| Five policies, one role, no IAM user | admin | step 1 |
 | Authenticated session for it | admin | step 1 |
 | State bucket | nodal-terraform | step 2 |
 | `backend.hcl` from the example | engineering | after step 2 |
@@ -225,6 +325,7 @@ Stripe webhook are unaffected.
 | A Path B Terraform environment | engineering | **not written** — see below |
 | Container images in ECR | engineering | none exist; no GitHub repository exists |
 | ElastiCache Redis for the API's rate-limit counters | nodal-terraform | required since F-82; see section 5 |
+| Access Analyzer run on the five policies | admin | section 1a, before anything is created |
 
 ## 5. The blocker inside our own code — CLOSED 2026-09-09
 

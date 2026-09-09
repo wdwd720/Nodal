@@ -1,0 +1,200 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreatesAWSWillNotLetUsNameInAdvance",
+      "Effect": "Allow",
+      "Action": [
+        "acm:RequestCertificate",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:PutScalingPolicy",
+        "application-autoscaling:RegisterScalableTarget",
+        "ecs:RegisterTaskDefinition",
+        "ecs:DeregisterTaskDefinition",
+        "kms:CreateKey"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "MutateOnlyWhatIsTaggedOurs",
+      "Effect": "Allow",
+      "Action": [
+        "acm:AddTagsToCertificate",
+        "acm:DeleteCertificate",
+        "acm:RemoveTagsFromCertificate",
+        "kms:CreateAlias",
+        "kms:DeleteAlias",
+        "kms:EnableKeyRotation",
+        "kms:PutKeyPolicy",
+        "kms:ScheduleKeyDeletion",
+        "kms:TagResource",
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "nodal"
+        }
+      }
+    },
+    {
+      "Sid": "ComputeAndBalancersByName",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:CreateCluster",
+        "ecs:CreateService",
+        "ecs:DeleteCluster",
+        "ecs:DeleteService",
+        "ecs:PutClusterCapacityProviders",
+        "ecs:RunTask",
+        "ecs:TagResource",
+        "ecs:UntagResource",
+        "ecs:UpdateService",
+        "elasticloadbalancing:AddTags",
+        "elasticloadbalancing:Create*",
+        "elasticloadbalancing:Delete*",
+        "elasticloadbalancing:Deregister*",
+        "elasticloadbalancing:Modify*",
+        "elasticloadbalancing:Register*",
+        "elasticloadbalancing:RemoveTags",
+        "elasticloadbalancing:SetSecurityGroups",
+        "elasticloadbalancing:SetSubnets"
+      ],
+      "Resource": [
+        "arn:aws:ecs:*:049286562577:cluster/nodal-*",
+        "arn:aws:ecs:*:049286562577:service/nodal-*/*",
+        "arn:aws:ecs:*:049286562577:task/nodal-*/*",
+        "arn:aws:elasticloadbalancing:*:049286562577:loadbalancer/app/nodal-*/*",
+        "arn:aws:elasticloadbalancing:*:049286562577:targetgroup/nodal-*/*",
+        "arn:aws:elasticloadbalancing:*:049286562577:listener/app/nodal-*/*/*",
+        "arn:aws:elasticloadbalancing:*:049286562577:listener-rule/app/nodal-*/*/*/*"
+      ]
+    },
+    {
+      "Sid": "DataStoresByName",
+      "Effect": "Allow",
+      "Action": [
+        "elasticache:AddTagsToResource",
+        "elasticache:CreateCacheParameterGroup",
+        "elasticache:CreateCacheSubnetGroup",
+        "elasticache:CreateReplicationGroup",
+        "elasticache:DeleteCacheParameterGroup",
+        "elasticache:DeleteCacheSubnetGroup",
+        "elasticache:DeleteReplicationGroup",
+        "elasticache:ModifyCacheParameterGroup",
+        "elasticache:ModifyCacheSubnetGroup",
+        "elasticache:ModifyReplicationGroup",
+        "elasticache:RemoveTagsFromResource",
+        "rds:AddTagsToResource",
+        "rds:CreateDBInstance",
+        "rds:CreateDBParameterGroup",
+        "rds:CreateDBSubnetGroup",
+        "rds:DeleteDBInstance",
+        "rds:DeleteDBParameterGroup",
+        "rds:DeleteDBSubnetGroup",
+        "rds:ModifyDBInstance",
+        "rds:ModifyDBParameterGroup",
+        "rds:RemoveTagsFromResource"
+      ],
+      "Resource": [
+        "arn:aws:elasticache:*:049286562577:replicationgroup:nodal-*",
+        "arn:aws:elasticache:*:049286562577:subnetgroup:nodal-*",
+        "arn:aws:elasticache:*:049286562577:parametergroup:nodal-*",
+        "arn:aws:rds:*:049286562577:db:nodal-*",
+        "arn:aws:rds:*:049286562577:subgrp:nodal-*",
+        "arn:aws:rds:*:049286562577:pg:nodal-*"
+      ]
+    },
+    {
+      "Sid": "StorageSecretsAndRegistriesByName",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DeleteRepository",
+        "ecr:PutImageScanningConfiguration",
+        "ecr:PutLifecyclePolicy",
+        "ecr:SetRepositoryPolicy",
+        "ecr:TagResource",
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:PutBucketLogging",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:PutResourcePolicy",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:TagResource",
+        "secretsmanager:UpdateSecret"
+      ],
+      "Resource": [
+        "arn:aws:ecr:*:049286562577:repository/nodal-*",
+        "arn:aws:s3:::nodal-*",
+        "arn:aws:secretsmanager:*:049286562577:secret:nodal/*"
+      ]
+    },
+    {
+      "Sid": "ObservabilityAndEdgeByName",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DeleteDashboards",
+        "cloudwatch:PutDashboard",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:TagResource",
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource",
+        "logs:UntagResource",
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:SetTopicAttributes",
+        "sns:Subscribe",
+        "sns:TagResource",
+        "sns:Unsubscribe",
+        "wafv2:AssociateWebACL",
+        "wafv2:CreateWebACL",
+        "wafv2:DeleteWebACL",
+        "wafv2:DeleteLoggingConfiguration",
+        "wafv2:DisassociateWebACL",
+        "wafv2:PutLoggingConfiguration",
+        "wafv2:TagResource",
+        "wafv2:UpdateWebACL"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:*:049286562577:alarm:nodal-*",
+        "arn:aws:cloudwatch::049286562577:dashboard/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:/ecs/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:/aws/vpc/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:/aws/elasticache/nodal-*",
+        "arn:aws:logs:*:049286562577:log-group:aws-waf-logs-nodal-*",
+        "arn:aws:sns:*:049286562577:nodal-*",
+        "arn:aws:wafv2:*:049286562577:regional/webacl/nodal-*/*",
+        "arn:aws:wafv2:*:049286562577:global/webacl/nodal-*/*"
+      ]
+    },
+    {
+      "Sid": "WAFLoggingNeedsToWriteALogDelivery",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:GetLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:UpdateLogDelivery",
+        "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -16,9 +16,19 @@ variable "aws_account_id" {
   }
 }
 
+# Every resource name and the Project tag derive from this, and the deployment
+# identity is scoped to both: nodal-terraform may only create names beginning
+# "nodal-" and may only mutate resources tagged Project=nodal. Changing it
+# without changing infra/aws/*.json produces an AccessDenied at apply time, not
+# a rename. It was "cp" until 2026-09-08, which no policy anywhere allowed.
 variable "project" {
   type    = string
-  default = "cp"
+  default = "nodal"
+
+  validation {
+    condition     = var.project == "nodal"
+    error_message = "The deployment identity is scoped to nodal-* names and the Project=nodal tag; see infra/aws/BOOTSTRAP.md."
+  }
 }
 
 variable "extra_tags" {
@@ -427,4 +437,12 @@ variable "api_autoscaling" {
     condition     = var.api_autoscaling.max_capacity >= var.api_autoscaling.min_capacity
     error_message = "api_autoscaling.max_capacity must be at least min_capacity."
   }
+}
+
+# Required, with no default. The deployment identity cannot create a role
+# without it, so a missing value must fail at plan time and not at apply time
+# with an AccessDenied nobody expects.
+variable "permissions_boundary_arn" {
+  type        = string
+  description = "IAM permissions boundary applied to every role this environment creates."
 }

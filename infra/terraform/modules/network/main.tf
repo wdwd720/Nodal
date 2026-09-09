@@ -373,9 +373,10 @@ data "aws_iam_policy_document" "flow" {
 }
 
 resource "aws_iam_role" "flow" {
-  name               = "${var.name_prefix}-vpc-flow-logs"
-  assume_role_policy = data.aws_iam_policy_document.flow_assume.json
-  tags               = var.tags
+  permissions_boundary = var.permissions_boundary_arn
+  name                 = "${var.name_prefix}-vpc-flow-logs"
+  assume_role_policy   = data.aws_iam_policy_document.flow_assume.json
+  tags                 = var.tags
 }
 
 resource "aws_iam_role_policy" "flow" {

@@ -1,0 +1,153 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateRolesOnlyUnderTheBoundary",
+      "Effect": "Allow",
+      "Action": "iam:CreateRole",
+      "Resource": "arn:aws:iam::049286562577:role/nodal-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::049286562577:policy/nodal-task-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "ManageOnlyRolesAndPoliciesInOurNamespace",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion",
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:TagPolicy",
+        "iam:TagRole",
+        "iam:UntagPolicy",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy"
+      ],
+      "Resource": [
+        "arn:aws:iam::049286562577:role/nodal-*",
+        "arn:aws:iam::049286562577:policy/nodal-*"
+      ]
+    },
+    {
+      "Sid": "OIDCProviderForGitHubDeploys",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:DeleteOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:TagOpenIDConnectProvider"
+      ],
+      "Resource": "arn:aws:iam::049286562577:oidc-provider/token.actions.githubusercontent.com"
+    },
+    {
+      "Sid": "PassOurRolesOnlyToTheServicesThatRunThem",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::049286562577:role/nodal-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "ecs-tasks.amazonaws.com",
+            "ecs.amazonaws.com",
+            "application-autoscaling.amazonaws.com",
+            "monitoring.rds.amazonaws.com",
+            "vpc-flow-logs.amazonaws.com",
+            "delivery.logs.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "ServiceLinkedRolesOnlyForTheSixServicesTheStackUses",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": [
+            "ecs.amazonaws.com",
+            "ecs.application-autoscaling.amazonaws.com",
+            "elasticache.amazonaws.com",
+            "elasticloadbalancing.amazonaws.com",
+            "rds.amazonaws.com",
+            "wafv2.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "NeverRewriteTheDeploymentIdentityItself",
+      "Effect": "Deny",
+      "Action": [
+        "iam:*"
+      ],
+      "Resource": [
+        "arn:aws:iam::049286562577:policy/nodal-terraform-*",
+        "arn:aws:iam::049286562577:policy/nodal-task-boundary",
+        "arn:aws:iam::049286562577:role/nodal-terraform"
+      ]
+    },
+    {
+      "Sid": "NeverEscapeTheBoundaryOnARoleWeCreated",
+      "Effect": "Deny",
+      "Action": [
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::049286562577:policy/nodal-task-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "AttachOnlyOurOwnPoliciesAndTheOneAWSManagedRoleRDSRequires",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::049286562577:policy/nodal-*",
+            "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "NeverTouchUsersKeysOrTheAccountItself",
+      "Effect": "Deny",
+      "Action": [
+        "account:*",
+        "aws-portal:*",
+        "budgets:*",
+        "lightsail:*",
+        "organizations:*",
+        "iam:AttachUserPolicy",
+        "iam:ChangePassword",
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:CreateUser",
+        "iam:DeactivateMFADevice",
+        "iam:DeleteAccessKey",
+        "iam:DeleteUser",
+        "iam:PutUserPolicy",
+        "iam:UpdateAccountPasswordPolicy",
+        "iam:UpdateLoginProfile"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

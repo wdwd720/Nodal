@@ -124,17 +124,19 @@ data "aws_iam_policy_document" "assume" {
 }
 
 resource "aws_iam_role" "task" {
-  name               = "${local.full_name}-task"
-  description        = "Runtime identity of ${var.service_name} (SYSTEM.md section 2 credential scope)"
-  assume_role_policy = data.aws_iam_policy_document.assume.json
-  tags               = merge(var.tags, { Binary = var.service_name })
+  permissions_boundary = var.permissions_boundary_arn
+  name                 = "${local.full_name}-task"
+  description          = "Runtime identity of ${var.service_name} (SYSTEM.md section 2 credential scope)"
+  assume_role_policy   = data.aws_iam_policy_document.assume.json
+  tags                 = merge(var.tags, { Binary = var.service_name })
 }
 
 resource "aws_iam_role" "execution" {
-  name               = "${local.full_name}-exec"
-  description        = "ECS agent identity for ${var.service_name}: image pull, logs, injected secrets"
-  assume_role_policy = data.aws_iam_policy_document.assume.json
-  tags               = merge(var.tags, { Binary = var.service_name })
+  permissions_boundary = var.permissions_boundary_arn
+  name                 = "${local.full_name}-exec"
+  description          = "ECS agent identity for ${var.service_name}: image pull, logs, injected secrets"
+  assume_role_policy   = data.aws_iam_policy_document.assume.json
+  tags                 = merge(var.tags, { Binary = var.service_name })
 }
 
 data "aws_iam_policy_document" "execution" {

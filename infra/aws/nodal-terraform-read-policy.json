@@ -1,0 +1,119 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MetadataAWSCannotScopeToAResource",
+      "Effect": "Allow",
+      "Action": [
+        "acm:Describe*",
+        "acm:List*",
+        "application-autoscaling:Describe*",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:ListTagsForResource",
+        "ec2:Describe*",
+        "ecr:GetAuthorizationToken",
+        "ecs:Describe*",
+        "ecs:List*",
+        "elasticache:Describe*",
+        "elasticache:List*",
+        "elasticloadbalancing:Describe*",
+        "iam:ListOpenIDConnectProviders",
+        "iam:ListPolicies",
+        "iam:ListRoles",
+        "kms:DescribeKey",
+        "kms:ListAliases",
+        "kms:ListKeys",
+        "kms:ListResourceTags",
+        "logs:Describe*",
+        "logs:ListTagsForResource",
+        "rds:Describe*",
+        "s3:ListAllMyBuckets",
+        "secretsmanager:ListSecrets",
+        "sns:ListTopics",
+        "sns:ListSubscriptionsByTopic",
+        "sns:ListTagsForResource",
+        "sts:GetCallerIdentity",
+        "wafv2:Get*",
+        "wafv2:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOurBucketsAndNoOthers",
+      "Effect": "Allow",
+      "Action": [
+        "s3:Get*",
+        "s3:ListBucket",
+        "s3:ListBucketVersions"
+      ],
+      "Resource": [
+        "arn:aws:s3:::nodal-*",
+        "arn:aws:s3:::nodal-*/*"
+      ]
+    },
+    {
+      "Sid": "ReadOurImagesAndNoOthers",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:Describe*",
+        "ecr:Get*",
+        "ecr:List*"
+      ],
+      "Resource": "arn:aws:ecr:*:049286562577:repository/nodal-*"
+    },
+    {
+      "Sid": "ReadOurIAMAndNoOthers",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*"
+      ],
+      "Resource": [
+        "arn:aws:iam::049286562577:role/nodal-*",
+        "arn:aws:iam::049286562577:policy/nodal-*",
+        "arn:aws:iam::049286562577:oidc-provider/token.actions.githubusercontent.com"
+      ]
+    },
+    {
+      "Sid": "SecretMetadataNeverSecretValues",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:ListSecretVersionIds"
+      ],
+      "Resource": "arn:aws:secretsmanager:*:049286562577:secret:nodal/*"
+    },
+    {
+      "Sid": "ReadOurTopicsAndKeys",
+      "Effect": "Allow",
+      "Action": [
+        "sns:GetTopicAttributes",
+        "sns:GetSubscriptionAttributes",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "nodal"
+        }
+      }
+    },
+    {
+      "Sid": "TerraformStateBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketVersioning"
+      ],
+      "Resource": [
+        "arn:aws:s3:::nodal-terraform-state-049286562577-us-east-2",
+        "arn:aws:s3:::nodal-terraform-state-049286562577-us-east-2/*"
+      ]
+    }
+  ]
+}

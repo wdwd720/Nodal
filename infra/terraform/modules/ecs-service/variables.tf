@@ -242,3 +242,14 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+# The ceiling on this role, not its permissions. The Terraform deployment
+# identity may only create a role that carries it -- see
+# infra/aws/nodal-task-boundary-policy.json and the condition on iam:CreateRole
+# in nodal-terraform-iam-policy.json. Without it, a deployment identity that can
+# create a role and write its inline policy can grant itself anything, which
+# makes every other restriction on that identity decorative.
+variable "permissions_boundary_arn" {
+  type        = string
+  description = "IAM permissions boundary applied to every role this module creates."
+}
