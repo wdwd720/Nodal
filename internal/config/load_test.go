@@ -104,6 +104,9 @@ func TestLoad_DefaultsNeverApplyOutsideLocalTest(t *testing.T) {
 					if s.Dep != "" && !service.Requires(s.Dep) {
 						continue
 					}
+					if s.Svc != "" && s.Svc != service {
+						continue
+					}
 					want = append(want, s.Name)
 				}
 				require.NotEmpty(t, want)
@@ -285,8 +288,9 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// The 14*11 term is the provider slots: fourteen of them, eleven variables
 	// each. It was 12*6 before the Stripe workstream added the credit-purchase
 	// and payout slots, and then ACCOUNT_REF, SHARED_ACCOUNT, AVAILABILITY and
-	// the two statement-descriptor variables to every slot.
-	assert.Equal(t, 3+8+9+2+5+5+4+9+2+11+14*11+4+1+7, len(seen))
+	// the two statement-descriptor variables to every slot. The lone 1 is the
+	// rate-limit section.
+	assert.Equal(t, 3+8+9+1+2+5+5+4+9+2+11+14*11+4+1+7, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

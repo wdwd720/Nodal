@@ -55,6 +55,12 @@ type VarSpec struct {
 	// declares that dependency, and is parsed for any service that supplies
 	// it. Empty means the variable is unconditional.
 	Dep Dependency
+	// Svc narrows a required variable to one binary. Most variables that vary
+	// by binary vary because of an external dependency, and Dep covers those.
+	// This covers the rest: a setting only one binary has any use for, like
+	// where the transport rate limiter keeps its counters. Like Dep, it
+	// narrows required-ness only -- a supplied value is still parsed.
+	Svc Service
 }
 
 type applyFn func(c *Config, raw string) error
@@ -102,30 +108,50 @@ func Load(ctx context.Context, service Service, lookup func(string) (string, boo
 
 	c := &Config{Env: env, Service: service, BuildVersion: BuildVersion}
 	var errs []error
+
+	// Two passes, because one of the questions this loop has to answer depends
+	// on an answer from the loop itself. Whether the API needs Redis is decided
+	// by CP_RATELIMIT_BACKEND, and a single pass would make the outcome depend
+	// on the order of the table -- which is a trap for whoever next reorders it.
+	//
+	// Pass one applies every value that is present (or defaulted where that is
+	// allowed) and remembers what was absent. Nothing is judged missing yet.
+	var absent []varSpec
 	for _, s := range specs() {
 		if s.Name == EnvVarEnvironment {
 			continue
 		}
-		// A variable belonging to a dependency this service does not use is
-		// not required of it. It is still PARSED when supplied, so a malformed
-		// value fails closed for every binary rather than only for the ones
-		// that would have dialled it -- a broken broker list is a mistake
-		// whoever set it wants to hear about.
-		required := s.Required && (s.Dep == "" || service.Requires(s.Dep))
 		raw, present := lookup(s.Name)
 		if !present || strings.TrimSpace(raw) == "" {
-			switch {
-			case env.AllowsDefaults() && s.Default != "":
+			if env.AllowsDefaults() && s.Default != "" {
 				raw = s.Default
-			case required:
-				errs = append(errs, &VarError{Name: s.Name, Err: ErrMissingRequired})
-				continue
-			default:
+			} else {
+				absent = append(absent, s)
 				continue
 			}
 		}
+		// A supplied value is always PARSED, whether or not this binary would
+		// use it. A malformed broker list is a mistake whoever set it wants to
+		// hear about, and hearing about it only from the one binary that dials
+		// it means hearing about it late.
 		if err := s.apply(c, raw); err != nil {
 			errs = append(errs, &VarError{Name: s.Name, Err: err})
+		}
+	}
+
+	// Pass two: now that the deciding values are loaded, which absences are
+	// errors.
+	//
+	// This is the one place the package's "every problem is reported" promise
+	// bends. An absent CP_RATELIMIT_BACKEND is itself an error, and it also
+	// leaves the Redis question unanswerable, so its own error is reported and
+	// the Redis variables are not judged. Setting it produces the next answer.
+	// Guessing on its behalf would be worse: the guess would have to be redis,
+	// and then a LOCAL run that simply forgot the variable would be told to
+	// configure a Redis it does not need.
+	for _, s := range absent {
+		if c.requiresVar(s) {
+			errs = append(errs, &VarError{Name: s.Name, Err: ErrMissingRequired})
 		}
 	}
 	c.Capability.StoreConfigured = !c.Database.AppURL.IsZero()
@@ -143,6 +169,17 @@ func Load(ctx context.Context, service Service, lookup func(string) (string, boo
 func setString(dst func(*Config) *string) applyFn {
 	return func(c *Config, raw string) error {
 		*dst(c) = strings.TrimSpace(raw)
+		return nil
+	}
+}
+
+func setRateLimitBackend(dst func(*Config) *RateLimitBackend) applyFn {
+	return func(c *Config, raw string) error {
+		v, err := ParseRateLimitBackend(strings.ToLower(strings.TrimSpace(raw)))
+		if err != nil {
+			return err
+		}
+		*dst(c) = v
 		return nil
 	}
 }
@@ -267,10 +304,18 @@ func needs(d Dependency, s varSpec) varSpec {
 	return s
 }
 
+// only marks a variable as belonging to one binary. It is required only of
+// that service, and is parsed for every service that supplies it.
+func only(svc Service, s varSpec) varSpec {
+	s.Svc = svc
+	return s
+}
+
 const (
 	secCore       = "Core"
 	secHTTP       = "HTTP"
 	secDatabase   = "Database (Postgres)"
+	secRateLimit  = "Rate limiting"
 	secRedis      = "Redis"
 	secRedpanda   = "Redpanda (event bus)" // #nosec G101 -- config section heading, not a credential
 	secClickHouse = "ClickHouse (analytics)"
@@ -343,6 +388,9 @@ func specs() []varSpec {
 			setDuration(func(c *Config) *time.Duration { return &c.Database.StatementTimeout })),
 		req("CP_DATABASE_LOCK_TIMEOUT", secDatabase, "Postgres lock_timeout applied per session.", "5s",
 			setDuration(func(c *Config) *time.Duration { return &c.Database.LockTimeout })),
+
+		only(ServiceAPI, req("CP_RATELIMIT_BACKEND", secRateLimit, "Where transport rate-limit counters live: memory | redis. memory keeps them in the process, so the budget is per replica -- three API tasks with a limit of 100 admit 300 -- which is why STAGING and PROD refuse it. redis shares one budget across every replica and makes CP_REDIS_* required of the API.", "memory",
+			setRateLimitBackend(func(c *Config) *RateLimitBackend { return &c.RateLimit.Backend }))),
 
 		needs(DepRedis, secretVar(req("CP_REDIS_URL", secRedis, "SecretRef to the Redis URL (may embed a password). Redis is never financial truth.", "redis://127.0.0.1:6380/0",
 			setSecret(func(c *Config) *SecretRef { return &c.Redis.URL })))),

@@ -34,6 +34,12 @@ func prodEnv() map[string]string {
 		"CP_DATABASE_STATEMENT_TIMEOUT": "30s",
 		"CP_DATABASE_LOCK_TIMEOUT":      "5s",
 
+		// The API is the only binary this is required of, and STAGING/PROD
+		// refuse the memory backend, so the production fixture names the
+		// distributed one -- which is also what makes CP_REDIS_* required of
+		// the API rather than merely present.
+		"CP_RATELIMIT_BACKEND": "redis",
+
 		"CP_REDIS_URL":         "aws-sm://cp/prod/redis-url",
 		"CP_REDIS_REQUIRE_TLS": "true",
 

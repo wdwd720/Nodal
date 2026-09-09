@@ -35,8 +35,11 @@ go list -deps ./cmd/api | grep -E "clickhouse|temporal|redpanda|franz|kgo"
 ```
 
 Those clients are not in the binary at all. Redis is linked, through
-`internal/ratelimit`, and `cmd/api/wire.go` chooses `ratelimit.NewMemoryStore()`
-rather than the Redis store. Readiness is `db.Ping` and nothing more.
+`internal/ratelimit` -- and at the time of this survey `cmd/api/wire.go` chose
+`ratelimit.NewMemoryStore()` rather than the Redis store, which is the whole of
+F-82: linked, and never constructed. It is constructed now whenever
+`CP_RATELIMIT_BACKEND` is `redis`, which STAGING and PROD require. Readiness is
+`db.Ping` and nothing more.
 
 So the API's runtime dependencies are:
 
@@ -44,7 +47,7 @@ So the API's runtime dependencies are:
 |---|---|---|
 | **PostgreSQL** | **Yes** | Every read and write |
 | **S3-compatible object storage** | **Yes, for the Stripe webhook** | The ingestion pipeline preserves the raw signed request before parsing it. `creditWebhookPort` refuses to build without an evidence bucket |
-| Redis | No | The API uses an in-memory rate-limit store |
+| **Redis** | **Yes, in STAGING/PROD** | The transport rate limiter's counters. It was "no" until F-82, on the strength of `cmd/api` choosing the in-memory store -- which is what made every limit count per replica |
 | Redpanda | No | Not linked |
 | ClickHouse | No | Not linked |
 | Temporal | No | Not linked |
@@ -59,10 +62,15 @@ every binary, so an API-only deployment had to be given four endpoints it would
 never contact. Requirements are now declared per service: `Load` takes a
 `config.Service`, a variable tagged with a `Dependency` is required only of a
 binary that declares it, and a malformed value still fails closed for everyone.
-`cmd/api` starts in PROD with no Redis, Redpanda, ClickHouse or Temporal
-configured at all, and the workers that use those still refuse to start
-without them. See `internal/config/service.go` for the table and the audit
-behind it.
+`cmd/api` starts in PROD with no Redpanda, ClickHouse or Temporal configured at
+all, and the workers that use those still refuse to start without them. See
+`internal/config/service.go` for the table and the audit behind it.
+
+Redis is the exception, and it is the exception on purpose. Whether the API
+needs it is not a property of the binary but of the deployment: one task may
+keep its rate-limit counters in memory and three may not. So it is decided by
+`Config.RequiresDependency` from `CP_RATELIMIT_BACKEND` rather than by the
+service table, and STAGING and PROD have only one permitted answer.
 
 ## 3. What the prod stack actually requires before it can apply
 
@@ -133,9 +141,13 @@ GitHub repository, and it is days of work plus a significant recurring bill.
 
 Provision what the Credit purchase path actually uses: VPC, RDS PostgreSQL, the
 S3 evidence bucket, one Fargate service for `cmd/api`, one for
-`cmd/reconciliation-worker`, an ALB with an ACM certificate, and Secrets
-Manager. Skip Redis, Redpanda, ClickHouse, Temporal, CloudFront and the other
-seven binaries.
+`cmd/reconciliation-worker`, an ALB with an ACM certificate, Secrets Manager,
+and one small ElastiCache Redis for the rate-limit counters. Skip Redpanda,
+ClickHouse, Temporal, CloudFront and the other seven binaries.
+
+Redis was on the skip list until F-82. It is not a data store here and holds no
+financial truth -- it holds one integer per subject per window, with a TTL --
+but it is the only way three API tasks enforce one budget instead of three.
 
 This is not a toy. It is the same code, the same images, real HTTPS, real
 Secrets Manager, real RDS with TLS — a production-style endpoint that Stripe can
@@ -143,7 +155,8 @@ post to, and a foundation the rest of the stack is added to later rather than
 thrown away.
 
 It still needs: an authenticated non-root AWS role, the state bucket bootstrap,
-an OIDC identity provider for authentication, a hostname, and a certificate.
+an OIDC identity provider for authentication, a hostname, a certificate, and the
+ElastiCache group above.
 
 **Path B is the recommendation**, and it is a recommendation rather than a
 decision because it commits real money and diverges from `environments/prod`

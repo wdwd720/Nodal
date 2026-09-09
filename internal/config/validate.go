@@ -48,6 +48,10 @@ const (
 	RuleRetentionNonZero   Rule = "RETENTION_NON_ZERO"
 	RulePublicProductName  Rule = "PUBLIC_PRODUCT_NAME"
 	RuleCapabilityStore    Rule = "CAPABILITY_STORE_CONFIGURED"
+	// RuleDistributedRateLimit rejects a per-process rate-limit store on a
+	// binary that serves public HTTP in STAGING/PROD, where it runs as more
+	// than one replica.
+	RuleDistributedRateLimit Rule = "DISTRIBUTED_RATE_LIMIT"
 	// RuleNoInsecureOTLP applies to PROD only: telemetry must be exported
 	// over TLS.
 	RuleNoInsecureOTLP Rule = "NO_INSECURE_OTLP"
@@ -126,7 +130,7 @@ func (c *Config) Validate() error {
 		add(RuleField, "Service", fmt.Sprintf("unknown service %q", string(c.Service)))
 		return errors.Join(errs...)
 	}
-	needsRedis := c.Service.Requires(DepRedis)
+	needsRedis := c.RequiresDependency(DepRedis)
 	needsRedpanda := c.Service.Requires(DepRedpanda)
 	needsClickHouse := c.Service.Requires(DepClickHouse)
 	needsTemporal := c.Service.Requires(DepTemporal)
@@ -200,6 +204,37 @@ func (c *Config) Validate() error {
 	}
 	if prodLike && !c.Capability.StoreConfigured {
 		add(RuleCapabilityStore, "Capability.StoreConfigured", "capability store (application database) must be configured in STAGING/PROD")
+	}
+
+	// ---- rate limiting -----------------------------------------------------
+	//
+	// A rate limit is a budget, and an in-memory store gives each replica its
+	// own copy of it. The API autoscales from three tasks, so a limit of 100
+	// admits 300 requests and twelve times that at maximum capacity -- the
+	// configured number is then not the enforced number, which is worse than a
+	// wrong limit because it reads as a right one.
+	//
+	// So STAGING and PROD require a distributed backend of any binary that
+	// serves HTTP. LOCAL, TEST and DEV may keep the counters in the process:
+	// one replica, and no shared budget to get wrong.
+	if c.Service.ServesHTTP() {
+		switch {
+		case c.RateLimit.Backend == "":
+			// Only reachable outside LOCAL/TEST, where no default is applied.
+			// Load already reports the absence; saying it twice is worse than
+			// saying it once, so this only names the production consequence.
+			if prodLike {
+				add(RuleDistributedRateLimit, "RateLimit.Backend",
+					"must be set to a distributed backend (redis) in STAGING/PROD")
+			}
+		case !c.RateLimit.Backend.IsValid():
+			add(RuleField, "RateLimit.Backend",
+				fmt.Sprintf("unknown backend %q", string(c.RateLimit.Backend)))
+		case prodLike && !c.RateLimit.Backend.Distributed():
+			add(RuleDistributedRateLimit, "RateLimit.Backend",
+				fmt.Sprintf("%q keeps counters in the process, so each replica gets its own budget; STAGING/PROD require redis",
+					string(c.RateLimit.Backend)))
+		}
 	}
 
 	// ---- redis -------------------------------------------------------------

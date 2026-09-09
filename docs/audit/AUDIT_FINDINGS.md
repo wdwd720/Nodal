@@ -105,6 +105,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-79 | P2 | NEW | fixed | login_attempts kept a plaintext OIDC nonce and PKCE verifier forever, under a migration saying the ops role purged them |
 | F-80 | P2 | NEW | fixed | Two admin action kinds with live executors had never been run by anything, including the one that decides what happens to a payout |
 | F-81 | P2 | NEW | fixed | An execution attempt could carry two signing decisions, and the reader silently preferred whichever was written last |
+| F-82 | P2 | NEW | fixed | Nothing constructed a Redis client, so the API's rate limits were counted per replica: a configured 600/min admitted 1800 at three tasks and 7200 at twelve |
 
 ---
 
@@ -3888,6 +3889,85 @@ hole it closes.
 `TestIntegration_ADifferentAttemptStillGetsItsOwnDecision` is the control: a
 constraint one column too wide would refuse the second attempt of a retrying
 plan and stop execution altogether.
+
+## F-82 · The rate limiter counted per replica, so the configured limit was never the enforced one · NEW · P2 · FIXED
+
+**Found by** the per-service configuration audit (`internal/config/service.go`),
+which set out to establish what each binary actually dials and found one client
+that nothing anywhere constructed.
+
+**What was found.** `internal/ratelimit` ships two stores. `MemoryStore` keeps
+counters in the process. `RedisStore` shares them, with an atomic Lua
+`INCR` + `PEXPIRE` so two replicas cannot both believe they were first.
+`NewRedisStore` had no caller. `cmd/api` chose the memory store and passed
+`failOpen = true`, with a comment explaining that a Redis outage must never take
+the API down.
+
+The comment was answering the wrong question. The cost was not what happens when
+Redis fails; it was what happens when it is absent, which was every deployment:
+
+```hcl
+api_autoscaling = { min_capacity = 3, max_capacity = 12 }
+```
+
+Three tasks, each with its own copy of the counters, enforce the configured
+limit three times over. `CP_RATELIMIT_GENERAL=600/1m` admitted 1800 requests a
+minute at the floor and 7200 at the ceiling, and the number moved whenever the
+service scaled. A limit that is not the limit is worse than a wrong limit,
+because it reads as a right one: the configuration, the docs and the
+`RateLimit-Limit` header all said 600, and none of them was describing the
+system.
+
+Two things kept it invisible. `REQUIREMENTS_TRACEABILITY.md` cited "Redis
+integration tests" as evidence for R-180-1, and those tests are real and pass —
+they prove the store works, not that anything uses it. And the unit tests build
+one limiter, where every store behaves identically; the defect only exists at
+two.
+
+**Fix.** Where the counters live is now a stated deployment decision rather than
+an unstated code one.
+
+- `CP_RATELIMIT_BACKEND` (`memory` | `redis`) is required of `cmd/api` and of
+  nothing else, because nothing else serves HTTP.
+- `config.Validate` refuses `memory` for an HTTP binary in STAGING and PROD.
+- `cmd/api` builds the store the backend names, `PING`s Redis before the server
+  starts, and refuses to start if it does not answer. Redis is not optional once
+  chosen: a limiter that silently became per-process would report the same
+  numbers as one that had not.
+- The Redis-backed limiter fails **closed**. This reverses the earlier comment
+  deliberately. With one replica, failing open costs a limit that was
+  per-process anyway; with three or more it removes the only limit there is,
+  at precisely the moment something unusual is already happening.
+- Redis became the first *conditional* dependency. `serviceDeps` answers "what
+  does this binary always need", and the answer for Redis is "it depends on the
+  configuration", so `Config.RequiresDependency` decides it instead. `Load`
+  gained a second pass for the same reason: the value that decides is read
+  before the value it decides about, whatever order the table is in.
+
+**Evidence.** `TestReplicas_ProcessLocalCountersMultiplyTheBudget` is the defect
+as a measurement: three limiters over three memory stores, a limit of 10, and 30
+requests admitted. `TestReplicas_OneSharedStoreEnforcesOneBudget` is the same
+arrangement over one store and admits 10.
+
+`TestIntegration_RedisStore` extends that to the real thing: three clients,
+three stores, one server, ten allowed out of sixty.
+
+`TestReplicas_ASharedStoreOutageDoesNotBecomeAProcessLocalLimit` holds the
+absence of a fallback open — every request still reaches the failed store, each
+is refused, and the middleware answers 500 rather than serving the request. 500
+and not 429, because the limit is not exceeded, it is unknown.
+
+`TestRateLimitStore_*` in `cmd/api` cover the composition: production refuses
+the process-local store, a missing or malformed `CP_REDIS_URL` stops startup, a
+plaintext URL under `CP_REDIS_REQUIRE_TLS` is refused rather than silently
+upgraded, an unreachable Redis fails the `PING` rather than the first request,
+and no failure path returns a memory store. One of them asserts only that a
+password never appears in an error, because go-redis quotes the URL it was
+handed and startup errors are logged.
+
+`TestService_TheAPINeedsRedisOnlyWhenItsCountersAreShared` is the configuration
+half: the same binary in the same environment needs Redis or does not, according
+to one value.
 
 ## Findings deliberately NOT raised
 

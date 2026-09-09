@@ -155,14 +155,29 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	}
 	defer database.Close()
 
+	// Where the transport rate limiter keeps its counters. Opened here rather
+	// than inside build, for the same reason the database is: it is a
+	// connection pool with a process lifetime and it has to be closed when the
+	// process stops. A distributed backend that does not answer stops startup
+	// -- in production the limit is a control, and a control that is not there
+	// must not be reported as one.
+	rlStore, rlFailOpen, closeRateLimitStore, err := newRateLimitStore(ctx, cfg, resolver, log)
+	if err != nil {
+		log.Error("rate limit store could not be opened", "error", err.Error())
+		return exitFailure
+	}
+	defer closeRateLimitStore()
+
 	clk := clock.System()
 	server, err := build(ctx, buildInput{
-		cfg:      cfg,
-		lookup:   lookup,
-		resolver: resolver,
-		database: database,
-		clock:    clk,
-		logger:   log,
+		cfg:               cfg,
+		lookup:            lookup,
+		resolver:          resolver,
+		database:          database,
+		clock:             clk,
+		logger:            log,
+		rateLimitStore:    rlStore,
+		rateLimitFailOpen: rlFailOpen,
 	})
 	if err != nil {
 		log.Error("composition failed", "error", err.Error())

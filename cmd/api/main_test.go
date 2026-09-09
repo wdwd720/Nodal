@@ -271,7 +271,7 @@ func TestRateLimitsAreConfigurableWithTheDocumentedDefaults(t *testing.T) {
 	clk := clock.NewFake(time.Now().UTC())
 
 	// Defaults.
-	limits, err := rateLimits(clk, config.EnvLocal, config.LookupFromMap(map[string]string{}))
+	limits, err := rateLimits(clk, config.EnvLocal, config.LookupFromMap(map[string]string{}), ratelimit.NewMemoryStore(), true)
 	require.NoError(t, err)
 	require.NotNil(t, limits.General)
 	require.NotNil(t, limits.Auth)
@@ -288,7 +288,7 @@ func TestRateLimitsAreConfigurableWithTheDocumentedDefaults(t *testing.T) {
 		envRateLimitAuth:    "off",
 		envRateLimitQuote:   "5/1s",
 		envRateLimitCommand: "0",
-	}))
+	}), ratelimit.NewMemoryStore(), true)
 	require.NoError(t, err)
 	assert.NotNil(t, limits.General)
 	assert.Nil(t, limits.Auth, "off means no limiter at all")
@@ -298,7 +298,7 @@ func TestRateLimitsAreConfigurableWithTheDocumentedDefaults(t *testing.T) {
 	// A malformed value is a startup error, never a silent default.
 	_, err = rateLimits(clk, config.EnvLocal, config.LookupFromMap(map[string]string{
 		envRateLimitQuote: "lots",
-	}))
+	}), ratelimit.NewMemoryStore(), true)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), envRateLimitQuote)
 }
@@ -313,7 +313,7 @@ func TestRateLimitsCannotBeDisabledInProduction(t *testing.T) {
 		for _, name := range []string{
 			envRateLimitGeneral, envRateLimitAuth, envRateLimitQuote, envRateLimitCommand,
 		} {
-			_, err := rateLimits(clk, env, config.LookupFromMap(map[string]string{name: "off"}))
+			_, err := rateLimits(clk, env, config.LookupFromMap(map[string]string{name: "off"}), ratelimit.NewMemoryStore(), true)
 			require.Error(t, err, "%s %s", env, name)
 			assert.ErrorIs(t, err, errRateLimitDisabledInProduction)
 			assert.Contains(t, err.Error(), name)
@@ -321,11 +321,11 @@ func TestRateLimitsCannotBeDisabledInProduction(t *testing.T) {
 		// A configured limit is still accepted there.
 		_, err := rateLimits(clk, env, config.LookupFromMap(map[string]string{
 			envRateLimitGeneral: "1200/1m",
-		}))
+		}), ratelimit.NewMemoryStore(), true)
 		assert.NoError(t, err, "%s", env)
 	}
 	for _, env := range []config.Environment{config.EnvLocal, config.EnvTest, config.EnvDev} {
-		_, err := rateLimits(clk, env, config.LookupFromMap(map[string]string{envRateLimitGeneral: "off"}))
+		_, err := rateLimits(clk, env, config.LookupFromMap(map[string]string{envRateLimitGeneral: "off"}), ratelimit.NewMemoryStore(), true)
 		assert.NoError(t, err, "%s", env)
 	}
 }

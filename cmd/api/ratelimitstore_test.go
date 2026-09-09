@@ -1,0 +1,178 @@
+package main
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/config"
+	"github.com/nodal/controlplane/internal/ratelimit"
+)
+
+func quietLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+// localResolver reads the plain:// refs these tests use. Plain refs exist only
+// in LOCAL and TEST, which is where a test runs.
+func localResolver(t *testing.T) config.Resolver {
+	t.Helper()
+	r, err := config.NewPlainResolver(config.EnvTest)
+	require.NoError(t, err)
+	return r
+}
+
+// TestRateLimitStore_LocalKeepsCountersInTheProcess: one process, one copy of
+// the counters, and no Redis to run on a laptop. The memory backend is the
+// LOCAL and TEST default and this is what selecting it produces.
+func TestRateLimitStore_LocalKeepsCountersInTheProcess(t *testing.T) {
+	t.Parallel()
+	for _, env := range []config.Environment{config.EnvLocal, config.EnvTest, config.EnvDev} {
+		t.Run(string(env), func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.Config{
+				Env:       env,
+				Service:   config.ServiceAPI,
+				RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory},
+			}
+			store, failOpen, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+			require.NoError(t, err)
+			require.NotNil(t, cleanup)
+			cleanup()
+
+			assert.IsType(t, &ratelimit.MemoryStore{}, store)
+			assert.True(t, failOpen, "a store that cannot fail may be treated as one that will not")
+		})
+	}
+}
+
+// TestRateLimitStore_ProductionRefusesTheProcessLocalStore.
+//
+// This is the same refusal as config.Validate's, asked one layer down. It is
+// asserted here as well because the two answer different questions: Validate
+// rejects the configuration, and this rejects the store -- so a caller that
+// somehow reached composition with a memory backend in production still does
+// not get a limiter that quietly counts per replica.
+func TestRateLimitStore_ProductionRefusesTheProcessLocalStore(t *testing.T) {
+	t.Parallel()
+	for _, env := range []config.Environment{config.EnvStaging, config.EnvProd} {
+		t.Run(string(env), func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.Config{
+				Env:       env,
+				Service:   config.ServiceAPI,
+				RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory},
+			}
+			require.Error(t, cfg.Validate(), "validation refuses it first")
+			assert.True(t, config.HasViolation(cfg.Validate(), config.RuleDistributedRateLimit))
+
+			_, _, _, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+			require.Error(t, err, "and composition refuses it too, rather than trusting the caller")
+			assert.ErrorIs(t, err, errRateLimitProcessLocalInProduction)
+		})
+	}
+}
+
+// TestRateLimitStore_MissingOrMalformedRedisConfigurationFails: every way of
+// getting the Redis configuration wrong stops the process, and none of them
+// falls back to counting in memory.
+func TestRateLimitStore_MissingOrMalformedRedisConfigurationFails(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		url        config.SecretRef
+		requireTLS bool
+		wantText   string
+	}{
+		{"absent", "", false, "CP_REDIS_URL is not set"},
+		{"not a redis url", "http://example.com/redis", false, "not a valid redis URL"},
+		{"empty target", "   ", false, "not a valid redis URL"},
+		{"tls required, plaintext url", "redis://cache.internal:6379", true, "not rediss://"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.Config{
+				Env:       config.EnvTest,
+				Service:   config.ServiceAPI,
+				RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis},
+				Redis:     config.RedisConfig{URL: tc.url, RequireTLS: tc.requireTLS},
+			}
+			store, failOpen, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantText)
+			assert.Nil(t, store, "no store rather than a memory store: a fallback here is the bug")
+			assert.False(t, failOpen)
+			require.NotNil(t, cleanup, "the cleanup is always callable, including on the failure path")
+			cleanup()
+		})
+	}
+}
+
+// TestRateLimitStore_TheErrorNeverQuotesTheURL: CP_REDIS_URL may embed a
+// password, and go-redis's own parse error quotes the URL it was handed. A
+// startup failure is logged, so the message is a place a credential can escape
+// to; only the fact of the failure is reported.
+func TestRateLimitStore_TheErrorNeverQuotesTheURL(t *testing.T) {
+	t.Parallel()
+	const password = "s3cr3t-should-not-appear"
+	cfg := &config.Config{
+		Env:       config.EnvTest,
+		Service:   config.ServiceAPI,
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis},
+		Redis:     config.RedisConfig{URL: config.SecretRef("ftp://user:" + password + "@cache.internal:6379")},
+	}
+	_, _, _, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), password)
+}
+
+// TestRateLimitStore_AnUnreachableRedisStopsStartup: "unavailable" is decided
+// once, at startup, rather than on the first request. The API does not come up
+// claiming a limit it cannot enforce.
+func TestRateLimitStore_AnUnreachableRedisStopsStartup(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Env:       config.EnvTest,
+		Service:   config.ServiceAPI,
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitRedis},
+		// Port 1 is reserved and nothing listens on it, so the dial is refused
+		// rather than timing out.
+		Redis: config.RedisConfig{URL: "redis://127.0.0.1:1/0"},
+	}
+	store, _, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not answer PING")
+	assert.Nil(t, store)
+	cleanup()
+}
+
+// TestRateLimitStore_AnUnknownBackendIsRefused: the switch has no default that
+// picks a store. Adding a third backend to the enum without wiring one here
+// fails at startup instead of silently selecting whichever branch came last.
+func TestRateLimitStore_AnUnknownBackendIsRefused(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Env:       config.EnvTest,
+		Service:   config.ServiceAPI,
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitBackend("memcached")},
+	}
+	_, _, _, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errRateLimitBackendUnknown)
+}
+
+// TestRateLimitStore_TheLimitersUseTheStoreTheyWereGiven: rateLimits builds no
+// store of its own. If it did, the deployment's choice would have a second,
+// invisible answer.
+func TestRateLimitStore_TheLimitersUseTheStoreTheyWereGiven(t *testing.T) {
+	t.Parallel()
+	_, err := rateLimits(clock.NewFake(time.Now().UTC()), config.EnvLocal,
+		config.LookupFromMap(map[string]string{}), nil, false)
+	require.Error(t, err, "no store, no limiters")
+	assert.Contains(t, err.Error(), "no store")
+}

@@ -62,6 +62,7 @@ type Config struct {
 	BuildVersion      string
 	HTTP              HTTPConfig
 	Database          DatabaseConfig
+	RateLimit         RateLimitConfig
 	Redis             RedisConfig
 	Redpanda          RedpandaConfig
 	ClickHouse        ClickHouseConfig
@@ -105,6 +106,44 @@ type DatabaseConfig struct {
 	MinConns         int32
 	StatementTimeout time.Duration
 	LockTimeout      time.Duration
+}
+
+// RateLimitBackend selects where transport rate-limit counters live.
+type RateLimitBackend string
+
+// Rate-limit backends.
+const (
+	// RateLimitMemory keeps counters in the process. The budget is therefore
+	// PER REPLICA: three API tasks with a limit of 100 admit 300. That is
+	// acceptable on one machine and is not a rate limit in a deployment that
+	// scales horizontally, which is why STAGING and PROD refuse it.
+	RateLimitMemory RateLimitBackend = "memory"
+	// RateLimitRedis keeps counters in a shared Redis, so every replica spends
+	// from one budget.
+	RateLimitRedis RateLimitBackend = "redis"
+)
+
+// ParseRateLimitBackend parses a backend name, failing closed.
+func ParseRateLimitBackend(s string) (RateLimitBackend, error) {
+	switch RateLimitBackend(s) {
+	case RateLimitMemory, RateLimitRedis:
+		return RateLimitBackend(s), nil
+	}
+	return "", fmt.Errorf("config: unknown rate limit backend %q (want memory|redis)", s)
+}
+
+// IsValid reports whether b is a declared backend.
+func (b RateLimitBackend) IsValid() bool {
+	_, err := ParseRateLimitBackend(string(b))
+	return err == nil
+}
+
+// Distributed reports whether the backend is shared across replicas.
+func (b RateLimitBackend) Distributed() bool { return b == RateLimitRedis }
+
+// RateLimitConfig configures the transport rate limiter.
+type RateLimitConfig struct {
+	Backend RateLimitBackend
 }
 
 // RedisConfig configures Redis (never financial truth).

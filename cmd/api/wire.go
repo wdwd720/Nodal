@@ -66,6 +66,14 @@ type buildInput struct {
 	database *db.DB
 	clock    clock.Clock
 	logger   *slog.Logger
+
+	// rateLimitStore is where the transport limiters keep their counters, and
+	// rateLimitFailOpen says whether a store failure admits the request. Both
+	// are opened by main, like the database, because they outlive composition:
+	// the Redis client behind the distributed store is a connection pool with
+	// a process lifetime, and build has no shutdown of its own to close it in.
+	rateLimitStore    ratelimit.Store
+	rateLimitFailOpen bool
 }
 
 // build constructs every dependency explicitly and returns the mounted server.
@@ -423,7 +431,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		ports.Webhooks[creditPurchases.ProviderKey] = creditPurchases.WebhookPort
 	}
 
-	limits, err := rateLimits(clk, cfg.Env, in.lookup)
+	limits, err := rateLimits(clk, cfg.Env, in.lookup, in.rateLimitStore, in.rateLimitFailOpen)
 	if err != nil {
 		return nil, fmt.Errorf("rate limits: %w", err)
 	}
@@ -646,8 +654,15 @@ func parseRateLimit(spec string, def ratelimit.Limit) (ratelimit.Limit, bool, er
 // The counters live in process memory, so the budget is per replica. That is
 // deliberate for now: a Redis outage must never take the API down, and these
 // counters are not financial authority (PART 181).
-func rateLimits(clk clock.Clock, env config.Environment, lookup func(string) (string, bool)) (httpapi.RateLimits, error) {
-	store := ratelimit.NewMemoryStore()
+// rateLimits builds the four transport limiters over a store the caller has
+// already chosen and proved usable. It takes the store rather than making one
+// because where the counters live is a deployment decision (see
+// rateLimitStore), and because a limiter that silently made its own store would
+// be a second, invisible answer to that question.
+func rateLimits(clk clock.Clock, env config.Environment, lookup func(string) (string, bool), store ratelimit.Store, failOpen bool) (httpapi.RateLimits, error) {
+	if store == nil {
+		return httpapi.RateLimits{}, errors.New("rate limits: no store")
+	}
 	build := func(name string) (*ratelimit.Limiter, error) {
 		raw, _ := lookup(name)
 		limit, enabled, err := parseRateLimit(raw, defaultRateLimits[name])
@@ -660,9 +675,11 @@ func rateLimits(clk clock.Clock, env config.Environment, lookup func(string) (st
 			}
 			return nil, nil
 		}
-		// failOpen: a limiter store failure must never refuse a request that
-		// the financial rules would have allowed.
-		return ratelimit.NewLimiter(strings.ToLower(name), store, limit, clk.Now, true)
+		// failOpen comes from the store, because it is a property of the
+		// store: the in-process one cannot fail, and the shared one failing
+		// open would remove the only limit that exists across replicas. It is
+		// not a property of the limit, so it is not decided here.
+		return ratelimit.NewLimiter(strings.ToLower(name), store, limit, clk.Now, failOpen)
 	}
 
 	var (

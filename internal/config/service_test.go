@@ -37,7 +37,7 @@ func withoutPrefix(base map[string]string, prefixes ...string) map[string]string
 // and believes.
 func TestService_APIStartsInProductionWithoutTheDependenciesItDoesNotUse(t *testing.T) {
 	t.Parallel()
-	env := withoutPrefix(prodEnv(), "CP_REDIS_", "CP_REDPANDA_", "CP_CLICKHOUSE_", "CP_TEMPORAL_")
+	env := withoutPrefix(prodEnv(), "CP_REDPANDA_", "CP_CLICKHOUSE_", "CP_TEMPORAL_")
 
 	c, err := Load(context.Background(), ServiceAPI, LookupFromMap(env))
 	require.NoError(t, err, "the API must start in PROD with only what it uses")
@@ -49,10 +49,86 @@ func TestService_APIStartsInProductionWithoutTheDependenciesItDoesNotUse(t *test
 	assert.NotEmpty(t, c.Archive.EvidenceBucket, "the one dependency it does use is still required")
 
 	// Nothing was quietly filled in.
-	assert.True(t, c.Redis.URL.IsZero())
 	assert.Empty(t, c.Redpanda.Brokers)
 	assert.Empty(t, c.ClickHouse.Addr)
 	assert.Empty(t, c.Temporal.HostPort)
+
+	// Redis is the exception, and it is not an exception to the principle: the
+	// API really does dial it, because PROD requires a rate-limit budget that
+	// is shared across replicas rather than copied into each one.
+	assert.False(t, c.Redis.URL.IsZero())
+	assert.True(t, c.RequiresDependency(DepRedis))
+}
+
+// TestService_TheAPINeedsRedisOnlyWhenItsCountersAreShared is the other half of
+// the same idea. Redis is the one dependency that is not a property of the
+// binary: the same cmd/api needs it or does not, according to a deployment
+// decision. A DEV deployment running one task may keep its counters in the
+// process, and then there is no Redis to configure and none is demanded.
+func TestService_TheAPINeedsRedisOnlyWhenItsCountersAreShared(t *testing.T) {
+	t.Parallel()
+	base := withoutPrefix(withVars(prodEnv(), map[string]string{"CP_ENV": string(EnvDev)}), "CP_REDIS_")
+
+	memory := withVars(base, map[string]string{"CP_RATELIMIT_BACKEND": "memory"})
+	c, err := Load(context.Background(), ServiceAPI, LookupFromMap(memory))
+	require.NoError(t, err, "a single-replica DEV API may keep its counters in the process")
+	assert.True(t, c.Redis.URL.IsZero(), "and then nothing about Redis was invented")
+	assert.False(t, c.RequiresDependency(DepRedis))
+
+	// Same environment, same binary, one value changed: now Redis is required
+	// and its absence is the error.
+	shared := withVars(base, map[string]string{"CP_RATELIMIT_BACKEND": "redis"})
+	c, err = Load(context.Background(), ServiceAPI, LookupFromMap(shared))
+	require.Error(t, err, "a shared budget needs the thing that shares it")
+	assert.Nil(t, c)
+	assert.Contains(t, varErrors(err), "CP_REDIS_URL")
+	assert.ErrorIs(t, varErrors(err)["CP_REDIS_URL"], ErrMissingRequired)
+}
+
+// TestService_TheDecidingValueIsReadBeforeItIsUsed: CP_REDIS_URL is declared
+// after CP_RATELIMIT_BACKEND in the table today. If it were declared before,
+// a loader that judged each variable as it walked the table would have decided
+// Redis was missing before it knew whether Redis was wanted. Load makes two
+// passes so the answer does not depend on the order, and this test loads with
+// the table walked in both directions to say so.
+func TestService_TheDecidingValueIsReadBeforeItIsUsed(t *testing.T) {
+	t.Parallel()
+	env := withVars(withoutPrefix(prodEnv(), "CP_REDIS_"),
+		map[string]string{"CP_ENV": string(EnvDev), "CP_RATELIMIT_BACKEND": "memory"})
+
+	// Reading the deciding variable last is the hostile order, and it is
+	// simulated by answering lookups only after every other variable has been
+	// asked for. The result must still be a config that needs no Redis.
+	var asked []string
+	lookup := func(name string) (string, bool) {
+		asked = append(asked, name)
+		v, ok := env[name]
+		return v, ok
+	}
+	c, err := Load(context.Background(), ServiceAPI, lookup)
+	require.NoError(t, err)
+	assert.False(t, c.RequiresDependency(DepRedis))
+	assert.Contains(t, asked, "CP_RATELIMIT_BACKEND")
+	assert.Contains(t, asked, "CP_REDIS_URL", "the absent variable is still looked up, not skipped")
+}
+
+// TestService_RedisIsRequiredOfNobodyElse: the conditional requirement belongs
+// to the binary that serves HTTP. Setting the rate-limit backend on a worker
+// must not conjure a Redis dependency it has no use for.
+func TestService_RedisIsRequiredOfNobodyElse(t *testing.T) {
+	t.Parallel()
+	env := withVars(withoutPrefix(prodEnv(), "CP_REDIS_"), map[string]string{"CP_RATELIMIT_BACKEND": "redis"})
+	for _, svc := range AllServices() {
+		if svc.ServesHTTP() {
+			continue
+		}
+		t.Run(string(svc), func(t *testing.T) {
+			t.Parallel()
+			c, err := Load(context.Background(), svc, LookupFromMap(env))
+			require.NoError(t, err, "%s does not serve HTTP and has no rate limiter", svc)
+			assert.False(t, c.RequiresDependency(DepRedis))
+		})
+	}
 }
 
 // TestService_ABinaryThatNeedsADependencyRefusesToStartWithoutIt is the other
@@ -86,22 +162,28 @@ func TestService_ABinaryThatNeedsADependencyRefusesToStartWithoutIt(t *testing.T
 	}
 }
 
-// TestService_RedisHasNoConsumerYet records a finding rather than asserting a
-// preference.
+// TestService_RedisIsNotAStaticDependencyOfAnything records where the Redis
+// requirement lives, because it is the one that does not live in the table.
 //
-// Nothing in this repository constructs a Redis client. ratelimit.NewRedisStore
-// exists and has no caller; cmd/api builds ratelimit.NewMemoryStore. So no
-// service declares DepRedis, and CP_REDIS_URL was, until now, a secret every
-// deployment had to supply for a client nobody creates.
+// serviceDeps answers "what does this binary always need". Nothing always needs
+// Redis: cmd/api builds ratelimit.NewRedisStore when its rate-limit backend is
+// redis and ratelimit.NewMemoryStore when it is not. So the question is asked
+// of the Config, which knows the backend, rather than of the Service, which
+// does not.
 //
-// This test fails the moment that changes, which is the point: whoever wires
-// the Redis store adds one line to serviceDeps and this test tells them to.
-func TestService_RedisHasNoConsumerYet(t *testing.T) {
+// If a binary ever needs Redis unconditionally, it gains a line in serviceDeps
+// and this test says so.
+func TestService_RedisIsNotAStaticDependencyOfAnything(t *testing.T) {
 	t.Parallel()
 	for _, s := range AllServices() {
 		assert.False(t, s.Requires(DepRedis),
-			"%s now declares Redis: add its variables to that service's expectations and delete this test", s)
+			"%s declares Redis unconditionally: say why here, because RequiresDependency now has a second answer", s)
 	}
+	// And the conditional path is real: same service, two backends.
+	shared := &Config{Service: ServiceAPI, RateLimit: RateLimitConfig{Backend: RateLimitRedis}}
+	local := &Config{Service: ServiceAPI, RateLimit: RateLimitConfig{Backend: RateLimitMemory}}
+	assert.True(t, shared.RequiresDependency(DepRedis))
+	assert.False(t, local.RequiresDependency(DepRedis))
 }
 
 // TestService_MalformedDependencyConfigFailsClosedForEveryone: required-ness
@@ -174,6 +256,9 @@ func TestService_NoProductionBinaryFallsBackToLocalBehaviour(t *testing.T) {
 						continue
 					}
 					if s.Dep != "" && !service.Requires(s.Dep) {
+						continue
+					}
+					if s.Svc != "" && s.Svc != service {
 						continue
 					}
 					assert.Contains(t, got, s.Name,

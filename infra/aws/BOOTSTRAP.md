@@ -130,7 +130,7 @@ Stripe webhook are unaffected.
 
 | Item | Who | State |
 |---|---|---|
-| `nodal-terraform` IAM user and policy | admin | step 1 |
+| `nodal-terraform` IAM identity and policy | admin | step 1 |
 | Authenticated session for it | admin | step 1 |
 | State bucket | nodal-terraform | step 2 |
 | `backend.hcl` from the example | engineering | after step 2 |
@@ -138,6 +138,7 @@ Stripe webhook are unaffected.
 | Auth0 tenant, client id and secret | owner | `docs/operations/IDENTITY_PROVIDER.md` |
 | A Path B Terraform environment | engineering | **not written** — see below |
 | Container images in ECR | engineering | none exist; no GitHub repository exists |
+| ElastiCache Redis for the API's rate-limit counters | nodal-terraform | required since F-82; see section 5 |
 
 ## 5. The blocker inside our own code — CLOSED 2026-09-09
 
@@ -170,10 +171,28 @@ PROD given Postgres, the archive and its own settings, and the workers that
 genuinely need Redpanda, ClickHouse or Temporal still refuse to start without
 them.
 
-One finding came out of the audit and is recorded rather than fixed: **nothing
-in the repository constructs a Redis client.** `ratelimit.NewRedisStore` exists
-with no caller and `cmd/api` chooses the in-memory store. That is a defect
-rather than a simplification -- with `api_autoscaling.min_capacity = 3`, a
-per-task memory store makes every rate limit three times looser than configured
-and twelve times at maximum capacity. It is not on the Path B critical path and
-it is named so that nobody reads the empty Redis column as a design.
+One finding came out of the audit, and it turned out to be on the Path B
+critical path after all: **nothing in the repository constructed a Redis
+client.** `ratelimit.NewRedisStore` had no caller and `cmd/api` chose the
+in-memory store, so with `api_autoscaling.min_capacity = 3` every rate limit was
+three times looser than configured and twelve times at maximum capacity.
+
+That is now fixed (F-82), and it changes what Path B has to provision.
+`CP_RATELIMIT_BACKEND` selects where the counters live, `config.Validate`
+refuses the per-process store for an HTTP binary in STAGING and PROD, and
+`cmd/api` refuses to start if the Redis it was told to use does not answer
+`PING`. So:
+
+**Path B needs ElastiCache after all, or the API must run as a single task.**
+The `redis` Terraform module already exists and is not large -- one
+`cache.t4g.micro` replication group is a few dollars a month, against the
+alternative of an API whose published rate limit is not the one it enforces.
+The single-task alternative is real but is a different decision: it removes the
+rolling-deploy and availability properties Path B was chosen to keep.
+
+The audit-worker's S3 Object Lock archive remains **open and unfixed**:
+`buildArchive` returns a filesystem archive when `CP_AUDIT_ARCHIVE_DIR` is set
+and nil otherwise, so the WORM guarantee the audit bucket exists for is not
+wired. `cmd/audit-worker` is not part of the minimal Path B deployment, so it
+does not block an apply -- but it is not done, and nothing here should be read
+as saying it is.

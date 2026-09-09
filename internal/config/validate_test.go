@@ -33,11 +33,12 @@ func prodRuleCases() []struct {
 		{"debug auth", RuleNoDebugAuth, "", "Auth.DebugAuthEnabled", func(c *Config) { c.Auth.DebugAuthEnabled = true }},
 		{"seed", RuleNoSeed, "", "Seed.Enabled", func(c *Config) { c.Seed.Enabled = true }},
 		{"database tls", RuleDatabaseTLS, "", "Database.RequireTLS", func(c *Config) { c.Database.RequireTLS = false }},
-		// "redis tls" used to be here. It cannot be: no service declares
-		// DepRedis, because nothing in the repository constructs a Redis
-		// client -- ratelimit.NewRedisStore exists with no caller and cmd/api
-		// chooses the in-memory store. The rule is kept and its mechanism is
-		// proved by TestValidate_RedisTLSIsUnreachableUntilSomethingUsesRedis.
+		// "redis tls" is back. It was removed while nothing in the repository
+		// constructed a Redis client; cmd/api now builds one whenever the
+		// rate-limit backend is redis, which the production fixture selects
+		// because STAGING and PROD refuse the per-process alternative.
+		{"redis tls", RuleRedisTLS, ServiceAPI, "Redis.RequireTLS", func(c *Config) { c.Redis.RequireTLS = false }},
+		{"memory rate limit", RuleDistributedRateLimit, ServiceAPI, "RateLimit.Backend", func(c *Config) { c.RateLimit.Backend = RateLimitMemory }},
 		{"redpanda tls", RuleRedpandaTLS, ServiceRelayWorker, "Redpanda.RequireTLS", func(c *Config) { c.Redpanda.RequireTLS = false }},
 		{"clickhouse tls", RuleClickHouseTLS, ServiceMarketIngestWorker, "ClickHouse.RequireTLS", func(c *Config) { c.ClickHouse.RequireTLS = false }},
 		{"temporal tls", RuleTemporalTLS, ServiceWorkflowWorker, "Temporal.RequireTLS", func(c *Config) { c.Temporal.RequireTLS = false }},
@@ -275,19 +276,31 @@ func TestViolations_HandlesNilAndForeignErrors(t *testing.T) {
 //
 // What is worth asserting is the pair of facts that make that true today and
 // the mechanism that will make the rule live the moment it stops being true.
-func TestValidate_RedisTLSIsUnreachableUntilSomethingUsesRedis(t *testing.T) {
+// TestValidate_RedisTLSBelongsToWhoeverActuallyUsesRedis.
+//
+// Redis is the one dependency that is not a property of the binary alone: the
+// API needs it when, and only when, its rate-limit counters are shared. So the
+// Redis rules follow the configured backend rather than the service table, and
+// this is the test that says so in both directions.
+func TestValidate_RedisTLSBelongsToWhoeverActuallyUsesRedis(t *testing.T) {
 	t.Parallel()
-	for _, s := range AllServices() {
-		assert.False(t, s.Requires(DepRedis),
-			"%s declares Redis; the rate limiter now has a real consumer and the redis tls case belongs back in prodRuleCases", s)
-	}
 
-	// The mechanism: a config whose service declares Redis is held to the
-	// rule. Service is set directly because no declared service does.
+	// Held to the rule: the API with the distributed backend really does dial
+	// Redis, so plaintext to it in production is plaintext on the wire.
 	c := validProdConfig(t)
 	c.Service = ServiceAPI
+	c.RateLimit.Backend = RateLimitRedis
 	c.Redis.RequireTLS = false
-	require.NoError(t, c.Validate(), "the API does not use Redis, so its TLS setting is not its problem")
+	err := c.Validate()
+	require.Error(t, err, "the API dials Redis for its counters, so its TLS setting is its problem")
+	assert.True(t, HasViolation(err, RuleRedisTLS))
+
+	// Not held to it: a binary that never dials Redis is not asked how it
+	// would have encrypted the connection.
+	c = validProdConfig(t)
+	c.Service = ServiceRelayWorker
+	c.Redis.RequireTLS = false
+	require.NoError(t, c.Validate(), "the relay worker does not use Redis")
 }
 
 // TestValidate_PresenceRulesBelongToTheServicesThatUseThem: the presence half
@@ -304,14 +317,22 @@ func TestValidate_PresenceRulesBelongToTheServicesThatUseThem(t *testing.T) {
 		field   string
 		mutate  func(*Config)
 	}{
-		{"redpanda brokers", ServiceRelayWorker, ServiceAPI, "Redpanda.Brokers",
-			func(c *Config) { c.Redpanda.Brokers = nil }},
-		{"clickhouse addr", ServiceMarketIngestWorker, ServiceAPI, "ClickHouse.Addr",
-			func(c *Config) { c.ClickHouse.Addr = "" }},
-		{"temporal host", ServiceWorkflowWorker, ServiceAPI, "Temporal.HostPort",
-			func(c *Config) { c.Temporal.HostPort = "" }},
-		{"archive evidence bucket", ServiceAPI, ServiceRelayWorker, "Archive.EvidenceBucket",
-			func(c *Config) { c.Archive.EvidenceBucket = "" }},
+		{
+			"redpanda brokers", ServiceRelayWorker, ServiceAPI, "Redpanda.Brokers",
+			func(c *Config) { c.Redpanda.Brokers = nil },
+		},
+		{
+			"clickhouse addr", ServiceMarketIngestWorker, ServiceAPI, "ClickHouse.Addr",
+			func(c *Config) { c.ClickHouse.Addr = "" },
+		},
+		{
+			"temporal host", ServiceWorkflowWorker, ServiceAPI, "Temporal.HostPort",
+			func(c *Config) { c.Temporal.HostPort = "" },
+		},
+		{
+			"archive evidence bucket", ServiceAPI, ServiceRelayWorker, "Archive.EvidenceBucket",
+			func(c *Config) { c.Archive.EvidenceBucket = "" },
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

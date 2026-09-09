@@ -56,6 +56,11 @@ locals {
     CP_DATABASE_STATEMENT_TIMEOUT = var.database.statement_timeout
     CP_DATABASE_LOCK_TIMEOUT      = var.database.lock_timeout
 
+    # Rate limiting. The API autoscales, so its counters cannot live in each
+    # task's memory: a limit of 100 across three tasks would admit 300. This is
+    # also what makes CP_REDIS_* required of the API rather than merely present.
+    CP_RATELIMIT_BACKEND = "redis"
+
     # Redis
     CP_REDIS_URL         = "${local.ref}/redis/url"
     CP_REDIS_REQUIRE_TLS = "true"

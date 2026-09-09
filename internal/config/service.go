@@ -23,12 +23,12 @@ type Dependency string
 
 // Dependencies.
 const (
-	// DepRedis is the rate-limit store. NOTHING constructs a Redis client
-	// today: ratelimit.NewRedisStore exists and no composition root calls it,
-	// and cmd/api explicitly chooses ratelimit.NewMemoryStore. It is modelled
-	// anyway, because the store exists and a binary will one day use it, and a
-	// dependency that appears later should arrive as one line here rather than
-	// as a rediscovery of why the variable was required.
+	// DepRedis is the shared rate-limit store, and it is the one dependency
+	// that no entry in serviceDeps can express. cmd/api builds
+	// ratelimit.NewRedisStore when CP_RATELIMIT_BACKEND is redis and
+	// ratelimit.NewMemoryStore when it is not, so whether the binary needs
+	// Redis is a deployment decision rather than a property of the binary.
+	// Config.RequiresDependency is where that is decided.
 	DepRedis Dependency = "redis"
 	// DepRedpanda is the Kafka-protocol event bus.
 	DepRedpanda Dependency = "redpanda"
@@ -81,16 +81,20 @@ const (
 // Each entry was established by reading what the binary actually constructs,
 // not by reading its documentation. `go list -deps` says which clients are even
 // linked into a binary, and the composition root says which of those it builds.
-// The two disagree in one place that matters: cmd/api links go-redis through
-// internal/ratelimit and then chooses the in-memory store, so it is linked and
-// unused.
 //
-// Adding a dependency to a binary belongs here, in one line, next to the
+// It answers one question: what does this binary ALWAYS need. A dependency the
+// binary needs only under some configuration cannot be stated here and is
+// decided in Config.RequiresDependency instead -- Redis is the only one, and
+// the only one so far that a deployment gets to choose.
+//
+// Adding an unconditional dependency belongs here, in one line, next to the
 // evidence.
 var serviceDeps = map[Service][]Dependency{
 	// Dials Postgres. Writes raw Stripe deliveries to the evidence bucket
-	// before parsing them. Chooses ratelimit.NewMemoryStore, links no
-	// ClickHouse, Temporal or Redpanda client at all.
+	// before parsing them. Links no ClickHouse, Temporal or Redpanda client at
+	// all. Redis is absent here and required of it anyway whenever
+	// CP_RATELIMIT_BACKEND is redis, which STAGING and PROD insist on: see
+	// RequiresDependency.
 	ServiceAPI: {DepArchive},
 
 	// Postgres only.
@@ -154,4 +158,52 @@ func ParseService(v string) (Service, error) {
 		return "", fmt.Errorf("config: unknown service %q", v)
 	}
 	return s, nil
+}
+
+// httpServices lists the binaries that serve public HTTP and therefore run the
+// transport rate limiter.
+//
+// It is a list rather than an equality check so that a second HTTP surface --
+// an admin API, say -- joins by being named here instead of by somebody
+// remembering that a condition existed somewhere.
+var httpServices = []Service{ServiceAPI}
+
+// ServesHTTP reports whether s serves public HTTP, which is the same question
+// as whether the transport rate limiter runs in it.
+func (s Service) ServesHTTP() bool { return slices.Contains(httpServices, s) }
+
+// RequiresDependency reports whether this configuration needs an external
+// system, combining what the binary always needs with what its configuration
+// makes it need.
+//
+// Most dependencies are a property of the binary alone. Redis is not: the API
+// needs it only when the rate-limit backend is the distributed one, which is a
+// deployment decision rather than a compile-time fact. Modelling that as a
+// static "the API needs Redis" would put the variable back into every LOCAL
+// developer's environment for a client that a memory-backed run never builds.
+func (c *Config) RequiresDependency(d Dependency) bool {
+	if c.Service.Requires(d) {
+		return true
+	}
+	if d == DepRedis && c.Service.ServesHTTP() && c.RateLimit.Backend.Distributed() {
+		return true
+	}
+	return false
+}
+
+// requiresVar reports whether an absent variable is an error for this
+// configuration.
+func (c *Config) requiresVar(s varSpec) bool {
+	switch {
+	case !s.Required:
+		return false
+	case s.Svc != "" && s.Svc != c.Service:
+		// A setting only one binary has any use for is not missing from the
+		// others.
+		return false
+	case s.Dep == "":
+		return true
+	default:
+		return c.RequiresDependency(s.Dep)
+	}
 }

@@ -47,6 +47,12 @@ func ExampleEnv() string {
 		default:
 			notes = append(notes, "optional")
 		}
+		if s.Dep != "" {
+			notes = append(notes, "only required of a service that uses "+s.Dep.String())
+		}
+		if s.Svc != "" {
+			notes = append(notes, "only required of "+s.Svc.String())
+		}
 		if s.Secret {
 			notes = append(notes, "SecretRef (env://NAME | aws-sm://name-or-arn | file://path | plain in LOCAL/TEST)")
 		}

@@ -76,7 +76,11 @@
 //	CP_DATABASE_STATEMENT_TIMEOUT   duration
 //	CP_DATABASE_LOCK_TIMEOUT        duration
 //
-// Redis:
+// Rate limiting (cmd/api only):
+//
+//	CP_RATELIMIT_BACKEND            memory | redis (STAGING/PROD require redis)
+//
+// Redis (required of cmd/api when CP_RATELIMIT_BACKEND is redis):
 //
 //	CP_REDIS_URL                    SecretRef: redis URL
 //	CP_REDIS_REQUIRE_TLS            bool (true in STAGING/PROD)
