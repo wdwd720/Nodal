@@ -73,12 +73,70 @@ func TestConsumptionOrderSQL_MentionsEveryOriginExactlyOnce(t *testing.T) {
 // Funding state machine
 // ---------------------------------------------------------------------------
 
-func TestFundingState_AllElevenStatesDeclared(t *testing.T) {
-	require.Len(t, AllFundingStates(), 11, "PART XI names eleven credit funding states")
+func TestFundingState_AllDeclaredStates(t *testing.T) {
+	// PART XI named eleven. Two more were added by the Stripe provider
+	// workstream and each one is here because folding it into an existing
+	// state loses something real:
+	//
+	//   CANCELED      -- an abandoned checkout is not a declined card, and a
+	//                    support queue that cannot tell them apart chases
+	//                    customers who did nothing wrong.
+	//   MANUAL_REVIEW -- an unmapped provider status must be able to stop,
+	//                    because the alternative is guessing which state it
+	//                    meant and acting on the guess.
+	require.Len(t, AllFundingStates(), 13)
 	for _, s := range AllFundingStates() {
 		require.True(t, s.Valid(), "%s", s)
 	}
 	require.False(t, FundingState("PAID").Valid())
+}
+
+func TestFundingState_ReviewCannotBeResolvedToSettled(t *testing.T) {
+	// The one resolution an operator must not have. SETTLED means the dispute
+	// window closed, which is a fact about a clock and a policy -- not
+	// something a person establishes by closing a ticket. An operator who
+	// could assert it by hand could make value payout-eligible at will.
+	require.False(t, CanTransitionFunding(FundingManualReview, FundingSettled),
+		"resolving a review to SETTLED would let an operator make value payout-eligible by hand")
+	require.True(t, CanTransitionFunding(FundingManualReview, FundingReversible),
+		"the honest resolution is back onto the path that reaches SETTLED through the hold policy")
+}
+
+func TestFundingState_ProviderMayReportOutOfOrder(t *testing.T) {
+	// A Stripe PaymentIntent with automatic capture never reports
+	// requires_capture: it goes requires_payment_method -> succeeded. And any
+	// delivery may be lost or re-ordered. A table that only allows one step at
+	// a time would jam a funding on either of those ordinary events.
+	require.True(t, CanTransitionFunding(FundingAuthorizationPending, FundingCaptured),
+		"automatic capture skips the authorized states entirely")
+	require.True(t, CanTransitionFunding(FundingCreated, FundingCaptured),
+		"the first delivery we see may be the last one that happened")
+
+	// What the skip must never do is run backwards, or skip the mint edge.
+	require.False(t, CanTransitionFunding(FundingCaptured, FundingAuthorized))
+	require.False(t, CanTransitionFunding(FundingCaptured, FundingCreated))
+	require.False(t, CanTransitionFunding(FundingReversible, FundingCaptured))
+	require.False(t, CanTransitionFunding(FundingCreated, FundingReversible),
+		"Credits are minted on the CAPTURED -> REVERSIBLE edge and nothing may skip it")
+}
+
+func TestFundingState_MintedSaysWhetherCreditsExist(t *testing.T) {
+	for _, s := range []FundingState{
+		FundingCreated, FundingAuthorizationPending, FundingAuthorized,
+		FundingCapturePending, FundingCaptured, FundingFailed, FundingCanceled,
+		FundingManualReview,
+	} {
+		require.False(t, s.Minted(), "no Credits exist in %s", s)
+	}
+	for _, s := range []FundingState{
+		FundingReversible, FundingSettled, FundingDisputed, FundingReversed, FundingRefunded,
+	} {
+		require.True(t, s.Minted(), "Credits exist in %s", s)
+	}
+	// CAPTURED is the interesting one: the money arrived and the Credits have
+	// not been issued yet. That gap is the whole point of having a separate
+	// mint edge, and it is why Minted() is not "the payment succeeded".
+	require.False(t, FundingCaptured.Minted())
 }
 
 func TestFundingState_CapturedIsNotSettled(t *testing.T) {
@@ -95,7 +153,7 @@ func TestFundingState_CapturedIsNotSettled(t *testing.T) {
 }
 
 func TestFundingState_TerminalStatesGoNowhere(t *testing.T) {
-	for _, s := range []FundingState{FundingReversed, FundingRefunded, FundingFailed} {
+	for _, s := range []FundingState{FundingReversed, FundingRefunded, FundingFailed, FundingCanceled} {
 		require.True(t, s.Terminal(), "%s", s)
 		for _, to := range AllFundingStates() {
 			require.False(t, CanTransitionFunding(s, to),

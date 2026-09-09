@@ -40,12 +40,28 @@ const (
 	FundingRefunded   FundingState = "REFUNDED"
 	FundingDisputed   FundingState = "DISPUTED"
 	FundingFailed     FundingState = "FAILED"
+
+	// FundingCanceled is a purchase abandoned or cancelled before any money
+	// moved. It is deliberately not FAILED: nothing was declined and nothing
+	// went wrong, and a support queue that cannot tell the two apart will
+	// chase customers whose only crime was closing a tab.
+	FundingCanceled FundingState = "CANCELED"
+
+	// FundingManualReview is where a funding goes when the provider said
+	// something this binary does not understand.
+	//
+	// Without this state an unmapped provider status leaves two options, and
+	// both are worse: crash, or pick the nearest state and act on it. Picking
+	// is how a payment nobody understood becomes Credits somebody spent. A
+	// funding sitting here has had no economic effect and is waiting for a
+	// person.
+	FundingManualReview FundingState = "MANUAL_REVIEW"
 )
 
 var allFundingStates = []FundingState{
 	FundingCreated, FundingAuthorizationPending, FundingAuthorized, FundingCapturePending,
 	FundingCaptured, FundingReversible, FundingSettled, FundingReversed, FundingRefunded,
-	FundingDisputed, FundingFailed,
+	FundingDisputed, FundingFailed, FundingCanceled, FundingManualReview,
 }
 
 // AllFundingStates returns every declared state in declaration order (a copy).
@@ -68,29 +84,80 @@ func (s FundingState) String() string { return string(s) }
 // Terminal reports whether no further transition is possible.
 func (s FundingState) Terminal() bool {
 	switch s {
-	case FundingReversed, FundingRefunded, FundingFailed:
+	case FundingReversed, FundingRefunded, FundingFailed, FundingCanceled:
+		return true
+	}
+	return false
+}
+
+// Minted reports whether Credits exist for a funding in this state. It is the
+// question an operator resolving a MANUAL_REVIEW has to answer before choosing
+// a resolution, and the question Reverse asks before deciding whether there is
+// anything to claw back.
+func (s FundingState) Minted() bool {
+	switch s {
+	case FundingReversible, FundingSettled, FundingDisputed, FundingReversed, FundingRefunded:
 		return true
 	}
 	return false
 }
 
 // fundingTransitions is the explicit legal transition table.
+//
+// The pre-capture states may skip forward, and that is a change from the
+// strictly sequential table this started as. The reason is that the strict
+// version could not survive a real acquirer. A Stripe PaymentIntent with
+// automatic capture never reports requires_capture at all: it goes
+// requires_payment_method -> succeeded, sometimes with processing in between
+// and sometimes not. Webhooks are also re-delivered and unordered, so the
+// first delivery we ever see for a purchase may be the last one that happened.
+// A table that only allows one step at a time turns both of those ordinary
+// situations into a permanently jammed funding.
+//
+// Nothing is given up by allowing the skip. The pre-capture states are
+// observational -- they record what the provider has told us so far and have
+// no economic effect. The effects are guarded elsewhere and unchanged: minting
+// requires CAPTURED and happens on the CAPTURED -> REVERSIBLE edge, the lot id
+// on the row makes a second mint a no-op, and no state may move backwards.
 var fundingTransitions = map[FundingState][]FundingState{
-	FundingCreated:              {FundingAuthorizationPending, FundingFailed},
-	FundingAuthorizationPending: {FundingAuthorized, FundingFailed},
-	FundingAuthorized:           {FundingCapturePending, FundingFailed},
-	FundingCapturePending:       {FundingCaptured, FundingFailed},
+	FundingCreated: {
+		FundingAuthorizationPending, FundingAuthorized, FundingCapturePending, FundingCaptured,
+		FundingFailed, FundingCanceled, FundingManualReview,
+	},
+	FundingAuthorizationPending: {
+		FundingAuthorized, FundingCapturePending, FundingCaptured,
+		FundingFailed, FundingCanceled, FundingManualReview,
+	},
+	FundingAuthorized: {
+		FundingCapturePending, FundingCaptured,
+		FundingFailed, FundingCanceled, FundingManualReview,
+	},
+	// Once the provider is processing, cancelling is no longer ours to do.
+	FundingCapturePending: {FundingCaptured, FundingFailed, FundingManualReview},
 	// Credits are minted on CAPTURED -> REVERSIBLE, not on CAPTURED, so that
 	// the mint has its own transition and cannot be triggered twice by a
 	// duplicated capture webhook.
-	FundingCaptured:   {FundingReversible, FundingFailed},
-	FundingReversible: {FundingSettled, FundingDisputed, FundingReversed, FundingRefunded},
+	FundingCaptured:   {FundingReversible, FundingFailed, FundingManualReview},
+	FundingReversible: {FundingSettled, FundingDisputed, FundingReversed, FundingRefunded, FundingManualReview},
 	// A card network can dispute a payment a processor already calls settled.
-	FundingSettled:  {FundingDisputed, FundingRefunded},
-	FundingDisputed: {FundingSettled, FundingReversed},
+	FundingSettled:  {FundingDisputed, FundingRefunded, FundingManualReview},
+	FundingDisputed: {FundingSettled, FundingReversed, FundingManualReview},
+	// An operator resolving a review may send the funding anywhere a provider
+	// event could legitimately have sent it -- with one exception. There is no
+	// resolution to SETTLED. Settlement means the dispute window closed, which
+	// is a fact about a clock and a policy; an operator who could assert it by
+	// hand could make value payout-eligible by closing a ticket. Resolving to
+	// REVERSIBLE puts the funding back on the path that reaches SETTLED
+	// honestly.
+	FundingManualReview: {
+		FundingAuthorizationPending, FundingAuthorized, FundingCapturePending, FundingCaptured,
+		FundingReversible, FundingDisputed, FundingReversed, FundingRefunded,
+		FundingFailed, FundingCanceled,
+	},
 	FundingReversed: {},
 	FundingRefunded: {},
 	FundingFailed:   {},
+	FundingCanceled: {},
 }
 
 // CanTransitionFunding reports whether from → to is legal.
