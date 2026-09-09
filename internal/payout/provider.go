@@ -114,6 +114,22 @@ type Capabilities struct {
 	// refused before a payout is ever attempted.
 	RecipientKinds []string
 
+	// SupportedCountries are the ISO 3166-1 alpha-2 codes the provider will
+	// pay recipients in.
+	//
+	// An empty list is NOT "everywhere". It is the absence of an answer, and
+	// CanPayRecipient reads it as "no recipient has been confirmed payable" --
+	// which is the only safe reading for an adapter nobody has verified.
+	SupportedCountries []string
+
+	// ExcludedRegions maps a supported country to the subdivisions inside it
+	// the provider will not pay, e.g. {"US": {"NY", "HI"}}.
+	//
+	// It exists because a country-level answer is not always the whole answer,
+	// and discovering that at the end of an onboarding flow -- after the user
+	// has handed over identity documents -- is the expensive way to find out.
+	ExcludedRegions map[string][]string
+
 	// --- bounds ------------------------------------------------------------
 
 	// MinimumAmount and MaximumAmount bound one payout. A zero MaximumAmount

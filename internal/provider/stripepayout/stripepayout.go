@@ -262,6 +262,9 @@ func (c *Client) Capabilities() payout.Capabilities {
 		KYCPerformedByProvider:   true,
 		RequiresTaxInfo:          true,
 		RecipientKinds:           []string{RecipientIndividual, RecipientSoleProprietor},
+		SupportedCountries:       SupportedCountries(),
+		// "except the US states of New York and Hawaii".
+		ExcludedRegions: map[string][]string{"US": ExcludedUSStates()},
 
 		// Stripe publishes neither a minimum nor a maximum for this product.
 		// Both are left zero, which the payout engine reads as unknown. A

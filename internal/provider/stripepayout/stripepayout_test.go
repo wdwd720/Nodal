@@ -367,3 +367,45 @@ func (unverified) Submit(context.Context, payout.SubmitRequest) (payout.SubmitRe
 func (unverified) Lookup(context.Context, string) (payout.SubmitResult, error) {
 	return payout.SubmitResult{}, nil
 }
+
+// ---------------------------------------------------------------------------
+// pre-flight recipient refusals, against the real published data
+// ---------------------------------------------------------------------------
+
+func TestCanPayRecipient_AgainstStripesActualLimits(t *testing.T) {
+	t.Parallel()
+	// SANDBOX, not LIVE: a sandbox-mode client claiming LIVE availability is
+	// refused at construction, which is the guard that stops a test key being
+	// the thing that moves real value. Either usable value works here; the
+	// test is measuring the recipient rules, not the availability gate that
+	// every other test in this file already covers.
+	caps := client(t, "https://example.invalid", payout.AvailabilitySandbox).Capabilities()
+
+	cases := []struct {
+		name    string
+		profile payout.RecipientProfile
+		want    []payout.RecipientRefusal
+	}{
+		{"a Californian individual", payout.RecipientProfile{Country: "US", Region: "CA", Kind: "individual"}, nil},
+		{"a sole proprietor in Mexico", payout.RecipientProfile{Country: "MX", Kind: "sole_proprietor"}, nil},
+		{"New York", payout.RecipientProfile{Country: "US", Region: "NY", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalRegionExcluded}},
+		{"Hawaii", payout.RecipientProfile{Country: "US", Region: "HI", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalRegionExcluded}},
+		{"a US recipient whose state we do not know", payout.RecipientProfile{Country: "US", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalRegionUnknown}},
+		{"a company", payout.RecipientProfile{Country: "US", Region: "CA", Kind: "company"},
+			[]payout.RecipientRefusal{payout.RefusalKindUnsupported}},
+		{"a non-profit", payout.RecipientProfile{Country: "US", Region: "CA", Kind: "non_profit"},
+			[]payout.RecipientRefusal{payout.RefusalKindUnsupported}},
+		{"Germany", payout.RecipientProfile{Country: "DE", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalCountryUnsupported}},
+		{"the United Kingdom", payout.RecipientProfile{Country: "GB", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalCountryUnsupported}},
+	}
+	for _, tc := range cases {
+		ok, why := caps.CanPayRecipient(tc.profile)
+		require.Equal(t, len(tc.want) == 0, ok, tc.name)
+		require.Equal(t, tc.want, why, tc.name)
+	}
+}
