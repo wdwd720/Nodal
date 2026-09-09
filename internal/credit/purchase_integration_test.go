@@ -558,3 +558,85 @@ func requireLedgerBalanced(t *testing.T, ctx context.Context) {
 		 ) t WHERE t.net <> 0`).Scan(&unbalanced))
 	require.Zero(t, unbalanced, "every journal transaction must balance")
 }
+
+// ---------------------------------------------------------------------------
+// SEC-003 and the metadata attack surface
+// ---------------------------------------------------------------------------
+
+func TestSEC003_AProviderEventCannotCreditAnotherUsersAccount(t *testing.T) {
+	victim := newPurchaseFixture(t)
+	attacker := newPurchaseFixture(t)
+
+	vp := victim.start(t, "sec003-v", 10000)
+	ap := attacker.start(t, "sec003-a", 10000)
+
+	// The attacker's own event, but claiming the victim's funding id in
+	// metadata. The funding is resolved by provider reference -- a column
+	// under a unique constraint in a database only this application writes --
+	// and the metadata claim is a cross-check, so the two disagree and the
+	// event is refused outright rather than resolved in favour of either.
+	ev := event(ap.Funding.ProviderReference, PurchaseSucceeded, "sec003-e1", 10000)
+	ev.FundingID = vp.Funding.ID
+
+	err := attacker.tx(func(tx pgx.Tx) error {
+		_, derr := attacker.svcP.Dispatch(attacker.ctx, tx, ev)
+		return derr
+	})
+	require.Error(t, err, "an object whose two identities disagree must not be resolved automatically")
+	require.Contains(t, err.Error(), "names funding")
+
+	require.Equal(t, "0", victim.balances(t).Gross.String(), "the victim gained nothing")
+	require.Equal(t, "0", attacker.balances(t).Gross.String(), "and so did the attacker")
+}
+
+func TestSEC_MetadataCannotDecideHowManyCreditsAreIssued(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "meta-qty", 10000)
+	require.Equal(t, "10000", p.Funding.CreditQuantity.String())
+
+	// Suppose the nodal_credit_quantity metadata on the Stripe object were
+	// edited to nine million -- by a compromised dashboard session, or by
+	// anyone with provider access. The mint reads the funding row, never the
+	// event, so the claim has nowhere to land.
+	ev := event(p.Funding.ProviderReference, PurchaseSucceeded, "meta-e1", 10000)
+	ev.Snapshot.Metadata = map[string]string{
+		"nodal_workstream":      "NODAL",
+		"nodal_credit_quantity": "9000000",
+	}
+	require.Equal(t, webhook.Applied, f.deliver(t, ev))
+
+	require.Equal(t, "10000", f.balances(t).Gross.String(),
+		"the Credit quantity comes from the pricing policy at purchase time and from nowhere else")
+}
+
+func TestSEC_AnEventCannotRaiseTheAmountThatWasPaid(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "amt-raise", 10000)
+
+	// An attacker who could forge a signature would forge the amount, because
+	// that is where the money is. Signature verification stops that at the
+	// adapter; this asserts the domain refuses it too, so the guarantee does
+	// not rest on one layer.
+	require.Equal(t, webhook.Applied,
+		f.deliver(t, event(p.Funding.ProviderReference, PurchaseSucceeded, "amt-e1", 5000000)))
+
+	require.Equal(t, FundingManualReview, f.funding(t, p.Funding.ID).State)
+	require.Equal(t, "0", f.balances(t).Gross.String())
+}
+
+func TestSEC_TwoFundingsCannotShareAProviderReference(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "ref-unique", 10000)
+
+	// The database is the thing that guarantees a provider object maps to at
+	// most one funding. Without it, the resolution in Dispatch would be
+	// ambiguous and an attacker could aim an event at whichever row they
+	// preferred.
+	_, err := testDB.Exec(f.ctx,
+		`INSERT INTO credit_fundings (id, account_id, provider, provider_reference, state,
+		    credit_quantity, paid_amount_minor, paid_currency, idempotency_key)
+		 VALUES ($1,$2,$3,$4,'CREATED',1::numeric,1,'USD',$5)`,
+		NewFundingID(), f.account, "fake_credit", p.Funding.ProviderReference, uuid.NewString())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "credit_fundings_provider_provider_reference_key")
+}
