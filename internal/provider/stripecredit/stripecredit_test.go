@@ -42,6 +42,11 @@ func testClient(t *testing.T, base string) *Client {
 		Clock:             clock.NewFake(testNow),
 		ContractReference: "acct_TEST/nodal-credit",
 		SharedAccount:     true,
+		// Required on a shared account. "ACTR" is the live prefix this
+		// deployment's Stripe account actually carries, so the budget the
+		// suffix is checked against is the real one.
+		StatementDescriptorPrefix: "ACTR",
+		StatementDescriptorSuffix: "NODAL CREDITS",
 	})
 	require.NoError(t, err)
 	return c
@@ -615,4 +620,103 @@ func TestModelledEventTypes_AreAllHandled(t *testing.T) {
 		require.True(t, ev.Recognized, "%s is subscribed to and not handled", typ)
 		require.False(t, ev.Foreign, typ)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// what the cardholder sees
+// ---------------------------------------------------------------------------
+
+func TestNewClient_SharedAccountRequiresAStatementDescriptorSuffix(t *testing.T) {
+	t.Parallel()
+	// The live Actorvia account's static descriptor is "ACTORVIA". Without a
+	// suffix, a Nodal Credit purchase appears on the cardholder's statement
+	// under that name. Stripe's own guidance on running multiple businesses
+	// from separate accounts names exactly this as a cause of disputes -- and
+	// on this integration a dispute also destroys the Credits it bought.
+	_, err := NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvTest,
+		APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+		SharedAccount: true,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "under that product's name")
+
+	// An account of Nodal's own needs no suffix, because there is no other
+	// product to be confused with.
+	_, err = NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvTest,
+		APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+		SharedAccount: false,
+	})
+	require.NoError(t, err)
+}
+
+func TestSuffixBudget_MatchesStripesArithmetic(t *testing.T) {
+	t.Parallel()
+	// 22 characters total, including the "* " separator.
+	require.Equal(t, 22, MaxStatementDescriptor)
+	require.Equal(t, 16, SuffixBudget("ACTR"), `"ACTR* " leaves 16`)
+	require.Equal(t, 13, SuffixBudget("RUNCLUB"), "the worked example in Stripe's own documentation")
+	require.Equal(t, 20, SuffixBudget(""))
+	require.Equal(t, 0, SuffixBudget(strings.Repeat("X", 40)), "a nonsense prefix leaves nothing, never a negative")
+}
+
+func TestNewClient_RefusesASuffixStripeWouldTruncate(t *testing.T) {
+	t.Parallel()
+	// Stripe truncates an over-long descriptor rather than refusing it, so
+	// shipping one means shipping a descriptor nobody chose and discovering it
+	// on a customer's statement.
+	_, err := NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvTest,
+		APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+		SharedAccount:             true,
+		StatementDescriptorPrefix: "ACTR",
+		StatementDescriptorSuffix: "NODAL CREDITS PURCHASE",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "would ship a descriptor nobody chose")
+
+	// Exactly the budget is fine.
+	_, err = NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvTest,
+		APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+		SharedAccount:             true,
+		StatementDescriptorPrefix: "ACTR",
+		StatementDescriptorSuffix: strings.Repeat("N", 16),
+	})
+	require.NoError(t, err)
+}
+
+func TestNewClient_RefusesForbiddenDescriptorCharacters(t *testing.T) {
+	t.Parallel()
+	for _, bad := range []string{"NODAL<", "NODAL>", `NODAL\`, "NODAL'", `NODAL"`, "NODAL*"} {
+		_, err := NewClient(Options{
+			Mode: config.ProviderModeSandbox, Env: config.EnvTest,
+			APIKey: "sk_test_x", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+			SharedAccount:             true,
+			StatementDescriptorPrefix: "ACTR",
+			StatementDescriptorSuffix: bad,
+		})
+		require.Error(t, err, "%q", bad)
+		require.Contains(t, err.Error(), "character Stripe forbids", "%q", bad)
+	}
+}
+
+func TestCreatePurchase_SendsTheStatementDescriptorSuffix(t *testing.T) {
+	t.Parallel()
+	var form string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		form = r.Form.Encode()
+		_, _ = w.Write([]byte(`{"id":"pi_d1","object":"payment_intent","status":"requires_payment_method","amount":10000,"currency":"usd","livemode":false,"created":1757332800,"metadata":{}}`))
+	}))
+	defer srv.Close()
+
+	c := testClient(t, srv.URL)
+	_, err := c.CreatePurchase(context.Background(), newCreateRequest())
+	require.NoError(t, err)
+	require.Contains(t, form, "statement_descriptor_suffix=NODAL+CREDITS",
+		"the cardholder must see ACTR* NODAL CREDITS, not ACTORVIA")
+	require.NotContains(t, form, "statement_descriptor=",
+		"a card payment may only set the suffix; the static descriptor is the account's")
 }

@@ -426,6 +426,10 @@ func specs() []varSpec {
 				setBool(func(c *Config) *bool { return &slot.Get(&c.Providers).Shared })),
 			opt(prefix+"AVAILABILITY", secProviders, "How far the "+label+" integration is actually approved for use on this account, as opposed to how finished the code is. Empty means nothing has been granted, which every adapter treats as a refusal.", "",
 				setString(func(c *Config) *string { return &slot.Get(&c.Providers).Availability })),
+			opt(prefix+"DESCRIPTOR_PREFIX", secProviders, "The static descriptor the "+label+" provider's account puts on a customer's statement, e.g. a card statement prefix. It is used to check that the dynamic suffix fits the provider's length limit, because a provider that truncates rather than refuses ships a descriptor nobody chose.", "",
+				setString(func(c *Config) *string { return &slot.Get(&c.Providers).DescriptorPrefix })),
+			opt(prefix+"DESCRIPTOR_SUFFIX", secProviders, "What this product should be called on a customer's statement. Required when the provider account is shared: a charge that shows another product's name is a charge a customer disputes.", "",
+				setString(func(c *Config) *string { return &slot.Get(&c.Providers).DescriptorSuffix })),
 		)
 	}
 

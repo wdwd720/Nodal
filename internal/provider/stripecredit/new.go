@@ -53,5 +53,8 @@ func New(ctx context.Context, cfg config.ProviderConfig, env config.Environment,
 		AccountID:         cfg.AccountRef,
 		SharedAccount:     cfg.Shared,
 		ContractReference: cfg.AccountRef,
+
+		StatementDescriptorPrefix: cfg.DescriptorPrefix,
+		StatementDescriptorSuffix: cfg.DescriptorSuffix,
 	})
 }

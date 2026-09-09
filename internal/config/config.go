@@ -204,6 +204,17 @@ type ProviderConfig struct {
 	// that can disagree. An empty value means nothing has been granted, which
 	// every adapter must treat as a refusal.
 	Availability string
+
+	// DescriptorPrefix and DescriptorSuffix are what a customer sees on their
+	// statement for this product.
+	//
+	// They are here rather than left to each adapter because the failure they
+	// prevent is the same everywhere and stays invisible until it is
+	// expensive: a customer who does not recognise a charge disputes it, and
+	// on a shared provider account the default descriptor is the OTHER
+	// product's name.
+	DescriptorPrefix string
+	DescriptorSuffix string
 }
 
 // ProvidersConfig holds one ProviderConfig per provider slot.

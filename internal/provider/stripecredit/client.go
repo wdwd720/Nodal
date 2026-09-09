@@ -50,10 +50,40 @@ type Options struct {
 	// Without one, credit.PurchaseRegistry refuses to load it in production.
 	ContractReference string
 
-	// StatementDescriptorSuffix is what the cardholder sees. On a shared
-	// account this is the difference between a recognised charge and a
-	// dispute, so it is configuration rather than a constant.
+	// StatementDescriptorSuffix is what the cardholder sees after the
+	// account's prefix. On a shared account this is the difference between a
+	// recognised charge and a dispute, so it is configuration rather than a
+	// constant, and NewClient refuses a shared account without one.
 	StatementDescriptorSuffix string
+
+	// StatementDescriptorPrefix is the account's configured card prefix, e.g.
+	// "ACTR". It is carried here only so the suffix can be length-checked
+	// against the real budget: Stripe concatenates them as "<prefix>* <suffix>"
+	// and truncates the result at 22 characters, so a suffix that is too long
+	// is silently cut rather than rejected.
+	StatementDescriptorPrefix string
+}
+
+// MaxStatementDescriptor is the documented limit on the complete descriptor a
+// cardholder sees, including the separator.
+const MaxStatementDescriptor = 22
+
+// statementSeparator is what Stripe puts between the prefix and the suffix.
+const statementSeparator = "* "
+
+// forbiddenDescriptorChars are the characters Stripe documents as not allowed
+// in a statement descriptor: < > \ ' " *
+const forbiddenDescriptorChars = "<>\\'\"*"
+
+// SuffixBudget returns how many characters a dynamic suffix may use given a
+// prefix. It is exported because the deployment that sets the suffix should be
+// able to check it without deploying and reading a statement.
+func SuffixBudget(prefix string) int {
+	n := MaxStatementDescriptor - len(prefix) - len(statementSeparator)
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 // DefaultTimeout bounds every API call when Options.Timeout is zero.
@@ -123,6 +153,29 @@ func NewClient(o Options) (*Client, error) {
 		return nil, errs.Newf(errs.CodeValidationFailed,
 			"stripecredit: %s cannot run the credit purchase adapter in %s mode; test Stripe objects must never reach production",
 			o.Env, o.Mode)
+	}
+	// On a shared account, a charge with no suffix shows the OTHER product's
+	// name on the cardholder's statement. Stripe's own guidance on running
+	// multiple businesses names that as a cause of disputes, and a customer
+	// who does not recognise a charge disputes it -- which on this integration
+	// also destroys the Credits it bought. So the suffix is not advice here:
+	// an adapter that would take payments looking like somebody else's refuses
+	// to be built.
+	if o.SharedAccount && strings.TrimSpace(o.StatementDescriptorSuffix) == "" {
+		return nil, errs.New(errs.CodeValidationFailed,
+			"stripecredit: this Stripe account also serves another product, so a card charge with no statement descriptor suffix would appear on the cardholder's statement under that product's name; set one")
+	}
+	if suffix := strings.TrimSpace(o.StatementDescriptorSuffix); suffix != "" {
+		if budget := SuffixBudget(o.StatementDescriptorPrefix); len(suffix) > budget {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"stripecredit: statement descriptor suffix %q is %d characters and the prefix %q leaves %d; Stripe truncates rather than refusing, so this would ship a descriptor nobody chose",
+				suffix, len(suffix), o.StatementDescriptorPrefix, budget)
+		}
+		// The set Stripe documents as forbidden in a statement descriptor.
+		if strings.ContainsAny(suffix, forbiddenDescriptorChars) {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"stripecredit: statement descriptor suffix %q contains a character Stripe forbids", suffix)
+		}
 	}
 	base, err := url.Parse(o.BaseURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
