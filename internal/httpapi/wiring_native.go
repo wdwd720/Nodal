@@ -50,6 +50,12 @@ type NativeEconomyDeps struct {
 	PayoutEngine  *payout.Engine
 	Commerce      *commerce.Service
 
+	// CreditPurchases sells Credits for fiat. Nil means this deployment has no
+	// payment provider configured, and the purchase endpoints answer
+	// UNSUPPORTED rather than pretending -- which is the correct answer for a
+	// deployment that literally cannot take a payment.
+	CreditPurchases *credit.PurchaseService
+
 	// PayoutPolicy is the deployment's current payout policy. Nil means the
 	// fail-closed default, under which no origin may be withdrawn.
 	PayoutPolicy *valuedomain.Policy
@@ -181,6 +187,49 @@ func (a creditsAdapter) Balance(ctx context.Context, accountID accounts.AccountI
 		ActiveCaps: caps,
 		Now:        a.clk.Now(),
 	})
+}
+
+// Pricing implements CreditsPort.
+func (a creditsAdapter) Pricing(_ context.Context) (credit.PricingPolicy, error) {
+	if a.deps.CreditPurchases == nil {
+		return credit.PricingPolicy{}, errNotWired("credit purchases")
+	}
+	return a.deps.CreditPurchases.Pricing(), nil
+}
+
+// StartPurchase implements CreditsPort.
+//
+// The Credit quantity is decided inside PurchaseService from its pricing
+// policy. Nothing on the way here could have carried one: the command has an
+// amount of money and no quantity field, and neither does the request schema.
+func (a creditsAdapter) StartPurchase(ctx context.Context, r StartCreditPurchase) (credit.StartedPurchase, error) {
+	if a.deps.CreditPurchases == nil {
+		return credit.StartedPurchase{}, errNotWired("credit purchases")
+	}
+	var out credit.StartedPurchase
+	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var serr error
+			out, serr = a.deps.CreditPurchases.StartPurchase(ctx, tx, credit.StartPurchaseRequest{
+				AccountID:      r.AccountID,
+				Amount:         money.USDFromMinor(r.AmountMinor),
+				Currency:       r.Currency,
+				IdempotencyKey: r.IdempotencyKey,
+			})
+			return serr
+		})
+	if err != nil {
+		return credit.StartedPurchase{}, err
+	}
+	return out, nil
+}
+
+// Purchase implements CreditsPort.
+func (a creditsAdapter) Purchase(ctx context.Context, id credit.FundingID) (credit.Funding, error) {
+	if a.deps.CreditPurchases == nil {
+		return credit.Funding{}, errNotWired("credit purchases")
+	}
+	return a.deps.Credits.Funding(ctx, a.db, id)
 }
 
 // --- native assets ---------------------------------------------------------

@@ -117,7 +117,14 @@ var operationPolicies = map[string]operationPolicy{
 	// speculative internal ones, and the reverse. Tenant scoping is a separate
 	// per-request check, as everywhere else.
 	"GetCreditsBalance": {AnyOf: perms(security.PermCreditRead)},
-	"PostNativeAssets":  {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
+	// Reading the rate is not reading anybody's money, but it is still not
+	// public: an unauthenticated caller has no business enumerating this
+	// deployment's pricing, and credit:read is the narrowest permission that
+	// already exists for it.
+	"GetCreditsPricing":    {AnyOf: perms(security.PermCreditRead)},
+	"GetPaymentsPaymentId": {AnyOf: perms(security.PermCreditRead)},
+	"PostPayments":         {AnyOf: perms(security.PermCreditPurchase), Mutating: true},
+	"PostNativeAssets":     {AnyOf: perms(security.PermNativeAssetCreate), Mutating: true},
 	// Submitting your own draft for review is the same authority as creating
 	// it: the creator is asking for a decision, not making one. Who may submit
 	// WHICH asset is an ownership question and is answered per request, not by

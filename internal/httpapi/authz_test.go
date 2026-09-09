@@ -165,6 +165,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{assetId}":      testInstrument.String(),
 		"{marketId}":     testOrderID.String(),
 		"{payoutId}":     testSessionID,
+		"{paymentId}":    testSessionID,
 		"{productId}":    testOrderID.String(),
 	}
 

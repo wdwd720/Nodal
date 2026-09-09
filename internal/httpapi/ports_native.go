@@ -26,6 +26,34 @@ type CreditsPort interface {
 	// capability set are resolved by the implementation, because they are
 	// deployment facts rather than request facts.
 	Balance(ctx context.Context, accountID accounts.AccountID) (credit.Balances, error)
+
+	// Pricing is the policy that converts money into Credits. It is served so
+	// a funding page can show the rate rather than deriving it: a second
+	// implementation of this arithmetic in the browser would eventually
+	// disagree with the server, and the server is the one that issues.
+	Pricing(ctx context.Context) (credit.PricingPolicy, error)
+
+	// StartPurchase opens a Credit purchase for an amount of MONEY.
+	//
+	// There is no Credits argument, here or anywhere above it. The quantity is
+	// derived from Pricing inside the implementation, so a client cannot ask
+	// for nine million by any route.
+	StartPurchase(ctx context.Context, r StartCreditPurchase) (credit.StartedPurchase, error)
+
+	// Purchase reads one purchase back. A funding page polls this rather than
+	// trusting a provider redirect, which says the customer came back and not
+	// that the money arrived.
+	Purchase(ctx context.Context, id credit.FundingID) (credit.Funding, error)
+}
+
+// StartCreditPurchase is the command behind POST /credits/purchases.
+type StartCreditPurchase struct {
+	AccountID accounts.AccountID
+	// AmountMinor is what the customer will pay, in minor units.
+	AmountMinor    int64
+	Currency       string
+	IdempotencyKey string
+	CorrelationID  string
 }
 
 // NativeAssetsPort creates and reads Nodal-native assets.

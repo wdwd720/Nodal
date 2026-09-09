@@ -543,6 +543,60 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
 
+  /credits/pricing:
+    get:
+      tags: [credits]
+      summary: The rate at which money buys Credits, and the bounds on one purchase
+      description: >-
+        Exists so a funding page can show the rate without deriving it. A second
+        implementation of this arithmetic in the browser would eventually
+        disagree with the server, and the server is the one that issues.
+      responses:
+        "200":
+          description: The pricing policy in force
+          content: { application/json: { schema: { $ref: "#/components/schemas/CreditPricing" } } }
+
+  /payments:
+    post:
+      tags: [credits]
+      summary: Start a payment that buys Credits (PART XI, pgf Sections 5-7)
+      description: >-
+        The request says how much MONEY the customer will pay. It cannot say how
+        many Credits to issue, because there is no such field: the quantity is
+        derived server-side from the named pricing policy version. The response
+        carries a provider client secret exactly once, on creation, and never on
+        an idempotent replay -- a second browser must not be able to resume
+        somebody else's payment form.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateCreditPurchaseRequest" } } }
+      responses:
+        "201":
+          description: Purchase started; complete the payment with the provider using client_secret
+          content: { application/json: { schema: { $ref: "#/components/schemas/CreditPurchase" } } }
+        "200":
+          description: Idempotent replay. No client_secret is returned
+          content: { application/json: { schema: { $ref: "#/components/schemas/CreditPurchase" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /payments/{paymentId}:
+    get:
+      tags: [credits]
+      summary: The state of one Credit purchase
+      description: >-
+        A funding page polls this rather than trusting a redirect. A provider
+        redirect says the customer came back, not that the money arrived.
+      parameters:
+        - { $ref: "#/components/parameters/PaymentId" }
+      responses:
+        "200":
+          description: Purchase state
+          content: { application/json: { schema: { $ref: "#/components/schemas/CreditPurchase" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
   /native-assets:
     post:
       tags: [native-economy]
@@ -942,6 +996,7 @@ components:
     AssetId: { in: path, name: assetId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     MarketId: { in: path, name: marketId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     PayoutId: { in: path, name: payoutId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    PaymentId: { in: path, name: paymentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     ProductId: { in: path, name: productId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
     Problem:
@@ -1209,6 +1264,69 @@ components:
               kind: { type: string }
               severity: { type: string, enum: [INFO, WARN, CRITICAL] }
               reason: { type: string }
+
+    CreditPricing:
+      type: object
+      required: [version, currency, credits_per_major_unit, min_amount_minor, max_amount_minor]
+      description: >-
+        The versioned policy that converts money into Credits. version is
+        recorded on every purchase, so a purchase made under one rate is still
+        explicable after two more have replaced it.
+      properties:
+        version: { type: string, example: credit-pricing-v1 }
+        currency: { type: string, minLength: 3, maxLength: 3, example: USD }
+        credits_per_major_unit: { type: integer, format: int64, example: 100 }
+        min_amount_minor: { type: integer, format: int64, example: 100 }
+        max_amount_minor: { type: integer, format: int64, example: 1000000 }
+
+    CreateCreditPurchaseRequest:
+      type: object
+      required: [account_id, amount_minor]
+      description: >-
+        Note the absence of a Credit quantity. A client that could state one
+        could state nine million, and the only thing between that request and a
+        ledger issuance would be a validation somebody remembered to write.
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        amount_minor:
+          type: integer
+          format: int64
+          description: What the customer will pay, in minor units of the pricing currency.
+          example: 10000
+        currency: { type: string, minLength: 3, maxLength: 3, example: USD }
+
+    CreditPurchase:
+      type: object
+      required: [purchase_id, account_id, state, credit_quantity, amount_minor, currency, pricing_version, provider]
+      properties:
+        purchase_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        state:
+          type: string
+          description: >-
+            The funding lifecycle state. CAPTURED is not SETTLED and REVERSIBLE
+            is not payout-eligible; the difference is a card dispute window that
+            can run for months.
+          enum: [CREATED, AUTHORIZATION_PENDING, AUTHORIZED, CAPTURE_PENDING, CAPTURED,
+                 REVERSIBLE, SETTLED, REVERSED, REFUNDED, DISPUTED, FAILED, CANCELED, MANUAL_REVIEW]
+        credit_quantity: { $ref: "#/components/schemas/Quantity" }
+        amount_minor: { type: integer, format: int64 }
+        currency: { type: string }
+        pricing_version: { type: string }
+        provider: { type: string }
+        client_secret:
+          type: string
+          description: >-
+            The provider secret that drives the payment UI. Returned exactly
+            once, on creation. It is never persisted, never logged, and never
+            returned on a replay or a read.
+        reversible_at:
+          type: string
+          format: date-time
+          description: When the reversibility window opened. The settlement window is measured from here.
+        settled_at: { type: string, format: date-time }
+        failure_reason: { type: string }
+        created_at: { type: string, format: date-time }
 
     CreatePayoutRequest:
       type: object
