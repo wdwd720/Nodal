@@ -20,9 +20,9 @@ with no way to bypass it.
 So: record 1 first, wait for ISSUED, then record 2. Record 1 does not make the
 hostname resolve; it only proves ownership to ACM.
 
-## Record 1 — ACM validation (add now)
+## Record 1 — ACM validation (ADDED 2026-09-09, certificate ISSUED)
 
-Requested 2026-09-09.
+Requested and issued 2026-09-09. Validation took under three minutes.
 `arn:aws:acm:us-east-2:049286562577:certificate/80b0695b-ab4a-490b-a39d-56c04bf30e5f`
 
 | Field | Value |
@@ -48,7 +48,7 @@ nslookup -type=CNAME _2beed284bc59a86fc4df3be4a9968e94.api-nodal.actorvia.xyz 8.
 aws acm describe-certificate --certificate-arn <arn> --profile nodal-terraform --region us-east-2 --query Certificate.Status
 ```
 
-## Record 2 — the hostname itself (add only after ISSUED)
+## Record 2 — the hostname itself (unblocked; waiting on the load balancer)
 
 The load balancer does not exist until Terraform applies, so its DNS name is not
 known yet. It comes from the `alb_dns_name` output.
