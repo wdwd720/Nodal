@@ -307,7 +307,26 @@ anybody to log in.
 **What the code already supports.** `internal/auth/oidc` is implemented and tested, and
 `internal/auth/devidp` serves LOCAL and TEST only.
 
-**Evidence required to close.** An issuer URL, a client id, and a client secret in Secrets Manager.
+**Answered on 2026-09-09: use Auth0.** `docs/operations/IDENTITY_PROVIDER.md` derives the
+requirements from the code rather than from preference. Three of them eliminate candidates:
+`email_verified`, without which every account sits at verification level NONE and the whole
+internal economy is unreachable (F-26); `auth_time`, without which every step-up action is refused;
+and an `amr` claim carrying one of `mfa`, `otp`, `hwk`, `swk`, `pop`, `webauthn` or `passkey`.
+
+That last one decides it. Step-up is verified by `amr` and not `acr`, and step-up gates break-glass
+elevation and the dual-control approval path — which are what activate a capability gate. An issuer
+that never emits a strong `amr` makes `CREDIT_PURCHASE` permanently impossible to activate whatever
+Stripe approves.
+
+**AWS Cognito was the obvious choice and is rejected.** Its documented ID token payload carries no
+`amr` claim at all. A pre-token-generation Lambda could add one, but the claim is an assertion about
+how somebody authenticated, and synthesising it would defeat step-up everywhere it is used,
+including the approval path for live money movement.
+
+**Evidence required to close.** An Auth0 tenant, its issuer URL, a client id, and a client secret in
+Secrets Manager. The tenant's discovery document should be checked first: `oidc.New` now refuses an
+issuer that publishes a PKCE method list without S256, or an `acr_values_supported` list sharing
+nothing with the configured step-up value.
 
 ---
 
