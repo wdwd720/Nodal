@@ -15,13 +15,40 @@ Legend: **[eng]** engineering, **[user]** the account owner, **[stripe]** Stripe
 
 | # | Item | Who | State |
 |---|---|---|---|
-| 1.1 | Pair the Stripe CLI (`stripe login`) | [user] | **pending** |
-| 1.2 | Decide the production webhook URL for Nodal's API | [user] | **pending** |
+| 1.1 | Pair the Stripe CLI (`stripe login`) | [user] | **done** — Actorvia · live |
+| 1.2 | Decide the production API hostname | [user] | **pending, and genuinely absent.** See §Hostname |
+| 1.2a | Create a sandbox under Actorvia so Stage 2 can run | [user] | **pending** |
 | 1.3 | Wire the adapters in `cmd/api` | [eng] | **done** |
 | 1.4 | Expose HTTP endpoints for starting a purchase and reading funding state | [eng] | **done** |
 | 1.5 | Mount the webhook handler on the Nodal endpoint path | [eng] | **done** — `POST /v1/webhooks/stripe_credit` |
 | 1.6 | Store `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in the existing secret store; never in the repo | [user] | not started |
 | 1.7 | Set `CP_PROVIDER_CREDIT_PURCHASE_ACCOUNT_REF=acct_1REGPQALyMyuBFc1` and `..._SHARED_ACCOUNT=true` | [eng] | config exists |
+| 1.8 | Set `CP_PROVIDER_CREDIT_PURCHASE_DESCRIPTOR_PREFIX=ACTR` and `..._DESCRIPTOR_SUFFIX` | [eng] | **required**, not optional: the adapter refuses to build on a shared account without a suffix, because the default descriptor is `ACTORVIA` |
+
+### Hostname
+
+The production API hostname is not in this repository, and that is a finding
+rather than a question. Nodal has never been deployed.
+
+- `infra/terraform/environments/prod/` contains only `terraform.tfvars.example`,
+  whose `public_base_url` is the placeholder `https://api.example.com`. No real
+  tfvars is committed, no ACM certificate ARN, no DNS record, no applied state.
+- `apps/web` calls the API at the relative base `/v1`, so the web app and the
+  API are same-origin by construction and the web app names no host either.
+- No Nodal domain of any kind appears anywhere in the repository.
+
+So the hostname is a deployment fact that does not exist yet. What IS determined,
+from the code rather than from a preference, is the **path**: the generated
+router mounts `POST {base}/webhooks/{provider}` and the OpenAPI server base is
+`/v1`, and the provider key is the adapter's own name. The endpoint Stripe must
+be pointed at is therefore:
+
+```
+https://<the production API host>/v1/webhooks/stripe_credit
+```
+
+Creating the Stripe endpoint before that host resolves would put a permanently
+failing destination on Actorvia's live account, so it waits.
 
 Nothing in Stage 1 moves money or tells Stripe anything about the business.
 
