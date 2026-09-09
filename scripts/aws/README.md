@@ -40,11 +40,21 @@ restores whatever was there before.
 
 ## How the MFA code is handled
 
-`Read-Host -AsSecureString`, so it is not echoed. It is then piped to the AWS
-CLI's own stdin prompt rather than passed as `--token-code`, because a
-command-line argument is visible to anything that can list processes. The
-decrypted string is freed immediately afterwards. It reaches no file, no log and
-no history.
+The AWS CLI asks for it, and nothing here touches it. botocore reads the code
+with `getpass`, so it is not echoed; it is not passed as `--token-code`, which
+would make it visible to anything that can list processes; and it does not pass
+through these scripts, a file, a log or your shell history.
+
+The first version of this did read the code itself and pipe it to the CLI. That
+cannot work on Windows: the CLI reads the console directly rather than stdin, so
+there were two readers and one six-digit code between them, and `AssumeRole`
+received three characters of it.
+
+That same behaviour is why `nodal-tf.ps1` checks a session marker before
+touching the role profile. Any command against a profile with `mfa_serial`
+blocks on a console prompt once the cached session expires, which is fatal in a
+CI step or an agent. The marker holds an expiry timestamp and an ARN, and no
+credential of any kind: the credentials stay in the CLI's own cache.
 
 ## Why `aws login` is not enough on its own
 

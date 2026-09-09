@@ -48,6 +48,16 @@ if (-not (Test-Path -LiteralPath $envDir)) {
     throw "No such environment: $envDir"
 }
 
+# Check the session is warm BEFORE touching the role profile. Any command
+# against a profile with mfa_serial blocks on a console prompt once the cached
+# session has expired, and this script is meant to be runnable by things that
+# have no console. Failing in one line beats hanging forever.
+if (-not (Test-NodalSession)) {
+    Write-Bad 'the role session has expired or was never started'
+    Write-Host '  Run .\scripts\aws\nodal-login.ps1 (one MFA code) and try again.' -ForegroundColor Yellow
+    exit 3
+}
+
 # Prove the identity before doing anything, and prove it by asking AWS rather
 # than by trusting the profile file. A misconfigured source_profile that quietly
 # resolves to root is exactly the failure this check exists for.

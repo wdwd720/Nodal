@@ -26,7 +26,46 @@ $script:Nodal.MfaArn    = "arn:aws:iam::$($script:Nodal.AccountId):mfa/$($script
 $script:Nodal.UserArn   = "arn:aws:iam::$($script:Nodal.AccountId):user/$($script:Nodal.OperatorUser)"
 $script:Nodal.LoginPath = Join-Path $env:USERPROFILE '.aws\login\cache'
 
+$script:Nodal.SessionMarker = Join-Path $env:TEMP 'nodal-aws-session.json'
+
 function Get-NodalConfig { return $script:Nodal }
+
+# ---------------------------------------------------------------------------
+# Knowing whether a code will be asked for, without asking for one.
+#
+# The AWS CLI reads its MFA prompt from the Windows console directly, not from
+# stdin. Closing stdin does not stop it and piping to it does not answer it, so
+# any command touching a profile with mfa_serial will BLOCK when the cached role
+# session has expired -- including inside an agent or a CI step that has no
+# console to type into.
+#
+# So the expiry is recorded when the session is created. The marker holds a
+# timestamp and an ARN and no credential of any kind; the credentials stay in
+# the CLI's own cache where they belong.
+# ---------------------------------------------------------------------------
+
+function Save-NodalSessionMarker {
+    param([Parameter(Mandatory = $true)][string]$Arn, [Parameter(Mandatory = $true)][string]$Expiration)
+    $cfg = Get-NodalConfig
+    $doc = [pscustomobject]@{ arn = $Arn; expires = $Expiration }
+    $doc | ConvertTo-Json | Set-Content -LiteralPath $cfg.SessionMarker -Encoding utf8
+}
+
+# Test-NodalSession returns $true only when a role session should still be
+# usable. It is deliberately pessimistic: no marker, an unreadable one, or one
+# inside the last two minutes of its life all count as cold, because the cost of
+# being wrong is a command that hangs on a prompt nobody can answer.
+function Test-NodalSession {
+    $cfg = Get-NodalConfig
+    if (-not (Test-Path -LiteralPath $cfg.SessionMarker)) { return $false }
+    try {
+        $doc = Get-Content -LiteralPath $cfg.SessionMarker -Raw | ConvertFrom-Json
+        $expires = ([datetime]$doc.expires).ToUniversalTime()
+    } catch {
+        return $false
+    }
+    return ($expires -gt (Get-Date).ToUniversalTime().AddMinutes(2))
+}
 
 # ---------------------------------------------------------------------------
 # Output. Four shapes, so a reader can tell a fact from a question at a glance.
@@ -73,9 +112,17 @@ function Invoke-AwsJson {
 
 # Invoke-AwsQuiet is for probes whose failure is an answer rather than a
 # problem, so the CLI's error text does not scroll past as if something broke.
+#
+# stdin is closed, and that is the whole point rather than a detail. A profile
+# carrying mfa_serial makes the CLI prompt for a code, so a probe run with the
+# console attached asks a question the caller never meant to ask -- and then
+# competes for the answer with the prompt that comes next. That is exactly what
+# happened the first time this ran: two readers, one six-digit code, and an
+# AssumeRole that received three characters of it. With stdin closed the prompt
+# gets EOF, the command fails, and "no usable session" is the answer we wanted.
 function Invoke-AwsQuiet {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
-    $out = & aws @Arguments 2>$null
+    $out = $null | & aws @Arguments 2>$null
     return [pscustomobject]@{ Ok = ($LASTEXITCODE -eq 0); Output = $out }
 }
 
@@ -190,19 +237,24 @@ function Set-NodalProfiles {
 # Assuming the role.
 # ---------------------------------------------------------------------------
 
-# Enter-NodalRole populates the CLI's own credential cache for the role
-# profile, so that every later `aws --profile nodal-terraform` and every
-# Terraform run reuses one MFA challenge instead of asking again.
+# Enter-NodalRole populates the CLI's own credential cache for the role profile,
+# so that every later `aws --profile nodal-terraform` and every Terraform run
+# reuses one MFA challenge instead of asking again.
 #
-# The token code is read without echo and piped to the CLI's own prompt. Piping
-# rather than passing --token-code is the point: a command-line argument is
-# visible to anything that can list processes, and a TOTP code is a credential
-# for the thirty seconds it lives.
+# The prompt is the CLI's, not ours, and that is the safer arrangement rather
+# than a concession. botocore reads the code with getpass, so it is not echoed;
+# it never becomes a command-line argument, which is what `--token-code` would
+# make it; and it never passes through this script at all. An earlier version
+# read the code here and piped it in, which cannot work: the CLI reads the
+# Windows console directly, so there were two readers and one six-digit code
+# between them.
 function Enter-NodalRole {
     param([switch]$Force)
     $cfg = Get-NodalConfig
 
-    if (-not $Force) {
+    # When the cached session is still good the CLI does not prompt, so there is
+    # nothing to detect and nothing to warn about -- just ask.
+    if (-not $Force -and (Test-NodalSession)) {
         $arn = Get-CallerArn -ProfileName $cfg.RoleProf
         if ($arn -and $arn -like "*assumed-role/$($cfg.RoleName)/*") {
             Write-Ok "role session already valid: $arn"
@@ -210,28 +262,24 @@ function Enter-NodalRole {
         }
     }
 
-    Write-Action -Title 'enter your MFA code' -Detail @(
-        "Open your authenticator and read the current code for $($cfg.OperatorUser).",
-        'It is not echoed, not logged, and not written anywhere.'
+    Write-Action -Title 'enter your MFA code at the prompt below' -Detail @(
+        "The AWS CLI asks for it directly. Input is hidden, and the code never",
+        'reaches this script, a file, a log or your shell history.'
     )
-    $secure = Read-Host -Prompt '  MFA code' -AsSecureString
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try {
-        $code = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
-        if ($code -notmatch '^\d{6}$') { throw 'An MFA code is six digits.' }
-        # The CLI prompts on stdin for the mfa_serial code; feeding it there
-        # keeps the code out of argv and out of PowerShell history.
-        $out = $code | & aws sts get-caller-identity --profile $cfg.RoleProf --region $cfg.Region --query Arn --output text
-        $rc = $LASTEXITCODE
-    } finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-        Remove-Variable -Name code -ErrorAction SilentlyContinue
-    }
+    $out = & aws sts get-caller-identity --profile $cfg.RoleProf --region $cfg.Region --query Arn --output text
+    if ($LASTEXITCODE -ne 0) { return $null }
 
-    if ($rc -ne 0) { return $null }
     $arn = ($out | Out-String).Trim()
     if ($arn -notlike "*assumed-role/$($cfg.RoleName)/*") {
         throw "Assumed something, and it was not the deployment role: $arn"
+    }
+
+    # Record when this expires, so a later non-interactive run can say "log in
+    # again" instead of blocking forever on a prompt.
+    $exported = & aws configure export-credentials --profile $cfg.RoleProf --format process
+    if ($LASTEXITCODE -eq 0 -and $exported) {
+        $c = ($exported | Out-String | ConvertFrom-Json)
+        Save-NodalSessionMarker -Arn $arn -Expiration $c.Expiration
     }
     return $arn
 }
@@ -251,7 +299,7 @@ function Assert-RoleIdentity {
     Write-Ok "caller is $Arn"
 }
 
-Export-ModuleMember -Function Get-NodalConfig, Write-Step, Write-Ok, Write-Warn, Write-Bad,
+Export-ModuleMember -Function Get-NodalConfig, Save-NodalSessionMarker, Test-NodalSession, Write-Step, Write-Ok, Write-Warn, Write-Bad,
     Write-Action, Invoke-AwsJson, Invoke-AwsQuiet, Assert-AwsCli, Get-CallerArn, Assert-Account,
     Get-OperatorMfaSerial, Test-LoginPredatesMfa, Set-NodalProfiles, Enter-NodalRole,
     Assert-RoleIdentity
