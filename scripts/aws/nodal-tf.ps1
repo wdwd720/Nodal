@@ -48,11 +48,10 @@ if (-not (Test-Path -LiteralPath $envDir)) {
     throw "No such environment: $envDir"
 }
 
-# Check the session is warm BEFORE touching the role profile. Any command
-# against a profile with mfa_serial blocks on a console prompt once the cached
-# session has expired, and this script is meant to be runnable by things that
-# have no console. Failing in one line beats hanging forever.
-if (-not (Test-NodalSession)) {
+# Check the session is live before anything else, so an expired one costs one
+# line of output rather than a round trip that ends in AccessDenied.
+$session = Get-NodalSession
+if (-not $session) {
     Write-Bad 'the role session has expired or was never started'
     Write-Host '  Run .\scripts\aws\nodal-login.ps1 (one MFA code) and try again.' -ForegroundColor Yellow
     exit 3
@@ -69,14 +68,8 @@ if (-not $arn) {
 }
 Assert-RoleIdentity -Arn $arn
 
-# Pull the cached session out as plain values for one child process. --format
-# process returns JSON rather than shell text, so nothing has to be parsed out
-# of a string that might contain anything.
-$exported = & aws configure export-credentials --profile $cfg.RoleProf --format process
-if ($LASTEXITCODE -ne 0 -or -not $exported) {
-    throw 'Could not export the cached role credentials. Run nodal-login.ps1.'
-}
-$c = ($exported | Out-String | ConvertFrom-Json)
+# The session, decrypted for the lifetime of one child process.
+$c = $session
 
 $saved = @{}
 foreach ($k in 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_PROFILE', 'AWS_REGION', 'AWS_DEFAULT_REGION') {

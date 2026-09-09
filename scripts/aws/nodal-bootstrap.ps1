@@ -13,6 +13,9 @@
     without it existing in a file, a variable, a terminal buffer or a shell
     history first. The console shows a QR code that goes from screen to phone
     and is never written down. So enrolment is one console instruction.
+  - Read your MFA code through the AWS CLI. On Windows that prompt reads the
+    console directly and hands back a corrupted value, so the code is read here
+    and passed to the AWS SDK in-process instead.
   - Weaken the MFA condition. If assuming the role fails for want of MFA, this
     reports it and stops. It never edits a policy to make a failure go away.
 
@@ -40,9 +43,7 @@ Write-Step 'checking the AWS CLI'
 [void](Assert-AwsCli)
 
 # --- 2. profiles, before anything that needs them ---------------------------
-# Written first and without an mfa_serial, because the operator profile is what
-# every check below authenticates with, and the role profile cannot be finished
-# until we know whether a device exists.
+# The operator profile is what every check below authenticates with.
 Write-Step 'writing CLI profiles'
 Set-NodalProfiles
 
@@ -106,20 +107,23 @@ if ($serial -ne $cfg.MfaArn) {
 Write-Ok "MFA device is $serial"
 
 # --- 5. and AWS agrees it is active ----------------------------------------
-$dev = Invoke-AwsJson -AllowFailure -Arguments @('iam', 'list-mfa-devices',
+$devs = Invoke-AwsQuiet @('iam', 'list-mfa-devices',
     '--user-name', $cfg.OperatorUser, '--profile', $cfg.OperatorProf,
     '--region', $cfg.Region, '--output', 'json')
 $enabled = $null
-if ($dev -and $dev.MFADevices -and $dev.MFADevices.Count -gt 0) {
-    $enabled = [datetime]$dev.MFADevices[0].EnableDate
-    Write-Ok "mfa_active=true, enrolled $($enabled.ToUniversalTime().ToString('u'))"
+if ($devs.Ok) {
+    $doc = ($devs.Output | Out-String | ConvertFrom-Json)
+    if ($doc.MFADevices.Count -gt 0) {
+        $enabled = ([datetime]$doc.MFADevices[0].EnableDate).ToUniversalTime()
+        Write-Ok "mfa_active=true, enrolled $($enabled.ToString('u'))"
+    }
 }
 
 # --- 6. is the session older than the device? -------------------------------
 # A console session created before enrolment never passed an MFA challenge, so
 # nothing it produces can carry the claim. Saying so here saves a confusing
 # AccessDenied later.
-if ($enabled -and (Test-LoginPredatesMfa -MfaEnabledUtc $enabled.ToUniversalTime())) {
+if ($enabled -and (Test-LoginPredatesMfa -MfaEnabledUtc $enabled)) {
     Write-Warn 'the cached login session is older than the MFA device'
     Write-Action -Title 'sign in once more, with MFA' -Detail @(
         'Your current session was created before the device existed, so it never',
@@ -131,9 +135,11 @@ if ($enabled -and (Test-LoginPredatesMfa -MfaEnabledUtc $enabled.ToUniversalTime
     exit 4
 }
 
-# --- 7. finish the role profile --------------------------------------------
-Write-Step 'gating the role profile on that device'
-Set-NodalProfiles -MfaSerial $serial
+# --- 7. the role profile ----------------------------------------------------
+# Rewritten on every run, so a profile left over from the role_arn + mfa_serial
+# approach is replaced rather than merely added to.
+Write-Step 'pointing the role profile at the session helper'
+Set-NodalProfiles
 
 if ($SkipRoleTest) {
     Write-Warn 'skipping the role test as asked'

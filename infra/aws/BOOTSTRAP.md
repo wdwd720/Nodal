@@ -460,8 +460,17 @@ permanent credential, unlike the six digits it generates. The console's QR code
 goes from screen to phone and is never written down, so this is one console
 instruction rather than an automated step.
 
-**Typing a code once an hour.** Read without echo and piped to the CLI's own
-stdin prompt, so it is neither displayed nor visible in argv.
+**Typing a code once an hour.** Read by PowerShell without echo, checked against
+`^[0-9]{6}$` before any network call, and handed to the AWS SDK in-process. It
+is never a command-line argument and never reaches a file, a log or a history.
+
+The AWS CLI is deliberately not in that path. A profile with `role_arn` and
+`mfa_serial` makes the CLI prompt for the code itself, and on Windows that
+prompt reads the console directly rather than stdin -- so it cannot be
+suppressed, cannot be answered by anything without a console, and returns a
+corrupted value even when a person is there to type it: one six-digit code
+entered at that prompt reached STS as a nine-character string containing a
+letter. See `scripts/aws/README.md`.
 
 ### Why aws login alone does not satisfy the trust policy
 

@@ -61,11 +61,12 @@ if ($operator -ne $cfg.UserArn) {
 }
 Write-Ok "operator is $operator"
 
-# A missing mfa_serial means the bootstrap has not finished. Say which script to
-# run rather than failing with an AccessDenied that explains nothing.
-$serial = (& aws configure get mfa_serial --profile $cfg.RoleProf) 2>$null
-if ($LASTEXITCODE -ne 0 -or -not $serial) {
-    Write-Bad "the '$($cfg.RoleProf)' profile has no mfa_serial"
+# The role profile must be a credential_process profile. If it still carries
+# role_arn or mfa_serial it is the old arrangement, which prompts on the console
+# and cannot be answered reliably here.
+$cp = (& aws configure get credential_process --profile $cfg.RoleProf) 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $cp) {
+    Write-Bad "the '$($cfg.RoleProf)' profile is not configured for the session helper"
     Write-Host '  Run .\scripts\aws\nodal-bootstrap.ps1 first.' -ForegroundColor Yellow
     exit 3
 }
@@ -78,20 +79,19 @@ if (-not $arn) {
 Assert-RoleIdentity -Arn $arn
 
 if (-not $NoExport) {
-    # Read the cached session out of the CLI rather than assuming the role a
+    # Read back the session just established rather than assuming the role a
     # second time, so one MFA code covers the whole hour. `$env:` writes to the
     # process environment, which persists for this PowerShell session.
-    $exported = & aws configure export-credentials --profile $cfg.RoleProf --format process
-    if ($LASTEXITCODE -eq 0 -and $exported) {
-        $c = ($exported | Out-String | ConvertFrom-Json)
-        $env:AWS_ACCESS_KEY_ID     = $c.AccessKeyId
-        $env:AWS_SECRET_ACCESS_KEY = $c.SecretAccessKey
-        $env:AWS_SESSION_TOKEN     = $c.SessionToken
+    $live = Get-NodalSession
+    if ($live) {
+        $env:AWS_ACCESS_KEY_ID     = $live.AccessKeyId
+        $env:AWS_SECRET_ACCESS_KEY = $live.SecretAccessKey
+        $env:AWS_SESSION_TOKEN     = $live.SessionToken
         $env:AWS_REGION            = $cfg.Region
         $env:AWS_DEFAULT_REGION    = $cfg.Region
-        Write-Ok "credentials exported to this shell, expiring $($c.Expiration)"
+        Write-Ok "credentials exported to this shell, expiring $($live.Expiration.ToString('u'))"
     } else {
-        Write-Warn 'could not export credentials; use -Profile nodal-terraform instead'
+        Write-Warn "could not read the session back; use --profile $($cfg.RoleProf) instead"
     }
 }
 

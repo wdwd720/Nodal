@@ -1,6 +1,6 @@
 # scripts/aws
 
-Three scripts, so that deploying does not mean reading commands out of a chat
+Four files, so that deploying does not mean reading commands out of a chat
 window and pasting them back.
 
 | Script | When | Human input |
@@ -8,6 +8,7 @@ window and pasting them back.
 | `nodal-bootstrap.ps1` | once, and again whenever something looks wrong | at most one action, named on screen |
 | `nodal-login.ps1` | once per working session | one MFA code |
 | `nodal-tf.ps1` | every Terraform run | none |
+| `nodal-credential-process.ps1` | never run by hand | none |
 
 ```powershell
 .\scripts\aws\nodal-bootstrap.ps1     # verify and finish the local setup
@@ -15,58 +16,84 @@ window and pasting them back.
 .\scripts\aws\nodal-tf.ps1 plan       # runs as the role, no prompt
 ```
 
-## What they refuse to do
+## The AWS CLI is not in the AssumeRole path, and this is why
 
-**Enrol an MFA device from the CLI.** `aws iam create-virtual-mfa-device`
-returns the shared secret in its response. Getting that onto a phone means it
-first exists in a variable, a file, a terminal buffer or a shell history, and a
-TOTP seed is a permanent credential rather than a momentary one. The console
-draws a QR code that goes from screen to phone and is never written down, so
-enrolment is one console instruction and nothing more.
+A profile with `role_arn` + `mfa_serial` makes the CLI ask for a code itself.
+On Windows that prompt is broken in two ways.
 
-**Weaken the MFA requirement.** If the role cannot be assumed for want of MFA,
-the scripts say so and stop. None of them edits a policy to make a failure go
-away. `nodal-tf.ps1` additionally refuses to run at all unless the caller is an
-assumed-role session for `nodal-terraform`, so a misconfigured profile that
-quietly resolves to root fails on the first line instead of provisioning
-something.
+It reads the console directly rather than stdin, so a code cannot be piped in
+and the prompt cannot be suppressed. Any command against such a profile
+therefore **hangs** once the cached session expires, which is fatal in CI or an
+agent, and a hang rather than an error.
 
-**Write a credential anywhere.** No access keys exist. The role session lives in
-the AWS CLI's own credential cache, which is what lets one MFA code cover an
-hour of work for both a person and an agent. `nodal-login.ps1` puts the same
-session into the shell's environment; `nodal-tf.ps1` reads it back out with
-`aws configure export-credentials` for the lifetime of one child process and
-restores whatever was there before.
+Worse, what it reads is corrupted. One six-digit code typed at that prompt
+reached STS as a nine-character value containing a letter. A TOTP code cannot
+be either of those things, so the code never arrived intact.
 
-## How the MFA code is handled
+So the role is assumed **in-process through the AWS SDK**:
 
-The AWS CLI asks for it, and nothing here touches it. botocore reads the code
-with `getpass`, so it is not echoed; it is not passed as `--token-code`, which
-would make it visible to anything that can list processes; and it does not pass
-through these scripts, a file, a log or your shell history.
+```
+aws login (browser, no MFA prompt)        -> operator credentials
+Read-Host -AsSecureString + ^[0-9]{6}$    -> one code, validated locally
+Use-STSRole (AWS.Tools.SecurityToken)     -> role credentials
+DPAPI-encrypted session file              -> reused for the hour
+```
 
-The first version of this did read the code itself and pipe it to the CLI. That
-cannot work on Windows: the CLI reads the console directly rather than stdin, so
-there were two readers and one six-digit code between them, and `AssumeRole`
-received three characters of it.
+The code is hidden as typed, checked before any network call, never passed as a
+command-line argument where anything listing processes could read it, and never
+written to a file, a log or shell history. `AWS.Tools.SecurityToken` is
+installed for the current user on first run if it is absent.
 
-That same behaviour is why `nodal-tf.ps1` checks a session marker before
-touching the role profile. Any command against a profile with `mfa_serial`
-blocks on a console prompt once the cached session expires, which is fatal in a
-CI step or an agent. The marker holds an expiry timestamp and an ARN, and no
-credential of any kind: the credentials stay in the CLI's own cache.
+## How Terraform gets the credentials
 
-## Why `aws login` is not enough on its own
+The `nodal-terraform` profile is a **`credential_process`** profile. It carries
+no `role_arn` and no `mfa_serial`, so nothing can make it prompt. It runs
+`nodal-credential-process.ps1`, which prints the session that
+`nodal-login.ps1` established and exits. A cold session is exit 1 with a message
+naming the script to run.
 
-`aws login` mints credentials that mirror a console session, and those
-credentials do **not** carry `aws:MultiFactorAuthPresent`. This was established
-with the IAM policy simulator rather than inferred: the same request is
-`allowed` with the claim present and `implicitDeny` without it.
+That means `aws --profile nodal-terraform`, Terraform's AWS provider and every
+AWS SDK all work natively, none of them prompts, and none of them hangs.
 
-So the role profile sets `mfa_serial`, which makes the CLI pass `SerialNumber`
-and `TokenCode` to `sts:AssumeRole` itself. That is the mechanism AWS documents
-for a trust policy that tests for MFA, and it satisfies the condition rather
-than avoiding it.
+`nodal-tf.ps1` additionally refuses to run unless the caller is an assumed-role
+session for `nodal-terraform`, so a profile that quietly resolves to root fails
+on the first line rather than provisioning something.
+
+## Where the session lives
+
+`%LOCALAPPDATA%\Nodal\aws-session.json`, outside the repository, with the three
+credential fields encrypted by DPAPI — scoped to this Windows user on this
+machine. The expiry and the role ARN are in clear so a caller can ask "is this
+still good?" without decrypting anything. Sessions last one hour, and the last
+two minutes are treated as already gone: credentials that expire mid-apply are
+worse than being asked for a code.
+
+No access key exists anywhere in this design.
+
+## What these scripts will not do
+
+**Enrol an MFA device.** `aws iam create-virtual-mfa-device` returns the shared
+secret, so getting it onto a phone means it first exists in a variable, a file
+or a shell history. A TOTP seed is a permanent credential, unlike the six digits
+it generates. The console's QR code goes from screen to phone and is never
+written down, so enrolment is one console instruction.
+
+**Weaken the MFA requirement.** If the role cannot be assumed, the scripts say
+so and stop. None of them edits a policy to make a failure go away.
+
+## Two Windows PowerShell traps these scripts had to survive
+
+Both were hit for real, and both are in the code with the reason attached.
+
+`-Encoding utf8` writes a **byte-order mark** in PowerShell 5.1. Three invisible
+bytes at the top of `~/.aws/config` make every AWS tool on the machine report
+"Unable to parse config file", because botocore's parser does not skip one. The
+config writer uses an explicit BOM-less encoder.
+
+Redirecting a **native** command's stderr wraps each line in an `ErrorRecord`,
+and under `$ErrorActionPreference = 'Stop'` that aborts the script even when the
+command exited 0. The CLI wrapper lowers the preference for the call and filters
+the records out.
 
 ## Exit codes
 
