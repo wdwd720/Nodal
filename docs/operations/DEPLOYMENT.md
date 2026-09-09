@@ -1,6 +1,10 @@
 # DEPLOYMENT (AWS V1)
 
-Status: Terraform under `infra/terraform` is written and `terraform validate` passes for every environment (2026-09-06). **No plan or apply has been run against AWS: no account, credentials or OIDC trust exist yet (BLOCKERS EB-012).** Nothing in this document claims a deployed environment. Section 13 states exactly what has been verified.
+Status: Terraform under `infra/terraform` is written and `terraform validate` passes for every environment (re-verified 2026-09-09, and `terraform fmt -check -recursive` is clean). **No plan or apply has been run against AWS.** Nothing in this document claims a deployed environment. Section 13 states exactly what has been verified.
+
+**Correction, 2026-09-09.** This line previously said "no account, credentials or OIDC trust exist yet". An AWS account **does** exist — `049286562577` — and the operator machine has the AWS CLI configured against it. What is missing is an authenticated session and, more importantly, a non-root role: the configured identity is `arn:aws:iam::049286562577:root`, and Terraform must not run as root. OIDC trust and the GitHub repository are still absent.
+
+**Read `DEPLOYMENT_GAP_ANALYSIS.md` before planning an apply.** It records what the API binary actually depends on, which is materially less than this document provisions: `cmd/api` links no ClickHouse, Temporal or Redpanda client at all, and chooses an in-memory rate-limit store over Redis. Its runtime dependencies are PostgreSQL and, for the Stripe webhook, S3. That changes what a first deployment has to cost.
 
 Companions: `docs/architecture/SYSTEM.md` section 2 (binaries and credential scopes), `docs/security/SECURITY.md` section 10, `docs/operations/BACKUP_RESTORE.md`, `docs/compliance-gates/PRODUCTION_GATES.md`, `.github/workflows/release.yml`.
 

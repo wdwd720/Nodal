@@ -270,6 +270,67 @@ rule rather than chosen.
 
 ---
 
+## B-12 — No deployed environment, and no authenticated non-root AWS role · BLOCKED_EXTERNAL
+
+**Decision needed.** An authenticated AWS session under a role Terraform may use, and the manual
+state-bucket bootstrap that Terraform cannot do for itself.
+
+**What is NOT missing.** An AWS account exists: `049286562577`. The Terraform is written, validates
+for all three environments and is correctly formatted. Twelve modules cover network, RDS, Redis,
+S3 with Object Lock, KMS, Secrets Manager, the ECS cluster and services, the ALB with WAF,
+observability and the GitHub OIDC deploy role.
+
+**What is missing.** An authenticated session (`aws sts get-caller-identity` fails). A role that is
+not root — the configured identity is `arn:aws:iam::049286562577:root`, and running Terraform as
+root is not something to do once, let alone routinely. The state bucket and its KMS key, which are
+bootstrapped by hand because Terraform cannot create the bucket that holds its own state. A
+hostname and an ACM certificate. A GitHub repository, which does not exist and which the deploy
+role's OIDC trust names.
+
+**Evidence required to close.** A named IAM role with a Terraform policy, a bootstrapped state
+bucket, and `backend.hcl` written from the example.
+
+**Capabilities currently disabled.** None directly. Everything, indirectly: nothing can serve a
+webhook, so no Credit purchase can complete outside a local run.
+
+---
+
+## B-13 — No OIDC identity provider · BLOCKED_EXTERNAL
+
+**Decision needed.** Which identity provider authenticates users, and its issuer, client id and
+client secret.
+
+**Why external.** `CP_AUTH_MODE` is `oidc` in STAGING and PROD, and `dev` is refused there by
+`config.Validate`. There is no fallback: a deployed environment with no issuer has no way for
+anybody to log in.
+
+**What the code already supports.** `internal/auth/oidc` is implemented and tested, and
+`internal/auth/devidp` serves LOCAL and TEST only.
+
+**Evidence required to close.** An issuer URL, a client id, and a client secret in Secrets Manager.
+
+---
+
+## B-14 — Hostname and TLS certificate · BLOCKED_EXTERNAL
+
+**Decision needed.** The public hostname the API serves on, and approval to create the DNS record
+and certificate for it.
+
+**What is known.** `actorvia.xyz` is controlled: it is the Stripe account's declared URL, it serves
+the live billing webhook, and DNS is managed at GoDaddy. The site sends
+`Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`, so any subdomain is
+HTTPS-only in browsers from the first request and needs a valid certificate before it is usable.
+
+**Recommended.** `api-nodal.actorvia.xyz`, a new record that touches neither the apex nor `www`, so
+the Vercel site and the existing Stripe webhook are unaffected. See
+`docs/operations/DEPLOYMENT_GAP_ANALYSIS.md` §6.
+
+**What it blocks.** The Stripe webhook endpoint, which is
+`https://<hostname>/v1/webhooks/stripe_credit`, and with it every Credit purchase that is not run
+locally.
+
+---
+
 ## Not blockers
 
 Recorded because their absence might otherwise look like one:
