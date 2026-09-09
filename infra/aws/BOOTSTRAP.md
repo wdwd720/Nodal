@@ -10,8 +10,8 @@ CLI profiles use; the whole stack should live in one region).
 
 ## 0. The one thing that must change first
 
-The `default` CLI profile is `arn:aws:iam::049286562577:root`. **Terraform must
-not run as root.** Root cannot be constrained by a policy, cannot be revoked
+The `default` CLI profile is `arn:aws:iam::049286562577:root`, and its session
+has expired. **Terraform must not run as root.** Root cannot be constrained by a policy, cannot be revoked
 without changing the account password, and leaves an audit trail that says only
 "the account owner did it".
 
@@ -26,24 +26,103 @@ administrator.**
 ## 1. Create the Terraform identity — NEEDS AN ADMIN SIGN-IN
 
 Everything here is done once. It needs the account root or an existing
-administrator, because `bdg-deployer` has no IAM permissions at all.
+administrator, because `bdg-deployer` has no IAM permissions at all — it cannot
+even list roles, so this document cannot say whether any other administrator
+identity exists.
 
-1. Sign in to the AWS console as root (or an admin user).
-2. IAM → Policies → Create policy → JSON, and paste
-   `infra/aws/nodal-terraform-policy.json`. Name it **`nodal-terraform`**.
-3. IAM → Users → Create user, name **`nodal-terraform`**, no console access.
-4. Attach the `nodal-terraform` policy to it.
-5. Enable `aws login` for it, or create an access key **only if** `aws login`
-   is unavailable. A long-lived access key is the worse option and should be
-   deleted once OIDC deployment exists.
+### The authentication model already on this machine
 
-Then, back in a terminal:
+`~/.aws/credentials` is empty. Both profiles in `~/.aws/config` are
+`login_session` profiles:
 
 ```
+[default]
+login_session = arn:aws:iam::049286562577:root
+[profile bdg-deployer]
+login_session = arn:aws:iam::049286562577:user/bdg-deployer
+```
+
+That is `aws login`, which mirrors a console sign-in into short-lived CLI
+credentials and refreshes them while the refresh token lasts. **No long-lived
+access key exists on this machine, and none needs to.** Everything below keeps
+that true.
+
+### What gets created
+
+Three objects, and one of them is only a trust relationship.
+
+| | Name | Why |
+|---|---|---|
+| Managed policy | `nodal-terraform` | `infra/aws/nodal-terraform-policy.json`, unchanged |
+| IAM role | `nodal-terraform` | Holds the policy. Terraform runs as this and nothing else |
+| IAM user | `nodal-deploy` | Console sign-in only. Its **entire** permission set is `sts:AssumeRole` on the role above |
+
+`nodal-deploy` exists because `aws login` mirrors a *console* session, and only
+a user, root or Identity Center can sign into a console. It is a human
+credential (a password, ideally with MFA), not a machine credential: it holds no
+access key and can do exactly one thing, which is become the role.
+
+The role is where the permissions live, and its credentials are one-hour STS
+tokens. Nothing durable is ever written to disk.
+
+Steps, signed in as root or an administrator:
+
+1. IAM → Policies → Create policy → JSON, paste
+   `infra/aws/nodal-terraform-policy.json`, name it **`nodal-terraform`**.
+2. IAM → Roles → Create role → Custom trust policy:
+   ```json
+   {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
+    "Principal":{"AWS":"arn:aws:iam::049286562577:user/nodal-deploy"},
+    "Action":"sts:AssumeRole"}]}
+   ```
+   Attach the `nodal-terraform` policy. Name it **`nodal-terraform`**. Set the
+   maximum session duration to 1 hour.
+3. IAM → Users → Create user **`nodal-deploy`**, **console access enabled**, no
+   access key. Attach one inline policy and nothing else:
+   ```json
+   {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
+    "Action":"sts:AssumeRole",
+    "Resource":"arn:aws:iam::049286562577:role/nodal-terraform"}]}
+   ```
+4. Enable MFA on `nodal-deploy`.
+
+Then, in a terminal:
+
+```
+aws configure set region us-east-2 --profile nodal-deploy
+aws configure set login_session arn:aws:iam::049286562577:user/nodal-deploy --profile nodal-deploy
 aws configure set region us-east-2 --profile nodal-terraform
-aws login --profile nodal-terraform
+aws configure set role_arn arn:aws:iam::049286562577:role/nodal-terraform --profile nodal-terraform
+aws configure set source_profile nodal-deploy --profile nodal-terraform
+
+aws login --profile nodal-deploy
 aws sts get-caller-identity --profile nodal-terraform
 ```
+
+The last line must print the **role** ARN. If the CLI refuses a `login_session`
+profile as a `source_profile`, that is the one thing in this design that has not
+been proven on this machine, and the fallback is stated below rather than
+discovered later.
+
+### If the role cannot be assumed from an `aws login` profile
+
+Then create `nodal-terraform` as a console-only **user** with the policy
+attached directly, and no access key:
+
+```
+aws configure set login_session arn:aws:iam::049286562577:user/nodal-terraform --profile nodal-terraform
+aws login --profile nodal-terraform
+```
+
+This is second best and the difference is worth naming. It keeps every property
+that matters — short-lived credentials, no access key, no root, no reach into
+`bdg-deployer` — and loses one: there is no assume-role boundary, so the
+permissions are attached to something that can sign into a console rather than
+to something that must be deliberately assumed.
+
+**A long-lived access key is not on this list.** It would be needed only if
+`aws login` did not work at all, which it demonstrably does: `bdg-deployer`
+authenticates that way today.
 
 ### What the policy allows, and what it deliberately does not
 
@@ -60,8 +139,15 @@ It is narrow exactly where breadth would be dangerous:
   compromised Terraform credential cannot mint a second one.
 - **Lightsail, billing, Organizations and account settings are denied**, so it
   cannot reach the other project or change what the account costs.
-- Service-linked roles are allowed only for the five AWS services that require
+- Service-linked roles are allowed only for the six AWS services that require
   them.
+
+**ElastiCache was added on 2026-09-08**, because F-82 made a shared rate-limit
+store a production requirement and the policy had no `elasticache:*` at all —
+the first apply would have failed on the subnet group. The document is now
+**5,786 characters excluding whitespace against IAM's 6,144 limit**, so it is
+close to needing to be split into two managed policies. Whoever adds the next
+service should check that number before assuming there is room.
 
 ## 2. Terraform state bucket — after step 1, and scriptable
 
@@ -130,7 +216,7 @@ Stripe webhook are unaffected.
 
 | Item | Who | State |
 |---|---|---|
-| `nodal-terraform` IAM identity and policy | admin | step 1 |
+| `nodal-terraform` policy, role and the `nodal-deploy` console user | admin | step 1 |
 | Authenticated session for it | admin | step 1 |
 | State bucket | nodal-terraform | step 2 |
 | `backend.hcl` from the example | engineering | after step 2 |
