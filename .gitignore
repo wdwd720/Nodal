@@ -30,6 +30,10 @@ test-results/
 *.tfstate.*
 *.tfvars
 !*.example.tfvars
+# Generated per checkout by scripts/aws/nodal-deploy.ps1 and naming a real
+# bucket. The .example alongside it is the tracked one.
+backend.hcl
+tfplan
 crash.log
 
 # IDE / OS
