@@ -73,8 +73,10 @@ Before sending a user into onboarding, Nodal can already refuse the cases that
 will fail later: a country outside the published 67, a US address in New York
 or Hawaii, a recipient that is a company rather than an individual or sole
 proprietor. `stripepayout.SupportsCountry`, `SupportsUSState` and
-`Capabilities.SupportsRecipientKind` exist for this. Wiring them into the
-payout eligibility path is **not built**.
+`Capabilities.SupportsRecipientKind` exist for this, and
+`Capabilities.CanPayRecipient` answers all three at once with every failing
+reason rather than the first. Calling it from the payout eligibility path is
+**not built**: it needs the Connect recipient model, which is blocked on B-11.
 
 ## 3. The existing wallet package is a different thing
 
@@ -135,5 +137,5 @@ world we are in, so the branch is a capability question and not a rewrite.
 | Phantom usable as destination | **Yes**, via its EVM address on Base or Polygon |
 | Solana usable as destination | **No.** Stripe does not send USDC there |
 | Destination-change hold | **NOT BUILT** — blocks `PAYOUT_SETTLE` |
-| Pre-flight eligibility refusals | **NOT BUILT** |
+| Pre-flight eligibility refusals | **decided and tested**, not yet called |
 | Network warning in the UI | **NOT BUILT** |

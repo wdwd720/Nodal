@@ -92,7 +92,7 @@ change that; a new policy version does, through its own approval path.
 |---|---|---|---|
 | 6.1 | External penetration test | [user] | B-08 |
 | 6.2 | Destination-change payout hold | [eng] | not built; see `WALLET_INTEGRATION_STATE.md` §2B |
-| 6.3 | Pre-flight payout eligibility refusals (country, US state, recipient kind) | [eng] | not built |
+| 6.3 | Pre-flight payout eligibility refusals (country, US state, recipient kind) | [eng] | **decided and tested** in `payout.Capabilities.CanPayRecipient`; not yet called from the payout eligibility path, which needs the Connect recipient model first |
 | 6.4 | The network warning in the withdrawal UI: Base or Polygon, not Solana | [eng] | not built |
 | 6.5 | Reconciliation sweep on a schedule | [eng] | functions exist; nothing calls them |
 | 6.6 | Partial-refund economics decided, then implemented | [user] + [eng] | parks in MANUAL_REVIEW today |
