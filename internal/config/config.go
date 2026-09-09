@@ -178,10 +178,44 @@ type ProviderConfig struct {
 	APIKeyRef        SecretRef
 	WebhookSecretRef SecretRef
 	Timeout          time.Duration
+
+	// AccountRef identifies the provider-side account or tenant this adapter
+	// is configured for. An adapter that knows it can assert, at startup, that
+	// the credentials it was given belong to the account it expected -- which
+	// is how a key rotated to the wrong account is caught before it takes a
+	// payment rather than after.
+	AccountRef string
+
+	// Shared declares that the provider-side account also serves systems
+	// outside this deployment.
+	//
+	// It is configuration rather than a comment because it changes what the
+	// code must do. On a shared account the webhook endpoint receives events
+	// belonging to somebody else, and an adapter that assumes every delivery
+	// is its own will act on another product's payment.
+	Shared bool
+
+	// Availability is how far this integration is actually approved for use
+	// on this account, as opposed to how finished the code is.
+	//
+	// It is carried here as an opaque string that this package does not
+	// interpret: the vocabulary belongs to the adapter that reads it, and
+	// duplicating an enum across this leaf boundary would create two lists
+	// that can disagree. An empty value means nothing has been granted, which
+	// every adapter must treat as a refusal.
+	Availability string
 }
 
 // ProvidersConfig holds one ProviderConfig per provider slot.
 type ProvidersConfig struct {
+	// CreditPurchase sells Nodal Credits for fiat. It is a separate slot from
+	// Funding, which is the crypto onramp: one takes a card payment and issues
+	// internal Credits, the other converts a customer's own money into crypto
+	// in a wallet Nodal never holds. Sharing a slot would mean one set of
+	// credentials and one mode for two products with different risk.
+	CreditPurchase ProviderConfig
+	// Payout sends eligible value out of the system.
+	Payout                ProviderConfig
 	Funding               ProviderConfig
 	Wallet                ProviderConfig
 	Signing               ProviderConfig
@@ -205,6 +239,8 @@ type providerSlot struct {
 
 func providerSlots() []providerSlot {
 	return []providerSlot{
+		{"credit_purchase", "CREDIT_PURCHASE", func(p *ProvidersConfig) *ProviderConfig { return &p.CreditPurchase }},
+		{"payout", "PAYOUT", func(p *ProvidersConfig) *ProviderConfig { return &p.Payout }},
 		{"funding", "FUNDING", func(p *ProvidersConfig) *ProviderConfig { return &p.Funding }},
 		{"wallet", "WALLET", func(p *ProvidersConfig) *ProviderConfig { return &p.Wallet }},
 		{"signing", "SIGNING", func(p *ProvidersConfig) *ProviderConfig { return &p.Signing }},

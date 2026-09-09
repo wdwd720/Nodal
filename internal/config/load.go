@@ -420,6 +420,12 @@ func specs() []varSpec {
 				setSecret(func(c *Config) *SecretRef { return &slot.Get(&c.Providers).WebhookSecretRef }))),
 			req(prefix+"TIMEOUT", secProviders, "Per-call timeout for the "+label+" provider (Go duration).", "10s",
 				setDuration(func(c *Config) *time.Duration { return &slot.Get(&c.Providers).Timeout })),
+			opt(prefix+"ACCOUNT_REF", secProviders, "Provider-side account or tenant id for the "+label+" provider (e.g. a Stripe acct_...). Asserted at startup against the account the credentials actually belong to, so a key rotated to the wrong account is caught before it moves money.", "",
+				setString(func(c *Config) *string { return &slot.Get(&c.Providers).AccountRef })),
+			opt(prefix+"SHARED_ACCOUNT", secProviders, "Whether the "+label+" provider account also serves systems outside this deployment. It is a declaration for operators and for the capability report; rejecting another product's events is unconditional in the adapters that can receive them, so this flag is never the thing that makes that safe. Absent means not shared.", "false",
+				setBool(func(c *Config) *bool { return &slot.Get(&c.Providers).Shared })),
+			opt(prefix+"AVAILABILITY", secProviders, "How far the "+label+" integration is actually approved for use on this account, as opposed to how finished the code is. Empty means nothing has been granted, which every adapter treats as a refusal.", "",
+				setString(func(c *Config) *string { return &slot.Get(&c.Providers).Availability })),
 		)
 	}
 

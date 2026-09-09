@@ -252,7 +252,11 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 		}
 	}
 	assert.True(t, seen[EnvVarEnvironment])
-	assert.Equal(t, 3+8+9+2+5+5+4+9+2+11+12*6+4+1+7, len(seen))
+	// The 14*9 term is the provider slots: fourteen of them, nine variables
+	// each. It was 12*6 before the Stripe workstream added the credit-purchase
+	// and payout slots, and ACCOUNT_REF, SHARED_ACCOUNT and AVAILABILITY to
+	// every slot.
+	assert.Equal(t, 3+8+9+2+5+5+4+9+2+11+14*9+4+1+7, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {
