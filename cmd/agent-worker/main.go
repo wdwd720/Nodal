@@ -341,7 +341,7 @@ func cmdTick(ctx context.Context, d *deps, out io.Writer) error {
 }
 
 func cmdExecute(ctx context.Context, d *deps, out io.Writer) error {
-	live, state, err := d.store.LiveTradingEnabled(ctx, d.db, string(d.cfg.Env))
+	gate, err := d.store.LiveTradingEnabled(ctx, d.db, string(d.cfg.Env), d.clk.Now())
 	if err != nil {
 		return err
 	}
@@ -351,10 +351,14 @@ func cmdExecute(ctx context.Context, d *deps, out io.Writer) error {
 	}
 	executed, refused := 0, 0
 	for _, r := range open {
-		if r.Mode == agent.ModeLive && !live {
+		if r.Mode == agent.ModeLive && !gate.Enabled {
 			// Live money is gated, and no environment variable opens the gate.
-			d.log.Warn("refusing a LIVE run: capability gate is not ACTIVE",
-				"run_id", r.ID.String(), "gate", agent.LiveTradingCapability, "state", state)
+			// The reason is logged beside the state: a gate whose window has
+			// closed still reads state=ACTIVE, and an operator told only that
+			// would go looking for the wrong thing (F-72).
+			d.log.Warn("refusing a LIVE run: capability gate does not permit live trading",
+				"run_id", r.ID.String(), "gate", agent.LiveTradingCapability,
+				"state", gate.State, "reason", gate.Reason)
 			refused++
 			continue
 		}
@@ -363,7 +367,7 @@ func cmdExecute(ctx context.Context, d *deps, out io.Writer) error {
 		}
 		executed++
 	}
-	fmt.Fprintf(out, "executed %d run(s), refused %d LIVE run(s) (gate %s)\n", executed, refused, state)
+	fmt.Fprintf(out, "executed %d run(s), refused %d LIVE run(s) (gate %s)\n", executed, refused, gate.State)
 	return nil
 }
 
@@ -452,12 +456,16 @@ func cmdCalibrate(ctx context.Context, d *deps, versionID, mode string, out io.W
 }
 
 func cmdGate(ctx context.Context, d *deps, out io.Writer) error {
-	live, state, err := d.store.LiveTradingEnabled(ctx, d.db, string(d.cfg.Env))
+	gate, err := d.store.LiveTradingEnabled(ctx, d.db, string(d.cfg.Env), d.clk.Now())
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s in %s: state=%s live_agent_trading_enabled=%t\n",
-		agent.LiveTradingCapability, d.cfg.Env, state, live)
+	fmt.Fprintf(out, "%s in %s: state=%s live_agent_trading_enabled=%t",
+		agent.LiveTradingCapability, d.cfg.Env, gate.State, gate.Enabled)
+	if gate.Reason != "" {
+		fmt.Fprintf(out, " refused_because=%q", gate.Reason)
+	}
+	fmt.Fprintln(out)
 	return nil
 }
 

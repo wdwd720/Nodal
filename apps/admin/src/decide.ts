@@ -83,6 +83,16 @@ export interface DecideAction {
   readonly requiresDual: boolean;
   readonly proposedBy: string;
   readonly approvedBy: string | null;
+  /**
+   * Who the action elevates, for a kind whose spec sets approver_is_not_target.
+   * That person may not approve it however many others were involved -- the
+   * second signature would be supplied by the beneficiary.
+   *
+   * It was absent, so the console had no target check and rendered a live
+   * Approve button to the grantee of a BREAK_GLASS_GRANT that the server
+   * refuses (F-71).
+   */
+  readonly targetId?: string;
   readonly expiresAt: string;
 }
 
@@ -367,6 +377,15 @@ function decideApprove(p: DecidePrincipal, action: DecideAction, now: Date, inde
     d.code = "FORBIDDEN";
   } else if (p.subjectId.toLowerCase() === action.proposedBy.toLowerCase()) {
     // Dual control. The console must never let this be clickable.
+    d.reason = "SELF_APPROVAL";
+    d.code = "FORBIDDEN";
+  } else if (
+    spec.approver_is_not_target &&
+    isUserId(action.targetId ?? "") &&
+    p.subjectId.toLowerCase() === (action.targetId ?? "").toLowerCase()
+  ) {
+    // The other shape of self-approval: approving an action whose target is
+    // you is granting yourself the thing it grants.
     d.reason = "SELF_APPROVAL";
     d.code = "FORBIDDEN";
   } else if (expired(action, now)) {

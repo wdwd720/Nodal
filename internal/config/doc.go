@@ -60,6 +60,7 @@
 //	CP_DATABASE_APP_URL             SecretRef: application-role URL
 //	CP_DATABASE_MIGRATE_URL         SecretRef: migration-role URL
 //	CP_DATABASE_READONLY_URL        SecretRef: read-only URL (optional)
+//	CP_DATABASE_OPS_URL             SecretRef: operations-role URL (optional; the retention passes need it)
 //	CP_DATABASE_REQUIRE_TLS         bool (true in STAGING/PROD)
 //	CP_DATABASE_MAX_CONNS           int32
 //	CP_DATABASE_MIN_CONNS           int32
@@ -186,6 +187,7 @@
 //
 // Retention (days):
 //
+//	CP_RETENTION_LOGIN_ATTEMPT_DAYS     days a login_attempts row survives its expiry
 //	CP_RETENTION_FINANCIAL_RECORD_DAYS  > 0 in STAGING/PROD
 //	CP_RETENTION_SECURITY_AUDIT_DAYS    > 0 in STAGING/PROD
 //	CP_RETENTION_RAW_MARKET_DATA_DAYS

@@ -710,7 +710,7 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 		f.fund(traders[i], 5_000_000_000)
 	}
 
-	var ok, failed atomic.Int64
+	var ok, failed, retried atomic.Int64
 	// firstErr keeps one failure to report. "4 failed" with no reason is a
 	// result nobody can act on, and this test discarded every error until a
 	// run failed and there was nothing to look at.
@@ -718,6 +718,45 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 		errMu    sync.Mutex
 		firstErr error
 	)
+
+	// A hundred buyers contend for one market row, and the deployment's
+	// lock_timeout is 5 seconds. On a loaded machine some of them wait longer
+	// than that and are refused with CONFLICT and SQLSTATE 55P03 -- which is
+	// the correct outcome of a defended system under contention, not a defect,
+	// and F-31 is the finding that recorded it as unexplained. It is explained
+	// now: observed in a full 50-package sweep as "13 failed, first error:
+	// CONFLICT: ledger operation timed out waiting for the database: ERROR:
+	// canceling statement due to lock timeout (SQLSTATE 55P03)", and passing
+	// three times out of three when the package runs alone.
+	//
+	// So the buyer retries, because that is what a client does with a CONFLICT.
+	// The claim this test makes is unchanged and still strong: a hundred
+	// concurrent buyers all get their units, the version moves exactly once per
+	// trade, the curve invariant holds and supply reconciles. What is no longer
+	// asserted is that all hundred succeed inside one five-second lock wait on
+	// whatever machine happens to be running, which was never a property of the
+	// system.
+	//
+	// The retries are bounded and counted: a regression that turned contention
+	// into livelock would exhaust them and fail here, rather than hiding behind
+	// an unbounded loop.
+	const maxAttempts = 6
+	buyWithRetry := func(trader accounts.AccountID) error {
+		var last error
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			_, err := f.buy(trader, 1_000_000_000, money.Quantity{})
+			if err == nil {
+				return nil
+			}
+			last = err
+			if errs.CodeOf(err) != errs.CodeConflict {
+				return err // anything but contention is a real failure
+			}
+			retried.Add(1)
+		}
+		return last
+	}
+
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	for i := 0; i < workers; i++ {
@@ -725,7 +764,7 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 		go func(idx int) {
 			defer wg.Done()
 			<-start
-			if _, err := f.buy(traders[idx], 1_000_000_000, money.Quantity{}); err != nil {
+			if err := buyWithRetry(traders[idx]); err != nil {
 				failed.Add(1)
 				errMu.Lock()
 				if firstErr == nil {
@@ -741,7 +780,9 @@ func TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything(t *testing
 	wg.Wait()
 
 	require.EqualValues(t, workers, ok.Load(),
-		"every funded buyer should succeed; %d failed, first error: %v", failed.Load(), firstErr)
+		"every funded buyer should succeed; %d failed after %d attempts each, first error: %v",
+		failed.Load(), maxAttempts, firstErr)
+	t.Logf("contention retries: %d across %d buyers", retried.Load(), workers)
 
 	st, err := f.svc.State(f.ctx, testDB, f.market.ID)
 	require.NoError(t, err)

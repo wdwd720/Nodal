@@ -37,6 +37,16 @@ type ActionKind struct {
 	// that renders an approve button for such a kind to an operator without an
 	// elevation is offering a button that cannot work.
 	RequiresBreakGlassApproval bool `json:"requires_break_glass_approval"`
+	// ApproverIsNotTarget is true when target_id names the person the action
+	// elevates, so that person may not approve it however many others were
+	// involved.
+	//
+	// It was absent, so authority.json could not carry it and the console's
+	// port had no target check at all: the grantee of a BREAK_GLASS_GRANT was
+	// shown a live Approve button that the server refuses (F-71). Being more
+	// permissive than the enforcing layer is the one thing this package's doc
+	// says it must never do.
+	ApproverIsNotTarget bool `json:"approver_is_not_target"`
 }
 
 // GateAction is the export view of one capability-gate state-machine step.
@@ -138,6 +148,7 @@ func ActionKinds() []ActionKind {
 			StepUpMaxAge:               Sec(spec.StepUpMaxAge),
 			Expiry:                     Sec(spec.Expiry),
 			RequiresBreakGlassApproval: ElevationRequired(k),
+			ApproverIsNotTarget:        spec.ApproverIsNotTarget,
 		})
 	}
 	return out

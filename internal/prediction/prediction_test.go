@@ -214,7 +214,14 @@ func TestHorizonEnd(t *testing.T) {
 	assert.Equal(t, p.CommittedAt.Add(time.Hour), p.HorizonEnd())
 }
 
-func TestModesMirrorTheDatabaseCheck(t *testing.T) {
+// TestModesAreDeclaredAndClosed was called TestModesMirrorTheDatabaseCheck and
+// opened no database: it asserted a hardcoded length and then that every member
+// of Modes() is a member of Modes(), which holds however far predictions.mode's
+// CHECK has drifted from this list (F-74). The comparison it claimed is
+// test/integration/enums, which reads pg_get_constraintdef for all twelve
+// mode columns and for sixteen other enums besides. What is left here is what a
+// test with no database can establish.
+func TestModesAreDeclaredAndClosed(t *testing.T) {
 	t.Parallel()
 	require.Len(t, Modes(), 6)
 	for _, m := range Modes() {

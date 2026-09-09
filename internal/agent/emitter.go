@@ -76,6 +76,13 @@ func NewEmitter(deps EmitterDeps, authority Authority) (*Emitter, error) {
 		return nil, errs.New(errs.CodeValidationFailed, "agent: emitter requires a pause checker")
 	case deps.Budgets == nil:
 		return nil, errs.New(errs.CodeValidationFailed, "agent: emitter requires a budget reader")
+	case deps.Envelope == nil:
+		// NewBroker refuses six nil dependencies; this one was optional, and
+		// Emit guarded the whole envelope block on `deps.Envelope != nil`. A
+		// caller that forgot it lost the instrument allow-list and the
+		// single-trade cap silently, at any stage, with the agent's own
+		// authority still saying it had an envelope (F-75).
+		return nil, errs.New(errs.CodeValidationFailed, "agent: emitter requires an envelope reader")
 	case authority.AgentID().IsZero():
 		return nil, errs.New(errs.CodeValidationFailed, "agent: emitter requires a frozen authority")
 	}
@@ -145,7 +152,10 @@ func (e *Emitter) Emit(ctx context.Context, tx pgx.Tx, req EmitRequest) (intent.
 		return intent.TradeIntent{}, err
 	}
 
-	if e.deps.Envelope != nil && e.authority.EnvelopeID() != "" {
+	// An empty envelope id is the legitimate case -- the stages below CANARY
+	// carry no envelope, and agents_check2 is what says so. A nil reader is not:
+	// NewEmitter refuses one, so reaching here means the check runs.
+	if e.authority.EnvelopeID() != "" {
 		env, err := e.deps.Envelope.Envelope(ctx, tx, e.authority.EnvelopeID())
 		if err != nil {
 			return intent.TradeIntent{}, err

@@ -58,6 +58,7 @@ type domainAHarness struct {
 	nativeMarkets *nativemarket.Service
 	commerce      *commerce.Service
 	credits       *credit.Service
+	payouts       *payout.Service
 
 	creator accounts.AccountID
 	buyer   accounts.AccountID
@@ -103,7 +104,16 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	t.Helper()
 	clk := clock.NewFake(testNow)
 	led := ledger.NewService(clk, "domaina-admin-itest")
-	led.SetCapabilityResolver(commerceCaps{valuedomain.CapNativeMarketTrading: true})
+	// PAYOUT_RESERVE and PAYOUT_SETTLE are active here as well as
+	// NATIVE_MARKET_TRADING, because PAYOUT_MANUAL_REVIEW_RESOLVE needs a real
+	// payout to resolve, and reserving one moves value INTERNAL_CREDIT ->
+	// PAYOUT_PENDING (F-80). No test on this harness asserts a payout refused
+	// for want of a capability; internal/payout owns that case.
+	led.SetCapabilityResolver(commerceCaps{
+		valuedomain.CapNativeMarketTrading: true,
+		valuedomain.CapPayoutReserve:       true,
+		valuedomain.CapPayoutSettle:        true,
+	})
 	credits := credit.NewService(led, clk)
 
 	assetSvc := nativeasset.NewService(clk, nil)
@@ -115,6 +125,12 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 
 	adminSvc := admin.NewService(clk, audit.NewWriter())
 
+	// The payout service is built before the executors rather than after,
+	// because DomainAExecutors registers PAYOUT_MANUAL_REVIEW_RESOLVE only when
+	// it is given one. It was built after, so the executor was never registered
+	// on this harness and the kind had no test of any kind (F-80).
+	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk)
+
 	fx := newFixtures()
 	ports := fx.ports()
 	ports.AdminActions = adminActionsAdapter{
@@ -124,6 +140,7 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 			NativeMarkets: marketSvc,
 			Commerce:      commerceSvc,
 			Credits:       credits,
+			Payouts:       payoutSvc,
 		}),
 	}
 
@@ -132,7 +149,6 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	// route on this harness answers UNSUPPORTED, which reads as a refusal and
 	// is not one -- and a test asserting a refusal would pass for the wrong
 	// reason. That is how F-37 stayed hidden: no test drove these routes.
-	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk)
 	economy := NativeEconomyDeps{
 		NativeAssets: assetSvc,
 		Payouts:      payoutSvc,
@@ -173,6 +189,7 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	dh := &domainAHarness{
 		harness: h, db: d, clk: clk,
 		nativeAssets: assetSvc, nativeMarkets: marketSvc, commerce: commerceSvc, credits: credits,
+		payouts: payoutSvc,
 		creator: seedCustomerAccount(t, d), buyer: seedCustomerAccount(t, d),
 	}
 	dh.launchMarket(t, commerceCreditAsset(t, d))

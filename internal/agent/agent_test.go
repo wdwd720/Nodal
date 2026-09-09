@@ -103,6 +103,12 @@ func TestCanTransitionRejectsUnknownAndSelf(t *testing.T) {
 
 // TestModeMappingMirrorsTheDatabaseCheck: the Go mapping and the agents CHECK
 // must agree, or a legal-looking promotion fails at COMMIT.
+// TestModeMappingMirrorsTheDatabaseCheck compares ModesForStage against a table
+// typed out below. That is worth having -- it states the intended mapping in one
+// readable place -- but the name overclaims: the CHECK it names is
+// agents_check3, and nothing here opens a database. The comparison against the
+// constraint itself is test/integration/enums'
+// TestIntegration_TheStageModeMappingMatchesTheDatabase, added with F-74.
 func TestModeMappingMirrorsTheDatabaseCheck(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

@@ -79,7 +79,16 @@ func TestSystemCannotRaiseAPersonalPause(t *testing.T) {
 	}
 }
 
-func TestPauseReasonsMirrorTheDatabaseCheck(t *testing.T) {
+// These two were called ...MirrorTheDatabaseCheck and never read the database:
+// they asserted a hardcoded length and then that every member of a list is a
+// member of that list, which holds however far the CHECK constraint has drifted
+// from the Go declaration. The comparison their old names claimed is
+// TestIntegration_TheReasonListsMatchTheDatabase, which reads
+// pg_get_constraintdef and compares the literals. What is left here is what a
+// test with no database can actually establish: the count is deliberate, and an
+// undeclared value is refused.
+
+func TestPauseReasonsAreDeclaredAndClosed(t *testing.T) {
 	t.Parallel()
 	require.Len(t, PauseReasons(), 9)
 	for _, r := range PauseReasons() {
@@ -88,9 +97,9 @@ func TestPauseReasonsMirrorTheDatabaseCheck(t *testing.T) {
 	assert.False(t, PauseReason("BECAUSE").Valid())
 }
 
-func TestSkipReasonsMirrorTheDatabaseCheck(t *testing.T) {
+func TestSkipReasonsAreDeclaredAndClosed(t *testing.T) {
 	t.Parallel()
-	require.Len(t, SkipReasons(), 10)
+	require.Len(t, SkipReasons(), 11)
 	for _, r := range SkipReasons() {
 		assert.True(t, r.Valid())
 	}

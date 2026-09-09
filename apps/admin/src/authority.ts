@@ -32,6 +32,11 @@ export interface ActionKind {
   readonly expiry_seconds: number;
   /** true when only a live break-glass elevation can supply the approval. */
   readonly requires_break_glass_approval: boolean;
+  /**
+   * true when target_id names the person the action elevates, so that person
+   * may not approve it however many others were involved.
+   */
+  readonly approver_is_not_target: boolean;
 }
 
 export interface GateAction {

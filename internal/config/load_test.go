@@ -252,7 +252,7 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 		}
 	}
 	assert.True(t, seen[EnvVarEnvironment])
-	assert.Equal(t, 3+8+8+2+5+5+4+9+2+11+12*6+4+1+6, len(seen))
+	assert.Equal(t, 3+8+9+2+5+5+4+9+2+11+12*6+4+1+7, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

@@ -1358,6 +1358,56 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
+### RESUME HERE — checkpoint 2026-09-08, commit at the end of the F-71..F-81 batch
+
+The `/goal` run against `gola.md` (independent adversarial audit + final
+architecture migration + production proof) was **paused deliberately** at this
+point for a separate provider-integration workstream. It is not blocked and
+nothing is half-applied: every change in the batch is landed, tested and
+recorded.
+
+**State at the pause.**
+
+- Findings F-71 through F-81 are fixed and recorded in `AUDIT_FINDINGS.md`, each
+  with the control observed failing before it was believed. F-31 is closed with
+  the diagnosis it had been waiting for.
+- Migrations 00725, 00726 and 00727 applied. Schema version **727**; the restore
+  drill was re-run at 727 (118 tables, row counts identical, zero balance drift,
+  journal hashes equal).
+- `make lint`, `make unit`, `apps/admin` (26) and `apps/web` (35) npm suites, and
+  the 50-package `make integration` sweep with the external stack live and
+  `CP_TEST_REQUIRE_EXTERNAL_DEPS=1`.
+
+**The next step, exactly.** Continue F-69's inventory, which is the running list
+of what six independent audits found and what has not been fixed. Every item
+still open there carries its own recorded reason; the three that are real work
+rather than deferred-with-cause are:
+
+1. **The other ten transition bindings.** F-78 fixed `agents` by binding the
+   EDGE (`<from>><to>`) instead of the destination. `capability_gates`,
+   `kill_switches`, `accounts`, `assets`, `instruments`, `deposits`,
+   `withdrawals`, `trade_intents`, `orders` and `reconciliation_records` still
+   compare the destination alone. Whether the same composition is reachable
+   depends on each table's own CHECKs, so this is a migration per table with its
+   own exploit test — deliberately not done on the strength of the analogy.
+2. **The 131 unpaired enum CHECKs** named by
+   `test/integration/enums.TestIntegration_NoEnumCheckAppearsUnnoticed`. Each is
+   a list the schema holds with nothing verifying it against the code. The right
+   number is zero.
+3. **The three retention classes with no enforcement**:
+   `CP_RETENTION_SOCIAL_DATA_DAYS`, `CP_RETENTION_MODEL_IO_DAYS`,
+   `CP_RETENTION_OPERATIONAL_LOG_DAYS`. Harder than F-79's: the tables they
+   would cover carry `forbid_mutation` triggers that refuse DELETE outright, so
+   this is partition management or archival-then-drop and belongs in an ADR
+   first.
+
+Still open and unchanged: **F-42** (the AU001 binding trusts a transaction-local
+setting any caller can set) and **F-47** (two deliberate statements about who may
+read encrypted PII contradict each other). Both are recorded with their full
+reasoning in `AUDIT_FINDINGS.md`.
+
+### The original stage plan (historical; most of it has landed)
+
 1. Land wave 2 (§3): re-verify every package on a fresh isolated DB, fold deviations into DECISION_REGISTER, wire `execution` ↔ `intent`/`quote` types and `chain` observers into the executor/recoverer.
 2. `internal/reconciliation` (Stage 7): event-driven/periodic/full modes, record lifecycle, unknown-submission recovery (PART 48), PART 49 crash test, PART 163 operator flow, internal consistency verifiers wired to SEV1 metrics.
 3. Composition roots: `cmd/api` (chi, `/v1` REST per PART 108, problem+json, Idempotency-Key, SSE), `cmd/execution-worker`, `cmd/reconciliation-worker`, `cmd/workflow-worker` (Temporal funding/reconciliation-escalation workflows), `cmd/audit-worker` (Merkle checkpoints, KMS signing, WORM archive, `verify`), `cmd/market-ingest-worker`, `cmd/agent-worker`; `openapi/openapi.yaml` + oapi-codegen strict server + generated TS client; provider wiring by `config.ProviderMode` with fake rejection in STAGING/PROD.
@@ -1427,11 +1477,24 @@ Open lint findings (1), inside an in-progress package and assigned to its owning
 
 ## 6. Architectural changes made
 
-None yet beyond initial decisions (DECISION_REGISTER).
+Recorded in `DECISION_REGISTER.md`, D-001 through D-045. The most recent are
+D-044 (a transition row licenses only the change it describes — the audit
+binding compares the edge rather than the destination) and D-045 (retention
+passes live in `audit-worker` under a `cp_ops` DSN rather than in a ninth
+binary).
 
 ## 7. Migrations applied
 
-None yet.
+00001 through **00727**, 59 files, all embedded in `migrations.FS` and
+checksum-verified by `internal/db/migrate`. An applied migration is never
+edited; a correction is a new file. `go run ./cmd/migrate status` is
+authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
+falls behind the schema.
+
+The current head is 00727 (one signing decision per execution attempt). 00725
+and 00726 landed in the same batch: a skip reason for a run stopped because its
+agent is no longer runnable, and the edge-binding of `agents.state` and
+`agents.stage`.
 
 ## 8. External blockers
 
@@ -1439,7 +1502,16 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-None yet.
+`docs/audit/AUDIT_FINDINGS.md` is the register: 81 findings, of which three are
+open.
+
+| Finding | Priority | Why it is still open |
+|---|---|---|
+| F-42 | P2 | The AU001 binding trusts a transaction-local setting any caller with the application credential can set. The remedy is privilege work on the state columns, and F-78 has now narrowed what that work has to cover for `agents`. |
+| F-47 | P2 | Two deliberate statements about who may read encrypted PII contradict each other. It is a policy decision, not a code fix, and an agent has misread the migration comment as the code twice. |
+| F-69 | P2 | The inventory itself. It shrinks as its items are fixed; §4 names the three that are real work. |
+
+Everything else is FIXED or PART, with the evidence named in the finding.
 
 ## 10. Production-capability state
 
@@ -1608,3 +1680,77 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
   package's audit-count invariant refused it within seconds; and the marker check
   refused two rewrites for naming a package that exists instead of the thing that
   does not.
+
+- **2026-09-08 S2 (a control nobody reaches, in nine more places)**: F-71 through
+  F-79, and F-31 closed with the diagnosis it had been waiting three sessions
+  for. Migrations 00725 and 00726.
+
+  **F-78 (P1)** is the one that matters. 00690's header says it stops "a bare
+  `UPDATE agents SET state = 'LIVE'` by the application role" from moving an
+  agent onto real customer capital with no evidence. It compares the transition
+  row's destination and nothing else — not `from_state`, and not `stage` at
+  all — while both promotion CHECKs on the transitions table open with
+  `from_stage = to_stage OR ...`, because a pause must not have to carry
+  promotion evidence. Those compose: insert a row claiming the stage did not
+  move, then move it. Observed committing from the application pool, promoting a
+  CANARY agent to LIVE with no approval_id and no evidence at all. 00726 binds
+  the edge rather than the destination, so a row licenses a change only if it
+  says where the change started, and `stage` gets a binding of its own.
+
+  **F-72 (P1)**: `internal/agent` may not import `internal/gates`, so it reads
+  `capability_gates` itself — selecting `effective_at` and `expires_at` and
+  deciding on `state` alone. Nothing calls `Admin.ExpireDue`, so the persisted
+  state never catches up, and an expired LIVE_AGENT_TRADING gate read as live to
+  the agent worker for as long as the row sat there. The two readers are now
+  compared against the same row at the same instant, across every condition.
+
+  **F-74** is the class this session keeps finding, in the tests themselves:
+  three tests named `...MirrorsTheDatabaseCheck` that opened no database. They
+  asserted a hardcoded length and then that every member of a list is a member of
+  that list — true however far the CHECK had drifted. The schema holds 163
+  enum CHECK constraints and **none** was compared against a Go declaration by
+  anything. `test/integration/enums` now compares 32 of them plus the
+  stage-to-mode mapping in `agents_check3`, and names the 131 that remain so a
+  new enum column cannot appear unnoticed.
+
+  **F-71** and **F-76** are the affordance layer: the console offered the grantee
+  of a break-glass elevation a live Approve button because the rule that refuses
+  them was unreachable in every fixture, and six exported route guards look like
+  the API's authorization while the API mounts none of them. **F-73**: revoking
+  an agent stopped new runs and let every run already open finish, including its
+  intent — the dispatcher asked `Runnable()` and the runner never did.
+  **F-75**: the intent emitter treated its envelope reader as optional.
+  **F-79**: `login_attempts` kept a plaintext OIDC nonce and PKCE verifier
+  forever, under a migration saying the ops role purged them; `audit-worker`
+  now runs the pass, on a `cp_ops` pool it refuses to start without.
+
+  **F-31**, open and unreproduced since it was written, reproduced itself in this
+  session's third sweep: `13 failed, first error: ... canceling statement due to
+  lock timeout (SQLSTATE 55P03)`. The recorded hypothesis was right, the system
+  was doing the correct thing, and the test's claim — that all hundred
+  buyers succeed inside one five-second lock wait — was a claim about the
+  machine. The buyer retries a CONFLICT now, bounded and counted.
+
+  **F-77** is smaller and worth the sentence: the Redpanda suite created a topic
+  per test and deleted none, so after 134 of them the broker refused to create
+  any more and the next run failed with an error about the partition count —
+  which is the one thing that was not wrong. CI never sees it; only the person
+  running the suite repeatedly does.
+
+  **F-80** and **F-81** close the last two actionable items of F-69's inventory.
+  Two admin action kinds with live executors had never been run by anything, one
+  of them the only Domain A kind that is dual-controlled in both directions;
+  both tests failed the first time they ran, on properties worth having (a live
+  asset is stepped down through CLOSE_ONLY or HALTED before it can be delisted,
+  and `payout.Create` records a REJECTED request rather than erroring when the
+  eligibility decision denies). **F-81**: an execution attempt could carry two
+  signing decisions, because `Sign` is check-then-insert and `attempt_id` had a
+  plain index — `findDecision` conceded it in its own `ORDER BY created_at
+  DESC ... LIMIT 1`. Migration 00727 makes the index unique.
+
+  The recurring class, stated once more because it keeps arriving in new
+  disguises: **a rule that cannot be reached is not enforced, whatever the code
+  says**. F-71's branch was unreachable because every fixture used a target id
+  that was not a user id. F-74's comparisons were unreachable because no test
+  opened a database. F-78's evidence requirement was reachable and simply
+  side-stepped by a row that lied about where it started.

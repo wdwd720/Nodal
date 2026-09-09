@@ -176,3 +176,12 @@ Recorded because their absence might otherwise look like one:
 | Admin tooling for Domain A | not built | Stage 17 |
 | Chaos, load, restore drill for the new subsystems | not run | Stages 20–21 |
 | Terraform for the new tables | not needed (schema is migration-managed) | — |
+| Retention of SOCIAL_DATA, MODEL_IO and OPERATIONAL_LOG | declared in config, enforced by nothing | `AUDIT_FINDINGS.md` F-79; `MASTER_BUILD_STATE.md` §4 |
+| The ten transition bindings that still compare the destination only | `agents` is fixed (D-044); the rest are not | `AUDIT_FINDINGS.md` F-78; `MASTER_BUILD_STATE.md` §4 |
+| 131 enum CHECK constraints with no Go list compared against them | named individually by `test/integration/enums` | `AUDIT_FINDINGS.md` F-74 |
+
+**Checkpoint 2026-09-08.** The F-71..F-81 batch added **no** external blockers.
+Every item it left undone is work, and each is named above or in
+`MASTER_BUILD_STATE.md` §4 with the reason it was left. `CP_DATABASE_OPS_URL`
+(D-045) is a new deployment input, not a blocker: it is a database role the
+repository already creates, and the local default is in `.env.example`.

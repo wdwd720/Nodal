@@ -88,9 +88,15 @@ type HTTPConfig struct {
 // DatabaseConfig configures Postgres. The URLs embed credentials and are
 // therefore SecretRefs (plain only in LOCAL/TEST).
 type DatabaseConfig struct {
-	AppURL           SecretRef
-	MigrateURL       SecretRef
-	ReadOnlyURL      SecretRef
+	AppURL      SecretRef
+	MigrateURL  SecretRef
+	ReadOnlyURL SecretRef
+	// OpsURL is the cp_ops role. It exists for the deletions the application
+	// role is deliberately refused: cp_app may write a login attempt and never
+	// remove one, so an attacker holding it cannot erase the record of the
+	// logins they tried. Optional, and a retention pass that needs it says so
+	// rather than running on the app pool.
+	OpsURL           SecretRef
 	RequireTLS       bool
 	MaxConns         int32
 	MinConns         int32
@@ -245,6 +251,11 @@ type CapabilityConfig struct {
 // PART 122). Production cannot set the financial or security-audit classes to
 // zero.
 type RetentionConfig struct {
+	// LoginAttemptDays bounds how long login_attempts keeps a plaintext OIDC
+	// nonce and PKCE verifier after the attempt expired. Short by design: the
+	// secrets are single-use and the durable record of a login is a
+	// security_events row.
+	LoginAttemptDays    int
 	FinancialRecordDays int
 	SecurityAuditDays   int
 	RawMarketDataDays   int

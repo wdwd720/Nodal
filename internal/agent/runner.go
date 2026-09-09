@@ -137,7 +137,7 @@ func NewRunner(deps RunnerDeps) (*Runner, error) {
 // run cleanly with a recorded skip reason; it never leaves a run open and
 // never fabricates a result.
 func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
-	run, _, auth, err := r.prepare(ctx, runID)
+	run, a, auth, err := r.prepare(ctx, runID)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -152,6 +152,17 @@ func (r *Runner) Run(ctx context.Context, runID RunID) (RunResult, error) {
 		return RunResult{}, err
 	} else if paused {
 		return r.skip(ctx, run, SkipAgentPaused, "agent is paused")
+	}
+
+	// A lifecycle state that cannot open a run cannot finish one either.
+	// PGDispatcher.dispatchAgent asks Runnable() before opening anything, and
+	// this asks the same predicate for a run already in flight: revoking an
+	// agent used to stop new work while every run already open ran through to
+	// its intent, which is the opposite of what an operator revoking an agent
+	// mid-incident is asking for (F-73). Pause is checked above and keeps its
+	// own reason; what reaches here is FAILED, REVOKED and SUPERSEDED.
+	if !a.Runnable() {
+		return r.skip(ctx, run, SkipAgentNotRunnable, "agent is not runnable: state is "+a.State.String())
 	}
 
 	// Run under the agent's own principal: AGENT actor type, no roles, one

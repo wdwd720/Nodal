@@ -126,3 +126,79 @@ func TestDocs_TheReachabilityScanCanSeeACaller(t *testing.T) {
 		require(t, len(callers) > 0, "%s reported reachable with no caller named", symbol)
 	}
 }
+
+// mountedOutside reports the files outside internal/auth/httpmw that reference
+// one of its exported guards. A caller in another package must write the
+// qualified form, so that is what is looked for -- and it has to be, because
+// RequireStepUp is also a function in internal/security with real callers, and
+// a bare-name scan would report it reachable and the check would pass for the
+// wrong reason.
+func mountedOutside(t *testing.T, root, guard string) []string {
+	t.Helper()
+	use := regexp.MustCompile(`httpmw\.` + regexp.QuoteMeta(guard) + `\b`)
+	var callers []string
+	for _, tree := range []string{"internal", "cmd", "scripts"} {
+		err := filepath.WalkDir(filepath.Join(root, tree), func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".go") {
+				return err
+			}
+			rel, _ := filepath.Rel(root, path)
+			rel = filepath.ToSlash(rel)
+			if strings.HasPrefix(rel, "internal/auth/httpmw/") {
+				return nil // the package's own tests are not the API mounting it
+			}
+			body, rerr := os.ReadFile(path) // #nosec G304 -- walking the repository
+			if rerr != nil {
+				return rerr
+			}
+			if use.Match(body) {
+				callers = append(callers, rel)
+			}
+			return nil
+		})
+		require(t, err == nil, "walking %s: %v", tree, err)
+	}
+	return callers
+}
+
+// TestDocs_TheHTTPMiddlewareGuardsAreStillUnused.
+//
+// internal/auth/httpmw exports six route guards -- RequireAuth, RequireRole,
+// RequireRoleAt, RequirePermission, RequirePermissionAt, RequireStepUp -- and
+// the API mounts none of them. Authorization is decided in
+// internal/httpapi/authz.go, per operation, from the generated operation id.
+//
+// The package doc advertised the six as the enforcement without saying that
+// (F-76). Six exported guards that look live are an invitation to mount one
+// beside the real enforcement layer, and two authorization paths over one route
+// is the shape that produces a route guarded in one of them.
+//
+// So the doc now says which layer enforces, and this keeps that sentence true:
+// the day somebody wires one of these, the doc has to change with it.
+func TestDocs_TheHTTPMiddlewareGuardsAreStillUnused(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	guards := []string{"RequireAuth", "RequireRole", "RequireRoleAt", "RequirePermission", "RequirePermissionAt", "RequireStepUp"}
+	for _, g := range guards {
+		if callers := mountedOutside(t, root, g); len(callers) > 0 {
+			t.Errorf("httpmw.%s is now referenced outside its package (%s).\n"+
+				"    If the API has started mounting it, take the paragraph out of internal/auth/httpmw/doc.go\n"+
+				"    that says it does not -- and check that the route is not also guarded by httpapi/authz.go,\n"+
+				"    because two authorization paths over one route is how a route ends up guarded in only one.",
+				g, strings.Join(callers, ", "))
+		}
+	}
+
+	// The other half: the doc must still say so. Without it this check would
+	// pass on a doc that had quietly gone back to advertising them.
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("internal/auth/httpmw/doc.go")))
+	require(t, err == nil, "reading httpmw/doc.go: %v", err)
+	require(t, strings.Contains(string(body), "THE API DOES NOT MOUNT THEM"),
+		"httpmw/doc.go no longer says the API does not mount its guards, and nothing else tells a reader "+
+			"that internal/httpapi/authz.go is the enforcement layer")
+
+	// And the positive control: the scan can see a reference it should see.
+	// Without this the walk could be broken and every guard would look unused.
+	require(t, len(mountedOutside(t, root, "Session")) > 0,
+		"the scan found no reference to httpmw.Session, which cmd/api certainly makes; the walk or the regex is broken")
+}

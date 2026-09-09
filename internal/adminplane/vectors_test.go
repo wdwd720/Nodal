@@ -47,7 +47,15 @@ type actionView struct {
 	RequiresDual bool         `json:"requires_dual"`
 	ProposedBy   string       `json:"proposed_by"`
 	ApprovedBy   string       `json:"approved_by,omitempty"`
-	ExpiresAt    string       `json:"expires_at"`
+	// TargetID matters for kinds whose spec sets ApproverIsNotTarget: it names
+	// the person the action elevates, and that person may not approve it.
+	//
+	// It was absent, and every fixture used the non-user-id "t-1", so
+	// canonicalUserID returned "" and the preceding case always caught first --
+	// the ApproverIsNotTarget branch was never evaluated true in any test, any
+	// integration case or any generated vector (F-71).
+	TargetID  string `json:"target_id,omitempty"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 type vectorCase struct {
@@ -177,8 +185,12 @@ func toAction(t *testing.T, v actionView) admin.Action {
 	t.Helper()
 	exp, err := time.Parse(time.RFC3339Nano, v.ExpiresAt)
 	require.NoError(t, err)
+	target := v.TargetID
+	if target == "" {
+		target = "t-1"
+	}
 	a := admin.Action{
-		ID: admin.NewActionID(), Kind: v.Kind, TargetType: "target", TargetID: "t-1",
+		ID: admin.NewActionID(), Kind: v.Kind, TargetType: "target", TargetID: target,
 		Reason: "a reason of sufficient length", RequiresDual: v.RequiresDual,
 		Status: v.Status, ProposedBy: v.ProposedBy, ProposedAt: now0, ExpiresAt: exp, UpdatedAt: now0,
 	}
@@ -217,6 +229,17 @@ func vectorActions(proposer, other string) map[string]actionView {
 		rejected := base
 		rejected.Status = admin.StatusRejected
 		out[string(kind)+"/rejected"] = rejected
+
+		// For a kind whose target names a person, the case where that person is
+		// the one looking at the queue. Without it the ApproverIsNotTarget
+		// branch is unreachable in every vector, which is how the console came
+		// to have no target check at all (F-71).
+		if spec.ApproverIsNotTarget {
+			elevatee := base
+			elevatee.Status = admin.StatusProposed
+			elevatee.TargetID = other
+			out[string(kind)+"/proposed_for_other"] = elevatee
+		}
 	}
 	// A kind that is not in the closed table. It is not reachable through the
 	// API — Propose refuses an unknown kind — but a stored row whose kind was

@@ -4,6 +4,7 @@ package redpandabus_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,9 +70,21 @@ func newBus(t *testing.T, seeds []string, opts redpandabus.Options) *redpandabus
 
 // createTopic provisions a topic with an exact partition count through the
 // Kafka protocol, so the ordering tests control how many partitions exist
-// instead of inheriting a broker default.
+// instead of inheriting a broker default. It deletes the topic afterwards.
+//
+// The deletion is not tidiness. Every run of this suite used to leave its
+// topics behind, and a local broker accumulates them: after enough runs the
+// partition budget is spent and the NEXT run fails at topic creation with
+// "INVALID_PARTITIONS: Number of partitions is below 1" -- a message that
+// sends the reader to look at the partition count in the call, which is 1
+// (F-77). Observed after 134 leftover topics on a broker up for three days.
+//
+// CI never sees it, because CI starts a fresh broker. It fails only for
+// somebody running the suite repeatedly on one machine, which is the person
+// running it most.
 func createTopic(t *testing.T, seeds []string, name string, partitions int32) {
 	t.Helper()
+	t.Cleanup(func() { deleteTopic(t, seeds, name) })
 	admin, err := kgo.NewClient(kgo.SeedBrokers(seeds...), kgo.ClientID("redpandabus-test-admin"))
 	require.NoError(t, err)
 	defer admin.Close()
@@ -92,6 +105,42 @@ func createTopic(t *testing.T, seeds []string, name string, partitions int32) {
 	require.Len(t, resp.Topics, 1)
 	if err := kerr.ErrorForCode(resp.Topics[0].ErrorCode); err != nil {
 		require.ErrorIs(t, err, kerr.TopicAlreadyExists, "create topic %s", name)
+	}
+}
+
+// deleteTopic removes a topic created by createTopic. A failure is reported,
+// not fatal: the test it belongs to has already finished, and a broker that
+// cannot delete a topic is worth knowing about without turning a passing test
+// red at cleanup time.
+func deleteTopic(t *testing.T, seeds []string, name string) {
+	t.Helper()
+	admin, err := kgo.NewClient(kgo.SeedBrokers(seeds...), kgo.ClientID("redpandabus-test-admin"))
+	if err != nil {
+		t.Logf("cleanup: dial for deleting %s: %v", name, err)
+		return
+	}
+	defer admin.Close()
+
+	req := kmsg.NewDeleteTopicsRequest()
+	req.TopicNames = []string{name}
+	topic := kmsg.NewDeleteTopicsRequestTopic()
+	topic.Topic = &name
+	req.Topics = append(req.Topics, topic)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	raw, err := admin.Request(ctx, &req)
+	if err != nil {
+		t.Logf("cleanup: delete topic %s: %v", name, err)
+		return
+	}
+	resp, ok := raw.(*kmsg.DeleteTopicsResponse)
+	if !ok || len(resp.Topics) != 1 {
+		t.Logf("cleanup: delete topic %s: unexpected response", name)
+		return
+	}
+	if err := kerr.ErrorForCode(resp.Topics[0].ErrorCode); err != nil && !errors.Is(err, kerr.UnknownTopicOrPartition) {
+		t.Logf("cleanup: delete topic %s: %v", name, err)
 	}
 }
 

@@ -54,7 +54,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-28 | P1 | BASELINE | fixed | No deployment could launch a native market: the act every document called separate was never built |
 | F-29 | P2 | BASELINE | fixed | A user could reserve their Credits in a payout request and had no way to release them |
 | F-30 | P2 | BASELINE | fixed | A property test could fail on a no-op mutation, and its shrinker would mis-explain any real failure |
-| F-31 | P3 | NEW | **OPEN, unreproduced** | Four of a hundred concurrent buyers failed once, on a loaded machine, and the test discarded the reason |
+| F-31 | P3 | NEW | fixed | Reproduced: a hundred buyers contend for one row and the 5s lock timeout refuses some of them, which is the system working |
 | F-32 | P2 | BASELINE | fixed | The browser test for the internal-economy pages could not tell a working page from a broken one |
 | F-33 | P2 | BASELINE | fixed | No browser test completed a transaction, so nothing proved a customer could finish anything |
 | F-34 | P1 | BASELINE | fixed | The whole risk kernel was unreachable: no deployment wrote a policy and nothing evaluated one |
@@ -94,6 +94,17 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-68 | P2 | NEW | fixed | The production withdrawal velocity policy bounds nothing, under a comment saying it bounds everything |
 | F-69 | P2 | NEW | open | Inventory: what six independent audits found and what has not been fixed, with the reason for each |
 | F-70 | P2 | NEW | fixed | A kill switch's first activation needed no transition row, because the binding fired only on UPDATE |
+| F-71 | P2 | NEW | fixed | The console offered the grantee of an elevation a live Approve button, because the rule that refuses them was unreachable in every test |
+| F-72 | P1 | NEW | fixed | An expired LIVE_AGENT_TRADING gate still read as live to the agent worker, because its reader decided on `state` alone |
+| F-73 | P2 | NEW | fixed | Revoking an agent stopped new runs and let every run already open finish, including its intent |
+| F-74 | P2 | NEW | fixed | Three tests named for a comparison against the database opened no database; 163 enum CHECKs had nothing checking them |
+| F-75 | P3 | NEW | fixed | The intent emitter treated its envelope reader as optional, and a nil one dropped the instrument allow-list and the per-trade cap in silence |
+| F-76 | P3 | NEW | fixed | Six exported route guards look like the API's authorization and the API mounts none of them |
+| F-77 | P3 | NEW | fixed | The Redpanda suite left every topic it created behind, and eventually failed the next run with an error about the partition count |
+| F-78 | P1 | NEW | fixed | The application role could promote an agent to LIVE with no approval and no evidence, by writing a transition row that denied the change it licensed |
+| F-79 | P2 | NEW | fixed | login_attempts kept a plaintext OIDC nonce and PKCE verifier forever, under a migration saying the ops role purged them |
+| F-80 | P2 | NEW | fixed | Two admin action kinds with live executors had never been run by anything, including the one that decides what happens to a payout |
+| F-81 | P2 | NEW | fixed | An execution attempt could carry two signing decisions, and the reader silently preferred whichever was written last |
 
 ---
 
@@ -887,10 +898,12 @@ times at 3,000 checks each, and the whole property tier three times over.
 The stale `testdata/rapid/...fail` file rapid wrote is deleted: left in place it
 pins every future run to the degenerate case.
 
-## F-31 · Four concurrent buyers failed once and nobody can say why · NEW · P3 · OPEN
+## F-31 · Four concurrent buyers failed once and nobody could say why · NEW · P3 · FIXED
 
-**Status: open and unreproduced.** Recorded rather than closed, because "it
-passed the next eight times" is not a diagnosis.
+**Status: reproduced and closed.** It was recorded rather than closed because
+"it passed the next eight times" is not a diagnosis. The diagnosis arrived on
+its own, in a full 50-package sweep run against a loaded machine — see
+**Reproduced** below.
 
 `TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything` runs 100
 concurrent buys against one market. On one run it reported `every funded buyer
@@ -923,6 +936,45 @@ unproven is whether the cause was environmental.
 
 **What would close it.** The error text from a recurrence. The test now captures
 it, and CI runs this suite on every commit.
+
+**Reproduced.** In this session's third full sweep, with 50 packages each
+provisioning a database and other work on the same machine:
+
+```
+--- FAIL: TestIntegration_ConcurrentBuyersSerialiseWithoutBreakingAnything (12.51s)
+    expected: int(100)
+    actual  : int64(87)
+    every funded buyer should succeed; 13 failed, first error:
+    CONFLICT: ledger operation timed out waiting for the database:
+    ERROR: canceling statement due to lock timeout (SQLSTATE 55P03)
+```
+
+The hypothesis recorded above — "a timeout under contention (`lock_timeout`
+is 5s)" — was right, and the error now says so, because the earlier fix to
+keep the first error is what made the failing run legible. The package passed
+three times out of three immediately afterwards when run alone.
+
+**What it means.** The system did the correct thing. A hundred buyers contend
+for one market row; a lock wait longer than the deployment's five seconds is
+refused with CONFLICT, the transaction rolls back, and nothing partial is
+written — which is why every financial invariant in that test kept passing
+through every one of these failures.
+
+The test was the thing that was wrong. "Every funded buyer should succeed" is a
+claim about throughput on whatever machine happens to be running, and it fails
+on a loaded runner while looking like a correctness failure.
+
+**Fix.** The buyer retries a CONFLICT, which is what a client does with one. The
+claim the test makes is unchanged and still strong: a hundred concurrent buyers
+all get their units, the version moves exactly once per trade, the curve
+invariant holds, and supply reconciles against max supply. What is no longer
+asserted is that all hundred succeed inside one five-second lock wait.
+
+The retries are bounded at six and counted, and the count is logged: contention
+turning into livelock would exhaust them and fail here rather than hide behind
+an unbounded loop. The version assertion is what stops a retry from becoming a
+double buy — a client that retried after a commit it did not see would push
+the version past 100 and fail.
 
 ## F-32 · A browser test that could not tell a working page from a broken one · BASELINE · P2 · FIXED
 
@@ -3124,17 +3176,17 @@ indistinguishable from "not noticed".
 | `EnvelopeService` is entirely unreachable, so `ApplyRealizedPnL` never runs and no envelope can be exhausted by losses | `NewEnvelopeService` has only test callers; no `EnvelopeAdmin` port, no OpenAPI path, no executor for `ENVELOPE_AUTHORITY_CHANGE` | Same shape. Wiring a limit into a subsystem nothing calls produces a control only a test can reach. |
 | ~~`kill_switches_require_transition` fires `AFTER UPDATE OF active`, not on INSERT~~ | — | **Fixed as F-70**, with the migration and tests it wanted. |
 | `internal/eligibility` has zero non-test callers for every function that refuses anything | Only non-test use is a struct field consumed inside the unreachable planner | Already recorded under F-34. Repeating it here so the inventory is complete. |
-| `agents.stage` and `agents.mode` are not bound to a transition row, so a PAUSED agent can be moved to stage LIVE by direct UPDATE and then Resumed with only `agent:pause` | 00690 binds `state` only; `cp_require_transition` returns early when the bound column did not change; the `agents` CHECK exempts side states | The sharpest of the agent findings and additive to F-42 — F-42's remedy (revoke UPDATE on the state column) would leave `stage` and `mode` writable. Belongs with F-42's privilege work, deliberately not started piecemeal. |
-| `agent.NewEmitter` does not require an `EnvelopeReader`; a nil one silently drops the instrument allow-list and the per-trade cap at any stage | `emitter.go` guards the whole envelope block on `deps.Envelope != nil`, while `NewBroker` refuses six nil dependencies | A one-line fail-closed fix in an inert package. Grouped with the agent-runtime work rather than committed alone, because its test needs the runtime the finding is about. |
-| The runner never reads the agent's lifecycle state, so REVOKED, FAILED and SUPERSEDED agents keep executing runs already open | `prepare` uses `Stage` and `RiskPolicyVersion` only; the run-selection query has no agent-state predicate | Same package, same reason. `Pause` does reach an in-flight run, at five independent points, so the mechanism exists and one state is missing from it. |
-| `Store.LiveTradingEnabled` scans `effective_at` and `expires_at` and discards them, so an expired LIVE gate reads as active to the agent worker | `store.go`; `gates.Evaluate` checks both | Real divergence between two readers of the same gate. Fixing it means deciding which reader is authoritative, which is a design call in an inert path. |
-| Four admin action kinds have no test at all: `ENVELOPE_AUTHORITY_CHANGE`, `WITHDRAWAL_APPROVE`, `NATIVE_ASSET_DELIST`, `PAYOUT_MANUAL_REVIEW_RESOLVE` | Grepped for both the constant and the literal across every `*_test.go` | `PAYOUT_MANUAL_REVIEW_RESOLVE` and `NATIVE_ASSET_DELIST` have live executors and are the two worth writing first. Recorded rather than written because a test per kind is a body of work, not a patch. |
-| `ApproverIsNotTarget` is never evaluated true in any test or generated vector, and the console cannot express it | Every fixture uses a `target_id` that is not a user id, so the preceding case always catches first; `ActionKind` has no such field, so `authority.json` cannot carry it | The server refuses correctly (proven end to end), so this is a dead button rather than an escalation — but it violates `adminplane`'s own stated contract not to be more permissive than the enforcement layer. |
+| ~~`agents.stage` and `agents.mode` are not bound to a transition row~~ | — | **Fixed as F-78**, which turned out to be larger than the item: the same gap let a transition row deny the change it licensed, and a promotion to LIVE needed no approval at all. |
+| ~~`agent.NewEmitter` does not require an `EnvelopeReader`~~ | — | **Fixed as F-75.** The deferral reason was wrong: a constructor that must refuse a nil dependency needs no runtime to test. |
+| ~~The runner never reads the agent's lifecycle state~~ | — | **Fixed as F-73**, with the migration the new skip reason needed. |
+| ~~`Store.LiveTradingEnabled` scans `effective_at` and `expires_at` and discards them~~ | — | **Fixed as F-72.** On re-reading it, "which reader is authoritative" was not a design call: the mandate is to fail closed, and the stricter reader is the one that does. |
+| ~~Four admin action kinds have no test at all~~ | — | **The two with live executors are fixed as F-80.** The other two execute nothing yet, which is F-34's territory. |
+| ~~`ApproverIsNotTarget` is never evaluated true in any test or generated vector~~ | — | **Fixed as F-71**, with the export, the vectors, the console branch and the test that reaches it. |
 | `admin.refuseAgent` permits the **absent** principal, so `VerifyApproved` runs fully unauthenticated | `if p, ok := PrincipalFrom(ctx); ok && p.ActorType == ActorAgent` | Deliberate per its doc ("it needs no principal but refuses agents") and every caller holds a `db.Querier` already. Recorded because the reasoning deserves to be revisited, not because it is wrong today. |
 | Two IdP identities for one human defeat approver ≠ proposer entirely | `users` is unique on `(idp_issuer, idp_subject)`; there is no person entity; `RoleAdmin` holds both halves of break-glass | An identity-model decision, not a code fix. Already noted under F-64. |
-| `login_attempts` accumulates plaintext `nonce` and `code_verifier` indefinitely | 00641 says the ops role purges it; nothing does, and `PurgeExpired` has no callers of any kind | A retention job, which is operations work with no home in this tree yet. |
-| `internal/auth/httpmw`'s `RequireAuth`, `RequireRole`, `RequirePermission` and `RequireStepUp` all have zero non-test callers | The API enforces through `httpapi/authz.go` instead; `httpmw/doc.go` still advertises the dead set | Not a hole — the live path is the correct one — but a doc that names the wrong enforcement layer, and five exported guards that look live. |
-| `signing_decisions` has a plain index on `attempt_id`, not a unique constraint | 00300; `findDecision` concedes it with `ORDER BY created_at DESC ... LIMIT 1` | Recorded under F-67. |
+| ~~`login_attempts` accumulates plaintext `nonce` and `code_verifier` indefinitely~~ | — | **Fixed as F-79**, in `audit-worker`, which already owns what the platform keeps and for how long. (The inventory named `PurgeExpired`, which purges sessions; `login_attempts` had no purge function at all.) |
+| ~~`internal/auth/httpmw`'s guards all have zero non-test callers~~ | — | **Fixed as F-76**, in the doc and with a control that keeps it true. Six guards, not five. |
+| ~~`signing_decisions` has a plain index on `attempt_id`, not a unique constraint~~ | — | **Fixed as F-81**, with the migration and the test that shows the second row being refused. |
 
 **Two things the audits confirmed are genuinely well covered**, recorded because
 a clean answer is worth as much as a finding: the kill-switch never-blocked
@@ -3198,6 +3250,644 @@ built scope ids from the **head** of a UUIDv7, which is the millisecond
 timestamp, so two ids minted in the same millisecond collided on
 `UNIQUE (kind, scope_id)`. `internal/httpapi`'s `launchMarket` carries a comment
 warning about precisely that.
+
+## F-71 · The grantee of an elevation was offered a button the server refuses · NEW · P2 · FIXED
+
+**Found by** the adminplane audit; verified against `decision.go`, the generated
+corpus and `apps/admin/src/decide.ts` before acting. Listed in F-69's inventory.
+
+**What was found.** `decideApprove` carries two shapes of self-approval. The
+first is approver ≠ proposer. The second is `ApproverIsNotTarget`: for a kind
+whose `target_id` names a person who *gains* something — `BREAK_GLASS_GRANT`
+is the only one — that person may not approve it, however many others were
+involved, because otherwise the second signature is supplied by the beneficiary.
+
+The server enforces both and that is proven end to end. The **affordance layer's**
+copy of the second was never evaluated true:
+
+```go
+case a.UserID == "":
+    d.Reason, d.Code = ReasonSubjectNotUser, errs.CodeForbidden
+case a.UserID == action.ProposedBy:
+    ...
+case spec.ApproverIsNotTarget && a.UserID == canonicalUserID(action.TargetID):
+```
+
+Every fixture in the package used `TargetID: "t-1"`. That is not a user id, so
+`canonicalUserID` returned `""`, and the `a.UserID == ""` case two lines above
+caught first — in every unit test, every integration case and every generated
+vector. `ActionKind` therefore had no such field, `authority.json` could not
+carry it, and `apps/admin/src/decide.ts` had **no target check at all**: the
+console rendered an enabled Approve button to the grantee, and the server
+refused the click.
+
+That is the specific failure `internal/adminplane/doc.go` forbids in as many
+words — *"Be more permissive than the enforcing layer. The agreement test
+treats an allowed-but-refused verdict as a failure, because that is the bug that
+produces a dead button"* — and it is worse than an ordinary dead button,
+because the operator it is dead for is the one person in the room with a motive
+to keep clicking it.
+
+**Why three separate guards all missed it.** Each for its own structural reason,
+which is why it survived:
+
+- `TestVectorsAreNotVacuous` asserts every `Reason` occurs somewhere in the
+  corpus. `SELF_APPROVAL` did occur — always from the proposer arm. A
+  coverage check on *outcomes* cannot see an unreached *cause* of a reached
+  outcome.
+- The Go↔TypeScript agreement test drives the same fixtures, so both
+  implementations agreed about a case neither one ran.
+- `TestNoStandingRoleCanApprove` skips kinds whose approve permission is
+  standing, and `break_glass:approve` is standing by deliberate design — so
+  it skips exactly the one kind carrying the flag.
+
+This is a variant of a class already named twice in this document: a path only
+tests can walk looks finished from inside the tests. Here the path was one no
+test could walk, and the assertions were all about somewhere else.
+
+**Fix.** `ApproverIsNotTarget` is exported on `adminplane.ActionKind` and
+populated from the spec, so `authority.json` carries it. `actionView` gained a
+`TargetID`, and `vectorActions` emits a `proposed_for_other` case for every kind
+whose spec sets the flag, targeted at a principal the corpus actually has. The
+console's port gained the matching branch. Both goldens were regenerated.
+
+**Evidence.** `TestDecideApprove_TheTargetOfAnElevationCannotApproveIt` drives
+the grantee (refused, `SELF_APPROVAL`), a third principal with identical
+entitlements (**allowed** — the control that separates a corrected affordance
+from a broken one), a non-user `target_id` (allowed, the shape every fixture used
+to have), and a kind whose spec does not set the flag, elevated so it clears the
+dual-control permission check rather than passing on `MISSING_PERMISSION`.
+
+Observed failing with the branch disabled: `ALLOWED` where `SELF_APPROVAL` was
+expected. The console's copy was disabled the same way and the agreement test
+failed on the regenerated vectors — which is the point of the whole exercise,
+because before this it could not have.
+
+`TestTheVectorsReachTheTargetBranch` asserts the corpus still contains such a
+case, so the check cannot quietly become unreachable again.
+
+The regenerated corpus now carries 8 `SELF_APPROVAL` verdicts reached through
+this branch, on `BREAK_GLASS_GRANT/proposed_for_other`, for principals whose
+`subject_id` is the action's `target_id`.
+
+## F-72 · An expired gate still read as live to the agent worker · NEW · P1 · FIXED
+
+**Found by** the killswitch/eligibility audit; listed in F-69's inventory as a
+divergence between two readers, deferred there on the grounds that deciding
+which reader is authoritative was a design call. On checking it against the
+source, it is not: the mandate is to fail closed, and the stricter reader is the
+one that does.
+
+**What was found.** `internal/agent` may not import `internal/gates` — an
+agent tree can never reach the gate controller — so it reads
+`capability_gates` with a SELECT of its own. That reader selected `effective_at`
+and `expires_at` and then decided on `state` alone:
+
+```go
+err := q.QueryRow(ctx,
+    `SELECT state, effective_at, expires_at FROM capability_gates ...`).
+    Scan(&state, &effectiveAt, &expiresAt)
+...
+if state != "ACTIVE" { return false, state, nil }
+return true, state, nil
+```
+
+Both window columns were fetched and neither was read. `gates.Evaluate` calls
+the same row inactive once `expires_at` has passed, once `effective_at` is unset
+or still in the future, and once `revoked_at` is set — four conditions the
+agent-side reader did not have.
+
+**Why it lasted.** `Admin.ExpireDue` moves an expired gate to EXPIRED, and its
+own doc says it is "meant for a periodic worker". It has no non-test caller.
+Nothing sweeps, so the persisted `state` never catches up on its own, and the
+divergence lasted for as long as the row sat there rather than until the next
+sweep. What it permitted was live agent trading past the end of its approval
+window — the exact thing the window exists to stop, and the reason this is
+P1 rather than P2.
+
+`LiveTradingEnabled` also had **no test of any kind**, which is the other half of
+the answer.
+
+**Fix.** The reader applies every condition that can change after activation
+without a state transition: revocation, `effective_at` unset or in the future,
+`expires_at` passed. It returns a `LiveTrading` value carrying the state **and**
+the refusing reason, because a gate whose window has closed still reads
+`state=ACTIVE`, and an operator told only that would go looking for the wrong
+thing. `cmd/agent-worker` logs both.
+
+The quorum and evidence conditions `Evaluate` also applies are deliberately not
+re-checked, and the code says why: `Activate` enforces them before it writes
+ACTIVE, and migration 00701 leaves `cp_app` no UPDATE on any column of this table
+except `version`, so no approver, evidence reference or window can be moved
+underneath the reader by the application at all.
+
+**Evidence.** `TestIntegration_TheAgentGateReaderAgreesWithTheAuthority` drives a
+real proposal, approval and activation by three distinct principals, then
+compares `Evaluate` and `Store.LiveTradingEnabled` against the same row at the
+same instant across every condition: window open, `expires_at` passed (by moving
+the CLOCK, not the row — which is how it happens in production: nobody edits
+anything and the gate simply outlives its approval), `effective_at` in the
+future, `effective_at` NULL, `revoked_at` set while the state still says ACTIVE,
+open again after each case restores, and revoked through the workflow. It asserts
+the two readers agree whatever the answer is, so a change that makes them differ
+in the other direction fails here too.
+
+`TestIntegration_TheAgentGateReaderFailsClosedWithNoRow` covers the absent gate.
+
+Observed failing with the four conditions disabled: *"the authority says
+active=false (expires_at has passed) and the agent reader says enabled=true"*,
+and the same for the other three.
+
+The test lives in `internal/gates` rather than `internal/agent` because
+`test/security`'s boundary check counts test files, so the agent tree may not
+import the gate package even in a test. The direction that is allowed is that
+one.
+
+## F-73 · Revoking an agent did not stop the runs it already had open · NEW · P2 · FIXED
+
+**Found by** the agent-authority audit; listed in F-69's inventory.
+
+**What was found.** `PGDispatcher.dispatchAgent` asks `a.Runnable()` before
+opening anything, so a REVOKED, FAILED or SUPERSEDED agent gets no **new** runs.
+That is correct and was already built.
+
+`Runner.prepare` loads the same agent row, takes `stage` and
+`risk_policy_version` from it and discards the rest; `ListOpenRuns` selects on
+the run's status with no predicate on the agent. So every run already open ran
+through to its intent.
+
+Pause reaches an in-flight run at five separate points — at the start, and
+again before every broker call, before the prediction and before the intent
+— which is the right shape and is what made this easy to miss. The lifecycle
+control an operator reaches for in an incident is the terminal one, and that was
+the one that did not reach.
+
+**Fix.** `Runner.Run` asks the same predicate the dispatcher asks, in the same
+position relative to the pause check, so the two cannot diverge: one predicate,
+two callers. Migration 00725 adds `AGENT_NOT_RUNNABLE` to the `agent_runs`
+skip-reason CHECK. It covers all three states with the state itself recorded in
+`agent_runs.error`, rather than three near-identical enum values that every
+reader would have to know to treat alike. The existing reasons would each have
+been a lie: `AGENT_PAUSED` names a different control, and `MISSING_DEPENDENCY`
+(the fallback for an undeclared reason) would send an operator to look at data
+feeds.
+
+**Evidence.** `TestIntegration_ARevokedAgentStopsARunAlreadyOpen` drives a real
+`Revoke` and a real `Fail` through the lifecycle, then runs the open run: the run
+ends SKIPPED{AGENT_NOT_RUNNABLE}, the recorded error names the state, the provider
+adapter is never dialled, the evaluator is never called, and **no prediction and
+no intent exist** afterwards.
+
+`TestIntegration_ARunnableAgentStillRuns` is the control that matters more: a
+check one condition too wide would pass every case above and stop the platform's
+agents altogether, which is the more expensive failure of the two.
+
+Observed failing with the check disabled: the revoked agent's run reached the
+evaluator and produced its prediction.
+
+## F-74 · Three tests named for a comparison they never made · NEW · P2 · FIXED
+
+**Found by** the F-73 work: adding a skip reason broke
+`TestSkipReasonsMirrorTheDatabaseCheck`, and reading it to see what it wanted
+showed that what it wanted was a number changed. The three names quoted in
+this finding do not exist any more; they are what the tests were called
+before it.
+
+**What was found.** Three tests were named for a comparison against the schema
+and none of them opened a database:
+
+```go
+// TestSkipReasonsMirrorTheDatabaseCheck and the two like it do not exist any
+// more. This is what they were.
+func TestSkipReasonsMirrorTheDatabaseCheck(t *testing.T) {
+    require.Len(t, SkipReasons(), 10)
+    for _, r := range SkipReasons() {
+        assert.True(t, r.Valid())      // Valid() means "is in SkipReasons()"
+    }
+}
+```
+
+A hardcoded length, and then that every member of a list is a member of that
+list — which holds however far the CHECK constraint has drifted. The same
+shape in `TestPauseReasonsMirrorTheDatabaseCheck` and in `internal/prediction`'s
+`TestModesMirrorTheDatabaseCheck` — names that do not exist any more, for
+the reason this finding gives. A fourth,
+`TestModeMappingMirrorsTheDatabaseCheck`, compares `ModesForStage` against a
+table typed out inside the test — a third copy of the mapping, compared
+with the second, while `agents_check3`, the constraint that actually refuses the
+write, went unread.
+
+Five rows of `REQUIREMENTS_TRACEABILITY.md` cited these as the evidence that Go
+and the schema agree about modes, skip reasons and pause reasons.
+
+The failure they were meant to catch arrives at the worst possible moment: a
+value declared in Go and absent from the CHECK is a row that cannot be written at
+all, and the constraint violation lands exactly when the thing being recorded has
+already gone wrong — a skipped run, a raised pause, a halted market. The
+other direction is quieter and worse: a value the database accepts that no switch
+in the code handles.
+
+**How wide it is.** The schema holds **163** enum CHECK constraints. Before this
+finding, **none** was compared against a Go declaration by any test.
+
+**Fix.** `test/integration/enums` compares 32 constraints against the 20 Go lists
+that declare them — including all twelve `mode` columns — and
+`agents_check3` against `ModesForStage`, parsing the constraint's stage-to-mode
+structure out of `pg_get_constraintdef` rather than trusting a copy.
+`TestTheThreeModeListsAgreeWithEachOther` keeps `agent.Modes`, `intent.Modes` and
+`prediction.Modes` in step with one another, which comparing each against the
+schema separately would not catch.
+
+The pairing is written out by hand and not derived. Pairing by "these two sets
+happen to be equal" would pass by construction and prove nothing — the same
+defect in a new place.
+
+`TestIntegration_NoEnumCheckAppearsUnnoticed` names the **131** enum CHECKs still
+unpaired, so a new enum column fails the suite until somebody decides whether it
+has a Go counterpart worth comparing against. That is the decision nobody made
+for the 131. The list is an inventory, not an allow-list: the right number is
+zero, and adding a name to it is admitting a second copy of a list with nothing
+keeping the two in step.
+
+The two tautological unit tests keep the part a test with no database can
+establish, and are renamed for it — `TestSkipReasonsAreDeclaredAndClosed`,
+`TestPauseReasonsAreDeclaredAndClosed`, `TestModesAreDeclaredAndClosed`. The five
+traceability rows now cite the test that makes the comparison.
+
+**Evidence.** Observed failing three ways. A value added to `allSkipReasons` with
+no migration: *"agent.SkipReasons() and agent_runs_skip_reason_check have
+diverged"*. A name removed from the unpaired inventory: *"an enum CHECK appeared
+or disappeared without a decision about its Go counterpart"*. And
+`stageModes[StageShadow]` given `ModeLive` — a change that would let a
+SHADOW agent run in LIVE mode: *"ModesForStage(SHADOW) and agents_check3 have
+diverged"*.
+
+**One thing this surfaced and did not fix.** `admin_actions.kind` has **no CHECK
+constraint at all**, while every other enum column in the schema has one:
+`admin.Kinds()` is 19 values the database has never heard of. The Go layer
+refuses an unknown kind at `Propose`, and an unknown kind reaching the executor
+finds no executor, so the blast radius is a junk row rather than an unauthorised
+action. It is recorded here rather than fixed because adding the CHECK creates an
+obligation — a new admin action kind becomes a migration — and that
+is a decision about how the kind list is meant to evolve, not a patch.
+
+## F-75 · The emitter's envelope reader was optional · NEW · P3 · FIXED
+
+**Found by** the agent-authority audit; listed in F-69's inventory, deferred
+there because "its test needs the runtime the finding is about". That was wrong:
+a constructor that must refuse a nil dependency is testable with no runtime at
+all, which is what the fix does.
+
+**What was found.** `NewBroker` refuses six nil dependencies. `NewEmitter`
+refused four and let `EmitterDeps.Envelope` be nil, and `Emit` guarded the whole
+envelope block on it:
+
+```go
+if e.deps.Envelope != nil && e.authority.EnvelopeID() != "" {
+```
+
+A caller that omitted the reader lost the instrument allow-list and the
+single-trade cap, at any stage, while the agent's own frozen authority still
+carried an envelope id. The two conditions in that line are not alike: an empty
+envelope id is a legitimate state — the stages below CANARY carry no
+envelope, and `agents_check2` is what says so — while a nil reader is a
+wiring mistake being treated as a decision.
+
+**Honest scope.** The path is inert. The only production `EmitterFor`, in
+`cmd/agent-worker`, refuses outright with "the intent emitter is wired by the API
+composition root; this worker proposes no intents yet", and the only other caller
+is a test that passes the reader. Nothing is currently unguarded. This is
+hardening ahead of the wiring, and it is worth doing exactly because the wiring
+has not happened: a fail-open default is at its most dangerous in the window
+between "nothing calls it" and "something does".
+
+**Fix.** `NewEmitter` refuses a nil envelope reader, and `Emit` now guards only
+on the envelope id, with the reason in the code.
+
+**Evidence.** `TestNewEmitterRefusesEveryMissingDependency` accepts the complete
+set first — without that control every refusal below it could be passing
+for some other reason — then blanks each of the five dependencies in turn
+and requires a VALIDATION_FAILED naming the missing one.
+
+## F-76 · Six route guards that look like the API's authorization · NEW · P3 · FIXED
+
+**Found by** the auth/identity audit; listed in F-69's inventory.
+
+**What was found.** `internal/auth/httpmw` exports `RequireAuth`, `RequireRole`,
+`RequireRoleAt`, `RequirePermission`, `RequirePermissionAt` and `RequireStepUp`,
+and its package doc presented them as the authorization layer. The API mounts
+none of them: every reference outside the package is in the package's own test
+file. Authorization is decided in `internal/httpapi/authz.go`, per operation,
+from the generated operation id.
+
+That layer is the better design and is not in question here — a route
+added to the OpenAPI document cannot be left unguarded by forgetting to wrap it,
+which is exactly the failure a middleware chain invites. The finding is the doc:
+a reader following it would believe the guards are live, and six exported guards
+that look live are an invitation to mount one beside the real enforcement layer.
+Two authorization paths over one route is how a route ends up guarded in only
+one of them.
+
+**Fix.** The package doc says which layer enforces, in those words, and says the
+guards are kept because they are the right shape for a second server rather than
+because anything uses them.
+
+**Evidence.** `TestDocs_TheHTTPMiddlewareGuardsAreStillUnused` checks both
+halves: no reference to any of the six outside the package, and the doc still
+carrying the sentence that says so — without the second half the check
+would pass on a doc that had quietly gone back to advertising them. It carries
+its own positive control (`httpmw.Session`, which `cmd/api` certainly mounts),
+because a broken walk would report every guard unused and agree with any doc at
+all.
+
+It looks for the qualified form, `httpmw.RequireStepUp`, and it has to:
+`RequireStepUp` is also a function in `internal/security` with real callers, and
+a bare-name scan reports it reachable — the check would have passed for
+the wrong reason.
+
+Observed failing with `r.Use(httpmw.RequireAuth)` planted in
+`internal/httpapi/server.go`.
+
+## F-77 · A test suite that poisons its own broker · NEW · P3 · FIXED
+
+**Found by** this session's integration sweep failing three Redpanda tests with
+`INVALID_PARTITIONS: Number of partitions is below 1` — on calls that pass
+a partition count of 1 and 3.
+
+**What was found.** `createTopic` provisions a topic per test and nothing ever
+removed one. The local broker had **134** leftover `test.bus.*` topics from
+previous runs, 252 partitions in total, and had reached the point where it would
+create no more. Deleting them made the suite pass unchanged.
+
+The error is the interesting part. It names the partition count, and the
+partition count in the failing call is correct, so it sends the reader to look
+at the one thing that is not wrong. Three tests failed and two passed, which
+reads like a flaky broker rather than a full one.
+
+CI never sees this: every run gets a fresh container. It fails only for somebody
+running the suite repeatedly on one machine — which is the person running
+it most, and the person for whom a confusing failure costs the most time.
+
+**Fix.** `createTopic` registers a `t.Cleanup` that deletes the topic. The
+deletion logs rather than fails: the test it belongs to has already finished,
+and a broker that cannot delete a topic is worth knowing about without turning a
+passing test red at cleanup time.
+
+**Evidence.** Measured directly: 7 topics before a full package run and 7 after,
+where before the fix each run added 7. The suite passes on a clean broker and on
+one it has already used.
+
+## F-78 · A promotion licensed by a row that denied it · NEW · P1 · FIXED
+
+**Found by** following F-69's inventory item about `agents.stage` and `mode` not
+being bound to a transition row. The item was real and narrower than what was
+actually there.
+
+**What was found.** Migration 00690 binds `agents.state` to a row in
+`agent_lifecycle_transitions` written in the same transaction, and its header
+states the stake plainly: *"without this, a bare `UPDATE agents SET state =
+'LIVE'` by the application role would move an agent onto real customer capital
+leaving no evidence of the promotion, its approval or its gate evidence"*.
+
+The binding compares one thing. `cp_flag_transition` records the row's
+`to_state`; `cp_require_transition` raises AU001 unless that equals the NEW
+state. Nothing looks at `from_state`, and nothing looks at `stage` at all.
+
+Both promotion CHECKs on the transitions table open with `from_stage = to_stage
+OR ...`, and they must: a pause or a resume keeps the stage and cannot be made
+to carry promotion evidence.
+
+Those two facts compose. In one transaction, holding nothing but the
+application role's INSERT and UPDATE:
+
+```sql
+INSERT INTO agent_lifecycle_transitions (from_state, to_state, from_stage, to_stage, ...)
+VALUES ('CANARY', 'LIVE', 'LIVE', 'LIVE', ...);          -- the lie is from_stage
+UPDATE agents SET state = 'LIVE', stage = 'LIVE', mode = 'LIVE' WHERE id = ...;
+```
+
+`from_stage = to_stage` satisfies the first clause of both CHECKs, so no
+`approval_id`, no `ir_hash`, no risk policy version or hash and no
+`evidence_hash` are required. `to_state = 'LIVE'` is exactly what the state
+binding demands. The agent is at LIVE, on the ladder, with an envelope, and the
+only record of how it got there is a row saying it was already there.
+
+**A second route needs no lie.** `agents_check` permits any stage while the
+state is a side state, so a PAUSED agent's `stage` can be moved with no
+transition row at all — and `Resume`, which needs only `agent:pause`, then
+sets the state to whatever stage it finds. That is the escalation F-69's
+inventory described, and it is the smaller half.
+
+This was **observed committing** before the fix, from the application pool,
+against an agent walked to CANARY through the real lifecycle.
+
+**Fix.** Migration 00726 binds the EDGE rather than the destination. The flag
+records `<from>><to>` and the constraint trigger compares it against
+`OLD.col || '>' || NEW.col`, so a row licenses a change only if it says where
+that change started. `stage` gets a binding of its own under a separate label.
+The destination-only trigger is replaced rather than kept beside the new one:
+two triggers raising the same SQLSTATE for one write would make every failure
+ambiguous about which rule fired, which is F-53's lesson.
+
+**Scope, stated rather than implied.** This covers `agents`. The other ten
+bindings 00603 established compare the destination alone and have the same
+shape; whether the same composition is reachable depends on each table's own
+CHECKs, and answering that is a migration per table with its own exploit test.
+It is recorded here rather than done on the strength of the analogy — the
+analogy is what would make it a claim instead of a proof.
+
+`mode` is deliberately not bound: `agent_lifecycle_transitions` has no `to_mode`
+column to bind it to, and `agents_check3` pins mode to stage for every rung
+except BACKTEST_ELIGIBLE, whose two modes both move simulated money only.
+
+**Evidence.** `TestIntegration_APromotionCannotBeLicensedByARowThatDeniesIt`
+drives the exploit above and requires AU001, then re-reads the agent and asserts
+it is still at CANARY. `TestIntegration_ABareStageUpdateIsRefused` pauses through
+the real lifecycle first, so the state is legitimately PAUSED and `agents_check`
+is not what refuses, then moves the stage with no transition row.
+
+`TestIntegration_AStageChangeWithAnHonestRowIsAccepted` is the control, and the
+suite's existing ladder walk is the larger one: a binding one condition too
+strict would refuse every real promotion, and the whole lifecycle suite passes
+unchanged.
+
+Both refusals were observed failing before the migration: *"An error is expected
+but got nil — the application role promoted an agent to LIVE with no
+approval and no evidence"*.
+
+## F-79 · A plaintext PKCE verifier kept forever, under a migration saying otherwise · NEW · P2 · FIXED
+
+**Found by** the auth/identity audit; listed in F-69's inventory as "a retention
+job, which is operations work with no home in this tree yet".
+
+**What was found.** `login_attempts` holds the OIDC `state`, the `nonce` and the
+PKCE `code_verifier` in plaintext, plus the IP and user agent of whoever began
+the login. Migration 00641 grants `DELETE` on it to `cp_ops` and says, in its
+Down section, that the table "is transient and purged by the ops role instead".
+
+Nothing deleted a row. Not a worker, not a script, not a scheduled task: every
+login ever begun was still there in full, secrets included.
+
+The secrets are single-use — `Complete` sets `consumed_at` under
+`FOR UPDATE`, and `test/security/replay_test.go` proves a consumed attempt
+cannot be replayed — so this is exposure rather than an authentication
+hole. That is why it is P2. It is still a table of credentials and IP addresses
+growing without bound, against a written statement that it does not.
+
+**Where the job now lives, and why.** `cmd/audit-worker`. Adding a binary was
+available and rejected: ADR-0003 lists the eight deployables as a decision and
+puts "any additional binaries" out of scope, so a ninth is an ADR amendment
+rather than a patch. Of the eight, this one already owns what the platform keeps
+and for how long — it reads `CP_RETENTION_SECURITY_AUDIT_DAYS` to set the
+archive's Object Lock window — so retention of records is the remit it
+already has.
+
+`audit-worker purge` runs one pass; `audit-worker run` runs one an hour. The
+interval is fixed rather than configurable: retention is measured in days and
+the pass is a single DELETE on an indexed column, so there is nothing to tune,
+and one more knob is one more thing that can be set to a value meaning "never".
+
+**The credential stays where it belongs.** `cp_app` holds SELECT, INSERT and
+UPDATE on `login_attempts` and deliberately not DELETE, so an attacker holding
+the application credential cannot erase the record of the logins they attempted.
+The purge therefore needs `cp_ops`, and `CP_DATABASE_OPS_URL` is a new optional
+variable rather than a new production requirement for every binary: making it
+required in STAGING/PROD would hand `cmd/api` an operations credential it never
+uses, against PART 100's rule that a binary loads only the secrets its role
+permits.
+
+`audit-worker` opens that pool before its first tick and **refuses to start
+without it**. A retention pass that quietly does nothing is the defect this
+finding is about, and the operator who deployed the binary asked for the purge
+by deploying it.
+
+**Retention.** `CP_RETENTION_LOGIN_ATTEMPT_DAYS`, default 2. The durable record
+of a login is a `security_events` row of kind `login`, which the purge never
+touches, so the investigative trail survives; what goes is the plaintext. The Go
+layer also refuses anything under a 24-hour floor, because a configuration value
+is one edit away from meaning "all of them", and an operator looking at a
+login-flow anomaly is usually doing it the next morning.
+
+**Evidence.** `TestIntegration_ExpiredLoginAttemptsArePurged` plants three
+attempts — long expired, expired inside the window, and not yet expired
+— and asserts only the first goes. It asserts the privilege first: the
+application role's own DELETE is refused with 42501, which is what makes the ops
+role necessary rather than merely conventional.
+`TestIntegration_ThePurgeRefusesTooShortARetention` covers the floor.
+
+Observed failing with the DELETE made a no-op: *"the purge deleted nothing at
+all"* and *"purge-old-... survived the purge"*.
+
+**What this did not fix.** `CP_RETENTION_SOCIAL_DATA_DAYS`,
+`CP_RETENTION_MODEL_IO_DAYS` and `CP_RETENTION_OPERATIONAL_LOG_DAYS` are
+declared, validated and read by nothing. Three of the six retention classes the
+configuration announces have no enforcement anywhere. Two of the six do:
+SECURITY_AUDIT sets the archive's Object Lock window, and RAW_MARKET_DATA sets
+the ClickHouse TTL.
+
+The three that do not are harder than this one and not the same shape: the
+tables they would cover (`tool_invocations`, `model_calls`, the audit stream)
+carry `forbid_mutation` triggers that refuse DELETE outright, so retention there
+means partition management or archival-then-drop, not a DELETE with a WHERE
+clause. That is a design decision about how an append-only financial record is
+aged out, and it belongs in an ADR rather than in a purge command.
+
+## F-80 · Two executors nothing had ever run · NEW · P2 · FIXED
+
+**Found by** the admin dual-control audit; listed in F-69's inventory as four
+kinds with no test at all.
+
+**What was found.** Grepping for the constant **and** the literal across every
+`*_test.go` found nothing for `ENVELOPE_AUTHORITY_CHANGE`, `WITHDRAWAL_APPROVE`,
+`NATIVE_ASSET_DELIST` or `PAYOUT_MANUAL_REVIEW_RESOLVE`.
+
+The first two execute nothing yet — their subsystems are unreachable,
+which is F-34's territory and recorded there. The other two run real code
+against real state, and one of them is the only Domain A kind that is
+dual-controlled in both directions, because resolving a payout by hand decides
+what happens to money somebody is waiting for.
+
+An untested executor is worse than an untested branch. An executor is the thing
+that turns two signatures into an effect, and nothing had ever run these.
+
+`PAYOUT_MANUAL_REVIEW_RESOLVE` had a second reason for being untestable: the
+Domain A harness built its payout service **after** the executor set, and
+`DomainAExecutors` registers that executor only when it is given one. The kind
+was not merely untested on that harness; it was not registered.
+
+**Evidence, and what running them found.** Both tests failed the first time they
+ran, on properties worth having:
+
+*Delist.* An ACTIVE asset cannot be delisted at all. `statusTransitions` sends a
+live asset through CLOSE_ONLY or HALTED first, so holders are either given the
+chance to exit or the halt is a recorded decision somebody has to make. An
+approval does not create an edge the subsystem does not have.
+`TestIntegration_DelistingALiveAssetGoesThroughTheStatusTable` asserts the
+refusal, the step-down, the delist, and that DELISTED is terminal.
+`TestIntegration_ADelistTargetingSomethingElseIsRefused` covers a target that is
+not an asset id, because the executor reads the action's target rather than its
+params.
+
+*Payout.* `Create` records a REJECTED request when the eligibility decision
+denies, rather than returning an error, so the fixture built a rejected payout
+and then failed to flag it for review: *"a payout cannot go REJECTED ->
+MANUAL_REVIEW"*. The helper now asserts `decision.Sufficient()` — the
+precondition everything below it depends on — and reports the eligible
+amount and the reasons when it does not hold.
+
+`TestIntegration_ResolvingAStuckPayoutTakesTwoPeople` drives the whole shape:
+one signature does not execute, the proposer cannot approve their own however
+elevated, a second person can, and only then does the payout move.
+`TestIntegration_NoResolutionDeclaresAPayoutSettled` is the property the
+executor's own comment names — the provider is authoritative for
+settlement, and an operator who could assert it by hand could close a ticket by
+claiming money moved. It tries SETTLED, PAID, COMPLETE and the empty string,
+each fully approved so the refusal cannot be coming from the approval, and ends
+with a declared resolution that does execute so the four refusals are not
+passing for some other reason.
+
+## F-81 · An attempt could carry two signing decisions · NEW · P2 · FIXED
+
+**Found by** F-69's inventory, where it was recorded under F-67 and left.
+
+**What was found.** `signing.Service.Sign` treats a decision as the attempt's
+idempotency record: it calls `findDecision`, and replays what it finds instead
+of inspecting and deciding again. The refusal path writes a row too, so a
+rejected attempt replays its rejection. One decision per attempt is the model.
+
+00300 gave `attempt_id` a plain index and no uniqueness, and `findDecision`
+concedes it in its own SQL:
+
+```sql
+WHERE attempt_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1
+```
+
+"The latest decision" is a phrase that only makes sense if there can be more
+than one, and check-then-insert with no constraint is how there comes to be:
+two concurrent `Sign` calls for one attempt both find nothing and both insert.
+The rows are immutable, so the loser is not corrected — it stays, and every
+later read silently prefers whichever sorted last.
+
+That matters more here than a duplicate row usually does. A decision carries
+`inspected_tx_hash`, and F-67 made the replay path bind the bytes offered
+against the bytes that decision approved. Two decisions for one attempt are two
+different sets of approved bytes, with the binding comparing against whichever
+row was written last.
+
+**Fix.** Migration 00727 replaces the plain index with a unique one. It replaces
+rather than joins it: a unique index serves every lookup the plain index served.
+
+**Evidence.** `TestIntegration_AnAttemptCannotCarryTwoSigningDecisions` signs
+once through the real service, then writes a second decision row for the same
+attempt directly — which is what the losing side of the race does, with the
+INSERT privilege the application role holds — and requires 23505. It then
+signs again and asserts the replay still returns the one decision there is,
+because a constraint that refused legitimate replays would be worse than the
+hole it closes.
+
+`TestIntegration_ADifferentAttemptStillGetsItsOwnDecision` is the control: a
+constraint one column too wide would refuse the second attempt of a retrying
+plan and stop execution altogether.
 
 ## Findings deliberately NOT raised
 

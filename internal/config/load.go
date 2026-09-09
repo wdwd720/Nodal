@@ -305,6 +305,9 @@ func specs() []varSpec {
 			setSecret(func(c *Config) *SecretRef { return &c.Database.MigrateURL }))),
 		secretVar(opt("CP_DATABASE_READONLY_URL", secDatabase, "SecretRef to the read-only Postgres URL (cp_readonly). Optional; readers fall back to the app URL.", "",
 			setSecret(func(c *Config) *SecretRef { return &c.Database.ReadOnlyURL }))),
+		secretVar(opt("CP_DATABASE_OPS_URL", secDatabase, "SecretRef to the operations-role Postgres URL (cp_ops). Optional; the retention passes need it, because cp_app holds no DELETE on the rows they remove.",
+			"postgres://cp_ops:cp_ops_local@127.0.0.1:5433/controlplane?sslmode=disable",
+			setSecret(func(c *Config) *SecretRef { return &c.Database.OpsURL }))),
 		req("CP_DATABASE_REQUIRE_TLS", secDatabase, "Refuse Postgres connections that are not TLS with certificate verification. Must be true in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Database.RequireTLS })),
 		req("CP_DATABASE_MAX_CONNS", secDatabase, "Maximum pool connections.", "10",
@@ -433,6 +436,8 @@ func specs() []varSpec {
 		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
 
+		req("CP_RETENTION_LOGIN_ATTEMPT_DAYS", secRetention, "Days a login_attempts row is kept after it expired. It holds a plaintext OIDC nonce and PKCE verifier; the durable record of a login is a security_events row. Minimum 1.", "2",
+			setInt(func(c *Config) *int { return &c.Retention.LoginAttemptDays })),
 		req("CP_RETENTION_FINANCIAL_RECORD_DAYS", secRetention, "Retention of the FINANCIAL_RECORD class. Must be > 0 in STAGING/PROD.", "2555",
 			setInt(func(c *Config) *int { return &c.Retention.FinancialRecordDays })),
 		req("CP_RETENTION_SECURITY_AUDIT_DAYS", secRetention, "Retention of the SECURITY_AUDIT class. Must be > 0 in STAGING/PROD.", "2555",

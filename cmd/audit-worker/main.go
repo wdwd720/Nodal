@@ -10,6 +10,14 @@
 //	audit-worker verify           verify chains, checkpoint signatures, roots and archived objects;
 //	                              prints the report as JSON; exit 1 on any failure (make verify-audit)
 //	audit-worker bundle <id>      print the proof bundle for a fill id or a trade intent id
+//	audit-worker purge            one retention pass over login_attempts and exit
+//
+// Retention runs here because this binary is already the one that owns what
+// the platform keeps and for how long: it reads CP_RETENTION_SECURITY_AUDIT_DAYS
+// for the archive's Object Lock window. The purge needs the cp_ops role
+// (CP_DATABASE_OPS_URL), because cp_app is deliberately refused DELETE on the
+// rows it removes, and this binary refuses to run it rather than skipping when
+// that URL is unset (F-79).
 //
 // Configuration comes from internal/config (CP_* variables). The signer is
 // KMS (CP_KMS_AUDIT_SIGNING_KEY_ID, CP_KMS_REGION) unless the environment is
@@ -59,6 +67,7 @@ import (
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/identity"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/proof"
 )
@@ -78,6 +87,11 @@ const (
 	defaultCheckpointInterval = 5 * time.Minute
 	defaultVerifyInterval     = time.Hour
 	defaultSweepEvery         = 12
+	// purgeInterval is fixed rather than configurable. Retention is measured
+	// in days and the pass is a single DELETE on an indexed column, so there is
+	// nothing to tune -- and one more knob is one more thing that can be set to
+	// a value that means "never".
+	purgeInterval = time.Hour
 
 	exitOK      = 0
 	exitFailure = 1
@@ -112,7 +126,7 @@ func run(args []string, lookup func(string) (string, bool), stdout, stderr io.Wr
 	case "help", "-h", "--help":
 		usage(stdout)
 		return exitOK
-	case "run", "checkpoint", "verify", "bundle":
+	case "run", "checkpoint", "verify", "bundle", "purge":
 	default:
 		fmt.Fprintf(stderr, "audit-worker: unknown command %q\n", cmd)
 		usage(stderr)
@@ -152,6 +166,8 @@ func run(args []string, lookup func(string) (string, bool), stdout, stderr io.Wr
 		}
 	case "bundle":
 		err = cmdBundle(ctx, d, rest[0], stdout)
+	case "purge":
+		err = cmdPurge(ctx, d, stdout)
 	}
 	if err != nil {
 		if errors.Is(err, errUsage) {
@@ -174,6 +190,7 @@ func usage(w io.Writer) {
   verify               verify hash chains, checkpoint signatures, Merkle roots and archived objects;
                        print the JSON report; exit 1 on any failure
   bundle <id>          print the proof bundle (PART 88) for a fill id or a trade intent id
+  purge                one retention pass over login_attempts and exit; needs CP_DATABASE_OPS_URL
 
 env: CP_* (see internal/config); %s (SecretRef to a PEM P-256 key, LOCAL/TEST/DEV only);
      %s (filesystem archive directory, LOCAL/TEST/DEV only); %s (leaves per checkpoint)
@@ -525,6 +542,66 @@ func cmdBundle(ctx context.Context, d *deps, idText string, stdout io.Writer) er
 // verify interval. Verification failures are logged at error level and
 // recorded in audit_verification_runs; the worker keeps running so the
 // failure keeps being reported.
+// cmdPurge deletes login_attempts rows whose expiry passed more than
+// CP_RETENTION_LOGIN_ATTEMPT_DAYS ago and reports how many went.
+//
+// The rows hold a plaintext OIDC nonce and PKCE code_verifier, and 00641 said
+// they were "purged by the ops role instead" while nothing anywhere deleted one
+// (F-79). The secrets are single-use and the durable record of a login is a
+// security_events row, so this loses no investigative trail.
+func cmdPurge(ctx context.Context, d *deps, out io.Writer) error {
+	pool, err := d.opsPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	n, err := purgeOnce(ctx, d, pool)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "purged %d expired login attempt(s) older than %d day(s)\n", n, d.cfg.Retention.LoginAttemptDays)
+	return nil
+}
+
+// purgeOnce is the single pass both the command and the run loop perform.
+func purgeOnce(ctx context.Context, d *deps, pool identity.Purger) (int64, error) {
+	days := d.cfg.Retention.LoginAttemptDays
+	if days <= 0 {
+		return 0, fmt.Errorf("CP_RETENTION_LOGIN_ATTEMPT_DAYS is %d: a retention pass with no retention would delete every login attempt ever made", days)
+	}
+	n, err := identity.PurgeLoginAttempts(ctx, pool, d.clk.Now(), time.Duration(days)*24*time.Hour)
+	if err != nil {
+		return 0, err
+	}
+	d.log.Info("login attempts purged", "rows", n, "retention_days", days)
+	return n, nil
+}
+
+// opsPool opens the cp_ops connection. It is a separate pool, opened only by
+// the commands that need it, because cp_app is deliberately refused DELETE on
+// login_attempts: an attacker holding the application credential must not be
+// able to erase the record of the logins they attempted.
+//
+// It refuses rather than skipping when the URL is unset. A retention pass that
+// quietly does nothing is the shape of defect this repository keeps finding --
+// a control that reports success having run nothing -- and the operator who
+// deployed this binary asked for the purge by deploying it.
+func (d *deps) opsPool(ctx context.Context) (*db.DB, error) {
+	if d.cfg.Database.OpsURL == "" {
+		return nil, errors.New("CP_DATABASE_OPS_URL is not set: the retention pass needs the cp_ops role, " +
+			"because cp_app holds no DELETE on login_attempts")
+	}
+	url, err := config.NewResolver(d.cfg.Env, d.lookup).Resolve(ctx, d.cfg.Database.OpsURL)
+	if err != nil {
+		return nil, fmt.Errorf("resolve ops database url: %w", err)
+	}
+	return db.Open(ctx, db.Config{
+		URL: url, AppName: "audit-worker-ops", RequireTLS: d.cfg.Database.RequireTLS,
+		MaxConns: 2, MinConns: 0,
+		StatementTimeout: d.cfg.Database.StatementTimeout, LockTimeout: d.cfg.Database.LockTimeout,
+	})
+}
+
 func cmdRun(ctx context.Context, d *deps) error {
 	cpInterval, err := durationVar(d.lookup, envCheckpointInterval, defaultCheckpointInterval)
 	if err != nil {
@@ -550,12 +627,24 @@ func cmdRun(ctx context.Context, d *deps) error {
 	if err != nil {
 		return err
 	}
-	d.log.Info("audit worker starting", "checkpoint_interval", cpInterval, "verify_interval", verifyInterval, "sweep_every", sweepEvery)
+	// The ops pool is opened before the first tick, not at the first purge, so
+	// a missing or wrong CP_DATABASE_OPS_URL is a startup failure rather than a
+	// daily log line nobody reads. A retention pass that never runs is the
+	// state this worker was given the command to end (F-79).
+	opsPool, err := d.opsPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer opsPool.Close()
+	d.log.Info("audit worker starting", "checkpoint_interval", cpInterval, "verify_interval", verifyInterval,
+		"sweep_every", sweepEvery, "purge_interval", purgeInterval, "login_attempt_retention_days", d.cfg.Retention.LoginAttemptDays)
 
 	checkpointTick := time.NewTicker(cpInterval)
 	defer checkpointTick.Stop()
 	verifyTick := time.NewTicker(verifyInterval)
 	defer verifyTick.Stop()
+	purgeTick := time.NewTicker(purgeInterval)
+	defer purgeTick.Stop()
 
 	runs := 0
 	doCheckpoint := func() {
@@ -614,6 +703,14 @@ func cmdRun(ctx context.Context, d *deps) error {
 			doCheckpoint()
 		case <-verifyTick.C:
 			doVerify()
+		case <-purgeTick.C:
+			// A failed purge is logged and the loop continues: retention is
+			// not integrity, and stopping the checkpointer because a DELETE
+			// failed would trade the thing this worker exists for against the
+			// thing it was lately given to do.
+			if _, err := purgeOnce(ctx, d, opsPool); err != nil {
+				d.log.Error("retention pass failed", "error", err)
+			}
 		}
 	}
 }

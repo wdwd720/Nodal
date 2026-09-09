@@ -346,7 +346,8 @@
       "propose_permission": "account:freeze",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "AGENT_PROMOTE",
@@ -355,7 +356,8 @@
       "approve_permission": "agent:promote_approve",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 86400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "BREAK_GLASS_GRANT",
@@ -364,7 +366,8 @@
       "approve_permission": "break_glass:approve",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 1800,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": true
     },
     {
       "kind": "CAPABILITY_GATE_APPROVE",
@@ -373,7 +376,8 @@
       "approve_permission": "gate:approve",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 86400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "COMMERCE_PRODUCT_WITHDRAW",
@@ -381,7 +385,8 @@
       "propose_permission": "commerce:moderate",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "COMMERCE_SELLER_SUSPEND",
@@ -389,7 +394,8 @@
       "propose_permission": "commerce:moderate",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "ENVELOPE_AUTHORITY_CHANGE",
@@ -398,7 +404,8 @@
       "approve_permission": "envelope:approve",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 86400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "KILL_SWITCH_RELEASE",
@@ -407,7 +414,8 @@
       "approve_permission": "kill:release",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "LEDGER_CORRECTION",
@@ -416,7 +424,8 @@
       "approve_permission": "ledger:approve_correction",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 14400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_ASSET_DELIST",
@@ -424,7 +433,8 @@
       "propose_permission": "native_asset:moderate",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_ASSET_MODERATION_VERDICT",
@@ -432,7 +442,8 @@
       "propose_permission": "native_asset:moderate",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 86400,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_MARKET_CLOSE_ONLY",
@@ -440,7 +451,8 @@
       "propose_permission": "native_market:halt",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_MARKET_FREEZE",
@@ -448,7 +460,8 @@
       "propose_permission": "native_market:halt",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_MARKET_HALT",
@@ -456,7 +469,8 @@
       "propose_permission": "native_market:halt",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": false
+      "requires_break_glass_approval": false,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_MARKET_LAUNCH",
@@ -465,7 +479,8 @@
       "approve_permission": "native_market:resume",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "NATIVE_MARKET_RESUME",
@@ -474,7 +489,8 @@
       "approve_permission": "native_market:resume",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 14400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "PAYOUT_MANUAL_REVIEW_RESOLVE",
@@ -483,7 +499,8 @@
       "approve_permission": "payout:approve",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 14400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "RECONCILIATION_RESOLVE_MATERIAL",
@@ -492,7 +509,8 @@
       "approve_permission": "reconciliation:approve",
       "step_up_max_age_seconds": 900,
       "expiry_seconds": 14400,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     },
     {
       "kind": "WITHDRAWAL_APPROVE",
@@ -501,7 +519,8 @@
       "approve_permission": "withdrawal:approve",
       "step_up_max_age_seconds": 300,
       "expiry_seconds": 3600,
-      "requires_break_glass_approval": true
+      "requires_break_glass_approval": true,
+      "approver_is_not_target": false
     }
   ],
   "action_statuses": [

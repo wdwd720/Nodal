@@ -63,12 +63,18 @@ const (
 	SkipKillSwitch          SkipReason = "KILL_SWITCH"
 	SkipEffectMismatch      SkipReason = "EFFECT_MISMATCH"
 	SkipEnvelopeUnavailable SkipReason = "ENVELOPE_UNAVAILABLE"
+	// SkipAgentNotRunnable ends a run already open because the agent's
+	// lifecycle state no longer permits work: FAILED, REVOKED or SUPERSEDED.
+	// It is distinct from AGENT_PAUSED because a pause is reversible and an
+	// operator reading the two needs to tell them apart; the state itself is
+	// recorded in agent_runs.error (F-73).
+	SkipAgentNotRunnable SkipReason = "AGENT_NOT_RUNNABLE"
 )
 
 var allSkipReasons = []SkipReason{
 	SkipStaleData, SkipMissingDependency, SkipBudgetExhausted, SkipModelUnavailable,
 	SkipRateLimited, SkipConditionFalse, SkipAgentPaused, SkipKillSwitch,
-	SkipEffectMismatch, SkipEnvelopeUnavailable,
+	SkipEffectMismatch, SkipEnvelopeUnavailable, SkipAgentNotRunnable,
 }
 
 // SkipReasons returns every declared skip reason.

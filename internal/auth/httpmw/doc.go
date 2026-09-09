@@ -11,6 +11,15 @@
 //     503: an outage must never demote requests to anonymous silently.
 //   - RequireAuth, RequireRole, RequirePermission and RequireStepUp turn
 //     the security package's decisions into 401/403 problem+json responses.
+//     THE API DOES NOT MOUNT THEM. Authorization for every route the server
+//     serves is decided in internal/httpapi/authz.go, per operation, from the
+//     generated operation id -- which is the correct place for it, because a
+//     route added to the OpenAPI document cannot then be left unguarded by
+//     forgetting to wrap it. These six are reachable from this package's own
+//     tests and from nowhere else (F-76). They are kept because they are the
+//     right shape for a second server, and left documented as unused because a
+//     guard that looks live is one somebody will mount beside the real
+//     enforcement layer and end up with two authorization paths that disagree.
 //   - CSRF rejects unsafe methods (POST/PUT/PATCH/DELETE and anything not
 //     GET/HEAD/OPTIONS/TRACE) unless the browser proves the request is
 //     first-party: Sec-Fetch-Site ∈ {same-origin, none}, or Origin exactly

@@ -38,6 +38,7 @@ interface VectorAction {
   requires_dual: boolean;
   proposed_by: string;
   approved_by?: string;
+  target_id?: string;
   expires_at: string;
 }
 
@@ -93,6 +94,7 @@ function toAction(v: VectorAction): DecideAction {
     requiresDual: v.requires_dual,
     proposedBy: v.proposed_by,
     approvedBy: v.approved_by ?? null,
+    ...(v.target_id === undefined ? {} : { targetId: v.target_id }),
     expiresAt: v.expires_at,
   };
 }
