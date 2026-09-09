@@ -169,6 +169,51 @@ func New(ctx context.Context, cfg Config) (*Provider, error) {
 	}
 	algList := slices.Sorted(maps.Keys(algs))
 
+	// PKCE is not optional in this implementation: AuthCodeURL always sends a
+	// code_challenge with method S256. An issuer that does not support it
+	// ignores both parameters and completes the flow anyway, so the
+	// authorization code stops being bound to this client and nothing
+	// anywhere reports that it happened. Refusing at construction is the only
+	// place that difference is visible.
+	//
+	// The field is optional in discovery, so an issuer that omits it is not
+	// refused -- only one that publishes a list without S256 in it, which is a
+	// statement rather than a silence.
+	if len(disc.CodeChallengeMethodsSupported) > 0 &&
+		!slices.Contains(disc.CodeChallengeMethodsSupported, "S256") {
+		return nil, fmt.Errorf(
+			"oidc: issuer advertises code_challenge_methods_supported %v and not S256; this client always sends a PKCE challenge, and an issuer that ignores it leaves the authorization code unbound",
+			disc.CodeChallengeMethodsSupported)
+	}
+
+	// The same reasoning for acr_values. Step-up sends acr_values and is
+	// ultimately decided by the amr claim, not this -- but an issuer that has
+	// published the acr values it supports, and does not list ours, will
+	// silently ignore the request. A step-up that is quietly not performed is
+	// the failure this whole path exists to prevent, so it is refused here
+	// rather than discovered when somebody's break-glass elevation succeeds
+	// without a second factor.
+	//
+	// acr_values is a preference list and not a conjunction: the issuer
+	// satisfies ONE of the requested values, in order. So the check is that at
+	// least one overlaps, not that all do -- asking for "phrh phr" against an
+	// issuer that supports only "phr" is a correct request that will be
+	// answered, and refusing it would be refusing the spec.
+	if len(disc.ACRValuesSupported) > 0 && len(cfg.StepUpACRValues) > 0 {
+		overlap := false
+		for _, want := range cfg.StepUpACRValues {
+			if slices.Contains(disc.ACRValuesSupported, want) {
+				overlap = true
+				break
+			}
+		}
+		if !overlap {
+			return nil, fmt.Errorf(
+				"oidc: step-up asks for acr %v and the issuer advertises acr_values_supported %v, which share nothing; the request would be ignored",
+				cfg.StepUpACRValues, disc.ACRValuesSupported)
+		}
+	}
+
 	verifier := gooidc.NewVerifier(cfg.Issuer, newKeySet(disc.JWKSURI, client, cfg.Now, cfg.JWKSMinRefresh, algList), &gooidc.Config{
 		ClientID:             cfg.ClientID,
 		SupportedSigningAlgs: algList,

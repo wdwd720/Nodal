@@ -64,6 +64,10 @@ type OIDCServer struct {
 	// instead of Issuer (to test issuer-mismatch handling).
 	DiscoveryIssuer string
 
+	// DiscoveryOverrides is merged over the discovery document. A nil value
+	// removes the key entirely.
+	DiscoveryOverrides map[string]any
+
 	mu        sync.Mutex
 	key       *rsa.PrivateKey
 	kid       string
@@ -158,7 +162,7 @@ func (s *OIDCServer) discovery(w http.ResponseWriter, r *http.Request) {
 	if s.DiscoveryIssuer != "" {
 		iss = s.DiscoveryIssuer
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	doc := map[string]any{
 		"issuer":                                iss,
 		"authorization_endpoint":                s.Issuer + "/authorize",
 		"token_endpoint":                        s.Issuer + "/token",
@@ -170,7 +174,20 @@ func (s *OIDCServer) discovery(w http.ResponseWriter, r *http.Request) {
 		"scopes_supported":                      []string{"openid", "email", "profile"},
 		"claims_supported":                      []string{"sub", "email", "email_verified", "amr", "acr", "auth_time"},
 		"acr_values_supported":                  []string{"phr"},
-	})
+	}
+	// DiscoveryOverrides lets a test say what a real issuer would say. A nil
+	// value deletes the key, which is how an issuer that publishes nothing
+	// about a capability is distinguished from one that publishes a list
+	// without us in it -- a distinction the provider treats differently and
+	// which could not otherwise be exercised.
+	for k, v := range s.DiscoveryOverrides {
+		if v == nil {
+			delete(doc, k)
+			continue
+		}
+		doc[k] = v
+	}
+	writeJSON(w, http.StatusOK, doc)
 }
 
 func (s *OIDCServer) jwks(w http.ResponseWriter, r *http.Request) {

@@ -460,3 +460,77 @@ func TestGenerators(t *testing.T) {
 		t.Fatal("state/nonce generation weak")
 	}
 }
+
+// TestNew_RefusesAnIssuerThatWouldIgnorePKCE: AuthCodeURL always sends a
+// code_challenge with method S256. An issuer that does not support it ignores
+// both parameters and completes the flow anyway, so the authorization code
+// stops being bound to this client and nothing reports that it happened.
+func TestNew_RefusesAnIssuerThatWouldIgnorePKCE(t *testing.T) {
+	srv := authtest.NewOIDCServer(t, "cp-web", "cp-secret")
+	srv.DiscoveryOverrides = map[string]any{"code_challenge_methods_supported": []string{"plain"}}
+	clk := authtest.NewClock(t0)
+	srv.Now = clk.Now
+
+	_, err := oidc.New(context.Background(), oidc.Config{
+		Issuer: srv.Issuer, ClientID: srv.ClientID, ClientSecret: srv.ClientSecret,
+		RedirectURL: "http://127.0.0.1:3000/auth/callback", HTTPClient: srv.Client(), Now: clk.Now,
+	})
+	if err == nil {
+		t.Fatal("an issuer advertising only plain PKCE must be refused")
+	}
+	if !strings.Contains(err.Error(), "S256") {
+		t.Fatalf("error should name the missing method: %v", err)
+	}
+}
+
+// TestNew_OmittedPKCEMetadataIsNotARefusal: the field is optional in
+// discovery. Silence is not a statement, and refusing on it would lock out
+// conforming issuers that simply do not publish it.
+func TestNew_OmittedPKCEMetadataIsNotARefusal(t *testing.T) {
+	srv := authtest.NewOIDCServer(t, "cp-web", "cp-secret")
+	srv.DiscoveryOverrides = map[string]any{"code_challenge_methods_supported": nil}
+	clk := authtest.NewClock(t0)
+	srv.Now = clk.Now
+
+	if _, err := oidc.New(context.Background(), oidc.Config{
+		Issuer: srv.Issuer, ClientID: srv.ClientID, ClientSecret: srv.ClientSecret,
+		RedirectURL: "http://127.0.0.1:3000/auth/callback", HTTPClient: srv.Client(), Now: clk.Now,
+	}); err != nil {
+		t.Fatalf("an issuer that publishes nothing about PKCE must still be accepted: %v", err)
+	}
+}
+
+// TestNew_RefusesAnIssuerThatWouldIgnoreStepUp: a step-up that is quietly not
+// performed is the failure the whole path exists to prevent.
+func TestNew_RefusesAnIssuerThatWouldIgnoreStepUp(t *testing.T) {
+	srv := authtest.NewOIDCServer(t, "cp-web", "cp-secret")
+	srv.DiscoveryOverrides = map[string]any{"acr_values_supported": []string{"urn:something:else"}}
+	clk := authtest.NewClock(t0)
+	srv.Now = clk.Now
+
+	_, err := oidc.New(context.Background(), oidc.Config{
+		Issuer: srv.Issuer, ClientID: srv.ClientID, ClientSecret: srv.ClientSecret,
+		RedirectURL: "http://127.0.0.1:3000/auth/callback", HTTPClient: srv.Client(), Now: clk.Now,
+	})
+	if err == nil {
+		t.Fatal("an issuer that supports none of our step-up acr values must be refused")
+	}
+	if !strings.Contains(err.Error(), "share nothing") {
+		t.Fatalf("error should explain the mismatch: %v", err)
+	}
+}
+
+// TestNew_AcrValuesArePreferencesNotAConjunction: acr_values is an ordered
+// preference list and the issuer satisfies ONE of them. Asking for "phrh phr"
+// against an issuer that supports only "phr" is a correct request, and
+// refusing it would be refusing the spec.
+func TestNew_AcrValuesArePreferencesNotAConjunction(t *testing.T) {
+	e := setup(t, func(c *oidc.Config) { c.StepUpACRValues = []string{"phrh", "phr"} })
+	u, err := url.Parse(e.p.AuthCodeURL("s", "n", "c", true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := u.Query().Get("acr_values"); got != "phrh phr" {
+		t.Fatalf("acr_values = %q, want both in preference order", got)
+	}
+}
