@@ -65,10 +65,141 @@ type Capabilities struct {
 	SupportsLookup       bool
 	Currencies           []string
 
+	// --- crypto payout specifics -----------------------------------------
+	//
+	// These exist because "supports crypto payout" turned out to be four
+	// separate questions, and answering only the first one is how a system
+	// promises a user USDC on Solana when the provider sends USDC on Base.
+	// Every one of them is read from the provider's own documentation.
+
+	// SupportedAssets are the payout assets, e.g. "USDC". Empty means none,
+	// which is what an unverified adapter reports.
+	SupportedAssets []string
+	// SupportedNetworks are the chains the provider will actually send on,
+	// e.g. "base", "polygon". A network absent from this list cannot be paid
+	// to however well the wallet supports it.
+	SupportedNetworks []string
+	// SupportsExternalWallet is whether the destination may be a wallet the
+	// user controls, as opposed to one the provider or the platform holds.
+	SupportsExternalWallet bool
+	// DestinationHeldByProvider is true when the provider, not Nodal, holds
+	// the destination address.
+	//
+	// It is a capability rather than a detail because it decides who is
+	// authoritative for where money goes. When it is true, a Nodal-side wallet
+	// record is a mirror and must never be treated as the destination; when it
+	// is false, Nodal owns the address and owes the user every protection in
+	// the account-takeover section.
+	DestinationHeldByProvider bool
+
+	// --- what the provider requires before it will pay ---------------------
+
+	// RequiresConnect is whether the recipient must exist as an account under
+	// a platform relationship, rather than as a bare payee.
+	RequiresConnect bool
+	// RequiresRecipientAccount is whether a per-user provider object must be
+	// created and onboarded before any payout.
+	RequiresRecipientAccount bool
+	// RequiresKYC is whether the recipient must complete identity
+	// verification. Who performs it is KYCPerformedByProvider.
+	RequiresKYC bool
+	// KYCPerformedByProvider is true when the PROVIDER collects and verifies
+	// identity documents, so Nodal stores a state and never a document.
+	KYCPerformedByProvider bool
+	// RequiresTaxInfo is whether the provider collects tax information from
+	// recipients.
+	RequiresTaxInfo bool
+	// RecipientKinds are the legal kinds of recipient the provider will pay,
+	// e.g. "individual", "sole_proprietor". A kind absent from this list is
+	// refused before a payout is ever attempted.
+	RecipientKinds []string
+
+	// --- bounds ------------------------------------------------------------
+
+	// MinimumAmount and MaximumAmount bound one payout. A zero MaximumAmount
+	// means the provider does not publish one; it is NOT unlimited, and code
+	// must treat it as unknown rather than as permission.
+	MinimumAmount money.USD
+	MaximumAmount money.USD
+
+	// Availability is how far this provider is actually usable, as opposed to
+	// how far its documentation reads.
+	Availability Availability
+
 	// ContractReference names the commercial contract these capabilities come
 	// from. An adapter with no contract reference is a sandbox by definition,
 	// and Verify refuses to use it in production.
 	ContractReference string
+}
+
+// Availability is the difference between a documented product and a usable
+// one.
+//
+// It exists because the most dangerous state for an integration is "the code
+// is finished". A finished adapter for a product the account has not been
+// granted looks exactly like a working one until the first real payout, and
+// the goal document's Section 70 is entirely about not letting those two be
+// confused.
+type Availability string
+
+// Availabilities, in increasing order of usefulness.
+const (
+	// AvailabilityUnknown is the zero value and means nobody has said. It is
+	// never usable.
+	AvailabilityUnknown Availability = ""
+	// AvailabilityNotOffered means the provider does not offer this at all.
+	AvailabilityNotOffered Availability = "NOT_OFFERED"
+	// AvailabilityRequiresApplication means the product exists and this
+	// account must apply for it. The application has not been made.
+	AvailabilityRequiresApplication Availability = "REQUIRES_APPLICATION"
+	// AvailabilityApplicationPending means the application is with the
+	// provider and no decision has come back.
+	AvailabilityApplicationPending Availability = "APPLICATION_PENDING"
+	// AvailabilityApplicationDenied means the provider said no. It is
+	// recorded rather than retried, and the architecture may need another
+	// provider.
+	AvailabilityApplicationDenied Availability = "APPLICATION_DENIED"
+	// AvailabilitySandbox means the product works in the provider's test
+	// environment only.
+	AvailabilitySandbox Availability = "SANDBOX_ONLY"
+	// AvailabilityLive means the account is approved and the product moves
+	// real value.
+	AvailabilityLive Availability = "LIVE"
+)
+
+// Usable reports whether a payout may actually be attempted. Everything short
+// of LIVE and SANDBOX_ONLY is a refusal, and the zero value is a refusal,
+// which is what makes an unset field fail closed.
+func (a Availability) Usable() bool {
+	return a == AvailabilityLive || a == AvailabilitySandbox
+}
+
+// SupportsAsset reports whether the provider pays out in an asset.
+func (c Capabilities) SupportsAsset(symbol string) bool {
+	return containsFold(c.SupportedAssets, symbol)
+}
+
+// SupportsNetwork reports whether the provider sends on a network.
+func (c Capabilities) SupportsNetwork(network string) bool {
+	return containsFold(c.SupportedNetworks, network)
+}
+
+// SupportsRecipientKind reports whether the provider pays this kind of
+// recipient.
+func (c Capabilities) SupportsRecipientKind(kind string) bool {
+	return containsFold(c.RecipientKinds, kind)
+}
+
+func containsFold(haystack []string, needle string) bool {
+	if strings.TrimSpace(needle) == "" {
+		return false
+	}
+	for _, x := range haystack {
+		if strings.EqualFold(x, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // Supports reports whether the provider handles a destination kind.
@@ -204,6 +335,28 @@ func (r *Registry) Register(p Provider) error {
 	if !caps.SupportsLookup {
 		return errs.Newf(errs.CodeForbidden,
 			"payout provider %q cannot answer what happened to an idempotency key; a timed-out submission would be permanently ambiguous, so it cannot be used for payouts",
+			name)
+	}
+	// A crypto adapter that names no asset or no network has not been verified
+	// against anything. Registering it would let a payout be attempted against
+	// a destination nobody has confirmed the provider can reach, which is
+	// precisely the "do not invent supported assets and chains" failure the
+	// goal document opens with.
+	if caps.SupportsCryptoPayout {
+		if len(caps.SupportedAssets) == 0 {
+			return errs.Newf(errs.CodeForbidden,
+				"payout provider %q claims crypto payouts and names no supported asset; an adapter that has not been read against a real product reports nothing",
+				name)
+		}
+		if len(caps.SupportedNetworks) == 0 {
+			return errs.Newf(errs.CodeForbidden,
+				"payout provider %q claims crypto payouts and names no supported network; the asset alone does not say where it can be sent",
+				name)
+		}
+	}
+	if caps.RequiresKYC && !caps.KYCPerformedByProvider && !r.allowSandbox {
+		return errs.Newf(errs.CodeForbidden,
+			"payout provider %q requires identity verification but does not perform it; Nodal would have to collect government identity documents, which this deployment is not built to hold",
 			name)
 	}
 	r.mu.Lock()

@@ -96,7 +96,7 @@ wrong.
 | PRODUCT | **Stablecoin payouts for Connect** |
 | API / DASHBOARD CAPABILITY | `POST /v1/transfers` in USD to the connected account; Stripe converts to the recipient's preferred currency |
 | ACCOUNT ELIGIBILITY | Platform must be a **US** Connect platform, opted in, and approved |
-| REGION | US platforms only. Recipients in 68 listed countries, **excluding the US states of New York and Hawaii** |
+| REGION | US platforms only. Recipients in 67 listed countries, **excluding the US states of New York and Hawaii** |
 | STATUS | VERIFIED (docs) / NOT AVAILABLE (this account) |
 | PRODUCTION AVAILABILITY | **Private preview.** Not generally available |
 | REQUIRES APPLICATION? | **Yes, four steps.** Be a Connect platform; request private-preview access through Stripe sales; request the feature in the Dashboard; complete a due-diligence questionnaire on the Account status page |
