@@ -99,8 +99,46 @@ leading-slash argument into a Windows path, so `stripe get /v1/account` asks
 Stripe for `/v1/C:/Program Files/Git/v1/account`. Prefix the command with
 `MSYS_NO_PATHCONV=1`.
 
-The CLI has a live context only. A sandbox context is what Stage 2 of the
-production checklist needs and does not exist yet.
+The CLI has a **live context only**. `stripe switch context acct_1REGPQALyMyuBFc1`
+(without `--live`, which selects test mode) answers "Account ... does not have
+sandbox access", so the device pairing granted a live-scoped credential. The
+CLI's authorized-account list is fixed at login, so it also cannot see a
+sandbox created afterwards without re-authenticating.
+
+## 9. The sandbox — DONE, and what it is
+
+Stripe's documentation answers the isolation question without ambiguity:
+
+> "A sandbox is an isolated test environment. You can use your sandbox to test
+> Stripe functionality **in your account** … the payments you create aren't
+> processed by card networks or payment providers."
+>
+> "**Your account** can have up to five sandboxes."
+
+So a sandbox is inside the existing account, not a new one; it cannot move real
+money; and deleting one "deletes all the data associated with the sandbox" and
+nothing else. Creating one does not write to live configuration. The
+"Copy live account to sandbox" option copies live settings **into** the sandbox
+and is one-way.
+
+Note which tool creates what. `stripe sandbox create` on the CLI "provisions an
+anonymous Stripe sandbox … No account registration required" — that is a
+standalone environment, not one under Actorvia. The **Dashboard** path is the
+one that creates a sandbox belonging to the account, and it is the one used.
+
+**Created:** `NODAL Integration`, `acct_1UDbrdAeDQ6sKD6H`, under Actorvia, with
+the live account's configuration copied in. The Sandboxes page had reported
+"Using 0 of 5 available account sandboxes" beforehand.
+
+The same page also showed something worth knowing: **Test mode is now part of
+sandboxes**, and the account's own Test mode is listed with the same id as live,
+`acct_1REGPQALyMyuBFc1`. So test mode was always available on this account; what
+was missing was a credential that could reach it.
+
+**Still needed to use it:** its test secret key and webhook signing secret,
+placed in the deployment's secret store or a git-ignored `.env.local`. That is
+the owner's action, because handling a key here would put it in this
+transcript.
 
 ## 6. The live webhook endpoint — NEEDS USER, and needs a URL
 

@@ -16,8 +16,9 @@ Legend: **[eng]** engineering, **[user]** the account owner, **[stripe]** Stripe
 | # | Item | Who | State |
 |---|---|---|---|
 | 1.1 | Pair the Stripe CLI (`stripe login`) | [user] | **done** — Actorvia · live |
-| 1.2 | Decide the production API hostname | [user] | **pending, and genuinely absent.** See §Hostname |
-| 1.2a | Create a sandbox under Actorvia so Stage 2 can run | [user] | **pending** |
+| 1.2 | Approve the production API hostname | [user] | **pending.** `api-nodal.actorvia.xyz` recommended; see `../operations/DEPLOYMENT_GAP_ANALYSIS.md` §6 |
+| 1.2a | Create a sandbox under Actorvia so Stage 2 can run | [eng] | **done** — `NODAL Integration`, `acct_1UDbrdAeDQ6sKD6H`, isolated and unable to move real money |
+| 1.2b | Place the sandbox's test secret key and webhook signing secret | [user] | **pending** — this is what Stage 2 waits on |
 | 1.3 | Wire the adapters in `cmd/api` | [eng] | **done** |
 | 1.4 | Expose HTTP endpoints for starting a purchase and reading funding state | [eng] | **done** |
 | 1.5 | Mount the webhook handler on the Nodal endpoint path | [eng] | **done** — `POST /v1/webhooks/stripe_credit` |
