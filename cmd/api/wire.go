@@ -256,6 +256,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// routes, and they answer NOT_FOUND with a reason rather than 404-ing as
 	// though the feature did not exist.
 	creditSvc := credit.NewService(ledgerSvc, clk)
+
+	// The Credit purchase path (pgf.md). Separate from the funding block
+	// above, and deliberately so: that is the crypto onramp, where a
+	// customer's own money becomes crypto in a wallet Nodal never holds. This
+	// one takes a card payment and issues internal Credits, which is the
+	// reversible-card / irreversible-value problem the whole funding lifecycle
+	// exists to manage. One set of credentials for both would mean one mode
+	// for two products with different risk.
+	creditPurchases := wireCreditPurchase(ctx, cfg, database, in.resolver, clk, creditSvc, gateChecker, log)
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
@@ -321,12 +330,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		FundingSettlement: settlement,
 		ProviderCatalog:   providerCatalog(cfg),
 		NativeEconomy: httpapi.NativeEconomyDeps{
-			Credits:       creditSvc,
-			NativeAssets:  nativeAssetSvc,
-			NativeMarkets: nativeMarketSvc,
-			Payouts:       payoutSvc,
-			PayoutEngine:  payoutEngine,
-			Commerce:      commerceSvc,
+			Credits:         creditSvc,
+			CreditPurchases: creditPurchases.Service,
+			NativeAssets:    nativeAssetSvc,
+			NativeMarkets:   nativeMarketSvc,
+			Payouts:         payoutSvc,
+			PayoutEngine:    payoutEngine,
+			Commerce:        commerceSvc,
 			// No payout policy is configured, so the fail-closed default
 			// applies and no origin is withdrawable. Activating one is a
 			// policy version with evidence, not a code change here.
@@ -400,6 +410,18 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
 	ports.Stream = sse
+
+	// Provider webhooks. The map is keyed by the provider name in the path, so
+	// POST /v1/webhooks/stripe_credit reaches the Credit purchase pipeline and
+	// nothing else does. An unconfigured provider leaves no key, and the
+	// handler answers 404 rather than accepting a delivery it cannot process
+	// -- which is what makes Stripe retry instead of considering it delivered.
+	if creditPurchases.WebhookPort != nil {
+		if ports.Webhooks == nil {
+			ports.Webhooks = map[string]httpapi.WebhookPort{}
+		}
+		ports.Webhooks[creditPurchases.ProviderKey] = creditPurchases.WebhookPort
+	}
 
 	limits, err := rateLimits(clk, cfg.Env, in.lookup)
 	if err != nil {
