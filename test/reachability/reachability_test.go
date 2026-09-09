@@ -77,19 +77,6 @@ var reachableFrom = []string{"internal", "cmd", "scripts"}
 // BLOCKERS.md. "Nobody has got round to it" is not a reason and must not be
 // added: that is precisely what F-26, F-28 and F-29 were.
 var unreachableOnPurpose = map[string]string{
-	// The Credit funding lifecycle: real money buying Credits. Every step
-	// exists and none has an endpoint, because there is no payment provider
-	// (BLOCKERS B-04) and no determination that Credits may be sold
-	// (B-02/B-07). A checkout with no provider behind it would be a form that
-	// collects card details and does nothing with them.
-	"internal/credit.CreateFunding":  "B-04: no Credit-purchase payment provider exists",
-	"internal/credit.AdvanceFunding": "B-04: no Credit-purchase payment provider exists",
-	"internal/credit.SettleFunding":  "B-04: no Credit-purchase payment provider exists",
-	"internal/credit.DisputeFunding": "B-04: a dispute arrives from a provider that does not exist yet",
-	"internal/credit.MintFrom":       "B-04: minting Credits against funding needs funding, which needs a provider",
-	"internal/credit.SetFinality":    "B-04: finality advances when a provider's dispute window closes",
-	"internal/credit.Reverse":        "B-04: a reversal unwinds a funded purchase; there are none",
-
 	// Payout destinations. Registering one means collecting bank details, and
 	// verifying one requires a payout provider to accept them (B-01, B-06).
 	// Collecting that data with nowhere to send it is worse than not offering
@@ -100,6 +87,33 @@ var unreachableOnPurpose = map[string]string{
 	// Identity verification for a payout. The level it would record is
 	// PAYOUT_KYC, which by definition comes from a provider.
 	"internal/payout.CompleteVerification": "B-06: PAYOUT_KYC is performed by, or accepted by, a payout provider",
+}
+
+// reachedThroughInterface lists mutators whose only caller reaches them through
+// an interface, which the name-and-import matching below cannot see.
+//
+// This is a DIFFERENT claim from unreachableOnPurpose and is kept separate on
+// purpose. That map says "no deployment can run this, and here is the external
+// reason". This one says "a deployment does run this, and here is the interface
+// and the file that wires it" -- a claim a reader can check in about a minute,
+// which is the bar an exemption has to clear to be worth anything.
+//
+// The whole Credit funding family lives here as of the Stripe workstream. It
+// used to be in unreachableOnPurpose citing B-04, and that reason stopped being
+// true when the provider was written: every one of these is now called by
+// credit.PurchaseService, whose own entry points are the webhook Dispatcher
+// interface and the CreditsPort the HTTP layer holds.
+var reachedThroughInterface = map[string]string{
+	"internal/credit.Dispatch": "webhook.Dispatcher[credit.PurchaseEvent]; wired in cmd/api/wire_credit.go and mounted at POST /v1/webhooks/stripe_credit",
+	"internal/credit.Refund":   "credit.PurchaseService.apply, on a charge.refunded event arriving through Dispatch",
+	"internal/credit.Reverse":  "credit.PurchaseService.apply, on a chargeback arriving through Dispatch",
+
+	"internal/credit.CreateFunding":  "credit.PurchaseService.StartPurchase, through httpapi.CreditsPort at POST /v1/payments",
+	"internal/credit.AdvanceFunding": "credit.PurchaseService.apply and StartPurchase",
+	"internal/credit.SettleFunding":  "credit.PurchaseService.apply and SettleDue, the latter run by cmd/reconciliation-worker",
+	"internal/credit.DisputeFunding": "credit.PurchaseService.apply, on charge.dispute.created arriving through Dispatch",
+	"internal/credit.MintFrom":       "credit.PurchaseService.apply, on the CAPTURED edge",
+	"internal/credit.SetFinality":    "credit.Service.SettleFunding and DisputeFunding, both reached as above",
 }
 
 var (
@@ -139,10 +153,19 @@ func TestReachability_EveryFinancialMutatorHasADeploymentCaller(t *testing.T) {
 			key := pkg + "." + name
 			reachable := calledOutside(t, root, pkg, name)
 			reason, exempt := unreachableOnPurpose[key]
+			viaIface, indirect := reachedThroughInterface[key]
 			switch {
+			case exempt && indirect:
+				staleExemptions = append(staleExemptions,
+					key+" is listed both as unreachable ("+reason+") and as reached through an interface ("+viaIface+"); it cannot be both")
 			case reachable && exempt:
 				staleExemptions = append(staleExemptions,
 					key+" is listed as unreachable ("+reason+") but something outside its package calls it")
+			case reachable && indirect:
+				staleExemptions = append(staleExemptions,
+					key+" is listed as reached through an interface ("+viaIface+") but a direct caller now exists; drop the entry")
+			case !reachable && indirect:
+				// Claimed, and named specifically enough to be checked.
 			case !reachable && !exempt:
 				problems = append(problems, key+
 					" changes money and nothing a deployment can run calls it; "+

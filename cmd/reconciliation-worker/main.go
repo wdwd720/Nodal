@@ -78,6 +78,10 @@ type deps struct {
 	engine *reconciliation.Engine
 	log    *slog.Logger
 	lookup func(string) (string, bool)
+	// credits promotes funded Credits out of the reversibility window and asks
+	// the provider about purchases still in flight. Nil when this deployment
+	// has no Credit purchase provider.
+	credits *creditSweeper
 }
 
 func run(args []string, lookup func(string) (string, bool), stdout, stderr io.Writer) int {
@@ -204,7 +208,10 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		d.Close()
 		return nil, err
 	}
-	return &deps{cfg: cfg, db: d, engine: engine, log: log, lookup: lookup}, nil
+	return &deps{
+		cfg: cfg, db: d, engine: engine, log: log, lookup: lookup,
+		credits: newCreditSweeper(ctx, cfg, d, resolver, clk, log),
+	}, nil
 }
 
 func cmdRun(ctx context.Context, d *deps) error {
@@ -217,8 +224,15 @@ func cmdRun(ctx context.Context, d *deps) error {
 		slog.Duration("periodic_interval", periodic), slog.Duration("full_interval", full),
 		slog.Duration("verify_interval", verify), slog.Int("batch", batch))
 
+	if d.credits != nil {
+		d.credits.window = durationVar(d.lookup, envSettlementWindow, defaultSettlementWindow)
+	}
+	creditEvery := durationVar(d.lookup, envCreditInterval, defaultCreditInterval)
+
 	periodicTick := time.NewTicker(periodic)
 	defer periodicTick.Stop()
+	creditTick := time.NewTicker(creditEvery)
+	defer creditTick.Stop()
 	verifyTick := time.NewTicker(verify)
 	defer verifyTick.Stop()
 	fullTick := time.NewTicker(full)
@@ -238,6 +252,9 @@ func cmdRun(ctx context.Context, d *deps) error {
 			if _, err := d.engine.SweepEscalations(ctx, batch); err != nil {
 				d.log.ErrorContext(ctx, "escalation sweep failed", slog.String("error", err.Error()))
 			}
+		case <-creditTick.C:
+			d.credits.settle(ctx, batch)
+			d.credits.reconcile(ctx, batch)
 		case <-fullTick.C:
 			d.log.InfoContext(ctx, "full balance reconciliation is scheduled per account by the composition root")
 		}
