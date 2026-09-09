@@ -198,6 +198,7 @@ Six documents and one role. Nothing durable, nothing with a password.
 | Policy | `nodal-terraform-iam` | 3,046 of 6,144 |
 | Policy | `nodal-task-boundary` | 2,094 of 6,144 |
 | Policy | `nodal-operator` | inline on the user |
+| Policy | `SignInLocalDevelopmentAccess` | AWS managed, attached to the user |
 | Role | `nodal-terraform` | max session 1 hour |
 | User | `nodal-operator` | console + MFA, **no access key** |
 
@@ -221,7 +222,10 @@ Steps, signed in as root:
 1. Create the five managed policies from `infra/aws/nodal-terraform-*.json` and
    `nodal-task-boundary-policy.json`.
 2. Create user `nodal-operator`: console access, **no access key**, inline
-   policy `infra/aws/nodal-operator-policy.json`. Enroll an MFA device.
+   policy `infra/aws/nodal-operator-policy.json`. Enroll an MFA device named
+   exactly `nodal-operator`. Attach the AWS managed policy
+   `arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess`, which is not
+   optional -- see below.
 3. Create role `nodal-terraform` with
    `infra/aws/nodal-terraform-trust-policy.json`, the four
    `nodal-terraform-*` policies attached, maximum session duration 1 hour.
@@ -268,6 +272,41 @@ deliberately not attached to anything: it is named by the condition on
 
 `bdg-deployer`, `bdg-github-deployer`, `BDGLightsailDeploy`, the GitHub OIDC
 provider and Lightsail were not modified.
+
+### aws login needs a policy of its own
+
+`aws login` is not free for an IAM user. Without
+`arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess` the OAuth exchange
+returns **HTTP 400** from the authorize page, with nothing in the message
+naming a permission, so it reads as a broken login rather than a missing grant.
+
+The policy (v3) is two actions and no more:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["signin:AuthorizeOAuth2Access", "signin:CreateOAuth2Token"],
+  "Resource": "arn:aws:signin:*:*:oauth2/public-client/*"
+}
+```
+
+It permits the exchange that mints console-mirrored credentials. It grants no
+access to any AWS service: the credentials it produces carry the user's own
+permissions, which for `nodal-operator` is assuming one role and looking after
+its own MFA device. The evidence it was always required was in the account the
+whole time -- `bdg-deployer` carries the same policy, which is why that user
+could `aws login` on the first try.
+
+`nodal-operator`'s complete permission set, after this:
+
+| Source | Grants |
+|---|---|
+| `SignInLocalDevelopmentAccess` (AWS managed) | the two sign-in actions above |
+| inline, `BecomeTheDeploymentRoleAndNothingElse` | `sts:AssumeRole` on `role/nodal-terraform` only, gated on MFA |
+| inline, `SeeAndManageOnlyItsOwnMFADevice` | password and MFA device for `${aws:username}` |
+
+No groups, no access keys, no infrastructure permissions, and no change to the
+role's trust policy.
 
 ### If aws login does not carry the MFA claim
 
