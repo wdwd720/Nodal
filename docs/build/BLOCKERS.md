@@ -198,8 +198,15 @@ internal commerce is the second. There is no reading of the product under which 
 about something else.
 
 **The account-level risk, stated once.** This review happens against the account that currently runs
-live payments, Treasury with Cross River Bank, and a card issuing programme. A denial does not land
-on an empty account. The owner was told this before any configuration work began and confirmed the
+live payments and a prepaid-card issuing programme with Cross River Bank. (An earlier draft said
+Treasury; the live API reports Treasury is not onboarded.) A denial does not land on an empty
+account.
+
+**A second thing the review will see.** The account's declared
+`business_profile.product_description` describes software tooling for game developers sold by
+subscription. It says nothing about stored-value Credits, a user-created asset market, marketplace
+settlement or crypto payouts. Processing Nodal's payments against that description is processing
+outside the declared business, and correcting it is itself what triggers the review. The owner was told this before any configuration work began and confirmed the
 direction; `docs/providers/STRIPE_ACCOUNT_STRUCTURE.md` records it.
 
 **Evidence required to close.** A written Stripe approval naming the account and the activities.
@@ -215,7 +222,16 @@ through Stripe sales at https://stripe.com/use-cases/crypto#request-invite; requ
 https://dashboard.stripe.com/stablecoin-payouts/overview; complete the due-diligence questionnaire
 on the account status page.
 
-**Current status.** None of the four has been started. The account is not yet a Connect platform.
+**Current status.** None of the four has been started. The account is not yet a Connect platform:
+`controller.type` is `account` and `GET /v1/accounts` returns an empty list.
+
+**Confirmed on the account, 2026-09-08.** The live payment method configuration reports
+`"crypto": {"available": false}`. Stripe's own documentation names that flag as the way to verify
+the product is granted, so this is account-specific evidence rather than an inference.
+
+**A prerequisite question nobody has asked Stripe yet.** `business_type` on this account is
+`individual`. Stablecoin payouts require a US Connect platform, and whether a sole-proprietor
+standard account may become one is not answered by any public document.
 
 **What it blocks.** `PAYOUT_RESERVE` and `PAYOUT_SETTLE`, and with them every crypto payout.
 

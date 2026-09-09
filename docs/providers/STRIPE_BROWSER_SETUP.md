@@ -20,7 +20,8 @@ Every browser action taken against Stripe, with its outcome. Goal Section 66.
 | Stripe Identity availability checked | **DONE** | Not enabled on this account; both Identity URLs redirect to the dashboard home |
 | Official documentation verified | **DONE** | Stablecoin payouts, Connect Accounts v2, restricted businesses, multiple accounts, organizations. See `STRIPE_CAPABILITY_MATRIX.md` for citations |
 | Separate Nodal account created | **DONE, then superseded** | `acct_1UDZsoARym5YyR1Q`, US, unactivated, test mode only. Abandoned when the direction changed to using Actorvia. Left in place rather than deleted |
-| Stripe CLI paired | **NEEDS USER** | See §5 |
+| Stripe CLI paired | **DONE** | Paired to `acct_1REGPQALyMyuBFc1`, context Actorvia · live. Verified from this session |
+| Live account read through the API | **DONE** | See §8, which corrects two things the Dashboard implied |
 | Live webhook endpoint for Nodal | **NEEDS USER** | See §6 |
 | Connect platform profile | **NEEDS USER** | Declares the business model. Goal Section 67 stop |
 | Stablecoin payout private-preview request | **NEEDS USER** | Requires contacting Stripe sales |
@@ -81,32 +82,25 @@ rather than Checkout. Stripe delivers each event to every endpoint subscribed
 to it, so Checkout would post every Nodal purchase to Actorvia's billing
 handler. See `STRIPE_CAPABILITY_MATRIX.md` §1.
 
-## 5. Stripe CLI pairing — NEEDS USER
+## 5. Stripe CLI pairing — DONE
 
-The CLI is installed (`stripe` 1.50.3, via winget) and not paired. Pairing was
-attempted twice and could not be completed from this session: the device flow
-requires typing a verification code into `access.stripe.com`, and the
-permission classifier correctly refuses to let an agent type what looks like a
-credential.
-
-**What the user needs to do**, in a terminal:
+Paired by the account owner running `stripe login`. Credentials live in the
+owner's own CLI configuration, never in this repository, and no key has entered
+this session's transcript.
 
 ```
-stripe login
+account_id   = acct_1REGPQALyMyuBFc1
+display_name = Actorvia
+context      = Actorvia · live
 ```
 
-Then approve in the browser. That stores credentials under the user's own
-config, not in this repository, and this session never sees a key.
+One operational note for anyone repeating this on Windows: Git Bash rewrites a
+leading-slash argument into a Windows path, so `stripe get /v1/account` asks
+Stripe for `/v1/C:/Program Files/Git/v1/account`. Prefix the command with
+`MSYS_NO_PATHCONV=1`.
 
-Once paired, the following become possible without any secret entering the
-transcript:
-
-- enumerate the live account's real capability set through the API rather than
-  the Dashboard's summary;
-- create the Nodal webhook endpoint with `NODAL_` naming;
-- run `stripe listen` to exercise the webhook path locally against real
-  Stripe-signed deliveries;
-- trigger test events for every modelled type.
+The CLI has a live context only. A sandbox context is what Stage 2 of the
+production checklist needs and does not exist yet.
 
 ## 6. The live webhook endpoint — NEEDS USER, and needs a URL
 
@@ -130,6 +124,73 @@ subscription, and a subscription cannot be added without a handler.
 Note what happens the moment this endpoint exists: it will also receive
 Actorvia's subscription `payment_intent.*` events, because they share the
 account. That is expected and handled. See `STRIPE_INTEGRATION_STATE.md` §2.
+
+## 8. What the live API said, and what it corrects
+
+The Dashboard is a summary. Two things it implied turned out to be wrong, and
+both were corrected here rather than left standing.
+
+**Treasury is not onboarded.** `GET /v1/treasury/financial_accounts` answers
+"Have you onboarded to Treasury? ...", and no treasury capability appears on
+the account object. The Dashboard shows a "Treasury overview" nav item and
+lists Money Manager Business Storage Inbound/Outbound USD and Financial
+Addresses as active, which read as a live Treasury programme. Earlier drafts of
+these documents said "live Treasury with Cross River Bank" on that basis. That
+overstated the blast radius of a restricted-business review and has been
+corrected.
+
+**Stripe Identity's API responds.** `GET /v1/identity/verification_sessions`
+returns an empty list rather than an error, so the endpoint exists on this
+account even though the Dashboard shows no Identity product and no session has
+ever been created. Earlier drafts said "not enabled", which was a Dashboard
+reading rather than a fact. Identity is still not needed: Connect Express
+onboarding performs the payout KYC.
+
+### The finding that settles the payout question empirically
+
+Stripe's stablecoin payout documentation says to verify access by checking that
+**Crypto** is active in the account's payment method settings. It is not:
+
+```
+"crypto": { "available": false }
+```
+
+That is account-specific confirmation, from the account itself rather than from
+documentation, that the product has not been granted. It matches exactly what
+the adapter reports without having been told: `AvailabilityRequiresApplication`.
+
+### Other facts worth having on record
+
+| | |
+|---|---|
+| Account type | `standard`, `controller.type: account` — a standalone account, **not a Connect platform** |
+| Business type | **`individual`** |
+| Country / default currency | US / USD |
+| `charges_enabled` / `payouts_enabled` / `details_submitted` | true / true / true |
+| `requirements.currently_due` and `past_due` | **both empty** at the account level |
+| Connected accounts | none (`GET /v1/accounts` returns an empty list) |
+| Transfers API | reachable, no transfers exist |
+| Crypto Onramp API | **"Unrecognized request URL"** — not available on this account |
+| Statement descriptor | static `ACTORVIA`, card prefix `ACTR` |
+| MCC | 5734 |
+
+Two of those need a decision rather than a note.
+
+**`business_type` is `individual`.** Stablecoin payouts require the platform to
+be a US Connect platform. Whether a sole-proprietor standard account can become
+one is a question for Stripe, and carrying marketplace settlement and
+stored-value issuance on an individual account is a materially different risk
+posture from carrying them on a company.
+
+**The declared product description does not describe Nodal.** The account's
+`business_profile.product_description` describes software tooling for game
+developers, sold by subscription or usage. It says nothing about stored-value
+Credits, a user-created asset market, marketplace settlement or crypto payouts.
+Running Nodal's payments through this account without updating that description
+means processing outside the declared business. Goal Section 28 requires a
+truthful description and Section 68 forbids working around the gap by leaving
+words out. **This is a STOP: the description is the owner's to change, and
+changing it is what triggers the review.**
 
 ## 7. What was never touched
 

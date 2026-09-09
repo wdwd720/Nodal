@@ -59,8 +59,11 @@ Recorded from the Dashboard on 2026-09-08, because the blast radius is the point
 | Live webhook | `actorvia-site-live` → `https://www.actorvia.xyz/api/billing/webhook`, active, API version `2026-07-29.dahlia`, 0% error rate |
 | Webhook events | `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.deleted`, `customer.subscription.updated`, `invoice.paid`, `invoice.payment_failed` |
 | Connect | Present in the Dashboard, **not configured** |
-| Treasury | Active, Cross River Bank |
-| Identity | Not enabled |
+| Treasury | **Not onboarded.** The Dashboard shows a Treasury nav item and Money Manager Business Storage capabilities, but `GET /v1/treasury/financial_accounts` answers "Have you onboarded to Treasury?" and no treasury capability is on the account |
+| Card issuing | A prepaid-card programme with Cross River Bank exists and is what the past-due task blocks |
+| Account type | `standard`, `controller.type: account`, `business_type: individual` — a standalone account, not a platform |
+| Statement descriptor | static `ACTORVIA`, card prefix `ACTR` |
+| Identity | Not shown in the Dashboard; the API endpoint responds and no session has ever been created |
 
 ### The past-due task, specifically
 
@@ -79,8 +82,10 @@ issuing programme, and it has not been submitted or modified by this workstream.
 Nodal's business model touches several of Stripe's listed restricted categories
 (`STRIPE_BUSINESS_MODEL_REVIEW.md`). Declaring it means a Stripe human reviews it **against this
 account**. If that review goes badly, what is at stake is not a greenfield Nodal account with
-nothing on it. It is the account currently running live payments, Treasury with Cross River Bank,
-and a card issuing programme.
+nothing on it. It is the account currently running live payments and a prepaid-card issuing
+programme with Cross River Bank. An earlier draft said "Treasury with Cross
+River Bank"; the live API says Treasury is not onboarded, and that correction
+narrows the blast radius without removing it.
 
 This risk was stated to the owner before any configuration work began, and the direction was
 confirmed. It is recorded here rather than argued again.
@@ -98,9 +103,11 @@ aspirational.
 1. **No Stripe object is a Nodal identity.** Nodal's ids are primary; Stripe references are
    external, unique and indexed. That was already true of `credit_fundings` and `payout_requests`
    and is preserved.
-2. **The account id is configuration.** `CP_STRIPE_ACCOUNT_ID` is asserted at startup against the
-   account the API key actually belongs to. Moving accounts is a config change plus a re-verification,
-   not a code change.
+2. **The account id is configuration.** `CP_PROVIDER_CREDIT_PURCHASE_ACCOUNT_REF` names the account
+   this adapter expects, so moving accounts is a configuration change rather than a code change.
+   (An earlier draft named a `CP_STRIPE_ACCOUNT_ID` variable that does not exist; the real one is
+   per provider slot, which is also the right shape, because the payout provider need not live on
+   the same account as the payment provider.)
 3. **Foreign events are rejected, not tolerated.** Because the account is shared, Nodal's webhook
    endpoint receives Actorvia's events. Nodal ignores any event that does not carry Nodal's own
    metadata namespace. That is what makes the shared account survivable, and it is also exactly what
@@ -117,6 +124,11 @@ Every Nodal-created live Stripe resource carries:
 | `nodal_credit_purchase_id` | Nodal's own id, on purchase objects |
 | `nodal_user_id` | Nodal's account id |
 | `nodal_pricing_version` | the pricing policy version that derived the Credit amount |
+| `nodal_idempotency_key` | on payout transfers, so a timed-out submission can be found again |
+
+Card charges additionally carry a statement descriptor suffix, because the account's own descriptor
+is `ACTORVIA` and a cardholder who does not recognise a charge disputes it. See
+`STRIPE_BROWSER_SETUP.md` §8.
 
 Names of Dashboard-created resources are prefixed `NODAL_`. An object without
 `nodal_workstream=NODAL` is not Nodal's and Nodal's code refuses to act on it.

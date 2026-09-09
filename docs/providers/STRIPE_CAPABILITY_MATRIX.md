@@ -97,7 +97,7 @@ wrong.
 | API / DASHBOARD CAPABILITY | `POST /v1/transfers` in USD to the connected account; Stripe converts to the recipient's preferred currency |
 | ACCOUNT ELIGIBILITY | Platform must be a **US** Connect platform, opted in, and approved |
 | REGION | US platforms only. Recipients in 67 listed countries, **excluding the US states of New York and Hawaii** |
-| STATUS | VERIFIED (docs) / NOT AVAILABLE (this account) |
+| STATUS | VERIFIED (docs) / **NOT AVAILABLE, confirmed on this account**: the live payment method configuration reports `"crypto": {"available": false}`, which is the check Stripe's own documentation names |
 | PRODUCTION AVAILABILITY | **Private preview.** Not generally available |
 | REQUIRES APPLICATION? | **Yes, four steps.** Be a Connect platform; request private-preview access through Stripe sales; request the feature in the Dashboard; complete a due-diligence questionnaire on the Account status page |
 | REQUIRES CONNECT? | Yes |
@@ -162,8 +162,8 @@ reason is recorded so that nobody re-adds one later on a hunch.
 | Product | Verdict | Why |
 |---|---|---|
 | Stripe Checkout | Rejected | `checkout.session.completed` collides with Actorvia's live endpoint. See §1 |
-| Stripe Identity | Not needed | Connect Express onboarding already performs the payout KYC. Adding Identity would collect identity data twice, which goal Section 16 forbids. Dashboard: not enabled on this account |
-| Stripe Treasury | Not used by Nodal | Actorvia has it (Money Manager Business Storage USD, Cross River Bank). Nodal holds no stored fiat balance for users, and touching Treasury would pull Actorvia's live financial accounts into scope |
+| Stripe Identity | Not needed | Connect Express onboarding already performs the payout KYC. Adding Identity would collect identity data twice, which goal Section 16 forbids. The API endpoint responds on this account and no session has ever been created |
+| Stripe Treasury | Not used by Nodal, and not onboarded | The Dashboard implies otherwise; the API answers "Have you onboarded to Treasury?". Nodal holds no stored fiat balance for users either way |
 | Stripe Crypto Onramp | Already integrated, different purpose | `internal/provider/stripe` implements it for Domain C, fiat to crypto direct to a self-custodial wallet. It is neither a Credit purchase path nor a payout path |
 | Stripe Issuing | Not used | Actorvia's, and the subject of the past-due task |
 | Global Payouts | Not a separate product here | `/crypto/crypto-payouts` resolves to the Connect stablecoin payouts page. There is one stablecoin payout product and it is Connect-based |
