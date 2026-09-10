@@ -190,8 +190,8 @@ reproduced against a real PostgreSQL 16 before and after);
 
 | | |
 |---|---|
-| Migration head | **`00742_a_lost_key_says_so_instead_of_blaming_the_caller.sql`** |
-| Migration files | **74** |
+| Migration head | **`00743_a_funding_state_is_not_the_applications_to_write.sql`** |
+| Migration files | **75** |
 | Tables | **120**, plus **14 partitions** of `security_events` |
 | CHECK constraints | 462 declared on parents |
 
@@ -219,7 +219,7 @@ Every tier below was re-run at `952b9fd`, the last commit of the session.
 | `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 11m51s** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
 | `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
-| `go run ./scripts/restoredrill` | **OK, 11.8s, at version 742, including a live state change on the restored database** |
+| `go run ./scripts/restoredrill` | **OK, at version 743, including a live state change on the restored database** |
 | `go run ./scripts/fmtcheck .` | ok |
 | `go run ./scripts/tool golangci-lint run` | 0 issues |
 | `go run ./scripts/lintfin` | 0 findings |
@@ -347,7 +347,7 @@ name cannot forge a transition edge (F-101).
 | Race detector | Cannot link on this host. Rests entirely on CI. | See F-125 |
 | The audit binding cannot be forged | Fixed (F-42, F-128). The transition flag is a keyed tag over a secret no role but the owner can read, salted with the top-level transaction id, and EXECUTE on every function that touches it is revoked from PUBLIC. Seventeen audited tables. | `REAL_DB_INTEGRATION` |
 | `security_events` retention | Fixed (F-105). Partitioned by month; retention is partition detachment, never row deletion, and the immutability trigger is unchanged for every role including the owner. | `REAL_DB_INTEGRATION` |
-| A state column the application cannot write at all | **Not done for eleven of seventeen tables.** F-42's stronger remedy: privilege beats detection. 00733 did the four whose columns are money, 00701 did `capability_gates`. | Open |
+| A state column the application cannot write at all | **Done for seven of seventeen tables, ten remain.** F-42's stronger remedy: privilege beats detection. `credit_fundings` was done first (00743) because its forgery costs money — the refusal there moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied` at the statement, and the money stamps moved into the transition with it. | `REAL_DB_INTEGRATION` for the seven; open for the ten |
 
 Eighteen files under `test/security/` cover authority boundaries, dual control,
 idempotency abuse and break scanning, and run as part of the 51-package
@@ -360,7 +360,7 @@ integration tier.
 Run at `952b9fd`:
 
 ```
-restoredrill: boot: version source=742 restored=742 verify=ok
+restoredrill: boot: version source=743 restored=743 verify=ok
 restoredrill: reconciliation dry-run: tables=134 rowcounts_match=true
               balance_drift_accounts=0 journal_hash_match=true
 restoredrill: state change on the restored database: ok
@@ -596,20 +596,21 @@ The next four pieces of software work, in the order they are worth doing:
    own tests, and it wants a session that starts with it rather than one that
    reaches it.
 
-   **Two candidates were scoped and the difference is large enough to record.**
-   `credit_fundings` is the clean one: exactly **one** state-change site
-   (`internal/credit/funding.go`, the `UPDATE ... SET state` after the transition
-   insert), and the only other columns the application writes are `lot_id` and
-   `provider_reference`, so the grant-back list is two columns. The transition
-   row is already written immediately before, so an AFTER INSERT trigger on
-   `credit_funding_transitions` can perform the state change and the stamp, and
-   the Go call site becomes a re-read.
+   **`credit_fundings` is done (00743) and is the worked example to copy.** The
+   AFTER INSERT trigger on the transitions table performs the state change as
+   SECURITY DEFINER; the application keeps UPDATE on `lot_id` and
+   `provider_reference` and nothing else; the money stamps moved into the
+   transition, so there is no longer a way to reach REVERSIBLE without
+   `reversible_at`. The Go call site became a re-read. Two fixtures and one
+   assertion had to move, and the pattern of what breaks is in the register
+   under F-42.
 
-   `kill_switches` looks smaller and is not. `saveSwitch` writes `active`
-   together with six other columns under optimistic concurrency
-   (`WHERE version = $11 RETURNING version`), so moving `active` into a trigger
-   breaks the concurrency check and the return value at once. Start with
-   `credit_fundings`.
+   **`kill_switches` is deliberately not next.** It looks smaller and is not:
+   `saveSwitch` writes `active` together with six other columns under optimistic
+   concurrency (`WHERE version = $11 RETURNING version`), so moving one column
+   into a trigger breaks the version check and the returned row at once. Pick
+   the next table by counting its state-change sites first — that number, not
+   the table's importance, is what the work costs.
 2. **An alert destination and something on a timer** (F-118). Everything up to
    the destination is built.
 3. **Birth control for `wallets`, `assets` and `instruments`** (F-122 residual).

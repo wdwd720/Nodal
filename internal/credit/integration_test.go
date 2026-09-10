@@ -30,6 +30,19 @@ var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	testDB         *db.DB
+	// testOwnerDB is the migration role, and it exists for exactly one thing:
+	// backdating a money timestamp so a settlement window can be observed
+	// closing without moving this process's clock.
+	//
+	// It is separate because 00743 revoked UPDATE on credit_fundings from
+	// cp_app and granted back only lot_id and provider_reference. Two tests
+	// were backdating reversible_at through testDB -- the APPLICATION pool --
+	// which is precisely the write that must be impossible, since reversible_at
+	// is what the settlement window is measured from and moving it settles
+	// money early. The tests were right about what they needed and wrong about
+	// who should do it: rewinding a clock the database owns is an operator
+	// action.
+	testOwnerDB *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -51,6 +64,12 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	defer testDB.Close()
+	testOwnerDB, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "credit-itest-owner", MaxConns: 2})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "credit integration: open owner pool:", err)
+		return 1
+	}
+	defer testOwnerDB.Close()
 	return m.Run()
 }
 
@@ -535,13 +554,44 @@ func TestIntegration_FundingStateChangeRequiresItsTransitionRow(t *testing.T) {
 			return err
 		}))
 
+	// The refusal got stronger in 00743 and this assertion moved with it.
+	//
+	// It used to be AUDIT_TRANSITION_REQUIRED, raised by the deferred audit
+	// binding at COMMIT: the application COULD write the column and was caught
+	// afterwards. It is now `permission denied`, raised by PostgreSQL at the
+	// statement: cp_app holds UPDATE on lot_id and provider_reference and on
+	// nothing else, so there is no statement it can issue that writes `state`.
+	//
+	// Detection became privilege, which is the whole point of F-42's remaining
+	// remedy, and a test still expecting the weaker error would have been the
+	// thing telling us the stronger one had not landed.
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			_, e := tx.Exec(ctx, `UPDATE credit_fundings SET state = 'SETTLED' WHERE id = $1`, funding.ID)
 			return e
 		})
-	require.Error(t, err, "a bare state update must be refused at commit")
-	require.Contains(t, err.Error(), "AUDIT_TRANSITION_REQUIRED")
+	require.Error(t, err, "a bare state update must be refused")
+	require.Contains(t, err.Error(), "permission denied",
+		"the application can still write credit_fundings.state; 00743 did not take")
+
+	// And the stamps went with it, for the same reason: reversible_at is what
+	// the settlement window is measured from.
+	for _, col := range []string{"reversible_at = now()", "settled_at = now()", "reversed_at = now()", "failure_reason = 'x'"} {
+		err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, e := tx.Exec(ctx, `UPDATE credit_fundings SET `+col+` WHERE id = $1`, funding.ID)
+				return e
+			})
+		require.Error(t, err, "cp_app can write %s", col)
+		require.Contains(t, err.Error(), "permission denied", col)
+	}
+
+	// The two it may still write, so the revoke is a boundary and not a wall.
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, e := tx.Exec(ctx, `UPDATE credit_fundings SET provider_reference = 'pr-1' WHERE id = $1`, funding.ID)
+			return e
+		}), "cp_app must still record the provider reference")
 }
 
 func TestIntegration_BalancesExplainWhatIsAndIsNotWithdrawable(t *testing.T) {

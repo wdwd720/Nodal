@@ -1677,11 +1677,50 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: **eleven of the
-seventeen bound tables still grant `cp_app` blanket UPDATE.** Six do not, and
-they are the worked examples — `capability_gates` (00701), `withdrawals`,
-`assets`, `instruments` and `payout_requests` (00733, F-109, the four whose
-columns are money), and `admin_actions`. That work makes a bare state update
+tracked on its own terms rather than as this finding's blocker: **ten of the
+seventeen bound tables still grant `cp_app` blanket UPDATE.** Seven do not:
+`capability_gates` (00701), `withdrawals`, `assets`, `instruments` and
+`payout_requests` (00733, F-109, the four whose columns are money),
+`admin_actions`, and **`credit_fundings` (00743, the first done under this
+finding rather than another).**
+
+### 00743 — the first of the ten, and what it cost
+
+`credit_fundings` went first because its forgery costs money and because it is
+the cheapest to do correctly: exactly one place in the repository changes a
+funding's state, and it already writes the transition row immediately before.
+
+The AFTER INSERT trigger on `credit_funding_transitions` now performs the state
+change, as SECURITY DEFINER. `cp_app` keeps UPDATE on `lot_id` and
+`provider_reference` and nothing else. **Detection became privilege:** the
+refusal moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied`
+at the statement.
+
+**The stamps moved with the state, and that is the better half.**
+`reversible_at`, `settled_at`, `reversed_at` and `failure_reason` were set by a
+switch on the destination that the caller had to remember. `reversible_at` is
+what the settlement window is measured from, so a transition that moved the
+state and forgot the stamp would leave money in REVERSIBLE with no clock running
+on it. There is now no way to reach REVERSIBLE without `reversible_at`.
+
+**The trigger's name is load-bearing.** PostgreSQL fires a statement's AFTER ROW
+triggers in name order, and `credit_funding_transitions_writes_the_state` must
+sort after both flag setters. Under a DEFERRED check the order is irrelevant;
+under `SET CONSTRAINTS ALL IMMEDIATE` it is not, and something in this
+repository does exactly that. Renaming it to something alphabetically earlier
+would break the binding under an immediate check and pass every deferred test.
+
+**Two fixtures were backdating `reversible_at` through the application pool**,
+which is precisely the write that must be impossible. They were right about what
+they needed and wrong about who should do it, so the credit suite now opens a
+second pool on the migration role for exactly that. **That is the seventh
+fixture this session found doing what a control forbids**, and every one was
+found by closing the control rather than by reading the fixture.
+
+**And one test was asserting the weaker refusal.** It required
+`AUDIT_TRANSITION_REQUIRED`; the answer is now `permission denied`. A test still
+expecting the old error would have been the thing telling us the stronger
+control had not landed. That work makes a bare state update
 impossible rather than unforgeable, which is strictly stronger — but the claim
 this finding was raised about is now true.
 

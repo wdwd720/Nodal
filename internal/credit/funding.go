@@ -375,26 +375,19 @@ func (s *Service) AdvanceFunding(ctx context.Context, tx pgx.Tx, id FundingID, t
 		NewFundingTransitionID(), id, string(f.State), string(to), actorType, actorID, reason, providerEv); err != nil {
 		return Funding{}, mapError(err)
 	}
-	set := `state = $2`
-	switch to {
-	case FundingReversible:
-		// Stamped here rather than derived later, because the settlement
-		// window is measured from it and updated_at -- which a trigger resets
-		// on any write -- is not a record of when anything happened.
-		set += `, reversible_at = coalesce(reversible_at, now())`
-	case FundingSettled:
-		set += `, settled_at = now()`
-	case FundingReversed, FundingRefunded:
-		set += `, reversed_at = now()`
-	case FundingFailed:
-		set += `, failure_reason = $3`
-	}
-	args := []any{id, string(to)}
-	if to == FundingFailed {
-		args = append(args, reason)
-	}
+	// The INSERT above IS the state change. 00743 revoked UPDATE on this table
+	// from cp_app and granted back only lot_id and provider_reference, so there
+	// is no longer a statement this function could issue that writes `state` --
+	// and the trigger on credit_funding_transitions has already written it, and
+	// the stamp its destination carries, by the time control returns here.
+	//
+	// The stamps moved with it deliberately. They used to be a switch on `to`
+	// that the caller had to remember: reversible_at is what the settlement
+	// window is measured from, so a transition that moved the state and forgot
+	// the stamp would leave money in REVERSIBLE with no clock running on it.
+	// There is now no way to reach REVERSIBLE without reversible_at.
 	updated, err := scanFunding(tx.QueryRow(ctx,
-		`UPDATE credit_fundings SET `+set+` WHERE id = $1 RETURNING `+fundingColumns, args...))
+		`SELECT `+fundingColumns+` FROM credit_fundings WHERE id = $1`, id))
 	if err != nil {
 		return Funding{}, mapError(err)
 	}

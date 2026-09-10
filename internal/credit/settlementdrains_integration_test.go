@@ -70,7 +70,9 @@ func TestIntegration_SettlementDrainsTheMoneyAtRiskCeiling(t *testing.T) {
 	// Past the window. reversible_at is backdated rather than the clock
 	// advanced, because SettleDue compares the database's column against the
 	// database's now().
-	_, err = testDB.Exec(f.ctx,
+	// The owner pool, for the reason given in purchase_integration_test.go:
+	// cp_app cannot write reversible_at since 00743.
+	_, err = testOwnerDB.Exec(f.ctx,
 		`UPDATE credit_fundings SET reversible_at = now() - interval '31 days' WHERE id = $1`,
 		p.Funding.ID)
 	require.NoError(t, err)

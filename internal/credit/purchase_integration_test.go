@@ -525,7 +525,10 @@ func TestSettleDue_PromotesTheLotAndNotJustTheRow(t *testing.T) {
 	// compares the database's reversible_at against the database's now(), so
 	// moving this process's clock proves nothing -- which is exactly the
 	// property that made mixing the two a bug.
-	_, err := testDB.Exec(f.ctx,
+	// Through the OWNER pool, not the application one: 00743 put reversible_at
+	// out of cp_app's reach, because it is what the settlement window is
+	// measured from and an application that can move it can settle money early.
+	_, err := testOwnerDB.Exec(f.ctx,
 		`UPDATE credit_fundings SET reversible_at = now() - interval '31 days' WHERE id = $1`,
 		p.Funding.ID)
 	require.NoError(t, err)
