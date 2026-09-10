@@ -141,7 +141,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-115 | P1 | NEW | fixed | The branch whose comment says "do not resubmit" was the one that resubmitted, and the provider a payout goes to was a caller argument compared to nothing |
 | F-116 | P2 | NEW | fixed | An open event stream outlived logout, operator revocation and the session's own absolute expiry, because revocation is per request and a stream is one request that never ends |
 | F-117 | P2 | NEW | fixed | Two metric label sets took values the caller chose, so arming metrics on a 512 MB instance would have made observability the memory leak |
-| F-118 | P2 | NEW | part | Every reconciliation alert was silent: an in-process counter no exporter read, an OTel instrument nobody constructed, and an observer callback with no caller |
+| F-118 | P2 | NEW | fixed | Every reconciliation alert was silent: an in-process counter no exporter read, an OTel instrument nobody constructed, and an observer callback with no caller |
 | F-119 | P3 | NEW | fixed | An as-of price read was bounded by event time and not by knowledge time, so it could answer with something the platform had not yet received |
 | F-120 | P3 | NEW | fixed | A calibration snapshot folded in every outcome resolved since, so the evidence a promotion decision reads changed when you looked at it again |
 | F-121 | P1 | NEW | fixed | Every control on the dual-control table guarded UPDATE, so the application role could INSERT a row born APPROVED and forge two-person control outright |
@@ -6373,7 +6373,7 @@ Both were already right, and the audit checked them rather than assuming.
 survives unchanged, and an empty string, a lowercase spelling, a WebDAV verb and
 a 4 KiB token all become one label.
 
-## F-118 · Nothing was told anything · NEW · P2 · PART
+## F-118 · Nothing was told anything · NEW · P2 · FIXED
 
 **Found by** the observability audit, sweeping for anything in the tree that
 reaches a human.
@@ -6420,26 +6420,105 @@ to a metric is not a stopped service.
 metric labels first. Arming instruments on a 512 MB instance with an unbounded
 label would have replaced a silent control with a memory leak.
 
-### What remains, and it is the larger half
+### The larger half, done
 
-**Nothing pages.** A sweep for `pagerduty|opsgenie|hooks.slack.com|alertmanager|
-healthchecks.io|sendgrid|twilio|smtp.` across every Go, YAML, Terraform and
-shell file in the repository returns **one** hit: a Terraform variable
-*description*. `internal/notification` is customer-facing and its dispatcher has
-no production caller. The escalation workflow exists and nothing starts it. The
-`reconciliation.record.transitioned` topic has no subscriber.
+**Something on a timer.** `cmd/api/reconverify.go` runs `VerifyInternal` —
+Σ journal entries against `ledger_balances`, Σ active reservations against
+`asset_reservation_totals`, envelope allocation against its flow — and then
+`SweepEscalations`, once at start and every five minutes for as long as the
+process is up: the same cadence `cmd/reconciliation-worker` uses on the paid
+tier, in the process the launch tier actually runs. It is the pass that
+produces the SEV1 this finding is about, and it needs only the database. It
+deliberately does not run the execution and funding sweeps: this engine is
+resolution-shaped — no attempts repository, no chain observers — because the
+worker owns detection against the chain and the API owns the operator's answer
+to it. Bolting observers onto the API to make those sweeps run there would be a
+different architecture, not a ticker; and the launch tier enables
+`CREDIT_PURCHASE` only, so there are no attempts to sweep.
 
-That is a deployment decision as much as a software one — a cron on the Render
-blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is,
-plus somewhere for it to send. It is recorded here rather than guessed at, and
-`docs/PRODUCTION_READINESS_REPORT.md` already states it accurately: *"no alert
-has ever been delivered anywhere, and today none can be."*
+**Somewhere to send it.** `internal/alert` is `Metrics.OnAlert`'s production
+caller. A webhook and not a vendor, because the constraint is "$0 and it must
+leave the process" and an outbound HTTPS POST is the only shape that satisfies
+both without choosing for the operator: Slack and Discord incoming webhooks,
+ntfy, a Cloudflare Worker all accept one on a free tier. Three rules it will
+not break, each with a test that fails when it does: an alert never blocks a
+money-moving transaction (bounded queue, non-blocking enqueue, a full queue
+drops and says so); only allowlisted fields leave the process (`account_id`,
+`attempt_id`, `blocks_new_risk`, `deposit_id`, `material`, `order_id`,
+`signature` — derived from the raise sites, everything else dropped and
+counted); and silence is reported (no destination logs WARN naming the
+consequence, and `config.Validate` refuses STAGING and PROD without one —
+`RuleAlertDestination` — so a deployment that forgets it does not boot
+silently unalerted; it does not boot).
 
-**Evidence.** STATIC_PROOF for the three dead ends, each confirmed by grep for
-callers. Unit test for the logging, driven through the exact shape the
-deployment runs — `NoopMetrics()`, no exporter, no observer — asserting both
-levels, the alert name, the record id, and that the in-process counters the
-health endpoint reads still work.
+**In the shape the destination accepts.** The first draft posted the event as
+JSON to whatever URL it was given, and Slack and Discord answer that with a
+400: "accepts a POST" is not "accepts any POST". A destination that rejects
+every alert is this finding with a URL attached. The sink now speaks
+`{"text":…}` to Slack (and Mattermost), `{"content":…}` to Discord under its
+2000-character cap, a text body with `Title`/`Priority`/`Tags` headers to
+ntfy, and the event as JSON to anything else — chosen from the host unless
+`CP_ALERT_WEBHOOK_FORMAT` says otherwise, and named in the startup line so an
+operator who pasted a Slack URL can see `(generic)` and know why. ntfy's
+acceptance of the headed text POST was checked against `ntfy.sh` with a
+synthetic event (HTTP 200, title/priority/tags echoed); Slack's and Discord's
+shapes are their documented ones and are pinned by test.
+
+**The Terraform clause.** The five application alarms keep
+`treat_missing_data = "notBreaching"`, and correctly — a mismatch counter that
+never arrives is a system with no mismatches. What they could not tell apart
+was that from a system whose instruments were never constructed, which for a
+year they were not. `verification_passes` is a heartbeat: one count per
+completed `VerifyInternal` pass, and a `verification-heartbeat-missing` alarm
+with `treat_missing_data = "breaching"` (fifteen minutes, three passes, SEV2)
+fires when nothing is verifying — pass broken, exporter down, or instruments
+not built — and says that every counter-based SEV1 is blind while it does.
+`test/infra` now also proves every alarm bound to the application namespace
+names an instrument some Go file constructs, in either construction style the
+tree uses; the first draft of that test saw only one style and reported the
+four relay metrics missing, which was the test's gap, not the tree's.
+
+**A smaller thing the same test found.** `Raise` logs through
+`LoggerFrom(ctx)`, which falls back to `slog.Default` when nothing put a
+logger on the context. Requests get one from the middleware; the tickers ran on
+the root context, which had none — so the "alert is said out loud" line from
+a background pass bypassed the JSON logger the deployment reads. The root
+context now carries it.
+
+**What is not code.** The URL. `NODAL_ALERT_WEBHOOK_URL` is a dashboard
+secret in `render.yaml` (`sync: false`, like every other credential there)
+and the next deploy of this build does not go live until it is set: the
+process refuses configuration, never answers `/v1/healthz`, and Render keeps
+the previous deploy serving. That is the safe direction and it is stated
+rather than softened. The paid-tier inventory the original sweep also turned
+up — `internal/notification` has no production caller, the Temporal
+escalation workflow has nothing starting it, `reconciliation.record.transitioned`
+has no subscriber — is not this finding's defect (nothing pages) and is not
+runnable on a tier with no Temporal and no relay; it stays recorded under
+F-69.
+
+**Evidence.** STATIC_PROOF for the three dead ends, each confirmed by grep
+for callers. TEST_UNIT: `internal/alert` (never blocks under a wedged sink,
+drops and counts; allowlist drops and counts unknown keys; non-2xx is a
+failure; severity floor; Close drains; nil dispatcher usable; each format's
+body and headers; host detection; bounded summary), `cmd/api/alerts_test.go`
+(a `Raise` reaches the sink through `OnAlert` with the allowlist applied; the
+composition root calls `attachAlertDispatcher`, constructs the dispatcher,
+closes it on both shutdown paths, and puts the logger on the root context; no
+destination is said at WARN naming the variable; the delivery timeout is
+trimmed to the shutdown budget and the destination is named without its
+secret), `internal/config` (the variable set, the golden `.env.example`, the
+STAGING refusal), `internal/observability` (the heartbeat instrument name),
+`test/infra` (every application alarm names a constructed instrument; the
+heartbeat alarm breaches on missing data). TEST_INTEGRATION:
+`TestIntegration_DriftInTheDatabaseReachesTheWebhook` — a `ledger_balances`
+row written behind the ledger's back as the schema owner, the API's own
+`verifyOnce`, the seam, the dispatcher, and a webhook that receives a SEV1
+`ledger_integrity_violation` naming the record, which exists in
+`reconciliation_records` as MISMATCH; and the clean pass before it delivers
+nothing. `terraform validate` in dev, staging and prod; `terraform fmt
+-check`. LIVE: the deployed STAGING service observed healthy before this
+change; the change has not been deployed, and the reason is stated above.
 
 ## F-119 · An as-of read that could look ahead · NEW · P3 · FIXED
 

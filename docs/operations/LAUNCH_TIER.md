@@ -133,6 +133,15 @@ collectors; none was adopted because each is another account, another quota and
 another thing that can fail, for a cohort of 50 where the logs are readable by
 one person. It is the first thing to add when the tier grows.
 
+Alerting is not thinner, and it was until F-118. Every reconciliation alert —
+a ledger-integrity violation above all — is POSTed by `internal/alert` to
+`CP_ALERT_WEBHOOK_URL`, in Slack's, Discord's or ntfy's own shape when the host
+is one of those and as JSON otherwise. A Slack or Discord incoming webhook or
+an ntfy topic costs nothing and needs no collector. The API runs the internal
+verification pass itself every five minutes (`cmd/api/reconverify.go`),
+because this tier has no worker to run it, and STAGING refuses to start
+without a destination: an alert nobody receives is not an alert.
+
 ## 7. Failing closed before the quota
 
 The hard rule was that the system must fail closed before crossing a free-tier

@@ -77,7 +77,7 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 
 | Item | Finding | Shape |
 |---|---|---|
-| **Nothing pages anyone about anything** | F-118 | The largest of these. Alerts now log and both roots build the real instruments; what remains is a destination and something on a timer. Half deployment decision. Before the Terraform is ever applied, its five application alarms set `treat_missing_data = "notBreaching"`, so a metric that never arrives reads OK |
+| **Nothing pages anyone about anything** | F-118 | **Closed in software.** `internal/alert` delivers to a webhook in the shape the destination accepts (Slack, Discord, ntfy, generic); `cmd/api` runs the verification pass every five minutes; `verification_passes` is a heartbeat whose alarm breaches on missing data, so the five counter alarms keeping `notBreaching` can no longer read green over a system emitting nothing. Remaining: `NODAL_ALERT_WEBHOOK_URL` in the Render dashboard — the deployment refuses to boot without it |
 
 | Choose a security-event retention period, or decide not to | ADR-0020 | `CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and tested (00740). Not code; the question the ADR left open |
 | `login_attempts` has a purge that this deployment never runs | F-105 | A cron on the blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is |

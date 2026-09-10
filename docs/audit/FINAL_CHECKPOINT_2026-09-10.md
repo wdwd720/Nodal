@@ -71,7 +71,7 @@ The seven that are not fixed, and what each is now:
 | **F-84** | part | Request validation precedes authentication, so two endpoints answer 400 where 401 would be truthful. Fixing it means authorising on the chi route pattern before the generated wrapper, which is a change to the boundary's structure. |
 | **F-93** | open | An inventory row across six provider audits. **Five of its rows closed this session** — the schema-owner credential, the replica assumption, the login-attempt window, and both Neon pool knobs. What remains is decisions (Stripe-account availability, the identity model, whether an unverified account may pay in), one external fact (a mainnet settlement mint), and two small items. |
 | **F-95** | part | 121 enum CHECKs have no Go counterpart. Most have no Go list to compare against, by their nature. |
-| **F-118** | part | Alerts log and both roots build the real instruments. What remains is a destination and something on a timer — half a deployment decision. |
+| **F-118** | fixed | **Closed this session.** A webhook destination in the shape each destination accepts, refused-when-empty in STAGING/PROD; the verification pass on a ticker in `cmd/api`; a heartbeat alarm that breaches on missing data; a drift in the database reaching a webhook end to end under test. What is not code is the URL, and the next deploy does not go live until it is set. |
 
 Opened this session: **F-100 through F-132 — 33 findings, 17 P1, 10 P2, 6 P3.**
 Every one is fixed. Twenty-five came from eleven parallel read-only audits whose
@@ -100,7 +100,7 @@ individually.
 | **F-84** | P3 | part | Request validation precedes authentication. **Confirmed LIVE today** — `POST /v1/payouts` with no session answers `400 "Header parameter Idempotency-Key is required"`, not 401. Authentication still holds: the same request *with* an idempotency key answers 401. Fixing it means authorising on the route pattern before the generated wrapper, which wants its own design. |
 | **F-93** | P1 | open | An inventory row across six provider audits. Its constituent items are individually tracked; several are deployment changes (`CP_DATABASE_MIGRATE_URL` service-conditional, a Neon idle timeout, an advisory lock on replica count) and one is an external fact (a mainnet settlement mint). |
 | **F-95** | P3 | part | 121 enum CHECKs have no Go counterpart. Most have no Go list to compare against, by their nature. Nine more were paired this session; three were deliberately left unpaired. |
-| **F-118** | P2 | part | Alerts now log at ERROR/WARN and both roots construct the real OTel instruments. What remains is a destination and something on a timer — half deployment decision. |
+| **F-118** | P2 | fixed | Alerts log, both roots construct the real instruments, and now: `internal/alert` delivers to a webhook (Slack, Discord, ntfy or generic, chosen from the host), `cmd/api` runs `VerifyInternal` + `SweepEscalations` every five minutes, `verification_passes` is a heartbeat with a breaching alarm, and STAGING/PROD refuse to start without a destination. |
 | **F-125** | P3 | open | The race detector cannot link on this host: this GCC's path contains a space and binutils splits the linker-script argument on it. It is a host change, not a repository one. **Every race claim in this repository rests on CI.** |
 
 Closed after this checkpoint was first written, and listed because their absence
@@ -566,7 +566,7 @@ Stated explicitly, and none of them optimistically.
 
 | Flag | Value | Why |
 |---|---|---|
-| `SOFTWARE_COMPLETE` | **false** | **Two named items remain, and both are decisions rather than code.** An alert destination (F-118) — the instruments are built and the alerts log; what is missing is somewhere to send them and something on a timer, which is half a deployment decision. And the PII-read policy (F-47), whose answer depends on an encryption that has not been built, so it cannot be taken yet. F-42's stronger remedy came off this list when the last of its seventeen tables landed; `security_events` partitioning came off with 00740. What is left of F-84 and F-95 is design work and a class of comparison most of the constraints cannot have. |
+| `SOFTWARE_COMPLETE` | **false** | **One named item remains.** The PII-read policy (F-47), whose answer depends on an encryption that has not been built, so it cannot be taken yet. F-118 came off this list when the destination, the timer and the heartbeat landed — what is left of it is a URL in a dashboard, and the deployment refuses to boot without it rather than booting unalerted. F-42's stronger remedy came off when the last of its seventeen tables landed; `security_events` partitioning came off with 00740. What is left of F-84 and F-95 is design work and a class of comparison most of the constraints cannot have. |
 | `STRIPE_PRODUCTION_APPROVED` | **false** | Stripe's own review of a real business. Not submitted. `BLOCKED_EXTERNAL`. |
 | `LEGAL_APPROVED` | **false** | Counsel. `BLOCKED_EXTERNAL`. **No legal approval is claimed anywhere.** |
 | `PENTEST_COMPLETE` | **false** | An independent third party. **This audit is not one and does not claim to be.** `BLOCKED_EXTERNAL`. |
@@ -598,8 +598,11 @@ different position from where this session started, and it is still not
 
 1. **Decide the PII-read policy** (F-47). Two deliberate statements contradict
    each other and the architecture does not derive which wins.
-2. **Choose an alert destination** (F-118). The instruments exist and the alerts
-   log; nothing has anywhere to go.
+2. **Paste an alert destination** (F-118). Set `NODAL_ALERT_WEBHOOK_URL` in the
+   Render dashboard to a Slack or Discord incoming-webhook URL, an ntfy topic,
+   or any endpoint that takes a JSON POST; the shape is chosen from the host.
+   Until it is set, the next deploy of this build refuses to start and Render
+   keeps the current one serving — by design, and stated.
 3. **Engage counsel** for B-02, B-03 and B-07.
 4. **Submit the Stripe restricted-business review** (B-09). Deliberately not
    done here.
@@ -676,8 +679,9 @@ The next four pieces of software work, in the order they are worth doing:
    into a trigger breaks the version check and the returned row at once.
    `agents` also has one, writing seven columns including the promotion
    evidence.
-2. **An alert destination and something on a timer** (F-118). Everything up to
-   the destination is built.
+2. ~~An alert destination and something on a timer (F-118).~~ Done: the
+   destination, the timer, the heartbeat alarm and the payload shapes. A URL
+   remains, and it is an operator's to paste.
 3. **Birth control for `wallets`, `assets` and `instruments`** (F-122 residual).
    These are named in an assertion that fails when one is closed, so the list
    cannot go stale.

@@ -1469,14 +1469,18 @@ observed failing first.
    one of them is closed, so the list cannot go stale.
 4. **F-42 and F-47**, unchanged. F-109 applied the privilege treatment to the
    four tables whose columns are money; the rest of F-42's list stands.
-5. **Nothing pages anyone about anything** (F-118, PART). The software half is
-   done: alerts now log, and both composition roots construct the real
-   instruments. What remains is a destination and something that runs on a
-   timer — a cron on the Render blueprint, or a ticker in `cmd/api` the way
-   `runCreditSettlement` already is. Also worth doing before that Terraform is
-   ever applied: the five application alarms set `treat_missing_data =
-   "notBreaching"`, so a metric that never arrives reads OK rather than
-   INSUFFICIENT_DATA.
+5. **Nothing pages anyone about anything** (F-118, FIXED). Alerts log, both
+   composition roots construct the real instruments, and now `internal/alert`
+   delivers them to a webhook — in Slack's, Discord's or ntfy's own shape,
+   chosen from the host, or as JSON — from a bounded queue that never blocks a
+   money-moving transaction and forwards only allowlisted fields. `cmd/api`
+   runs `VerifyInternal` and `SweepEscalations` every five minutes the way
+   `runCreditSettlement` already ran, so the ledger is checked against its own
+   entries on the tier that has no worker. `verification_passes` is a heartbeat
+   and its alarm breaches on missing data, which is what the five
+   `notBreaching` counter alarms could not do. STAGING and PROD refuse to start
+   without `CP_ALERT_WEBHOOK_URL`; the URL is the one thing left, and it is a
+   dashboard secret.
 
 `docs/audit/LAUNCH_GATE_MATRIX.md` remains the honest summary of what stands
 between this repository and real money. All five launch flags are still false.
@@ -1749,7 +1753,7 @@ Read it before this file if you want the state; read this file for how it got
 there.
 
 `docs/audit/AUDIT_FINDINGS.md` is the register: **132 findings**, of which three
-are open (F-47, F-69, F-93) and four are partial (F-65, F-84, F-95, F-118); the
+are open (F-47, F-69, F-93) and three are partial (F-65, F-84, F-95); the
 rest are fixed. **F-125 closed on 2026-09-10** — the race detector links on this
 host now, so both race tiers run here and no race claim rests on CI alone.
 
