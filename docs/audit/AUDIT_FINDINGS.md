@@ -153,6 +153,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-127 | P2 | NEW | fixed | The ADR deciding how an unprunable table must be pruned records that the table does not refuse DELETE; it does, and that was the fact the choice of remedy rested on |
 | F-128 | P1 | NEW | fixed | The application role could mint a transition flag by attaching the real setter to a temp table of its own, which F-42 does not record and which defeats any fix that only hardens the flag's value |
 | F-129 | P2 | NEW | fixed | A restore that lost one table would pass every comparison the restore drill makes and then refuse every state change in the system, with an error blaming the caller |
+| F-130 | P3 | NEW | fixed | This register states every finding's status twice and nothing checked the two agreed; four disagreed, and five findings have no evidence section at all |
 
 ---
 
@@ -1559,7 +1560,7 @@ passed against a deployment where the route did not exist. That is F-37's lesson
 arriving twice in one session: the harness now wires the native-asset and payout
 ports, and each of the three tests was observed failing with its fix removed.
 
-## F-42 · The audit binding trusts a session variable any caller can set · BASELINE · P2 · OPEN
+## F-42 · The audit binding trusts a session variable any caller can set · BASELINE · P2 · FIXED
 
 **Found by** an adversarial read of the migration surface.
 
@@ -4269,7 +4270,7 @@ binding means authorizing on the chi route pattern before the generated wrapper
 runs, which is a change to the boundary's structure and wants its own design.
 The document is corrected to say what the deployment does.
 
-## F-85 · The body is buffered before the rate limiter · NEW · P2 · OPEN
+## F-85 · The body is buffered before the rate limiter · NEW · P2 · FIXED
 
 `captureBody` is middleware position 233 and `rateLimit` is position 235, so
 every request — including the ones the limiter would refuse — has up to
@@ -4280,11 +4281,16 @@ On the deployed topology that matters more than it usually would: one Render fre
 instance, 512 MB, no horizontal capacity. An unauthenticated caller can force
 megabytes of allocation per second before any application-level limit applies.
 
-Left open deliberately. The fix is to move rate limiting ahead of body capture,
-and the ordering is load-bearing in the other direction too — `captureBody`
+**Fix.** `rateLimit` now runs ahead of `captureBody` (`internal/httpapi/server.go`),
+so a request the limiter refuses is refused before its body is read.
+
+This entry said "left open deliberately" for one batch, and the reason it gave
+was real: the ordering is load-bearing in the other direction too — `captureBody`
 is what makes the raw body available to the webhook signature check, and the
 limiter's key depends on the principal the authenticator attaches. Reordering
-middleware on the money path is not a change to make at the end of a batch.
+middleware on the money path was not a change to make at the end of a batch, so
+it was made at the start of the next one, with the adversarial body-limit suite
+in `internal/httpapi/bodylimit_test.go` written first.
 
 ## F-86 · The payload-hash binding stopped at PROCESSED · NEW · P2 · FIXED
 
@@ -4776,7 +4782,7 @@ builds a freshly authenticated proposer, which is what the real ceremony
 requires — the change makes the test describe the ceremony more accurately
 than it did.
 
-## F-100 · A funding parked for a human is un-parked by the next webhook · NEW · P1 · OPEN
+## F-100 · A funding parked for a human is un-parked by the next webhook · NEW · P1 · FIXED
 
 **Found by** an independent read of the Stripe adapter and the funding state
 machine, checking what MANUAL_REVIEW actually means to each caller.
@@ -5203,7 +5209,7 @@ passes against the new one. The step-up test builds a server with a tightened
 window and compares the reported instant to it, with a control that an
 unconfigured deployment still reports the ceiling rather than zero.
 
-## F-105 · An unauthenticated caller chose how much of the database to consume · NEW · P1 · PART
+## F-105 · An unauthenticated caller chose how much of the database to consume · NEW · P1 · FIXED
 
 **Found by** an independent audit of the abuse and resource-exhaustion surface,
 reasoning from the deployment (one Render free instance, Neon free tier) rather
@@ -6719,6 +6725,57 @@ simulate a restore that never had the row.
 
 **Evidence.** `REAL_DB_INTEGRATION` — the failure and both fixes reproduced
 against a genuinely restored PostgreSQL 16 database, not a simulated one.
+
+## F-130 · The register did to itself what it keeps finding · NEW · P3 · FIXED
+
+**Found by** re-reading this register at the start of a session to recompute
+which findings were still open, rather than trusting the numbers a previous
+checkpoint carried.
+
+Every finding's status appears **twice**: in the summary table at the top, and
+in the heading of its own section. Nothing compared them. Four disagreed:
+
+```
+F-42   table=fixed  heading=open
+F-85   table=fixed  heading=open
+F-100  table=fixed  heading=open
+F-105  table=fixed  heading=part
+```
+
+All four stale in the same direction — the work was done, the row was updated,
+the heading was not. So a reader who scrolled to the detail of the audit
+binding, the buffered request body, the un-parked funding or the unprunable
+security trail was told the fix had not landed. **In the document this
+repository keeps in order to be the thing that does not overstate.**
+
+F-85's section went further than a stale heading: its body still read "Left open
+deliberately," with the reasoning for leaving it open, under a row that said
+fixed. The reasoning was true when written; the entry now says both, because
+"we said we would not do this yet and then did it at the start of the next
+batch" is more useful than either half alone.
+
+**And five findings have a summary row and no section at all** — F-05, F-06,
+F-08, F-09 and F-40. All fixed, all BASELINE-era, all predating the convention
+that a finding carries its evidence. Reconstructing that evidence now would be
+archaeology rather than audit, and inventing it would be worse than the gap, so
+they are named in a closed list rather than tolerated by a rule.
+
+**Why P3.** Nothing in the running system is affected. It is recorded because of
+what it is an instance of: **a list duplicated in two places diverges, and the
+copy nobody greps is the one that rots.** That is the defect class this register
+names more often than any other, and it had it.
+
+**Fix.** `TestDocs_EveryFindingSaysTheSameThingTwice` holds the table against
+the headings in both directions — a heading may not disagree with its row, and a
+section may not outlive its row. `TestDocs_EveryFindingCarriesItsEvidence`
+requires a section per finding and fails if a new finding is added without one,
+or if a name on the exception list ever gains a section or leaves the register.
+
+Both were proven non-vacuous by reintroducing the defect: putting F-85's heading
+back to OPEN, and deleting F-129's section.
+
+**Evidence.** `STATIC_PROOF` — the register is a file, and the check is a
+comparison of it against itself.
 
 ## Findings deliberately NOT raised
 
