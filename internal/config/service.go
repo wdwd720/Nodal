@@ -39,9 +39,23 @@ const (
 	// DepArchive is the S3-compatible object store that holds raw payloads,
 	// provider evidence and the WORM audit archive.
 	DepArchive Dependency = "archive"
+	// DepKMS is the key management service that signs the audit chain.
+	//
+	// Only cmd/audit-worker signs: it is the only binary that constructs a
+	// proof.Signer or a proof.Checkpointer. Every other binary links the KMS
+	// SDK through internal/proof and never calls it.
+	//
+	// This matters more than the usual unused-endpoint argument, because the
+	// requirement it carries is a real control. proof.NewLocalECDSASigner
+	// refuses STAGING and PROD outright: a software key held by the signing
+	// process can be copied by anything that compromises that process, and the
+	// audit chain's whole value is that it cannot be rewritten by whoever
+	// rewrote the data. So the control stays exactly where the signing happens,
+	// and stops being demanded of binaries that do not sign.
+	DepKMS Dependency = "kms"
 )
 
-var allDependencies = []Dependency{DepRedis, DepRedpanda, DepClickHouse, DepTemporal, DepArchive}
+var allDependencies = []Dependency{DepRedis, DepRedpanda, DepClickHouse, DepTemporal, DepArchive, DepKMS}
 
 // AllDependencies returns every declared dependency (a copy).
 func AllDependencies() []Dependency { return slices.Clone(allDependencies) }
@@ -107,7 +121,10 @@ var serviceDeps = map[Service][]Dependency{
 	// so the archive is declared because that is where it is going and because
 	// the audit bucket is the one place Object Lock is a compliance control
 	// rather than a convenience.
-	ServiceAuditWorker: {DepArchive},
+	//
+	// It is also the only binary that signs the audit chain, which is why it
+	// alone declares KMS.
+	ServiceAuditWorker: {DepArchive, DepKMS},
 
 	// Solana -> normalizer -> Redpanda -> ClickHouse, with raw payloads and
 	// evidence archived.

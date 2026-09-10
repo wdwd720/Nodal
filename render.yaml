@@ -1,0 +1,308 @@
+# Render Blueprint for the $0-fixed-cost launch tier.
+#
+# One free web service and nothing else. See docs/operations/LAUNCH_TIER.md for
+# why this tier exists and docs/operations/RENDER_DEPLOY.md for what an operator
+# does with it.
+#
+# WHAT IS DELIBERATELY ABSENT
+#
+# No database. The ledger lives on Neon, whose free tier documents SUSPENSION
+# rather than metering when a quota is reached. Render's own free Postgres
+# expires 30 days after creation and is then deleted, which is not somewhere a
+# ledger can live.
+#
+# No Redis. One instance keeps its rate-limit counters in its own memory, which
+# on one instance enforces exactly the configured limit. CP_HTTP_REPLICAS says
+# so out loud, and internal/config refuses the arrangement the moment that
+# number is above one.
+#
+# No workers and no cron jobs. Both are paid service types on Render, and a
+# fixed monthly charge is the one thing this tier may not have. The
+# reconciliation sweep and the migrations are operator-run for now; the
+# migration path in LAUNCH_TIER.md §8 is where they stop being.
+#
+# NO PAYMENT METHOD MAY EVER BE ADDED TO THIS WORKSPACE. Render bills bandwidth
+# and pipeline overage when a card is on file and SUSPENDS the free services
+# when one is not. The absence of a card is the spend cap.
+
+services:
+  - type: web
+    name: nodal-api
+    runtime: docker
+    plan: free
+    region: ohio # the same region as the Neon project, so the database is a short hop
+    dockerfilePath: ./build/Dockerfile
+    dockerContext: .
+    branch: main
+
+    # /v1/healthz is answered by the process alone and touches no dependency,
+    # which is what makes it a liveness check rather than a readiness check.
+    # Pointing Render at /v1/readyz instead would take the service out of
+    # rotation whenever Neon is scaled to zero, which is most of the time.
+    healthCheckPath: /v1/healthz
+
+    envVars:
+      # --- the build ----------------------------------------------------
+      # build/Dockerfile requires a CMD build arg naming the cmd/ directory to
+      # compile, and Render passes service environment variables to the build
+      # as build args. This is the only reason CMD is here; the runtime ignores
+      # it.
+      - key: CMD
+        value: api
+
+      # --- secrets, set in the dashboard and never in this file ----------
+      # sync: false means Render prompts for the value and keeps it out of the
+      # repository. Each is referenced indirectly: internal/config refuses a
+      # plain secret outside LOCAL/TEST, so CP_* carries an env:// reference
+      # and the value sits in the variable it names.
+      - key: NODAL_DB_APP_URL
+        sync: false
+      - key: NODAL_DB_MIGRATE_URL
+        sync: false
+      - key: NODAL_OIDC_CLIENT_SECRET
+        sync: false
+      - key: NODAL_STRIPE_API_KEY
+        sync: false
+      - key: NODAL_STRIPE_WEBHOOK_SECRET
+        sync: false
+
+      # --- core ----------------------------------------------------------
+      - key: CP_ENV
+        value: PROD
+      - key: CP_SERVICE_NAME
+        value: nodal-api
+      - key: CP_PUBLIC_PRODUCT_NAME
+        value: Nodal
+
+      # --- HTTP ----------------------------------------------------------
+      # 10000 is Render's default port. The app binds CP_HTTP_ADDR rather than
+      # reading $PORT, so the two have to agree.
+      - key: CP_HTTP_ADDR
+        value: 0.0.0.0:10000
+      - key: CP_HTTP_PUBLIC_BASE_URL
+        value: https://api-nodal.actorvia.xyz
+      - key: CP_HTTP_CORS_ORIGINS
+        value: https://api-nodal.actorvia.xyz
+      - key: CP_HTTP_READ_TIMEOUT
+        value: 15s
+      - key: CP_HTTP_WRITE_TIMEOUT
+        value: 30s
+      - key: CP_HTTP_IDLE_TIMEOUT
+        value: 120s
+      - key: CP_HTTP_MAX_BODY_BYTES
+        value: "1048576"
+
+      # --- rate limiting -------------------------------------------------
+      # One process, so process-local counters enforce the configured limit
+      # exactly. Raising the instance count without raising this produces a
+      # limit looser than the one configured, which is why the number is stated
+      # rather than inferred.
+      - key: CP_RATELIMIT_BACKEND
+        value: memory
+      - key: CP_HTTP_REPLICAS
+        value: "1"
+
+      # --- capacity ceilings ---------------------------------------------
+      # The launch tier's hard limits, checked inside the transaction of every
+      # financial action and before the provider is called. See
+      # internal/capacity: a measurement that fails is a refusal.
+      - key: CP_CAPACITY_MAX_ACCOUNTS
+        value: "50"
+      - key: CP_CAPACITY_MAX_PURCHASES_PER_DAY
+        value: "200"
+      - key: CP_CAPACITY_MAX_AT_RISK_MINOR
+        value: "200000"
+      - key: CP_CAPACITY_MAX_DATABASE_BYTES
+        value: "524288000"
+
+      # --- database ------------------------------------------------------
+      # Neon, over TLS, with a small pool: the free tier autoscales from 0.25 CU
+      # and a large idle pool would hold the compute awake and spend the
+      # 100 CU-hour monthly allowance on nothing.
+      - key: CP_DATABASE_APP_URL
+        value: env://NODAL_DB_APP_URL
+      - key: CP_DATABASE_MIGRATE_URL
+        value: env://NODAL_DB_MIGRATE_URL
+      - key: CP_DATABASE_REQUIRE_TLS
+        value: "true"
+      - key: CP_DATABASE_MAX_CONNS
+        value: "8"
+      - key: CP_DATABASE_MIN_CONNS
+        value: "0"
+      - key: CP_DATABASE_STATEMENT_TIMEOUT
+        value: 30s
+      - key: CP_DATABASE_LOCK_TIMEOUT
+        value: 5s
+
+      # --- evidence archive ----------------------------------------------
+      # Postgres, not S3. Every free object store wants a card. Write-once here
+      # comes from the privilege model and a trigger rather than Object Lock;
+      # migration 00730 carries the argument.
+      - key: CP_ARCHIVE_BACKEND
+        value: postgres
+
+      # --- authentication ------------------------------------------------
+      # Zitadel. The issuer has NO trailing slash and go-oidc compares it byte
+      # for byte against the discovery document, so this string is exact.
+      - key: CP_AUTH_MODE
+        value: oidc
+      - key: CP_AUTH_ISSUER
+        value: https://nodal-az1hxe.us1.zitadel.cloud
+      - key: CP_AUTH_CLIENT_ID
+        value: "390076573774056913"
+      - key: CP_AUTH_CLIENT_SECRET_REF
+        value: env://NODAL_OIDC_CLIENT_SECRET
+      - key: CP_AUTH_REDIRECT_URL
+        value: https://api-nodal.actorvia.xyz/v1/auth/callback
+      - key: CP_AUTH_COOKIE_NAME
+        value: nodal_session
+      - key: CP_AUTH_COOKIE_SECURE
+        value: "true"
+      - key: CP_AUTH_SESSION_TTL
+        value: 12h
+      - key: CP_AUTH_STEP_UP_MAX_AGE
+        value: 5m
+      - key: CP_AUTH_DEBUG_ENABLED
+        value: "false"
+
+      # --- telemetry -----------------------------------------------------
+      # No endpoint, so no-op tracer and meter providers are installed and
+      # nothing is exported. Structured logs go to Render. This is the one place
+      # the launch tier is genuinely thinner than the AWS architecture, and
+      # LAUNCH_TIER.md §6 says so rather than glossing it.
+      - key: CP_TELEMETRY_OTLP_INSECURE
+        value: "false"
+      - key: CP_TELEMETRY_TRACE_SAMPLE_RATIO
+        value: "0.1"
+      - key: CP_TELEMETRY_METRICS_INTERVAL
+        value: 60s
+
+      # --- retention -----------------------------------------------------
+      - key: CP_RETENTION_LOGIN_ATTEMPT_DAYS
+        value: "90"
+      - key: CP_RETENTION_FINANCIAL_RECORD_DAYS
+        value: "2555"
+      - key: CP_RETENTION_SECURITY_AUDIT_DAYS
+        value: "2555"
+      - key: CP_RETENTION_RAW_MARKET_DATA_DAYS
+        value: "30"
+      - key: CP_RETENTION_SOCIAL_DATA_DAYS
+        value: "30"
+      - key: CP_RETENTION_MODEL_IO_DAYS
+        value: "90"
+      - key: CP_RETENTION_OPERATIONAL_LOG_DAYS
+        value: "30"
+
+      - key: CP_SEED_ENABLED
+        value: "false"
+
+      # --- provider slots ------------------------------------------------
+      # `sandbox`, not `live`. Nothing here has a production contract yet, and
+      # sandbox says so; `fake` is refused outright in PROD. Every capability
+      # gate stays DISABLED regardless of these modes -- a mode is not an
+      # approval, and only a persisted dual-approved gate row is.
+      #
+      # Only credit_purchase is exercised by this tier. The rest are named
+      # because the configuration requires a name once a slot is not fake, and
+      # the name records intent rather than a live integration.
+      - key: CP_PROVIDER_CREDIT_PURCHASE_MODE
+        value: sandbox
+      - key: CP_PROVIDER_CREDIT_PURCHASE_NAME
+        value: stripe-credit
+      - key: CP_PROVIDER_CREDIT_PURCHASE_TIMEOUT
+        value: 20s
+      - key: CP_PROVIDER_CREDIT_PURCHASE_API_KEY_REF
+        value: env://NODAL_STRIPE_API_KEY
+      - key: CP_PROVIDER_CREDIT_PURCHASE_WEBHOOK_SECRET_REF
+        value: env://NODAL_STRIPE_WEBHOOK_SECRET
+
+      - key: CP_PROVIDER_PAYOUT_MODE
+        value: sandbox
+      - key: CP_PROVIDER_PAYOUT_NAME
+        value: stripe-payout
+      - key: CP_PROVIDER_PAYOUT_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_FUNDING_MODE
+        value: sandbox
+      - key: CP_PROVIDER_FUNDING_NAME
+        value: stripe-onramp
+      - key: CP_PROVIDER_FUNDING_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_WALLET_MODE
+        value: sandbox
+      - key: CP_PROVIDER_WALLET_NAME
+        value: privy
+      - key: CP_PROVIDER_WALLET_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_SIGNING_MODE
+        value: sandbox
+      - key: CP_PROVIDER_SIGNING_NAME
+        value: privy
+      - key: CP_PROVIDER_SIGNING_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_EXECUTION_MODE
+        value: sandbox
+      - key: CP_PROVIDER_EXECUTION_NAME
+        value: jupiter
+      - key: CP_PROVIDER_EXECUTION_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_MARKET_DATA_MODE
+        value: sandbox
+      - key: CP_PROVIDER_MARKET_DATA_NAME
+        value: helius
+      - key: CP_PROVIDER_MARKET_DATA_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_CHAIN_OBSERVER_MODE
+        value: sandbox
+      - key: CP_PROVIDER_CHAIN_OBSERVER_NAME
+        value: helius
+      - key: CP_PROVIDER_CHAIN_OBSERVER_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_CHAIN_OBSERVER_FALLBACK_MODE
+        value: sandbox
+      - key: CP_PROVIDER_CHAIN_OBSERVER_FALLBACK_NAME
+        value: solana-rpc
+      - key: CP_PROVIDER_CHAIN_OBSERVER_FALLBACK_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_MODEL_MODE
+        value: sandbox
+      - key: CP_PROVIDER_MODEL_NAME
+        value: anthropic
+      - key: CP_PROVIDER_MODEL_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_EVENT_BUS_MODE
+        value: sandbox
+      - key: CP_PROVIDER_EVENT_BUS_NAME
+        value: redpanda
+      - key: CP_PROVIDER_EVENT_BUS_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_WORKFLOW_MODE
+        value: sandbox
+      - key: CP_PROVIDER_WORKFLOW_NAME
+        value: temporal
+      - key: CP_PROVIDER_WORKFLOW_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_ARCHIVE_MODE
+        value: sandbox
+      - key: CP_PROVIDER_ARCHIVE_NAME
+        value: postgres
+      - key: CP_PROVIDER_ARCHIVE_TIMEOUT
+        value: 20s
+
+      - key: CP_PROVIDER_NOTIFICATION_MODE
+        value: sandbox
+      - key: CP_PROVIDER_NOTIFICATION_NAME
+        value: ses
+      - key: CP_PROVIDER_NOTIFICATION_TIMEOUT
+        value: 20s

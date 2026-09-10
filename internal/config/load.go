@@ -471,10 +471,10 @@ func specs() []varSpec {
 		needs(DepArchive, secretVar(opt("CP_ARCHIVE_SECRET_KEY_REF", secArchive, "SecretRef to a static S3 secret key. Leave empty in AWS to use the task IAM role.", "cp_minio_local",
 			setSecret(func(c *Config) *SecretRef { return &c.Archive.SecretKeyRef })))),
 
-		opt("CP_KMS_AUDIT_SIGNING_KEY_ID", secKMS, "KMS key id/ARN used to sign audit records. Required in STAGING/PROD.", "",
-			setString(func(c *Config) *string { return &c.KMS.AuditSigningKeyID })),
-		opt("CP_KMS_REGION", secKMS, "KMS region. Required when a signing key is set.", "",
-			setString(func(c *Config) *string { return &c.KMS.Region })),
+		needs(DepKMS, opt("CP_KMS_AUDIT_SIGNING_KEY_ID", secKMS, "KMS key id/ARN used to sign audit records. Required in STAGING/PROD of the binary that signs, which is cmd/audit-worker alone.", "",
+			setString(func(c *Config) *string { return &c.KMS.AuditSigningKeyID }))),
+		needs(DepKMS, opt("CP_KMS_REGION", secKMS, "KMS region. Required when a signing key is set.", "",
+			setString(func(c *Config) *string { return &c.KMS.Region }))),
 
 		req("CP_AUTH_MODE", secAuth, "Authentication mode: oidc | dev. dev is rejected in STAGING/PROD.", "dev",
 			setString(func(c *Config) *string { return &c.Auth.Mode })),

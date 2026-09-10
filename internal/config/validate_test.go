@@ -52,7 +52,7 @@ func prodRuleCases() []struct {
 		{"archive audit bucket", RuleArchiveConfigured, "", "Archive.AuditBucket", func(c *Config) { c.Archive.AuditBucket = "" }},
 		{"archive region", RuleArchiveConfigured, "", "Archive.Region", func(c *Config) { c.Archive.Region = "" }},
 		{"archive object lock", RuleArchiveObjectLock, "", "Archive.ObjectLockRequired", func(c *Config) { c.Archive.ObjectLockRequired = false }},
-		{"kms key", RuleKMSConfigured, "", "KMS.AuditSigningKeyID", func(c *Config) { c.KMS.AuditSigningKeyID = "" }},
+		{"kms key", RuleKMSConfigured, ServiceAuditWorker, "KMS.AuditSigningKeyID", func(c *Config) { c.KMS.AuditSigningKeyID = "" }},
 		{"cookie secure", RuleCookieSecure, "", "Auth.CookieSecure", func(c *Config) { c.Auth.CookieSecure = false }},
 		{"public base url http", RulePublicBaseURLHTTPS, "", "HTTP.PublicBaseURL", func(c *Config) { c.HTTP.PublicBaseURL = "http://api.example.com" }},
 		{"financial retention zero", RuleRetentionNonZero, "", "Retention.FinancialRecordDays", func(c *Config) { c.Retention.FinancialRecordDays = 0 }},
@@ -137,7 +137,10 @@ func TestValidate_InsecureOTLPOnlyRejectedInProd(t *testing.T) {
 
 func TestValidate_JoinsEveryViolation(t *testing.T) {
 	t.Parallel()
-	c := validProdConfig(t)
+	// Loaded as the audit worker, because one of the six rules below belongs to
+	// the binary that signs the audit chain and to no other. cmd/api links the
+	// KMS SDK and never calls it.
+	c := validProdConfigAs(t, ServiceAuditWorker)
 	c.Providers.Funding.Mode = ProviderModeFake
 	c.Auth.DebugAuthEnabled = true
 	c.Seed.Enabled = true

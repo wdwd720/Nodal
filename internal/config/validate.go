@@ -377,7 +377,7 @@ func (c *Config) Validate() error {
 	if c.KMS.AuditSigningKeyID != "" && c.KMS.Region == "" {
 		add(RuleField, "KMS.Region", "required when AuditSigningKeyID is set")
 	}
-	if prodLike && c.KMS.AuditSigningKeyID == "" {
+	if prodLike && c.RequiresDependency(DepKMS) && c.KMS.AuditSigningKeyID == "" {
 		add(RuleKMSConfigured, "KMS.AuditSigningKeyID", "must be set in STAGING/PROD")
 	}
 
