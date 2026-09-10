@@ -367,3 +367,11 @@ Two defects in `scripts/seed`, both of which hid behind a misleading error.
 - **Why no KMS:** a fixed monthly cost the launch tier may not carry; the paid tier wraps the same keyring in an envelope and the row format does not change.
 - **Consequences:** `NODAL_PII_KEYRING` is a dashboard secret and STAGING/PROD refuse to start without it; rotation is add-raise-deploy-reseal-remove; a ring missing a version a row names errors on read. Checking what `cp_ops` did with `sessions` found that nothing purged them (F-133).
 - **Evidence:** `internal/pii` unit and integration tests; `TestIntegration_Login_StoresTheVerifiedEmailEncrypted`; `TestIntegration_ExpiredSessionsArePurgedAsOps`; `TestPII_OnlyTheEncryptingStoreWritesPersonalData`; `TestIntegration_ApplicationRolePrivileges`. ADR-0021.
+
+## D-051 — One identity source of truth for the product surfaces (2026-09-10, product goal §3)
+
+- **Problem:** the productization goal raised Supabase as a possible home for user accounts. A second authentication system would create two subjects per person, an account-linking problem Nodal has deliberately not invented (F-64/F-93), and ambiguous authority over who a session belongs to.
+- **Chosen:** ZITADEL remains the only authenticator; Neon owns the Nodal user (`users` keyed by issuer+subject, `identity_pii` sealed, `sessions` as Nodal's own hashed tokens) and gains a separate `user_profiles` table for product-level state. No Supabase.
+- **Why derived rather than chosen:** the code's three eliminating requirements — a strong RFC 8176 `amr`, `auth_time`, `email_verified` — are what step-up and therefore capability activation rest on; ZITADEL meets them at $0 and is verified live, and Supabase Auth is not an OIDC provider the relying-party flow can point at without rewriting the control. Supabase offers no non-auth capability Nodal genuinely needs: SSE exists, evidence goes to the archive, and user documents are provider-hosted by design.
+- **Consequences:** signup is a ZITADEL identity plus a Nodal profile; the browser never holds a provider token; a future provider change is a superseding ADR and an issuer migration, never a parallel directory.
+- **Evidence:** ADR-0022; `docs/operations/IDENTITY_PROVIDER.md`; `docs/operations/LAUNCH_TIER.md` §4; the live login redirect in the final checkpoint §6.

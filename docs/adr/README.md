@@ -39,6 +39,7 @@ The set of ADRs is the one required by goal PART 210.
 | [0019](0019-no-internal-crossing.md) | No internal order matching, crossing, or principal trading | Accepted | 3, 4, 10, 41, 46, 50, 163, 182 | EB-009, EB-011 |
 | [0020](0020-retention-against-append-only-tables.md) | Retention on an append-only table is partition detachment, never row deletion under a disabled trigger | Accepted | 122 | — |
 | [0021](0021-who-may-read-personal-data.md) | Personal data is encrypted in the application or not stored, and a role with no use for it cannot read it | Accepted | 121 | — |
+| [0022](0022-one-identity-source-of-truth.md) | One identity source of truth: ZITADEL authenticates, Neon owns the Nodal user; no second authentication system | Accepted | 4 (product goal §3) | — |
 
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.
