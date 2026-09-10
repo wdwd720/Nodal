@@ -300,6 +300,11 @@
 //	CP_ALERT_MIN_SEVERITY           SEV1 or SEV2; the floor below which nothing is sent
 //	CP_ALERT_TIMEOUT                per-delivery budget; trimmed to fit the shutdown budget
 //
+// Personal data (F-47: the encryption identity_pii was designed for):
+//
+//	CP_PII_KEYRING                  secret; JSON keyring {"active": N, "keys": {"N": base64}};
+//	                                required in STAGING/PROD, empty in LOCAL/TEST stores nothing
+//
 // Seed:
 //
 //	CP_SEED_ENABLED                 bool (false in STAGING/PROD)

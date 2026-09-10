@@ -54,7 +54,9 @@ const SecurityEventRetentionFloorDays = 90
 // Rules applied only when Environment.IsProductionLike (STAGING, PROD).
 const (
 	// RuleAlertDestination requires somewhere for a raised alert to go.
-	RuleAlertDestination  Rule = "ALERT_DESTINATION"
+	RuleAlertDestination Rule = "ALERT_DESTINATION"
+	// RulePIIKeyring requires the key personal data is encrypted under.
+	RulePIIKeyring        Rule = "PII_KEYRING"
 	RuleNoDebugAuth       Rule = "NO_DEBUG_AUTH"
 	RuleNoSeed            Rule = "NO_SEED"
 	RuleDatabaseTLS       Rule = "DATABASE_TLS"
@@ -329,6 +331,17 @@ func (c *Config) Validate() error {
 	if prodLike && c.Alert.WebhookURL.IsZero() {
 		add(RuleAlertDestination, "Alert.WebhookURL",
 			"must be set in STAGING/PROD: an alert nobody receives is not an alert, and a webhook destination costs nothing")
+	}
+
+	// Personal data is encrypted before it is stored, or it is not stored.
+	// The keyring is the encryption, so a prod-like deployment without one
+	// would run with the control silently absent -- which is the state F-47
+	// sat in for a year, with the table empty because nothing could write
+	// it. A keyring costs nothing: it is thirty-two random bytes in a
+	// dashboard secret.
+	if prodLike && c.PII.Keyring.IsZero() {
+		add(RulePIIKeyring, "PII.Keyring",
+			"must be set in STAGING/PROD: personal data is encrypted at the application layer, and this is the key")
 	}
 
 	// A dial must be bounded, and bounded below the request it serves.

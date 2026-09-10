@@ -4,7 +4,11 @@ package identity_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/identity"
+	"github.com/nodal/controlplane/internal/pii"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -154,4 +159,69 @@ func TestIntegration_Login_StepUpExpiryUnknownStateAndOperatorRoles(t *testing.T
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 	_, err = svc.Begin(ctx, identity.BeginRequest{ReturnTo: "//evil.test"})
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}
+
+// A verified e-mail address is kept, encrypted, beside the hash that finds it
+// (F-47). The column is not the address; the hash agrees with it; and a login
+// that finds the row already filled leaves it alone.
+func TestIntegration_Login_StoresTheVerifiedEmailEncrypted(t *testing.T) {
+	url := os.Getenv("CP_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("CP_TEST_DATABASE_URL not set; skipping integration test")
+	}
+	ctx := context.Background()
+	d, err := db.Open(ctx, db.Config{URL: url, MaxConns: 4, MinConns: 1, AppName: "identity-pii-test"})
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+	clk := clock.NewFake(time.Now().UTC().Truncate(time.Microsecond))
+	idp, err := devidp.New("TEST", devidp.Config{Now: clk.Now})
+	require.NoError(t, err)
+	mgr, err := auth.NewManager(pgstore.New(), auth.ManagerConfig{Now: clk.Now})
+	require.NoError(t, err)
+
+	key := make([]byte, pii.KeySize)
+	_, err = rand.Read(key)
+	require.NoError(t, err)
+	kr, err := pii.ParseKeyring(`{"active": 1, "keys": {"1": "` + base64.StdEncoding.EncodeToString(key) + `"}}`)
+	require.NoError(t, err)
+	store := pii.NewStore(kr)
+
+	svc, err := identity.New(identity.Deps{
+		IdP: idp, DB: d, Accounts: accounts.NewRepository(), Sessions: mgr, Audit: audit.NewWriter(), Clock: clk,
+		PII: store,
+	})
+	require.NoError(t, err)
+
+	begin, err := svc.Begin(ctx, identity.BeginRequest{})
+	require.NoError(t, err)
+	done, err := svc.Complete(ctx, identity.CompleteRequest{Code: "customer-a", State: begin.State})
+	require.NoError(t, err)
+	userID := done.User.ID.String()
+
+	rec, found, err := store.Read(ctx, d, userID)
+	require.NoError(t, err)
+	require.True(t, found, "the login stored nothing in identity_pii")
+	assert.Equal(t, "customer-a@dev.invalid", rec.Email)
+
+	// The column holds ciphertext, not the address.
+	var raw []byte
+	var updated time.Time
+	require.NoError(t, d.QueryRow(ctx, `SELECT email_encrypted, updated_at FROM identity_pii WHERE user_id = $1`, done.User.ID).Scan(&raw, &updated))
+	assert.NotContains(t, strings.ToLower(string(raw)), "dev.invalid")
+
+	// The lookup hash and the sealed address agree, so they describe one
+	// person.
+	var hash []byte
+	require.NoError(t, d.QueryRow(ctx, `SELECT email_hash FROM users WHERE id = $1`, done.User.ID).Scan(&hash))
+	sum := sha256.Sum256([]byte("customer-a@dev.invalid"))
+	assert.Equal(t, sum[:], hash)
+
+	// A second login finds the row filled and does not rewrite it.
+	begin2, err := svc.Begin(ctx, identity.BeginRequest{})
+	require.NoError(t, err)
+	_, err = svc.Complete(ctx, identity.CompleteRequest{Code: "customer-a", State: begin2.State})
+	require.NoError(t, err)
+	var updatedAgain time.Time
+	require.NoError(t, d.QueryRow(ctx, `SELECT updated_at FROM identity_pii WHERE user_id = $1`, done.User.ID).Scan(&updatedAgain))
+	assert.Equal(t, updated, updatedAgain, "a login rewrote a row that already had the address")
 }

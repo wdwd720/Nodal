@@ -84,6 +84,12 @@ services:
       # in this block.
       - key: NODAL_ALERT_WEBHOOK_URL
         sync: false
+      # The keyring personal data is encrypted under before it reaches
+      # identity_pii (F-47). Thirty-two random bytes, base64, in the JSON
+      # shape internal/pii documents; generate with
+      # `openssl rand -base64 32`. The database never holds it.
+      - key: NODAL_PII_KEYRING
+        sync: false
 
       # --- core ----------------------------------------------------------
       # STAGING, not PROD, and the difference is one thing only: whose money
@@ -322,6 +328,16 @@ services:
       # ever shrinks below it.
       - key: CP_ALERT_TIMEOUT
         value: 5s
+
+      # --- personal data -------------------------------------------------
+      # identity_pii's columns are ciphertext under this keyring, bound to
+      # their row, column and key version; cp_readonly and cp_ops cannot read
+      # the table at all (00754). Without a keyring the service refuses to
+      # start here: personal data is encrypted, or it is not stored, and a
+      # STAGING that silently stored nothing is the state F-47 sat in.
+      # Rotation: add a key, raise "active", deploy, reseal, remove the old key.
+      - key: CP_PII_KEYRING
+        value: env://NODAL_PII_KEYRING
 
       # --- retention -----------------------------------------------------
       # --- credit funding lifecycle ---------------------------------------

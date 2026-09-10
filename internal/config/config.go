@@ -76,6 +76,7 @@ type Config struct {
 	Providers         ProvidersConfig
 	Telemetry         TelemetryConfig
 	Alert             AlertConfig
+	PII               PIIConfig
 	Seed              SeedConfig
 	Capability        CapabilityConfig
 	Credit            CreditConfig
@@ -487,6 +488,14 @@ type TelemetryConfig struct {
 	OTLPInsecure     bool
 	TraceSampleRatio string
 	MetricsInterval  time.Duration
+}
+
+// PIIConfig is the key material for personal data at rest. internal/pii
+// seals identity_pii's columns under it; the database never sees the key.
+type PIIConfig struct {
+	// Keyring is a SecretRef to the JSON keyring document internal/pii
+	// parses: {"active": N, "keys": {"N": "<base64 32 bytes>", ...}}.
+	Keyring SecretRef
 }
 
 // AlertConfig is where operational alerts go when they leave the process.

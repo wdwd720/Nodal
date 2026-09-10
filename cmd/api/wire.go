@@ -296,9 +296,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		"max_at_risk_minor", cfg.Capacity.MaxAtRiskMinor,
 		"max_database_bytes", cfg.Capacity.MaxDatabaseBytes)
 
+	// Personal data is encrypted before it reaches identity_pii, and the
+	// login path is what writes it (F-47). Nil in LOCAL/TEST with no keyring;
+	// config.Validate requires one in STAGING and PROD.
+	piiStore := newPIIStore(ctx, cfg, in.resolver, log)
 	identitySvc, err := identity.New(identity.Deps{
 		IdP: idp, DB: database, Accounts: accountRepo, Sessions: sessionMgr,
 		Audit: auditWriter, Clock: clk, AttemptTTL: identity.DefaultAttemptTTL,
+		PII: piiStore,
 		AdmitAccount: func(ctx context.Context, tx pgx.Tx) error {
 			_, aerr := capGuard.Admit(ctx, tx, capacity.ActionOpenAccount)
 			return aerr

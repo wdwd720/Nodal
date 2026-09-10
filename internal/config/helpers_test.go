@@ -114,6 +114,7 @@ func prodEnv() map[string]string {
 		"CP_ALERT_WEBHOOK_FORMAT": "auto",
 		"CP_ALERT_MIN_SEVERITY":   "SEV2",
 		"CP_ALERT_TIMEOUT":        "5s",
+		"CP_PII_KEYRING":          "env://CP_SECRET_PII_KEYRING",
 
 		"CP_SEED_ENABLED": "false",
 

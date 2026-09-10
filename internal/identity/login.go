@@ -21,6 +21,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/pii"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -46,6 +47,11 @@ type Deps struct {
 	// Ceiling asserts that it does. An optional control is only safe when
 	// something checks that it was not accidentally left out.
 	AdmitAccount func(ctx context.Context, tx pgx.Tx) error
+	// PII keeps the verified e-mail address, encrypted, beside the hash that
+	// finds it (F-47). Nil keeps nothing, which is the LOCAL/TEST default --
+	// and, as with AdmitAccount, cmd/api always supplies one and
+	// TestIdentityIsGivenThePIIStore asserts that it does.
+	PII *pii.Store
 }
 
 // Service implements login/logout.
@@ -237,6 +243,14 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		if user.Status != "ACTIVE" {
 			return errs.New(errs.CodeForbidden, "user is not active").WithField("status", user.Status)
 		}
+		// The address itself, encrypted, for the deployments that keep one.
+		// Filling an absence on every login rather than only at creation, for
+		// the same reason email_hash learned to: a user created before this
+		// existed, or before the provider asserted the address, would
+		// otherwise never have it. A row that has one is left alone.
+		if err := s.storeEmail(ctx, tx, user.ID, ident); err != nil {
+			return err
+		}
 		owned, err := s.d.Accounts.ListByOwner(ctx, tx, user.ID)
 		if err != nil {
 			return err
@@ -366,4 +380,15 @@ func randomToken(n int) (string, error) {
 		return "", fmt.Errorf("identity: random: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// storeEmail keeps the verified address, encrypted, when a PII store is
+// configured. Only a verified address: an unverified claim is somebody's
+// assertion about somebody else's mailbox, and the hash does not record it
+// either.
+func (s *Service) storeEmail(ctx context.Context, tx pgx.Tx, userID accounts.UserID, ident auth.Identity) error {
+	if s.d.PII == nil || !ident.EmailVerified || ident.Email == "" {
+		return nil
+	}
+	return s.d.PII.EnsureEmail(ctx, tx, userID.String(), strings.TrimSpace(ident.Email))
 }

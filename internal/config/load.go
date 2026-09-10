@@ -339,6 +339,7 @@ const (
 	secProviders  = "Providers"
 	secTelemetry  = "Telemetry"
 	secAlert      = "Alerting"
+	secPII        = "Personal data"
 	secSeed       = "Seed"
 	secCredit     = "Credit (funding lifecycle)"
 	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
@@ -601,6 +602,8 @@ func specs() []varSpec {
 			setString(func(c *Config) *string { return &c.Alert.MinSeverity })),
 		req("CP_ALERT_TIMEOUT", secAlert, "Bound on one delivery attempt. Short on purpose: delivery runs behind a small queue and a slow destination delays every alert behind it.", "5s",
 			setDuration(func(c *Config) *time.Duration { return &c.Alert.Timeout })),
+		secretVar(opt("CP_PII_KEYRING", secPII, "Keyring for personal data at rest, as a JSON document: {\"active\": N, \"keys\": {\"N\": \"<base64 32 bytes>\"}}. internal/pii seals identity_pii's columns with AES-256-GCM under the active version and opens a row under whichever version it names, so rotation is: add a key, make it active, deploy, reseal, then remove the old key. Required in STAGING/PROD. Empty in LOCAL/TEST means no personal data is stored, which is said at startup. A SecretRef because it IS the key.", "env://NODAL_PII_KEYRING",
+			setSecret(func(c *Config) *SecretRef { return &c.PII.Keyring }))),
 
 		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
