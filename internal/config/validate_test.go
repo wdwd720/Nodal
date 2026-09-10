@@ -71,9 +71,70 @@ func TestValidate_ValidProdHasNoViolations(t *testing.T) {
 	t.Parallel()
 	c := validProdConfig(t)
 	require.NoError(t, c.Validate())
-	staging := c.Clone()
-	staging.Env = EnvStaging
-	require.NoError(t, staging.Validate())
+	require.NoError(t, asStaging(c).Validate())
+}
+
+// TestValidate_TheEnvironmentAndTheProviderModeMakeTheSameClaim.
+//
+// PROD in sandbox mode mints value against test objects nobody paid for.
+// STAGING in live mode charges real cards for a rehearsal. Both adapters that
+// take money refuse to be built on a mismatch -- but they refuse at startup,
+// where the symptom is a WARN and a silently disabled capability, on a service
+// that answers 200 on every health check. This is the check that happens
+// first, where scripts/configcheck and the deployment tests can see it.
+//
+// This was reached in a real deployment: every provider slot said sandbox and
+// CP_ENV said PROD, so the Credit purchase path was dark and the only visible
+// symptom was a 404 on the webhook route.
+func TestValidate_TheEnvironmentAndTheProviderModeMakeTheSameClaim(t *testing.T) {
+	t.Parallel()
+
+	t.Run("PROD refuses a provider sandbox", func(t *testing.T) {
+		t.Parallel()
+		c := validProdConfig(t)
+		c.Providers.CreditPurchase.Mode = ProviderModeSandbox
+		err := c.Validate()
+		require.Error(t, err)
+		assert.True(t, HasViolation(err, RuleProviderModeMatchesEnv))
+		assert.Contains(t, err.Error(), "PROD requires live mode")
+	})
+
+	t.Run("STAGING refuses live money", func(t *testing.T) {
+		t.Parallel()
+		c := asStaging(validProdConfig(t))
+		c.Providers.Payout.Mode = ProviderModeLive
+		err := c.Validate()
+		require.Error(t, err)
+		require.Len(t, Violations(err), 1)
+		assert.Equal(t, RuleProviderModeMatchesEnv, Violations(err)[0].Rule)
+		assert.Equal(t, "Providers.payout.Mode", Violations(err)[0].Field)
+	})
+
+	t.Run("every slot is covered in both directions", func(t *testing.T) {
+		t.Parallel()
+		for _, slot := range providerSlots() {
+			prod := validProdConfig(t)
+			slot.Get(&prod.Providers).Mode = ProviderModeSandbox
+			assert.True(t, HasViolation(prod.Validate(), RuleProviderModeMatchesEnv),
+				"PROD accepts a sandbox %s provider", slot.Name)
+
+			staging := asStaging(validProdConfig(t))
+			slot.Get(&staging.Providers).Mode = ProviderModeLive
+			assert.True(t, HasViolation(staging.Validate(), RuleProviderModeMatchesEnv),
+				"STAGING accepts a live %s provider", slot.Name)
+		}
+	})
+
+	t.Run("DEV is not constrained either way", func(t *testing.T) {
+		t.Parallel()
+		// Below STAGING the ladder is about developer conveniences, not about
+		// whose money moves, and a DEV deployment pointed at a live provider is
+		// a decision its operator gets to make.
+		c := validProdConfig(t)
+		c.Env = EnvDev
+		c.Providers.CreditPurchase.Mode = ProviderModeSandbox
+		assert.False(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv))
+	})
 }
 
 func TestValidate_ProdRulesIndividually(t *testing.T) {
@@ -87,7 +148,9 @@ func TestValidate_ProdRulesIndividually(t *testing.T) {
 					service = ServiceAPI
 				}
 				c := validProdConfigAs(t, service)
-				c.Env = env
+				if env == EnvStaging {
+					c = asStaging(c)
+				}
 				require.NoError(t, c.Validate(), "baseline must be valid")
 				tc.mutate(c)
 				err := c.Validate()
@@ -129,8 +192,7 @@ func TestValidate_InsecureOTLPOnlyRejectedInProd(t *testing.T) {
 	assert.True(t, HasViolation(err, RuleNoInsecureOTLP))
 	assert.Len(t, Violations(err), 1)
 
-	staging := validProdConfig(t)
-	staging.Env = EnvStaging
+	staging := asStaging(validProdConfig(t))
 	staging.Telemetry.OTLPInsecure = true
 	assert.NoError(t, staging.Validate(), "STAGING may export telemetry without TLS")
 }

@@ -154,3 +154,22 @@ func validProdConfigAs(t *testing.T, service Service) *Config {
 	t.Helper()
 	return mustLoadAs(t, service, prodEnv())
 }
+
+// asStaging returns the same configuration as a STAGING deployment.
+//
+// It is not just a relabelling, and that is the point of having it: STAGING
+// differs from PROD in exactly one way, which is that the providers run
+// against their sandboxes rather than moving real money. Every other
+// production rule still applies. A test that only changed Env would be
+// asserting things about a configuration no deployment could have.
+func asStaging(c *Config) *Config {
+	s := c.Clone()
+	s.Env = EnvStaging
+	for _, slot := range providerSlots() {
+		p := slot.Get(&s.Providers)
+		if p.Mode == ProviderModeLive {
+			p.Mode = ProviderModeSandbox
+		}
+	}
+	return s
+}

@@ -187,9 +187,21 @@ func NewClient(o Options) (*Client, error) {
 			return nil, errs.New(errs.CodeValidationFailed, "stripepayout: sandbox mode requires a test secret key")
 		}
 	}
-	if o.Env.IsProductionLike() && o.Mode != config.ProviderModeLive {
-		return nil, errs.Newf(errs.CodeValidationFailed,
-			"stripepayout: %s cannot run in %s mode", o.Env, o.Mode)
+	// The same pairing stripecredit enforces, for the same reasons: PROD is
+	// live only, and STAGING is sandbox only so a rehearsal cannot pay real
+	// money out. See the comment there.
+	switch o.Env {
+	case config.EnvProd:
+		if o.Mode != config.ProviderModeLive {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"stripepayout: %s cannot run in %s mode", o.Env, o.Mode)
+		}
+	case config.EnvStaging:
+		if o.Mode == config.ProviderModeLive {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"stripepayout: %s must run against the Stripe sandbox, not live mode; a rehearsal that pays out real money is not a rehearsal",
+				o.Env)
+		}
 	}
 	// A sandbox-mode adapter claiming LIVE availability would let a test-mode
 	// key be the thing that moves real value.

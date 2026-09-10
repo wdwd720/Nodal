@@ -149,10 +149,32 @@ func NewClient(o Options) (*Client, error) {
 			return nil, errs.New(errs.CodeValidationFailed, "stripecredit: sandbox mode requires a test secret key")
 		}
 	}
-	if o.Env.IsProductionLike() && o.Mode != config.ProviderModeLive {
-		return nil, errs.Newf(errs.CodeValidationFailed,
-			"stripecredit: %s cannot run the credit purchase adapter in %s mode; test Stripe objects must never reach production",
-			o.Env, o.Mode)
+	// The environment and the mode must agree, in both directions.
+	//
+	// PROD must never process test Stripe objects: Credit minted against a
+	// test PaymentIntent is Credit nobody paid for.
+	//
+	// STAGING must never process live ones, and that is why this is not
+	// IsProductionLike. STAGING is production minus real money: it keeps every
+	// other production rule -- no fakes, no dev auth, no plain secrets, TLS
+	// verification, the same gates -- and exists so the money path can be
+	// rehearsed against Stripe's own test mode. Refusing sandbox there left
+	// two options and both are worse than what this prevents: rehearse with
+	// live keys and take real money from testers, or drop the deployment to
+	// DEV and lose every production rule at once to change one of them.
+	switch o.Env {
+	case config.EnvProd:
+		if o.Mode != config.ProviderModeLive {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"stripecredit: %s cannot run the credit purchase adapter in %s mode; test Stripe objects must never reach production",
+				o.Env, o.Mode)
+		}
+	case config.EnvStaging:
+		if o.Mode == config.ProviderModeLive {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"stripecredit: %s must run against the Stripe sandbox, not live mode; a rehearsal that charges real cards is not a rehearsal",
+				o.Env)
+		}
 	}
 	// On a shared account, a charge with no suffix shows the OTHER product's
 	// name on the cardholder's statement. Stripe's own guidance on running

@@ -409,3 +409,35 @@ func TestCanPayRecipient_AgainstStripesActualLimits(t *testing.T) {
 		require.Equal(t, tc.want, why, tc.name)
 	}
 }
+
+// TestNewClient_TheEnvironmentAndTheModeMakeTheSameClaim.
+//
+// PROD is live only: a payout adapter holding a test key in production would
+// report money as sent that never left. STAGING is sandbox only, which is what
+// makes a rehearsal a rehearsal rather than a transfer.
+func TestNewClient_TheEnvironmentAndTheModeMakeTheSameClaim(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvProd,
+		APIKey: "sk_test_x", Clock: clock.NewFake(testNow),
+		Availability: payout.AvailabilitySandbox, ContractReference: "acct_TEST/nodal-payout",
+	})
+	require.Error(t, err, "PROD must not pay out through a test key")
+	require.Contains(t, err.Error(), "cannot run in sandbox mode")
+
+	_, err = NewClient(Options{
+		Mode: config.ProviderModeLive, Env: config.EnvStaging,
+		APIKey: "sk_live_x", Clock: clock.NewFake(testNow),
+		Availability: payout.AvailabilityLive, ContractReference: "acct_LIVE/nodal-payout",
+	})
+	require.Error(t, err, "a rehearsal that pays out real money is not a rehearsal")
+	require.Contains(t, err.Error(), "must run against the Stripe sandbox")
+
+	_, err = NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvStaging,
+		APIKey: "sk_test_x", Clock: clock.NewFake(testNow),
+		Availability: payout.AvailabilitySandbox, ContractReference: "acct_TEST/nodal-payout",
+	})
+	require.NoError(t, err, "STAGING must be able to rehearse against the Stripe sandbox")
+}

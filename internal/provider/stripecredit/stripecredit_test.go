@@ -534,6 +534,30 @@ func TestNewClient_ProductionRefusesSandboxMode(t *testing.T) {
 	require.Contains(t, err.Error(), "test Stripe objects must never reach production")
 }
 
+// TestNewClient_StagingIsProductionMinusRealMoney.
+//
+// STAGING keeps every other production rule and runs against the Stripe
+// sandbox. The alternative this replaced was worse in both directions: a
+// rehearsal on live keys takes real money from testers, and dropping the
+// deployment to DEV to change the mode gives up fakes, dev auth and plain
+// secrets all at once.
+func TestNewClient_StagingIsProductionMinusRealMoney(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewClient(Options{
+		Mode: config.ProviderModeSandbox, Env: config.EnvStaging,
+		APIKey: "sk_test_abc", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+	})
+	require.NoError(t, err, "STAGING must be able to rehearse against the Stripe sandbox")
+
+	_, err = NewClient(Options{
+		Mode: config.ProviderModeLive, Env: config.EnvStaging,
+		APIKey: "sk_live_abc", WebhookSecret: "whsec_x", Clock: clock.NewFake(testNow),
+	})
+	require.Error(t, err, "a rehearsal that charges real cards is not a rehearsal")
+	require.Contains(t, err.Error(), "must run against the Stripe sandbox")
+}
+
 func TestNewClient_LiveRequiresHTTPS(t *testing.T) {
 	t.Parallel()
 	_, err := NewClient(Options{

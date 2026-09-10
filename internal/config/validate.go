@@ -28,6 +28,10 @@ const (
 	RuleNoDevAuth Rule = "NO_DEV_AUTH"
 	// RuleNoFakeProviders rejects provider mode "fake" in STAGING/PROD.
 	RuleNoFakeProviders Rule = "NO_FAKE_PROVIDERS"
+	// RuleProviderModeMatchesEnv requires the provider mode and the
+	// environment to make the same claim about whose money is moving: PROD is
+	// live, STAGING is the provider's sandbox.
+	RuleProviderModeMatchesEnv Rule = "PROVIDER_MODE_MATCHES_ENV"
 )
 
 // Rules applied only when Environment.IsProductionLike (STAGING, PROD).
@@ -459,6 +463,27 @@ func (c *Config) Validate() error {
 		}
 		if p.Mode == ProviderModeFake && !env.AllowsFakeProviders() {
 			add(RuleNoFakeProviders, field+".Mode", "fake providers are not allowed in STAGING/PROD")
+		}
+		// The environment and the mode must make the same claim about whose
+		// money is moving. PROD in sandbox mode mints value against test
+		// objects nobody paid for; STAGING in live mode charges real cards for
+		// a rehearsal. Both adapters that take money refuse to be built on a
+		// mismatch, but they refuse at startup, where the symptom is a WARN
+		// and a silently disabled capability. Refusing here is what lets
+		// scripts/configcheck and the deployment tests see it first.
+		if p.Mode != ProviderModeFake {
+			switch env {
+			case EnvProd:
+				if p.Mode != ProviderModeLive {
+					add(RuleProviderModeMatchesEnv, field+".Mode",
+						fmt.Sprintf("PROD requires live mode, not %q; a production deployment must not run against a provider's test environment", string(p.Mode)))
+				}
+			case EnvStaging:
+				if p.Mode == ProviderModeLive {
+					add(RuleProviderModeMatchesEnv, field+".Mode",
+						"STAGING must use sandbox mode; a rehearsal that moves real money is not a rehearsal")
+				}
+			}
 		}
 		if p.Mode != ProviderModeFake && p.Name == "" {
 			add(RuleField, field+".Name", "required unless mode is fake")
