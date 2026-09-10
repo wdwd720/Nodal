@@ -36,7 +36,18 @@ const STATUS_FILTERS = ["PROPOSED", "APPROVED", "REJECTED", "EXECUTED", "FAILED"
 const ROW_VERBS = ["approve", "reject", "execute", "cancel"] as const;
 type RowVerb = (typeof ROW_VERBS)[number];
 
-/** The API's AdminAction as the decision logic wants it. */
+/**
+ * The API's AdminAction as the decision logic wants it.
+ *
+ * `targetId` is not optional in practice. For a kind whose spec sets
+ * `approver_is_not_target` — BREAK_GLASS_GRANT is the one that matters — the
+ * target names the person the action elevates, and that person may not supply
+ * the second signature on their own elevation. `decide.ts` implements that
+ * check and `decisions.json` proves it; this mapping is what feeds it, and
+ * omitting the field here reproduced F-71 one layer up: the queue rendered a
+ * live Approve button to the grantee of their own grant, which the server then
+ * refuses. The console must not offer what the server will refuse.
+ */
 export function toDecideAction(a: AdminAction): DecideAction {
   return {
     kind: a.kind,
@@ -44,6 +55,7 @@ export function toDecideAction(a: AdminAction): DecideAction {
     requiresDual: a.requires_dual,
     proposedBy: a.proposed_by,
     approvedBy: a.approved_by ?? null,
+    targetId: a.target_id,
     expiresAt: a.expires_at,
   };
 }
