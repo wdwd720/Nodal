@@ -295,7 +295,7 @@ webhook, so no Credit purchase can complete outside a local run.
 
 ---
 
-## B-13 — No OIDC identity provider · BLOCKED_EXTERNAL
+## B-13 — No OIDC identity provider · **RESOLVED 2026-09-10**
 
 **Decision needed.** Which identity provider authenticates users, and its issuer, client id and
 client secret.
@@ -303,6 +303,26 @@ client secret.
 **Why external.** `CP_AUTH_MODE` is `oidc` in STAGING and PROD, and `dev` is refused there by
 `config.Validate`. There is no fallback: a deployed environment with no issuer has no way for
 anybody to log in.
+
+**RESOLVED.** ZITADEL, and it is not a claim about configuration — the deployed service performs
+the authorization request. LIVE_OBSERVED against `https://api-nodal.actorvia.xyz` on 2026-09-10:
+
+```
+GET /v1/auth/login  ->  302
+Location: https://nodal-az1hxe.us1.zitadel.cloud/oauth/v2/authorize
+          ?client_id=390076573774056913
+          &code_challenge_method=S256&code_challenge=...&nonce=...
+          &redirect_uri=https%3A%2F%2Fapi-nodal.actorvia.xyz%2Fv1%2Fauth%2Fcallback
+          &response_type=code&scope=openid+email+profile&state=...
+```
+
+A real PKCE challenge, a real nonce and the deployment's own redirect URI, issued by the running
+service. The issuer's discovery document answers 200. `render.yaml` carries the issuer, the client
+id and `CP_AUTH_CLIENT_SECRET_REF`; the secret itself is a Render environment value and is not in
+this repository.
+
+Kept in this file rather than deleted, because what unblocked it is the record of how the next
+environment gets an issuer.
 
 **What the code already supports.** `internal/auth/oidc` is implemented and tested, and
 `internal/auth/devidp` serves LOCAL and TEST only.
@@ -330,7 +350,7 @@ nothing with the configured step-up value.
 
 ---
 
-## B-14 — Hostname and TLS certificate · BLOCKED_EXTERNAL
+## B-14 — Hostname and TLS certificate · **RESOLVED 2026-09-10**
 
 **Decision needed.** The public hostname the API serves on, and approval to create the DNS record
 and certificate for it.
@@ -343,6 +363,11 @@ HTTPS-only in browsers from the first request and needs a valid certificate befo
 **Recommended.** `api-nodal.actorvia.xyz`, a new record that touches neither the apex nor `www`, so
 the Vercel site and the existing Stripe webhook are unaffected. See
 `docs/operations/DEPLOYMENT_GAP_ANALYSIS.md` §6.
+
+**RESOLVED.** `api-nodal.actorvia.xyz` is the hostname, behind Cloudflare, and the certificate
+verifies. LIVE_OBSERVED on 2026-09-10: `curl` reports `ssl_verify_result=0` and the service answers
+on it — `/v1/healthz`, `/v1/readyz` and `/v1/version` all 200. The recommendation above is what was
+done.
 
 **What it blocks.** The Stripe webhook endpoint, which is
 `https://<hostname>/v1/webhooks/stripe_credit`, and with it every Credit purchase that is not run
@@ -388,6 +413,20 @@ Credits for real money needs, and cannot be given from inside this repository:
 
 Everything else the reconciliation found was work, and is either fixed
 (F-83, F-86 to F-92) or recorded with its reason in F-93.
+
+**Checkpoint 2026-09-10 — two blockers resolved by the deployment.**
+B-13 (no OIDC identity provider) and B-14 (hostname and TLS certificate) are
+**RESOLVED**, and were already resolved in fact before this checkpoint wrote it
+down — which is its own small instance of the defect class this repository
+keeps recording. Both were verified LIVE_OBSERVED against the running service
+rather than read out of `render.yaml`: the deployment issues a real PKCE
+authorization redirect to ZITADEL, and the hostname serves a certificate that
+verifies.
+
+**Twelve blockers remain, and B-12 is not one of the twelve that stops launch.**
+`aws sts get-caller-identity` still fails (`Your session has expired`), but the
+$0 launch tier does not run on AWS — it runs on Render free, Neon free and
+Cloudflare free. B-12 blocks the scale-up path, not the launch.
 
 **Checkpoint 2026-09-08.** The F-71..F-81 batch added **no** external blockers.
 Every item it left undone is work, and each is named above or in

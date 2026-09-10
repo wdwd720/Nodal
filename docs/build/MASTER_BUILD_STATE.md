@@ -1744,9 +1744,10 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 are open (F-42, F-47, F-69, F-93), one is open as a host limitation (F-125),
 five are partial (F-65, F-84, F-95, F-105, F-118) and the rest are fixed.
 
-F-100 through F-126 landed on 2026-09-10, from eleven parallel read-only audits
-whose claims were re-verified here before anything was changed. Eight are P1 and
-every one of them was observed failing before it was believed:
+F-100 through F-126 landed on 2026-09-10: **27 findings, 16 P1, 7 P2, 4 P3**,
+from eleven parallel read-only audits whose claims were re-verified here before
+anything was changed, plus two the fuzz tier found on its own. Every P1 was
+observed failing before it was believed:
 
 - **F-100** a funding parked for a person was un-parked by the next webhook, and
   a refund followed by a late success minted Credits for money that was returned
