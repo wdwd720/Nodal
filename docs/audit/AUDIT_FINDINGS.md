@@ -1699,6 +1699,25 @@ entirely inside a `SAVEPOINT` and one split across two; a flag captured from a
 committed transaction and replayed in a later one for the same edge is refused.
 Each test was proven non-vacuous by disabling the half of the fix it depends on.
 
+**And the other half of 00603's claim now has a test.** Its header also says the
+application role "has no privilege to drop triggers." That half was true and was
+never the problem — but an unforgeable flag is worth nothing if the trigger that
+reads it can be switched off, so the four ways to switch one off are now
+asserted rather than assumed:
+
+```
+SET session_replication_role = replica            -> permission denied
+ALTER TABLE accounts DISABLE TRIGGER <name>       -> must be owner
+ALTER TABLE accounts DISABLE TRIGGER ALL          -> must be owner
+DROP TRIGGER <name> ON accounts                   -> must be owner
+```
+
+The first is the one worth naming: `session_replication_role` disables every
+trigger in the session at once, so it would bypass **every** trigger-based
+control in this schema, not only this one. It is superuser-only and `cp_app` is
+not one, which is a fact about PostgreSQL that this repository now depends on
+out loud instead of silently.
+
 
 ## F-43 · MARKETPLACE was high-risk in Go and not in SQL · BASELINE · P1 · FIXED
 

@@ -130,6 +130,58 @@ func TestIntegration_TheApplicationCannotMintATransitionFlag(t *testing.T) {
 	_ = acct
 }
 
+// The other half of 00603's claim, which was true and had no test.
+//
+// Its header says the application role "has no privilege to drop triggers." It
+// does not, and that half was never the problem -- but an unforgeable flag is
+// worth nothing if the trigger that checks it can be switched off, so the four
+// ways to switch one off are asserted here rather than assumed. Three need
+// table ownership; the fourth, `session_replication_role = replica`, disables
+// every trigger in the session at once and would bypass every trigger-based
+// control in this schema, not just this one.
+func TestIntegration_TheApplicationCannotTurnTheTriggerOff(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	app := connect(t, appURL)
+
+	for _, tc := range []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "session_replication_role disables every trigger at once",
+			sql:  `SET session_replication_role = replica`,
+			want: "permission denied",
+		},
+		{
+			name: "disable one trigger by name",
+			sql:  `ALTER TABLE accounts DISABLE TRIGGER accounts_require_transition`,
+			want: "must be owner",
+		},
+		{
+			name: "disable every trigger on the table",
+			sql:  `ALTER TABLE accounts DISABLE TRIGGER ALL`,
+			want: "must be owner",
+		},
+		{
+			name: "drop the trigger",
+			sql:  `DROP TRIGGER accounts_require_transition ON accounts`,
+			want: "must be owner",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx, err := app.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, tc.sql)
+			require.Error(t, err, "cp_app could run: %s", tc.sql)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}
+
 // A tag is bound to the transaction that produced it. Without that, a caller
 // could transition an entity legitimately, keep the string, and replay it later
 // to change state again with no audit row -- which is a forgery, and is why a
