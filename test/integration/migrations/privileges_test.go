@@ -100,6 +100,21 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 			assert.False(t, priv("cp_app", tbl, "SELECT"), "%s: runner bookkeeping must be invisible to the app role", tbl)
 			continue
 		}
+		// The one table nobody but the owner may read, asserted rather than
+		// skipped. cp_transition_key holds the key the transition flag is
+		// tagged with (00741), and a role that can read it can forge a state
+		// change on seventeen audited tables. "cp_readonly reads everything" is
+		// the rule below and this is the deliberate hole in it, so it is
+		// checked in the strong direction here instead of being excused.
+		if tbl == "cp_transition_key" {
+			for _, r := range []string{"cp_app", "cp_readonly", "cp_ops"} {
+				for _, p := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"} {
+					assert.False(t, priv(r, tbl, p),
+						"%s: %s holds %s; a role that can read this key can forge any transition", tbl, r, p)
+				}
+			}
+			continue
+		}
 		assert.False(t, priv("cp_app", tbl, "DELETE"), "%s: cp_app must never DELETE", tbl)
 		assert.False(t, priv("cp_app", tbl, "TRUNCATE"), "%s: cp_app must never TRUNCATE", tbl)
 		assert.True(t, priv("cp_app", tbl, "SELECT"), "%s: cp_app has no SELECT; the migration forgot its GRANT", tbl)

@@ -65,7 +65,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-39 | P2 | BASELINE | fixed | The no-float linter never looked at the internal economy |
 | F-40 | P2 | NEW | fixed | This register claimed a database guarantee that the trigger it named does not make |
 | F-41 | P2 | BASELINE | fixed | Three by-id reads answered more than they should: a membership oracle and two unpublished records |
-| F-42 | P2 | BASELINE | **OPEN** | The AU001 audit binding trusts a session variable any caller can set |
+| F-42 | P2 | BASELINE | fixed | The AU001 audit binding trusts a session variable any caller can set |
 | F-43 | P1 | BASELINE | fixed | MARKETPLACE is high-risk in Go and was not in SQL, so the database evidence check never fired for it |
 | F-44 | P1 | BASELINE | fixed | Every native-market price was displayed at the wrong scale, as a sixteen-digit number of Credits |
 | F-45 | P2 | NEW | fixed | The web unit suite had been red on the purchase spec, which parsed money into doubles |
@@ -151,6 +151,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-125 | P3 | NEW | open | The race detector cannot link on this host, so every race claim in this repository rests on CI |
 | F-126 | P2 | NEW | fixed | Five spellings of one archive key parse to the same object, so a dedup check, a retention sweep and an audit reconstruction each miss what the other wrote |
 | F-127 | P2 | NEW | fixed | The ADR deciding how an unprunable table must be pruned records that the table does not refuse DELETE; it does, and that was the fact the choice of remedy rested on |
+| F-128 | P1 | NEW | fixed | The application role could mint a transition flag by attaching the real setter to a temp table of its own, which F-42 does not record and which defeats any fix that only hardens the flag's value |
 
 ---
 
@@ -1645,6 +1646,48 @@ detection, which is why it works. It remains open because it is a change to the
 mechanism seventeen state machines depend on, and the right way to do it is
 deliberately, one table at a time with its own tests, rather than as a
 sixteen-table migration written in one pass.
+
+### Closed 2026-09-10 by 00741, and not by the remedy above
+
+The remedy above is still the stronger answer and is still worth doing. It is
+not what closed this.
+
+**The problem was never the one the three rejected attempts were solving.** Each
+tried to prove a transition row exists *in this transaction*, and each broke on
+something real: subtransaction xids, `xid` wraparound, fake clocks. 00741 does
+not detect anything. It makes the flag unforgeable, which is exactly the claim
+00603's header made:
+
+    tag = sha256(secret || '|' || pg_current_xact_id() || '|' || setting || '|' || value)
+
+The secret lives in `cp_transition_key`, which no role but the owner may read;
+the setters read it only because they are now SECURITY DEFINER; and EXECUTE on
+every one of them is revoked from PUBLIC, which is what closes **F-128**, the
+second forgery route this finding did not record.
+
+`pg_current_xact_id()` is what the earlier attempts needed and did not use. The
+rejection of `xmin = pg_current_xact_id()` was correct and was about a **row's**
+xmin; `pg_current_xact_id()` itself returns the TOP-LEVEL id, identical in every
+subtransaction. Probed again before the migration was written — top level, inside
+a savepoint, after a write in a savepoint, and after `ROLLBACK TO SAVEPOINT` all
+returned `3430236`. It also sidesteps the wraparound objection that killed
+`pg_xact_status`, because nothing is stored or compared across time: the id is a
+salt inside one transaction and never leaves it. And no ordering or timestamp is
+involved, so the fake clocks that sank the other two attempts cannot reach it.
+
+**What is left of this finding is the privilege work**, which is real and is now
+tracked on its own terms rather than as this finding's blocker: eleven of the
+seventeen bound tables still grant `cp_app` blanket UPDATE. 00733 (F-109) did the
+four whose columns are money, and 00701 did `capability_gates`. That work makes a
+bare state update impossible rather than unforgeable, which is strictly stronger
+— but the claim this finding was raised about is now true.
+
+**Proof.** Both forgeries reproduced as `cp_app` before the migration and
+refused after it; a legitimate transition still commits, including one written
+entirely inside a `SAVEPOINT` and one split across two; a flag captured from a
+committed transaction and replayed in a later one for the same edge is refused.
+Each test was proven non-vacuous by disabling the half of the fix it depends on.
+
 
 ## F-43 · MARKETPLACE was high-risk in Go and not in SQL · BASELINE · P1 · FIXED
 
@@ -6420,6 +6463,55 @@ checking them.**
 
 **Evidence.** `REAL_DB_INTEGRATION` — reproduced against PostgreSQL 16 as the
 owner, before anything was changed. `STATIC_PROOF` for the trigger definition.
+
+## F-128 · The application could mint a transition flag from a table of its own · NEW · P1 · FIXED
+
+**Found by** trying to close F-42, and only because the fix was attacked before
+it was written.
+
+F-42 records one route to forging the audit binding: set the `cp.transition.*`
+or `cp.edge.*` GUC by hand. There is a second, and it is worse. `cp_app` holds
+`TEMPORARY` on the database, and the flag setters were EXECUTE-able by PUBLIC,
+so it could attach the real setter to a table it owns:
+
+```
+CREATE TEMP TABLE forge (account_id uuid, from_status text, to_status text);
+CREATE TRIGGER forge_flag AFTER INSERT ON forge FOR EACH ROW
+  EXECUTE FUNCTION cp_flag_transition_edge('account_id','from_status','to_status','accounts');
+INSERT INTO forge VALUES ('<id>', 'ACTIVE', 'FROZEN');
+UPDATE accounts SET status = 'FROZEN' WHERE id = '<id>';   -- committed
+```
+
+Reproduced as `cp_app` against this schema. The account froze;
+`account_status_transitions` gained no row.
+
+**Why it is P1 when F-42 is P2.** Not because the outcome differs — both forge a
+state change on seventeen audited tables with no audit row. Because of what it
+does to the fix. **The obvious repair for F-42 is to make the flag's VALUE
+unforgeable**, and this route forges the value using the real setter, so that
+repair would have looked complete, passed every test written for F-42, and been
+bypassed in three lines. A defect that defeats the fix for another defect is
+worth more than either.
+
+**Fix.** `REVOKE EXECUTE ... FROM PUBLIC` on all five transition functions and
+on the new tag helper (00741). Existing triggers are unaffected because
+PostgreSQL checks EXECUTE on a trigger function at **CREATE TRIGGER** time, not
+when it fires — verified by applying the revoke and then driving a legitimate
+transition through as `cp_app`, rather than by reading the manual.
+
+`TestIntegration_TheApplicationCannotMintATransitionFlag` asserts no role but
+the owner holds EXECUTE on any of the six, and then drives the route itself.
+Proven non-vacuous by granting EXECUTE back and watching all three assertions
+fail.
+
+**And one thing the test found that the migration had missed.** The key table
+arrived readable by `cp_readonly` and `cp_ops` with no GRANT written anywhere:
+`ALTER DEFAULT PRIVILEGES` in this schema grants SELECT on every table
+`cp_migrate` creates. **Writing no GRANT is not the same as granting nothing**,
+and only the assertion caught it.
+
+**Evidence.** `REAL_DB_INTEGRATION` — both the exploit and the refusal
+reproduced against PostgreSQL 16 as `cp_app`.
 
 ## Findings deliberately NOT raised
 
