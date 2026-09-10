@@ -15,19 +15,20 @@ false for reasons no amount of engineering can clear.
 
 ## 1 · Final HEAD
 
-**`d483b07a17e1d8867dd9bc9f8e1d8ac0ce782b01`** — the commit carrying this
-document. Written in after the commit, because a hash cannot be in the object it
-hashes; `git log -1` is the check.
+Run `git log -1` for the exact value: a hash cannot be inside the object it
+hashes, and this document has been rewritten by every commit after it.
 
-The three commits that end the session:
+The commits that end the session:
 
 | Commit | What |
 |---|---|
 | `9e9278c` | `archive: five spellings of one key is five objects` — F-126 |
 | `8c5d8a9` | `docs: two blockers were resolved before this file said so` — B-13, B-14 |
 | `d483b07` | `docs: the seventeen-item final checkpoint` — this file |
+| `6853caa` | `security_events: a trail that can be bounded without being rewritten` — F-105, F-127 |
+| `952b9fd` | `audit: the flag can only be set by inserting a transition row` — F-42, F-128 |
 
-Sixteen commits since `05ec7f3`, the session's starting point.
+Nineteen commits since `05ec7f3`, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
@@ -35,29 +36,38 @@ Sixteen commits since `05ec7f3`, the session's starting point.
 
 ## 2 · Findings — opened, closed, remaining
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **126 findings**, of which
-**116 are fixed, 5 are open and 5 are partial.**
+`docs/audit/AUDIT_FINDINGS.md` is the register: **128 findings**, of which
+**120 are fixed, 4 are open and 4 are partial.**
 
-Opened this session: **F-100 through F-126 — 27 findings, 16 P1, 7 P2, 4 P3.**
-Twenty-four are fixed, two are partial (F-105, F-118) and one is open (F-125).
-Twenty-five came from eleven parallel read-only audits whose claims were
-re-verified before anything was changed; **two the fuzz tier found on its own**
-(F-123, F-126).
+Opened this session: **F-100 through F-128 — 29 findings, 17 P1, 8 P2, 4 P3.**
+Twenty-eight are fixed and one is open (F-125, a host limitation). Twenty-five
+came from eleven parallel read-only audits whose claims were re-verified before
+anything was changed; **two the fuzz tier found on its own** (F-123, F-126); and
+**two were found by attacking this session's own fixes before writing them**
+(F-127, F-128).
+
+**No P1 in the register is unfixed.** The last one not marked fixed is F-93, an
+inventory row across six provider audits whose constituent items are tracked
+individually.
 
 ### What remains, and the exact reason each remains
 
 | Finding | Sev | State | Exact reason it remains |
 |---|---|---|---|
-| **F-42** | P2 | open | The AU001 audit binding trusts a transaction-local setting any caller can set. F-109 closed the four tables whose columns are money by revoking column-level UPDATE from `cp_app`; the general case needs the same privilege work on every state column, which is a schema-wide change, not a fix. |
 | **F-47** | P2 | open | Two deliberate statements about who may read encrypted PII contradict each other. **This is a policy decision, not a defect** — the architecture does not derive which statement wins, so §42's "the decision can be derived from the architecture" does not apply. |
 | **F-65** | P2 | part | Two kill-switch kinds reach nothing. The reachable half is fixed; the remainder needs the kill-switch to own surfaces it does not currently own. |
 | **F-69** | P2 | open | An inventory row, not a defect: it names what six audits found and has been drawn down as each was closed. |
 | **F-84** | P3 | part | Request validation precedes authentication. **Confirmed LIVE today** — `POST /v1/payouts` with no session answers `400 "Header parameter Idempotency-Key is required"`, not 401. Authentication still holds: the same request *with* an idempotency key answers 401. Fixing it means authorising on the route pattern before the generated wrapper, which wants its own design. |
 | **F-93** | P1 | open | An inventory row across six provider audits. Its constituent items are individually tracked; several are deployment changes (`CP_DATABASE_MIGRATE_URL` service-conditional, a Neon idle timeout, an advisory lock on replica count) and one is an external fact (a mainnet settlement mint). |
 | **F-95** | P3 | part | 121 enum CHECKs have no Go counterpart. Most have no Go list to compare against, by their nature. Nine more were paired this session; three were deliberately left unpaired. |
-| **F-105** | P1 | part | The unauthenticated write amplification is fixed. The larger half — `security_events` is bounded per minute and still unprunable — needs partitioning per ADR-0020. **On a 500 MB ceiling, any steady rate eventually fills a database nothing can remove a row from.** |
 | **F-118** | P2 | part | Alerts now log at ERROR/WARN and both roots construct the real OTel instruments. What remains is a destination and something on a timer — half deployment decision. |
 | **F-125** | P3 | open | The race detector cannot link on this host: this GCC's path contains a space and binutils splits the linker-script argument on it. It is a host change, not a repository one. **Every race claim in this repository rests on CI.** |
+
+Closed after this checkpoint was first written, and listed because their absence
+from the table above is the change: **F-105** (`security_events` is now
+partitioned by month and prunable by detachment, 00740) and **F-42** (the
+transition flag is now a keyed tag the application cannot forge, 00741, after
+four sessions open and three fixes tried and rejected).
 
 **Evidence:** `STATIC_PROOF` for the register; `LIVE_OBSERVED` for F-84's live
 behaviour and F-125's link failure.
@@ -98,6 +108,30 @@ The ones that would have cost real money or real authority:
 - **F-124** — the webhook path the published contract documents is not the one
   the service registers, so a delivery to it answers 404 and Stripe eventually
   gives up.
+- **F-128** — the application role could mint a transition flag by attaching the
+  real setter to a temp table of its own, forging a state change on any of
+  seventeen audited tables with no audit row.
+
+### The two found by attacking this session's own fixes
+
+Both were found before the fix they concern was written, and neither would have
+been found by reading the code that was about to change.
+
+- **F-127** — ADR-0020 decides how an unprunable table must be pruned, and
+  records that `security_events` does not refuse DELETE. It does. That was the
+  one fact the choice of remedy rested on, and an implementer following the
+  table would have written a DELETE that fails at runtime, or reached for the
+  trigger, which the same ADR forbids permanently.
+- **F-128** — rated P1 above F-42 not because the outcome differs but because of
+  what it does to the fix. The obvious repair for F-42 is to make the flag's
+  *value* unforgeable; this route forges the value using the real setter, so
+  that repair would have looked complete, passed every test written for F-42,
+  and been bypassed in three lines.
+
+**And one thing a test found that a migration had missed.** The transition key
+table arrived readable by two lower-privilege roles with no `GRANT` written
+anywhere, because `ALTER DEFAULT PRIVILEGES` grants SELECT on every table the
+migration role creates. **Writing no GRANT is not the same as granting nothing.**
 
 ### Three things this session got wrong and corrected
 
@@ -139,10 +173,14 @@ reproduced against a real PostgreSQL 16 before and after);
 
 | | |
 |---|---|
-| Migration head | **`00739_a_birth_control_keyed_on_the_money_line.sql`** |
-| Migration files | **71** |
-| Tables | **119** |
-| CHECK constraints | **462** |
+| Migration head | **`00741_the_flag_can_only_be_set_by_inserting_a_transition_row.sql`** |
+| Migration files | **73** |
+| Tables | **120**, plus **14 partitions** of `security_events` |
+| CHECK constraints | 462 declared on parents |
+
+`security_events` is the **first partitioned table in this schema** (00740). A
+partition is a table, so a freshly migrated database now reports 134 relations
+where it reported 119; the restore drill counts them and they come back.
 
 Applied migrations are never edited — a correction is a new file, and `00738`
 exists solely to drop two constraints `00736`/`00737` got wrong, with the
@@ -155,22 +193,20 @@ version 739, not from the files.
 
 ## 5 · Test evidence
 
-Every tier below was run at the archive fix (`9e9278c`). The only commit after
-it changes two markdown files, and `./test/docs` and `./test/infra` pass at that
-commit too.
+Every tier below was re-run at `952b9fd`, the last commit of the session.
 
 | Command | Result |
 |---|---|
 | `go build ./...` | pass |
 | `go test ./...` | **140 packages, 0 failures** |
-| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 15m31s** |
+| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
 | `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
-| `go run ./scripts/restoredrill` | **OK, 11.7s** |
+| `go run ./scripts/restoredrill` | **OK, 11.8s, at version 741** |
 | `go run ./scripts/fmtcheck .` | ok |
 | `go run ./scripts/tool golangci-lint run` | 0 issues |
 | `go run ./scripts/lintfin` | 0 findings |
-| `go run ./scripts/configcheck -service api .env.example` | 244 variables, valid |
+| `go run ./scripts/configcheck -service api .env.example` | 245 variables, valid |
 | `terraform validate` × dev, staging, prod | Success, all three |
 | `terraform fmt -check -recursive` | clean |
 
@@ -279,7 +315,9 @@ name cannot forge a transition edge (F-101).
 | Security headers, HSTS, rate limiting | Present, observed live. | `LIVE_OBSERVED` |
 | Independent penetration test | **Not done. This audit is not one and does not claim to be.** | `BLOCKED_EXTERNAL` |
 | Race detector | Cannot link on this host. Rests entirely on CI. | See F-125 |
-| `security_events` retention | Unprunable (F-105 residual). | Open |
+| The audit binding cannot be forged | Fixed (F-42, F-128). The transition flag is a keyed tag over a secret no role but the owner can read, salted with the top-level transaction id, and EXECUTE on every function that touches it is revoked from PUBLIC. Seventeen audited tables. | `REAL_DB_INTEGRATION` |
+| `security_events` retention | Fixed (F-105). Partitioned by month; retention is partition detachment, never row deletion, and the immutability trigger is unchanged for every role including the owner. | `REAL_DB_INTEGRATION` |
+| A state column the application cannot write at all | **Not done for eleven of seventeen tables.** F-42's stronger remedy: privilege beats detection. 00733 did the four whose columns are money, 00701 did `capability_gates`. | Open |
 
 Eighteen files under `test/security/` cover authority boundaries, dual control,
 idempotency abuse and break scanning, and run as part of the 51-package
@@ -289,19 +327,20 @@ integration tier.
 
 ## 10 · Restore drill
 
-Run at `9e9278c`:
+Run at `952b9fd`:
 
 ```
-restoredrill: backup: 682455 bytes sha256=7b9ab2f634dbe578
-restoredrill: boot: version source=739 restored=739 verify=ok
-restoredrill: reconciliation dry-run: tables=119 rowcounts_match=true
+restoredrill: boot: version source=741 restored=741 verify=ok
+restoredrill: reconciliation dry-run: tables=134 rowcounts_match=true
               balance_drift_accounts=0 journal_hash_match=true
-restoredrill: OK (11.712s)
+restoredrill: OK (11.842s)
 ```
 
 A restored database reaches the same schema version, the same table count, the
 same row counts, **zero balance drift and identical journal hashes.** Report at
-`dist/restore-drill.json`.
+`dist/restore-drill.json`. The 134 includes the fourteen partitions of
+`security_events`: the first partitioned table in this schema restores as a
+partitioned table, not as an empty parent.
 
 **Evidence:** `REAL_DB_INTEGRATION`. This is a drill against a local
 PostgreSQL 16, not against the Neon backup — **the deployed database's own
@@ -343,9 +382,23 @@ service's job is serving requests — but it is never silent.
 
 ### Migration triggers
 
-Any ceiling reaching its headroom is the signal to move. The database ceiling
-is the binding one: `security_events` is unprunable (F-105), so **on this tier
-the 500 MB quota is a countdown, not a steady state.**
+Any ceiling reaching its headroom is the signal to move.
+
+**The database ceiling stopped being a countdown.** Before 00740, `security_events`
+could not have a row removed by any role, so any steady rate eventually filled
+the 500 MB quota and the failure arrived looking like a capacity refusal rather
+than a retention failure. It is now partitioned by month and a month can be
+dropped.
+
+**Nothing is dropped yet, and that is deliberate.**
+`CP_RETENTION_SECURITY_EVENT_DAYS` is `0` on the blueprint, which disables
+pruning. The mechanism exists; the period does not, because ADR-0020 leaves it
+open as a product and compliance question. Dropping a security audit trail
+because nobody chose a number is worse than a table that grows — a growing table
+costs a capacity refusal, which is fail-closed and visible. Setting it is one
+value and a redeploy, with a floor of 90 days enforced twice: in `config.Validate`
+at boot, where an operator sees it, and in the SQL function at call time, where
+an attacker holding the operations credential would be.
 
 ---
 
@@ -434,15 +487,16 @@ Stated explicitly, and none of them optimistically.
 
 | Flag | Value | Why |
 |---|---|---|
-| `SOFTWARE_COMPLETE` | **false** | Four named items remain: `security_events` partitioning (F-105), an alert destination (F-118), the PII-read policy contradiction (F-47), and the AU001 privilege work (F-42). Three are decisions or deployment changes; one is schema work. |
+| `SOFTWARE_COMPLETE` | **false** | Three named items remain: an alert destination (F-118), the PII-read policy contradiction (F-47), and the state-column privilege work that is F-42's stronger remedy. The first two are decisions rather than code; the third is schema work with a specified design and eleven tables left. Two items came off this list after this checkpoint was first written — `security_events` partitioning (F-105, 00740) and the forgeable audit binding (F-42's actual claim, 00741). |
 | `STRIPE_PRODUCTION_APPROVED` | **false** | Stripe's own review of a real business. Not submitted. `BLOCKED_EXTERNAL`. |
 | `LEGAL_APPROVED` | **false** | Counsel. `BLOCKED_EXTERNAL`. **No legal approval is claimed anywhere.** |
 | `PENTEST_COMPLETE` | **false** | An independent third party. **This audit is not one and does not claim to be.** `BLOCKED_EXTERNAL`. |
 | `LIVE_READY` | **false** | The conjunction of all four, plus the capability gate activated by three principals against four approval references. |
 
-**Twenty-seven findings closed this session moved none of these**, and that is
+**Twenty-eight findings closed this session moved none of these**, and that is
 the honest headline. Not one of the four independent reasons `LIVE_READY` is
-false was a thing this audit could fix.
+false was a thing this audit could fix. What the last two closures changed is the
+length of the list behind `SOFTWARE_COMPLETE`, not its value.
 
 ---
 
@@ -476,9 +530,14 @@ document; this file is the checkpoint that points into it.
 
 The next four pieces of software work, in the order they are worth doing:
 
-1. **`security_events` partitioning per ADR-0020** (F-105). The largest
-   remaining software item, and the one that makes the 500 MB ceiling a steady
-   state instead of a countdown.
+1. **F-42's stronger remedy: revoke UPDATE on the state column of the eleven
+   remaining bound tables and route state changes through SECURITY DEFINER
+   functions.** The audit binding can no longer be forged (00741), but that is
+   detection; this is privilege, and it makes a bare state update impossible
+   rather than unprovable. The design is settled — `capability_gates` (00701) is
+   the worked example and `00733` did the four money tables. It is a change to
+   every state machine's call sites, so it wants one table at a time with its
+   own tests.
 2. **An alert destination and something on a timer** (F-118). Everything up to
    the destination is built.
 3. **Birth control for `wallets`, `assets` and `instruments`** (F-122 residual).
@@ -488,10 +547,18 @@ The next four pieces of software work, in the order they are worth doing:
    residual). A provenance gap, not a money one — closing it is a decision about
    how the suite seeds agents, and `00739` records the reasoning in full.
 
-Then F-42's privilege work and F-93's inventory rows.
+Then F-93's inventory rows.
+
+**Choose a security-event retention period, or decide not to.**
+`CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and
+tested. That is not code; it is the question ADR-0020 left open.
 
 **The thing worth carrying forward is not on any of these lists.** Six fixtures
-this session encoded the exact defect they were meant to guard against, and
-every one surfaced only when a control was closed around them. A green suite
-proves the assertions ran. It does not prove the fixture they ran against was
-ever safe.
+this session encoded the exact defect they were meant to guard against; an ADR
+got the one fact its decision rested on backwards; a migration granted a secret
+to two roles by writing no `GRANT` at all; and a comment in the request path
+described a guarantee the schema had stopped making. Every one surfaced only
+when something was checked rather than read.
+
+A green suite proves the assertions ran. It does not prove the fixture they ran
+against was ever safe, and a document is not evidence of the thing it describes.

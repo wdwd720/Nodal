@@ -78,7 +78,8 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | Item | Finding | Shape |
 |---|---|---|
 | **Nothing pages anyone about anything** | F-118 | The largest of these. Alerts now log and both roots build the real instruments; what remains is a destination and something on a timer. Half deployment decision. Before the Terraform is ever applied, its five application alarms set `treat_missing_data = "notBreaching"`, so a metric that never arrives reads OK |
-| `security_events` is bounded per minute and still unprunable | F-105 | Any steady rate eventually fills a 500 MB database when nothing can remove a row. ADR-0020's remedy: partition and detach |
+| A state column the application cannot write at all | F-42 | The audit binding can no longer be forged (00741), which is detection. This is privilege: revoke UPDATE on the state column and route changes through SECURITY DEFINER functions. Eleven of seventeen tables remain; 00733 did the four whose columns are money and 00701 is the worked example |
+| Choose a security-event retention period, or decide not to | ADR-0020 | `CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and tested (00740). Not code; the question the ADR left open |
 | `login_attempts` has a purge that this deployment never runs | F-105 | A cron on the blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is |
 | Request validation precedes authentication | F-84 | Authorising on the route pattern before the generated wrapper; wants its own design |
 | `cmd/api` requires the schema-owner credential | F-93 | Make `CP_DATABASE_MIGRATE_URL` service-conditional; needs a blueprint change and a redeploy |
@@ -87,16 +88,19 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | Neon pool has no idle or connect timeout | F-93 | Small change, needs measurements this repository does not have |
 | Three retention classes are declared and unenforced | ADR-0020 | The ADR decides how; the migration and the partition manager remain |
 | 121 enum CHECKs have no Go counterpart | F-95 | Most have no Go list to compare against, by their nature |
-| The AU001 binding trusts a transaction-local setting | F-42 | Privilege work on the state columns. F-109 did four of them — the ones whose columns are money |
 | An agent can be born SHADOW without its promotion evidence | F-122 | A provenance gap, not a money one; closing it is a decision about how the suite seeds agents |
 | `wallets`, `assets` and `instruments` have no birth control | F-122 | Named in an assertion that fails when one is closed, so the list cannot go stale |
 | Two statements about who may read encrypted PII contradict each other | F-47 | A policy decision |
 
 Closed since the previous audit, and listed because their absence from this
 table is the change: the buffered request body (F-85), the fifteen
-destination-only transition bindings (F-94), and the forged dual control that
-made every other approval-bearing control conditional (F-42's INSERT half, now
-F-121).
+destination-only transition bindings (F-94), the forged dual control that made
+every other approval-bearing control conditional (F-121), the unprunable
+security trail (F-105, 00740) and the forgeable audit binding itself (F-42,
+00741, after four sessions open and three fixes tried and rejected).
+
+**None of these moved a launch flag**, which is the honest way to read the
+change: `SOFTWARE_COMPLETE` has a shorter list behind it and the same value.
 
 ## What the 2026-09-10 audit changed
 
