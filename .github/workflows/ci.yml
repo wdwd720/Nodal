@@ -472,7 +472,10 @@ jobs:
         run: git diff --exit-code
 
   # Every workspace package that is not apps/web: the generated client and the
-  # strategy SDK both ship lint/typecheck/test scripts and had no job.
+  # strategy SDK both ship lint/typecheck/test scripts and had no job — and
+  # neither did the operator console, whose filter said "not apps/web" and read
+  # `./packages/*`. Nothing in CI had ever compiled apps/admin, run its money,
+  # decision-vector or source-scan tests, or built it.
   workspace-packages:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -491,6 +494,15 @@ jobs:
           pnpm --filter "./packages/*" run lint
           pnpm --filter "./packages/*" run typecheck
           pnpm --filter "./packages/*" run test
+      - name: Lint, typecheck, test and build the operator console
+        # The build is part of the gate, not a convenience: it verifies that
+        # dist/generated matches src/generated, so a console that would render a
+        # stale authority model fails here rather than in a browser.
+        run: |
+          pnpm --filter @controlplane/admin run lint
+          pnpm --filter @controlplane/admin run typecheck
+          pnpm --filter @controlplane/admin run test
+          pnpm --filter @controlplane/admin run build
 
   # Playwright critical-path UI tests. apps/web owns the Playwright config,
   # including whether it starts the app itself through `webServer`; this job
