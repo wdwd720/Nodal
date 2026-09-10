@@ -147,6 +147,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-121 | P1 | NEW | fixed | Every control on the dual-control table guarded UPDATE, so the application role could INSERT a row born APPROVED and forge two-person control outright |
 | F-122 | P1 | NEW | fixed | An agent could be born LIVE, a funding born minted and a payout born settled, because every binding in the schema is about changes and a row inserted in a privileged state never changed |
 | F-123 | P3 | NEW | fixed | Six rapid property-failure seeds were committed by accident, and rapid replays them on every run, pinning the property tier to cases that no longer fail |
+| F-124 | P1 | NEW | fixed | The webhook path the published contract documents is not the one the service registers, so a delivery to it answers 404 and the provider eventually gives up |
+| F-125 | P3 | NEW | open | The race detector cannot link on this host, so every race claim in this repository rests on CI |
 
 ---
 
@@ -6233,6 +6235,88 @@ writing as a named test**, not left as a timestamped seed file nobody can read.
 **Evidence.** STATIC_PROOF for the mechanism, REAL_DB_INTEGRATION for the
 staleness — all five older properties are integration-tagged and all five ran
 and passed in this session's gate, so none of the seeds still reproduces.
+
+## F-124 · The documented webhook path is not the registered one · NEW · P1 · FIXED
+
+**Found by** the abuse-surface audit, and verified here against the deployment.
+
+`openapi.yaml` declared the webhook provider parameter as
+`enum: [stripe]`. `cmd/api` registers the port under
+`stripecredit.ProviderName`, which is **`stripe_credit`**.
+
+Nothing enforces the enum at runtime — no OpenAPI request validator is wired
+anywhere in this repository, which is its own recorded observation — so a
+delivery to the **documented** path reaches the handler, finds no provider in
+the map, and answers 404 before writing anything.
+
+**Observed against `https://api-nodal.actorvia.xyz` on 2026-09-10:**
+
+```
+POST /v1/webhooks/stripe                     -> 404
+POST /v1/webhooks/definitely-not-a-provider  -> 404
+```
+
+The path the contract publishes is byte-identical in behaviour to an invented
+one.
+
+**What that costs.** Stripe retries a 404 for a few days and then gives up. A
+delivery that is given up on is a payment whose outcome never reaches this
+system — money captured and Credits never minted, with the reconciliation
+sweep as the only backstop and no alert to say it happened. `cmd/api/wire.go`'s
+own comment says the mounting exists to avoid exactly that.
+
+**Whether the live Stripe endpoint is configured at the right path is
+BLOCKED_EXTERNAL** — it is a value in Stripe's dashboard and cannot be read
+from here. The defect is real regardless: anyone configuring it from the
+published contract configures the wrong one.
+
+**Fix.** The contract now declares the key the service registers. Corrected in
+that direction, not the other, because `ProviderName` is the provider key
+throughout — `provider_events.provider`, the evidence archive keys, the inbox
+namespace — and changing it would change the meaning of stored rows.
+
+`TestWebhookPathIsTheOneTheContractPublishes` reads the enum out of
+`openapi.yaml` and the constant out of `stripecredit/wire.go` and requires them
+to be the same set. Two strings that have to agree, in two languages, is the
+defect class this register keeps recording; this is the test that makes them
+agree. Verified non-vacuous by putting `stripe` back and watching it fail.
+
+**Evidence.** LIVE_OBSERVED for the 404s, STATIC_PROOF for the divergence,
+BLOCKED_EXTERNAL for what Stripe is actually configured with.
+
+## F-125 · Every race claim rests on CI · NEW · P3 · OPEN
+
+**Found by** trying to run the race detector, which the goal document names as
+available on this host.
+
+It is not. `go test -race` fails to LINK for every package in `RACE_PKGS`:
+
+```
+ld.exe: error: linker script file 'C:/Users/Mihir (C:\Users\MIHIRM~1\...\fix_debug_gdb_scripts.ld)'
+        appears multiple times
+collect2.exe: error: ld returned 1 exit status
+```
+
+The GCC installation path contains a space (`\Users\Mihir Modi\...`) and this
+binutils — GCC 16.1.0, recent — splits the linker-script argument on it.
+Attempted and rejected: `GOTMPDIR` on a space-free path (the split is on GCC's
+own location, not the temp dir); `-ldflags=-w` to skip DWARF (the script is
+still emitted); and a directory junction at `C:\Dev\mingw64` (GCC resolves
+through it to the real path). The junction was removed afterwards.
+
+**Why it is recorded rather than shrugged at.** `make race` and the per-package
+integration-tagged race sweep both run in CI on Linux, so the coverage exists
+— but it means **no race claim in this repository can be checked from this
+host**, and a session working here cannot verify a concurrency fix it makes.
+That is worth knowing before someone assumes otherwise, and the goal document
+assumed otherwise.
+
+The fix is a GCC whose path has no space. It is a host change, not a repository
+one, which is why this is OPEN rather than fixed.
+
+**Evidence.** LIVE_OBSERVED on this host — the failure above is the actual
+output, reproduced for three packages and three workarounds. STATIC_PROOF that
+CI runs both race tiers (`ci.yml` lines 128 and 312-327).
 
 ## Findings deliberately NOT raised
 

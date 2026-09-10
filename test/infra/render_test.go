@@ -3,6 +3,9 @@ package infra
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -273,4 +276,45 @@ func TestRender_EveryProviderNameMatchesAnAdapter(t *testing.T) {
 			assert.True(t, real[v], "%s names %q, which no Stripe adapter answers to", key, v)
 		}
 	}
+}
+
+// The webhook path the contract publishes is the one the service registers
+// (F-124).
+//
+// openapi.yaml declared `enum: [stripe]`; cmd/api registers the port under
+// stripecredit.ProviderName, which is "stripe_credit". Nothing enforced the
+// enum at runtime -- no OpenAPI request validator is wired anywhere in this
+// repository -- so a delivery to the DOCUMENTED path reached the handler, found
+// no provider in the map, and answered 404.
+//
+// Confirmed against the deployment on 2026-09-10: POST /v1/webhooks/stripe
+// returns 404, byte-identical to POST /v1/webhooks/definitely-not-a-provider.
+// Stripe retries a 404 for a few days and then gives up, which is exactly the
+// failure cmd/api/wire.go's own comment says the mounting exists to avoid.
+//
+// Two strings that have to agree, in two languages, is the defect class this
+// register keeps recording. This is the test that makes them agree.
+func TestWebhookPathIsTheOneTheContractPublishes(t *testing.T) {
+	t.Parallel()
+	spec, err := os.ReadFile(filepath.Join("..", "..", "openapi", "openapi.yaml"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`name: provider,[^}]*enum: \[([^\]]+)\]`).FindSubmatch(spec)
+	require.NotNil(t, m, "the provider path parameter's enum is no longer where this test looks for it")
+
+	var declared []string
+	for _, v := range strings.Split(string(m[1]), ",") {
+		declared = append(declared, strings.TrimSpace(v))
+	}
+	sort.Strings(declared)
+
+	// What the composition root actually registers. Read from source rather
+	// than imported, because test/infra deliberately does not link cmd/api.
+	wire, err := os.ReadFile(filepath.Join("..", "..", "internal", "provider", "stripecredit", "wire.go"))
+	require.NoError(t, err)
+	pm := regexp.MustCompile(`ProviderName\s*=\s*"([^"]+)"`).FindSubmatch(wire)
+	require.NotNil(t, pm, "stripecredit.ProviderName is no longer a string constant")
+
+	assert.Equal(t, []string{string(pm[1])}, declared,
+		"the contract publishes a webhook provider the service does not register; a delivery to the "+
+			"documented path answers 404 and the provider eventually gives up")
 }

@@ -1740,11 +1740,11 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **123 findings**, of which four
-are open (F-42, F-47, F-69, F-93), five are partial (F-65, F-84, F-95, F-105,
-F-118) and the rest are fixed.
+`docs/audit/AUDIT_FINDINGS.md` is the register: **125 findings**, of which four
+are open (F-42, F-47, F-69, F-93), one is open as a host limitation (F-125),
+five are partial (F-65, F-84, F-95, F-105, F-118) and the rest are fixed.
 
-F-100 through F-123 landed on 2026-09-10, from eleven parallel read-only audits
+F-100 through F-125 landed on 2026-09-10, from eleven parallel read-only audits
 whose claims were re-verified here before anything was changed. Eight are P1 and
 every one of them was observed failing before it was believed:
 

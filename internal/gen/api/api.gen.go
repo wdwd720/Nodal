@@ -1848,13 +1848,13 @@ func (e GetInternalOrdersParamsRole) Valid() bool {
 
 // Defines values for PostWebhooksProviderParamsProvider.
 const (
-	Stripe PostWebhooksProviderParamsProvider = "stripe"
+	StripeCredit PostWebhooksProviderParamsProvider = "stripe_credit"
 )
 
 // Valid indicates whether the value is a known member of the PostWebhooksProviderParamsProvider enum.
 func (e PostWebhooksProviderParamsProvider) Valid() bool {
 	switch e {
-	case Stripe:
+	case StripeCredit:
 		return true
 	default:
 		return false
@@ -12600,12 +12600,12 @@ var swaggerSpec = []string{
 	"KTPZ1OxTjURS2fKKwDXgZYNm+q3kQcBuwLJish89dPv1ps3PPplfhncMWMgU296pS3yermaa9mlM7POe",
 	"DibyexcwmkTOR2kZ9CioX4gX7n1zb5MRMXcB0GvT5Ej4KbIj84SHgWfNXuIi2i19cbwllUvne7tMn7Nu",
 	"pM2FFKcrDl4cys2bFM8s3ZGdacZhxlSC13r5ODoxKtsiUoBVGF3j48ePH1Zd9ls2X8bxBx1GhshiT53B",
-	"n0yHcZ6pfH+9ECut+f7Kf7Dba2cdvyP41kNZw3I9rA9RfIu1/gPygEd+mCClChI9NxQZz7MhlXASv46o",
-	"AoIVCyPJp5gbpWbKQxbsPP10y4k5NMKjaya115JMRz/RKhpQ/qwBTiTG9mr+Kc/Z1LaNOFkale/Oq+HE",
-	"BD7RcI9f009Ww29U65MvsREb9vgLLMCFCPK35eQ7333LXu/dzrjztD/oz954w9HM64zHk9Hr3iUoH0Nt",
-	"t8E6jaDr5JLOM2B36HhyYCMPzKlIkpUfg6HSeNTOYGoXXeWSXPannaeQHIhH5PWjHLZ//N6GbRuc330u",
-	"XbpPLUPeurqixsUv7wAUtQlWA3IiwtZF6+zmEQKpGfVTphUHUvi5nf9tQofsZ2mGROtRyp1aj9Jco9Yj",
-	"e+mFOUxuafsZlsCxHpgr/fnd5/89AA==",
+	"n0yHcZ6pfH+9ECut+f7Kf7Dba+ZpxZUrI8UR7OuhHGK5LNaHKL7Fkv8BecAjP0yQYAWJnhtqjedJkUqo",
+	"iV9HVAHdioUR6FMEjsIz5SELdgJBuvPEnB3h0TWT2nlJpqOfaE0N6IDWAC4SQ3w1G5Wnbmrbtpwsm8p3",
+	"59XgYuKfaLjHveknq+E3qvzJl9iIG3v8BRbgwgf523IOnu++Zef3bmfcedof9GdvvOFo5nXG48node8S",
+	"dJChNt9guUZQeXJJ5xmwO1Q9ObCRB+ZUJMmqkMFQaVhqZzC1a69ySS77085TyBHEI/L6UQ7bP35vw7YN",
+	"zu8+ly7dp5ahcl1dWOPil3cAitoSqwE5EWHronV28wiB1Iz6KVOOA0X83M7/NhFE9rM0UaL1KGVSrUdp",
+	"ylHrkb30whwmxbT9DCvhWA/Mlf787vP/HgA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

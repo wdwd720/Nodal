@@ -349,7 +349,15 @@ paths:
       security: []
       summary: Provider webhook ingestion (signature-verified, persisted before processing, idempotent — PART 30)
       parameters:
-        - { in: path, name: provider, required: true, schema: { type: string, enum: [stripe] } }
+        # The value cmd/api registers the port under, which is
+        # stripecredit.ProviderName. This said `stripe`, and nothing enforced
+        # the enum at runtime -- no OpenAPI request validator is wired -- so a
+        # delivery to the DOCUMENTED path reached the handler, found no
+        # provider in the map and answered 404, indistinguishable from an
+        # invented provider. Confirmed against the deployment. Stripe retries a
+        # 404 for a few days and then gives up, which is the failure
+        # cmd/api/wire.go says it exists to avoid (F-124).
+        - { in: path, name: provider, required: true, schema: { type: string, enum: [stripe_credit] } }
       requestBody:
         required: true
         content: { application/json: { schema: { type: object } } }

@@ -2699,7 +2699,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    provider: "stripe";
+                    provider: "stripe_credit";
                 };
                 cookie?: never;
             };
