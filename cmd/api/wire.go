@@ -332,6 +332,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// exists to manage. One set of credentials for both would mean one mode
 	// for two products with different risk.
 	creditPurchases := wireCreditPurchase(ctx, cfg, database, in.resolver, clk, creditSvc, gateChecker, capGuard, log)
+	// A configured provider that ended up disabled is a page, not a line in
+	// a log stream nobody watches (F-93). The path stays disabled and the
+	// service keeps serving; what must not happen is that nobody is told.
+	raiseIfCreditPathDisabled(in.alerts, cfg, creditPurchases, clk.Now())
 	// The launch tier deploys no worker, so the settlement sweep runs here or
 	// nowhere -- and nowhere turns the money-at-risk ceiling into a lifetime
 	// cumulative cap that refuses every purchase forever (F-90). See

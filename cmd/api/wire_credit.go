@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/nodal/controlplane/internal/alert"
 	"github.com/nodal/controlplane/internal/archive"
 	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/clock"
@@ -35,6 +37,35 @@ type creditPurchaseWiring struct {
 	// of the endpoint Stripe is configured to call.
 	WebhookPort httpapi.WebhookPort
 	ProviderKey string
+	// DisabledReason is why a CONFIGURED provider ended up disabled, and is
+	// empty when the path is wired or when no provider was configured at all.
+	// It exists so the composition root can raise it: F-93 recorded that a
+	// key rotated to the wrong Stripe account was "a warning nobody reads plus
+	// a silently disabled capability on a service answering 200". The
+	// availability decision -- disable the path, keep serving -- stands and is
+	// explained below; what changed is that the disabled path is now a page.
+	DisabledReason string
+}
+
+// disabled returns the zero wiring carrying the reason.
+func disabled(reason string, err error) creditPurchaseWiring {
+	if err != nil {
+		reason += ": " + err.Error()
+	}
+	return creditPurchaseWiring{DisabledReason: reason}
+}
+
+// raiseIfCreditPathDisabled turns a configured-but-disabled Credit purchase
+// path into a SEV2 at the alert destination. A provider that was never
+// configured is not raised: that is the LOCAL default and a decision, not a
+// failure. A nil dispatcher is a no-op, so LOCAL and TEST are unaffected.
+func raiseIfCreditPathDisabled(d *alert.Dispatcher, cfg *config.Config, w creditPurchaseWiring, now time.Time) {
+	if w.DisabledReason == "" {
+		return
+	}
+	d.Enqueue(alert.EventFrom("credit_purchase_disabled", alert.SEV2,
+		"selling Credits is disabled on a deployment that configured a provider: "+w.DisabledReason,
+		"", nil, now, string(cfg.Env), cfg.ServiceName))
 }
 
 // wireCreditPurchase builds the Credit purchase provider, its service and its
@@ -66,7 +97,7 @@ func wireCreditPurchase(
 	if err != nil {
 		log.Warn("credit purchase provider is not configured; selling Credits is disabled",
 			"error", err.Error())
-		return creditPurchaseWiring{}
+		return disabled("the provider could not be constructed", err)
 	}
 
 	// One read-only call to confirm the key belongs to the account this
@@ -84,7 +115,7 @@ func wireCreditPurchase(
 		if verr := v.VerifyAccount(ctx); verr != nil {
 			log.Warn("credit purchase credentials do not match the configured account; selling Credits is disabled",
 				"error", verr.Error())
-			return creditPurchaseWiring{}
+			return disabled("the credentials could not be verified against the configured account", verr)
 		}
 	}
 
@@ -96,12 +127,12 @@ func wireCreditPurchase(
 	if rerr := registry.Register(prov); rerr != nil {
 		log.Warn("credit purchase provider was refused; selling Credits is disabled",
 			"provider", prov.Name(), "error", rerr.Error())
-		return creditPurchaseWiring{}
+		return disabled("the registry refused the provider", rerr)
 	}
 
 	if capGuard == nil {
 		log.Warn("capacity ceilings are not available; selling Credits is disabled")
-		return creditPurchaseWiring{}
+		return disabled("no capacity ceilings are available", nil)
 	}
 
 	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
@@ -122,7 +153,7 @@ func wireCreditPurchase(
 	if err != nil {
 		log.Warn("credit purchase service could not be built; selling Credits is disabled",
 			"error", err.Error())
-		return creditPurchaseWiring{}
+		return disabled("the purchase service could not be built", err)
 	}
 
 	// Webhook ingestion. Without it a payment is taken and no Credits are ever
@@ -131,7 +162,7 @@ func wireCreditPurchase(
 	if err != nil {
 		log.Warn("credit purchase webhook ingestion could not be built; selling Credits is disabled",
 			"error", err.Error())
-		return creditPurchaseWiring{}
+		return disabled("webhook ingestion could not be built", err)
 	}
 
 	log.Info("credit purchase provider wired",

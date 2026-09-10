@@ -152,3 +152,53 @@ func TestDeliveryTimeoutFitsInsideTheShutdownBudget(t *testing.T) {
 	// a Slack URL can see "generic" and know why Slack is answering 400.
 	assert.Contains(t, buf.String(), "(generic)")
 }
+
+// A configured Credit provider that ends up disabled reaches the destination
+// as a SEV2 (F-93: "a warning nobody reads plus a silently disabled capability
+// on a service answering 200"). An unconfigured provider is the LOCAL default
+// and raises nothing.
+func TestADisabledCreditPathIsAPage(t *testing.T) {
+	t.Parallel()
+	var (
+		mu  sync.Mutex
+		got []alert.Event
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var e alert.Event
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&e))
+		mu.Lock()
+		got = append(got, e)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	d := alert.NewDispatcher(alert.Options{
+		Sink:   alert.NewWebhookSink(srv.URL, "test", alert.FormatGeneric, srv.Client()),
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	cfg := &config.Config{Env: config.EnvStaging, ServiceName: "nodal-api"}
+
+	raiseIfCreditPathDisabled(d, cfg, creditPurchaseWiring{}, time.Now())
+	raiseIfCreditPathDisabled(d, cfg, disabled("the credentials could not be verified against the configured account", nil), time.Now())
+	d.Close()
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, got, 1, "an unconfigured provider must not page, and a disabled one must")
+	assert.Equal(t, "credit_purchase_disabled", got[0].Name)
+	assert.Equal(t, alert.SEV2, got[0].Severity)
+	assert.Contains(t, got[0].Detail, "could not be verified")
+	assert.Equal(t, "STAGING", got[0].Environment)
+
+	// And the composition root really calls it, on the wiring it built.
+	src, err := os.ReadFile("wire.go")
+	require.NoError(t, err)
+	assert.Contains(t, string(src), "raiseIfCreditPathDisabled(in.alerts, cfg, creditPurchases",
+		"the reason is computed and nobody raises it; F-93's silent half is back")
+
+	// A nil dispatcher -- LOCAL, TEST -- is a no-op, not a panic in the
+	// composition root.
+	assert.NotPanics(t, func() {
+		raiseIfCreditPathDisabled(nil, cfg, disabled("x", nil), time.Now())
+	})
+}
