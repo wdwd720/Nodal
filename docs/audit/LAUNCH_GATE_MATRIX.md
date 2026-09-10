@@ -80,12 +80,8 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | **Nothing pages anyone about anything** | F-118 | **Closed in software.** `internal/alert` delivers to a webhook in the shape the destination accepts (Slack, Discord, ntfy, generic); `cmd/api` runs the verification pass every five minutes; `verification_passes` is a heartbeat whose alarm breaches on missing data, so the five counter alarms keeping `notBreaching` can no longer read green over a system emitting nothing. Remaining: `NODAL_ALERT_WEBHOOK_URL` in the Render dashboard — the deployment refuses to boot without it |
 
 | Choose a security-event retention period, or decide not to | ADR-0020 | `CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and tested (00740). Not code; the question the ADR left open |
-| `login_attempts` has a purge that this deployment never runs | F-105 | A cron on the blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is |
 | Request validation precedes authentication | F-84 | Authorising on the route pattern before the generated wrapper; wants its own design |
-| `cmd/api` requires the schema-owner credential | F-93 | Make `CP_DATABASE_MIGRATE_URL` service-conditional; needs a blueprint change and a redeploy |
-| A wrong Stripe account warns rather than refusing to start | F-93 | A real availability decision on a tier that cold-starts |
-| Render replica count is an assumption, not an assertion | F-93 | A startup advisory lock would make it one |
-| Neon pool has no idle or connect timeout | F-93 | Small change, needs measurements this repository does not have |
+| A wrong Stripe account warns rather than refusing to start | F-93 | **The silent half is fixed**: the path stays disabled and the service keeps serving, and the reason now reaches the alert destination as `credit_purchase_disabled` (SEV2). Refusing to start would make every cold start during a Stripe blip an outage, which is the code's own reasoning and stands |
 | Three retention classes are declared and unenforced | ADR-0020 | The ADR decides how; the migration and the partition manager remain |
 | 121 enum CHECKs have no Go counterpart | F-95 | Most have no Go list to compare against, by their nature |
 | An agent can be born SHADOW without its promotion evidence | F-122 | A provenance gap, not a money one; closing it is a decision about how the suite seeds agents |
@@ -97,7 +93,13 @@ table is the change: the buffered request body (F-85), the fifteen
 destination-only transition bindings (F-94), the forged dual control that made
 every other approval-bearing control conditional (F-121), the unprunable
 security trail (F-105, 00740) and the forgeable audit binding itself (F-42,
-00741, after four sessions open and three fixes tried and rejected).
+00741, after four sessions open and three fixes tried and rejected). And on
+2026-09-10: the `login_attempts` purge and the `security_events` partitions
+run from `cmd/api` (F-105); the web service no longer holds the schema-owner
+credential, the replica count is an advisory lock rather than an assumption,
+and the Neon pool has a connect timeout and an idle time (F-93); alerts leave
+the process (F-118); personal data is encrypted and withheld from the roles
+with no use for it (F-47); and expired sessions are purged (F-133).
 
 **F-42's stronger remedy is complete and has left this table.** Seventeen bound
 tables, zero of which still grant the application blanket UPDATE (00743-00753).
