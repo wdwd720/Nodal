@@ -1679,17 +1679,31 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: **two of the
-seventeen bound tables still grant `cp_app` blanket UPDATE** — `deposits` and
-`kill_switches`.
+tracked on its own terms rather than as this finding's blocker — and as of
+00753 it is **done**.
+
+**Zero of the seventeen bound tables grant `cp_app` blanket UPDATE.** Counted
+from the schema, not from this list:
+
+```
+WITH bound AS (SELECT DISTINCT c.oid FROM pg_trigger t
+  JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_proc p ON p.oid = t.tgfoid
+ WHERE NOT t.tgisinternal AND p.proname LIKE '%require_transition%')
+SELECT count(*) FILTER (WHERE has_table_privilege('cp_app', oid, 'UPDATE'))
+     || ' of ' || count(*) FROM bound;
+-> 0 of 17
+```
+
+Detection became privilege on every audited table. The transition row is the
+state change; the application cannot write a state column at all.
 
 Fourteen do not: `capability_gates` (00701), `withdrawals`, `assets`,
 `instruments` and `payout_requests` (00733, F-109, the four whose columns are
 money), `admin_actions`, and the eight done under this finding —
 **`credit_fundings` (00743), `accounts` (00744), `wallets` (00745),
 `native_markets` (00746), `native_assets` (00747), `orders` (00748),
-`trade_intents` (00749), `agents` (00750) and `reconciliation_records`
-(00751).**
+`trade_intents` (00749), `agents` (00750), `reconciliation_records` (00751),
+`deposits` (00752) and `kill_switches` (00753).**
 
 ### 00743 — the first of the ten, and what it cost
 
@@ -2035,6 +2049,46 @@ control in this schema, not only this one. It is superuser-only and `cp_app` is
 not one, which is a fact about PostgreSQL that this repository now depends on
 out loud instead of silently.
 
+
+### 00752 and 00753 — the two the survey called hardest
+
+**`deposits` (00752) is where the revoke buys the least, and it was still worth
+doing.** Its update is built dynamically from a patch of fifteen optional
+columns — provider session ids and references, the amounts a provider reported,
+chain signatures, fraud state, eligibility flags, the journal transactions a
+settlement produced — and not one is a fact about a transition. All fifteen are
+granted back, and the revoke buys exactly `status` and the thirteen timestamps
+that record when each status was reached.
+
+That is the smallest yield in the series and it is the point of the series:
+**those fifteen columns are evidence, and `status` is authority.** They are now
+separated by privilege rather than by convention. `created_at` is in
+`timestampColumns` and deliberately absent from the trigger's CASE — a deposit
+is INSERTed at CREATED, so a branch for it would be dead code that looked like
+coverage.
+
+**`kill_switches` (00753) is the one 00743 named as deliberately-not-next**, and
+the reason it gave was real: its single write sets `active` with six other
+columns under `version = version + 1 WHERE version = $11 RETURNING version`, so
+moving one column breaks the concurrency check and the returned row at once.
+
+That was a reason to move the version check too, not a reason to leave the
+switch that stops the platform writable by the application. The transition row
+carries `from_version`; the trigger performs the same compare-and-swap and the
+same increment, and raises when the switch has moved underneath. It now applies
+to every writer, and it is no longer possible to write the switch without
+bumping the version — previously a convention of one statement.
+
+`to_severity` is carried rather than derived, because severity comes from
+`kind.Severity()` on activation and is left alone on release: deriving it from
+`to_active` would be wrong on exactly the transition that matters, the release.
+
+The birth row needed no exemption but did need a rule. A switch is INSERTed
+already active by `insertActive` and `record` runs after it, so its transition
+has nothing to move; a row with no `from_version` is not applied. The Go side
+returns the switch by re-reading it, because the version and the timestamps are
+the database's to produce now — the same correction 00747 made when it stopped
+assigning stamps from a local clock.
 
 ## F-43 · MARKETPLACE was high-risk in Go and not in SQL · BASELINE · P1 · FIXED
 

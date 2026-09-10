@@ -345,8 +345,16 @@ func (r *Repository) TransitionWithPatch(ctx context.Context, tx pgx.Tx, deposit
 		transitionID, depositID, cur.Status, to, string(ev.ActorType), ev.ActorID, ev.Reason, ev.EvidenceRef, ev.CorrelationID, now); err != nil {
 		return Deposit{}, dbErr("insert transition", err)
 	}
-	sets := []string{"status = $2", to.TimestampColumn() + " = $3"}
-	args := []any{depositID, to, now}
+	// The transition row IS the status change since 00752: cp_app holds no
+	// UPDATE on `status` or on any of the thirteen stamps, and the trigger on
+	// deposit_transitions has already written both from the row.
+	//
+	// What remains in this statement is the patch -- fifteen columns a sweep or
+	// a webhook learned about the deposit. Those are evidence; the status is
+	// authority, and they are now separated by privilege rather than by
+	// convention.
+	sets := []string{}
+	args := []any{depositID}
 	add := func(col string, v any) {
 		args = append(args, v)
 		sets = append(sets, fmt.Sprintf("%s = $%d", col, len(args)))
@@ -399,7 +407,13 @@ func (r *Repository) TransitionWithPatch(ctx context.Context, tx pgx.Tx, deposit
 	if p.ReversalJournalTransactionID != nil {
 		add("reversal_journal_transaction_id", *p.ReversalJournalTransactionID)
 	}
-	updated, err := scanDeposit(tx.QueryRow(ctx, `UPDATE deposits SET `+strings.Join(sets, ", ")+` WHERE id = $1 RETURNING `+depositColumns, args...))
+	var updated Deposit
+	if len(sets) == 0 {
+		// A transition with no patch: the trigger did all of it.
+		updated, err = scanDeposit(tx.QueryRow(ctx, `SELECT `+depositColumns+` FROM deposits WHERE id = $1`, depositID))
+	} else {
+		updated, err = scanDeposit(tx.QueryRow(ctx, `UPDATE deposits SET `+strings.Join(sets, ", ")+` WHERE id = $1 RETURNING `+depositColumns, args...))
+	}
 	if err != nil {
 		if db.IsUniqueViolation(err) {
 			return Deposit{}, errs.Wrap(err, errs.CodeConflict, "funding: provider session is already bound to another deposit")

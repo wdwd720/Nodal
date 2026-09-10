@@ -40,7 +40,11 @@ import (
 var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
-	testDB         *db.DB
+	// The migration role, for seeding a kill switch into a chosen state. Since
+	// 00753 that is not something the application can do, and a fixture that did
+	// it would be claiming a capability the system does not have.
+	testOwnerDB *db.DB
+	testDB      *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -62,6 +66,12 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	defer testDB.Close()
+	testOwnerDB, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "funding-itest-owner", MaxConns: 2})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "funding integration: open owner pool:", err)
+		return 1
+	}
+	defer testOwnerDB.Close()
 	return m.Run()
 }
 
@@ -375,7 +385,11 @@ func TestIntegration_Start_Refusals(t *testing.T) {
 		// went unaudited and this fixture relied on that (F-70). It now writes
 		// what Controller.Activate writes.
 		switchID := id.New[id.Any]()
-		require.NoError(t, testDB.InTx(context.Background(), db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		// Seeded as the OWNER: 00753 revoked UPDATE on kill_switches from cp_app,
+		// so the ON CONFLICT DO UPDATE below is not something the application can
+		// do any more. Flipping a switch is an operator action now, and this
+		// fixture is standing in for one.
+		require.NoError(t, testOwnerDB.InTx(context.Background(), db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 			if err := tx.QueryRow(ctx, `INSERT INTO kill_switches
 				(id, kind, scope_id, active, severity, reason, activated_by_actor_id, activated_at)
 				VALUES ($1, 'FUNDING_DISABLE', '*', true, 'SEVERE', 'funding itest', 'itest', now())
@@ -725,11 +739,24 @@ func TestIntegration_IllegalTransitions(t *testing.T) {
 	})
 	require.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 
-	// The database refuses a status change without a transition row in the same transaction.
+	// The database refuses a status change with no transition row behind it, and
+	// the refusal got stronger in 00752: the 00603 binding caught it at COMMIT,
+	// and privilege now refuses it at the statement. cp_app holds UPDATE on the
+	// fifteen evidence columns and on neither the status nor its stamps.
 	_, err = testDB.Exec(f.ctx, `UPDATE deposits SET status = 'CANCELLED' WHERE id = $1`, depositID)
 	require.Error(t, err)
-	require.Equal(t, "AU001", db.SQLState(err))
+	require.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
 	require.Equal(t, funding.StatusSessionCreated, f.deposit(depositID).Status)
+
+	// Nor a stamp, which is what says WHEN a status was reached.
+	_, err = testDB.Exec(f.ctx, `UPDATE deposits SET available_at = now() WHERE id = $1`, depositID)
+	require.Error(t, err)
+	require.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+
+	// But the evidence a provider reports is still the application's to write,
+	// so the revoke is a boundary and not a wall.
+	_, err = testDB.Exec(f.ctx, `UPDATE deposits SET provider_ref = 'probe' WHERE id = $1`, depositID)
+	require.NoError(t, err, "cp_app must still be able to record what the provider said")
 }
 
 // TestIntegration_Driver_AdvancesToAvailable runs the Temporal-free

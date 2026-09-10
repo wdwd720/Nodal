@@ -78,7 +78,7 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | Item | Finding | Shape |
 |---|---|---|
 | **Nothing pages anyone about anything** | F-118 | The largest of these. Alerts now log and both roots build the real instruments; what remains is a destination and something on a timer. Half deployment decision. Before the Terraform is ever applied, its five application alarms set `treat_missing_data = "notBreaching"`, so a metric that never arrives reads OK |
-| A state column the application cannot write at all | F-42 | The audit binding can no longer be forged (00741), which is detection. This is privilege: revoke UPDATE on the state column and route changes through SECURITY DEFINER functions. **Two of seventeen remain** — `deposits` and `kill_switches`. Nine were done under this finding (00743-00751). Rules paid for: a row lock needs UPDATE privilege, so budget one column grant per table and say it is for the lock; binding tests move to the migration role; a column with no home on the transition row usually belongs ON it rather than granted back; and where the destination is constrained, mirror the constraint onto the transition so an incomplete row is refused where it is written |
+
 | Choose a security-event retention period, or decide not to | ADR-0020 | `CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and tested (00740). Not code; the question the ADR left open |
 | `login_attempts` has a purge that this deployment never runs | F-105 | A cron on the blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is |
 | Request validation precedes authentication | F-84 | Authorising on the route pattern before the generated wrapper; wants its own design |
@@ -98,6 +98,16 @@ destination-only transition bindings (F-94), the forged dual control that made
 every other approval-bearing control conditional (F-121), the unprunable
 security trail (F-105, 00740) and the forgeable audit binding itself (F-42,
 00741, after four sessions open and three fixes tried and rejected).
+
+**F-42's stronger remedy is complete and has left this table.** Seventeen bound
+tables, zero of which still grant the application blanket UPDATE (00743-00753).
+Detection became privilege everywhere: the transition row is the state change,
+and the application cannot write a state column at all. Four rules were paid for
+along the way and are recorded in the register — a row lock needs UPDATE
+privilege; binding tests move to the migration role; a column with no home on
+the transition row usually belongs ON it; and where a destination is
+constrained, mirror the constraint onto the transition so an incomplete row is
+refused where it is written.
 
 **And one this audit caused and then found.** 00741 made every state change
 depend on one row, and a restore that lost it would have passed every comparison

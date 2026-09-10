@@ -148,10 +148,17 @@ func authError(err error) error {
 	}
 }
 
-func (c *Controller) record(ctx context.Context, tx pgx.Tx, p security.Principal, s *Switch, verb, reason, approvalID string, now time.Time) error {
+func (c *Controller) record(ctx context.Context, tx pgx.Tx, p security.Principal, s *Switch, verb, reason, approvalID string, now time.Time, expect *int64) error {
 	t := Transition{
 		ID: NewTransitionID(), SwitchID: s.ID, Kind: s.Kind, ScopeID: s.ScopeID, ToActive: s.Active,
 		ActorType: p.ActorType, ActorID: p.SubjectID, Reason: reason, ApprovalID: approvalID, OccurredAt: now,
+		// The row carries what it makes true, and the version it expected --
+		// the compare-and-swap 00753 moved out of saveSwitch. Filled here in one
+		// place because every caller already computed the switch it wants.
+		ToSeverity: s.Severity, ReleaseReason: s.ReleaseReason,
+	}
+	if expect != nil {
+		t.FromVersion = expect
 	}
 	if err := insertTransition(ctx, tx, t); err != nil {
 		return err
@@ -218,15 +225,26 @@ func (c *Controller) Activate(ctx context.Context, tx pgx.Tx, kind Kind, scope, 
 	t := now
 	s.ActivatedAt = &t
 	s.ReleasedBy, s.ReleasedAt, s.ReleaseApprovalID, s.ReleaseReason = "", nil, "", ""
+	// A switch that does not exist yet is INSERTed already active, and its birth
+	// transition applies nothing: the row is written to record the arrival, and
+	// 00753's trigger returns early on a row with no from_version.
+	//
+	// An existing switch is moved BY the transition. `expect` is the version the
+	// caller last saw, and the trigger refuses the row if the switch has moved
+	// underneath -- the compare-and-swap saveSwitch used to carry.
+	var expect *int64
 	if s.Version == 0 {
-		err = insertActive(ctx, tx, s)
+		if err = insertActive(ctx, tx, s); err != nil {
+			return Switch{}, err
+		}
 	} else {
-		err = saveSwitch(ctx, tx, s)
+		v := s.Version
+		expect = &v
 	}
-	if err != nil {
+	if err := c.record(ctx, tx, p, s, "activate", reason, "", now, expect); err != nil {
 		return Switch{}, err
 	}
-	if err := c.record(ctx, tx, p, s, "activate", reason, "", now); err != nil {
+	if err := reloadSwitch(ctx, tx, s); err != nil {
 		return Switch{}, err
 	}
 	return *s, nil
@@ -292,10 +310,11 @@ func (c *Controller) Release(ctx context.Context, tx pgx.Tx, kind Kind, scope, r
 	s.ReleasedAt = &t
 	s.ReleaseApprovalID = approval
 	s.ReleaseReason = reason
-	if err := saveSwitch(ctx, tx, s); err != nil {
+	expect := s.Version
+	if err := c.record(ctx, tx, p, s, "release", reason, approval, now, &expect); err != nil {
 		return Switch{}, err
 	}
-	if err := c.record(ctx, tx, p, s, "release", reason, approval, now); err != nil {
+	if err := reloadSwitch(ctx, tx, s); err != nil {
 		return Switch{}, err
 	}
 	return *s, nil
