@@ -182,13 +182,22 @@ func (s Service) ServesHTTP() bool { return slices.Contains(httpServices, s) }
 // static "the API needs Redis" would put the variable back into every LOCAL
 // developer's environment for a client that a memory-backed run never builds.
 func (c *Config) RequiresDependency(d Dependency) bool {
-	if c.Service.Requires(d) {
-		return true
+	switch d {
+	case DepRedis:
+		// The API needs Redis only when its rate-limit counters are shared.
+		if c.Service.ServesHTTP() && c.RateLimit.Backend.Distributed() {
+			return true
+		}
+	case DepArchive:
+		// A binary that archives needs an OBJECT STORE only when the archive
+		// backend is one. With the Postgres backend the store it needs is the
+		// database it already has, and demanding an endpoint, a region and
+		// three bucket names would be four values that are never contacted.
+		if c.Service.Requires(DepArchive) && !c.Archive.Backend.NeedsObjectStore() {
+			return false
+		}
 	}
-	if d == DepRedis && c.Service.ServesHTTP() && c.RateLimit.Backend.Distributed() {
-		return true
-	}
-	return false
+	return c.Service.Requires(d)
 }
 
 // requiresVar reports whether an absent variable is an error for this

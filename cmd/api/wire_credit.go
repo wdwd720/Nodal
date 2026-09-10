@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/nodal/controlplane/internal/archive"
+	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
@@ -14,6 +15,7 @@ import (
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/httpapi"
+	"github.com/nodal/controlplane/internal/proof"
 	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/webhook"
 )
@@ -95,13 +97,35 @@ func wireCreditPurchase(
 		return creditPurchaseWiring{}
 	}
 
+	capGuard, err := capacity.NewGuard(capacity.Budget{
+		MaxAccounts:        cfg.Capacity.MaxAccounts,
+		MaxPurchasesPerDay: cfg.Capacity.MaxPurchasesPerDay,
+		MaxAtRiskMinor:     cfg.Capacity.MaxAtRiskMinor,
+		MaxDatabaseBytes:   cfg.Capacity.MaxDatabaseBytes,
+	}, clk.Now)
+	if err != nil {
+		log.Warn("capacity ceilings could not be built; selling Credits is disabled",
+			"error", err.Error())
+		return creditPurchaseWiring{}
+	}
+	log.Info("launch-tier capacity ceilings in force",
+		"max_accounts", cfg.Capacity.MaxAccounts,
+		"max_purchases_per_day", cfg.Capacity.MaxPurchasesPerDay,
+		"max_at_risk_minor", cfg.Capacity.MaxAtRiskMinor,
+		"max_database_bytes", cfg.Capacity.MaxDatabaseBytes)
+
 	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
 		Credits:  credits,
 		Provider: prov,
 		// The shipped policy. Changing the rate is a new version through the
 		// same path any other versioned policy takes, not an edit here.
-		Pricing:     credit.DefaultPricingPolicy(),
-		Gates:       gateChecker,
+		Pricing: credit.DefaultPricingPolicy(),
+		Gates:   gateChecker,
+		// The launch-tier ceilings. Built from configuration rather than
+		// hardcoded, and refused outright if the configuration states none --
+		// see internal/capacity, which will not construct a guard that guards
+		// nothing.
+		Capacity:    capGuard,
 		Clock:       clk,
 		Environment: string(cfg.Env),
 	})
@@ -132,9 +156,13 @@ func wireCreditPurchase(
 // The archive is a hard requirement and that is the pipeline's design, not an
 // oversight here: step one preserves the raw signed request before anything is
 // parsed, so that what a provider actually sent survives however the parse
-// goes. A deployment with no object store cannot keep that evidence, and the
-// honest response is to refuse the deliveries rather than process them
-// unrecorded.
+// goes. A deployment that cannot keep that evidence must refuse the deliveries
+// rather than process them unrecorded.
+//
+// WHERE it is kept is a different question, and one the infrastructure gets to
+// answer. An object store is the usual answer. A tier without one keeps the
+// objects in the application database, write-once by privilege and by trigger,
+// which is the same guarantee reached differently -- see migration 00730.
 func creditWebhookPort(
 	ctx context.Context,
 	cfg *config.Config,
@@ -148,22 +176,82 @@ func creditWebhookPort(
 	if !ok {
 		return nil, fmt.Errorf("credit purchase provider %q cannot verify its own webhooks", prov.Name())
 	}
-	if cfg.Archive.EvidenceBucket == "" {
-		return nil, fmt.Errorf("no evidence bucket is configured; raw provider deliveries could not be preserved")
-	}
-	store, err := archive.NewS3(ctx, cfg.Archive, resolver, archive.S3Options{Clock: clk})
+	evidence, err := evidenceStore(ctx, cfg, database, resolver, clk)
 	if err != nil {
-		return nil, fmt.Errorf("evidence archive: %w", err)
+		return nil, err
 	}
 	return webhook.NewHandler(webhook.Config[credit.PurchaseEvent]{
 		Verifier:   verifier,
 		Dispatcher: svc,
-		Archive:    evidenceArchive{store: store, bucket: cfg.Archive.EvidenceBucket},
+		Archive:    evidence,
 		DB:         database,
 		Inbox:      event.NewInbox(clk),
 		Clock:      clk,
 		Tolerance:  stripecredit.SignatureTolerance,
 	})
+}
+
+// webhookEvidence is what the ingestion pipeline asks of an archive: a key, a
+// content type and bytes, in exchange for a reference it can record.
+type webhookEvidence interface {
+	Put(ctx context.Context, key, contentType string, body []byte) (string, error)
+}
+
+// evidenceStore returns the archive the configured backend names.
+//
+// There is no fallback between the two. A deployment that asked for an object
+// store and cannot reach one does not quietly write to its database instead:
+// the evidence would then be somewhere other than where the deployment's own
+// runbooks say to look for it, which is a worse failure than refusing.
+func evidenceStore(
+	ctx context.Context,
+	cfg *config.Config,
+	database *db.DB,
+	resolver config.Resolver,
+	clk clock.Clock,
+) (webhookEvidence, error) {
+	switch cfg.Archive.Backend {
+	case config.ArchivePostgres:
+		pg, err := proof.NewPgArchive(database)
+		if err != nil {
+			return nil, fmt.Errorf("evidence archive: %w", err)
+		}
+		return pgEvidence{a: pg}, nil
+
+	case config.ArchiveS3:
+		if cfg.Archive.EvidenceBucket == "" {
+			return nil, fmt.Errorf("no evidence bucket is configured; raw provider deliveries could not be preserved")
+		}
+		store, err := archive.NewS3(ctx, cfg.Archive, resolver, archive.S3Options{Clock: clk})
+		if err != nil {
+			return nil, fmt.Errorf("evidence archive: %w", err)
+		}
+		return evidenceArchive{store: store, bucket: cfg.Archive.EvidenceBucket}, nil
+
+	default:
+		// Unreachable through Load, which parses the backend and refuses an
+		// unknown one. It is here so that adding a third backend without
+		// wiring it fails at startup rather than selecting whichever branch
+		// came last.
+		return nil, fmt.Errorf("evidence archive: no store is wired for backend %q", string(cfg.Archive.Backend))
+	}
+}
+
+// pgEvidence adapts the database-backed archive to the same interface.
+//
+// The content type is dropped, and that is not a loss worth carrying a column
+// for: every delivery this pipeline preserves is a provider webhook body, the
+// bytes are stored exactly as received, and the digest is what any later
+// verification uses. A field that is always the same value is a field nobody
+// reads.
+type pgEvidence struct{ a *proof.PgArchive }
+
+func (p pgEvidence) Put(ctx context.Context, key, _ string, body []byte) (string, error) {
+	uri, _, err := p.a.Put(ctx, key, body, nil)
+	if err != nil {
+		return "", err
+	}
+	return uri, nil
 }
 
 // evidenceArchive adapts the object archive to what the webhook pipeline asks

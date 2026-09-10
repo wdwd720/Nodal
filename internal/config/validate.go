@@ -137,7 +137,12 @@ func (c *Config) Validate() error {
 	needsRedpanda := c.Service.Requires(DepRedpanda)
 	needsClickHouse := c.Service.Requires(DepClickHouse)
 	needsTemporal := c.Service.Requires(DepTemporal)
-	needsArchive := c.Service.Requires(DepArchive)
+	// The archive backend decides whether the object-store values are needed
+	// at all, so it is validated before anything reads needsArchive.
+	if c.Archive.Backend != "" && !c.Archive.Backend.IsValid() {
+		add(RuleField, "Archive.Backend", fmt.Sprintf("unknown backend %q", string(c.Archive.Backend)))
+	}
+	needsArchive := c.RequiresDependency(DepArchive)
 
 	// ---- core --------------------------------------------------------------
 	if c.ServiceName == "" {

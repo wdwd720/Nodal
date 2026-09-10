@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -222,7 +223,55 @@ type TemporalConfig struct {
 }
 
 // ArchiveConfig configures the S3-compatible evidence/audit archive.
+// ArchiveBackend is where evidence objects are stored.
+//
+// It exists because "an S3-compatible object store" is an infrastructure
+// assumption rather than a requirement of the code. What the code needs is a
+// write-once keyed store, and on a tier with no object storage -- the free
+// tiers all want a card for it -- an append-only Postgres table denied UPDATE,
+// DELETE and TRUNCATE at the privilege level provides the same guarantee by a
+// different mechanism.
+//
+// The one thing it does NOT provide is S3 Object Lock, which is a compliance
+// control rather than a convenience and is the reason the audit archive wants
+// s3 specifically. That distinction is enforced in Validate rather than left to
+// whoever reads this.
+type ArchiveBackend string
+
+// Archive backends.
+const (
+	// ArchiveS3 is an S3-compatible object store: AWS S3 in a deployment,
+	// MinIO locally.
+	ArchiveS3 ArchiveBackend = "s3"
+	// ArchivePostgres keeps objects in the application database, write-once by
+	// privilege and by trigger. It needs no second provider and no card.
+	ArchivePostgres ArchiveBackend = "postgres"
+)
+
+// ParseArchiveBackend parses the canonical name.
+func ParseArchiveBackend(v string) (ArchiveBackend, error) {
+	b := ArchiveBackend(strings.ToLower(strings.TrimSpace(v)))
+	if !b.IsValid() {
+		return "", fmt.Errorf("config: unknown archive backend %q (want s3 or postgres)", v)
+	}
+	return b, nil
+}
+
+// IsValid reports whether b is a declared backend.
+func (b ArchiveBackend) IsValid() bool { return b == ArchiveS3 || b == ArchivePostgres }
+
+// NeedsObjectStore reports whether this backend requires the S3 endpoint,
+// region, buckets and credentials to be configured at all.
+//
+// Only an explicit "postgres" relaxes the requirement. An unset or unrecognised
+// backend needs the object store, which is the fail-closed direction: a
+// deployment that forgot to say where its evidence goes is asked for everything
+// rather than excused from all of it, and the missing variable is reported on
+// its own account.
+func (b ArchiveBackend) NeedsObjectStore() bool { return b != ArchivePostgres }
+
 type ArchiveConfig struct {
+	Backend            ArchiveBackend
 	Endpoint           string
 	Region             string
 	RawBucket          string

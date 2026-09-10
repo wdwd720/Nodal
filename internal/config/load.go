@@ -173,6 +173,17 @@ func setString(dst func(*Config) *string) applyFn {
 	}
 }
 
+func setArchiveBackend(dst func(*Config) *ArchiveBackend) applyFn {
+	return func(c *Config, raw string) error {
+		v, err := ParseArchiveBackend(raw)
+		if err != nil {
+			return err
+		}
+		*dst(c) = v
+		return nil
+	}
+}
+
 func setRateLimitBackend(dst func(*Config) *RateLimitBackend) applyFn {
 	return func(c *Config, raw string) error {
 		v, err := ParseRateLimitBackend(strings.ToLower(strings.TrimSpace(raw)))
@@ -439,6 +450,8 @@ func specs() []varSpec {
 		needs(DepTemporal, req("CP_TEMPORAL_REQUIRE_TLS", secTemporal, "Require TLS to Temporal. Must be true in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Temporal.RequireTLS }))),
 
+		needs(DepArchive, req("CP_ARCHIVE_BACKEND", secArchive, "Where evidence objects live: s3 | postgres. s3 makes every CP_ARCHIVE_* value below required and is what a deployment with object storage uses. postgres keeps objects in the application database, write-once by privilege and by trigger, and needs no object store at all -- but it cannot provide S3 Object Lock, so the audit chain still wants s3.", "s3",
+			setArchiveBackend(func(c *Config) *ArchiveBackend { return &c.Archive.Backend }))),
 		needs(DepArchive, req("CP_ARCHIVE_ENDPOINT", secArchive, "S3-compatible endpoint URL. Empty in AWS means the regional default; LOCAL points at MinIO.", "http://127.0.0.1:9100",
 			setString(func(c *Config) *string { return &c.Archive.Endpoint }))),
 		needs(DepArchive, req("CP_ARCHIVE_REGION", secArchive, "S3 region.", "us-east-1",

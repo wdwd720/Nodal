@@ -120,6 +120,7 @@
 //
 // Archive (S3-compatible):
 //
+//	CP_ARCHIVE_BACKEND              s3 | postgres (postgres needs no object store)
 //	CP_ARCHIVE_ENDPOINT             endpoint URL
 //	CP_ARCHIVE_REGION               region
 //	CP_ARCHIVE_RAW_BUCKET           raw payload bucket
