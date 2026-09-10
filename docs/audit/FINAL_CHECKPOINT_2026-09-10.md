@@ -49,8 +49,19 @@ The commits that end the session:
 | `07f8c94` | `config: the web service is not given the credential that can turn off every trigger` |
 | `68536a6` | `api: the one-instance assumption is now an assertion` |
 | `cc7d7f3` | `db: a dial that outlives its request, and a connection that outlives its server` |
+| `237ad43` | `docs: the checkpoint after the F-42 remedy and five F-93 rows` |
+| `8866127` | `api: every reconciliation alert leaves the process, and the pass that raises it runs here` — F-118 |
+| `32cbdd4` | `infra: a heartbeat the counter alarms cannot fake` — F-118 |
+| `5b62a46` | `docs: F-118 closes; what is left of it is a URL` |
+| `fe20a4c` | `pii: personal data is encrypted in the application, or it is not stored` — F-47 |
+| `cc3237b` | `db: who may read personal data, decided by what the columns now hold` — F-47, F-133 |
+| `11c6ab6` | `docs: F-47 closes the way its own updates said it would; F-133 opens and closes` |
+| `d56b6b8` | `config: the keyring reference follows the *_REF convention, and 00754's Down is protected` |
+| `26a5ac9` | `api: a Credit path that a configured provider left disabled is a page, not a log line` — F-93 |
+| `a4e438b` | `docs: the launch matrix stops listing what was fixed, and F-93's silent half is recorded as closed` |
 
-**Thirty-nine commits since `05ec7f3`**, the session's starting point.
+**Forty-nine commits since `05ec7f3`**, the session's starting point; the last
+ten close the two items `SOFTWARE_COMPLETE` was waiting on.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
@@ -73,7 +84,7 @@ The seven that are not fixed, and what each is now:
 | **F-95** | part | 121 enum CHECKs have no Go counterpart. Most have no Go list to compare against, by their nature. |
 | **F-118** | fixed | **Closed this session.** A webhook destination in the shape each destination accepts, refused-when-empty in STAGING/PROD; the verification pass on a ticker in `cmd/api`; a heartbeat alarm that breaches on missing data; a drift in the database reaching a webhook end to end under test. What is not code is the URL, and the next deploy does not go live until it is set. |
 
-Opened this session: **F-100 through F-132 — 33 findings, 17 P1, 10 P2, 6 P3.**
+Opened this session: **F-100 through F-133 — 34 findings, 17 P1, 11 P2, 6 P3.** F-133 is the last: expired sessions were never purged on any tier, found by checking what `cp_ops` actually did with the table before deciding what it may read.
 Every one is fixed. Twenty-five came from eleven parallel read-only audits whose
 claims were re-verified before anything was changed; **two the fuzz tier found on
 its own** (F-123, F-126); **two were found by attacking this session's own fixes
@@ -101,13 +112,30 @@ individually.
 | **F-93** | P1 | open | An inventory row across six provider audits. Its constituent items are individually tracked; several are deployment changes (`CP_DATABASE_MIGRATE_URL` service-conditional, a Neon idle timeout, an advisory lock on replica count) and one is an external fact (a mainnet settlement mint). |
 | **F-95** | P3 | part | 121 enum CHECKs have no Go counterpart. Most have no Go list to compare against, by their nature. Nine more were paired this session; three were deliberately left unpaired. |
 | **F-118** | P2 | fixed | Alerts log, both roots construct the real instruments, and now: `internal/alert` delivers to a webhook (Slack, Discord, ntfy or generic, chosen from the host), `cmd/api` runs `VerifyInternal` + `SweepEscalations` every five minutes, `verification_passes` is a heartbeat with a breaching alarm, and STAGING/PROD refuse to start without a destination. |
-| **F-125** | P3 | open | The race detector cannot link on this host: this GCC's path contains a space and binutils splits the linker-script argument on it. It is a host change, not a repository one. **Every race claim in this repository rests on CI.** |
+| **F-125** | P3 | fixed | The race detector links on this host now (a copy of the toolchain at a path GCC resolves to without spaces); both race tiers run here, and no race claim rests on CI alone. Listed because an earlier revision of this table said the opposite. |
 
 Closed after this checkpoint was first written, and listed because their absence
 from the table above is the change: **F-105** (`security_events` is now
-partitioned by month and prunable by detachment, 00740) and **F-42** (the
+partitioned by month and prunable by detachment, 00740), **F-42** (the
 transition flag is now a keyed tag the application cannot forge, 00741, after
-four sessions open and three fixes tried and rejected).
+four sessions open and three fixes tried and rejected), and — in the last ten
+commits — **F-118** (alerts leave the process, in the shape the destination
+accepts, from a verification pass the API runs itself, with a heartbeat the
+counter alarms cannot fake), **F-47** (personal data is encrypted in the
+application and withheld from the roles with no use for it, the decision
+derived from the encryption rather than chosen) and **F-133** (expired
+sessions are purged). **F-93's** "warning nobody reads" row closed with them:
+a Credit path a configured provider leaves disabled now pages.
+
+What is left in the table is three inventory or partial rows whose remaining
+items are each stated with the reason they do not block the launch tier: F-65
+(a bridge into an agent runtime that has no production caller, watched by a
+test that fails the day it acquires one), F-69 and F-93 (rows that are product
+or identity-model decisions, an external fact about a mainnet mint, a
+circuit-breaker that is latent because nothing on this tier calls `Disable`,
+and a test-scope widening), and two P3s (F-84, F-95). None is a P0/P1/P2
+software defect that blocks intended launch behaviour; each is
+non-launch-impacting with the evidence beside it.
 
 **Evidence:** `STATIC_PROOF` for the register; `LIVE_OBSERVED` for F-84's live
 behaviour and F-125's link failure.
@@ -221,8 +249,8 @@ reproduced against a real PostgreSQL 16 before and after);
 
 | | |
 |---|---|
-| Migration head | **`00753_a_kill_switch_is_released_by_its_transition.sql`** |
-| Migration files | **85** |
+| Migration head | **`00754_who_may_read_personal_data.sql`** |
+| Migration files | **86** |
 | Bound tables the application may still UPDATE | **0 of 17** |
 | Tables | **120**, plus **14 partitions** of `security_events` |
 | CHECK constraints | 462 declared on parents |
@@ -235,8 +263,13 @@ Applied migrations are never edited — a correction is a new file, and `00738`
 exists solely to drop two constraints `00736`/`00737` got wrong, with the
 reasoning kept in the file rather than in a commit message.
 
+00754 is a grant migration: `identity_pii` and `sessions` are withheld from
+`cp_readonly` and `cp_ops`, and `cp_ops` keeps `SELECT (expires_at)` on
+`sessions` for its retention DELETE. Its Down is protected: a Down is not where
+that decision is retaken.
+
 **Evidence:** `REAL_DB_INTEGRATION` — counted from a live PostgreSQL 16 at
-version 739, not from the files.
+version 754 by the restore drill, not from the files.
 
 ---
 
@@ -253,17 +286,17 @@ is not "a path without spaces" but "a path GCC resolves to without spaces".
 | Command | Result |
 |---|---|
 | `go build ./...` | pass |
-| `go test ./...` | **140 packages, 0 failures** |
-| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 0 failures** |
+| `go test ./...` | **99 packages with tests, 0 failures** |
+| `go run ./scripts/inttest` | **52 packages, one fresh database each, all passed, 12m07s, 0 failures** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
-| `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
-| `go run ./scripts/restoredrill` | **OK, at version 744, including a live state change on the restored database** |
-| `go run ./scripts/fmtcheck .` | ok |
-| `go run ./scripts/tool golangci-lint run` | 0 issues |
-| `go run ./scripts/lintfin` | 0 findings |
-| `go run ./scripts/configcheck -service api .env.example` | 247 variables, valid |
+| `go run ./scripts/restoredrill` | **OK, at version 754**: 134 tables, row counts identical, 0 accounts with balance drift, journal hashes equal, one live state change on the restored database, 25.6 s |
+| `go run ./scripts/fmtcheck ./cmd ./internal ./scripts ./test ./packages` | ok |
+| `go run ./scripts/tool golangci-lint run ./...` (and again with `--build-tags integration`) | 0 issues, both |
+| `go run ./scripts/lintfin ./...` | 0 findings |
+| `go run ./scripts/configcheck -service api .env.example` | **252 variables, valid** |
 | `terraform validate` × dev, staging, prod | Success, all three |
 | `terraform fmt -check -recursive` | clean |
+| `test/docs` (register and document consistency) | pass |
 
 **One failure is recorded here rather than dropped, because it is the kind that
 looks like a regression.** An earlier run of this tier reported
@@ -278,16 +311,17 @@ The transferable part is not the diagnosis: it is that **a torture test with a
 lock timeout reports on the machine as much as on the code**, so a gate run
 concurrent with anything else is not a gate run.
 
-| `make race` | **7 packages, 0 data races** |
-| `make integration-race` | **12 packages, a database each, 7m27s, 0 data races** |
+| `make race` | **10 packages, 0 data races** — run with `CC`/`CXX` on the space-free toolchain copy (F-125); the first attempt without them failed to *link*, not to test, with F-125 exact signature |
+| `make integration-race` | **12 packages, a database each, 6m27s, 0 data races** |
 
 **No race claim in this repository rests on CI alone any more.** Both tiers were
 run on this host and both are clean.
 
-**Evidence:** `LIVE_OBSERVED` for every row above, each run to a log file with
-its exit status appended. `REAL_DB_INTEGRATION` for the 51 integration packages
-and the restore drill. `BLOCKED_EXTERNAL` — on the host, not a provider — for
-the race tier.
+Every tier above was run after the last code-bearing commit (`26a5ac9`) and
+none concurrently with another, for the reason the paragraph above gives.
+
+**Evidence:** `LIVE_OBSERVED` for every row above. `REAL_DB_INTEGRATION` for
+the integration packages, the integration race tier and the restore drill.
 
 ---
 
@@ -321,7 +355,18 @@ ratelimit-limit: 600
 **`build_version` is `dev`.** The deployed binary does not carry a commit
 identity, so **the deployment cannot be pinned to a commit from the outside.**
 It is recorded here rather than smoothed over: nothing above proves the
-deployment is at `9e9278c`, and it almost certainly is not.
+deployment is at HEAD, and it is not — the session's commits are local and
+unpushed, as every session's have been until the owner pushes. Re-observed at
+the end of the session: `/v1/healthz` 200, `/v1/readyz` 200, `/v1/version` 200
+with the same `config_hash`, so the service is up and unchanged.
+
+**The next deploy of this HEAD refuses to start until two dashboard secrets
+exist**, and that is by design rather than by accident: `NODAL_ALERT_WEBHOOK_URL`
+(F-118) and `NODAL_PII_KEYRING` (F-47) are both required in STAGING and PROD by
+`config.Validate`, because an unalerted deployment and an unencrypted one are
+the two states this session closed and neither should be reachable by
+omission. Render keeps the current deploy serving while the new one fails its
+health check. Both values are one paste each and are listed in §16.
 
 **Evidence:** `LIVE_OBSERVED` throughout. Nothing here is "production
 approved" — this is STAGING, on a free tier, and the §2 rule that a deployed
@@ -383,11 +428,13 @@ name cannot forge a transition edge (F-101).
 | Idempotency keys scoped by owner | Fixed across three money tables (F-106). | `REAL_DB_INTEGRATION` |
 | Security headers, HSTS, rate limiting | Present, observed live. | `LIVE_OBSERVED` |
 | Independent penetration test | **Not done. This audit is not one and does not claim to be.** | `BLOCKED_EXTERNAL` |
-| Race detector | Cannot link on this host. Rests entirely on CI. | See F-125 |
 | The audit binding cannot be forged | Fixed (F-42, F-128). The transition flag is a keyed tag over a secret no role but the owner can read, salted with the top-level transaction id, and EXECUTE on every function that touches it is revoked from PUBLIC. Seventeen audited tables. | `REAL_DB_INTEGRATION` |
 | `security_events` retention | Fixed (F-105). Partitioned by month; retention is partition detachment, never row deletion, and the immutability trigger is unchanged for every role including the owner. | `REAL_DB_INTEGRATION` |
 | A state column the application cannot write at all | **Done. Zero of seventeen bound tables still grant the application blanket UPDATE** (00743-00753), counted from the schema rather than from a list. The refusal moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied` at the statement, everywhere. | `REAL_DB_INTEGRATION` |
 | The race detector | Runs on this host, both tiers, 0 data races (F-125). | `LIVE_OBSERVED` |
+| Personal data at rest | Encrypted in the application (F-47): AES-256-GCM, each ciphertext bound to its row, column and key version, a versioned keyring the database never sees. `internal/pii/store.go` is the only writer of `identity_pii`, asserted by `test/security`. | `REAL_DB_INTEGRATION` |
+| Who may read personal data | Decided in the schema (00754): neither `cp_readonly` nor `cp_ops` reads `identity_pii` or `sessions`; `cp_ops` reads `sessions.expires_at` alone, for the purge that now runs (F-133). Asserted in the strong direction, like `cp_transition_key`. | `REAL_DB_INTEGRATION` |
+| Something is told | Every reconciliation alert leaves the process to a webhook the deployment names, in the shape the destination accepts, from a bounded queue that never blocks the transaction that raised it; only allowlisted fields egress (F-118). A configured-but-disabled Credit path pages (F-93). | `REAL_DB_INTEGRATION` for the end-to-end drift-to-webhook test; `LIVE_OBSERVED` for ntfy accepting the headed POST |
 
 Eighteen files under `test/security/` cover authority boundaries, dual control,
 idempotency abuse and break scanning, and run as part of the 51-package
@@ -397,14 +444,14 @@ integration tier.
 
 ## 10 · Restore drill
 
-Run at `652dd67`:
+Run at `11c6ab6`, after 00754:
 
 ```
-restoredrill: boot: version source=744 restored=744 verify=ok
+restoredrill: boot: version source=754 restored=754 verify=ok
 restoredrill: reconciliation dry-run: tables=134 rowcounts_match=true
               balance_drift_accounts=0 journal_hash_match=true
 restoredrill: state change on the restored database: ok
-restoredrill: OK (11.835s)
+restoredrill: OK (25.556s)
 ```
 
 **That last line is new and is the one worth reading.** The three above it
@@ -450,14 +497,28 @@ the action does not happen. The money-at-risk ceiling sums the `credit_fundings`
 states that are neither terminal nor SETTLED — including CAPTURED, which is
 money already taken from the payer and one transition from minting Credit.
 
-### Two periodic jobs that would otherwise never run
+### Three periodic jobs that would otherwise never run
 
-This deployment has one process. `runCreditSettlement` (F-90) and
-`runLoginAttemptRetention` (F-105) both live inside `cmd/api` for that reason,
-each sweeping once at startup because a process that wakes, serves a login and
-spins down would otherwise never sweep at all. Retention **warns at WARN naming
-the consequence** when unconfigured rather than refusing to boot — a web
+This deployment has one process. `runCreditSettlement` (F-90),
+`runOpsRetention` (F-105 for login attempts and `security_events` partitions,
+F-133 for expired sessions) and `runInternalVerification` (F-118: Σ journal
+entries against `ledger_balances`, Σ active reservations against their totals,
+envelope allocation against its flow, then escalation of stale material
+mismatches — every five minutes) all live inside `cmd/api` for that reason,
+each running once at startup because a process that wakes, serves a login and
+spins down would otherwise never run them at all. Retention **warns at WARN
+naming the consequence** when unconfigured rather than refusing to boot — a web
 service's job is serving requests — but it is never silent.
+
+### What the deployment must now be told
+
+Two values `config.Validate` refuses to start STAGING or PROD without, both
+dashboard secrets, both $0:
+
+| Secret | For | What to paste |
+|---|---|---|
+| `NODAL_ALERT_WEBHOOK_URL` | F-118 | a Slack or Discord incoming-webhook URL, an ntfy topic, or any HTTPS endpoint; the payload shape is chosen from the host |
+| `NODAL_PII_KEYRING` | F-47 | `{"active":1,"keys":{"1":"<openssl rand -base64 32>"}}` |
 
 ### Migration triggers
 
@@ -503,9 +564,14 @@ The account exists (`049286562577`). `aws sts get-caller-identity` fails with
 `Your session has expired` — B-12, which blocks the scale-up path and **not the
 launch**, because the launch tier does not run on AWS.
 
-Before the Terraform is ever applied, one thing in it should be read again: its
-five application alarms set `treat_missing_data = "notBreaching"`, so **a metric
-that never arrives reads OK.**
+The five application counter alarms keep `treat_missing_data = "notBreaching"`,
+correctly — a mismatch counter that never arrives is a system with no
+mismatches. What they could not tell apart was that from a system whose
+instruments were never constructed, and `verification-heartbeat-missing` now
+can: `verification_passes` is emitted once per completed verification pass and
+its alarm breaches when fifteen minutes carry no sample (F-118). `test/infra`
+proves every alarm bound to the application namespace names an instrument some
+Go file constructs, in both construction styles the tree uses.
 
 ---
 
@@ -566,7 +632,7 @@ Stated explicitly, and none of them optimistically.
 
 | Flag | Value | Why |
 |---|---|---|
-| `SOFTWARE_COMPLETE` | **false** | **One named item remains.** The PII-read policy (F-47), whose answer depends on an encryption that has not been built, so it cannot be taken yet. F-118 came off this list when the destination, the timer and the heartbeat landed — what is left of it is a URL in a dashboard, and the deployment refuses to boot without it rather than booting unalerted. F-42's stronger remedy came off when the last of its seventeen tables landed; `security_events` partitioning came off with 00740. What is left of F-84 and F-95 is design work and a class of comparison most of the constraints cannot have. |
+| `SOFTWARE_COMPLETE` | **true** | **Every item the flag was waiting on is closed, and what remains is not engineering.** Against §37's list: no known P0/P1/P2 software defect blocks intended launch behaviour (F-93 and F-69 are inventory rows whose remaining items are decisions, an external fact and a latent path with the reason beside each; F-65 is a bridge into a runtime with no production caller, watched; F-84 and F-95 are P3); every remaining finding is closed or explicitly non-launch-impacting with evidence; the state machines, schema, configuration and provider boundaries are coherent (0 of 17 bound tables writable by the application, 86 checksum-verified migrations, 252 validated variables, every provider `sandbox`); the financial invariants pass (§8); the live STAGING service is up and serves the last deployed build — HEAD is ahead of it by this session's unpushed commits and its next deploy needs two dashboard secrets, which is §16's first item and the owner's, not engineering's; the sandbox provider path is proven to the limit governance permits (§7); no fake can enter PROD (`RuleNoFakeProviders`, re-checked in the binary); the $0 cohort controls refuse rather than degrade (§11); restore is proven at 754 (§10); the AWS path validates and nothing is applied (§12); and the documents say what the tree does (`test/docs`). **This is not `LIVE_READY`**, and the four flags below are why. |
 | `STRIPE_PRODUCTION_APPROVED` | **false** | Stripe's own review of a real business. Not submitted. `BLOCKED_EXTERNAL`. |
 | `LEGAL_APPROVED` | **false** | Counsel. `BLOCKED_EXTERNAL`. **No legal approval is claimed anywhere.** |
 | `PENTEST_COMPLETE` | **false** | An independent third party. **This audit is not one and does not claim to be.** `BLOCKED_EXTERNAL`. |
@@ -575,58 +641,58 @@ Stated explicitly, and none of them optimistically.
 In the literal form §43 asks for:
 
 ```
-SOFTWARE_COMPLETE        = false
+SOFTWARE_COMPLETE        = true
 STRIPE_PRODUCTION_APPROVED = false
 LEGAL_APPROVED           = false
 PENTEST_COMPLETE         = false
 LIVE_READY               = false
 ```
 
-**Thirty-three findings closed this session moved none of these**, and that is
-the honest headline. Not one of the four independent reasons `LIVE_READY` is
-false was a thing this audit could fix.
+**Thirty-four findings closed this session moved one of these**, and the
+honest headline is which one: `SOFTWARE_COMPLETE`, the only flag engineering
+can move. The list behind it went from four items to two to none — F-42's
+remedy, `security_events` partitioning, an alert destination and the PII-read
+policy — and the last two closed the way their own register entries said they
+would: the destination once something raised into it and a timer ran on this
+tier, and the policy once the encryption existed for it to be derived from.
 
-What changed is the length of the list behind `SOFTWARE_COMPLETE`, from four
-items to two — and the character of what is left. Everything remaining under that
-flag is now a **decision** or a **design**, not an unwritten control. That is a
-different position from where this session started, and it is still not
-`SOFTWARE_COMPLETE = true`.
+Not one of the four independent reasons `LIVE_READY` is false was a thing this
+session could fix, and none was touched: no Stripe attestation was submitted,
+no legal approval is claimed, no pentest is claimed, no gate was activated, no
+real money moved, and nothing paid was applied.
 
 ---
 
 ## 16 · Remaining human actions
 
-1. **Paste a PII keyring** (F-47). `openssl rand -base64 32` into
-   `NODAL_PII_KEYRING` as `{"active":1,"keys":{"1":"<that>"}}` in the Render
-   dashboard. The policy itself is decided and in the schema (00754); the key
-   is the one thing the repository cannot contain. Without it the next deploy
-   refuses to start, like the alert destination and for the same reason.
-2. **Paste an alert destination** (F-118). Set `NODAL_ALERT_WEBHOOK_URL` in the
-   Render dashboard to a Slack or Discord incoming-webhook URL, an ntfy topic,
-   or any endpoint that takes a JSON POST; the shape is chosen from the host.
-   Until it is set, the next deploy of this build refuses to start and Render
-   keeps the current one serving — by design, and stated.
-3. **Engage counsel** for B-02, B-03 and B-07.
-4. **Submit the Stripe restricted-business review** (B-09). Deliberately not
+Only what needs a person or an external party. The first two are one paste
+each in the Render dashboard and are what the next deploy of this HEAD waits
+on; everything after them is what `LIVE_READY` waits on.
+
+1. **Paste an alert destination** (F-118): `NODAL_ALERT_WEBHOOK_URL` — a Slack
+   or Discord incoming-webhook URL, an ntfy topic, or any HTTPS endpoint that
+   takes a JSON POST. The payload shape is chosen from the host.
+2. **Paste a PII keyring** (F-47): `NODAL_PII_KEYRING` =
+   `{"active":1,"keys":{"1":"<openssl rand -base64 32>"}}`. The policy is in
+   the schema; the key is the one thing the repository cannot contain.
+3. **Push `main`.** Every commit of this session is local. Render deploys from
+   `main`; with the two secrets above set, the deploy boots and STAGING is at
+   HEAD. Without them it refuses, by design, and the current deploy keeps
+   serving.
+4. **Engage counsel** for B-02, B-03 and B-07.
+5. **Submit the Stripe restricted-business review** (B-09). Deliberately not
    done here.
-5. **Commission an independent penetration test** (B-08).
-6. **Sign a payout provider contract** (B-01), and select the partner rail
+6. **Commission an independent penetration test** (B-08).
+7. **Sign a payout provider contract** (B-01), and select the partner rail
    (B-05) and identity verification provider (B-06).
-7. **Authenticate a non-root AWS role** (B-12), when scale-up is wanted.
-8. **Activate `CREDIT_PURCHASE`** — three distinct principals, four approval
+8. **Authenticate a non-root AWS role** (B-12), when scale-up is wanted.
+9. **Activate `CREDIT_PURCHASE`** — three distinct principals, four approval
    references, step-up within 15 minutes. Not fabricable, and fabricating it
    would defeat the control.
-9. **Sync the Render blueprint on the next deploy, not just the code.**
-   `CP_RETENTION_SECURITY_EVENT_DAYS` is new and required outside LOCAL/TEST.
-   It is in `render.yaml` with value `0`, so a blueprint sync carries it — but a
-   code-only push leaves it unset and **`cmd/api` will refuse to start**, by
-   design: a missing required variable is a startup error, never a silent
-   default. This is the intended behaviour of the config contract and it is
-   stated here so it is not discovered during a deploy.
 10. **Give the deployed binary a commit identity.** `build_version` is `dev`, so
     the deployment cannot be pinned to a commit from outside.
-11. **Install a GCC whose path has no space**, if race claims are ever to be
-    checkable off CI (F-125).
+11. **Choose a security-event retention period, or decide not to** (ADR-0020).
+    `CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery is built.
 
 ---
 
@@ -635,75 +701,34 @@ different position from where this session started, and it is still not
 **Start with `docs/build/MASTER_BUILD_STATE.md`.** It is the continuity
 document; this file is the checkpoint that points into it.
 
-The next four pieces of software work, in the order they are worth doing:
+`SOFTWARE_COMPLETE` is true and nothing on the engineering list is owed for the
+launch tier. If a session resumes here, this is the order the remaining
+software work is worth doing in — none of it is a launch item, and each is
+already named in an assertion or a register entry so it cannot go stale:
 
-1. **~~F-42's stronger remedy~~ — done (00743-00753).** All seventeen bound
-   tables. Four rules were paid for and are in the register under F-42, because
-   they will apply to any table that acquires a transition binding later: a row
-   lock needs UPDATE privilege, so budget one column grant per table and say it
-   is for the lock; binding tests move to the migration role, which can still
-   write the column and is still refused by the trigger; a column with no home
-   on the transition row usually belongs ON it rather than granted back; and
-   where a destination is constrained, mirror the constraint onto the transition
-   so an incomplete row is refused where it is written.
+1. **F-84** — authorise on the chi route pattern before the generated wrapper,
+   so an unauthenticated request answers 401 before it answers 400. A change
+   to the boundary's structure; it wants its own design.
+2. **F-122's residual** — birth control for `wallets`, `assets` and
+   `instruments`, and an agent born SHADOW without its promotion evidence.
+   `TestIntegration_NothingIsBornFinished` names the three tables.
+3. **F-95** — the enum CHECKs that do have a Go list to compare against.
+4. **F-93's test-scope row** — widen `test/infra`'s `CP_*` literal scan to
+   `internal/` and to non-literal reads.
+5. **F-65's bridge**, only when the agent runtime acquires a production caller;
+   `TestDeferredBridge_TheAgentRuntimeIsStillInert` fails on that day and says
+   what is owed.
 
-   **Two are done and are the worked examples to copy: `credit_fundings`
-   (00743) and `accounts` (00744).** The
-   AFTER INSERT trigger on the transitions table performs the state change as
-   SECURITY DEFINER; the application keeps UPDATE on `lot_id` and
-   `provider_reference` and nothing else; the money stamps moved into the
-   transition, so there is no longer a way to reach REVERSIBLE without
-   `reversible_at`. The Go call site became a re-read. Two fixtures and one
-   assertion had to move, and the pattern of what breaks is in the register
-   under F-42.
+Then the paid-tier inventory F-118's sweep turned up and F-69 holds:
+`internal/notification`'s dispatcher, the Temporal escalation workflow and the
+`reconciliation.record.transitioned` subscriber, none of which runs on a tier
+with no Temporal and no relay.
 
-   **The rules that were paid for, kept here because they outlive the task.**
-
-   *The row-lock rule.* `SELECT ... FOR UPDATE` requires UPDATE privilege, and
-   so do all three other row-lock modes. Every one of these transitions locks
-   the row before checking legality, so a plain REVOKE breaks the lock — it broke
-   four integration packages on `accounts`. A **column-level** grant restores the
-   lock and still refuses the write. Budget one column grant per table, and say
-   in the migration that it is for the lock, or a later reader will think the
-   application is meant to write it. 00743 got this right by accident, because
-   its two grant-back columns happened to supply the privilege.
-
-   *The test-fallout rule.* Tests that prove the audit binding by driving a bare
-   update must move to the migration role, which can still write the column and
-   is still refused by the trigger. Tests that prove a legitimate transition
-   should drop their UPDATE entirely, because the transition row is now the
-   change. And watch for a subtest whose premise stops existing rather than
-   failing.
-
-   **Pick the next table by counting its state-change sites, and treat that as a
-   lower bound rather than an estimate.** `kill_switches` has one and is a trap:
-   `saveSwitch` writes `active` together with six other columns under optimistic
-   concurrency (`WHERE version = $11 RETURNING version`), so moving one column
-   into a trigger breaks the version check and the returned row at once.
-   `agents` also has one, writing seven columns including the promotion
-   evidence.
-2. ~~An alert destination and something on a timer (F-118).~~ Done: the
-   destination, the timer, the heartbeat alarm and the payload shapes. A URL
-   remains, and it is an operator's to paste.
-3. **Birth control for `wallets`, `assets` and `instruments`** (F-122 residual).
-   These are named in an assertion that fails when one is closed, so the list
-   cannot go stale.
-4. **An agent can still be born SHADOW without its promotion evidence** (F-122
-   residual). A provenance gap, not a money one — closing it is a decision about
-   how the suite seeds agents, and `00739` records the reasoning in full.
-
-Then F-93's inventory rows.
-
-**Choose a security-event retention period, or decide not to.**
-`CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and
-tested. That is not code; it is the question ADR-0020 left open.
-
-**The thing worth carrying forward is not on any of these lists.** Six fixtures
-this session encoded the exact defect they were meant to guard against; an ADR
-got the one fact its decision rested on backwards; a migration granted a secret
-to two roles by writing no `GRANT` at all; and a comment in the request path
-described a guarantee the schema had stopped making. Every one surfaced only
-when something was checked rather than read.
-
-A green suite proves the assertions ran. It does not prove the fixture they ran
-against was ever safe, and a document is not evidence of the thing it describes.
+**The thing worth carrying forward is not on any of these lists.** Twice this
+session a control that existed was found to have nobody running it — the
+alert seam with no caller, the session purge with no caller — and once a claim
+about a destination ("accepts a JSON POST") was true of the transport and
+false of the two most likely destinations. Each surfaced only when something
+was checked rather than read: a grep for callers, a POST to the real endpoint.
+A green suite proves the assertions ran. It does not prove the thing they
+describe has anyone on the other end of it.

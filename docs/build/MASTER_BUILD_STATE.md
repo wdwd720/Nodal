@@ -1438,7 +1438,42 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
-### RESUME HERE — checkpoint 2026-09-10, after fourteen findings from eleven parallel audits
+### RESUME HERE — checkpoint 2026-09-10 (later), SOFTWARE_COMPLETE is true
+
+The two items `SOFTWARE_COMPLETE` was waiting on closed in the session's last
+ten commits, each the way its own register entry said it would:
+
+- **F-118.** `internal/alert` is `Metrics.OnAlert`'s production caller: a
+  webhook destination, spoken to in Slack's, Discord's or ntfy's own shape or
+  as JSON, from a bounded queue that never blocks the transaction that raised
+  the alert and forwards only allowlisted fields. `cmd/api` runs
+  `VerifyInternal` and `SweepEscalations` every five minutes, so the pass that
+  raises the SEV1 runs on the tier that has no worker. `verification_passes`
+  is a heartbeat whose alarm breaches on missing data. STAGING and PROD refuse
+  to start without a destination. Proven end to end: a `ledger_balances` row
+  written behind the ledger's back reaches a webhook as a SEV1 naming the record.
+- **F-47.** `internal/pii` is the encryption the decision was waiting on —
+  AES-256-GCM, ciphertext bound to row, column and key version, a versioned
+  keyring in one SecretRef — and the login path stores the verified e-mail
+  sealed. With the columns ciphertext under a key the database never holds,
+  00754 does what 00010 meant. ADR-0021 records why the decision was derived
+  and not chosen. Checking what `cp_ops` did with `sessions` found F-133:
+  nothing purged them, on any tier; the purge runs now.
+- **F-93's silent half.** A configured provider that leaves the Credit path
+  disabled pages as `credit_purchase_disabled`; the availability decision
+  stands.
+
+`docs/audit/FINAL_CHECKPOINT_2026-09-10.md` §15 states the flags and §16 the
+human actions. The first three are one paste, one paste and one push: the next
+deploy of this HEAD needs `NODAL_ALERT_WEBHOOK_URL` and `NODAL_PII_KEYRING` in
+the Render dashboard and refuses to start without them, by design.
+
+**What is left is not launch work**, and §17 of the checkpoint orders it:
+F-84's route-pattern authorisation, F-122's residual birth controls, F-95's
+pairable CHECKs, the `test/infra` scan widening, and F-65's bridge on the day
+the agent runtime acquires a caller.
+
+### The previous checkpoint — 2026-09-10, after fourteen findings from eleven parallel audits
 
 Eleven read-only audits ran in parallel over the financial kernel, the state
 machines, the provider path, configuration, agent authority, the launch tier,
@@ -1734,16 +1769,17 @@ binary).
 
 ## 7. Migrations applied
 
-00001 through **00739**, 71 files, all embedded in `migrations.FS` and
+00001 through **00754**, 86 files, all embedded in `migrations.FS` and
 checksum-verified by `internal/db/migrate`. An applied migration is never
 edited; a correction is a new file. `go run ./cmd/migrate status` is
 authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
 falls behind the schema.
 
-The current head is 00727 (one signing decision per execution attempt). 00725
-and 00726 landed in the same batch: a skip reason for a run stopped because its
-agent is no longer runnable, and the edge-binding of `agents.state` and
-`agents.stage`.
+The current head is 00754 (who may read personal data: `identity_pii` and
+`sessions` withheld from `cp_readonly` and `cp_ops`, with `cp_ops` keeping the
+one `sessions` column its retention DELETE filters by). 00740 partitioned
+`security_events`; 00741 keyed the transition tag; 00743–00753 moved every
+bound state column out of the application's reach.
 
 ## 8. External blockers
 
@@ -1760,8 +1796,9 @@ Read it before this file if you want the state; read this file for how it got
 there.
 
 `docs/audit/AUDIT_FINDINGS.md` is the register: **133 findings**, of which two
-are open (F-69, F-93) and three are partial (F-65, F-84, F-95); the
-rest are fixed. **F-125 closed on 2026-09-10** — the race detector links on this
+are open inventory rows (F-69, F-93) and three are partial (F-65, F-84, F-95);
+the rest are fixed. **`SOFTWARE_COMPLETE` is true** as of the session's last
+commit; the checkpoint's §15 says exactly what that does and does not claim. **F-125 closed on 2026-09-10** — the race detector links on this
 host now, so both race tiers run here and no race claim rests on CI alone.
 
 **No P1 is unfixed.** F-93 is the last P1 not marked fixed and it is an
@@ -1907,13 +1944,13 @@ that date; none of them is a promise about now.
 | Tier | Command | Last recorded result |
 |---|---|---|
 | build | `go build ./...` | green 2026-09-06 (between waves; in-progress packages may transiently break it) |
-| unit + race | `go test -count=1 -race ./...` | 2026-09-06 (later run, 61 packages): 58 green; `internal/settlement` failing while its agent finishes the executor; two Jupiter timeout tests load-sensitive (pass in isolation ×3; hardening requested) |
+| unit + race | `go test ./...`; `make race`; `make integration-race` | 2026-09-10 (later): unit 99 packages with tests, 0 failures; `make race` 10 packages, 0 data races; `make integration-race` 12 packages, one database each, 6m27s, 0 data races — both race tiers with `CC=C:/toolchain/mingw64/bin/gcc.exe` (F-125) |
 | property | `make property` (rapid `TestProp_*` in money, ledger, capital, positions, buyingpower, event, risk, eligibility, killswitch, provider, fees, ratelimit, audit, intent, quote) | green with unit |
 | fuzz | `make fuzz` (`FuzzParseUSD`, `FuzzParseQuantity`, `FuzzQuantityFromDecimalString`, `FuzzParseUSDRound`, `FuzzScanQuantity`, `FuzzParse` (id), `FuzzParseSecretRef`, `FuzzEnvelopeJSON`, `FuzzCanonicalJSON`, `FuzzValidate` (intent), `FuzzRouteHash`) | 10–20 s per target clean (per-package reports) |
-| integration | `make integration` (`scripts/inttest`, one fresh database per package) | **51/51 packages green, 2026-09-10.** This row said 32/32 until then, from a sweep predating `scripts/inttest`; section 6 of this same file already said "the 50-package sweep" (F-111) |
+| integration | `make integration` (`scripts/inttest`, one fresh database per package) | **52/52 packages green, 2026-09-10 (later), 12m07s.** This row said 32/32 until 2026-09-10, from a sweep predating `scripts/inttest`; section 6 of this same file already said "the 50-package sweep" (F-111) |
 | migration | `test/integration/migrations` (clean apply, checksums, tamper, guarded rollback, role privileges, transition binding) | green |
 | concurrency torture (PART 23) | `internal/capital` `CP_TORTURE_ITERATIONS=25` | 20/80 every iteration, both isolation modes |
-| restore drill (PART 141/219) | `make restore-drill` | OK, `dist/restore-drill.json` |
+| restore drill (PART 141/219) | `make restore-drill` | OK at 754 on 2026-09-10: 134 tables, 0 drift, hashes equal, a live state change on the restored database, `dist/restore-drill.json` |
 | lint | `make lint` (+ `golangci-lint --build-tags=integration ./...`) | 0 issues at last sweep |
 | contract | `make contract` (`test/contract/{stripe,jupiter,helius,solanarpc,privy}` and the topic registry) | green. "helius/solanarpc/privy pending" was wrong on 2026-09-10: all three exist and pass, and section 5 of this file lists them (F-111) |
 | security | `make security` (`test/security`: authority-boundary import rules, closed agent permission set, PROD refuses fakes/seed/debug auth) | green 2026-09-06; API-level IDOR/CSRF/SSRF/webhook-forgery cases join once `cmd/api` exists |
