@@ -591,6 +591,15 @@ services:
         value: "24"
       - key: VITE_API_ORIGIN
         value: https://api-nodal.actorvia.xyz
+      # Stripe's publishable key for the NODAL Integration account in test
+      # mode. Publishable keys are public by design (they are embedded in
+      # every browser that loads Stripe.js) and can only create tokens and
+      # confirm a PaymentIntent whose client_secret the API handed out; the
+      # secret key stays in NODAL_STRIPE_API_KEY on the API service. The app
+      # refuses a key that is not pk_test_ or pk_live_, and a live key here
+      # would pair with nothing: the API's provider mode is sandbox (D-078).
+      - key: VITE_STRIPE_PUBLISHABLE_KEY
+        value: pk_test_51UDbrdAeDQ6sKD6HvHnIHPrX7yyuZnpz161GCBdkOtWaWfx7Om5gwqaCsX6covukbeA5WDKV6AFV5p4MSIlu7OkD00w6v2Mts6
     routes:
       - type: rewrite
         source: /*
@@ -601,7 +610,11 @@ services:
     headers:
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; connect-src 'self' https://api-nodal.actorvia.xyz; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://api-nodal.actorvia.xyz; object-src 'none'"
+        # Stripe.js (the Payment Element) is the one third party: its script
+        # from js.stripe.com, its iframes from js.stripe.com / hooks.stripe.com
+        # (3-D Secure) / m.stripe.network (fraud signals), its calls to
+        # api.stripe.com, its images from *.stripe.com. Nothing else may load.
+        value: "default-src 'self'; connect-src 'self' https://api-nodal.actorvia.xyz https://api.stripe.com; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: https://*.stripe.com; font-src 'self'; frame-src https://js.stripe.com https://hooks.stripe.com https://m.stripe.network; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://api-nodal.actorvia.xyz; object-src 'none'"
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
