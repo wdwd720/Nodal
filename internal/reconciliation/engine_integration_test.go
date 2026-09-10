@@ -732,3 +732,57 @@ func (f *fixture) submittingOrderWithIntent(t *testing.T, res capital.Reservatio
 	defer func() { f.intentID, f.planID, f.quoteID = saveIntent, savePlan, saveQuote }()
 	return f.submittingOrder(res, money.QuantityFromInt64(orderInput), money.QuantityFromInt64(orderMinOut), sig, lastValid)
 }
+
+// A silent observer is not proof the transaction never happened (F-108).
+//
+// chain.AgreementPolicy.ResolveSingle sets Degraded on the honest not-found
+// path, precisely so that silence is never proof, and provenAbsent refuses a
+// degraded resolution. Three resolutions built by hand in recovery.go left
+// Degraded at its zero value -- so "both RPCs errored" arrived at the decision
+// indistinguishable from "both observers looked and it is not there".
+//
+// The remaining gate was GetBlockHeight, a DIFFERENT method that is routinely
+// healthy while getTransaction is rate-limited.
+//
+// The cost: a transaction that landed, with the user's tokens already spent,
+// recorded PROVEN_ABSENT, its attempt EXPIRED (which is not Recoverable, so
+// nothing looks again) and its record MATCHED, immaterial and terminal. The
+// books would say everything agrees.
+//
+// chaintest has had Fault since it was written and no test in this package had
+// ever injected one, which is why the branch survived.
+func TestIntegration_ASilentObserverDoesNotProveAbsence(t *testing.T) {
+	d := openTestDB(t)
+	f := newFixture(t, d)
+	f.fund(f.usdc, money.QuantityFromInt64(fundedUSDC), 10_000)
+	res := f.reserve(money.QuantityFromInt64(reservedUSDC), 5_000)
+	sig := "SIG-silent-" + f.suffix
+	_, att := f.submittingOrder(res,
+		money.QuantityFromInt64(orderInput), money.QuantityFromInt64(orderMinOut), sig, 10)
+
+	// The chain has moved past the deadline, so every other condition for a
+	// proven negative holds. Only the observation is missing.
+	f.sim.Advance(500)
+
+	// BOTH observers' getTransaction fails, which is the "no observer answered"
+	// branch. getBlockHeight is untouched on both, which is the shape of a
+	// rate-limited RPC rather than a dead node -- and is what made the
+	// remaining gate useless.
+	//
+	// Faulting only one would not reach it: a single failure falls to
+	// ResolveSingle, which sets Degraded correctly. That is worth saying,
+	// because a version of this test that faulted one observer PASSED against
+	// the defect.
+	f.primary.Fault(chaintest.MethodGetTransaction, chaintest.Fault{Kind: chaintest.FaultError})
+	f.secondary.Fault(chaintest.MethodGetTransaction, chaintest.Fault{Kind: chaintest.FaultError})
+
+	out, err := f.engine.RecoverAttempt(f.ctx, att.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, DispositionProvenAbsent, out.Disposition,
+		"an RPC failure was read as proof the transaction never happened")
+	assert.Equal(t, DispositionUncertain, out.Disposition)
+	assert.False(t, out.RetryAllowed, "a retry under uncertainty may double-spend")
+	assert.True(t, out.Record.BlocksNewRisk, "uncertainty about a spent balance must hold new risk")
+	assert.NotEqual(t, StatusMatched, out.Record.Status,
+		"a record nobody could observe was filed as agreeing")
+}

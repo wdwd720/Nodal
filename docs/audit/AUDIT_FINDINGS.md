@@ -130,6 +130,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-104 | P2 | NEW | fixed | Three controls reported something other than what they enforced: a secret redactor that never satisfied the interface it named, a step-up window three times the one applied, and a ceiling test that passed because a different guard fired |
 | F-105 | P1 | NEW | part | An unauthenticated caller chose how many permanent, undeletable rows the service wrote, and the deployment's database ceiling halts every financial action when it is reached |
 | F-106 | P1 | NEW | fixed | Three money tables handed one account's record to another on a reused idempotency key, and discarded the caller's own request; four sibling tables already compared the account |
+| F-107 | P1 | NEW | fixed | The seller set the platform's own commission on their own sales, with a ceiling, no floor and a zero default; and a payout the provider may already have paid could be cancelled by its owner, releasing the reservation |
+| F-108 | P1 | NEW | fixed | Two failed RPCs were read as proof a transaction never happened, closing the record as MATCHED and terminal while the user's tokens were spent |
 
 ---
 
@@ -5144,6 +5146,148 @@ before the fix — "An error is expected but got nil" — and refused after, wit
 the owner's own retry still a replay. Commerce and native market carry the same
 pair of assertions. The structural guard reads the live catalogue rather than a
 list typed out beside it.
+
+## F-107 · Two money decisions taken by the party who benefits from the answer · NEW · P1 · FIXED
+
+**Found by** two independent audits — the financial kernel's sweep of
+client-supplied values, and the money-out audit's read of the payout state
+machine.
+
+### 1. The seller set the platform's commission
+
+`POST /v1/internal-products` took `platform_fee_bps` from the request body.
+Validation had a **ceiling and no floor** — `PlatformFeeBPS < 0 ||
+PlatformFeeBPS > MaxPlatformFeeBPS` — and the schema agreed, `DEFAULT 0 CHECK
+(0..3000)`. Omit the field and it is zero.
+
+That number is the sole input to the revenue split and flows to the
+`PLATFORM_FEE_RECEIVABLE` entry and the order's `platform_fee` and
+`seller_proceeds`. And `commerce:sell` is a **CUSTOMER** permission. So the
+platform's take was whatever the counterparty who benefits from it being zero
+decided, and every rational seller decided nothing.
+
+Two things make it a defect rather than a pricing choice, and both are in this
+repository:
+
+- The contract's own words are *"The platform share, capped at 3000 (30%)"*,
+  and `MaxPlatformFeeBPS`' comment says the cap exists so *"a creator cannot be
+  asked to agree to a share that leaves the transaction pointless"*. The cap
+  protects the creator FROM the platform. It is unambiguously the platform's
+  number.
+- The native market decides the same number through a **dual-controlled admin
+  action**, not by the creator.
+
+**Fix.** The field is gone from the create request — removed from
+`openapi.yaml` and regenerated, in both the Go server and the TypeScript client
+— and `CreateProduct` overwrites the value from a server-side policy set by
+`SetPlatformFeeBPS`. Overwritten rather than validated, because a value the
+seller cannot influence needs no validation and refusing would tell them a
+field exists that does not.
+
+`DefaultPlatformFeeBPS` is **zero**, deliberately, and this is the part worth
+being precise about: **no business rate has been invented here.** Zero is the
+rate the system already charged, because the seller-supplied value defaulted to
+the Go zero value and sellers left it there. What changed is *who decides*, not
+*what the number is* — which is the whole defect. A deployment that wants a
+commission now has one place to say so, with an owner.
+
+### 2. A payout the provider may have paid could be cancelled by its owner
+
+`Cancel` refused `SUBMITTED`, `PROVIDER_PENDING` and `PAYOUT_STATUS_UNKNOWN`.
+**`MANUAL_REVIEW` is not in that list** — and `applyProviderResult` parks a
+payout there precisely when the provider WAS called and the settlement could not
+be recorded: a lost response, or a ledger posting that refused.
+
+So the sequence is: submit → provider pays → response lost → parked for a
+person → the account owner calls `POST /v1/payouts/{id}/cancel`, which is
+`payout:create`, no step-up, no approval → `returnReservation` posts
+`PAYOUT_PENDING → INTERNAL_CREDIT` and restores every lot. The provider has
+paid and the user has their Credits back.
+
+**The asymmetry is what names it.** `everSubmitted` exists for exactly this
+question, reads the transition history rather than the current state, and was
+already consulted by `ResolveManualReview` — the dual-controlled path. So the
+two-person path refused to retry an ever-submitted payout while the single-user
+endpoint would unwind one.
+
+**Fix.** `Cancel` consults `everSubmitted` too.
+
+**Evidence.** REAL_DB_INTEGRATION for both. The payout case was observed
+succeeding before the fix — "An error is expected but got nil", "the
+reservation was released on a payout the provider may have paid" — and refused
+after, with the reserved balance unchanged. The commerce case asserts the
+platform's receivable moves by the deployment's rate on a sale the seller
+listed, as a delta because that receivable is one account for the whole
+deployment; plus that the policy is bounded on both sides, a negative being a
+typo rather than a fee schedule.
+
+Correcting the commerce fixtures was itself the smaller half of the finding: the
+suite's `list` helper took a fee per product, because that was the shape of the
+thing. It now sets the deployment's policy, so every existing test that says "a
+product with a 4% platform fee" still says it — to the place that decides.
+
+## F-108 · Silence was read as proof · NEW · P1 · FIXED
+
+**Found by** the money-out audit, reading what `provenAbsent` actually
+consults.
+
+`chain.AgreementPolicy.ResolveSingle` sets `Degraded: true` on the honest
+not-found path, and says why in its own comment: *"absence is never proven"* by
+one observer. `provenAbsent` refuses a degraded resolution, and repeats the rule
+at the decision point.
+
+Three resolutions in `recovery.go` are constructed by hand rather than by the
+policy, and all three left `Degraded` at its zero value:
+
+- no chain observer configured
+- primary failed and there is no secondary
+- **both observers errored** — `Detail: "no observer answered"`
+
+So "the RPCs failed" arrived at the decision indistinguishable from "both
+observers looked and the transaction is not there". The remaining gate is
+`GetBlockHeight` — a **different method**, routinely healthy while
+`getTransaction` is rate-limited.
+
+**What that costs.** A transaction that landed on chain, with the user's tokens
+already spent, is recorded `PROVEN_ABSENT`; its attempt is marked EXPIRED,
+which is not `Recoverable`, so nothing ever looks again; and its reconciliation
+record is written MATCHED, immaterial, non-blocking and terminal. The user's
+asset is gone, the ledger says they still hold it, and the books say everything
+agrees. The same pass sets `RetryAllowed = true`.
+
+**Fix.** `Degraded: true` on all three. The field means "this rests on
+incomplete observation", and all three do — including the first, which was
+reachable only in the sense that a *different* check (`Primary != nil`) happened
+to refuse it first.
+
+### The test had to be written twice, and that is the finding behind it
+
+The first version faulted one observer and **passed against the unfixed code**.
+A single failure does not reach the branch: it falls to `ResolveSingle`, which
+sets `Degraded` correctly. The test named the right defect and exercised a
+different guard — the register's own recurring class, caught only because the
+fix was removed and the test re-run before it was believed.
+
+The version that stands faults **both** observers' `GetTransaction` and leaves
+`GetBlockHeight` healthy on both, which is the shape of a rate-limited RPC
+rather than a dead node, and is what made the remaining gate useless. Against
+the defect it reports:
+
+```
+Should not be: "PROVEN_ABSENT"
+  an RPC failure was read as proof the transaction never happened
+Should be false   -- a retry under uncertainty may double-spend
+Should be true    -- uncertainty about a spent balance must hold new risk
+```
+
+`chaintest` has had `Fault` since it was written, with `FaultError`,
+`FaultTimeout`, `FaultNotFound` and more. **No test in `internal/reconciliation`
+had ever injected one.** That is why a recovery engine whose entire job is
+deciding what to believe when an observer disagrees or goes quiet had never been
+asked what it does when one goes quiet.
+
+**Evidence.** REAL_DB_INTEGRATION, observed failing then passing, against a real
+database and the package's own chain simulator.
 
 ## Findings deliberately NOT raised
 

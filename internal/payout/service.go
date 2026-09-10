@@ -643,6 +643,29 @@ func (s *Service) Cancel(ctx context.Context, tx pgx.Tx, requestID RequestID, re
 			WithField("payout_id", requestID.String()).
 			WithField("state", string(req.State))
 	}
+	// The current state is not the whole question, and MANUAL_REVIEW is why.
+	//
+	// applyProviderResult parks a payout there precisely when the provider was
+	// called and the settlement could not be recorded -- a lost response, or a
+	// ledger posting that refused. So a payout the provider has PAID can sit in
+	// MANUAL_REVIEW, which the switch above does not name, and Cancel would
+	// then release the reservation and restore the user's Credits while the
+	// money was already gone (F-107).
+	//
+	// everSubmitted reads the transition history rather than the current state,
+	// for exactly this reason. ResolveManualReview already consulted it; the
+	// single-user endpoint did not, so the dual-controlled path refused to
+	// retry an ever-submitted payout while the account owner could unwind one.
+	submitted, err := s.everSubmitted(ctx, tx, requestID)
+	if err != nil {
+		return Request{}, err
+	}
+	if submitted {
+		return Request{}, errs.Newf(errs.CodeConflict,
+			"this payout has been submitted before and may have been paid; it can only be resolved by reconciliation, not cancelled").
+			WithField("payout_id", requestID.String()).
+			WithField("state", string(req.State))
+	}
 	if req.State.Terminal() {
 		return req, nil
 	}

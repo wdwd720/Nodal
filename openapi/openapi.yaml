@@ -1423,9 +1423,6 @@ components:
         price:
           allOf: [{ $ref: "#/components/schemas/Quantity" }]
           description: In Credit base units. Fixed for this version once published.
-        platform_fee_bps:
-          allOf: [{ $ref: "#/components/schemas/BPS" }]
-          description: The platform share, capped at 3000 (30%) and rounded DOWN on every sale.
 
     SetInternalProductStatusRequest:
       type: object

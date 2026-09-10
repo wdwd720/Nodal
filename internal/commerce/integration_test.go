@@ -198,15 +198,24 @@ func (f *fixture) registerSeller(payoutTo *accounts.AccountID) commerce.Seller {
 }
 
 // list creates a product and publishes it, which is the state a buyer can see.
+// list publishes a product at a price, with the DEPLOYMENT's platform fee set
+// to feeBPS.
+//
+// The fee moved from the product to the service in F-107: a seller setting the
+// platform's own share of their own sales is the counterparty who benefits from
+// the answer choosing it. The helper keeps taking the number so every test that
+// says "a product with a 4% platform fee" still says it -- it just says it to
+// the place that now decides.
 func (f *fixture) list(kind commerce.Kind, price int64, feeBPS money.BPS) commerce.Product {
 	f.t.Helper()
+	require.NoError(f.t, f.svc.SetPlatformFeeBPS(feeBPS))
 	var p commerce.Product
 	require.NoError(f.t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			created, err := f.svc.CreateProduct(ctx, tx, commerce.Product{
 				SellerAccountID: f.seller, Kind: kind,
 				Title: "Test " + string(kind), Description: "for the integration suite",
-				Price: q(price), PlatformFeeBPS: feeBPS,
+				Price: q(price),
 			})
 			if err != nil {
 				return err
@@ -963,4 +972,43 @@ func TestIntegration_ACommerceKeyBelongsToOneAccount(t *testing.T) {
 	again, err := f.purchase(p, f.buyer, q(2_500), key)
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, again.ID)
+}
+
+// The platform's share is the platform's to set (F-107).
+//
+// It used to be read from the create request, validated against a CEILING with
+// no floor, and defaulted to the Go zero value. commerce:sell is a CUSTOMER
+// permission, so the counterparty who benefits from the answer chose it -- and
+// every rational seller chose nothing by omitting the field.
+func TestIntegration_ASellerDoesNotSetThePlatformsShare(t *testing.T) {
+	f := newFixture(t)
+	f.registerSeller(nil)
+	f.fund(f.buyer, valuedomain.OriginPurchased, valuedomain.FinalitySettled, 10_000)
+
+	p := f.list(commerce.KindCreatorProduct, 2_000, 500) // the deployment's policy: 5%
+	assert.EqualValues(t, 500, p.PlatformFeeBPS,
+		"the product carries the seller's number, not the deployment's")
+
+	// The platform's receivable is one account for the whole deployment, so
+	// what this test owns is the difference across its own sale.
+	before := mustQty(t, f.platformBalance(ledger.CodePlatformFeeReceivable))
+	_, err := f.purchase(p, f.buyer, q(2_000), "fee-"+uuid.NewString())
+	require.NoError(t, err)
+	after := mustQty(t, f.platformBalance(ledger.CodePlatformFeeReceivable))
+	assert.Equal(t, "100", after.Sub(before).String(),
+		"the platform took nothing on a sale its own policy priced at 5%")
+	assert.Equal(t, "1900", f.balance(f.seller, ledger.CodeCreditBalance))
+
+	// The policy is bounded on both sides: a negative is a typo and anything
+	// above the cap is the marketplace the cap exists to refuse.
+	assert.Error(t, f.svc.SetPlatformFeeBPS(-1))
+	assert.Error(t, f.svc.SetPlatformFeeBPS(commerce.MaxPlatformFeeBPS+1))
+	assert.NoError(t, f.svc.SetPlatformFeeBPS(commerce.MaxPlatformFeeBPS))
+}
+
+func mustQty(t *testing.T, s string) money.Quantity {
+	t.Helper()
+	v, err := money.ParseQuantity(s)
+	require.NoError(t, err)
+	return v
 }

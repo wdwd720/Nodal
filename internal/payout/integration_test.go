@@ -1069,3 +1069,45 @@ func (f *fixture) createWithKey(account accounts.AccountID, key string, amount i
 		})
 	return req, dec, err
 }
+
+// A payout that has ever been submitted cannot be cancelled, whatever state it
+// is in now (F-107).
+//
+// Cancel guarded on the CURRENT state and MANUAL_REVIEW is not in that list --
+// but applyProviderResult parks a payout there precisely when the provider WAS
+// called and the settlement could not be recorded: a lost response, or a ledger
+// posting that refused. So a payout the provider has paid could sit in
+// MANUAL_REVIEW, and the account owner could release the reservation and get
+// their Credits back while the money was already gone.
+//
+// The asymmetry is what makes it a defect rather than a gap: the dual-controlled
+// ResolveManualReview already consulted everSubmitted and refused to retry an
+// ever-submitted payout. The single-user endpoint would unwind one.
+func TestIntegration_APaidPayoutParkedForReviewCannotBeCancelled(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(600, f.input())
+	require.NoError(t, err)
+	require.Equal(t, "600", f.balance(ledger.CodePayoutReserved).String())
+
+	// Submitted, and the response never came back.
+	f.provider.TimeoutNext()
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+
+	// A person parks it, which is the ordinary thing to do with a payout whose
+	// outcome nobody knows.
+	parked := f.toManualReview(req, "provider did not answer")
+	require.Equal(t, payout.StateManualReview, parked.State)
+
+	err = testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, e := f.svc.Cancel(ctx, tx, req.ID, "user changed their mind")
+			return e
+		})
+	require.Error(t, err, "the reservation was released on a payout the provider may have paid")
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
+	assert.Equal(t, "600", f.balance(ledger.CodePayoutReserved).String(),
+		"the value came back to the user while the provider may already have sent it")
+	assert.Equal(t, "400", f.balance(ledger.CodeCreditBalance).String())
+}

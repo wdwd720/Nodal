@@ -994,6 +994,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/credits/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The rate at which money buys Credits, and the bounds on one purchase
+         * @description Exists so a funding page can show the rate without deriving it. A second implementation of this arithmetic in the browser would eventually disagree with the server, and the server is the one that issues.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The pricing policy in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPricing"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events/stream": {
         parameters: {
             query?: never;
@@ -2172,6 +2211,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a payment that buys Credits (PART XI, pgf Sections 5-7)
+         * @description The request says how much MONEY the customer will pay. It cannot say how many Credits to issue, because there is no such field: the quantity is derived server-side from the named pricing policy version. The response carries a provider client secret exactly once, on creation, and never on an idempotent replay -- a second browser must not be able to resume somebody else's payment form.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCreditPurchaseRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay. No client_secret is returned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                /** @description Purchase started; complete the payment with the provider using client_secret */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{paymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The state of one Credit purchase
+         * @description A funding page polls this rather than trusting a redirect. A provider redirect says the customer came back, not that the money arrived.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: components["parameters"]["PaymentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Purchase state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payouts": {
         parameters: {
             query?: never;
@@ -2788,12 +2927,22 @@ export interface components {
             /** @enum {string} */
             state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
         };
+        /** @description Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write. */
+        CreateCreditPurchaseRequest: {
+            account_id: components["schemas"]["UUID"];
+            /**
+             * Format: int64
+             * @description What the customer will pay, in minor units of the pricing currency.
+             * @example 10000
+             */
+            amount_minor: number;
+            /** @example USD */
+            currency?: string;
+        };
         CreateInternalProductRequest: {
             account_id: components["schemas"]["UUID"];
             description?: string;
             kind: components["schemas"]["InternalProductKind"];
-            /** @description The platform share, capped at 3000 (30%) and rounded DOWN on every sale. */
-            platform_fee_bps?: components["schemas"]["BPS"];
             /** @description In Credit base units. Fixed for this version once published. */
             price: components["schemas"]["Quantity"];
             title: string;
@@ -2838,6 +2987,55 @@ export interface components {
          * @enum {string}
          */
         CreditOrigin: "PURCHASED" | "PROMOTIONAL" | "REFUND" | "CREATOR_EARNING" | "DATA_SALE_EARNING" | "AGENT_SERVICE_EARNING" | "MARKET_CREATOR_EARNING" | "MARKET_TRADING_PROCEEDS" | "COMPETITION_REWARD" | "ADMIN_ADJUSTMENT" | "PROVIDER_SETTLEMENT";
+        /** @description The versioned policy that converts money into Credits. version is recorded on every purchase, so a purchase made under one rate is still explicable after two more have replaced it. */
+        CreditPricing: {
+            /**
+             * Format: int64
+             * @example 100
+             */
+            credits_per_major_unit: number;
+            /** @example USD */
+            currency: string;
+            /**
+             * Format: int64
+             * @example 1000000
+             */
+            max_amount_minor: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            min_amount_minor: number;
+            /** @example credit-pricing-v1 */
+            version: string;
+        };
+        CreditPurchase: {
+            account_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            amount_minor: number;
+            /** @description The provider secret that drives the payment UI. Returned exactly once, on creation. It is never persisted, never logged, and never returned on a replay or a read. */
+            client_secret?: string;
+            /** Format: date-time */
+            created_at?: string;
+            credit_quantity: components["schemas"]["Quantity"];
+            currency: string;
+            failure_reason?: string;
+            pricing_version: string;
+            provider: string;
+            purchase_id: components["schemas"]["UUID"];
+            /**
+             * Format: date-time
+             * @description When the reversibility window opened. The settlement window is measured from here.
+             */
+            reversible_at?: string;
+            /** Format: date-time */
+            settled_at?: string;
+            /**
+             * @description The funding lifecycle state. CAPTURED is not SETTLED and REVERSIBLE is not payout-eligible; the difference is a card dispute window that can run for months.
+             * @enum {string}
+             */
+            state: "CREATED" | "AUTHORIZATION_PENDING" | "AUTHORIZED" | "CAPTURE_PENDING" | "CAPTURED" | "REVERSIBLE" | "SETTLED" | "REVERSED" | "REFUNDED" | "DISPUTED" | "FAILED" | "CANCELED" | "MANUAL_REVIEW";
+        };
         Decision: {
             decision: string;
             evaluated_at: components["schemas"]["Timestamp"];
@@ -3545,6 +3743,7 @@ export interface components {
         Limit: number;
         MarketId: components["schemas"]["UUID"];
         OrderId: components["schemas"]["UUID"];
+        PaymentId: components["schemas"]["UUID"];
         PayoutId: components["schemas"]["UUID"];
         ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];

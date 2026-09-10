@@ -167,9 +167,6 @@ func (s *Server) PostInternalProducts(ctx context.Context, request api.PostInter
 	if request.Body.Description != nil {
 		cmd.Description = *request.Body.Description
 	}
-	if request.Body.PlatformFeeBps != nil {
-		cmd.PlatformFeeBPS = money.BPS(*request.Body.PlatformFeeBps)
-	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.InternalProduct, commandMeta, error) {
 			p, cerr := s.opts.Ports.Commerce.CreateProduct(ctx, cmd)

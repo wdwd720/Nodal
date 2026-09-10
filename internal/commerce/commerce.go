@@ -239,6 +239,20 @@ func (s Seller) EarningAccount() accounts.AccountID {
 // share that leaves the transaction pointless.
 const MaxPlatformFeeBPS money.BPS = 3_000
 
+// DefaultPlatformFeeBPS is the platform's share when a deployment states none.
+//
+// Zero, deliberately, and stated here rather than inferred from a missing
+// field: it is the rate this system already charged, because the seller-supplied
+// value defaulted to the Go zero value and every rational seller left it there
+// (F-107). Making it the explicit default changes no economics and moves the
+// decision to a place that has an owner.
+//
+// It is a BUSINESS number and this code does not invent one. A deployment that
+// wants a commission calls SetPlatformFeeBPS; the native market's equivalent is
+// decided by a dual-controlled admin action, which is the shape this should
+// eventually take.
+const DefaultPlatformFeeBPS money.BPS = 0
+
 // Product is something for sale.
 type Product struct {
 	ID              ProductID
