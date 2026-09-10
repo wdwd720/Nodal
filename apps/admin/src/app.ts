@@ -57,7 +57,8 @@ export const ROUTES: readonly Route[] = [
     path: "accounts",
     title: "Accounts",
     surface: "accounts",
-    description: "Search, inspect, change status, and read one account's whole audit trail.",
+    description:
+      "Search, and read one account whole: status, restrictions, Credit balance, open reconciliation, the actions that named it, the capabilities it may use, and its audit trail. The only write is the status machine.",
     render: renderAccounts,
   },
   {

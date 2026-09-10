@@ -184,3 +184,50 @@ capital) only.
 | `InternalCommerce` / creator economy | 0 |
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
+
+## 9. The operator console (`apps/admin`), 2026-09-10
+
+Added here because §3 named the app and nothing described it. Vanilla TypeScript,
+no framework and no bundler: `build.mjs` uses Node's own
+`module.stripTypeScriptTypes` to emit browser ES modules, and the only runtime
+dependency is `openapi-fetch`, already pinned for `packages/generated-client`.
+`server.mjs` is a loopback dev server that reverse-proxies `/v1` and `/auth` so
+the console is same-origin with the API — which the `SameSite=Lax` session
+cookie and the Fetch Metadata CSRF guard require. It is not a deployment.
+
+| Surface | Route | Reads | Writes |
+|---|---|---|---|
+| Action queue | `#actions` | `GET /v1/admin/actions` | propose, approve, reject, execute (`cancel` has no HTTP route and says so) |
+| Reconciliation | `#reconciliation` | `GET /v1/admin/reconciliation/records` | resolve (material resolutions demand the approved action id); no `compensation` form, deliberately |
+| Kill switches | `#kill-switches` | `GET /v1/admin/kill-switches` | activate (one operator, no step-up), release (step-up; SEVERE needs an approved action) |
+| Capability gates | `#gates` | `GET /v1/admin/gates` | propose, approve, activate, suspend, resume, revoke, **sandbox, unsandbox** |
+| Accounts | `#accounts` | `GET /v1/admin/accounts`, `/v1/accounts/{id}`, `/v1/accounts/{id}/activity`, `/v1/credits/balance`, plus the reconciliation, action, gate and kill-switch lists for one account | account status only |
+| Withdrawals, envelopes, agent promotion | `#withdrawals` `#envelopes` `#agent-promotion` | `GET /v1/admin/actions`, filtered by the surface's action kinds | none — each links into the one queue |
+| Break-glass | `#break-glass` | `GET /v1/admin/actions` | propose `BREAK_GLASS_GRANT` |
+| Providers | `#providers` | `GET /v1/admin/providers` | none |
+
+What the console will not do, each for a reason on screen: fabricate an approval
+reference (a high-risk proposal still requires all four); render a `SANDBOX` gate
+as an approval (ADR-0023 — its own hue, a dashed pill, and the words "sandbox —
+not an approval"); show a balance-editing control (none exists: account-scoped
+writes go through `RequireAccountOwner`, which has no operator override); or
+leave a marker instead of a decision (`src/scan.test.ts`).
+
+Two generated documents are its authority and neither is hand-written:
+`src/generated/authority.json` (permissions, roles, action kinds, surfaces,
+step-up windows, capabilities, kill-switch severities) and
+`src/generated/decisions.json` (a decision vector per principal/action/verb/instant),
+both produced by `internal/adminplane` and held equal to the Go tables by
+`TestAuthorityGolden` and `TestDecisionVectorsGolden`. The console fetches them
+at runtime from `dist/`, so `build.mjs` verifies its own copy and
+`TestConsoleBuiltArtifactsMatchTheirSource` compares `dist/` to `src/` whenever
+`dist/` exists.
+
+Known gaps, stated in the views rather than worked around: no `/v1/admin` route
+exposes `capability_gate_transitions`, so a SANDBOX row's actor (an operator, or
+the SYSTEM actor `config:CP_API_SANDBOX_GATES`) cannot be named for a specific
+row; `Account` carries no owner, so `GET /v1/admin/users/{userId}` has nothing to
+be called with; no route lists an account's agents; `cmd/api`'s
+`providerCatalog` omits the payout slot, so `sandbox_payout` never appears in
+the providers view; and `openapi/openapi.yaml`'s `Capability` enum lists ten of
+the twenty capabilities Go declares (D-079).

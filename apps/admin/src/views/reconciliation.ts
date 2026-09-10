@@ -20,6 +20,16 @@
  *
  * Nothing here edits a balance. A repair is a compensating journal transaction
  * posted by internal/ledger and referenced from the record.
+ *
+ * `ReconciliationResolution` also accepts a `compensation` object — a
+ * reason-coded set of double-entry postings. This console deliberately does not
+ * offer a form for it. A grid of account codes, sides and quantities is a
+ * balance-edit-shaped control however it is labelled, and the one thing this
+ * surface must never look like is a place where an operator types a number and
+ * a balance changes. A correction that needs postings is composed by the
+ * ledger's own tooling, under `ledger:post_correction` and
+ * `ledger:approve_correction`, and shows up here as the compensating
+ * transaction id on the record.
  */
 import { listReconciliationRecords, resolveReconciliationRecord } from "../api.ts";
 import type { ReconciliationRecord } from "../api.ts";

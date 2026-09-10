@@ -29,6 +29,7 @@ export type ReconciliationRecordPage = Schemas["ReconciliationRecordPage"];
 export type ActivityItem = Schemas["ActivityItem"];
 export type ActivityPage = Schemas["ActivityPage"];
 export type Principal = Schemas["Principal"];
+export type CreditBalance = Schemas["CreditBalance"];
 
 const client = createApiClient({ baseUrl: "/v1" });
 
@@ -101,6 +102,28 @@ export async function changeAccountStatus(
   );
 }
 
+/**
+ * One account's Credit balance, broken into the buckets PART XX requires.
+ *
+ * There is no `/v1/admin/credits/...` route. This is the customer route, and an
+ * operator reaches it by the same rule every other read on this console uses:
+ * `security.RequireAccount` admits the account's owner *or* a principal holding
+ * `account:read_any`, which is exactly the permission that already gates this
+ * surface (`internal/security/authz.go`). So this is not a customer endpoint
+ * being borrowed — it is the read path an operator is authorised for, and the
+ * write path (`RequireAccountOwner`) has no operator override at all, which is
+ * why no balance on this console is editable.
+ *
+ * It answers 422 UNSUPPORTED where the Nodal-native economy is not wired. That
+ * is a state of the deployment and is rendered as one, never as a zero.
+ */
+export async function getCreditBalance(accountId: string): Promise<CreditBalance> {
+  return must(
+    await client.GET("/credits/balance", { params: { query: { account_id: accountId } } }),
+    "the Credit balance",
+  );
+}
+
 // --- controlled administrative actions --------------------------------------
 
 export async function listActions(status: string, params: PageParams = {}): Promise<AdminActionPage> {
@@ -155,18 +178,51 @@ export async function listGates(): Promise<CapabilityGate[]> {
   return must(await client.GET("/admin/gates"), "the capability gates");
 }
 
-export type GateActionName = "propose" | "approve" | "activate" | "suspend" | "resume" | "revoke";
+/**
+ * Every step of the gate path, including the two that exist only on a sandbox
+ * tier. `sandbox` and `unsandbox` are ordinary path segments on the same
+ * route; what makes them sandbox-only is the server, which answers 403
+ * FORBIDDEN with its own reason anywhere else (internal/gates.Admin.sandboxOp).
+ * The console offers them and renders that refusal — it does not decide on the
+ * server's behalf which deployments are sandbox tiers, because it has no
+ * endpoint that would tell it.
+ */
+export type GateActionName =
+  | "propose"
+  | "approve"
+  | "activate"
+  | "suspend"
+  | "resume"
+  | "revoke"
+  | "sandbox"
+  | "unsandbox";
+
+/** The two steps ADR-0023 adds, which exist only on a sandbox tier. */
+export const SANDBOX_GATE_ACTIONS: readonly GateActionName[] = ["sandbox", "unsandbox"];
 
 /**
- * The capability names the contract accepts on the gate path.
+ * The capability names the *OpenAPI contract* lists on the gate path.
  *
  * Typed as `Record<Capability, true>`, so the compiler requires an entry for
  * every member of the generated enum: adding a capability to
- * `openapi/openapi.yaml` breaks this file rather than producing a console that
- * silently omits a live-money gate. The console's own capability list comes
- * from the authority document, which is generated from Go, so the two can in
- * principle disagree — `isCapability` is how a disagreement surfaces as a
- * visible refusal instead of a 400 on submit.
+ * `openapi/openapi.yaml` breaks this file rather than leaving the console
+ * quietly out of step.
+ *
+ * The contract is not the authority here, and this predicate is no longer a
+ * gate on what the console will address. `internal/gates.Capability.Valid` is
+ * what the server actually checks, `internal/adminplane` exports that same list
+ * into the authority document, and the OpenAPI enum is a hand-written
+ * restatement that has fallen behind it: the contract lists ten capabilities
+ * while Go declares twenty, and the six a sandbox tier activates
+ * (CREDIT_PURCHASE, NATIVE_ASSET_CREATION, NATIVE_MARKET_TRADING, MARKETPLACE,
+ * PAYOUT_RESERVE, PAYOUT_SETTLE) include five the enum has never heard of.
+ *
+ * Nothing validates the enum on the wire — the generated server binds the path
+ * segment as a plain string and hands it to `Capability.Valid` — so refusing to
+ * address a gate the authority document declares would leave an operator unable
+ * to suspend or revoke a live capability for no reason but a stale document.
+ * The console therefore addresses every declared capability and *reports* the
+ * drift where it is visible (`views/gates.ts`), rather than acting on it.
  */
 const CAPABILITY_SET: Readonly<Record<Capability, true>> = {
   LIVE_FUNDING: true,
@@ -181,12 +237,18 @@ const CAPABILITY_SET: Readonly<Record<Capability, true>> = {
   CEX_TRADING: true,
 };
 
-export function isCapability(name: string): name is Capability {
+/** True when the OpenAPI contract's Capability enum also lists this name. */
+export function inApiContract(name: string): name is Capability {
   return Object.hasOwn(CAPABILITY_SET, name);
 }
 
+/** The capability names the OpenAPI contract knows, for a drift report. */
+export function contractCapabilities(): readonly string[] {
+  return Object.keys(CAPABILITY_SET);
+}
+
 export async function actOnGate(
-  capability: Capability,
+  capability: string,
   action: GateActionName,
   body: {
     reason: string;
@@ -200,7 +262,12 @@ export async function actOnGate(
 ): Promise<CapabilityGate> {
   return must(
     await client.POST("/admin/gates/{capability}/{action}", {
-      ...idempotent(key, { path: { capability, action } }),
+      // The path parameter is typed from the OpenAPI enum, which is narrower
+      // than the capability list the server validates against (see
+      // CAPABILITY_SET). The cast is the drift, made visible in one place
+      // instead of silently narrowing the console's reach; remove it when the
+      // contract's enum is regenerated from internal/gates.
+      ...idempotent(key, { path: { capability: capability as Capability, action } }),
       body,
     }),
     "the gate transition",

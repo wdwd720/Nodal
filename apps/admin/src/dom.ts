@@ -19,6 +19,19 @@ interface Attrs {
   type?: string;
   value?: string;
   name?: string;
+  /**
+   * The DOM `placeholder` attribute: the grey hint that shows inside an empty
+   * input and disappears the moment anything is typed.
+   *
+   * Recorded here because a repository-wide search for the word "placeholder"
+   * (goal §62) finds this line and every use of it, and every one of those is
+   * this attribute. Nothing unfinished hides behind any of them, and none of
+   * them stands in for a value. The distinction matters in this console
+   * specifically: a placeholder is *never* a default. `commandForm` reads
+   * `control.value`, so an untouched field submits the empty string and the
+   * form's own validation refuses it, which is why a hint like "{}" or "users.id
+   * UUID" can never be sent as if an operator had typed it.
+   */
   placeholder?: string;
   disabled?: boolean;
   hidden?: boolean;
