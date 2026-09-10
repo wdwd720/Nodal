@@ -1438,7 +1438,16 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
-### RESUME HERE — checkpoint 2026-09-10 (later), SOFTWARE_COMPLETE is true
+### RESUME HERE — productization (product_goal.md), branch `productization` from `9906c9f`
+
+`SOFTWARE_COMPLETE` is **false for the duration** of the productization goal,
+by that goal's own rule: it was true at `024c691` for the backend as audited,
+and it returns to true only when the customer-facing surface is built,
+deployed, verified in a browser, adversarially audited and reconciled with the
+architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
+identity source of truth) is the first productization decision.
+
+### The previous checkpoint — 2026-09-10 (later), SOFTWARE_COMPLETE was true at 024c691
 
 The two items `SOFTWARE_COMPLETE` was waiting on closed in the session's last
 ten commits, each the way its own register entry said it would:
