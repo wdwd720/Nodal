@@ -15,7 +15,7 @@ false for reasons no amount of engineering can clear.
 
 ## 1 · Final HEAD
 
-**`54ed595` — `credit: a funding state is not the application's to write`.**
+**`652dd67` — `accounts: an account status is not the application's to write`.**
 
 That is the exact hash of the last commit that changes code or schema. Every
 commit after it edits this document only, and a hash cannot be inside the object
@@ -35,9 +35,10 @@ The commits that end the session:
 | `2a27ee8` | `docs: the gate is green at 741, and one failure is recorded not dropped` |
 | `07d490e` | `audit: the other half of 00603's claim now has a test` |
 | `02f8bdf` | `restore: prove the restored database works, not only that it matches` — F-129 |
-| `54ed595` | `credit: a funding state is not the application's to write` — F-42's remedy, table 1 of 11 |
+| `54ed595` | `credit: a funding state is not the application's to write` — F-42's remedy, table 1 |
+| `652dd67` | `accounts: an account status is not the application's to write` — F-42's remedy, table 2 |
 
-**Twenty-six commits since `05ec7f3`**, the session's starting point.
+**Twenty-eight commits since `05ec7f3`**, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
@@ -211,13 +212,13 @@ version 739, not from the files.
 
 ## 5 · Test evidence
 
-Every tier below was re-run at `54ed595`, the last commit that changes code or schema.
+Every tier below was re-run at `652dd67`, the last commit that changes code or schema.
 
 | Command | Result |
 |---|---|
 | `go build ./...` | pass |
 | `go test ./...` | **140 packages, 0 failures** |
-| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 11m22s** |
+| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 0 failures** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
 | `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
 | `go run ./scripts/restoredrill` | **OK, at version 744, including a live state change on the restored database** |
@@ -358,7 +359,7 @@ integration tier.
 
 ## 10 · Restore drill
 
-Run at `54ed595`:
+Run at `652dd67`:
 
 ```
 restoredrill: boot: version source=744 restored=744 verify=ok
