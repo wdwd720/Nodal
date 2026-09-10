@@ -67,7 +67,7 @@ func TestService_APIStartsInProductionWithoutTheDependenciesItDoesNotUse(t *test
 // process, and then there is no Redis to configure and none is demanded.
 func TestService_TheAPINeedsRedisOnlyWhenItsCountersAreShared(t *testing.T) {
 	t.Parallel()
-	base := withoutPrefix(withVars(prodEnv(), map[string]string{"CP_ENV": string(EnvDev)}), "CP_REDIS_")
+	base := withoutPrefix(asEnv(prodEnv(), EnvDev), "CP_REDIS_")
 
 	memory := withVars(base, map[string]string{"CP_RATELIMIT_BACKEND": "memory", "CP_HTTP_REPLICAS": "1"})
 	c, err := Load(context.Background(), ServiceAPI, LookupFromMap(memory))
@@ -93,8 +93,8 @@ func TestService_TheAPINeedsRedisOnlyWhenItsCountersAreShared(t *testing.T) {
 // the table walked in both directions to say so.
 func TestService_TheDecidingValueIsReadBeforeItIsUsed(t *testing.T) {
 	t.Parallel()
-	env := withVars(withoutPrefix(prodEnv(), "CP_REDIS_"),
-		map[string]string{"CP_ENV": string(EnvDev), "CP_RATELIMIT_BACKEND": "memory", "CP_HTTP_REPLICAS": "1"})
+	env := withVars(asEnv(withoutPrefix(prodEnv(), "CP_REDIS_"), EnvDev),
+		map[string]string{"CP_RATELIMIT_BACKEND": "memory", "CP_HTTP_REPLICAS": "1"})
 
 	// Reading the deciding variable last is the hostile order, and it is
 	// simulated by answering lookups only after every other variable has been

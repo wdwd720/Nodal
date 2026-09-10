@@ -148,15 +148,43 @@ func TestValidate_TheEnvironmentAndTheProviderModeMakeTheSameClaim(t *testing.T)
 		}
 	})
 
-	t.Run("DEV is not constrained either way", func(t *testing.T) {
+	t.Run("a sandbox provider is fine below STAGING", func(t *testing.T) {
 		t.Parallel()
-		// Below STAGING the ladder is about developer conveniences, not about
-		// whose money moves, and a DEV deployment pointed at a live provider is
-		// a decision its operator gets to make.
-		c := validProdConfig(t)
-		c.Env = EnvDev
-		c.Providers.CreditPurchase.Mode = ProviderModeSandbox
-		assert.False(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv))
+		// Below STAGING the ladder is about developer conveniences, and pointing
+		// a DEV deployment at a provider's test environment is a decision its
+		// operator gets to make.
+		for _, env := range []Environment{EnvDev, EnvLocal, EnvTest} {
+			c := validProdConfig(t)
+			c.Env = env
+			demoteProviders(c, ProviderModeSandbox)
+			assert.False(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv),
+				"%s refuses a sandbox provider", env)
+		}
+	})
+
+	t.Run("live money belongs to PROD and nowhere else", func(t *testing.T) {
+		t.Parallel()
+		// This subtest replaces one asserting "DEV is not constrained either
+		// way", which was true and was the defect. The rule was written as a
+		// switch over PROD and STAGING, so every other environment fell
+		// through it -- and DEV constrains nothing else either: it permits
+		// CP_AUTH_MODE=dev, a wildcard CORS origin, a non-secure cookie, no
+		// database TLS and no rate limit. The same file was refused by twenty
+		// rules at PROD and passed clean at DEV, holding live credentials for
+		// all fourteen slots (F-103).
+		//
+		// Stated per environment and per slot, because the hole was in the
+		// shape of the rule rather than in any one case of it.
+		for _, env := range []Environment{EnvStaging, EnvDev, EnvLocal, EnvTest} {
+			for _, slot := range providerSlots() {
+				c := validProdConfig(t)
+				c.Env = env
+				demoteProviders(c, ProviderModeSandbox)
+				slot.Get(&c.Providers).Mode = ProviderModeLive
+				assert.True(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv),
+					"%s accepts a live %s provider", env, slot.Name)
+			}
+		}
 	})
 }
 
@@ -248,6 +276,7 @@ func TestValidate_LocalAndTestPermitDevelopmentSettings(t *testing.T) {
 			t.Parallel()
 			c := validProdConfig(t)
 			c.Env = env
+			demoteProviders(c, ProviderModeSandbox)
 			// The rate-limit rule is deliberately not environment-dependent
 			// any more, so this test -- which is about the rules that ARE --
 			// states the single replica that makes it moot.
@@ -333,6 +362,7 @@ func TestValidate_DevAllowsFakesButNotPlainSecrets(t *testing.T) {
 	t.Parallel()
 	c := validProdConfig(t)
 	c.Env = EnvDev
+	demoteProviders(c, ProviderModeSandbox)
 	c.Providers.Funding.Mode = ProviderModeFake
 	c.Auth.Mode = AuthModeDev
 	c.Database.RequireTLS = false
@@ -512,4 +542,95 @@ func TestValidate_PresenceRulesBelongToTheServicesThatUseThem(t *testing.T) {
 				"%s does not use this dependency and must not be held to it", tc.notUses)
 		})
 	}
+}
+
+// Three rules that permitted a configuration the deployment cannot survive
+// (F-103). Each is stated as the refusal plus the control that it did not
+// become one condition too strict.
+
+func TestValidate_ATrustedProxyListThatTrustsEveryoneTrustsNobody(t *testing.T) {
+	t.Parallel()
+	// The list is what makes X-Forwarded-For readable, and a trusted peer's
+	// header is taken at face value. A default route therefore does not widen
+	// the control, it inverts it: every caller picks the address that lands in
+	// the audit record and in every unauthenticated rate-limit bucket. F-88
+	// made the list mandatory and nothing made it mean anything.
+	for _, cidr := range []string{"0.0.0.0/0", "::/0", "10.0.0.0/8,0.0.0.0/0"} {
+		c := validProdConfig(t)
+		c.HTTP.TrustedProxyCIDRs = strings.Split(cidr, ",")
+		err := c.Validate()
+		require.Error(t, err, "%q was accepted", cidr)
+		assert.Contains(t, err.Error(), "trusts every peer")
+	}
+
+	// The control: a real list still passes, so the rule is about the prefix
+	// length and not about the list.
+	c := validProdConfig(t)
+	c.HTTP.TrustedProxyCIDRs = []string{"10.0.0.0/8", "172.16.0.0/12", "127.0.0.0/8", "fd00::/8", "::1/128"}
+	assert.NoError(t, c.Validate())
+}
+
+func TestValidate_EveryRetentionClassRefusesANegativeNumber(t *testing.T) {
+	t.Parallel()
+	// Six of the seven were in the map. The seventh bounds how long
+	// login_attempts keeps a plaintext OIDC nonce and PKCE verifier, its own
+	// documentation says "Minimum 1", and a negative value made every purge
+	// pass in cmd/audit-worker fail -- so the secrets it exists to delete were
+	// never deleted and the symptom was a failing worker, not a failing check.
+	//
+	// Written as a loop over the fields rather than one case, because the
+	// defect was an absence from a list and a single case would restate it.
+	for name, set := range map[string]func(*Config){
+		"FinancialRecordDays": func(c *Config) { c.Retention.FinancialRecordDays = -1 },
+		"SecurityAuditDays":   func(c *Config) { c.Retention.SecurityAuditDays = -1 },
+		"RawMarketDataDays":   func(c *Config) { c.Retention.RawMarketDataDays = -1 },
+		"SocialDataDays":      func(c *Config) { c.Retention.SocialDataDays = -1 },
+		"ModelIODays":         func(c *Config) { c.Retention.ModelIODays = -1 },
+		"OperationalLogDays":  func(c *Config) { c.Retention.OperationalLogDays = -1 },
+		"LoginAttemptDays":    func(c *Config) { c.Retention.LoginAttemptDays = -1 },
+	} {
+		c := validProdConfig(t)
+		set(c)
+		err := c.Validate()
+		require.Error(t, err, "Retention.%s accepts a negative number of days", name)
+		assert.Contains(t, err.Error(), "Retention."+name)
+	}
+}
+
+func TestValidate_TheLegalPolicyIsOneTheBinaryCanBuild(t *testing.T) {
+	t.Parallel()
+	// cmd/api refuses to start on an unknown policy, and on a development
+	// policy in a production-like environment. Without a rule here the
+	// deployment passed every configuration check and then would not boot --
+	// the failure the settlement asset already had a rule for, reproduced by a
+	// variable that is in the table and had none.
+	c := validProdConfig(t)
+	c.API.LegalPolicy = "CONSERVATIV"
+	err := c.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a legal policy")
+
+	for _, env := range []Environment{EnvProd, EnvStaging} {
+		c := validProdConfig(t)
+		if env == EnvStaging {
+			c = asStaging(c)
+		}
+		c.API.LegalPolicy = "development"
+		err := c.Validate()
+		require.Error(t, err, "%s accepts a development legal policy", env)
+		assert.True(t, HasViolation(err, RuleLegalPolicyNotDevelopment))
+	}
+
+	// The controls: the two names it does know, in both spellings, and the
+	// empty string meaning the careful one.
+	for _, policy := range []string{"", "CONSERVATIVE", "conservative", " Conservative "} {
+		c := validProdConfig(t)
+		c.API.LegalPolicy = policy
+		assert.NoError(t, c.Validate(), "%q was refused", policy)
+	}
+	c = validProdConfig(t)
+	c.Env = EnvDev
+	demoteProviders(c, ProviderModeSandbox)
+	c.API.LegalPolicy = "DEVELOPMENT"
+	assert.NoError(t, c.Validate(), "a development policy is what DEV is for")
 }

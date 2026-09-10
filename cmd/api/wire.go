@@ -853,22 +853,29 @@ func mergeExecutors(tables ...map[admin.Kind]admin.ExecFunc) map[admin.Kind]admi
 // development policy in production has misconfigured something, and starting
 // anyway with different behaviour than they asked for is how that goes
 // unnoticed.
+//
+// The vocabulary is config.NormalizeLegalPolicy rather than a switch of its
+// own. Both halves have to agree -- config decides whether the deployment is
+// valid, this decides whether a router can be built from the same string --
+// and when they were separate, config had no list at all (F-103).
 func legalRouterFor(env config.Environment, policy string) (*legalrouter.Router, error) {
-	name := strings.ToUpper(strings.TrimSpace(policy))
+	name, ok := config.NormalizeLegalPolicy(policy)
+	if !ok {
+		return nil, fmt.Errorf("%s=%q: expected %s or %s", envLegalPolicy, policy,
+			config.LegalPolicyConservative, config.LegalPolicyDevelopment)
+	}
 	switch name {
-	case "", "CONSERVATIVE":
+	case config.LegalPolicyConservative:
 		return nil, nil
-	case "DEVELOPMENT":
+	default:
 		if env.IsProductionLike() {
-			return nil, fmt.Errorf("%s=DEVELOPMENT: a development legal policy may not be loaded in %s",
-				envLegalPolicy, env)
+			return nil, fmt.Errorf("%s=%s: a development legal policy may not be loaded in %s",
+				envLegalPolicy, config.LegalPolicyDevelopment, env)
 		}
 		r, err := legalrouter.New(legalrouter.DevelopmentPolicy())
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", envLegalPolicy, err)
 		}
 		return r, nil
-	default:
-		return nil, fmt.Errorf("%s=%q: expected CONSERVATIVE or DEVELOPMENT", envLegalPolicy, name)
 	}
 }

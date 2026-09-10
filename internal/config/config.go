@@ -581,3 +581,34 @@ func (c *Config) secretRefs() map[string]*SecretRef {
 	forEachSecretRef(reflect.ValueOf(c), "", func(path string, ref *SecretRef) { out[path] = ref })
 	return out
 }
+
+// Legal policy names.
+//
+// The vocabulary lives here rather than in the composition root because both
+// have to agree: internal/config decides whether a deployment is valid, and
+// cmd/api decides whether it can build a router from the same string. When the
+// two were separate lists, config had no list at all and a name it did not
+// recognise -- or a development policy in STAGING -- passed every check and
+// then refused to boot (F-103).
+const (
+	// LegalPolicyConservative asks the jurisdiction questions. It is the
+	// default, and the empty string means it.
+	LegalPolicyConservative = "CONSERVATIVE"
+	// LegalPolicyDevelopment permits the internal economy without them, and is
+	// refused outside LOCAL/TEST/DEV.
+	LegalPolicyDevelopment = "DEVELOPMENT"
+)
+
+// NormalizeLegalPolicy upper-cases and trims a configured policy name and
+// reports whether it is one this binary knows. The empty string is
+// CONSERVATIVE: naming nothing asks for the careful one.
+func NormalizeLegalPolicy(s string) (string, bool) {
+	switch name := strings.ToUpper(strings.TrimSpace(s)); name {
+	case "":
+		return LegalPolicyConservative, true
+	case LegalPolicyConservative, LegalPolicyDevelopment:
+		return name, true
+	default:
+		return name, false
+	}
+}

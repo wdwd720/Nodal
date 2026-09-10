@@ -126,6 +126,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-100 | P1 | NEW | fixed | A funding parked for a human is un-parked by the next provider event, and a refund followed by a late success mints Credits for money that was returned |
 | F-101 | P1 | NEW | fixed | One transition row licenses a second, unrelated edge, because the edge encoding's delimiters are in band and a state name is unconstrained text |
 | F-102 | P1 | NEW | fixed | Two write routes scoped through the read-grade helper, so one ADMIN session could cancel any customer's intent and move any seller's product; the guard that exists to prevent it matched one helper name of four |
+| F-103 | P1 | NEW | fixed | Five configuration rules permitted what the deployment cannot survive: live provider credentials outside PROD, a trusted-proxy list that trusts everyone, a retention class with no floor, a legal policy the binary refuses to boot on, and a TLS flag nothing read |
 
 ---
 
@@ -4794,6 +4795,110 @@ real router, the real generated wrapper and the real authorization middleware,
 but the intent port is a fake, so what is proven is the boundary's decision and
 not the domain's. STATIC_PROOF for the completeness check. That is the right
 level for this defect: the refusal being tested belongs to the boundary.
+
+## F-103 · Five configuration rules that permitted what the deployment cannot survive · NEW · P1 · FIXED
+
+**Found by** an independent audit of `internal/config` that ran the repository's
+own loader over crafted environment files rather than reading the rules.
+
+The configuration check is the control that is supposed to see a bad deployment
+before the deployment does. Five things it could not see.
+
+### 1. Live provider credentials outside PROD — the P1
+
+The environment/mode pairing was written as `switch env { case EnvProd: ...;
+case EnvStaging: ... }`. **Every other environment fell through it.** DEV
+therefore accepted `live` mode on all fourteen provider slots.
+
+That matters because DEV constrains nothing else either. One environment file,
+two values of `CP_ENV`, run through `scripts/configcheck`:
+
+| `CP_ENV` | result |
+|---|---|
+| `DEV` | 91 variables supplied, and the configuration is valid |
+| `PROD` | **20 rule violations** |
+
+The identical file carried every provider at `live`, `CP_AUTH_MODE=dev`,
+`CP_SEED_ENABLED=true`, `CP_DATABASE_REQUIRE_TLS=false`, `CORS_ORIGINS=*`, a
+non-secure cookie, an `http://` base URL, every transport budget `off`, and no
+trusted proxies. So a DEV deployment could hold live payment credentials, mount
+the dev identity picker, talk to the production database without TLS and
+enforce no rate limit — and pass.
+
+The belt-and-braces had the same hole: both money-taking adapters carry the
+same two-case switch, and `internal/provider/stripe` has no pairing check at
+all.
+
+**A test asserted it.** `TestValidate_TheEnvironmentAndTheProviderModeMakeTheSameClaim`
+had a subtest named *"DEV is not constrained either way"*, whose comment
+reasoned that a DEV deployment pointed at a live provider *"is a decision its
+operator gets to make"*. It has been replaced by *"live money belongs to PROD
+and nowhere else"*, stated per environment and per slot.
+
+**Fix.** The rule is now about the MODE, not a list of environments: live is
+permitted only in PROD, and PROD requires it. A total rule cannot acquire the
+same hole when a sixth environment is declared.
+
+### 2. A trusted-proxy list that trusts everyone
+
+`RuleTrustedProxyDeclared` (F-88) made `CP_HTTP_TRUSTED_PROXY_CIDRS` mandatory
+in STAGING/PROD. Nothing bounded its width, and `0.0.0.0/0,::/0` validated
+clean.
+
+A trusted peer's `X-Forwarded-For` is taken at face value, so a default route
+does not widen the control — it inverts it. Every caller then chooses the
+address that lands in the audit record, in `login_attempts`, and in every
+unauthenticated rate-limit bucket, including the 30/minute auth budget. F-88
+made the list mandatory; nothing made it mean anything.
+
+**Fix.** A prefix length of zero is refused, with the reason.
+
+### 3. The seventh retention class had no floor
+
+Six retention classes were checked non-negative. `Retention.LoginAttemptDays`
+was not in the map, though its own documentation says "Minimum 1". A negative
+value made every purge pass in `cmd/audit-worker` fail, so the plaintext OIDC
+nonces and PKCE verifiers the class exists to delete were never deleted — and
+the symptom was a failing worker rather than a failing configuration check.
+
+The regression test loops over all seven rather than restating the one, because
+the defect was an absence from a list.
+
+### 4. A legal policy the binary refuses to boot on
+
+`cmd/api`'s `legalRouterFor` refuses an unknown policy name, and refuses
+`DEVELOPMENT` in a production-like environment. `internal/config` had **no rule
+for `API.LegalPolicy` at all**, so `CP_API_LEGAL_POLICY=development` in STAGING
+validated clean and then would not start — the same failure `test/infra`
+already records for the settlement asset, reproduced by a variable that is in
+the table and had no rule.
+
+**Fix.** The vocabulary moved into `internal/config` as
+`NormalizeLegalPolicy`, and `legalRouterFor` now reads it instead of carrying
+its own switch. Two lists that must agree are now one list — which is the
+repeated defect this register calls "a list duplicated in two places diverges",
+here in its sharper form: one of the two places had no list.
+
+### 5. A TLS rule nothing read
+
+`RuleTemporalTLS` refuses `CP_TEMPORAL_REQUIRE_TLS=false` in STAGING/PROD. The
+only Temporal dial in the tree passed no `ConnectionOptions`, so a production
+workflow worker connected in plaintext while the configuration check certified
+TLS. The other four `*_REQUIRE_TLS` flags are honoured by their clients; this
+one was F-89's shape — a value loaded, validated, and read by nothing.
+
+**Fix.** The dial sets a TLS config when the flag is set. Verification against
+the system roots, deliberately: an empty `tls.Config` that skipped verification
+would be the same rule enforcing nothing in a more convincing way.
+
+**Evidence.** STATIC_PROOF for the fixes, plus the auditing run's LOCAL
+execution of `scripts/configcheck` — the repository's own loader — for the
+DEV/PROD asymmetry and for each accepted-bad-value above. Four new tests, each
+carrying its control so that none of the rules is one condition too strict.
+Correcting the fixtures was itself informative: several tests built "the
+production configuration, but DEV" by overwriting `CP_ENV` alone, which left
+fourteen providers on live credentials. That is the same mistake the rule now
+refuses, made inside the suite that was supposed to catch it.
 
 ## Findings deliberately NOT raised
 

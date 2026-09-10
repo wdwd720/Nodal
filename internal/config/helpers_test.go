@@ -126,6 +126,38 @@ func prodEnv() map[string]string {
 	return m
 }
 
+// demoteProviders moves every provider slot off live mode.
+//
+// The companion to asEnv, for the tests that build a *Config directly rather
+// than an environment map. Same reason: "the production config, but DEV" left
+// fourteen providers holding live credentials, which is now refused (F-103).
+func demoteProviders(c *Config, mode ProviderMode) {
+	for _, slot := range providerSlots() {
+		slot.Get(&c.Providers).Mode = mode
+	}
+}
+
+// asEnv is prodEnv moved to another environment, with the provider modes moved
+// with it.
+//
+// It exists because several tests wanted "the production fixture, but DEV" and
+// wrote CP_ENV=DEV over prodEnv() -- which left fourteen providers at live
+// mode. That combination is now refused, and refusing it is the point: it is a
+// deployment holding credentials that move real money while DEV constrains
+// nothing else about it (F-103). Tests that want a non-production environment
+// want its providers to be non-production too.
+func asEnv(base map[string]string, env Environment) map[string]string {
+	m := withVars(base, map[string]string{"CP_ENV": string(env)})
+	mode := "sandbox"
+	if env == EnvProd {
+		mode = "live"
+	}
+	for _, slot := range providerSlots() {
+		m["CP_PROVIDER_"+slot.Env+"_MODE"] = mode
+	}
+	return m
+}
+
 func withVars(base, overrides map[string]string) map[string]string {
 	m := maps.Clone(base)
 	maps.Copy(m, overrides)

@@ -69,8 +69,12 @@ const (
 	RuleTrustedProxyDeclared Rule = "TRUSTED_PROXY_DECLARED"
 	RulePublicBaseURLHTTPS   Rule = "PUBLIC_BASE_URL_HTTPS"
 	RuleRetentionNonZero     Rule = "RETENTION_NON_ZERO"
-	RulePublicProductName    Rule = "PUBLIC_PRODUCT_NAME"
-	RuleCapabilityStore      Rule = "CAPABILITY_STORE_CONFIGURED"
+	// RuleLegalPolicyNotDevelopment: a STAGING or PROD deployment does not name
+	// the permissive jurisdiction policy. cmd/api refuses to start on one, so
+	// without this the configuration check passes a deployment that cannot boot.
+	RuleLegalPolicyNotDevelopment Rule = "LEGAL_POLICY_NOT_DEVELOPMENT"
+	RulePublicProductName         Rule = "PUBLIC_PRODUCT_NAME"
+	RuleCapabilityStore           Rule = "CAPABILITY_STORE_CONFIGURED"
 	// RuleRateLimitStated rejects a transport budget that cannot be parsed,
 	// and one switched off where money is at stake.
 	RuleRateLimitStated Rule = "RATE_LIMIT_STATED"
@@ -212,10 +216,39 @@ func (c *Config) Validate() error {
 		}
 	}
 	for _, cidr := range c.HTTP.TrustedProxyCIDRs {
-		if _, _, err := net.ParseCIDR(cidr); err != nil {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
 			add(RuleField, "HTTP.TrustedProxyCIDRs", fmt.Sprintf("%q is not a CIDR", cidr))
+			continue
+		}
+		// A default route trusts every peer, and a trusted peer's
+		// X-Forwarded-For is taken at face value. So `0.0.0.0/0` does not widen
+		// the control -- it inverts it: every caller chooses the address that
+		// lands in the audit record, in login_attempts, and in every
+		// unauthenticated rate-limit bucket including the auth budget. F-88
+		// made this list mandatory; nothing made it mean anything (F-103).
+		if ones, _ := network.Mask.Size(); ones == 0 {
+			add(RuleField, "HTTP.TrustedProxyCIDRs", fmt.Sprintf(
+				"%q trusts every peer, which lets any caller forge its own address in "+
+					"audit records and rate-limit buckets; name the networks the load balancer speaks from", cidr,
+			))
 		}
 	}
+	// The legal policy names a router the composition root will build. A name
+	// it does not know, or a development policy in a production-like
+	// environment, is refused at startup -- so without a rule here the
+	// deployment passes every configuration check and then will not boot,
+	// which is the failure test/infra records for the settlement asset,
+	// reproduced by a variable that is in the table and has no rule (F-103).
+	if policy, ok := NormalizeLegalPolicy(c.API.LegalPolicy); !ok {
+		add(RuleField, "API.LegalPolicy",
+			fmt.Sprintf("%q is not a legal policy; expected %s or %s", c.API.LegalPolicy,
+				LegalPolicyConservative, LegalPolicyDevelopment))
+	} else if prodLike && policy == LegalPolicyDevelopment {
+		add(RuleLegalPolicyNotDevelopment, "API.LegalPolicy",
+			"a development legal policy may not be loaded in STAGING/PROD: it permits the internal economy without the jurisdiction questions the conservative policy asks")
+	}
+
 	if c.Credit.SettlementWindow <= 0 {
 		add(RuleField, "Credit.SettlementWindow", "must be > 0: a zero window settles a payment the instant it is captured")
 	}
@@ -551,19 +584,26 @@ func (c *Config) Validate() error {
 		// mismatch, but they refuse at startup, where the symptom is a WARN
 		// and a silently disabled capability. Refusing here is what lets
 		// scripts/configcheck and the deployment tests see it first.
-		if p.Mode != ProviderModeFake {
-			switch env {
-			case EnvProd:
-				if p.Mode != ProviderModeLive {
-					add(RuleProviderModeMatchesEnv, field+".Mode",
-						fmt.Sprintf("PROD requires live mode, not %q; a production deployment must not run against a provider's test environment", string(p.Mode)))
-				}
-			case EnvStaging:
-				if p.Mode == ProviderModeLive {
-					add(RuleProviderModeMatchesEnv, field+".Mode",
-						"STAGING must use sandbox mode; a rehearsal that moves real money is not a rehearsal")
-				}
-			}
+		//
+		// Stated as a rule about the MODE rather than a switch over
+		// environments, because the switch listed PROD and STAGING and every
+		// other environment fell through it. DEV therefore accepted live mode
+		// -- alongside CP_AUTH_MODE=dev, a wildcard CORS origin, a non-secure
+		// cookie, no TLS to the database and no rate limit, none of which DEV
+		// constrains either. The same configuration file was refused by twenty
+		// rules at CP_ENV=PROD and passed clean at CP_ENV=DEV. The two
+		// money-taking adapters carry the same two-case switch and the same
+		// hole, so the belt-and-braces had it too (F-103).
+		//
+		// A total rule cannot acquire that hole again when a sixth environment
+		// is declared.
+		if p.Mode == ProviderModeLive && env != EnvProd {
+			add(RuleProviderModeMatchesEnv, field+".Mode",
+				fmt.Sprintf("live mode is only permitted in PROD, not %s; a deployment that is not production must not hold credentials that move real money", env))
+		}
+		if env == EnvProd && p.Mode != ProviderModeFake && p.Mode != ProviderModeLive {
+			add(RuleProviderModeMatchesEnv, field+".Mode",
+				fmt.Sprintf("PROD requires live mode, not %q; a production deployment must not run against a provider's test environment", string(p.Mode)))
 		}
 		if p.Mode != ProviderModeFake && p.Name == "" {
 			add(RuleField, field+".Name", "required unless mode is fake")
@@ -609,6 +649,13 @@ func (c *Config) Validate() error {
 		"Retention.SocialDataDays":      c.Retention.SocialDataDays,
 		"Retention.ModelIODays":         c.Retention.ModelIODays,
 		"Retention.OperationalLogDays":  c.Retention.OperationalLogDays,
+		// The seventh, and the one that was missing. Its own documentation
+		// says "Minimum 1"; nothing enforced it, and cmd/audit-worker hard
+		// errors on every purge pass with a negative value -- so the plaintext
+		// OIDC nonces and PKCE verifiers it exists to delete are never deleted,
+		// and the operator sees a failing worker rather than a failing config
+		// check (F-103).
+		"Retention.LoginAttemptDays": c.Retention.LoginAttemptDays,
 	} {
 		if d < 0 {
 			add(RuleField, name, "must not be negative")
