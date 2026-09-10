@@ -32,11 +32,13 @@ ALTER DEFAULT PRIVILEGES FOR ROLE cp_migrate IN SCHEMA public GRANT USAGE, SELEC
 -- every table in the schema, and cp_ops performs retention cleanup on sessions,
 -- which needs SELECT on the columns it filters on.
 --
--- It does sit awkwardly beside migration 00010, whose grant list deliberately
--- withholds identity_pii and sessions from these two roles. That list has no
--- effect while this line exists. The contradiction is recorded as F-47, OPEN:
--- resolving it is a decision about who may read encrypted PII, and it belongs
--- to whoever owns that policy.
+-- It sits beside migration 00010, whose grant list deliberately withholds
+-- identity_pii and sessions from these two roles, and this line used to win
+-- silently (F-47). Migration 00754 resolves that in the schema: it REVOKEs
+-- both tables from both roles and grants cp_ops the one sessions column its
+-- retention DELETE filters by. This default stays so that every NEW table is
+-- readable without a migration remembering to say so; the withheld tables are
+-- named in test/integration/migrations so the list cannot grow silently.
 ALTER DEFAULT PRIVILEGES FOR ROLE cp_migrate IN SCHEMA public GRANT SELECT ON TABLES TO cp_readonly, cp_ops;
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 

@@ -12,7 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/auth/pgstore"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/identity"
 )
 
@@ -109,4 +112,50 @@ func TestIntegration_ThePurgeRefusesTooShortARetention(t *testing.T) {
 func newState(t *testing.T) string {
 	t.Helper()
 	return time.Now().UTC().Format("150405.000000000")
+}
+
+// Expired sessions are purged by the ops role, under the column grant 00754
+// leaves it (F-133, and the sessions half of F-47).
+//
+// The purge existed -- 00011 called it "an operations job" -- and nothing on
+// any tier ran it, so every session ever issued was kept forever. It runs
+// from cmd/api's retention loop now, as cp_ops, which after 00754 can read
+// exactly the column the DELETE filters by and not the token hash beside it.
+func TestIntegration_ExpiredSessionsArePurgedAsOps(t *testing.T) {
+	_, d, _ := newService(t)
+	ops := opsPool(t)
+	ctx := context.Background()
+
+	suffix := id.New[id.Any]().String()
+	u, err := accounts.NewRepository().CreateUser(ctx, d, "itest", "purge-"+suffix[len(suffix)-12:], nil)
+	require.NoError(t, err)
+	insert := func(tag string, expiresAt time.Time) string {
+		sid := id.New[id.Any]().String()
+		_, err := d.Exec(ctx, `INSERT INTO sessions (id, token_hash, user_id, actor_type, expires_at, auth_time)
+			VALUES ($1::uuid, $2, $3, 'USER', $4, now())`, sid, []byte("hash-"+tag+"-"+suffix), u.ID, expiresAt)
+		require.NoError(t, err)
+		return sid
+	}
+	old := insert("old", time.Now().Add(-5*24*time.Hour))
+	fresh := insert("fresh", time.Now().Add(-time.Hour))
+
+	n, err := pgstore.New().PurgeExpired(ctx, ops, 48*time.Hour)
+	require.NoError(t, err, "the purge cannot run as cp_ops; 00754's column grant is wrong")
+	assert.GreaterOrEqual(t, n, 1)
+
+	var count int
+	require.NoError(t, d.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE id = $1::uuid`, old).Scan(&count))
+	assert.Zero(t, count, "a session expired beyond the window survived the purge")
+	require.NoError(t, d.QueryRow(ctx, `SELECT count(*) FROM sessions WHERE id = $1::uuid`, fresh).Scan(&count))
+	assert.Equal(t, 1, count, "a session inside the window was purged")
+
+	// The housekeeping role reads the column it filters by and nothing else --
+	// so the probe references only that column, the way the DELETE does; a
+	// WHERE on id would need SELECT on id, which it deliberately lacks.
+	var when time.Time
+	require.NoError(t, ops.QueryRow(ctx, `SELECT expires_at FROM sessions WHERE expires_at < now() ORDER BY expires_at DESC LIMIT 1`).Scan(&when))
+	var hash []byte
+	err = ops.QueryRow(ctx, `SELECT token_hash FROM sessions WHERE id = $1::uuid`, fresh).Scan(&hash)
+	require.Error(t, err, "cp_ops read a session token hash")
+	assert.Contains(t, err.Error(), "permission denied")
 }

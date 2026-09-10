@@ -60,16 +60,20 @@ var opsHousekeeping = map[string]bool{
 //   - cp_readonly and cp_ops can SELECT everything and write nothing, EXCEPT
 //     where a table is named below as an exception with its reason.
 //
-// That last clause used to read "everything", flatly, and F-47 is the finding
-// that it contradicts migration 00010 -- which grants those two roles SELECT on
-// a named list that deliberately excludes `identity_pii` and `sessions`. Both
-// statements are in the tree; only the blanket ALTER DEFAULT PRIVILEGES has any
-// effect, so this test was asserting one side of a contradiction as if it were
-// the settled contract.
+// That last clause used to read "everything", flatly, and F-47 was the finding
+// that it contradicted migration 00010 -- which grants those two roles SELECT
+// on a named list that deliberately excludes `identity_pii` and `sessions`.
+// The blanket ALTER DEFAULT PRIVILEGES in the role bootstrap won silently, and
+// for a year the question could not be settled because nothing wrote the
+// encrypted columns, so whether reading them was an exposure had no answer.
 //
-// It is not settled and this test no longer pretends it is. The exception list
-// below records which tables are unresolved and why, so that a reader who
-// arrives at the grant question is told there IS a question.
+// internal/pii writes them now, as ciphertext under a key the database never
+// holds, and migration 00754 settles it the way 00010 meant: neither role can
+// read `identity_pii`; `cp_readonly` cannot read `sessions`; `cp_ops` can read
+// exactly the one column its retention DELETE filters by. The bootstrap's
+// default still grants every NEW table to both roles, so the exception below
+// is where a table is withheld on purpose, and this test is what keeps that
+// list from growing silently.
 func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 	requireEnv(t)
 	ctx := context.Background()
@@ -105,6 +109,11 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 		require.NoError(t, admin.QueryRow(ctx, `SELECT has_table_privilege($1, $2, $3)`, role, "public."+table, p).Scan(&ok))
 		return ok
 	}
+	colPriv := func(role, table, col, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx, `SELECT has_column_privilege($1, $2, $3, $4)`, role, "public."+table, col, p).Scan(&ok))
+		return ok
+	}
 	bookkeeping := map[string]bool{migrate.VersionTable: true, migrate.ChecksumTable: true}
 
 	for _, tbl := range tables {
@@ -118,32 +127,37 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 		// change on seventeen audited tables. "cp_readonly reads everything" is
 		// the rule below and this is the deliberate hole in it, so it is
 		// checked in the strong direction here instead of being excused.
-		// F-47: two deliberate statements about who may read these disagree, and
-		// the disagreement is the finding. The blanket default currently wins.
-		//
-		// The decision is downstream of a control that does not exist yet:
-		// `identity_pii`'s columns are encrypted at the application layer
-		// according to SECURITY.md, and that encryption is DESIGNED rather than
-		// built -- nothing in this repository writes those columns, so the table
-		// is empty in every deployment. Whether SELECT on it is an exposure
-		// depends on whether it holds ciphertext, which depends on the
-		// unimplemented encryption. `cp_ops` additionally NEEDS SELECT on
-		// `sessions` for retention, so the answer is not even the same for both.
-		//
-		// Asserted here as "currently readable, and that is an open question"
-		// rather than "readable, as intended". The moment anything writes
-		// identity_pii, TestPII_NothingWritesPersonalDataWhileTheGrantIsUnresolved
-		// fails and says what has to be decided first.
+		// F-47, resolved by 00754 once internal/pii made the columns ciphertext.
+		// Neither role has a use for identity_pii; cp_readonly has none for
+		// sessions; cp_ops keeps exactly what its retention DELETE needs --
+		// SELECT on expires_at -- and cannot read a token hash. Asserted in the
+		// strong direction, like cp_transition_key, because the bootstrap's
+		// blanket default would grant all of it back to a table that was
+		// recreated without this migration's REVOKE.
 		if tbl == "identity_pii" || tbl == "sessions" {
 			for _, ro := range []string{"cp_readonly", "cp_ops"} {
-				assert.True(t, priv(ro, tbl, "SELECT"),
-					"%s: %s lost SELECT. That may be right, but F-47 is the open question and this test is not where it gets decided", tbl, ro)
+				assert.False(t, priv(ro, tbl, "SELECT"),
+					"%s: %s can read personal data or session material; 00754 withholds it and F-47 says why", tbl, ro)
 				for _, p := range []string{"INSERT", "UPDATE", "TRUNCATE"} {
 					assert.False(t, priv(ro, tbl, p), "%s: %s must not %s", tbl, ro, p)
 				}
 			}
 			assert.False(t, priv("cp_app", tbl, "DELETE"), "%s: cp_app must never DELETE", tbl)
 			assert.True(t, priv("cp_app", tbl, "SELECT"), "%s: cp_app has no SELECT", tbl)
+			if tbl == "sessions" {
+				assert.True(t, priv("cp_ops", tbl, "DELETE"), "sessions: cp_ops performs retention cleanup here")
+				assert.True(t, colPriv("cp_ops", tbl, "expires_at", "SELECT"),
+					"sessions: cp_ops lost the one column its retention DELETE filters by; the purge now fails")
+				for _, col := range []string{"token_hash", "roles", "break_glass_until", "ip", "user_agent", "user_id"} {
+					assert.False(t, colPriv("cp_ops", tbl, col, "SELECT"),
+						"sessions: cp_ops can read %s; housekeeping needs expires_at and nothing else", col)
+				}
+				assert.False(t, priv("cp_readonly", tbl, "DELETE"), "sessions: cp_readonly must not DELETE")
+			} else {
+				for _, ro := range []string{"cp_readonly", "cp_ops"} {
+					assert.False(t, priv(ro, tbl, "DELETE"), "%s: %s must not DELETE", tbl, ro)
+				}
+			}
 			continue
 		}
 		if tbl == "cp_transition_key" {

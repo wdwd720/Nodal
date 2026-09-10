@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/nodal/controlplane/internal/auth/pgstore"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/identity"
@@ -87,7 +88,7 @@ func runOpsRetention(ctx context.Context, cfg *config.Config, lookup func(string
 	days := cfg.Retention.LoginAttemptDays
 	if days <= 0 {
 		log.Warn("login attempt purging is off: CP_RETENTION_LOGIN_ATTEMPT_DAYS is not positive",
-			"consequence", "plaintext OIDC nonces and PKCE verifiers are kept indefinitely")
+			"consequence", "plaintext OIDC nonces and PKCE verifiers, and every expired session, are kept indefinitely")
 	}
 
 	url, err := config.NewResolver(cfg.Env, lookup).Resolve(ctx, cfg.Database.OpsURL)
@@ -122,6 +123,7 @@ func runOpsRetention(ctx context.Context, cfg *config.Config, lookup func(string
 	for {
 		if days > 0 {
 			purgeLoginAttemptsOnce(ctx, pool, retention, log)
+			purgeSessionsOnce(ctx, pool, retention, log)
 		}
 		securityEventPartitionsOnce(ctx, pool, cfg.Retention.SecurityEventDays, log)
 		select {
@@ -201,5 +203,30 @@ func purgeLoginAttemptsOnce(ctx context.Context, pool *db.DB, retention time.Dur
 	}
 	if n > 0 {
 		log.InfoContext(ctx, "login attempts purged", "rows", n, "retention", retention)
+	}
+}
+
+// purgeSessionsOnce deletes sessions whose expiry passed more than the
+// login-attempt window ago.
+//
+// The job existed -- migration 00011 granted cp_ops DELETE on sessions and
+// called the purge "an operations job (auth/pgstore.PurgeExpired)" -- and
+// nothing on any tier called it (F-133). So every session ever issued, with
+// its token hash, roles, IP and user agent, was kept forever, on a database
+// whose ceiling halts every financial action when it fills.
+//
+// The login-attempt window is reused rather than a new variable added: both
+// are transient authentication rows whose only afterlife is forensic, and one
+// number for "how long after expiry does an auth row survive" is easier to
+// reason about than two. Under 00754, cp_ops holds SELECT on expires_at and
+// nothing else on this table, which is exactly what the DELETE filters by.
+func purgeSessionsOnce(ctx context.Context, pool *db.DB, retention time.Duration, log *slog.Logger) {
+	n, err := pgstore.New().PurgeExpired(ctx, pool, retention)
+	if err != nil {
+		log.ErrorContext(ctx, "session purge failed", "error", err.Error())
+		return
+	}
+	if n > 0 {
+		log.InfoContext(ctx, "expired sessions purged", "count", n, "retention", retention)
 	}
 }
