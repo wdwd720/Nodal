@@ -171,6 +171,21 @@ func (f *fixture) providerEvent(eventID string) (status, errText *string, found 
 	return &s, e, true
 }
 
+// suppressedInLatest reads the suppression count off the most recent row of a
+// kind: the number of rejections that row stands in for.
+func (f *fixture) suppressedInLatest(kind string) int {
+	f.t.Helper()
+	var n *int
+	require.NoError(f.t, testDB.QueryRow(context.Background(),
+		`SELECT (detail->>'suppressed_since_last')::int FROM security_events
+		  WHERE kind = $1 AND detail->>'provider' = $2 ORDER BY occurred_at DESC LIMIT 1`,
+		kind, f.provider.Name()).Scan(&n))
+	if n == nil {
+		return 0
+	}
+	return *n
+}
+
 func (f *fixture) securityEvents(kind string) int {
 	f.t.Helper()
 	var n int
@@ -245,10 +260,35 @@ func TestIntegration_ForgedSignature(t *testing.T) {
 	require.Equal(t, 0, f.archive.Len(), "nothing archived before verification")
 	require.Equal(t, int32(0), f.disp.calls.Load())
 
-	// Missing header entirely.
+	// A second rejection inside the same window is COUNTED, not written.
+	//
+	// This used to assert 2, and asserting it was the defect: the route is
+	// unauthenticated, security_events is append-only with no DELETE grant to
+	// any role, and the deployment's database ceiling halts every financial
+	// action when it is reached. So an anonymous caller chose how many
+	// permanent rows the service wrote (F-105).
+	status, _ = f.deliver(raw, http.Header{})
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Equal(t, 1, f.securityEvents(webhook.SecurityEventSignatureFailed),
+		"a second rejection in the same window wrote a second row")
+
+	// The refusal is unchanged either way: suppressing the row never suppresses
+	// the rejection.
+	for i := 0; i < 20; i++ {
+		status, outcome = f.deliver(raw, http.Header{})
+		require.Equal(t, http.StatusBadRequest, status)
+		require.Equal(t, "rejected", outcome)
+	}
+	require.Equal(t, 1, f.securityEvents(webhook.SecurityEventSignatureFailed))
+
+	// The next window writes again, and the row carries what it stood in for,
+	// which is strictly more than 21 identical rows would have said.
+	f.clk.Advance(2 * time.Minute)
 	status, _ = f.deliver(raw, http.Header{})
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Equal(t, 2, f.securityEvents(webhook.SecurityEventSignatureFailed))
+	require.Equal(t, 21, f.suppressedInLatest(webhook.SecurityEventSignatureFailed),
+		"the row must say how many rejections it stands for")
 }
 
 func TestIntegration_StaleTimestamp(t *testing.T) {
@@ -258,9 +298,13 @@ func TestIntegration_StaleTimestamp(t *testing.T) {
 	status, _ := f.deliver(raw, f.provider.Sign(raw, f.clk.Now().Add(-6*time.Minute)))
 	require.Equal(t, http.StatusBadRequest, status)
 	require.Equal(t, 1, f.securityEvents(webhook.SecurityEventTimestampStale))
+	// A different KIND has its own budget, so a flood of one does not hide the
+	// other -- which is why the bound is per kind rather than per handler.
+	require.Equal(t, 0, f.securityEvents(webhook.SecurityEventSignatureFailed))
 	status, _ = f.deliver(raw, f.provider.Sign(raw, f.clk.Now().Add(6*time.Minute)))
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Equal(t, 2, f.securityEvents(webhook.SecurityEventTimestampStale))
+	require.Equal(t, 1, f.securityEvents(webhook.SecurityEventTimestampStale),
+		"the second stale delivery in the same window is counted, not written")
 	_, _, found := f.providerEvent(eventID)
 	require.False(t, found)
 	require.Equal(t, int32(0), f.disp.calls.Load())

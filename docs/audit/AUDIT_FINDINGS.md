@@ -128,6 +128,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-102 | P1 | NEW | fixed | Two write routes scoped through the read-grade helper, so one ADMIN session could cancel any customer's intent and move any seller's product; the guard that exists to prevent it matched one helper name of four |
 | F-103 | P1 | NEW | fixed | Five configuration rules permitted what the deployment cannot survive: live provider credentials outside PROD, a trusted-proxy list that trusts everyone, a retention class with no floor, a legal policy the binary refuses to boot on, and a TLS flag nothing read |
 | F-104 | P2 | NEW | fixed | Three controls reported something other than what they enforced: a secret redactor that never satisfied the interface it named, a step-up window three times the one applied, and a ceiling test that passed because a different guard fired |
+| F-105 | P1 | NEW | part | An unauthenticated caller chose how many permanent, undeletable rows the service wrote, and the deployment's database ceiling halts every financial action when it is reached |
 
 ---
 
@@ -4988,6 +4989,93 @@ test fails against the old signature with the plain value printed in full, and
 passes against the new one. The step-up test builds a server with a tightened
 window and compares the reported instant to it, with a control that an
 unconfigured deployment still reports the ceiling rather than zero.
+
+## F-105 · An unauthenticated caller chose how much of the database to consume · NEW · P1 · PART
+
+**Found by** an independent audit of the abuse and resource-exhaustion surface,
+reasoning from the deployment (one Render free instance, Neon free tier) rather
+than from the code alone.
+
+Five facts, each checked:
+
+1. Every rejected webhook delivery writes a `security_events` row, outside any
+   transaction, unconditionally — `internal/webhook/handler.go`, and the
+   function's own comment says it "is the only persistence a rejected delivery
+   leaves behind".
+2. The route is **unauthenticated**. Rejection is what happens when the
+   signature does not verify, so producing one requires no credential.
+3. `security_events` is append-only by trigger (`security_events_immutable`
+   BEFORE UPDATE OR DELETE → `forbid_mutation`), and **no role holds DELETE**.
+   `cp_app` has SELECT and INSERT. Nothing in the tree deletes from it.
+   `CP_RETENTION_SECURITY_AUDIT_DAYS` exists and feeds a *checkpoint* retention
+   option, not a purge of this table.
+4. `render.yaml` deploys **exactly one service**, a web service. There is no
+   worker and no cron, so nothing that might have pruned it runs at all.
+5. `capacity.Admit` refuses **every** action — opening an account and buying
+   Credits alike — once `pg_database_size` reaches
+   `MaxDatabaseBytes × DatabaseHeadroom`.
+
+So an anonymous caller could write permanent rows at request rate until the
+capacity guard halted the entire economy, with **no remediation path**: the
+rows cannot be deleted by anyone, and the Neon free tier suspends the project
+at its own ceiling. The audit's arithmetic put it at roughly 400,000 requests,
+which the shared 120/min command budget allows in about two days from one
+address and hours from a handful.
+
+`GET /v1/auth/login` has the same shape through `login_attempts`: also
+unauthenticated, also writing a row before anything else happens, and its purge
+lives in `cmd/audit-worker`, which this deployment does not run.
+
+### What is fixed
+
+**The row count is now bounded by the clock, not by traffic.** One row per kind
+per minute, carrying `suppressed_since_last` — the number of rejections it
+stands in for. That is strictly more informative than N identical rows, and it
+makes the rate a property of time.
+
+Per KIND rather than per handler, so a flood of forged signatures cannot hide
+the one stale timestamp that arrived during it. The kind vocabulary is four
+constants, so the map cannot grow with traffic — a bound that leaked memory
+instead of rows would not be a fix.
+
+**The webhook route no longer shares a budget with the admin plane.** It fell
+through to the Command bucket at 120/min. It is now on the unauthenticated
+budget, which is the strictest, and which is the right home for it: a
+provider's real delivery volume is a few a minute, and a 429 makes it retry
+rather than lose the event.
+
+**Two existing tests asserted the defect** and have been corrected. Both drove
+two rejections and required two rows. They now require one, plus the
+suppression count on the next window's row, plus the control that twenty
+further deliveries are still each REFUSED — suppressing the row never
+suppresses the rejection.
+
+### What remains, and why it is not closed
+
+**`security_events` is still unprunable.** The bound converts "hours,
+unattended" into "months, loudly", which is a large improvement and not a
+complete one: any nonzero steady rate eventually fills a 500 MB database when
+nothing can ever remove a row.
+
+The complete fix is the one ADR-0020 already decided for append-only tables:
+retention is **partition detachment, never row deletion under a disabled
+trigger**. `security_events` is not partitioned, so that is a migration that
+converts it, plus the detachment job and the tests that prove a detached
+partition takes its rows with it and leaves the chain intact. It is deliberately
+not being written at the end of this batch, for the reason F-42 records about
+changes to mechanisms many things depend on.
+
+`login_attempts` has a purge that this deployment never runs — the same class,
+recorded here rather than fixed, because the answer is either a cron on the
+Render blueprint or a ticker inside `cmd/api` the way `runCreditSettlement`
+already is, and that is a deployment decision with its own evidence.
+
+**Evidence.** STATIC_PROOF for the exhaustion path — the five facts above were
+each read, not inferred, and no flood was run against the deployed service.
+REAL_DB_INTEGRATION for the fix: the webhook suite drives real deliveries
+against a real database and now observes one row where it observed two, the
+suppression count on the next window's row, and twenty further rejections still
+answered 400.
 
 ## Findings deliberately NOT raised
 

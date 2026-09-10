@@ -374,7 +374,10 @@ func corsPolicy(origins []string) func(http.Handler) http.Handler {
 type RateLimits struct {
 	// General applies to every authenticated request.
 	General *ratelimit.Limiter
-	// Auth applies to the unauthenticated login endpoints.
+	// Auth applies to the unauthenticated endpoints: the login flow and the
+	// provider webhooks. Both are reachable without a session, so their budget
+	// is the one that decides how much work an anonymous caller can make this
+	// service do.
 	Auth *ratelimit.Limiter
 	// Quote applies to quote previews, which are the most provider-expensive
 	// read.
@@ -419,6 +422,15 @@ func rateLimit(l RateLimits, trusted []*net.IPNet) func(http.Handler) http.Handl
 		p := r.URL.Path
 		switch {
 		case l.Auth != nil && strings.Contains(p, "/auth/"):
+			return l.Auth
+		// A webhook is unauthenticated -- rejection is what happens when the
+		// signature does not verify -- and it shared the Command budget with
+		// every admin command, at 120/min. Every rejected delivery wrote a
+		// durable security_events row that no role can ever delete, on a
+		// deployment whose database ceiling halts every financial action when
+		// it is reached (F-105). A provider's real delivery volume is a few a
+		// minute, and a 429 makes it retry rather than lose the event.
+		case l.Auth != nil && strings.HasPrefix(p, "/v1/webhooks/"):
 			return l.Auth
 		case l.Quote != nil && strings.HasSuffix(p, "/quotes/preview"):
 			return l.Quote

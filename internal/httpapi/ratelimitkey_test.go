@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -64,4 +66,45 @@ func TestRateLimitKeyDistinguishesCallersBehindAProxy(t *testing.T) {
 		SubjectID: "01a0754e-1111-7000-8000-000000000001", ActorType: security.ActorUser,
 	}))
 	assert.Equal(t, "sub:01a0754e-1111-7000-8000-000000000001", behind(r))
+}
+
+// The unauthenticated routes share the strict budget (F-105).
+//
+// A webhook used to fall through to the Command bucket, at 120/min, alongside
+// every admin command. It is reachable without a session -- rejection is what
+// happens when the signature does not verify -- and every rejected delivery
+// wrote a durable security_events row that no role can ever delete, on a
+// deployment whose database ceiling halts every financial action when it is
+// reached. A provider's real delivery volume is a few a minute, and a 429 makes
+// it retry rather than lose the event.
+func TestRateLimit_TheUnauthenticatedRoutesShareTheStrictBudget(t *testing.T) {
+	t.Parallel()
+	now := func() time.Time { return time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC) }
+	store := ratelimit.NewMemoryStore()
+	auth, err := ratelimit.NewLimiter("auth", store, ratelimit.Limit{Requests: 1, Window: time.Minute}, now, false)
+	require.NoError(t, err)
+	command, err := ratelimit.NewLimiter("command", store, ratelimit.Limit{Requests: 1000, Window: time.Minute}, now, false)
+	require.NoError(t, err)
+
+	h := rateLimit(RateLimits{Auth: auth, Command: command}, nil)(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+	)
+
+	send := func(path string) int {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.RemoteAddr = "203.0.113.9:1234"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	// One request exhausts the strict budget; the second webhook is refused,
+	// which it would not be on the 1000-wide command budget.
+	require.Equal(t, http.StatusOK, send("/v1/webhooks/stripe_credit"))
+	assert.Equal(t, http.StatusTooManyRequests, send("/v1/webhooks/stripe_credit"),
+		"a webhook is drawing on the command budget, not the unauthenticated one")
+
+	// The control: an ordinary command is unaffected, so the change narrowed
+	// the webhook rather than everything.
+	assert.Equal(t, http.StatusOK, send("/v1/intents"))
+	assert.Equal(t, http.StatusOK, send("/v1/intents"))
 }
