@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -279,4 +281,38 @@ func FuzzParseSecretRef(f *testing.F) {
 			_ = SecretRef(s).ValidateFor(env)
 		}
 	})
+}
+
+// A SecretRef logged directly is redacted, whatever key it is logged under
+// (F-104).
+//
+// This is the test that was missing, and its absence is why the control could
+// be inert for as long as it was: LogValue returned fmt.Stringer where
+// slog.LogValuer requires slog.Value, so SecretRef never implemented the
+// interface and slog never called the method. Nothing failed, because nothing
+// asked.
+//
+// The key here is deliberately one no redaction denylist would recognise. Under
+// a key containing "secret" or "password" the value is masked by the logger's
+// own key filter, which is a different control and would make this pass for the
+// wrong reason.
+func TestSecretRef_IsRedactedWhenLoggedUnderAnyKey(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	const plain = "hunter2-the-live-password"
+	log.Info("startup", "archive_ref", SecretRef(plain))
+	log.Info("startup", "anything_at_all", SecretRef(plain))
+
+	out := buf.String()
+	assert.NotContains(t, out, plain, "a plain SecretRef printed in the clear")
+	assert.Contains(t, out, RedactedMarker)
+
+	// A reference names a location rather than a value, and locations are safe
+	// to log -- that is the distinction Redacted draws and this must not lose.
+	buf.Reset()
+	log.Info("startup", "archive_ref", SecretRef("env://CP_SECRET_ARCHIVE_KEY"))
+	assert.Contains(t, buf.String(), "env://CP_SECRET_ARCHIVE_KEY",
+		"redacting a reference as well would make the logs useless for saying which secret was read")
 }

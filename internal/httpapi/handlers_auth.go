@@ -132,7 +132,7 @@ func (s *Server) GetMe(ctx context.Context, _ api.GetMeRequestObject) (api.GetMe
 	if !ok {
 		return nil, errs.New(errs.CodeUnauthenticated, "authentication is required")
 	}
-	return api.GetMe200JSONResponse(toAPIPrincipal(p)), nil
+	return api.GetMe200JSONResponse(toAPIPrincipal(p, effectiveStepUpMaxAge(s.opts.StepUpMaxAge))), nil
 }
 
 // GetSessions lists the caller's own sessions (PART 192 device listing).

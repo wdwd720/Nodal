@@ -127,6 +127,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-101 | P1 | NEW | fixed | One transition row licenses a second, unrelated edge, because the edge encoding's delimiters are in band and a state name is unconstrained text |
 | F-102 | P1 | NEW | fixed | Two write routes scoped through the read-grade helper, so one ADMIN session could cancel any customer's intent and move any seller's product; the guard that exists to prevent it matched one helper name of four |
 | F-103 | P1 | NEW | fixed | Five configuration rules permitted what the deployment cannot survive: live provider credentials outside PROD, a trusted-proxy list that trusts everyone, a retention class with no floor, a legal policy the binary refuses to boot on, and a TLS flag nothing read |
+| F-104 | P2 | NEW | fixed | Three controls reported something other than what they enforced: a secret redactor that never satisfied the interface it named, a step-up window three times the one applied, and a ceiling test that passed because a different guard fired |
 
 ---
 
@@ -4899,6 +4900,94 @@ Correcting the fixtures was itself informative: several tests built "the
 production configuration, but DEV" by overwriting `CP_ENV` alone, which left
 fourteen providers on live credentials. That is the same mistake the rule now
 refuses, made inside the suite that was supposed to catch it.
+
+## F-104 · Three controls that reported something other than what they enforced · NEW · P2 · FIXED
+
+**Found by** two independent audits — one of observability as a security
+surface, one of test-suite integrity — arriving at the same shape from
+different directions.
+
+### 1. A secret redactor that never satisfied the interface it named
+
+`internal/config/secret.go` carried:
+
+```go
+// LogValue implements slog.LogValuer so that a SecretRef logged directly is
+// always redacted.
+func (r SecretRef) LogValue() fmt.Stringer { return redactedStringer(r.Redacted()) }
+```
+
+`slog.LogValuer` requires `LogValue() slog.Value`. The comment's claim is
+false: `SecretRef` did not implement the interface, `slog` never called the
+method, and the type fell back to being formatted as the string it is.
+
+Observed, by logging a plain `SecretRef` under two ordinary keys:
+
+```
+{"level":"INFO","msg":"startup","archive_ref":"hunter2-the-live-password"}
+{"level":"INFO","msg":"startup","anything_at_all":"hunter2-the-live-password"}
+```
+
+Under a key the logger's own denylist recognises — one containing "secret",
+"password", "key" — the value was masked anyway, by a different control. That
+is what kept this invisible, and it is exactly why the regression test logs
+under `anything_at_all`.
+
+There is no evidence of a live leak: `Redacted()` has no non-test callers, and
+the two near-miss sites log `*_ref` values, which are references and are safe
+by design. The defect is that the guarantee did not exist, not that it was
+breached.
+
+**Fix.** The correct signature, plus `var _ slog.LogValuer = SecretRef("")` —
+the compile-time assertion `internal/id` already makes for the same reason. A
+wrong signature now fails to build rather than compiling quietly into a control
+that does nothing.
+
+### 2. A step-up window three times the one enforced
+
+`authorize` uses `effectiveStepUpMaxAge(configured)`, the MINIMUM of the
+deployment's `CP_AUTH_STEP_UP_MAX_AGE` and the package ceiling — the F-89 fix,
+so a deployment can only tighten. `toAPIPrincipal` built `step_up_valid_until`
+from the ceiling alone.
+
+The deployed value is 5 minutes. So `GET /v1/me` told an operator their step-up
+was good for fifteen minutes while the boundary refused after five. The
+operations that gate on it are the capability-gate ceremony and the admin plane
+— the three-principal ritual that decides whether this deployment may sell
+Credits — and a client that trusts the field submits an approval it is about
+to be refused for.
+
+F-89 fixed the enforcement and left the reporting one call site behind.
+
+### 3. A ceiling test that passed because a different guard fired
+
+`TestBudgetWithNoCeilingIsRefused` asserted *"a negative ceiling is a typo, not
+a policy"* with `Budget{MaxAccounts: -1}`. `NewGuard` checks, in order: nil
+clock; then whether **all four** ceilings are `<= 0`; then the per-field
+negative loop. With one field at `-1` and the rest at their zero values, all
+four are `<= 0`, so the no-ceiling rule returns first and the loop the
+assertion names had never run in any test — the register's own recurring
+class, "a test that passes because a different guard fired has not seen the
+guard it names".
+
+**The consequence reported to me did not follow, and that is worth recording.**
+The audit that found it concluded `MaxAtRiskMinor: -1` would therefore be
+accepted and the money-at-risk ceiling silently disappear. Checked: it would
+not. With any other ceiling positive the no-ceiling rule does not fire and the
+loop refuses it; with none positive the no-ceiling rule refuses it. The loop is
+reachable and correct. What was wrong was only the test — which is a real
+defect, because a control nothing exercises is a claim, but it is a smaller one
+than reported.
+
+**Fix.** Four cases, one per field, each with a positive sibling so the
+no-ceiling rule cannot answer first, and each asserting the message so the
+guard that spoke is the guard being tested.
+
+**Evidence.** STATIC_PROOF for the fixes; the secret leak was observed — the
+test fails against the old signature with the plain value printed in full, and
+passes against the new one. The step-up test builds a server with a tightened
+window and compares the reported instant to it, with a control that an
+unconfigured deployment still reports the ceiling rather than zero.
 
 ## Findings deliberately NOT raised
 

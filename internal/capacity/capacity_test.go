@@ -96,8 +96,29 @@ func TestBudgetWithNoCeilingIsRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "guards nothing")
 
-	_, err = NewGuard(Budget{MaxAccounts: -1}, at("2026-09-09T12:00:00Z"))
-	require.Error(t, err, "a negative ceiling is a typo, not a policy")
+	// A negative ceiling is a typo, not a policy -- and this used to be
+	// asserted with Budget{MaxAccounts: -1}, where every other ceiling is zero.
+	// That budget fails the no-ceiling rule ABOVE, which returns first, so the
+	// loop this line names had never run in any test: a test passing because a
+	// different guard fired has not seen the guard it names (F-104).
+	//
+	// Every field, each with a positive sibling so the no-ceiling rule cannot
+	// answer first, and each checked by message so the right guard is the one
+	// that spoke.
+	for _, tc := range []struct {
+		name   string
+		budget Budget
+	}{
+		{"MaxAccounts", Budget{MaxAccounts: -1, MaxPurchasesPerDay: 10}},
+		{"MaxPurchasesPerDay", Budget{MaxAccounts: 10, MaxPurchasesPerDay: -1}},
+		{"MaxAtRiskMinor", Budget{MaxAccounts: 10, MaxAtRiskMinor: -1}},
+		{"MaxDatabaseBytes", Budget{MaxAccounts: 10, MaxDatabaseBytes: -1}},
+	} {
+		_, err = NewGuard(tc.budget, at("2026-09-09T12:00:00Z"))
+		require.Error(t, err, "a negative %s was accepted", tc.name)
+		assert.Contains(t, err.Error(), "capacity: "+tc.name+" is negative",
+			"%s was refused by a different rule than the one being tested", tc.name)
+	}
 
 	_, err = NewGuard(LaunchTier(), nil)
 	require.Error(t, err, "no clock")

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"reflect"
 	"sort"
@@ -375,4 +376,48 @@ func TestOperationPolicyCountMatchesRouteCount(t *testing.T) {
 	assert.Equal(t, len(generatedOperations()), len(mountedRoutes(t, h.server)),
 		"every generated operation must be mounted exactly once")
 	assert.Equal(t, len(generatedOperations()), len(operationPolicies))
+}
+
+// The window /v1/me reports is the window authorize enforces (F-104).
+//
+// They used to disagree. authorize takes effectiveStepUpMaxAge(configured),
+// which is the MINIMUM of the deployment's CP_AUTH_STEP_UP_MAX_AGE and the
+// package's own ceiling; the response was built from the ceiling alone. Under
+// the deployed 5m the API told an operator their step-up was good for fifteen
+// minutes while the boundary refused after five -- and the operations it gates
+// are the gate ceremony and the admin plane, where a client that trusts the
+// field submits an approval it is about to be refused for.
+func TestStepUp_TheReportedWindowIsTheEnforcedOne(t *testing.T) {
+	t.Parallel()
+	const configured = 5 * time.Minute
+	require.Less(t, configured, stepUpMaxAge, "the fixture must actually tighten, or this proves nothing")
+
+	h := newHarness(t)
+	srv, err := New(Options{
+		Env: h.server.opts.Env, Clock: h.server.clk, StepUpMaxAge: configured,
+		Authenticator: h.server.opts.Authenticator, Ports: h.ports.ports(),
+	})
+	require.NoError(t, err)
+	h.server = srv
+
+	p := customerPrincipal()
+	h.as(&p)
+	res := h.do(http.MethodGet, "/v1/me", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+
+	var out api.Principal
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+	require.NotNil(t, out.StepUpValidUntil)
+	assert.Equal(t, p.AuthTime.Add(configured).UTC(), out.StepUpValidUntil.UTC(),
+		"the reported window is the package ceiling, not the tighter one the boundary applies")
+
+	// The control: with nothing configured, the ceiling is what is reported and
+	// what is enforced, so the field does not silently become zero.
+	h2 := newHarness(t)
+	h2.as(&p)
+	var plain api.Principal
+	r2 := h2.do(http.MethodGet, "/v1/me", nil)
+	require.NoError(t, json.Unmarshal(r2.Body.Bytes(), &plain))
+	require.NotNil(t, plain.StepUpValidUntil)
+	assert.Equal(t, p.AuthTime.Add(stepUpMaxAge).UTC(), plain.StepUpValidUntil.UTC())
 }

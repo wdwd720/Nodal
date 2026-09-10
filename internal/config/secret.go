@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -187,11 +188,19 @@ func (r SecretRef) Redacted() SecretRef {
 
 // LogValue implements slog.LogValuer so that a SecretRef logged directly is
 // always redacted.
-func (r SecretRef) LogValue() fmt.Stringer { return redactedStringer(r.Redacted()) }
+//
+// The return type is load-bearing and used to be wrong. slog.LogValuer requires
+// LogValue() slog.Value; this returned fmt.Stringer, so SecretRef did not
+// implement the interface, slog never called this method, and a SecretRef
+// logged under any key the redaction denylist does not recognise printed its
+// plain value in full. The comment above asserted the opposite (F-104).
+//
+// The compile-time assertion below is the actual guarantee. internal/id makes
+// the same one for the same reason, and it is what a wrong signature now fails
+// against rather than compiling quietly into a control that does nothing.
+func (r SecretRef) LogValue() slog.Value { return slog.StringValue(string(r.Redacted())) }
 
-type redactedStringer string
-
-func (s redactedStringer) String() string { return string(s) }
+var _ slog.LogValuer = SecretRef("")
 
 // Resolver turns a SecretRef into its value. Implementations return
 // ErrUnsupportedSecretRef (wrapped) for schemes they do not handle so that a

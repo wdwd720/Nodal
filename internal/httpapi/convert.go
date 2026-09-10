@@ -127,7 +127,16 @@ func toAPIAccounts(in []accounts.Account) []api.Account {
 	return out
 }
 
-func toAPIPrincipal(p security.Principal) api.Principal {
+// stepUpWindow is the window the caller is TOLD about, and it must be the one
+// authorize enforces.
+//
+// It used to be the package constant while authorize used
+// effectiveStepUpMaxAge(configured), which takes the minimum. Under the
+// deployed CP_AUTH_STEP_UP_MAX_AGE=5m the API told an operator their step-up
+// was good for fifteen minutes and the boundary refused after five -- during a
+// three-principal gate ceremony, a control misreporting its own window
+// (F-104).
+func toAPIPrincipal(p security.Principal, stepUpWindow time.Duration) api.Principal {
 	roles := make([]string, 0, len(p.Roles))
 	for _, r := range p.Roles {
 		roles = append(roles, string(r))
@@ -155,7 +164,7 @@ func toAPIPrincipal(p security.Principal) api.Principal {
 		Amr:        amr,
 	}
 	if security.HasStrongAMR(p.AMR) && !p.AuthTime.IsZero() {
-		until := p.AuthTime.Add(stepUpMaxAge).UTC()
+		until := p.AuthTime.Add(stepUpWindow).UTC()
 		out.StepUpValidUntil = &until
 	}
 	return out
