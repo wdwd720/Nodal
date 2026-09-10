@@ -375,17 +375,48 @@ func (f *fixture) ensureEnvelope(t *testing.T, agentID AgentID) string {
 // registers it with the verifier. It must be a real row: the
 // agent_lifecycle_transitions.approval_id foreign key means a promotion can
 // never cite an approval that does not exist.
+// approveFor creates a dual-controlled approval the way one is really created:
+// proposed by one principal, then moved to APPROVED by another, with the
+// transition row that move requires.
+//
+// It used to INSERT the row directly as APPROVED. That is precisely the forgery
+// F-42 records and F-121 closed -- two-person control with no proposal and no
+// second person -- and migration 00735 now refuses it at INSERT, which is how
+// this fixture was found. internal/admin's own comment had already named the
+// shape: "a fixture that has to commit the exploit to reach the code is a
+// fixture that should not exist."
+//
+// It is written in SQL rather than through internal/admin because the authority
+// boundary forbids this tree from importing it (test/security asserts that), so
+// the honest path has to be spelled out here.
 func (f *fixture) approveFor(agentID AgentID) string {
 	f.t.Helper()
 	approvalID := newUUID()
-	_, err := testDB.Exec(context.Background(),
+	ctx := context.Background()
+	_, err := testDB.Exec(ctx,
 		`INSERT INTO admin_actions (id, kind, target_type, target_id, params_hash, reason, requires_dual,
-		          status, proposed_by_user_id, proposer_step_up_at, approved_by_user_id, approved_at,
-		          approver_step_up_at, expires_at)
+		          status, proposed_by_user_id, proposer_step_up_at, expires_at)
 		 VALUES ($1, $2, 'agent', $3, $4, 'integration test promotion approval', true,
-		         'APPROVED', $5, now(), $6, now(), now(), now() + interval '1 hour')`,
-		approvalID, ApprovalKindPromote, agentID.String(), bytes32("params"), f.operatorID, f.approverID)
+		         'PROPOSED', $5, now(), now() + interval '1 hour')`,
+		approvalID, ApprovalKindPromote, agentID.String(), bytes32("params"), f.operatorID)
 	require.NoError(f.t, err)
+
+	// The decision, by a different principal, with its transition row. The
+	// row and the UPDATE are one transaction because AU001 binds them.
+	require.NoError(f.t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 0},
+		func(ctx context.Context, tx pgx.Tx) error {
+			if _, terr := tx.Exec(ctx,
+				`INSERT INTO admin_action_transitions (id, action_id, from_status, to_status, actor_id, note)
+				 VALUES ($1, $2, 'PROPOSED', 'APPROVED', $3, 'integration test approval')`,
+				newUUID(), approvalID, f.approverID); terr != nil {
+				return terr
+			}
+			_, uerr := tx.Exec(ctx,
+				`UPDATE admin_actions SET status = 'APPROVED', approved_by_user_id = $2,
+				        approved_at = now(), approver_step_up_at = now()
+				  WHERE id = $1`, approvalID, f.approverID)
+			return uerr
+		}))
 	f.approvals.byID[approvalID] = Approval{
 		ID: approvalID, Kind: ApprovalKindPromote, TargetID: agentID.String(),
 		ProposedBy: f.operatorID, ApprovedBy: f.approverID,

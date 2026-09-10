@@ -291,10 +291,38 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 	if err != nil {
 		return Request{}, err
 	}
+	// A payout is submitted to the provider it was claimed for.
+	//
+	// providerName is a caller argument and was never compared to the persisted
+	// r.Provider, and the re-entry branch did not overwrite it either. So
+	// Submit(id, "providerB") on a request already claimed for providerA called
+	// providerB with providerA's idempotency key: two providers, one key, two
+	// disbursements, and neither of them able to dedupe the other (F-115).
+	if err := s.providerMatches(ctx, d, requestID, providerName); err != nil {
+		return Request{}, err
+	}
 
 	// Phase one: claim the request and persist the key, in its own committed
 	// transaction.
-	var req Request
+	//
+	// claimed says whether THIS call did the claiming, and it exists because
+	// the state does not answer that question. The early return below used to
+	// leave `req` in whatever state it found, and phase two then guarded on
+	// `req.State != StateSubmitted` -- which sent PROVIDER_PENDING and
+	// PAYOUT_STATUS_UNKNOWN home and let SUBMITTED fall straight through to the
+	// provider call. SUBMITTED is precisely what a crash between this commit
+	// and applyProviderResult leaves behind, so the branch whose comment says
+	// "do not resubmit" was the one that resubmitted (F-115).
+	//
+	// Two concurrent Submits reached it the same way: the second blocks on
+	// FOR UPDATE, is released by the first's COMMIT, re-reads SUBMITTED under
+	// READ COMMITTED, and returns here -- with the row lock already gone,
+	// because phase two is outside any transaction. Nothing serialised the
+	// external call.
+	var (
+		req     Request
+		claimed bool
+	)
 	err = d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		r, err := s.forUpdate(ctx, tx, requestID)
 		if err != nil {
@@ -321,13 +349,13 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 			return err
 		}
 		moved.Provider, moved.ProviderIdempotencyKey = providerName, key
-		req = moved
+		req, claimed = moved, true
 		return nil
 	})
 	if err != nil {
 		return Request{}, err
 	}
-	if req.State != StateSubmitted {
+	if !claimed {
 		return req, nil
 	}
 
@@ -608,6 +636,23 @@ func (s *Service) ResolveManualReview(
 		}
 		return s.transition(ctx, tx, req.ID, StateVerified, reason, "")
 	}
+}
+
+// providerMatches refuses a provider that is not the one this payout was
+// already claimed for. A request with no provider recorded has not been
+// claimed and may go to any registered one.
+func (s *Service) providerMatches(ctx context.Context, d *db.DB, id RequestID, providerName string) error {
+	var recorded *string
+	if err := d.QueryRow(ctx, `SELECT provider FROM payout_requests WHERE id = $1`, id).Scan(&recorded); err != nil {
+		return mapError(err)
+	}
+	if recorded == nil || *recorded == "" || *recorded == providerName {
+		return nil
+	}
+	return errs.Newf(errs.CodeConflict,
+		"this payout was claimed for provider %q and cannot be submitted to %q; its idempotency key belongs to the first",
+		*recorded, providerName).
+		WithField("payout_id", id.String())
 }
 
 // everSubmitted reports whether the request has ever been in a state that

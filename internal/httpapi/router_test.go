@@ -1332,7 +1332,7 @@ func TestEventStream_RealStreamPackageOverARealConnection(t *testing.T) {
 	h := newHarness(t)
 	p := customerPrincipal()
 	h.as(&p)
-	h.ports.stream = stream.NewHandler(hub, 60*time.Millisecond)
+	h.ports.stream = stream.NewHandler(hub, 60*time.Millisecond, nil)
 	srv, err := New(Options{
 		Env: config.EnvTest, Clock: clock.NewFake(testNow),
 		Authenticator: h.server.opts.Authenticator, Ports: h.ports.ports(),

@@ -201,8 +201,9 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		// guessing.
 		Orders:   execution.NewRepository(clk, outbox, writer),
 		Attempts: execution.NewAttemptRepository(clk, outbox, writer),
-		Metrics:  reconciliation.NoopMetrics(),
-		Logger:   log,
+		// Real instruments; see cmd/api/wire.go for why (F-118).
+		Metrics: financialMetrics(log),
+		Logger:  log,
 	})
 	if err != nil {
 		d.Close()

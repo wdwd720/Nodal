@@ -1111,3 +1111,89 @@ func TestIntegration_APaidPayoutParkedForReviewCannotBeCancelled(t *testing.T) {
 		"the value came back to the user while the provider may already have sent it")
 	assert.Equal(t, "400", f.balance(ledger.CodeCreditBalance).String())
 }
+
+// "Do not resubmit" does not resubmit (F-115).
+//
+// Phase one's early-return branch says "Already claimed by an earlier attempt.
+// Reconcile, do not resubmit" for SUBMITTED, PROVIDER_PENDING and
+// PAYOUT_STATUS_UNKNOWN. Phase two then guarded on `req.State != StateSubmitted`
+// -- which sent the last two home and let SUBMITTED fall straight through to the
+// provider call.
+//
+// SUBMITTED is precisely what a crash between the phase-one commit and
+// applyProviderResult leaves behind, so the branch whose comment says do not
+// resubmit was the one that did. The covering test never reached it: after a
+// timeout the state is PAYOUT_STATUS_UNKNOWN, which returns.
+//
+// The only thing that stood between this and paying twice was the provider
+// honouring the idempotency key -- which the sandbox does by construction, so
+// the test double hid it.
+func TestIntegration_ASecondSubmitDoesNotCallTheProviderAgain(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(600, f.input())
+	require.NoError(t, err)
+
+	// A submission that lands the request in SUBMITTED and stays there: the
+	// provider answered, but the process died before the answer was recorded.
+	f.provider.TimeoutNext()
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	before := f.provider.Submits()
+	require.Positive(t, before)
+	f.forceState(t, req.ID, payout.StateSubmitted, "crash between the call and recording it")
+
+	after, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	assert.Equal(t, before, f.provider.Submits(),
+		"a second Submit called the provider again on a payout it had already claimed")
+	assert.Equal(t, payout.StateSubmitted, after.State)
+}
+
+// A payout is submitted to the provider it was claimed for (F-115).
+//
+// providerName is a caller argument and was compared to nothing. On the
+// re-entry branch it was not even written back, so a second call naming another
+// provider would have handed that provider the FIRST one's idempotency key:
+// two providers, one key, two disbursements, neither able to dedupe the other.
+func TestIntegration_APayoutGoesToTheProviderItWasClaimedFor(t *testing.T) {
+	f := newFixture(t)
+	other := payouttest.NewSandbox("sandbox-two")
+	require.NoError(t, f.registry.Register(other))
+
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(600, f.input())
+	require.NoError(t, err)
+
+	f.provider.TimeoutNext()
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox-two")
+	require.Error(t, err, "a payout claimed for one provider was submitted to another")
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
+	assert.Zero(t, other.Submits(), "the second provider was called with the first's idempotency key")
+}
+
+// forceState moves a request directly, for the crash windows no Go path offers.
+func (f *fixture) forceState(t *testing.T, id payout.RequestID, to payout.State, reason string) {
+	t.Helper()
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var from string
+			if err := tx.QueryRow(ctx, `SELECT state FROM payout_requests WHERE id = $1`, id).Scan(&from); err != nil {
+				return err
+			}
+			if from == string(to) {
+				return nil
+			}
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO payout_request_transitions (id, request_id, from_state, to_state, actor_type, actor_id, reason)
+				 VALUES (gen_random_uuid(), $1, $2, $3, 'SERVICE', 'itest', $4)`,
+				id, from, string(to), reason); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE payout_requests SET state = $2 WHERE id = $1`, id, string(to))
+			return err
+		}))
+}

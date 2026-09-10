@@ -150,6 +150,37 @@ func (m *Manager) Check(s Session, now time.Time) error {
 	return nil
 }
 
+// StillLive reports whether one of a subject's sessions is still usable.
+//
+// It exists for the SSE stream, which is one request that never ends and so has
+// no "next request" at which the per-request revocation model would take effect
+// (F-116). Everything else in this system re-reads the session row on every
+// call; a stream has to ask on a timer instead.
+//
+// Keyed by subject as well as session id on purpose: the caller has both from
+// its own principal, and requiring them to agree means a session id learned
+// from somewhere else answers nothing.
+//
+// It reads through ListForSubject rather than a new store method so that the
+// answer comes from the same rows /v1/sessions shows and the same Check every
+// request already runs. Absent is treated as revoked: a session that is not in
+// the subject's list is not a session they may stream from.
+func (m *Manager) StillLive(ctx context.Context, q Querier, subjectID, sessionID string) error {
+	if subjectID == "" || sessionID == "" {
+		return ErrInvalidSession
+	}
+	ss, err := m.store.ListForSubject(ctx, q, subjectID)
+	if err != nil {
+		return fmt.Errorf("auth: still live: %w", err)
+	}
+	for _, s := range ss {
+		if s.ID == sessionID {
+			return m.Check(s, m.Now())
+		}
+	}
+	return ErrSessionRevoked
+}
+
 // Authenticate resolves a raw token to a valid session, touching
 // LastSeenAt at most once per TouchInterval. Store failures are returned
 // as-is (not as ErrInvalidSession) so callers fail closed with a 5xx rather

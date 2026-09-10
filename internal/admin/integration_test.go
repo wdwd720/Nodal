@@ -948,3 +948,83 @@ func TestIntegration_AdminStreamVerifiesAfterEverything(t *testing.T) {
 		`SELECT count(*) FROM audit_events WHERE stream = 'admin' AND resource_type = 'admin_action'`).Scan(&events))
 	assert.Equal(t, transitions, events, "one admin_action audit event per transition")
 }
+
+// An approval is not born approved (F-121, migration 00735).
+//
+// Dual control in this system IS this table: one principal proposes, a
+// different one approves, and the row is the record that both happened. Every
+// control on it guarded UPDATE -- admin_actions_identity_frozen is BEFORE
+// DELETE OR UPDATE, admin_actions_require_transition is AFTER UPDATE OF status
+// -- and neither fires on an INSERT. The only CHECK about approval is that the
+// approver differs from the proposer, which is satisfied by naming any second
+// user id.
+//
+// So cp_app, which holds INSERT, could write a row born APPROVED with an
+// approver and an approval timestamp already filled in: dual control forged
+// outright, with no proposal, no second person, and no transition row because
+// there was no transition.
+//
+// That is not theoretical. agent_lifecycle_transitions.approval_id REFERENCES
+// admin_actions(id), so a forged APPROVED row is the missing half of a
+// fully-evidenced agent promotion to LIVE.
+//
+// TestVerifyApprovedReadsTheSpecNotTheRow explains why the behavioural version
+// of this was not written before: reaching it meant committing the forgery, and
+// a fixture that has to commit an exploit to reach the code should not exist.
+// The schema refusing the forgery is a different thing to test, and this is it.
+func TestIntegration_AnApprovalIsNotBornApproved(t *testing.T) {
+	f := newFixture(t)
+	proposer, approver := f.newUser(), f.newUser()
+	ctx := context.Background()
+
+	insert := func(status, extraCol string, extraVal any) error {
+		cols := `id, kind, target_type, target_id, params, params_hash, reason, requires_dual, status,
+		         proposed_by_user_id, proposed_at, proposer_step_up_at, expires_at`
+		vals := `$1,'LEDGER_CORRECTION','ACCOUNT',$2,'{}','h','forging dual control',true,$3,
+		         $4,$5,$5,$6`
+		args := []any{uuid.NewString(), "acct-" + uuid.NewString(), status, proposer, f.clk.Now(), f.clk.Now().Add(time.Hour)}
+		if extraCol != "" {
+			cols += ", " + extraCol
+			vals += ", $7"
+			args = append(args, extraVal)
+		}
+		_, err := testDB.Exec(ctx, `INSERT INTO admin_actions (`+cols+`) VALUES (`+vals+`)`, args...)
+		return err
+	}
+
+	t.Run("born APPROVED with an approver", func(t *testing.T) {
+		err := insert(string(StatusApproved), "approved_by_user_id", approver)
+		require.Error(t, err, "dual control was forged at INSERT")
+		assert.Contains(t, err.Error(), "ADMIN_ACTION_BORN_DECIDED")
+	})
+
+	t.Run("born EXECUTED", func(t *testing.T) {
+		err := insert(string(StatusExecuted), "executed_at", f.clk.Now())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ADMIN_ACTION_BORN_DECIDED")
+	})
+
+	t.Run("born PROPOSED with the approval chain pre-filled", func(t *testing.T) {
+		// The subtler one: the status is honest and the approval is not.
+		err := insert(string(StatusProposed), "approver_step_up_at", f.clk.Now())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ADMIN_ACTION_BORN_DECIDED")
+	})
+
+	// The control, and the one that matters most: the real ceremony still
+	// works. A birth control one condition too strict would refuse every
+	// proposal, and every other test here would fail -- but stating it once
+	// where the refusals are makes the pair legible.
+	t.Run("an honest proposal is created and approved", func(t *testing.T) {
+		a, err := f.propose(f.operator(proposer, security.RoleFinance), ledgerProposal("acct-"+uuid.NewString()))
+		require.NoError(t, err)
+		assert.Equal(t, StatusProposed, a.Status)
+		assert.Nil(t, a.ApprovedBy)
+
+		decided, err := f.approve(f.breakGlass(approver), a.ID.String(), "approved for the control")
+		require.NoError(t, err)
+		assert.Equal(t, StatusApproved, decided.Status)
+		require.NotNil(t, decided.ApprovedBy)
+		assert.Equal(t, approver, *decided.ApprovedBy)
+	})
+}

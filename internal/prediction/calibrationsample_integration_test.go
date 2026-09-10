@@ -41,7 +41,32 @@ import (
 // resolveIt writes a real outcome for p through the ledger, the way the
 // aggregation test does -- an inserted row rather than a fabricated one, so the
 // join this test is about is the join production uses.
+// resolveAt is resolveIt with an explicit knowledge time, for the tests that
+// care when the platform LEARNED an outcome rather than when it happened.
+func (f *fixture) resolveAt(t *testing.T, l *PGLedger, p Prediction, hit bool, resolvedAt time.Time) {
+	t.Helper()
+	f.resolveWith(t, l, p, hit, resolvedAt)
+}
+
+// resolveIt resolves a prediction a minute after its horizon closes, and moves
+// the fixture clock there.
+//
+// The clock move is the part that matters. Outcome.Validate refuses a
+// resolution before the horizon ends, so a fixture that commits a prediction
+// and resolves it two seconds later was stamping resolved_at an HOUR in the
+// future -- recording an outcome the platform could not yet have had. That went
+// unnoticed while nothing compared resolved_at to anything; F-120's bound on
+// knowledge time is what surfaced it.
 func (f *fixture) resolveIt(t *testing.T, l *PGLedger, p Prediction, hit bool) {
+	t.Helper()
+	at := p.HorizonEnd().Add(time.Minute)
+	if now := f.clk.Now(); now.Before(at) {
+		f.clk.Advance(at.Sub(now))
+	}
+	f.resolveWith(t, l, p, hit, at)
+}
+
+func (f *fixture) resolveWith(t *testing.T, l *PGLedger, p Prediction, hit bool, resolvedAt time.Time) {
 	t.Helper()
 	brier, err := Brier(p.ProbabilityDirection, hit)
 	require.NoError(t, err)
@@ -53,7 +78,7 @@ func (f *fixture) resolveIt(t *testing.T, l *PGLedger, p Prediction, hit bool) {
 	}
 	o := Outcome{
 		ID: NewOutcomeID(), PredictionID: p.ID, StrategyVersionID: f.versionID, Mode: ModeShadow,
-		HorizonEndAt: p.HorizonEnd(), ResolvedAt: p.HorizonEnd().Add(time.Minute),
+		HorizonEndAt: p.HorizonEnd(), ResolvedAt: resolvedAt,
 		RealizedDirection: DirectionUp, RealizedReturnBPS: realized, RealizedMaxDrawdownBPS: money.BPS(10),
 		DirectionHit: &hit, Brier: brier, LogLoss: logLoss,
 		AbsReturnErrorBPS: money.BPS(20), RegimeLabel: UnlabelledRegime,
@@ -88,7 +113,12 @@ func TestIntegration_CalibrationStatesWhatItCouldNotScore(t *testing.T) {
 	require.NoError(t, err)
 	rows, err := c.Compute(ctx, testDB, CalibrationScope{
 		StrategyVersionID: f.versionID, AgentID: f.agentID, Mode: ModeShadow,
-		WindowStart: f.clk.Now().Add(-time.Hour), WindowEnd: f.clk.Now().Add(time.Hour),
+		// The window is a day rather than an hour because resolveIt now moves the
+		// clock to the resolution instant: a prediction with a one-hour horizon
+		// cannot be resolved two seconds after it is committed, and the fixture
+		// used to stamp resolved_at an hour in the future to pretend otherwise.
+		// F-120's bound on knowledge time is what surfaced that.
+		WindowStart: f.clk.Now().Add(-24 * time.Hour), WindowEnd: f.clk.Now().Add(time.Hour),
 	}, f.clk.Now())
 	require.NoError(t, err)
 	require.NotEmpty(t, rows, "two resolved predictions must produce a bucket")
@@ -138,7 +168,12 @@ func TestIntegration_CalibrationSampleIsNotVacuous(t *testing.T) {
 	require.NoError(t, err)
 	rows, err := c.Compute(ctx, testDB, CalibrationScope{
 		StrategyVersionID: f.versionID, AgentID: f.agentID, Mode: ModeShadow,
-		WindowStart: f.clk.Now().Add(-time.Hour), WindowEnd: f.clk.Now().Add(time.Hour),
+		// The window is a day rather than an hour because resolveIt now moves the
+		// clock to the resolution instant: a prediction with a one-hour horizon
+		// cannot be resolved two seconds after it is committed, and the fixture
+		// used to stamp resolved_at an hour in the future to pretend otherwise.
+		// F-120's bound on knowledge time is what surfaced that.
+		WindowStart: f.clk.Now().Add(-24 * time.Hour), WindowEnd: f.clk.Now().Add(time.Hour),
 	}, f.clk.Now())
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
@@ -165,4 +200,73 @@ func TestPersistRefusesASnapshotThatDoesNotStateItsSample(t *testing.T) {
 	require.Error(t, err, "a snapshot claiming to have scored more than the window held was accepted")
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 	assert.Contains(t, err.Error(), "claims 4 scored of 1")
+}
+
+// A calibration snapshot is reproducible (F-120).
+//
+// The window is on p.committed_at -- when the prediction was made. The
+// outcome's resolved_at is when this platform learned how it turned out, and
+// nothing bounded it. So recomputing a snapshot "as of" an earlier date folded
+// in every outcome resolved since, and the same scope recomputed later gave a
+// different answer.
+//
+// That is the reproducibility path that matters: calibration_snapshots rows are
+// cited as CALIBRATION_SNAPSHOT promotion evidence, and evidence that changes
+// when you look at it again is not evidence. Compute already took `now`, and
+// used it only to stamp ComputedAt.
+func TestIntegration_ACalibrationSnapshotIsReproducible(t *testing.T) {
+	f := newFixture(t)
+	l := f.ledger(t)
+	ctx := context.Background()
+
+	// Two predictions committed inside the window.
+	var committed []Prediction
+	for i := range 2 {
+		runID := newUUID()
+		f.newRun(t, runID)
+		draft := f.draft(t, fmt.Sprintf("repro-%d", i), time.Hour, "0.7")
+		draft.RunID = runID
+		committed = append(committed, f.commit(t, draft))
+		f.clk.Advance(time.Second)
+	}
+
+	// The first is resolved promptly, a minute after its horizon closes.
+	f.resolveAt(t, l, committed[0], true, committed[0].HorizonEnd().Add(time.Minute))
+	f.clk.Advance(2 * time.Hour) // past both horizons and the first resolution
+
+	// The instant the snapshot is taken. One outcome is known.
+	asOf := f.clk.Now()
+	scope := CalibrationScope{
+		StrategyVersionID: f.versionID, AgentID: f.agentID, Mode: ModeShadow,
+		WindowStart: asOf.Add(-24 * time.Hour), WindowEnd: asOf.Add(time.Hour),
+	}
+	c, err := NewCalibrator(f.clk)
+	require.NoError(t, err)
+	scoredIn := func(rows []CalibrationRow) int {
+		n := 0
+		for _, r := range rows {
+			n += r.NPredictions
+		}
+		return n
+	}
+
+	first, err := c.Compute(ctx, testDB, scope, asOf)
+	require.NoError(t, err)
+	require.Equal(t, 1, scoredIn(first), "the fixture must have exactly one known outcome at asOf")
+
+	// A month passes and the second prediction is finally resolved. The window
+	// is unchanged; only what the platform has since LEARNED has changed.
+	f.clk.Advance(30 * 24 * time.Hour)
+	f.resolveAt(t, l, committed[1], true, f.clk.Now())
+
+	again, err := c.Compute(ctx, testDB, scope, asOf)
+	require.NoError(t, err)
+	assert.Equal(t, 1, scoredIn(again),
+		"the same scope recomputed as of the same instant folded in an outcome resolved after it")
+
+	// The control: asked as of NOW the later outcome is included, so the bound
+	// is on knowledge time and the row is not simply invisible.
+	current, err := c.Compute(ctx, testDB, scope, f.clk.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 2, scoredIn(current))
 }

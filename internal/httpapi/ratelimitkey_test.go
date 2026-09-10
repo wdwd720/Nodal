@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,4 +108,29 @@ func TestRateLimit_TheUnauthenticatedRoutesShareTheStrictBudget(t *testing.T) {
 	// the webhook rather than everything.
 	assert.Equal(t, http.StatusOK, send("/v1/intents"))
 	assert.Equal(t, http.StatusOK, send("/v1/intents"))
+}
+
+// No metric label takes a value the caller chose (F-117).
+//
+// r.Method is the raw request-line token and Go accepts any RFC 7230 token as
+// one, so the `method` label was an unbounded dimension. chi runs middleware
+// before routing, so even a 405 recorded it. The meter provider is a no-op
+// today (CP_TELEMETRY_OTLP_ENDPOINT is unset), which is exactly why this is
+// worth closing now: arming metrics on a 512 MB instance with a label an
+// attacker enumerates turns observability into the memory leak.
+func TestObserve_TheMethodLabelIsBounded(t *testing.T) {
+	t.Parallel()
+	for _, m := range []string{
+		http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch,
+		http.MethodDelete, http.MethodHead, http.MethodOptions,
+		http.MethodConnect, http.MethodTrace,
+	} {
+		assert.Equal(t, m, knownMethod(m), "a real method must survive unchanged")
+	}
+	for _, m := range []string{
+		"", "get", "PROPFIND", "NOTIFY", strings.Repeat("A", 4096),
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "M-SEARCH",
+	} {
+		assert.Equal(t, "_OTHER", knownMethod(m), "%q became its own label", m)
+	}
 }

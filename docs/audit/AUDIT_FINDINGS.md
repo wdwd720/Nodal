@@ -138,6 +138,13 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-112 | P1 | NEW | fixed | A supported configuration removes the `__Host-` prefix from the session and login-state cookies, re-opening the planted-callback takeover F-87 closed; the terraform PROD example set it and the test suite's own valid-production fixture set it |
 | F-113 | P1 | NEW | fixed | The amount a provider says it refunded was computed in two places and read in none, so a succeeded payment carrying a full refund minted Credits |
 | F-114 | P1 | NEW | fixed | A revoked agent could return to live capital with no approval and no evidence, because it keeps its stage and both promotion CHECKs short-circuit when the stage does not move |
+| F-115 | P1 | NEW | fixed | The branch whose comment says "do not resubmit" was the one that resubmitted, and the provider a payout goes to was a caller argument compared to nothing |
+| F-116 | P2 | NEW | fixed | An open event stream outlived logout, operator revocation and the session's own absolute expiry, because revocation is per request and a stream is one request that never ends |
+| F-117 | P2 | NEW | fixed | Two metric label sets took values the caller chose, so arming metrics on a 512 MB instance would have made observability the memory leak |
+| F-118 | P2 | NEW | part | Every reconciliation alert was silent: an in-process counter no exporter read, an OTel instrument nobody constructed, and an observer callback with no caller |
+| F-119 | P3 | NEW | fixed | An as-of price read was bounded by event time and not by knowledge time, so it could answer with something the platform had not yet received |
+| F-120 | P3 | NEW | fixed | A calibration snapshot folded in every outcome resolved since, so the evidence a promotion decision reads changed when you looked at it again |
+| F-121 | P1 | NEW | fixed | Every control on the dual-control table guarded UPDATE, so the application role could INSERT a row born APPROVED and forge two-person control outright |
 
 ---
 
@@ -5683,6 +5690,381 @@ the named constraint as `cp_app`, an ordinary pause observed passing it, and an
 integration test that revokes a real agent through the real lifecycle and then
 attempts the row directly — directly, because no Go path offers it, which is
 exactly why the schema has to be the one to refuse it.
+
+## F-115 · "Do not resubmit" resubmitted · NEW · P1 · FIXED
+
+**Found by** the money-out audit, reading `Submit`'s two phases against each
+other.
+
+Phase one's early return covers three states with the comment:
+
+> Already claimed by an earlier attempt. Reconcile, do not resubmit.
+
+Phase two then guarded on `req.State != StateSubmitted`. PROVIDER_PENDING and
+PAYOUT_STATUS_UNKNOWN returned there. **SUBMITTED did not** — it fell straight
+through to `provider.Submit`.
+
+And SUBMITTED is precisely the state a crash between the phase-one commit and
+`applyProviderResult` leaves behind, which is the case the whole two-phase
+design exists for. The branch whose comment says do not resubmit was the one
+that resubmitted.
+
+**Two concurrent Submits reach it the same way.** The second blocks on
+`FOR UPDATE`, is released by the first's COMMIT, re-reads SUBMITTED under READ
+COMMITTED, and returns from phase one — with the row lock already released,
+because phase two is outside any transaction. Nothing serialised the external
+call.
+
+**The test double hid it.** The only thing standing between this and paying
+twice was the provider honouring `nodal-payout-<uuid>`, and `payouttest.Sandbox`
+dedupes on that key by construction. The covering test
+(`TestIntegration_AProviderTimeoutDoesNotDuplicateThePayout`) never reached the
+branch at all: after a timeout the state is PAYOUT_STATUS_UNKNOWN, which
+returns.
+
+### And the provider was the caller's to choose
+
+`providerName` is an argument and was **never compared** to the persisted
+`r.Provider`. The re-entry branch did not overwrite it either. So
+`Submit(id, "providerB")` on a request already claimed for providerA called
+**providerB with providerA's idempotency key** — two providers, one key, two
+disbursements, and neither of them able to dedupe the other.
+
+**Fix.** A `claimed` flag says whether THIS call did the claiming, because the
+state does not answer that question; phase two runs only when it did. And
+`providerMatches` refuses a provider that is not the one the payout was claimed
+for, treating an unclaimed request (no provider recorded) as free to go to any
+registered one.
+
+**Evidence.** REAL_DB_INTEGRATION, both observed failing before and passing
+after. The resubmit case forces the row into SUBMITTED directly, because no Go
+path offers that crash window — which is the same reason F-114's test writes
+its row by hand: the states worth testing are the ones the happy path cannot
+produce.
+
+## F-116 · A stream outlived the session it belonged to · NEW · P2 · FIXED
+
+**Found by** the identity/session audit, asking what ends an SSE stream.
+
+Revocation in this system is per request, and correctly so: `auth.Manager`
+re-reads the session row on every call, so a revoked session dies at the next
+one. **An SSE stream is one request that never ends**, so the per-request model
+had no purchase on it.
+
+The streaming loop's only exits were client disconnect, the drain context, and a
+slow-consumer drop. Nothing re-checked the session, and the principal it filters
+events against is a snapshot copied once at subscribe time.
+
+So a stolen cookie's stream kept delivering the victim's balance, order, deposit
+and agent events:
+
+- after the victim hit `POST /v1/auth/logout`,
+- after an operator revoked the session,
+- and past the session's own 12-hour absolute expiry.
+
+The incident runbook presents revocation as the containment for a leaked cookie.
+For the one surface that streams a user's financial activity continuously, it
+was not.
+
+**Fix.** `stream.Handler` takes a `StillLive` hook and calls it on every
+heartbeat — the heartbeat is where a stream re-earns its right to exist,
+because for a stream there is no next request. `auth.Manager.StillLive` answers
+it through `ListForSubject` and the same `Check` every request already runs, so
+the answer comes from the same rows `/v1/sessions` shows. **Absent is treated as
+revoked**: a session that is not in the subject's list is not one they may
+stream from. It is keyed by subject AND session id, so a session id learned
+elsewhere answers nothing.
+
+Ending the stream writes a `resync` event first, which is the same thing a
+slow-consumer drop does, so a legitimate client that reconnects behaves the way
+it already knows how to.
+
+**Evidence.** TEST_DOUBLE_ONLY, and deliberately: the test drives a real HTTP
+server and a real streaming loop with a stub validity function, because what is
+being proven is that the loop asks and acts on the answer — not what the
+session store would say. It fails without the check with "the session was never
+re-checked; the stream would outlive any revocation", and the passing form reads
+the body to EOF to prove the SERVER ended the stream rather than the client.
+
+## F-117 · Two metric labels the caller chose · NEW · P2 · FIXED
+
+**Found by** the observability audit, reading the label sets rather than the
+instruments.
+
+Two dimensions were unbounded, on two different label sets attached to the same
+request:
+
+**`method`**, in this repository's own middleware, was `r.Method` — the raw
+request-line token, and Go accepts any RFC 7230 token as one. chi runs
+middleware before routing, so even a 405 recorded it. The middleware's own
+comment says "attributes stay low cardinality"; `route` and `status_class` do,
+and this one did not.
+
+**`server.address` / `server.port`**, from `otelhttp`, fell back to
+`SplitHostPort(req.Host)` — the raw Host **header** — because the handler was
+built with no `WithServerName`. Those go on `http.server.request.duration` and
+both body-size histograms, and they **bypass `WithSafeAttrs` entirely**, because
+that filters the attributes this code passes, not the ones the instrumentation
+library adds. Bounded only by `MaxHeaderBytes`, which is 1 MiB.
+
+**Why it is fixed now rather than when metrics are armed.** `CP_TELEMETRY_OTLP_ENDPOINT`
+is unset, so the meter provider is a no-op and nothing is stored today. That is
+exactly the argument for closing it now: the moment an endpoint is configured,
+these become a memory leak on a 512 MB instance, and the fix would then be
+competing with an incident.
+
+**Fix.** `knownMethod` folds anything outside the method set into `_OTHER` —
+the same spelling `otelhttp` uses eighty lines away, because two label sets on
+one request should agree about what a method is. And the handler passes
+`WithServerName(operation)`: this service serves one operation, and a metric
+label is not where a deployment learns its own hostname.
+
+**Not changed, and worth saying:** `route` is the chi template or the constant
+`"unmatched"`, with no handler bypassing it, and `status_class` has four values.
+Both were already right, and the audit checked them rather than assuming.
+
+**Evidence.** STATIC_PROOF, with a unit test over the fold: every real method
+survives unchanged, and an empty string, a lowercase spelling, a WebDAV verb and
+a 4 KiB token all become one label.
+
+## F-118 · Nothing was told anything · NEW · P2 · PART
+
+**Found by** the observability audit, sweeping for anything in the tree that
+reaches a human.
+
+`Metrics.Raise` — the function every reconciliation alert goes through —
+did three things, and in the deployed system **all three were dead ends**:
+
+| what it did | why nothing came of it |
+|---|---|
+| incremented an in-process atomic | no exporter read it; the process discards it on exit |
+| added to an OTel counter *if* a `FinancialMetrics` was attached | both composition roots passed `NoopMetrics()`, so `observability.NewFinancialMetrics` had **no caller outside its own tests** |
+| called an observer *if* one was registered | `Metrics.OnAlert` has **zero callers in the repository, tests included** |
+
+And it wrote **no log line at all**. So `ledger_integrity_violation`,
+`unknown_submission`, `unauthorized_signing_candidate`,
+`observer_disagreement` and `unknown_transaction` each incremented a number in
+RAM and then vanished.
+
+Three independent reasons, so fixing any one changed nothing — which is why
+they survived. The `infra/terraform` alarms bound to those instruments compound
+it: they set `treat_missing_data = "notBreaching"`, so a metric that never
+arrives resolves to **OK**. Applying that Terraform today would show a wall of
+green alarms over a system emitting nothing, which is worse than a blank
+dashboard.
+
+### What is fixed
+
+**An alert is said out loud.** `Raise` logs every alert, SEV1 at ERROR so it is
+separable from ordinary traffic. A log line is not paging and this does not
+claim to be — nothing in this deployment pages. It is the difference between an
+incident that is findable in the service's logs afterwards and one that left no
+trace at all, and it is the only one of the three dead ends that needs no
+external service.
+
+**The instruments are constructed.** Both roots now build
+`observability.NewFinancialMetrics` from the global meter. That meter is a no-op
+while `CP_TELEMETRY_OTLP_ENDPOINT` is unset, and that is the point: this removes
+the reason that is SOFTWARE and leaves the one that is a deployment decision,
+rather than leaving both and calling the result instrumented. A failure to build
+instruments logs and falls back rather than refusing to start — the alternative
+to a metric is not a stopped service.
+
+**Order mattered.** This is only safe because F-117 bounded the caller-chosen
+metric labels first. Arming instruments on a 512 MB instance with an unbounded
+label would have replaced a silent control with a memory leak.
+
+### What remains, and it is the larger half
+
+**Nothing pages.** A sweep for `pagerduty|opsgenie|hooks.slack.com|alertmanager|
+healthchecks.io|sendgrid|twilio|smtp.` across every Go, YAML, Terraform and
+shell file in the repository returns **one** hit: a Terraform variable
+*description*. `internal/notification` is customer-facing and its dispatcher has
+no production caller. The escalation workflow exists and nothing starts it. The
+`reconciliation.record.transitioned` topic has no subscriber.
+
+That is a deployment decision as much as a software one — a cron on the Render
+blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is,
+plus somewhere for it to send. It is recorded here rather than guessed at, and
+`docs/PRODUCTION_READINESS_REPORT.md` already states it accurately: *"no alert
+has ever been delivered anywhere, and today none can be."*
+
+**Evidence.** STATIC_PROOF for the three dead ends, each confirmed by grep for
+callers. Unit test for the logging, driven through the exact shape the
+deployment runs — `NoopMetrics()`, no exporter, no observer — asserting both
+levels, the alert name, the record id, and that the in-process counters the
+health endpoint reads still work.
+
+## F-119 · An as-of read that could look ahead · NEW · P3 · FIXED
+
+**Found by** the point-in-time audit, checking which queries bound knowledge
+time and which bound only event time.
+
+`asset_prices` stores both: `observed_at` is when the price happened,
+`received_at` is when this platform learned it. `PriceStore.Latest` bounded only
+the first — `received_at` appeared solely as an `ORDER BY` tiebreaker — while
+its own doc comment said:
+
+> Observations after now are ignored so that an as-of valuation never looks
+> ahead.
+
+So a price observed at T-1m and **inserted** at T+5m was returned by
+`Latest(..., now=T)`: an as-of read answering with something the platform did
+not know yet.
+
+**Latent rather than live**, and the finding is only worth its P3 because of
+that: the sole production caller passes a live clock, and at a live `now` a row
+with a future `received_at` does not exist. It stops being latent the moment
+anything replays as of a past instant — which is the entire reason
+`received_at` is stored at all. The same table's other reader,
+`prediction/outcome.go`, already filters on it.
+
+**Fix.** `AND received_at <= $4`. It changes nothing for a live clock, which is
+what makes it safe, and closes the replay case.
+
+### The existing test was asking the question the defect answered
+
+`TestIntegration_PriceStore_LatestAndStaleness` recorded three observations —
+all received at `now` — and then asked `Latest(..., now-1m)`, expecting an
+answer. Under the knowledge-time bound the honest answer to "what did we know a
+minute ago" is "none of this", so the test failed.
+
+It failed correctly. The assertion was the defect in miniature: an as-of read
+returning rows the platform had not yet received. Its actual point was about
+ORDERING — that `observed_at` wins over `received_at` — and that point is now
+made at an instant where the rows are known, with the fresher observation
+excluded by the window rather than by the as-of bound. A second assertion states
+the new rule directly: at an instant before these rows were received, nothing is
+known.
+
+**Evidence.** REAL_DB_INTEGRATION. The new test records an observation observed
+before an as-of instant and received five minutes after it, requires the as-of
+read to refuse it, and carries the control that the same row IS visible once the
+as-of instant is past the moment it was learned — so the bound is on knowledge
+time and not on the row.
+
+## F-120 · Evidence that changed when you looked at it again · NEW · P3 · FIXED
+
+**Found by** the point-in-time audit, the sibling of F-119 and the same
+question asked of a different table.
+
+`calibrationSourceSQL` bounds the window on `p.committed_at` — when the
+prediction was made. `prediction_outcomes.resolved_at` is when this platform
+learned how it turned out, and **nothing bounded it**. `Compute` already took a
+`now` argument and used it only to stamp `ComputedAt`.
+
+So recomputing a snapshot for the same scope and the same window a month later
+folded in every outcome resolved in between, and produced a different answer.
+
+**Why it matters more than a stale number.** `calibration_snapshots` rows are
+cited as `CALIBRATION_SNAPSHOT` promotion evidence — the evidence an agent's
+promotion to a higher stage rests on. Evidence that changes when you look at it
+again is not evidence.
+
+**Fix.** `AND o.resolved_at <= $7`, bound to `now`.
+
+### Three fixtures were recording outcomes the platform could not have had
+
+`Outcome.Validate` refuses a resolution before its horizon ends. Three
+calibration tests committed a prediction with a one-hour (or one-minute)
+horizon, advanced the clock by seconds, and stamped `resolved_at` at
+`horizonEnd + 1m` — an hour or two in the **future** relative to the instant
+they then computed at.
+
+Nothing compared `resolved_at` to anything, so it went unnoticed. Bounding
+knowledge time is what surfaced it, and the fix is the one reality imposes:
+`resolveIt` now moves the fixture clock to the resolution instant, one test
+advances past its own horizons before computing, and the windows widen from an
+hour to a day because a prediction with a one-hour horizon cannot be resolved
+two seconds after it is committed.
+
+That is the third time in this batch that bounding a control revealed a fixture
+describing something impossible — after F-103's providers on live credentials
+in DEV and F-112's cookie domain in the "valid production" config.
+
+**Evidence.** REAL_DB_INTEGRATION. The new test resolves one prediction
+promptly and the second a month later, recomputes the SAME scope as of the same
+instant, and requires the answer to be unchanged — with the control that asked
+as of now the later outcome IS included, so the bound is on knowledge time and
+the row is not simply invisible.
+
+## F-121 · An approval born approved · NEW · P1 · FIXED
+
+**Found by** the state-machine audit's INSERT-time sweep: which entities can be
+born in a privileged state.
+
+Dual control in this system **is** `admin_actions`. One principal proposes, a
+different one approves, and the row is the record that both happened.
+
+Every control on that table guards the UPDATE path:
+
+| control | when it fires |
+|---|---|
+| `admin_actions_identity_frozen` | BEFORE DELETE **OR UPDATE** |
+| `admin_actions_require_transition` | AFTER **UPDATE** OF status |
+| `admin_actions_check` | `approved_by <> proposed_by` — satisfied by naming any second user id |
+
+**None of them fires on an INSERT**, and `status` permits APPROVED and EXECUTED
+among its seven values. So `cp_app`, which holds INSERT, could write a row born
+APPROVED with an approver, an approval timestamp and an approver step-up already
+filled in: two-person control forged outright, with no proposal, no second
+person, and no transition row — because there was no transition.
+
+**It is the missing half of a bigger forgery.**
+`agent_lifecycle_transitions.approval_id` REFERENCES `admin_actions(id)`, so a
+forged APPROVED row completes a fully-evidenced agent promotion to LIVE.
+
+### The test that was deliberately not written
+
+`TestVerifyApprovedReadsTheSpecNotTheRow` says so in its own comment:
+
+> The behavioural version of this test is not written, deliberately. Reaching
+> the branch means an APPROVED dual-control row with no approver … and that is
+> exactly the forgery F-42 records, performed by a test. … A fixture that has
+> to commit the exploit to reach the code is a fixture that should not exist.
+
+That reasoning was right, and 00735 changes what it applies to. The forgery is
+now refused at INSERT, so **testing the refusal is not committing the exploit**
+— it is watching the exploit fail. Three forms are driven: born APPROVED with
+an approver, born EXECUTED, and born PROPOSED with the approval chain pre-filled
+(the subtle one, where the status is honest and the approval is not).
+
+**Fix.** `cp_admin_action_born_proposed`, a BEFORE INSERT trigger: an admin
+action is created PROPOSED, with no approver, no rejection and no execution
+recorded. A trigger rather than a CHECK because a CHECK cannot tell an INSERT
+from an UPDATE, and the UPDATE path is exactly where those columns are
+legitimately filled in.
+
+This is `cp_gate_born_disabled`'s treatment (00701) applied to the table dual
+control actually lives in. `capability_gates` was the **only** entity in this
+schema closed at birth; it is now the second of two, and `agents`,
+`credit_fundings` and `payout_requests` remain open — recorded in
+MASTER_BUILD_STATE's resume list rather than fixed here.
+
+### It found a fixture committing the exploit
+
+`internal/agent`'s `approveFor` INSERTed an `admin_actions` row **directly as
+APPROVED** to stand in for a promotion approval, and six tests depended on it.
+The birth control refused it, which is how the fixture was found.
+
+That is the same shape `internal/admin`'s comment had already named — "a
+fixture that has to commit the exploit to reach the code is a fixture that
+should not exist" — sitting in a different package, where that comment could
+not see it. It now proposes as one principal and approves as another, with the
+transition row the move requires, written in SQL because the authority boundary
+forbids `internal/agent` from importing `internal/admin`.
+
+**That is the fourth fixture in this batch that encoded the defect it was meant
+to guard against**, after F-103's fourteen providers on live credentials in DEV,
+F-112's cookie domain in the "valid production" config, and F-120's outcomes
+resolved before their horizons closed. The pattern is worth stating plainly: a
+suite's known-good fixture is an assertion about what is safe, and nothing was
+checking it. Closing a control is how you find out.
+
+**Evidence.** REAL_DB_INTEGRATION. All three forgeries observed refused with
+AD001 as the real `cp_app` role, and the control — an honest proposal created
+and then approved through the real service by a second principal — observed
+passing, which is what proves the birth control is not one condition too strict.
 
 ## Findings deliberately NOT raised
 

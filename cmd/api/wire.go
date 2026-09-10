@@ -32,6 +32,7 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -54,6 +55,7 @@ import (
 	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
@@ -112,8 +114,22 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Records:   reconciliation.NewRepository(clk, outbox, auditWriter),
 		Policy:    reconciliation.DefaultPolicy(),
 		Approvals: adminSvc,
-		Metrics:   reconciliation.NoopMetrics(),
-		Logger:    log,
+		// Real instruments rather than NoopMetrics().
+		//
+		// Both composition roots passed the no-op, so the FinancialMetrics
+		// instruments the 29 designed CloudWatch alarms are bound to were never
+		// constructed at all -- three independent reasons the alarms would have
+		// read green over a system emitting nothing (F-118).
+		//
+		// otel.Meter returns the global provider's meter, which is a no-op
+		// while CP_TELEMETRY_OTLP_ENDPOINT is unset. That is the point: this
+		// removes the reason that is SOFTWARE and leaves the one that is a
+		// deployment decision, instead of leaving both.
+		//
+		// Safe to arm only because F-117 bounded the caller-chosen labels
+		// first; the order mattered.
+		Metrics: financialMetrics(log),
+		Logger:  log,
 	})
 	if rerr != nil {
 		return nil, fmt.Errorf("wiring: reconciliation engine: %w", rerr)
@@ -337,7 +353,18 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// heartbeats only until it is wired. It is never authoritative either way
 	// (PART 109).
 	hub := stream.NewHub(1024, log)
-	sse := stream.NewHandler(hub, 15*time.Second)
+	// The stream re-checks its session on every heartbeat. Without it a stolen
+	// cookie's stream kept delivering after the victim logged out, after an
+	// operator revoked the session, and past the session's own absolute expiry
+	// -- because revocation in this system is per request and a stream is one
+	// request that never ends (F-116).
+	sse := stream.NewHandler(hub, 15*time.Second, func(ctx context.Context, sessionID string) error {
+		p, ok := security.PrincipalFrom(ctx)
+		if !ok {
+			return errs.New(errs.CodeUnauthenticated, "stream: no principal to re-check")
+		}
+		return sessionMgr.StillLive(ctx, database, p.SubjectID, sessionID)
+	})
 
 	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {

@@ -97,13 +97,42 @@ func (m *Metrics) AlertCount(name string) int64 {
 	return (*cur)[name]
 }
 
-// Raise records an alert.
+// Raise records an alert, and says so out loud.
+//
+// It used to be silent. It incremented an in-process atomic, added to an OTel
+// counter only when a FinancialMetrics was attached, and called an observer
+// only when one was registered -- and in the deployed system all three of those
+// are absent: both composition roots pass NoopMetrics(), OnAlert has no caller
+// anywhere in the repository, and CP_TELEMETRY_OTLP_ENDPOINT is unset so the
+// meter provider is a no-op.
+//
+// So `ledger_integrity_violation`, `unknown_submission`,
+// `unauthorized_signing_candidate`, `observer_disagreement` and
+// `unknown_transaction` each incremented a counter in RAM that no exporter read
+// and the process discarded on exit. Nobody was told anything (F-118).
+//
+// A log line is not paging, and this does not claim to be: nothing in this
+// deployment pages. What it is, is the difference between an incident that is
+// findable in the service's logs afterwards and one that left no trace at all.
+// SEV1 logs at ERROR so it is separable from ordinary traffic.
 func (m *Metrics) Raise(ctx context.Context, a Alert) {
 	if m == nil {
 		return
 	}
 	if a.At.IsZero() {
 		a.At = time.Now().UTC()
+	}
+	attrs := []any{
+		"alert", a.Name,
+		"severity", string(a.Severity),
+		"detail", a.Detail,
+		"record_id", a.RecordID,
+	}
+	log := observability.LoggerFrom(ctx)
+	if a.Severity == SEV1 {
+		log.ErrorContext(ctx, "reconciliation: alert raised", attrs...)
+	} else {
+		log.WarnContext(ctx, "reconciliation: alert raised", attrs...)
 	}
 	switch a.Severity {
 	case SEV1:

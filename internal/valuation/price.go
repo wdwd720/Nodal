@@ -98,7 +98,9 @@ var _ PriceSource = (*PriceStore)(nil)
 // Staleness is judged on observed_at, the event time, never on received_at:
 // a price that arrived a moment ago but was observed an hour ago is stale.
 // Observations after now are ignored so that an as-of valuation never
-// looks ahead (and a skewed provider clock fails closed). A non-positive
+// looks ahead (and a skewed provider clock fails closed) -- on BOTH clocks:
+// observed_at is when the price happened, received_at is when this platform
+// learned it, and an as-of read must be bounded by each of them (F-119). A non-positive
 // maxAge accepts nothing. Missing or too old → STALE_MARKET_DATA.
 //
 // The returned Price carries QuoteAsset = quoteAssetID in canonical string
@@ -120,8 +122,23 @@ func (s *PriceStore) Latest(ctx context.Context, q db.Querier, assetID, quoteAss
 	var scale int32
 	var source string
 	var observedAt time.Time
+	// received_at <= now is the second half of "never looks ahead", and it was
+	// missing.
+	//
+	// observed_at is EVENT time and received_at is KNOWLEDGE time, and the
+	// bound above is only on the first. So a price observed at T-1m but
+	// INSERTED at T+5m was returned by Latest(..., now=T): an as-of read
+	// answering with something the platform did not know yet (F-119).
+	//
+	// Latent, not live: the sole production caller passes a live clock, and at
+	// a live now a row with a future received_at does not exist. It stops being
+	// latent the moment anything replays as of a past instant, which is the
+	// whole point of storing knowledge time. The same table's other reader,
+	// prediction/outcome.go, already filters it.
 	err := q.QueryRow(ctx, `SELECT mantissa, scale, source, observed_at FROM asset_prices
-		WHERE asset_id = $1 AND quote_asset_id = $2 AND observed_at >= $3 AND observed_at <= $4
+		WHERE asset_id = $1 AND quote_asset_id = $2
+		  AND observed_at >= $3 AND observed_at <= $4
+		  AND received_at <= $4
 		ORDER BY observed_at DESC, received_at DESC, id DESC LIMIT 1`, assetID, quoteAssetID, oldest, now).
 		Scan(&mantissa, &scale, &source, &observedAt)
 	if err != nil {

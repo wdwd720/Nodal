@@ -1461,15 +1461,22 @@ observed failing first.
    that lives in a worker this deployment does not run.
 2. ~~**The agent resurrection.**~~ Closed as F-114 by migration 00734: a
    transition row may not claim to leave a terminal state.
-3. **Birth controls.** `capability_gates` is the only entity in the schema that
-   cannot be born in a privileged state. `agents` can be born LIVE,
-   `credit_fundings` SETTLED, `payout_requests` SETTLED, and `admin_actions`
-   APPROVED — which is F-42's forged dual control, and the sharpest of them.
+3. **Birth controls.** `admin_actions` is closed as F-121 by migration 00735,
+   which was the sharpest of them: it is F-42's forged dual control, and a
+   forged APPROVED row is the missing half of a fully-evidenced agent promotion
+   to LIVE. `agents` can still be born LIVE, `credit_fundings` SETTLED and
+   `payout_requests` SETTLED; `capability_gates` and `admin_actions` are now the
+   only two entities in the schema closed at birth.
 4. **F-42 and F-47**, unchanged. F-109 applied the privilege treatment to the
    four tables whose columns are money; the rest of F-42's list stands.
-5. The remaining audit findings not yet actioned, listed in the reports: SSE
-   surviving session revocation, `payout.Submit` re-calling the provider on the
-   SUBMITTED path, and the reconciliation alerting that reaches nobody.
+5. **Nothing pages anyone about anything** (F-118, PART). The software half is
+   done: alerts now log, and both composition roots construct the real
+   instruments. What remains is a destination and something that runs on a
+   timer — a cron on the Render blueprint, or a ticker in `cmd/api` the way
+   `runCreditSettlement` already is. Also worth doing before that Terraform is
+   ever applied: the five application alarms set `treat_missing_data =
+   "notBreaching"`, so a metric that never arrives reads OK rather than
+   INSUFFICIENT_DATA.
 
 `docs/audit/LAUNCH_GATE_MATRIX.md` remains the honest summary of what stands
 between this repository and real money. All five launch flags are still false.
@@ -1716,7 +1723,7 @@ binary).
 
 ## 7. Migrations applied
 
-00001 through **00734**, 66 files, all embedded in `migrations.FS` and
+00001 through **00735**, 67 files, all embedded in `migrations.FS` and
 checksum-verified by `internal/db/migrate`. An applied migration is never
 edited; a correction is a new file. `go run ./cmd/migrate status` is
 authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
@@ -1733,11 +1740,11 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **114 findings**, of which four
-are open (F-42, F-47, F-69, F-93), four are partial (F-65, F-84, F-95, F-105)
-and the rest are fixed.
+`docs/audit/AUDIT_FINDINGS.md` is the register: **121 findings**, of which four
+are open (F-42, F-47, F-69, F-93), five are partial (F-65, F-84, F-95, F-105,
+F-118) and the rest are fixed.
 
-F-100 through F-114 landed on 2026-09-10, from eleven parallel read-only audits
+F-100 through F-121 landed on 2026-09-10, from eleven parallel read-only audits
 whose claims were re-verified here before anything was changed. Eight are P1 and
 every one of them was observed failing before it was believed:
 
@@ -1767,11 +1774,17 @@ every one of them was observed failing before it was believed:
 - **F-114** a revoked agent could return to live capital with no approval and no
   evidence, because it keeps its stage and both promotion CHECKs short-circuit
   when the stage does not move
+- **F-115** the branch whose comment says "do not resubmit" was the one that
+  resubmitted, and the provider a payout goes to was a caller argument compared
+  to nothing
 
 Three recurring shapes are worth carrying forward. **A fixture is a claim**:
-three separate suites encoded the defect they were meant to catch — fourteen
+six separate suites encoded the defect they were meant to catch — fourteen
 providers on live credentials in a "valid production" config, a cookie domain in
-the same fixture, and a seller-set platform fee in the HTTP journey. **A guard
+the same fixture, a seller-set platform fee in the HTTP journey, outcomes
+resolved before their horizons closed, an as-of price read answering with
+unreceived rows, and an agent fixture inserting an admin action born APPROVED.
+Each was found by closing the control, not by reading the fixture. **A guard
 matched on a name**: F-102's write-scope check knew one helper of four, and the
 completeness test that replaced it found a fifth on its first run. **A test can
 pass because a different guard fired**: F-108's first test did exactly that and

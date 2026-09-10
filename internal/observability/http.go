@@ -57,6 +57,20 @@ func HTTPMiddleware(operation string, opts ...otelhttp.Option) func(http.Handler
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
-		return otelhttp.NewHandler(inner, operation, opts...)
+		// WithServerName pins otelhttp's own `server.address` / `server.port`
+		// attributes.
+		//
+		// Without it otelhttp falls back to SplitHostPort(req.Host) -- the raw
+		// Host HEADER, which the caller chooses and which is bounded only by
+		// MaxHeaderBytes. Those attributes go on http.server.request.duration
+		// and both body-size histograms, and they bypass WithSafeAttrs
+		// entirely, because that filters the attributes WE pass (F-117).
+		//
+		// The name is the operation, which is what the span is already called:
+		// this service serves one, and a metric label is not where a deployment
+		// learns its own hostname.
+		return otelhttp.NewHandler(inner, operation, append([]otelhttp.Option{
+			otelhttp.WithServerName(operation),
+		}, opts...)...)
 	}
 }

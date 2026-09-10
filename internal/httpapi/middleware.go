@@ -263,6 +263,33 @@ func routePattern(r *http.Request) string {
 	return "unmatched"
 }
 
+// knownMethod folds anything outside the HTTP method set into _OTHER.
+//
+// r.Method is the raw request-line token, and Go accepts any RFC 7230 token as
+// one -- so this label took a value the caller chose. chi runs middleware
+// before routing, so even a 405 recorded it. `route` was already safe (the chi
+// template, or the constant "unmatched") and `status_class` has four values;
+// this was the one dimension an attacker could enumerate (F-117).
+//
+// otelhttp normalises the identical value to _OTHER eighty lines away, which is
+// where the spelling comes from: two label sets on the same request should
+// agree about what a method is.
+//
+// It matters now rather than later because the meter provider is currently a
+// no-op -- CP_TELEMETRY_OTLP_ENDPOINT is unset -- so nothing is stored today.
+// Arming metrics on a 512 MB instance with an unbounded label would turn
+// observability into the memory leak.
+func knownMethod(m string) string {
+	switch m {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodPatch, http.MethodDelete, http.MethodConnect,
+		http.MethodOptions, http.MethodTrace:
+		return m
+	default:
+		return "_OTHER"
+	}
+}
+
 func statusClass(code int) string {
 	switch {
 	case code >= 500:
@@ -315,7 +342,7 @@ func observe(log *slog.Logger, clk clock.Clock, m *httpMetrics) func(http.Handle
 			if m != nil {
 				opts := observability.WithSafeAttrs(
 					attribute.String("route", route),
-					attribute.String("method", r.Method),
+					attribute.String("method", knownMethod(r.Method)),
 					attribute.String("status_class", statusClass(sw.status)),
 				)
 				m.requests.Add(r.Context(), 1, opts)
