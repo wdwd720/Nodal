@@ -41,6 +41,11 @@ func prodEnv() map[string]string {
 		"CP_RATELIMIT_BACKEND": "redis",
 		"CP_HTTP_REPLICAS":     "3",
 
+		"CP_CAPACITY_MAX_ACCOUNTS":          "5000",
+		"CP_CAPACITY_MAX_PURCHASES_PER_DAY": "20000",
+		"CP_CAPACITY_MAX_AT_RISK_MINOR":     "50000000",
+		"CP_CAPACITY_MAX_DATABASE_BYTES":    "0",
+
 		"CP_REDIS_URL":         "aws-sm://cp/prod/redis-url",
 		"CP_REDIS_REQUIRE_TLS": "true",
 

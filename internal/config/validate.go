@@ -52,6 +52,9 @@ const (
 	// binary that serves public HTTP in STAGING/PROD, where it runs as more
 	// than one replica.
 	RuleDistributedRateLimit Rule = "DISTRIBUTED_RATE_LIMIT"
+	// RuleCapacityCeiling requires a binary that takes money to state at least
+	// one ceiling on how much it may take or store.
+	RuleCapacityCeiling Rule = "CAPACITY_CEILING"
 	// RuleNoInsecureOTLP applies to PROD only: telemetry must be exported
 	// over TLS.
 	RuleNoInsecureOTLP Rule = "NO_INSECURE_OTLP"
@@ -204,6 +207,32 @@ func (c *Config) Validate() error {
 	}
 	if prodLike && !c.Capability.StoreConfigured {
 		add(RuleCapabilityStore, "Capability.StoreConfigured", "capability store (application database) must be configured in STAGING/PROD")
+	}
+
+	// ---- capacity ceilings -------------------------------------------------
+	//
+	// A deployment that takes money states what it is prepared to owe. An
+	// individual ceiling may be zero, because paid infrastructure has no
+	// database quota to guard -- but all four being zero means nothing bounds
+	// how much this deployment may take or store, and that is a configuration
+	// nobody would choose deliberately and anybody could reach by deleting a
+	// line.
+	if c.Service.ServesHTTP() {
+		for name, v := range map[string]int64{
+			"Capacity.MaxAccounts":        c.Capacity.MaxAccounts,
+			"Capacity.MaxPurchasesPerDay": c.Capacity.MaxPurchasesPerDay,
+			"Capacity.MaxAtRiskMinor":     c.Capacity.MaxAtRiskMinor,
+			"Capacity.MaxDatabaseBytes":   c.Capacity.MaxDatabaseBytes,
+		} {
+			if v < 0 {
+				add(RuleField, name, "must not be negative")
+			}
+		}
+		if c.Capacity.MaxAccounts == 0 && c.Capacity.MaxPurchasesPerDay == 0 &&
+			c.Capacity.MaxAtRiskMinor == 0 && c.Capacity.MaxDatabaseBytes == 0 {
+			add(RuleCapacityCeiling, "Capacity",
+				"every ceiling is zero, so nothing bounds how much this deployment may take or store; state at least one")
+		}
 	}
 
 	// ---- rate limiting -----------------------------------------------------

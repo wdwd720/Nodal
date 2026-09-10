@@ -315,6 +315,7 @@ const (
 	secCore       = "Core"
 	secHTTP       = "HTTP"
 	secDatabase   = "Database (Postgres)"
+	secCapacity   = "Capacity ceilings"
 	secRateLimit  = "Rate limiting"
 	secRedis      = "Redis"
 	secRedpanda   = "Redpanda (event bus)" // #nosec G101 -- config section heading, not a credential
@@ -389,6 +390,14 @@ func specs() []varSpec {
 		req("CP_DATABASE_LOCK_TIMEOUT", secDatabase, "Postgres lock_timeout applied per session.", "5s",
 			setDuration(func(c *Config) *time.Duration { return &c.Database.LockTimeout })),
 
+		only(ServiceAPI, req("CP_CAPACITY_MAX_ACCOUNTS", secCapacity, "Most accounts this deployment tier will hold. Reached, it refuses to open more. 0 disables the ceiling, which is only correct where the tier has no such limit.", "50",
+			setInt64(func(c *Config) *int64 { return &c.Capacity.MaxAccounts }))),
+		only(ServiceAPI, req("CP_CAPACITY_MAX_PURCHASES_PER_DAY", secCapacity, "Most Credit purchases in any rolling 24 hours. It bounds provider webhook volume and database growth together. 0 disables it.", "200",
+			setInt64(func(c *Config) *int64 { return &c.Capacity.MaxPurchasesPerDay }))),
+		only(ServiceAPI, req("CP_CAPACITY_MAX_AT_RISK_MINOR", secCapacity, "Most money, in minor units, that may sit in a non-terminal funding state at once. This is the ceiling that bounds what a failure COSTS rather than what it consumes. 0 disables it.", "200000",
+			setInt64(func(c *Config) *int64 { return &c.Capacity.MaxAtRiskMinor }))),
+		only(ServiceAPI, req("CP_CAPACITY_MAX_DATABASE_BYTES", secCapacity, "The database storage quota this tier is subject to. New financial actions stop below it, leaving room to reconcile and export. 0 disables it, which is correct on infrastructure with no quota.", "524288000",
+			setInt64(func(c *Config) *int64 { return &c.Capacity.MaxDatabaseBytes }))),
 		only(ServiceAPI, req("CP_HTTP_REPLICAS", secRateLimit, "How many processes of this binary serve HTTP. It decides whether process-local rate-limit counters can enforce the configured limit: one process can, more cannot, because each keeps its own copy of the budget. Whatever runs the deployment -- a task count, a replica count, an instance count -- must agree with this, and a value that understates it produces a limit looser than the one configured.", "1",
 			setInt(func(c *Config) *int { return &c.RateLimit.Replicas }))),
 		only(ServiceAPI, req("CP_RATELIMIT_BACKEND", secRateLimit, "Where transport rate-limit counters live: memory | redis. memory keeps them in the process, so the budget is per replica -- three API tasks with a limit of 100 admit 300 -- which is why STAGING and PROD refuse it. redis shares one budget across every replica and makes CP_REDIS_* required of the API.", "memory",

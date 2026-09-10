@@ -62,6 +62,7 @@ type Config struct {
 	BuildVersion      string
 	HTTP              HTTPConfig
 	Database          DatabaseConfig
+	Capacity          CapacityConfig
 	RateLimit         RateLimitConfig
 	Redis             RedisConfig
 	Redpanda          RedpandaConfig
@@ -147,6 +148,25 @@ func (b RateLimitBackend) Distributed() bool { return b == RateLimitRedis }
 // two ways: one set of counters.
 func (c RateLimitConfig) EnforcesOneBudget() bool {
 	return c.Backend.Distributed() || c.Replicas == 1
+}
+
+// CapacityConfig is the deployment tier's hard ceilings on financial activity.
+//
+// They are configuration rather than constants because the same binary runs on
+// a free tier sized for fifty people and on infrastructure sized for rather
+// more, and the difference between those is a number rather than a code path.
+// They are stated explicitly outside LOCAL and TEST for the same reason a
+// pricing policy is: a ceiling nobody chose is a ceiling nobody owns.
+//
+// Zero disables one ceiling. That is meaningful on paid infrastructure, where
+// MaxDatabaseBytes would guard a quota that does not exist -- but
+// internal/capacity refuses a budget in which EVERY ceiling is zero, because
+// such a guard passes every check while reading as protection.
+type CapacityConfig struct {
+	MaxAccounts        int64
+	MaxPurchasesPerDay int64
+	MaxAtRiskMinor     int64
+	MaxDatabaseBytes   int64
 }
 
 // RateLimitConfig configures the transport rate limiter.

@@ -78,6 +78,15 @@
 //
 // Rate limiting (cmd/api only):
 //
+// Capacity ceilings (cmd/api only; every one 0 is refused):
+//
+//	CP_CAPACITY_MAX_ACCOUNTS           int64
+//	CP_CAPACITY_MAX_PURCHASES_PER_DAY  int64 (rolling 24h)
+//	CP_CAPACITY_MAX_AT_RISK_MINOR      int64 (non-terminal funding)
+//	CP_CAPACITY_MAX_DATABASE_BYTES     int64 (0 where there is no quota)
+//
+// Rate limiting (cmd/api only):
+//
 //	CP_RATELIMIT_BACKEND            memory | redis
 //	CP_HTTP_REPLICAS                int; memory counters need exactly 1
 //
