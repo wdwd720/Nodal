@@ -322,6 +322,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if creditPurchases.Service != nil {
 		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg.Credit.SettlementWindow, log)
 	}
+	// The same answer for the same reason: this deployment has one process, so
+	// the periodic work belongs in it. login_attempts holds a plaintext OIDC
+	// nonce and PKCE verifier per attempt, and its purge lives in
+	// cmd/audit-worker, which this deployment does not run (F-105).
+	go runLoginAttemptRetention(ctx, cfg, in.lookup, log)
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)

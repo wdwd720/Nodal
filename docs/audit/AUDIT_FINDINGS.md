@@ -5083,10 +5083,39 @@ partition takes its rows with it and leaves the chain intact. It is deliberately
 not being written at the end of this batch, for the reason F-42 records about
 changes to mechanisms many things depend on.
 
-`login_attempts` has a purge that this deployment never runs — the same class,
-recorded here rather than fixed, because the answer is either a cron on the
-Render blueprint or a ticker inside `cmd/api` the way `runCreditSettlement`
-already is, and that is a deployment decision with its own evidence.
+### Update 2026-09-10: the `login_attempts` half is done
+
+It was recorded here rather than fixed, on the grounds that the answer was
+"either a cron on the Render blueprint or a ticker inside `cmd/api` the way
+`runCreditSettlement` already is, and that is a deployment decision". Half of
+that was right and half was an excuse: **which** answer is a deployment
+decision, but the ticker is the same one F-90 already reached for settlement,
+and the reasoning transfers without modification — when the deployment has one
+process, the periodic work belongs in it.
+
+`runLoginAttemptRetention` purges expired attempts hourly, from its own `cp_ops`
+pool, because `cp_app` deliberately holds no DELETE on `login_attempts`: an
+attacker with the application credential must not be able to erase the record of
+the logins they attempted.
+
+**What it does when it cannot run is the part with a test.** With no
+`CP_DATABASE_OPS_URL`, or a retention of zero, it logs a WARN naming *what will
+not happen* — "plaintext OIDC nonces and PKCE verifiers are kept
+indefinitely" — and returns. It does **not** refuse to boot: `cmd/audit-worker`
+refuses because purging is why that binary was deployed, and this is a web
+service whose job is serving requests; taking it down over an unconfigured
+retention pass trades a disclosure risk for an outage. But it must not be silent
+either, because "a control that reports success having run nothing" is the
+defect class this register keeps recording, and a retention pass that quietly
+does not exist is the same shape.
+
+`render.yaml` now declares `NODAL_DB_OPS_URL` with `sync: false`, so the
+operator is prompted for it. **Until they supply it the purge still does not
+run** — that part is genuinely theirs, and the WARN is what says so.
+
+**Still open:** `security_events` remains unprunable. That is the larger half
+and it is a schema change, per ADR-0020: partition and detach, never delete
+under a disabled trigger.
 
 **Evidence.** STATIC_PROOF for the exhaustion path — the five facts above were
 each read, not inferred, and no flood was run against the deployed service.

@@ -59,6 +59,19 @@ services:
         sync: false
       - key: NODAL_DB_MIGRATE_URL
         sync: false
+      # The cp_ops role, for the login-attempt purge. cp_app deliberately holds
+      # no DELETE on login_attempts -- an attacker with the application
+      # credential must not be able to erase the record of the logins they
+      # attempted -- so the purge needs its own role.
+      #
+      # Until this is set, cmd/api logs a WARN at startup naming what will not
+      # happen and serves normally: a web service does not refuse to boot
+      # because a retention pass is unconfigured. But the plaintext OIDC nonces
+      # and PKCE verifiers in login_attempts are then kept forever, on a
+      # database whose ceiling halts every financial action when it fills
+      # (F-105).
+      - key: NODAL_DB_OPS_URL
+        sync: false
       - key: NODAL_OIDC_CLIENT_SECRET
         sync: false
       - key: NODAL_STRIPE_API_KEY
@@ -178,6 +191,8 @@ services:
         value: env://NODAL_DB_APP_URL
       - key: CP_DATABASE_MIGRATE_URL
         value: env://NODAL_DB_MIGRATE_URL
+      - key: CP_DATABASE_OPS_URL
+        value: env://NODAL_DB_OPS_URL
       - key: CP_DATABASE_REQUIRE_TLS
         value: "true"
       - key: CP_DATABASE_MAX_CONNS
