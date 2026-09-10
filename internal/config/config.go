@@ -222,7 +222,6 @@ type TemporalConfig struct {
 	RequireTLS      bool
 }
 
-// ArchiveConfig configures the S3-compatible evidence/audit archive.
 // ArchiveBackend is where evidence objects are stored.
 //
 // It exists because "an S3-compatible object store" is an infrastructure
@@ -270,6 +269,8 @@ func (b ArchiveBackend) IsValid() bool { return b == ArchiveS3 || b == ArchivePo
 // its own account.
 func (b ArchiveBackend) NeedsObjectStore() bool { return b != ArchivePostgres }
 
+// ArchiveConfig configures the evidence and audit archive. Which of these
+// values are required depends on Backend.
 type ArchiveConfig struct {
 	Backend            ArchiveBackend
 	Endpoint           string
