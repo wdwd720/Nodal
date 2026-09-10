@@ -166,12 +166,34 @@ func TestIntegration_AgentCanNeverResolve(t *testing.T) {
 		assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 	})
 
-	t.Run("database refuses AGENT as resolver", func(t *testing.T) {
-		// Even if every Go guard were bypassed, the CHECK constraint on
-		// reconciliation_records.resolved_by_actor_type refuses it.
+	t.Run("the application cannot name a resolver at all", func(t *testing.T) {
+		// 00751 revoked UPDATE on reconciliation_records from cp_app and moved
+		// the whole resolution onto the transition row, so the application
+		// cannot write this column whatever value it intends.
 		_, err := d.Exec(f.ctx, `UPDATE reconciliation_records SET resolved_by_actor_type = 'AGENT' WHERE id = $1`, rec.ID)
 		require.Error(t, err)
-		assert.True(t, db.IsCheckViolation(err), "expected a CHECK violation, got %v", err)
+		assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+	})
+
+	t.Run("and a transition row cannot name an AGENT as resolver", func(t *testing.T) {
+		// The rule that used to live only on reconciliation_records is mirrored
+		// onto the transition by 00751, so an illegal resolver is refused where
+		// the row is written. Driven through the repository, which is the only
+		// path that can write a transition row at all.
+		err := d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, terr := f.records.Transition(ctx, tx, rec.ID, StatusResolvedAutomatic,
+				TransitionEvidence{
+					Actor:  Actor{Type: security.ActorOperator, ID: "op-" + f.suffix},
+					Reason: "probe", EvidenceRef: "ref",
+					Patch: &ResolutionPatch{
+						ResolvedByActorType: "AGENT", ResolvedByActorID: "a",
+						Reason: "r", EvidenceRef: "e",
+					},
+				})
+			return terr
+		})
+		require.Error(t, err, "an agent was recorded as the resolver of a financial discrepancy")
+		assert.Contains(t, err.Error(), "resolver_is_not_an_agent", "got %v", err)
 	})
 
 	// The record is untouched.

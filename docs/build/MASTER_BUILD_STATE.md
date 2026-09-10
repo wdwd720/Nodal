@@ -1758,7 +1758,7 @@ inventory row across six provider audits, whose constituent items are tracked
 individually. F-105 closed with 00740 and F-42 with 00741 — the latter after
 four sessions open and three fixes tried and rejected.
 
-F-100 through F-131 landed on 2026-09-10: **32 findings, 17 P1, 9 P2, 6 P3**, and F-42’s stronger remedy has now taken fourteen of its seventeen tables,
+F-100 through F-131 landed on 2026-09-10: **32 findings, 17 P1, 9 P2, 6 P3**, and F-42’s stronger remedy has now taken fifteen of its seventeen tables,
 from eleven parallel read-only audits whose claims were re-verified here before
 anything was changed, plus two the fuzz tier found on its own. Every P1 was
 observed failing before it was believed:

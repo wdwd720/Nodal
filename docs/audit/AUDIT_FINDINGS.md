@@ -1679,16 +1679,17 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: **three of the
-seventeen bound tables still grant `cp_app` blanket UPDATE** — `deposits`,
-`kill_switches` and `reconciliation_records`.
+tracked on its own terms rather than as this finding's blocker: **two of the
+seventeen bound tables still grant `cp_app` blanket UPDATE** — `deposits` and
+`kill_switches`.
 
 Fourteen do not: `capability_gates` (00701), `withdrawals`, `assets`,
 `instruments` and `payout_requests` (00733, F-109, the four whose columns are
 money), `admin_actions`, and the eight done under this finding —
 **`credit_fundings` (00743), `accounts` (00744), `wallets` (00745),
 `native_markets` (00746), `native_assets` (00747), `orders` (00748),
-`trade_intents` (00749) and `agents` (00750).**
+`trade_intents` (00749), `agents` (00750) and `reconciliation_records`
+(00751).**
 
 ### 00743 — the first of the ten, and what it cost
 
@@ -1944,6 +1945,38 @@ against. Two different decisions:
   **unexported**. Pairing it would mean exporting a package internal purely so a
   test could read it, trading real encapsulation for a check the constraint
   already enforces on every write.
+
+### 00751 — the widest, and the trap in it
+
+`reconciliation_records` wrote ten columns, six of them from a `ResolutionPatch`
+carried on no transition row. All six moved onto the transition, for the reason
+00748 and 00750 give and which applies most clearly here: **a record is resolved
+BY a transition, so who resolved it, why, on what evidence, under whose approval
+and with which compensating journal transaction are facts about that transition**
+— not properties the record acquires beside it. A resolution written next to the
+transition rather than on it is a record that cannot say from its own history who
+closed it.
+
+**The trap is that the two actors are different.** The transition row already had
+`actor_type`/`actor_id` — who made the transition — and the record has
+`resolved_by_actor_type`/`_id` — who resolved the discrepancy. Only the second is
+refused to an AGENT. Mapping one onto the other, which is what "reuse the columns
+already there" would have meant, **would have let an agent be recorded as the
+resolver of a financial discrepancy** — exactly what
+`reconciliation_records_resolved_by_actor_type_check` exists to prevent. The
+survey flagged it; it was verified before writing, and the CHECK is mirrored onto
+the transition so an illegal resolver is refused where the row is written.
+
+**One ordering fact that would have been a silent hole.** The first draft wrote
+the resolution in an UPDATE after `writeTransition`. The trigger fires on
+INSERT, so the record would already have moved without it. The resolution has to
+travel in the INSERT, and does.
+
+**And the birth transition needed an explicit exemption.** `Create` writes the
+record and then a `NONE -> OPEN` row; NONE is not a stored status, so the
+compare-and-swap would have refused every record's own creation. The trigger
+returns early on it, and 00724's `cp_require_transition_on_insert` — untouched —
+is what still makes that birth row compulsory.
 
 #### What the test fallout was, and it is larger than 00743's
 

@@ -217,7 +217,7 @@ func (r *Repository) Open(ctx context.Context, tx pgx.Tx, req OpenRequest) (Reco
 	if err != nil {
 		return Record{}, dbErr("insert reconciliation record", err)
 	}
-	if err := r.writeTransition(ctx, tx, rec, StatusNone, StatusOpen, actor, req.Reason, req.EvidenceRef, now); err != nil {
+	if err := r.writeTransition(ctx, tx, rec, StatusNone, StatusOpen, actor, req.Reason, req.EvidenceRef, now, nil); err != nil {
 		return Record{}, err
 	}
 	if err := r.announce(ctx, tx, rec, StatusNone, StatusOpen, actor, req.Reason, req.EvidenceRef, now); err != nil {
@@ -299,50 +299,31 @@ func (r *Repository) Transition(ctx context.Context, tx pgx.Tx, recordID RecordI
 	now := r.clk.Now().UTC()
 	from := rec.Status
 
-	// The transition row must exist before COMMIT; writing it first also
-	// leaves the flag the constraint trigger reads.
-	if err := r.writeTransition(ctx, tx, rec, from, to, actor, ev.Reason, ev.EvidenceRef, now); err != nil {
-		return Record{}, err
-	}
-
 	p := ev.Patch
 	if p == nil {
 		p = &ResolutionPatch{}
 	}
-	var matchedAt, resolvedAt *time.Time
-	if to == StatusMatched {
-		matchedAt = &now
+
+	// The transition row IS the status change since 00751, and it carries the
+	// whole resolution with it: who resolved the discrepancy, why, on what
+	// evidence, under whose approval, and with which compensating journal
+	// transaction. Those are facts about THIS transition, not properties the
+	// record acquires beside it.
+	//
+	// It has to travel in the INSERT rather than in a later UPDATE, because the
+	// trigger that applies the row fires on INSERT -- a resolution written
+	// afterwards would arrive after the record had already moved without it.
+	//
+	// `resolved_by_actor_type` is deliberately not this row's own `actor_type`.
+	// Only the first is refused to an AGENT, and mapping one onto the other
+	// would let an agent be recorded as the resolver of a financial discrepancy.
+	if err := r.writeTransition(ctx, tx, rec, from, to, actor, ev.Reason, ev.EvidenceRef, now, p); err != nil {
+		return Record{}, err
 	}
-	if to == StatusResolvedAutomatic || to == StatusResolvedManual {
-		resolvedAt = &now
-	}
-	blocks := rec.BlocksNewRisk
-	if to == StatusMatched || to.Terminal() {
-		blocks = false
-	}
-	updated, err := scanRecord(tx.QueryRow(ctx, `UPDATE reconciliation_records SET
-			status = $2,
-			matched_at = coalesce(matched_at, $3),
-			resolved_at = coalesce(resolved_at, $4),
-			blocks_new_risk = $5,
-			resolved_by_actor_type = coalesce($6, resolved_by_actor_type),
-			resolved_by_actor_id = coalesce($7, resolved_by_actor_id),
-			resolution_reason = coalesce($8, resolution_reason),
-			resolution_evidence_ref = coalesce($9, resolution_evidence_ref),
-			approval_id = coalesce($10::uuid, approval_id),
-			compensating_journal_transaction_id = coalesce($11::uuid, compensating_journal_transaction_id)
-		WHERE id = $1 AND status = $12
-		RETURNING `+recordColumns,
-		rec.ID, string(to), matchedAt, resolvedAt, blocks,
-		nullable(string(p.ResolvedByActorType)), nullable(p.ResolvedByActorID),
-		nullable(p.Reason), nullable(p.EvidenceRef), nullable(p.ApprovalID), nullable(p.CompensatingJournalTxID),
-		string(from)))
+	updated, err := scanRecord(tx.QueryRow(ctx,
+		`SELECT `+recordColumns+` FROM reconciliation_records WHERE id = $1`, rec.ID))
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Record{}, errs.New(errs.CodeConflict, "reconciliation: record changed concurrently").
-				WithField("record_id", rec.ID.String())
-		}
-		return Record{}, dbErr("update reconciliation record", err)
+		return Record{}, dbErr("read reconciliation record back", err)
 	}
 	if err := r.announce(ctx, tx, updated, from, to, actor, ev.Reason, ev.EvidenceRef, now); err != nil {
 		return Record{}, err
@@ -369,12 +350,20 @@ func claimStatusUpdate(ctx context.Context, tx pgx.Tx, recordID RecordID) error 
 	return nil
 }
 
-func (r *Repository) writeTransition(ctx context.Context, tx pgx.Tx, rec Record, from, to Status, actor Actor, reason, evidenceRef string, now time.Time) error {
+func (r *Repository) writeTransition(ctx context.Context, tx pgx.Tx, rec Record, from, to Status, actor Actor, reason, evidenceRef string, now time.Time, p *ResolutionPatch) error {
+	if p == nil {
+		p = &ResolutionPatch{}
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO reconciliation_transitions
-			(id, record_id, from_status, to_status, actor_type, actor_id, reason, evidence_ref, occurred_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			(id, record_id, from_status, to_status, actor_type, actor_id, reason, evidence_ref, occurred_at,
+			 to_resolved_by_actor_type, to_resolved_by_actor_id, to_resolution_reason,
+			 to_resolution_evidence_ref, to_approval_id, to_compensating_journal_transaction_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::uuid,$15::uuid)`,
 		NewTransitionID(), rec.ID, string(from), string(to), string(actor.Type), actor.ID,
-		nullable(reason), nullable(evidenceRef), now); err != nil {
+		nullable(reason), nullable(evidenceRef), now,
+		nullable(string(p.ResolvedByActorType)), nullable(p.ResolvedByActorID),
+		nullable(p.Reason), nullable(p.EvidenceRef), nullable(p.ApprovalID),
+		nullable(p.CompensatingJournalTxID)); err != nil {
 		return dbErr("insert reconciliation transition", err)
 	}
 	return nil
