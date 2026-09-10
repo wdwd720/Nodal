@@ -26,6 +26,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,7 +223,14 @@ func TestTheThreeModeListsAgreeWithEachOther(t *testing.T) {
 
 // bespoke names the constraints compared by a test of their own because their
 // shape is not a flat list of values.
-var bespoke = []string{"agents.agents_check3"}
+var bespoke = []string{
+	"agents.agents_check3",
+	// 00750's mirror of agents_check3 onto the transition row. Compared with
+	// the original by TestIntegration_TheStageModeMappingMatchesTheDatabase,
+	// which is the strongest pairing available: not against a Go list, but
+	// against the constraint it is a copy of.
+	"agent_lifecycle_transitions.agent_lifecycle_transitions_destination_is_legal",
+}
 
 var (
 	stageNullMode = regexp.MustCompile(`\(stage = ANY \(ARRAY\[([^\]]*)\]\)\) AND \(mode IS NULL\)`)
@@ -278,6 +286,55 @@ func TestIntegration_TheStageModeMappingMatchesTheDatabase(t *testing.T) {
 			sort.Strings(want)
 			assert.Equal(t, want, got, "ModesForStage(%s) and agents_check3 have diverged", st)
 		})
+	}
+
+	// The third copy, and the reason this test grew rather than the unpaired
+	// list.
+	//
+	// 00750 mirrors agents_check3 onto agent_lifecycle_transitions, against
+	// to_stage and to_mode, so that a transition row which does not describe a
+	// legal agent is refused where it is WRITTEN instead of surfacing as a
+	// violation on a table the caller never touched. That migration says the two
+	// "cannot drift unnoticed, because the agent's own CHECKs still stand" --
+	// which is true of correctness and not of maintenance: a mirror that
+	// permitted LESS would refuse legitimate promotions, and nothing would say
+	// why.
+	//
+	// So the mirror is compared with the original, mapping to_stage/to_mode back
+	// onto stage/mode, and this assertion is what makes that sentence in 00750
+	// true rather than hopeful.
+	var mirror string
+	require.NoError(t, testDB.QueryRow(context.Background(),
+		`SELECT pg_get_constraintdef(oid) FROM pg_constraint
+			WHERE conrelid = 'agent_lifecycle_transitions'::regclass
+			  AND conname = 'agent_lifecycle_transitions_destination_is_legal'`).Scan(&mirror))
+	normalised := strings.NewReplacer("to_stage", "stage", "to_mode", "mode").Replace(mirror)
+
+	inMirror := map[string][]string{}
+	for _, m := range stageNullMode.FindAllStringSubmatch(normalised, -1) {
+		for _, st := range literal.FindAllStringSubmatch(m[1], -1) {
+			inMirror[st[1]] = nil
+		}
+	}
+	for _, m := range stageModeAny.FindAllStringSubmatch(normalised, -1) {
+		for _, md := range literal.FindAllStringSubmatch(m[2], -1) {
+			inMirror[m[1]] = append(inMirror[m[1]], md[1])
+		}
+	}
+	for _, m := range stageModeOne.FindAllStringSubmatch(normalised, -1) {
+		inMirror[m[1]] = append(inMirror[m[1]], m[2])
+	}
+	require.Len(t, inMirror, len(agent.Stages()),
+		"the parse found %d stages in the mirrored CHECK; every stage must appear or this comparison is partial", len(inMirror))
+
+	for _, st := range agent.Stages() {
+		a := append([]string{}, inDB[string(st)]...)
+		b := append([]string{}, inMirror[string(st)]...)
+		sort.Strings(a)
+		sort.Strings(b)
+		assert.Equal(t, a, b,
+			"%s: agents_check3 and its mirror on agent_lifecycle_transitions have diverged; "+
+				"a mirror that permits less refuses legitimate promotions and a mirror that permits more lets an illegal row through", st)
 	}
 }
 
@@ -339,6 +396,14 @@ func TestIntegration_NoEnumCheckAppearsUnnoticed(t *testing.T) {
 // unpaired names the enum CHECK constraints that no Go list is compared
 // against today. Each is a list the schema holds and nothing verifies against
 // the code. It is an inventory, not an allow-list: the right number is zero.
+// intent_transitions_rejection_code_check names the six terminal statuses, and
+// it is listed here rather than paired because the list it repeats is
+// intent.terminalStatuses, which is UNEXPORTED. Pairing it would mean exporting
+// a Go internal purely so a test could read it, which trades a real
+// encapsulation for a check the CHECK itself already enforces on every write.
+// The rule is asserted from the outside instead, by
+// internal/intent's own tests driving a rejection code onto a non-terminal
+// transition and watching it refused (00749).
 var unpaired = []string{
 	"accounts.accounts_kind_check",
 	"accounts.accounts_status_check",
@@ -403,6 +468,7 @@ var unpaired = []string{
 	"instruments.instruments_risk_class_check",
 	"instruments.instruments_status_check",
 	"instruments.instruments_type_check",
+	"intent_transitions.intent_transitions_rejection_code_check",
 	"internal_commerce_orders.internal_commerce_orders_earning_origin_check",
 	"internal_sellers.internal_sellers_status_check",
 	"journal_entries.journal_entries_side_check",

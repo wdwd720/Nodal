@@ -154,6 +154,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-128 | P1 | NEW | fixed | The application role could mint a transition flag by attaching the real setter to a temp table of its own, which F-42 does not record and which defeats any fix that only hardens the flag's value |
 | F-129 | P2 | NEW | fixed | A restore that lost one table would pass every comparison the restore drill makes and then refuse every state change in the system, with an error blaming the caller |
 | F-130 | P3 | NEW | fixed | This register states every finding's status twice and nothing checked the two agreed; four disagreed, and five findings have no evidence section at all |
+| F-131 | P3 | NEW | fixed | A fixture wrote agent rows with v4 UUIDs into a column the application reads as a v7 typed id, so it created rows this system can write and cannot read |
 
 ---
 
@@ -1678,15 +1679,16 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: **five of the
-seventeen bound tables still grant `cp_app` blanket UPDATE** — `agents`,
-`deposits`, `kill_switches`, `reconciliation_records` and `trade_intents`.
+tracked on its own terms rather than as this finding's blocker: **three of the
+seventeen bound tables still grant `cp_app` blanket UPDATE** — `deposits`,
+`kill_switches` and `reconciliation_records`.
 
-Twelve do not: `capability_gates` (00701), `withdrawals`, `assets`,
+Fourteen do not: `capability_gates` (00701), `withdrawals`, `assets`,
 `instruments` and `payout_requests` (00733, F-109, the four whose columns are
-money), `admin_actions`, and the six done under this finding —
+money), `admin_actions`, and the eight done under this finding —
 **`credit_fundings` (00743), `accounts` (00744), `wallets` (00745),
-`native_markets` (00746), `native_assets` (00747) and `orders` (00748).**
+`native_markets` (00746), `native_assets` (00747), `orders` (00748),
+`trade_intents` (00749) and `agents` (00750).**
 
 ### 00743 — the first of the ten, and what it cost
 
@@ -1862,6 +1864,86 @@ had one of them wrong. `OrderStatus.Terminal()` is SETTLED, REJECTED, EXPIRED,
 CANCELLED, FAILED_FINAL — **FILLED is not terminal**, because settlement follows
 it, and the invented list in the first draft would have stamped `terminal_at` on
 an order that was still moving.
+
+### 00749 — the same decision, and where it deliberately differs
+
+`trade_intents` had exactly the `orders` gap, so it got exactly the `orders`
+answer rather than a second answer to reconcile later. **The CHECK is not a
+copy**, and copying it would have been wrong: `orders` demands a code on
+REJECTED and permits it nowhere else, while `trade_intents` demands one on
+REJECTED *and* NO_VALID_PLAN and permits one on any of six terminal statuses.
+Both rules were read out of `RequiresRejectionCode` and the validator rather
+than out of the neighbouring migration. A single-equality CHECK would have
+refused a legitimate FAILED transition that explained itself.
+
+There is also no compare-and-swap here to preserve, because this UPDATE never
+had one. Adding it would have been a new behaviour rather than a moved one.
+
+### 00750 — where granting the obvious columns back would have undone 00739
+
+`agents` is the table where the established pattern had to be refused.
+`updateAgentStateSQL` wrote eight columns; three — `mode`, `envelope_id`,
+`superseded_by_agent_id` — were on no transition row. Granting them back would
+have left the application able to write LIVE and an envelope onto an existing
+agent with no transition and no approval, **reaching by UPDATE exactly what
+00739 refuses at INSERT.**
+
+So they moved onto the transition. A promotion is the thing that grants
+authority, so the authority it grants belongs on it — the 00748 argument, and
+stronger here because what is granted is the right to move real money.
+
+**Three drafts, and each was corrected by something in the schema rather than by
+review.**
+
+1. *Coalesce.* The first draft coalesced every column, so a transition that did
+   not restate a value preserved it. `agents_check3` refused immediately: it ties
+   stage to mode, and a demotion to VALIDATED that kept its mode is a row the
+   table does not permit. Direct assignment is what the old UPDATE did, and a
+   NULL means *cleared*.
+2. *Deriving `failure_reason` from `reason`.* They coincide on the way into
+   FAILED and diverge on the way out — a transition out of FAILED has a reason
+   and must clear the failure. Carried explicitly as `to_failure_reason`.
+3. *"The mode cannot be checked against the stage."* The first draft's header
+   said so, because BACKTEST_ELIGIBLE permits BACKTEST or PAPER. That confused
+   "not a function of" with "not constrained by". `agents_check3` has constrained
+   it since 00501.
+
+The third correction became the best part of the migration. **The three CHECKs
+that constrain an agent's authority are now mirrored onto the transition**, so a
+row that does not describe a legal destination is refused where it is *written*,
+naming the rule it broke — instead of surfacing as a constraint violation on a
+table the caller never touched. Three copies of a rule is normally what this
+register complains about; these cannot drift unnoticed, because the agent's own
+CHECKs still stand behind them. The mirror exists to move the error to where the
+mistake was made.
+
+**The test fallout was the largest of the eight** and every piece of it was the
+same shape: fixtures that hand-build a transition row must now state the whole
+destination, and probes that prove the *binding* must run as the migration role
+because `cp_app` can no longer reach the column to be refused by it. Two forged
+promotions are now refused earlier — at the row rather than at COMMIT — and the
+assertions say which mechanism refused them, so a future change that silently
+swapped one for the other would be visible.
+
+**And the enum inventory did its job on the way past.**
+`TestIntegration_NoEnumCheckAppearsUnnoticed` (F-74's answer) noticed both new
+CHECKs and refused to pass until somebody decided what each was worth pairing
+against. Two different decisions:
+
+- `agent_lifecycle_transitions_destination_is_legal` is **compared with the
+  constraint it mirrors** rather than with a Go list, which is a stronger
+  pairing than the registry offers. 00750's header claimed the mirror and the
+  original "cannot drift unnoticed, because the agent's own CHECKs still
+  stand" — true of correctness and not of maintenance, since a mirror that
+  permitted *less* would refuse legitimate promotions and nothing would say why.
+  The comparison is what makes that sentence true rather than hopeful, and it
+  was proven non-vacuous by narrowing the mirror to drop PAPER and watching
+  BACKTEST_ELIGIBLE fail.
+- `intent_transitions_rejection_code_check` is listed as unpaired, with the
+  reason: the list it repeats is `intent.terminalStatuses`, which is
+  **unexported**. Pairing it would mean exporting a package internal purely so a
+  test could read it, trading real encapsulation for a check the constraint
+  already enforces on every write.
 
 #### What the test fallout was, and it is larger than 00743's
 
@@ -6890,6 +6972,43 @@ back to OPEN, and deleting F-129's section.
 
 **Evidence.** `STATIC_PROOF` — the register is a file, and the check is a
 comparison of it against itself.
+
+## F-131 · A fixture wrote rows the application cannot read · NEW · P3 · FIXED
+
+**Found by** 00750's work on `agents`, and only because two packages happened to
+share a database.
+
+`internal/nativemarket/stage15_integration_test.go` built its scaffold ids with
+`uuid.NewString()`, which is **version 4**. Every id in this system is version 7
+(`id.New`), and `id.Parse` refuses anything else, so the fixture inserted agent
+rows that the application's own scanner cannot read back:
+
+```
+agent: scan agent: can't scan into dest[0] (col: id):
+  id: scan: id: not an rfc 9562 version 7 uuid: version 4
+```
+
+**Why nothing caught it, which is the part worth keeping.** `scripts/inttest`
+gives every package its own database. This fixture's rows were therefore only
+ever read by the package that wrote them, and that package never scans them as
+agents. The isolation that makes the integration tier reliable is the same
+isolation that hid a fixture writing unreadable rows, and it surfaced the first
+moment two packages shared one database.
+
+**Why P3.** No production path can produce a v4 id — `id.New` is the only
+constructor — so nothing running is affected. It is recorded because it is the
+fixture-shaped defect this register keeps finding, in a new place: **a fixture
+that creates state the system could never create itself is not a fixture, it is
+a different system.**
+
+**Fix.** The scaffold uses `id.New[id.Any]()`. The other 232 `uuid.NewString()`
+calls in the test tree were left alone deliberately: most produce idempotency
+keys, correlation ids and provider references, where v4 is correct and no typed
+id parses them. Changing them all would be churn, and would obscure the one that
+mattered.
+
+**Evidence.** `REAL_DB_INTEGRATION` — the scanner's refusal, observed against a
+database holding the fixture's rows.
 
 ## Findings deliberately NOT raised
 

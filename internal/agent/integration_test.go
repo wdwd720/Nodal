@@ -33,6 +33,10 @@ var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	testDB         *db.DB
+	// The migration role, for probes that must reach a column cp_app no longer
+	// holds so that the trigger or binding under test is what refuses them
+	// (00750).
+	testOwnerDB *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -53,7 +57,13 @@ func testMain(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "agent integration: open pool:", err)
 		return 1
 	}
+	testOwnerDB, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "agent-itest-owner", MaxConns: 2})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agent integration: open owner pool:", err)
+		return 1
+	}
 	code := m.Run()
+	testOwnerDB.Close()
 	testDB.Close()
 	return code
 }
@@ -285,7 +295,15 @@ func ctxAs(p security.Principal) context.Context {
 // inTx runs fn in a transaction against the isolated test database.
 func inTx(ctx context.Context, t *testing.T, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	t.Helper()
-	return testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 0}, fn)
+	return inTxAs(ctx, t, testDB, fn)
+}
+
+// inTxAs runs fn on a chosen pool. Used with testOwnerDB where the point of the
+// test is a trigger rather than a privilege, so the probe has to reach the
+// column for the trigger to be the thing that refuses it.
+func inTxAs(ctx context.Context, t *testing.T, pool *db.DB, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	t.Helper()
+	return pool.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 0}, fn)
 }
 
 func newUUID() string { return id.New[struct{}]().String() }
@@ -645,9 +663,15 @@ func TestBareStateUpdateIsRefused(t *testing.T) {
 	a := f.walkTo(t, StageShadow)
 
 	// PAUSED is a side state, so no CHECK on agents refuses it first: the only
-	// thing standing between the application role and a silent state change is
-	// the transition binding.
-	err := inTx(context.Background(), t, func(ctx context.Context, tx pgx.Tx) error {
+	// thing standing between a caller and a silent state change is the
+	// transition binding.
+	//
+	// Driven as the OWNER since 00750, because cp_app can no longer write
+	// agents.state at all and would be refused by privilege before the binding
+	// was consulted. The owner is the strongest role that CAN write the column,
+	// which makes it the only one on which the binding is still what is being
+	// measured. That cp_app is refused outright is asserted just below.
+	err := inTxAs(context.Background(), t, testOwnerDB, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE agents SET state = 'PAUSED' WHERE id = $1`, a.ID)
 		return err
 	})
@@ -678,8 +702,27 @@ func TestStateUpdateWithAMismatchedTransitionIsRefused(t *testing.T) {
 		_, err := tx.Exec(ctx, `UPDATE agents SET state = 'FAILED' WHERE id = $1`, a.ID)
 		return err
 	})
-	require.Error(t, err)
-	assert.True(t, IsTransitionRequired(err), "expected AU001, got %v", err)
+	require.Error(t, err, "a row naming one state licensed a change to another")
+
+	// The refusal moved EARLIER in 00750, and that is the improvement rather
+	// than a regression to absorb.
+	//
+	// It used to be AU001 at COMMIT: the mismatched row was written, the bare
+	// UPDATE was written, and the binding caught the disagreement at the end.
+	// The row is now the state change, so a row that does not describe a legal
+	// destination is refused where it is WRITTEN -- this one names ToStage
+	// SHADOW with no mode, which agents_check3 forbids and the mirrored CHECK on
+	// the transition now says so directly.
+	//
+	// Either way the forgery does not commit and the agent does not move. The
+	// assertion names the mechanism so that a future change which silently
+	// swapped one for the other would be visible here.
+	assert.Contains(t, err.Error(), "agent_lifecycle_transitions_destination_is_legal",
+		"expected the transition row itself to be refused, got %v", err)
+
+	current, err := f.store.Get(context.Background(), testDB, a.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StateShadow, current.State, "the agent moved")
 }
 
 func TestLifecycleTransitionsAreImmutable(t *testing.T) {
@@ -861,10 +904,16 @@ func TestRevokedIsTerminalInTheDatabase(t *testing.T) {
 	// it -- which is exactly why the schema has to refuse it.
 	err := inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
 		_, ierr := tx.Exec(ctx,
+			// The destination columns are stated since 00750, so that the
+			// row is a LEGAL destination and this test still measures the rule
+			// it names. Without them the row is refused for being incomplete,
+			// which is also correct and is not what is under test here.
 			`INSERT INTO agent_lifecycle_transitions
-			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason)
-			 VALUES (gen_random_uuid(), $1, 'REVOKED', 'LIVE', $2, $2, 'SYSTEM', 'x', 'resurrect')`,
-			a.ID, string(a.Stage))
+			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason,
+			    to_mode, to_strategy_version_id)
+			 VALUES (gen_random_uuid(), $1, 'REVOKED', 'LIVE', $2, $2, 'SYSTEM', 'x', 'resurrect',
+			         $3, nullif($4,'')::uuid)`,
+			a.ID, string(a.Stage), string(a.Mode), a.StrategyVersionID)
 		return ierr
 	})
 	require.Error(t, err, "a revoked agent was returned to an operating state with no approval and no evidence")
@@ -874,10 +923,13 @@ func TestRevokedIsTerminalInTheDatabase(t *testing.T) {
 	// one value.
 	err = inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
 		_, ierr := tx.Exec(ctx,
+			// Destination stated, for the reason above.
 			`INSERT INTO agent_lifecycle_transitions
-			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason)
-			 VALUES (gen_random_uuid(), $1, 'SUPERSEDED', 'SHADOW', $2, $2, 'SYSTEM', 'x', 'resurrect')`,
-			a.ID, string(a.Stage))
+			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason,
+			    to_mode, to_strategy_version_id)
+			 VALUES (gen_random_uuid(), $1, 'SUPERSEDED', 'SHADOW', $2, $2, 'SYSTEM', 'x', 'resurrect',
+			         $3, nullif($4,'')::uuid)`,
+			a.ID, string(a.Stage), string(a.Mode), a.StrategyVersionID)
 		return ierr
 	})
 	require.Error(t, err)

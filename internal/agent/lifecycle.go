@@ -611,6 +611,21 @@ func (l *Lifecycle) transitionFor(from, to Agent, p security.Principal, ev Promo
 func (l *Lifecycle) commitTransition(ctx context.Context, tx pgx.Tx, p security.Principal, next Agent,
 	t Transition, action, reason, approvalID, correlationID string, now time.Time,
 ) error {
+	// What the transition GRANTS is filled in from the agent it produces, in one
+	// place, because every caller already computed `next` correctly and none of
+	// them should have to remember a second copy.
+	//
+	// This is not bookkeeping. Since 00750 the transition row is the only way
+	// `mode` and `envelope_id` can change at all -- the application holds no
+	// UPDATE on them -- so a transition that failed to carry them would be a
+	// promotion that granted nothing, silently. That is why they are set here
+	// rather than at each call site.
+	t.ToMode = next.Mode
+	t.ToEnvelopeID = next.EnvelopeID
+	t.ToStrategyVersionID = next.StrategyVersionID
+	t.ToRiskPolicyVersion = next.RiskPolicyVersion
+	t.ToSupersededByAgentID = next.SupersededByAgentID
+	t.ToFailureReason = next.FailureReason
 	if err := insertTransition(ctx, tx, t); err != nil {
 		return err
 	}
