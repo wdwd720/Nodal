@@ -103,14 +103,19 @@ services:
         value: "1"
 
       # --- the settlement asset ------------------------------------------
-      # The USD-pegged asset funds settle into. cmd/api refuses to start in
-      # PROD without both, and additionally checks the pair resolves to a known
+      # The USD-pegged asset funds settle into. cmd/api refuses to start
+      # without both, and additionally checks the pair resolves to a REGISTERED
       # stablecoin -- which needs the database, so it happens at composition
-      # rather than at configuration.
+      # rather than at configuration. Register it with
+      # `go run ./scripts/settlementasset`.
+      #
+      # Devnet, not mainnet. Every provider slot in this tier is `sandbox` and
+      # no real crypto moves; pointing at mainnet USDC would claim a settlement
+      # path this deployment does not have.
       - key: CP_API_SETTLEMENT_CHAIN
-        value: solana
+        value: solana-devnet
       - key: CP_API_SETTLEMENT_MINT
-        value: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+        value: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
 
       # --- capacity ceilings ---------------------------------------------
       # The launch tier's hard limits, checked inside the transaction of every
