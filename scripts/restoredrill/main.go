@@ -57,6 +57,7 @@ type report struct {
 	RowCountDiffs    map[string][2]int `json:"row_count_diffs,omitempty"`
 	BalancesMatch    bool              `json:"ledger_balances_recomputed_match"`
 	JournalHashMatch bool              `json:"journal_hash_match"`
+	StateChangeWorks bool              `json:"state_change_works_on_restore"`
 	SourceJournal    string            `json:"source_journal_hash"`
 	RestoredJournal  string            `json:"restored_journal_hash"`
 	Steps            []string          `json:"steps"`
@@ -184,7 +185,29 @@ func run() int {
 	step("reconciliation dry-run: tables=%d rowcounts_match=%v balance_drift_accounts=%d journal_hash_match=%v",
 		len(srcCounts), rep.RowCountsMatch, drift, rep.JournalHashMatch)
 
-	rep.OK = rep.VerifyOK && rep.RowCountsMatch && rep.BalancesMatch && rep.JournalHashMatch
+	// The negative control this probe exists for. Deleting the key row as the
+	// OWNER is what a restore that silently skipped one table would leave
+	// behind; cp_app cannot do it, which the first attempt at this break
+	// demonstrated by failing with "permission denied for table
+	// cp_transition_key".
+	//
+	//	CP_DRILL_BREAK=lose_the_transition_key go run ./scripts/restoredrill
+	//
+	// A run with it set is EXPECTED TO FAIL. It is evidence, not a regression.
+	if os.Getenv("CP_DRILL_BREAK") == "lose_the_transition_key" {
+		if err := breakTransitionKey(ctx, dst.AdminDSN); err != nil {
+			return fail(err)
+		}
+	}
+	if err := stateChangeWorks(ctx, dst.AppDSN); err != nil {
+		rep.StateChangeWorks = false
+		step("state change on the restored database: FAILED: %v", err)
+	} else {
+		rep.StateChangeWorks = true
+		step("state change on the restored database: ok")
+	}
+
+	rep.OK = rep.VerifyOK && rep.RowCountsMatch && rep.BalancesMatch && rep.JournalHashMatch && rep.StateChangeWorks
 	rep.FinishedAt = time.Now().UTC()
 	writeReport(*out, rep)
 	if !rep.OK {
@@ -193,6 +216,69 @@ func run() int {
 	}
 	fmt.Printf("restoredrill: OK (%s)\n", rep.FinishedAt.Sub(rep.StartedAt).Round(time.Millisecond))
 	return 0
+}
+
+// breakTransitionKey empties cp_transition_key as the owner, so the probe below
+// can be observed firing. Never called unless CP_DRILL_BREAK says so.
+func breakTransitionKey(ctx context.Context, adminDSN string) error {
+	conn, err := pgx.Connect(ctx, adminDSN)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	// 00742 makes the row undeletable to every role including the owner, which
+	// is the point -- an operator cannot lose it by accident. Simulating a
+	// restore that never HAD the row therefore means turning that off first,
+	// which only the owner can do and only here.
+	if _, err := conn.Exec(ctx, `ALTER TABLE cp_transition_key DISABLE TRIGGER cp_transition_key_undeletable`); err != nil {
+		return err
+	}
+	_, err = conn.Exec(ctx, `DELETE FROM cp_transition_key`)
+	return err
+}
+
+// stateChangeWorks drives one real audited state transition on the RESTORED
+// database, as the application role.
+//
+// Row counts, balances and journal hashes all compare data. None of them proves
+// the restored database can still be USED, and since 00741 that is no longer
+// implied: every state change on seventeen tables is checked against a keyed tag
+// computed from a secret in cp_transition_key. A restore that brought back every
+// row but lost that one table would pass every other assertion in this drill and
+// then refuse every state change in the system -- an outage that looks like a
+// schema bug and arrives only when someone tries to freeze an account.
+//
+// It fails closed rather than open, which is the right direction, and that is
+// exactly why nothing else here would notice.
+func stateChangeWorks(ctx context.Context, appDSN string) error {
+	conn, err := pgx.Connect(ctx, appDSN)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	// Rolled back: this proves the transition COMMITS as far as the deferred
+	// constraint trigger is concerned, without changing what the drill compared.
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const acct = "00000000-0000-7000-8000-000000000010"
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO account_status_transitions (id, account_id, from_status, to_status, reason, actor_type, actor_id)
+		 VALUES (gen_random_uuid(), $1, 'ACTIVE', 'FROZEN', 'restore drill', 'SYSTEM', 'restoredrill')`, acct); err != nil {
+		return fmt.Errorf("write the transition row: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct); err != nil {
+		return fmt.Errorf("change the state: %w", err)
+	}
+	// SET CONSTRAINTS forces the DEFERRED audit trigger to run here rather than
+	// at a COMMIT this function deliberately never reaches.
+	if _, err := tx.Exec(ctx, `SET CONSTRAINTS ALL IMMEDIATE`); err != nil {
+		return fmt.Errorf("the audit binding refused a legitimate transition: %w", err)
+	}
+	return nil
 }
 
 // seed writes a small balanced ledger fixture as the application role.

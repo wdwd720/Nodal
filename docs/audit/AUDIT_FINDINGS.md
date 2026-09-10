@@ -152,6 +152,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-126 | P2 | NEW | fixed | Five spellings of one archive key parse to the same object, so a dedup check, a retention sweep and an audit reconstruction each miss what the other wrote |
 | F-127 | P2 | NEW | fixed | The ADR deciding how an unprunable table must be pruned records that the table does not refuse DELETE; it does, and that was the fact the choice of remedy rested on |
 | F-128 | P1 | NEW | fixed | The application role could mint a transition flag by attaching the real setter to a temp table of its own, which F-42 does not record and which defeats any fix that only hardens the flag's value |
+| F-129 | P2 | NEW | fixed | A restore that lost one table would pass every comparison the restore drill makes and then refuse every state change in the system, with an error blaming the caller |
 
 ---
 
@@ -6542,6 +6543,65 @@ and only the assertion caught it.
 
 **Evidence.** `REAL_DB_INTEGRATION` — both the exploit and the refusal
 reproduced against PostgreSQL 16 as `cp_app`.
+
+## F-129 · A restore that passes every check and then refuses everything · NEW · P2 · FIXED
+
+**Found by** the restore drill, within the hour of the fix that caused it.
+00741 closed F-42 by computing the transition flag from a secret in
+`cp_transition_key`, and in doing so made every state change on seventeen
+tables depend on one row.
+
+**What a lost key looked like.** `cp_transition_tag` was `LANGUAGE sql` and read
+the secret with a scalar subquery. With no row that is NULL, so the tag is NULL,
+so every comparison against it is NULL, so **every state change is refused.**
+Failing closed is the right direction and was not the problem. What it said was:
+
+```
+ERROR: AUDIT_TRANSITION_REQUIRED: accounts <id> changed status
+       ACTIVE -> FROZEN without a transition row describing that change
+```
+
+The caller wrote the transition row. The message says it did not. An operator
+reading that goes looking for a bug in the code that writes transitions, and the
+fault is a missing row in a table they have never heard of and cannot read.
+
+**Why it is P2 and not P3.** The failure is total — no account can be frozen, no
+funding can settle, no agent can be promoted — and it arrives at the worst
+moment, immediately after a restore, with a diagnosis pointing away from the
+cause.
+
+**How it was found, which matters more than the fix.** Not by review. The
+restore drill compared row counts, ledger balances and journal hashes, and **a
+restore that brought back every row but lost this one table would have passed all
+three.** None of them proves the restored database can still be USED, and until
+00741 that was implied. It is not implied any more.
+
+**Fix, in two parts.**
+
+`cp_transition_tag` is now plpgsql and raises when the key is absent, naming the
+fault and the remedy. Deliberately **not** SQLSTATE AU001: this is not an audit
+failure, and a handler catching AU001 must not treat it as one.
+
+The row is now undeletable — `forbid_mutation`, the same protection fifty-three
+append-only tables have, refusing DELETE for every role including the owner.
+UPDATE is left open so the key can be rotated; a rotation committed between a
+setter and its verifier invalidates tags in flight, so it is a brief window in
+which some transactions fail closed and retry. That is acceptable for a key.
+Losing it is not.
+
+**And the drill now proves the restored database works, not only that it
+matches.** It drives one real audited state transition on the restored database
+as `cp_app`, forcing the deferred trigger with `SET CONSTRAINTS ALL IMMEDIATE`
+and rolling back. `CP_DRILL_BREAK=lose_the_transition_key` empties the table so
+the probe can be watched firing — and the first attempt at that break failed
+with `permission denied for table cp_transition_key`, which is its own small
+confirmation that the application role cannot cause this fault. The second
+failed on the undeletable trigger, which is the fix working against its own
+test; the break now disables that trigger as the owner, which is the only way to
+simulate a restore that never had the row.
+
+**Evidence.** `REAL_DB_INTEGRATION` — the failure and both fixes reproduced
+against a genuinely restored PostgreSQL 16 database, not a simulated one.
 
 ## Findings deliberately NOT raised
 

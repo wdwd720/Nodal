@@ -15,8 +15,12 @@ false for reasons no amount of engineering can clear.
 
 ## 1 · Final HEAD
 
-Run `git log -1` for the exact value: a hash cannot be inside the object it
-hashes, and this document has been rewritten by every commit after it.
+**`07d490e` — `audit: the other half of 00603's claim now has a test`.**
+
+That is the exact hash of the last commit that changes code or schema. Every
+commit after it edits this document only, and a hash cannot be inside the object
+it hashes, so the value below is the one a reader should check the tree against.
+`git log --oneline 05ec7f3..HEAD` gives the rest.
 
 The commits that end the session:
 
@@ -508,6 +512,16 @@ Stated explicitly, and none of them optimistically.
 | `LEGAL_APPROVED` | **false** | Counsel. `BLOCKED_EXTERNAL`. **No legal approval is claimed anywhere.** |
 | `PENTEST_COMPLETE` | **false** | An independent third party. **This audit is not one and does not claim to be.** `BLOCKED_EXTERNAL`. |
 | `LIVE_READY` | **false** | The conjunction of all four, plus the capability gate activated by three principals against four approval references. |
+
+In the literal form §43 asks for:
+
+```
+SOFTWARE_COMPLETE        = false
+STRIPE_PRODUCTION_APPROVED = false
+LEGAL_APPROVED           = false
+PENTEST_COMPLETE         = false
+LIVE_READY               = false
+```
 
 **Twenty-eight findings closed this session moved none of these**, and that is
 the honest headline. Not one of the four independent reasons `LIVE_READY` is
