@@ -44,8 +44,13 @@ The commits that end the session:
 | `609eef4` | `F-42: reconciliation_records, and the two actors that are not the same one` |
 | `6226281` | `F-42: deposits and kill_switches, and the remedy is complete` |
 | `5b48a39` | `F-65: the deferral is now watched, because it rested on an unwatched fact` |
+| `cb4e1b4` | `httpapi: a public-route assertion that a 404 satisfied` — F-132 |
+| `798d274` | `F-47: the contradiction is resolvable even though the decision is not` |
+| `07f8c94` | `config: the web service is not given the credential that can turn off every trigger` |
+| `68536a6` | `api: the one-instance assumption is now an assertion` |
+| `cc7d7f3` | `db: a dial that outlives its request, and a connection that outlives its server` |
 
-**Thirty-four commits since `05ec7f3`**, the session's starting point.
+**Thirty-nine commits since `05ec7f3`**, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
@@ -55,6 +60,18 @@ The commits that end the session:
 
 `docs/audit/AUDIT_FINDINGS.md` is the register: **132 findings**, of which
 **125 are fixed, 3 are open and 4 are partial.**
+
+The seven that are not fixed, and what each is now:
+
+| Finding | State | What it is |
+|---|---|---|
+| **F-47** | open | A decision about who may read encrypted PII. **Premature rather than undecided**: whether SELECT on `identity_pii` is an exposure depends on whether it holds ciphertext, and the application-layer encryption is DESIGNED, not built — nothing writes those columns, so the table is empty everywhere. `cp_ops` needs SELECT on `sessions` regardless, so the answer differs by role. Nothing in the tree now asserts one side of it as settled. |
+| **F-65** | part | Two kill switches reach nothing, and the bridge is deliberately unbuilt because the agent runtime is inert. **The premise is now watched**: a test fails when the runtime acquires a production caller, and says what becomes owed. |
+| **F-69** | open | An inventory row across six audits, drawn down as each item closed. Not a defect. |
+| **F-84** | part | Request validation precedes authentication, so two endpoints answer 400 where 401 would be truthful. Fixing it means authorising on the chi route pattern before the generated wrapper, which is a change to the boundary's structure. |
+| **F-93** | open | An inventory row across six provider audits. **Five of its rows closed this session** — the schema-owner credential, the replica assumption, the login-attempt window, and both Neon pool knobs. What remains is decisions (Stripe-account availability, the identity model, whether an unverified account may pay in), one external fact (a mainnet settlement mint), and two small items. |
+| **F-95** | part | 121 enum CHECKs have no Go counterpart. Most have no Go list to compare against, by their nature. |
+| **F-118** | part | Alerts log and both roots build the real instruments. What remains is a destination and something on a timer — half a deployment decision. |
 
 Opened this session: **F-100 through F-132 — 33 findings, 17 P1, 10 P2, 6 P3.**
 Every one is fixed. Twenty-five came from eleven parallel read-only audits whose
@@ -206,6 +223,7 @@ reproduced against a real PostgreSQL 16 before and after);
 |---|---|
 | Migration head | **`00753_a_kill_switch_is_released_by_its_transition.sql`** |
 | Migration files | **85** |
+| Bound tables the application may still UPDATE | **0 of 17** |
 | Tables | **120**, plus **14 partitions** of `security_events` |
 | CHECK constraints | 462 declared on parents |
 
@@ -243,7 +261,7 @@ is not "a path without spaces" but "a path GCC resolves to without spaces".
 | `go run ./scripts/fmtcheck .` | ok |
 | `go run ./scripts/tool golangci-lint run` | 0 issues |
 | `go run ./scripts/lintfin` | 0 findings |
-| `go run ./scripts/configcheck -service api .env.example` | 245 variables, valid |
+| `go run ./scripts/configcheck -service api .env.example` | 247 variables, valid |
 | `terraform validate` × dev, staging, prod | Success, all three |
 | `terraform fmt -check -recursive` | clean |
 
@@ -548,7 +566,7 @@ Stated explicitly, and none of them optimistically.
 
 | Flag | Value | Why |
 |---|---|---|
-| `SOFTWARE_COMPLETE` | **false** | Three named items remain: an alert destination (F-118), the PII-read policy contradiction (F-47), and the state-column privilege work that is F-42's stronger remedy. The first two are decisions rather than code; the third is schema work with a specified design and eleven tables left. Two items came off this list after this checkpoint was first written — `security_events` partitioning (F-105, 00740) and the forgeable audit binding (F-42's actual claim, 00741). |
+| `SOFTWARE_COMPLETE` | **false** | **Two named items remain, and both are decisions rather than code.** An alert destination (F-118) — the instruments are built and the alerts log; what is missing is somewhere to send them and something on a timer, which is half a deployment decision. And the PII-read policy (F-47), whose answer depends on an encryption that has not been built, so it cannot be taken yet. F-42's stronger remedy came off this list when the last of its seventeen tables landed; `security_events` partitioning came off with 00740. What is left of F-84 and F-95 is design work and a class of comparison most of the constraints cannot have. |
 | `STRIPE_PRODUCTION_APPROVED` | **false** | Stripe's own review of a real business. Not submitted. `BLOCKED_EXTERNAL`. |
 | `LEGAL_APPROVED` | **false** | Counsel. `BLOCKED_EXTERNAL`. **No legal approval is claimed anywhere.** |
 | `PENTEST_COMPLETE` | **false** | An independent third party. **This audit is not one and does not claim to be.** `BLOCKED_EXTERNAL`. |
@@ -564,10 +582,15 @@ PENTEST_COMPLETE         = false
 LIVE_READY               = false
 ```
 
-**Twenty-eight findings closed this session moved none of these**, and that is
+**Thirty-three findings closed this session moved none of these**, and that is
 the honest headline. Not one of the four independent reasons `LIVE_READY` is
-false was a thing this audit could fix. What the last two closures changed is the
-length of the list behind `SOFTWARE_COMPLETE`, not its value.
+false was a thing this audit could fix.
+
+What changed is the length of the list behind `SOFTWARE_COMPLETE`, from four
+items to two — and the character of what is left. Everything remaining under that
+flag is now a **decision** or a **design**, not an unwritten control. That is a
+different position from where this session started, and it is still not
+`SOFTWARE_COMPLETE = true`.
 
 ---
 
