@@ -15,6 +15,14 @@ const (
 	// CodeValidationFailed: the request is syntactically or semantically
 	// invalid. Fields carries per-field messages. HTTP 400.
 	CodeValidationFailed Code = "VALIDATION_FAILED"
+	// CodeBodyTooLarge: the request body is larger than the route accepts.
+	// HTTP 413.
+	//
+	// Distinct from CodeValidationFailed because it is answered BEFORE the
+	// body is read -- often before a single byte of it is -- so there is
+	// nothing to validate and nothing to say about a field. A client that
+	// receives it must send less, not send different (F-85).
+	CodeBodyTooLarge Code = "BODY_TOO_LARGE"
 	// CodeUnauthenticated: no or invalid credentials. HTTP 401.
 	CodeUnauthenticated Code = "UNAUTHENTICATED"
 	// CodeForbidden: the principal lacks a permission or does not own the
@@ -234,6 +242,7 @@ type codeInfo struct {
 // constant must appear here exactly once; codes_test.go enforces it.
 var registry = map[Code]codeInfo{
 	CodeValidationFailed: {http.StatusBadRequest, "Validation failed"},
+	CodeBodyTooLarge:     {http.StatusRequestEntityTooLarge, "Request body too large"},
 	CodeUnauthenticated:  {http.StatusUnauthorized, "Authentication required"},
 	CodeForbidden:        {http.StatusForbidden, "Forbidden"},
 	CodeStepUpRequired:   {http.StatusForbidden, "Step-up authentication required"},

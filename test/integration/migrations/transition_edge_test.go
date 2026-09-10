@@ -126,8 +126,56 @@ func TestIntegration_ATransitionRowCannotDenyTheChangeItLicenses(t *testing.T) {
 		assert.Equal(t, "ACTIVE", statusOf(acct))
 	})
 
+	// F-101. The two above are forgeries the edge CHECK refuses. These two are
+	// the same forgeries written so that the check never sees them.
+	//
+	// The edge is encoded `<from>` `>` `<to>` and the edges of one transaction
+	// are joined with `|`. Both delimiters are in band, and from_status and
+	// to_status are unconstrained text on fourteen of the fifteen bound tables.
+	// So a single row carrying them splits the flag into more elements than the
+	// row describes -- and one of those elements can be an edge nobody wrote
+	// down. 00731's header reasoned that licensing an extra edge takes more than
+	// one row, each describing its own step. That was true of honest rows only.
+	//
+	// Both were observed committing against the pre-00732 function; the
+	// undelimited form of the same forgery is refused in the same session.
+
+	t.Run("a destination carrying the delimiters licenses nothing", func(t *testing.T) {
+		acct := newAccount()
+		err := inTx(func(tx pgx.Tx) error {
+			// flag  = 'RESTRICTED>FROZEN|ACTIVE>FROZEN'
+			// split = {'RESTRICTED>FROZEN', 'ACTIVE>FROZEN'}  <- the second is free
+			if err := transition(tx, acct, "RESTRICTED", "FROZEN|ACTIVE>FROZEN", "delimiter in the destination"); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct)
+			return err
+		})
+		require.Error(t, err, "one row licensed an edge it does not describe")
+		assert.Equal(t, "AU001", db.SQLState(err), "got %v", err)
+		assert.Equal(t, "ACTIVE", statusOf(acct))
+	})
+
+	t.Run("an origin carrying the delimiters licenses nothing", func(t *testing.T) {
+		acct := newAccount()
+		err := inTx(func(tx pgx.Tx) error {
+			// The same injection from the other end, which is why the guard
+			// reads both columns rather than the destination it was written for.
+			// flag  = 'RESTRICTED|ACTIVE>FROZEN'
+			// split = {'RESTRICTED', 'ACTIVE>FROZEN'}
+			if err := transition(tx, acct, "RESTRICTED|ACTIVE", "FROZEN", "delimiter in the origin"); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct)
+			return err
+		})
+		require.Error(t, err, "a forged origin licensed the change it was built to name")
+		assert.Equal(t, "AU001", db.SQLState(err), "got %v", err)
+		assert.Equal(t, "ACTIVE", statusOf(acct))
+	})
+
 	// The controls. A binding one condition too strict refuses every real
-	// change, and the three refusals above would all still pass.
+	// change, and the five refusals above would all still pass.
 	t.Run("an honest single step commits", func(t *testing.T) {
 		acct := newAccount()
 		require.NoError(t, inTx(func(tx pgx.Tx) error {

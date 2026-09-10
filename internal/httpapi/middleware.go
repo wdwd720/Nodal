@@ -58,17 +58,70 @@ func rawBody(ctx context.Context) []byte {
 // and the request in the context, and restores a reader so the generated
 // server can still decode. An oversized body is refused with 413 before any
 // handler runs.
+// Route body limits.
+//
+// # Why these are per route and not one number
+//
+// The body is read into memory, in full, so that the webhook signature check
+// can see the exact bytes the provider signed. On a single 512 MB instance that
+// makes CP_HTTP_MAX_BODY_BYTES an allocation an unauthenticated caller controls,
+// and one number has to be large enough for the most demanding route -- so
+// every other route inherited it (F-85).
+//
+// The largest field any request schema declares is 5,000 characters, so 64 KiB
+// is generous for an ordinary command. Provider deliveries get more, because
+// they are somebody else's payload and the webhook package documents 256 KiB
+// for exactly that reason.
+//
+// The configured maximum is a CEILING, never a floor: an operator may lower it
+// and may not raise a route past its own limit.
+const (
+	defaultMaxBodyBytes = 64 << 10
+	webhookMaxBodyBytes = 256 << 10
+)
+
+// bodyLimitFor returns the smaller of the route's limit and the configured
+// maximum. Matching is on the request path rather than the chi route pattern,
+// because middleware runs before routing and the pattern is not known yet --
+// which is a real limitation and the reason the table is prefixes rather than
+// operation ids.
+func bodyLimitFor(path string, configured int64) int64 {
+	limit := int64(defaultMaxBodyBytes)
+	if strings.HasPrefix(path, "/v1/webhooks/") {
+		limit = webhookMaxBodyBytes
+	}
+	if configured > 0 && configured < limit {
+		return configured
+	}
+	return limit
+}
+
 func captureBody(maxBytes int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			if r.Body != nil && r.ContentLength != 0 {
-				limited := http.MaxBytesReader(w, r.Body, maxBytes)
+				limit := bodyLimitFor(r.URL.Path, maxBytes)
+				// A declared length over the limit is refused without reading
+				// a byte. MaxBytesReader alone would read up to the limit
+				// first, so a caller announcing 100 MB still cost the limit in
+				// allocation and the whole body in bandwidth.
+				//
+				// A chunked request declares -1 and is bounded by the reader
+				// below instead, which is the best available: its size is not
+				// knowable until it has been read.
+				if r.ContentLength > limit {
+					writeProblem(w, r, errs.Newf(errs.CodeBodyTooLarge,
+						"request body is %d bytes and this route accepts %d", r.ContentLength, limit))
+					return
+				}
+				limited := http.MaxBytesReader(w, r.Body, limit)
 				buf, err := io.ReadAll(limited)
 				if err != nil {
 					var tooLarge *http.MaxBytesError
 					if errors.As(err, &tooLarge) {
-						writeProblem(w, r, errs.New(errs.CodeValidationFailed, "request body is too large"))
+						writeProblem(w, r, errs.Newf(errs.CodeBodyTooLarge,
+							"request body is larger than the %d bytes this route accepts", limit))
 						return
 					}
 					writeProblem(w, r, errs.Wrap(err, errs.CodeValidationFailed, "the request body could not be read"))

@@ -108,7 +108,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-82 | P2 | NEW | fixed | Nothing constructed a Redis client, so the API's rate limits were counted per replica: a configured 600/min admitted 1800 at three tasks and 7200 at twelve |
 | F-83 | P3 | NEW | fixed | `make lint` was red at the provider workstream's HEAD, and two helpers that read configuration straight from the environment survived the fix that removed their callers |
 | F-84 | P3 | NEW | part | Request validation precedes authentication, so two endpoints the checkpoint records as answering 401 answer 400 |
-| F-85 | P2 | NEW | open | The request body is read into memory before the rate limiter runs, on a single 512 MB instance |
+| F-85 | P2 | NEW | fixed | The request body is read into memory before the rate limiter runs, on a single 512 MB instance |
 | F-86 | P2 | NEW | fixed | The payload-hash binding covered a PROCESSED message and not a FAILED one, so a retry could be processed from different bytes than the evidence records |
 | F-87 | P1 | NEW | fixed | A planted OIDC callback signed the victim's browser in as the attacker, because `state` was a lookup key and never bound to a browser |
 | F-88 | P1 | NEW | fixed | Every unauthenticated rate-limit bucket collapsed into one, because the limiter keyed on the load balancer's address |
@@ -123,6 +123,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-97 | P2 | NEW | fixed | A money ceiling set to zero loaded, validated, and logged as in force with the cap silently off |
 | F-98 | P2 | NEW | fixed | A key withdrawn from the JWKS kept verifying tokens for the life of the process, because only an unknown kid triggered a refresh |
 | F-99 | P2 | NEW | fixed | Every step of the gate ceremony demanded a recent step-up except the first one |
+| F-100 | P1 | NEW | open | A funding parked for a human is un-parked by the next provider event, and a refund followed by a late success mints Credits for money that was returned |
+| F-101 | P1 | NEW | fixed | One transition row licenses a second, unrelated edge, because the edge encoding's delimiters are in band and a state name is unconstrained text |
 
 ---
 
@@ -4556,6 +4558,136 @@ refused, because the proposer's authentication was an hour old. The test now
 builds a freshly authenticated proposer, which is what the real ceremony
 requires — the change makes the test describe the ceremony more accurately
 than it did.
+
+## F-100 · A funding parked for a human is un-parked by the next webhook · NEW · P1 · OPEN
+
+**Found by** an independent read of the Stripe adapter and the funding state
+machine, checking what MANUAL_REVIEW actually means to each caller.
+
+`fundingTransitions[FundingManualReview]` (`internal/credit/funding.go:145-157`)
+lists ten destinations. Its comment says why:
+
+> An operator resolving a review may send the funding anywhere a provider event
+> could legitimately have sent it -- with one exception. There is no resolution
+> to SETTLED.
+
+The reasoning about SETTLED is careful and right. The premise underneath it is
+not: **`Dispatch` consults the same table.** `internal/credit/purchase.go:405`
+calls `CanTransitionFunding(f.State, to)` for a provider event exactly as an
+operator resolution would, and `apply` (`purchase.go:429`) then performs the
+economic effect. Nothing distinguishes the two callers, so every destination
+written for a human is also a destination the next webhook can take.
+
+MANUAL_REVIEW → CAPTURED is one of them, and CAPTURED is the edge that mints.
+
+**The sequence.** A funding is CAPTURE_PENDING.
+
+1. `charge.refunded` arrives first -- Stripe does not order deliveries, and a
+   fraud auto-refund can fire while the success delivery is being retried.
+   `to = REFUNDED`; CAPTURE_PENDING → REFUNDED is not legal; the state is not
+   terminal; `isBackwards` returns false because REFUNDED is absent from the
+   rank map (`funding.go:513-521`). So `review()` parks it in MANUAL_REVIEW --
+   and returns `webhook.Applied` (`purchase.go:504`), which marks the event
+   PROCESSED in the inbox. **The refund will not be redelivered.**
+2. `payment_intent.succeeded` arrives. `to = CAPTURED`. MANUAL_REVIEW →
+   CAPTURED is legal, so `apply` runs `AdvanceFunding` then `MintFrom`.
+
+Credits are minted for a payment that was refunded, and the event recording the
+refund has already been consumed.
+
+`charge.dispute.created` before `payment_intent.succeeded` is the same shape,
+with `DisputeFunding`'s freeze (`purchase.go:449-455`) never running.
+
+**And there is no operator.** `internal/admin/kinds.go` has no credit-funding
+resolution kind -- compare `KindPayoutManualReviewResolve` at `kinds.go:94`.
+`AdvanceFunding` and `DisputeFunding` have no caller outside `internal/credit`,
+and the HTTP surface over fundings is read-only
+(`internal/httpapi/ports_native.go:46`). The state whose transition table was
+widened so that a human could resolve it has exactly one resolver, and it is a
+machine.
+
+**Status.** CONFIRMED from source; the transition table, the two call sites and
+the absent admin kind were each read. Not yet fixed: the repair is to stop
+`Dispatch` acting on a parked funding at all, which means splitting one table
+into "what a provider event may cause" and "what an operator may cause", and
+that is a change to the money path's shape rather than a line.
+
+**Evidence classification.** STATIC_PROOF. The sequence has not been driven
+against a real database or a real Stripe sandbox, and it is not called
+end-to-end until it has been.
+
+## F-101 · One transition row licenses a second, unrelated edge · NEW · P1 · FIXED
+
+**Found by** an independent read of migration 00731 -- the fix for F-94 -- asking
+what the flag string is made of rather than what the check does with it.
+
+00731 binds an audited change to a transition row describing BOTH endpoints. It
+encodes the edge as `<from>` `>` `<to>`, joins the edges of one transaction with
+`|`, and checks exact membership over `string_to_array(flagged, '|')`.
+
+Both delimiters are in band, and `from_*`/`to_*` are unconstrained `text` on
+fourteen of the fifteen tables 00731 converted -- only
+`wallet_status_transitions.to_status` carries a CHECK, and no table constrains
+its origin. So a single row whose endpoint CONTAINS the delimiters splits the
+flag into more elements than the row describes.
+
+**Reproduced as `cp_app` against PostgreSQL 16 with migrations through 00731.**
+Two accounts, both ACTIVE. The control is the forgery 00731 exists to refuse:
+
+```sql
+INSERT INTO account_status_transitions (..., from_status, to_status, ...)
+VALUES (..., 'RESTRICTED', 'FROZEN', ...);
+UPDATE accounts SET status = 'FROZEN' WHERE id = $1;
+-- ERROR: AUDIT_TRANSITION_REQUIRED ... (AU001).  Account stays ACTIVE.
+```
+
+The same forgery, with the delimiters:
+
+```sql
+INSERT INTO account_status_transitions (..., from_status, to_status, ...)
+VALUES (..., 'RESTRICTED', 'FROZEN|ACTIVE>FROZEN', ...);
+UPDATE accounts SET status = 'FROZEN' WHERE id = $1;
+-- COMMIT.  Account is FROZEN.
+```
+
+    flagged = 'RESTRICTED>FROZEN|ACTIVE>FROZEN'
+    split   = {'RESTRICTED>FROZEN', 'ACTIVE>FROZEN'}
+
+The account moved ACTIVE → FROZEN under a row that says it moved from
+RESTRICTED to a string that is not a status. The origin position works too, and
+was observed separately: `'RESTRICTED|ACTIVE' → 'FROZEN'` gives
+`{'RESTRICTED', 'ACTIVE>FROZEN'}` and licenses the same change.
+
+**It needs one row.** 00731's header reasoned about how many rows it takes to
+license an extra edge and answered "more than one, and each must describe its
+own step". That was true of honest rows and was never true of this one.
+
+**Fix.** Migration 00732 refuses `|` and `>` in either endpoint, in
+`cp_flag_transition_edge` -- where the flag is built, so no forged flag exists
+to be read -- and symmetrically in `cp_require_transition_edge` for the entity's
+own values. Refused rather than escaped: escaping keeps the encoding ambiguous
+and hands the question to the next reader, while refusing makes the two
+characters impossible inside a state, which is a smaller thing to know. Every
+state name in the schema is SCREAMING_SNAKE and neither character has ever
+appeared in one; the guard turns an assumption the encoding already depended on
+into a constraint it enforces. It lives in the shared functions rather than in
+fifteen CHECK constraints, so the sixteenth table to be bound gets it by
+construction.
+
+**Evidence.** REAL_DB_INTEGRATION. Both variants observed committing against
+migrations through 00731 as the real application role, and both observed
+refused with AU001 after 00732, with the entity unchanged in each case. Two
+subtests in `TestIntegration_ATransitionRowCannotDenyTheChangeItLicenses` now
+carry them, beside the forgeries 00731 already refused; the suite's honest
+single-step and two-step controls still pass, so the guard is not one condition
+too strict.
+
+**What this says about the class.** F-94, F-78 and this are three findings about
+the same mechanism, each closing the previous one's blind spot: the destination
+was checked and the origin was not; then the origin was checked and the encoding
+that carried it was not. The register's standing note -- that a control nobody
+executes decays to a claim -- has a sibling here: a control whose input is
+attacker-shaped is only as strong as the parser in front of it.
 
 ## Findings deliberately NOT raised
 

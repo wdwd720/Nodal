@@ -1176,8 +1176,11 @@ func TestOversizedBodyIsRefused(t *testing.T) {
 	h.server = srv
 
 	res := h.do(http.MethodPost, "/v1/intents", strings.Repeat("x", 4096), "Idempotency-Key", "big-body-000001")
-	require.Equal(t, http.StatusBadRequest, res.Code)
-	assert.Equal(t, errs.CodeValidationFailed, res.problem().Code)
+	// 413, not 400: the answer is given before the body is read, so there is
+	// nothing to validate. A configured maximum below the route's own limit
+	// lowers it -- the two are a minimum, not a choice (F-85).
+	require.Equal(t, http.StatusRequestEntityTooLarge, res.Code)
+	assert.Equal(t, errs.CodeBodyTooLarge, res.problem().Code)
 }
 
 // --- SSE ----------------------------------------------------------------------

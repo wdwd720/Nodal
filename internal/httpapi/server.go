@@ -225,7 +225,14 @@ func (s *Server) buildRouter() http.Handler {
 	//   - the session load before access logging and before the body is
 	//     captured, so the log line, the rate-limit key and the request the
 	//     SSE handler receives all carry the principal;
-	//   - CSRF and rate limiting last, where the principal is known.
+	//   - CSRF and rate limiting after the session load, where the principal is
+	//     known -- and BEFORE the body is captured, because capturing it means
+	//     reading it into memory, and a request the limiter is going to refuse
+	//     should not cost an allocation the caller chose the size of (F-85).
+	//     Neither CSRF nor the limiter reads the body: CSRF decides on
+	//     Sec-Fetch-Site, Origin and Referer, and the limiter on the principal
+	//     or the caller's address.
+	//   - the body last, bounded per route by bodyLimitFor.
 	r.Use(observability.HTTPMiddleware("controlplane-api"))
 	r.Use(httpmw.SecureHeaders(httpmw.SecureHeadersOptions{Secure: s.opts.CookieSecure}))
 	r.Use(corsPolicy(s.opts.CORSOrigins))
@@ -234,9 +241,9 @@ func (s *Server) buildRouter() http.Handler {
 		r.Use(s.opts.Authenticator)
 	}
 	r.Use(observe(s.log, s.clk, s.metrics))
-	r.Use(captureBody(s.opts.MaxBodyBytes))
 	r.Use(s.csrf())
 	r.Use(rateLimit(s.opts.Limits, s.trusted))
+	r.Use(captureBody(s.opts.MaxBodyBytes))
 	r.Use(canonicalPathIdentifiers())
 
 	// Routes outside the /v1 contract are mounted before the generated ones
