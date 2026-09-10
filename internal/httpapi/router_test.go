@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/errs"
@@ -929,26 +930,100 @@ func TestLoginRedirectsToTheIdentityProvider(t *testing.T) {
 	res := h.do(http.MethodGet, "/v1/auth/login?step_up=true", nil)
 	require.Equal(t, http.StatusFound, res.Code)
 	assert.Equal(t, "https://idp.test/authorize?state=abc", res.Header().Get("Location"))
-	assert.Empty(t, res.Header().Values("Set-Cookie"), "no session exists before the callback")
+
+	// No SESSION exists before the callback. The login-state cookie does, and
+	// must: it is what binds the flow to this browser (F-87). Asserting
+	// "no cookies at all" would now be asserting the absence of the control.
+	for _, c := range res.Result().Cookies() {
+		assert.NotEqual(t, "cp_session", c.Name, "no session exists before the callback")
+	}
+	state := loginStateCookie(t, res)
+	require.NotNil(t, state, "the login redirect must bind the flow to this browser")
+	assert.True(t, state.HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, state.SameSite,
+		"Strict would not be sent on the top-level GET the identity provider redirects to")
+	assert.NotContains(t, state.Value, "abc", "the cookie carries a digest, not the state itself")
 }
 
 func TestCallbackSetsAnHttpOnlySessionCookie(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.as(nil)
-	res := h.do(http.MethodGet, "/v1/auth/callback?code=abc&state=xyz", nil)
-	require.Equal(t, http.StatusFound, res.Code)
+
+	// The flow begins in this browser, which is what the callback requires.
+	begin := h.do(http.MethodGet, "/v1/auth/login", nil)
+	require.Equal(t, http.StatusFound, begin.Code)
+
+	res := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil,
+		begin.Result().Cookies())
+	require.Equal(t, http.StatusFound, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, "/portfolio", res.Header().Get("Location"))
 
-	cookies := res.Result().Cookies()
-	require.Len(t, cookies, 1)
-	c := cookies[0]
-	assert.Equal(t, "cp_session", c.Name)
-	assert.True(t, c.HttpOnly, "the session cookie must be HttpOnly")
-	assert.Equal(t, http.SameSiteLaxMode, c.SameSite)
-	assert.Equal(t, "raw-session-token-value", c.Value)
+	session := namedCookie(res, "cp_session")
+	require.NotNil(t, session)
+	assert.True(t, session.HttpOnly, "the session cookie must be HttpOnly")
+	assert.Equal(t, http.SameSiteLaxMode, session.SameSite)
+	assert.Equal(t, "raw-session-token-value", session.Value)
 	assert.NotContains(t, res.Body.String(), "raw-session-token-value",
 		"the raw token leaves only in the cookie")
+
+	cleared := namedCookie(res, httpmw.LoginStateCookieName)
+	require.NotNil(t, cleared, "a completed flow clears the state cookie")
+	assert.Negative(t, cleared.MaxAge)
+}
+
+// TestAPlantedCallbackDoesNotSignAnybodyIn is the exploit (F-87).
+//
+// `state` was a server-side lookup key consumed once, which stops a callback
+// being REPLAYED and does nothing about one being PLANTED. The attacker starts
+// a flow in their own browser, authenticates as themselves, keeps
+// code=C&state=S without following the redirect, and induces the victim's
+// browser to navigate to the callback. The server used to find the attempt,
+// exchange the code and set a session cookie -- in the victim's browser, for
+// the attacker's subject. Everything the victim then did landed in the
+// attacker's account, attributed to the attacker.
+func TestAPlantedCallbackDoesNotSignAnybodyIn(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.as(nil)
+
+	// The attacker's browser begins a flow and keeps the callback parameters.
+	attacker := h.do(http.MethodGet, "/v1/auth/login", nil)
+	require.Equal(t, http.StatusFound, attacker.Code)
+	require.NotNil(t, loginStateCookie(t, attacker))
+
+	// The victim's browser follows the planted link. It has no login-state
+	// cookie, because the flow did not begin here.
+	victim := h.do(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil)
+	require.Equal(t, http.StatusUnauthorized, victim.Code,
+		"a callback that did not begin in this browser signed somebody in; body=%s", victim.Body.String())
+	assert.Nil(t, namedCookie(victim, "cp_session"), "no session may be established")
+
+	// A cookie for a DIFFERENT state is no better than none.
+	wrong := &http.Cookie{Name: httpmw.LoginStateCookieName, Value: httpmw.LoginStateDigest("some-other-state")}
+	res := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil, []*http.Cookie{wrong})
+	require.Equal(t, http.StatusUnauthorized, res.Code)
+	assert.Nil(t, namedCookie(res, "cp_session"))
+
+	// The control: the browser that began the flow still completes it. Without
+	// this the three refusals above could be a login that no longer works.
+	ok := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil, attacker.Result().Cookies())
+	require.Equal(t, http.StatusFound, ok.Code, "body=%s", ok.Body.String())
+	require.NotNil(t, namedCookie(ok, "cp_session"))
+}
+
+func namedCookie(res *response, name string) *http.Cookie {
+	for _, c := range res.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+func loginStateCookie(t *testing.T, res *response) *http.Cookie {
+	t.Helper()
+	return namedCookie(res, httpmw.LoginStateCookieName)
 }
 
 func TestLogoutRevokesAndClearsTheCookie(t *testing.T) {

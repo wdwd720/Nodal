@@ -1,5 +1,20 @@
 # Provider activation checkpoint
 
+> **Independently re-audited 2026-09-09 (F-83 – F-93).** Six read-only
+> audits ran over every surface below and each claim was re-verified against
+> the source; the deployment was probed directly. Much of this document held
+> — the signature verification, the database-enforced replay dedup, the
+> exactly-once property across all four crash boundaries, and fail-closed under
+> database unavailability are all as described. Eleven findings came out of it,
+> four of them P1, and the sentences they contradict are corrected in place and
+> marked **[corrected 2026-09-09]**. `docs/audit/AUDIT_FINDINGS.md` F-83 to
+> F-93 is the record; F-93 is the inventory of what was verified and not fixed.
+>
+> The configuration hash below is superseded: F-88 adds
+> `CP_HTTP_TRUSTED_PROXY_CIDRS` and F-90 adds `CP_CREDIT_SETTLEMENT_WINDOW`, so
+> the next deploy reports a different hash. That is the mechanism working, not
+> a drift.
+
 Date: 2026-09-10
 Deployment: `https://api-nodal.actorvia.xyz` (Render free web service, one instance)
 Environment: `STAGING`
@@ -20,9 +35,16 @@ secrets, TLS verification to the database, the same capability gates, the same
 capacity ceilings — against Stripe's sandbox, so no real money can move through
 it.
 
-Going live is two changes, both named in `render.yaml`: `CP_ENV` to `PROD`, and
-every `CP_PROVIDER_*_MODE` to `live` with live keys. `internal/config` refuses
-any other pairing, in both directions.
+Going live is `CP_ENV` to `PROD`, every `CP_PROVIDER_*_MODE` to `live` with
+live keys, and a real settlement mint. `internal/config` refuses any other
+pairing of environment and provider mode, in both directions — for STAGING
+and PROD.
+
+**[corrected 2026-09-09]** Three things, not two. `CP_API_SETTLEMENT_MINT` is a
+Solana **devnet** USDC mint and nothing refuses it in PROD, so flipping the other
+two would settle against a worthless token. And "in both directions" holds only
+between STAGING and PROD: `CP_ENV=DEV` with live modes and live keys passes
+validation while dropping every production rule (F-93).
 
 ---
 
@@ -94,10 +116,18 @@ Activating that gate is not something this session can do, by design:
 - `Admin.Activate` refuses both of them: *"the approving principal cannot also
   activate; a distinct principal is required"*.
 
-Three distinct principals, each with a step-up authentication inside
-`CP_AUTH_STEP_UP_MAX_AGE`, and four external approval references that a person
-has to produce. That is what the gate is for, and satisfying it by writing a
-row would be defeating it.
+Three distinct principals, each with a step-up authentication, and four
+external approval references that a person has to produce. That is what the gate
+is for, and satisfying it by writing a row would be defeating it.
+
+**[corrected 2026-09-09]** Two things this said were wrong. The window is not
+`CP_AUTH_STEP_UP_MAX_AGE`: that variable was read by nothing, and every window
+was a hard-coded constant — 15 minutes rather than the 5 the blueprint set
+(F-89, now the tighter of the two). And "three distinct principals" is three
+distinct `users.id` values: distinctness is a string comparison, there is no
+person entity and no uniqueness on email, so three ZITADEL accounts under one
+person's control satisfy the whole ceremony. It is a control against one careless
+operator, not against one determined one (F-93).
 
 What **is** verified, against the real Neon database, is every behaviour the
 lifecycle consists of. `internal/credit`'s integration suite passes in full:
@@ -168,8 +198,16 @@ missing.
 
 ### 8. Capacity guard — VERIFIED PASS
 
-All seven `internal/capacity` integration tests pass against Neon, covering
-every ceiling:
+All seven `internal/capacity` integration tests passed against Neon.
+
+**[corrected 2026-09-09]** Three subtests fail against a freshly migrated
+database: they set each ceiling from a live measurement, and a measurement of
+zero makes the assertion vacuous, so they passed because Neon already had rows
+(F-92, now seeded). There are **four** ceilings, not five — the fifth row
+below is an error path. The launch-cohort ceiling was enforced nowhere at all
+(F-91), and the money-at-risk ceiling could not drain on this topology, which
+would have refused every purchase forever at $2,000 of lifetime sales (F-90).
+All three are fixed. The four ceilings:
 
 | Ceiling | Behaviour |
 |---|---|
@@ -186,8 +224,10 @@ expiry beyond a week; HSTS with `includeSubDomains` and a one-year max-age
 surviving the CDN; `nosniff`, `DENY`, `strict-origin-when-cross-origin`,
 `frame-ancestors 'none'`, `same-origin`, `no-store`; no `/debug/pprof`,
 `/debug/vars`, `/metrics`, `/.env` or `/v1/config`; an unconfigured `Origin`
-neither echoed nor wildcarded; `/v1/payments`, `/v1/credits/balance` and
-`/v1/payouts` each 401 without a session; `/v1/auth/login` redirecting to the
+neither echoed nor wildcarded; `/v1/payments`, `/v1/credits/balance` and `/v1/payouts` refuse without a
+session — **[corrected 2026-09-09]** with 401 once their parameters
+validate, and with 400 before that: the generated request validator runs ahead of
+the authorization middleware, so an unauthenticated caller reaches it (F-84); `/v1/auth/login` redirecting to the
 configured Zitadel issuer with `code_challenge_method=S256`, a state, a nonce
 and `response_type=code`; liveness and readiness answering separately.
 
@@ -224,8 +264,13 @@ directions: `PROD` is live only, `STAGING` is sandbox only.
 **3. The Stripe account the credentials must belong to was never stated.** The
 adapter compares the account its key answers for against the configured one and
 refuses when there is nothing to compare against — correctly. Naming it also
-makes a key rotated to the wrong account a refusal to start rather than a
-silence in which charges succeed under somebody else's business.
+makes a key rotated to the wrong account visible rather than a silence in which
+charges succeed under somebody else's business.
+
+**[corrected 2026-09-09]** It is not a refusal to start. `wireCreditPurchase`
+logs a warning and returns an empty wiring, so the webhook route answers 404
+while `/v1/healthz` answers 200 — the same shape as this document's own
+defect #2. Recorded in F-93.
 
 **4. A provider doing exactly what its delivery contract says was told to retry
 forever.** Evidence is archived before the inbox deduplicates, and the archive

@@ -19,16 +19,12 @@ import (
 
 // Environment variables for the Credit funding sweep.
 const (
-	// envSettlementWindow is how long a captured card payment stays
-	// reversible before its Credits may be treated as settled.
-	//
-	// There is no default seven days here, because the goal document is
-	// explicit that an arbitrary number is not a policy. The default below is
-	// thirty days and it is a CONSERVATIVE placeholder, not a determination:
-	// card scheme chargeback windows run to 120 days and beyond, and the real
-	// value is a risk decision somebody has to make and record.
-	envSettlementWindow = "CP_CREDIT_SETTLEMENT_WINDOW"
-	envCreditInterval   = "CP_CREDIT_SWEEP_INTERVAL"
+	// The reversibility window is CP_CREDIT_SETTLEMENT_WINDOW, and it is read
+	// from the configuration table rather than from the environment: it is a
+	// risk determination somebody has to make and record, and a value read
+	// straight from the environment is outside the configuration hash. See
+	// config.CreditConfig.
+	envCreditInterval = "CP_CREDIT_SWEEP_INTERVAL" //nolint:gosec // G101: the name of an interval variable, not a credential
 
 	defaultSettlementWindow = 30 * 24 * time.Hour
 	defaultCreditInterval   = 15 * time.Minute
@@ -58,8 +54,8 @@ type creditSweeper struct {
 // Credits has no funding to settle, and starting a sweep over an empty table
 // every fifteen minutes would only teach operators to ignore its log lines.
 func newCreditSweeper(ctx context.Context, cfg *config.Config, database *db.DB,
-	resolver config.Resolver, clk clock.Clock, log *slog.Logger) *creditSweeper {
-
+	resolver config.Resolver, clk clock.Clock, log *slog.Logger,
+) *creditSweeper {
 	slot := cfg.Providers.CreditPurchase
 	if slot.Mode == "" || slot.Name == "" {
 		log.InfoContext(ctx, "credit purchase provider is not configured; the Credit settlement sweep is disabled")

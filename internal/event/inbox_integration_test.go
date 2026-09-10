@@ -113,7 +113,7 @@ func TestIntegration_InboxFailedIsReprocessable(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "the RECEIVED row rolled back with the transaction")
 
-	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "stripe", "evt_2", 1, boom))
+	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "stripe", "evt_2", 1, "", boom))
 	rec, ok, err := f.inbox.Get(ctx, testDB, "stripe", "evt_2")
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -127,7 +127,7 @@ func TestIntegration_InboxFailedIsReprocessable(t *testing.T) {
 		return errors.New("still broken")
 	})
 	require.Error(t, err)
-	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "stripe", "evt_2", 1, errors.New("still broken")))
+	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "stripe", "evt_2", 1, "", errors.New("still broken")))
 	rec, _, err = f.inbox.Get(ctx, testDB, "stripe", "evt_2")
 	require.NoError(t, err)
 	assert.Equal(t, "still broken", *rec.Error)
@@ -144,7 +144,7 @@ func TestIntegration_InboxFailedIsReprocessable(t *testing.T) {
 	assert.Equal(t, itestStart.Add(time.Minute), *rec.ProcessedAt)
 
 	// MarkFailed never downgrades a processed message.
-	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "stripe", "evt_2", 1, errors.New("late failure")))
+	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "stripe", "evt_2", 1, "", errors.New("late failure")))
 	rec, _, err = f.inbox.Get(ctx, testDB, "stripe", "evt_2")
 	require.NoError(t, err)
 	assert.Equal(t, event.StatusProcessed, rec.Status)
@@ -210,7 +210,7 @@ func TestIntegration_InboxInFlightElsewhereIsInProgress(t *testing.T) {
 	assert.Equal(t, int64(0), runs.Load())
 
 	// A FAILED row locked by another transaction that is re-processing it.
-	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "ext", "retrying", 1, errors.New("first try")))
+	require.NoError(t, f.inbox.MarkFailed(ctx, testDB, "ext", "retrying", 1, "", errors.New("first try")))
 	holder, err := testDB.Pool().Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = holder.Rollback(ctx) }()

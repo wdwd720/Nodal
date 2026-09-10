@@ -23,7 +23,10 @@ func webhookRequestMeta(s *Server, r *http.Request) webhook.RequestMeta {
 
 // GetAuthLogin starts the OIDC authorization-code + PKCE exchange. The state,
 // nonce and verifier are persisted by internal/identity and consumed exactly
-// once, so a replayed callback never yields a session.
+// once, so a replayed callback never yields a session -- and the state's digest
+// also goes to the browser, so a callback that did not BEGIN in this browser
+// never yields one either (F-87; see httpmw.SetLoginState for the attack the
+// second half stops).
 func (s *Server) GetAuthLogin(ctx context.Context, request api.GetAuthLoginRequestObject) (api.GetAuthLoginResponseObject, error) {
 	if s.opts.Ports.Identity == nil {
 		return nil, errNotWired("interactive login")
@@ -41,7 +44,12 @@ func (s *Server) GetAuthLogin(ctx context.Context, request api.GetAuthLoginReque
 	if err != nil {
 		return nil, err
 	}
-	return redirectResponse{location: res.RedirectURL}, nil
+	return redirectResponse{
+		location: res.RedirectURL,
+		before: func(w http.ResponseWriter) {
+			httpmw.SetLoginState(w, res.State, s.opts.CookieDomain, s.opts.CookieSecure, identity.DefaultAttemptTTL)
+		},
+	}, nil
 }
 
 // GetAuthCallback completes the exchange and establishes the server-side
@@ -53,6 +61,18 @@ func (s *Server) GetAuthCallback(ctx context.Context, request api.GetAuthCallbac
 	r, ok := requestFrom(ctx)
 	if !ok {
 		return nil, errs.New(errs.CodeInternal, "internal error")
+	}
+	// The browser that finishes the flow must be the one that started it.
+	// Without this the state is only a server-side lookup key: it stops a
+	// callback being replayed and does nothing about one being planted, and a
+	// planted callback signs the victim in as the attacker (F-87).
+	//
+	// This runs before Complete, so a planted callback does not consume the
+	// attacker's attempt row either -- the refusal costs the victim nothing and
+	// leaves the attacker's own flow to expire on its own.
+	if !httpmw.LoginStateMatches(r, request.Params.State, s.opts.CookieDomain, s.opts.CookieSecure) {
+		return nil, errs.New(errs.CodeUnauthenticated,
+			"this sign-in did not start in this browser; start again from the beginning")
 	}
 	done, err := s.opts.Ports.Identity.Complete(ctx, identity.CompleteRequest{
 		Code:      request.Params.Code,
@@ -73,6 +93,9 @@ func (s *Server) GetAuthCallback(ctx context.Context, request api.GetAuthCallbac
 	return redirectResponse{
 		location: dest,
 		before: func(w http.ResponseWriter) {
+			// The login-state cookie has done its work; a flow that completed
+			// leaves nothing behind for a later one to match against.
+			httpmw.ClearLoginState(w, s.opts.CookieDomain, s.opts.CookieSecure)
 			httpmw.SetSessionCookie(w, s.opts.CookieName, token, s.opts.CookieDomain, s.opts.CookieSecure, s.opts.SessionTTL)
 		},
 	}, nil

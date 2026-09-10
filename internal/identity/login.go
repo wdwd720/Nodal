@@ -36,6 +36,16 @@ type Deps struct {
 	Audit      audit.Writer
 	Clock      clock.Clock
 	AttemptTTL time.Duration
+	// AdmitAccount is asked before a first login provisions an account, and
+	// refusing is how the launch-cohort ceiling is enforced. It is a function
+	// rather than a capacity.Guard so this package keeps no dependency on the
+	// ceiling's implementation.
+	//
+	// Nil admits, which is right for a deployment that declares no ceilings --
+	// and is why cmd/api always supplies it and TestIdentityIsGivenTheAccount
+	// Ceiling asserts that it does. An optional control is only safe when
+	// something checks that it was not accidentally left out.
+	AdmitAccount func(ctx context.Context, tx pgx.Tx) error
 }
 
 // Service implements login/logout.
@@ -193,6 +203,15 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 			}
 			if user, err = s.d.Accounts.CreateUser(ctx, tx, issuer, ident.Subject, emailHash); err != nil {
 				return err
+			}
+			// The launch cohort is a ceiling on how many accounts exist, and
+			// this is the only place one is created for a person. It is asked
+			// before the account rather than after, so a refusal leaves no
+			// half-provisioned user (F-91).
+			if s.d.AdmitAccount != nil {
+				if err := s.d.AdmitAccount(ctx, tx); err != nil {
+					return err
+				}
 			}
 			if _, err := s.d.Accounts.CreateAccount(ctx, tx, user.ID, accounts.KindCustomer); err != nil {
 				return err

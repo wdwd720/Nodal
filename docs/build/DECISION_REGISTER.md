@@ -4,7 +4,7 @@ Every meaningful deviation from, or concretisation of, the goal architecture. Ne
 
 Format per entry: decision · original recommendation · chosen implementation · why · evidence · consequences · migration impact.
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 ---
 
@@ -321,3 +321,31 @@ Two defects in `scripts/seed`, both of which hid behind a misleading error.
 - **Evidence:** `internal/identity` `TestIntegration_ExpiredLoginAttemptsArePurged` (asserts the application role's own DELETE is refused with `42501` first, then that only rows past retention go) and `TestIntegration_ThePurgeRefusesTooShortARetention`. Observed failing with the DELETE made a no-op.
 - **Consequences:** `audit-worker` holds two database roles. A deployment that runs it must provide `CP_DATABASE_OPS_URL`; one that does not will fail at startup rather than silently skip.
 - **Open, deliberately:** three of the six declared retention classes (`SOCIAL_DATA`, `MODEL_IO`, `OPERATIONAL_LOG`) still have no enforcement. The tables they would cover carry `forbid_mutation` triggers that refuse DELETE outright, so retention there is partition management or archival-then-drop — a design decision about how an append-only financial record is aged out, and it belongs in an ADR before it belongs in a purge command.
+
+## D-046 — The launch tier's settlement sweep runs in the API process
+
+- **Original recommendation:** ADR-0003's eight binaries; the reconciliation worker owns `SettleDue`.
+- **Problem (2026-09-09, F-90):** Render charges for a worker service, so `render.yaml` deploys one web service and records the sweep as "operator-run for now". `internal/capacity` excludes SETTLED from money at risk **because** something settles — its own comment says counting SETTLED "would turn the ceiling into a lifetime cumulative cap that can only ever rise, so the tier would end up refusing every purchase forever — an outage, not a ceiling." With no sweep, that is exactly what it became: the only exits from REVERSIBLE are `SettleDue` and a won dispute, so the sum could only rise and the deployment would have refused every Credit purchase with `AT_CAPACITY`, permanently, at $2,000 of lifetime sales.
+- **Chosen:** `cmd/api` runs the sweep on a 15-minute ticker bound to the process lifetime, once at startup and then on the tick.
+- **Why this is acceptable in the API process, stated rather than assumed:** the sweep is idempotent and takes its rows `FOR UPDATE SKIP LOCKED`, so a worker tier added later runs alongside it with no coordination and no double effect. It holds no provider call and no lock across a network hop — one bounded UPDATE per pass. A free instance spins down when idle, so it does not run continuously; that is tolerable because it only has to run while purchases are happening, and purchases require the process to be up.
+- **What it deliberately does not become:** the only reason a number is correct. The ceiling still refuses when it cannot measure, and the settlement window is a recorded risk decision rather than an artefact of how often the ticker fires.
+- **Consequences:** `CP_CREDIT_SETTLEMENT_WINDOW` moves out of the worker's environment reads and into the configuration table, so it is in `scripts/configcheck` and in the configuration hash. The worker reads it from configuration too; two readers of one risk decision is what the move removes.
+- **Evidence:** `TestIntegration_SettlementDrainsTheMoneyAtRiskCeiling` measures the ceiling before a purchase, after it, after a pass that finds nothing because the window is open, and after one that settles.
+
+## D-047 — A production-like deployment declares the networks its load balancer speaks from
+
+- **Problem (2026-09-09, F-88):** the rate limiter keyed on `r.RemoteAddr`. Every deployment of this service terminates TLS at a balancer, so that address is the balancer's and identical for every caller: `CP_API_RATE_LIMIT_AUTH: 30/1m` was one bucket for the whole deployment. Any unauthenticated client issuing 31 requests a minute to `/v1/auth/login` returned 429 to every user's login, and an attacker's attempts were counted against the crowd. `clientIP` was already proxy-aware and was used only for audit records — two notions of "who is calling", disagreeing.
+- **Chosen:** one notion. The limiter keys on `clientIP`, and `config.Validate` gains `TRUSTED_PROXY_DECLARED`: `CP_HTTP_TRUSTED_PROXY_CIDRS` must be non-empty in STAGING and PROD.
+- **Why required rather than defaulted:** the answer depends on the platform, and a default would be a guess that silently trusts the wrong thing. Requiring it makes the operator state a fact they know and the code cannot discover.
+- **Why trusting private ranges is safe on Render, since the blueprint now does:** nothing routes to that container except through the platform's router, so an `X-Forwarded-For` arriving from a private peer is the router's record of the caller. A caller that somehow arrived from a public address is not in those ranges, so its header is ignored and it is keyed on where it really came from.
+- **Consequences:** the configuration hash changes, so the deployed hash in `PROVIDER_ACTIVATION_CHECKPOINT.md` is superseded. Audit records and `login_attempts` rows now carry the caller's address rather than the balancer's.
+- **Evidence:** `TestRateLimitKeyDistinguishesCallersBehindAProxy`; the validation rule was observed failing against the real blueprint before `render.yaml` was changed.
+
+## D-048 — `state` is bound to the browser, not only to a row
+
+- **Problem (2026-09-09, F-87):** `internal/auth/identity.go` said "state binds the callback to the browser session" and nothing implemented it. The state was persisted server-side and consumed once, which stops a REPLAYED callback and does nothing about a PLANTED one. An attacker who begins a flow, authenticates as themselves and induces a victim's browser to load the callback signs the victim in as the attacker — so a Credit purchase on the victim's card, their identity documents and their payout destination all land in the attacker's account, attributed to the attacker.
+- **Chosen:** a short-lived `__Host-` cookie carrying `base64url(sha256(state))`, required to match before `Complete` runs.
+- **Why the digest and not the value:** a cookie is readable by anything that can read the browser's storage for the host, and the raw state is the key to a pending attempt row. The digest is enough to compare and useless to present.
+- **Why `SameSite=Lax`:** the callback is a top-level cross-site GET from the identity provider. Strict would not send the cookie at all, breaking every login rather than only the planted ones — the same reason the session cookie is Lax.
+- **Why the check runs before `Complete`:** a planted callback then consumes nothing, so the refusal costs the real browser nothing and the attacker's own flow expires on its own.
+- **Consequences:** any client driving the flow must carry cookies between the two requests. `test/security`'s login helper did not, which is to say the security suite had been logging in the way the attack does.

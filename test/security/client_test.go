@@ -12,11 +12,18 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/nodal/controlplane/internal/auth/httpmw"
 )
 
 // cookieName is what cmd/api sets when CP_AUTH_COOKIE_SECURE is false. The
 // __Host- prefix is only added for secure cookies.
 const cookieName = "cp_session"
+
+// loginStateCookieName binds an authorization-code flow to the browser that
+// began it. Without the __Host- prefix here for the same reason cookieName has
+// none: this suite runs against a deployment with CP_AUTH_COOKIE_SECURE false.
+const loginStateCookieName = httpmw.LoginStateCookieName
 
 // noRedirect is the client used everywhere: the login flow is asserted on its
 // 302s, so redirects must never be followed.
@@ -142,8 +149,8 @@ type meDoc struct {
 // replay tests re-send exactly these.
 func login(t *testing.T, identity string) (session, string, string) {
 	t.Helper()
-	state := beginLogin(t)
-	resp := completeLogin(t, identity, state)
+	state, loginState := beginLogin(t)
+	resp := completeLoginFrom(t, identity, state, loginState)
 	require.Equal(t, http.StatusFound, resp.Status, "callback for %s: %s", identity, resp.text())
 	token := sessionCookie(t, resp)
 	require.NotEmpty(t, token, "callback for %s set no session cookie", identity)
@@ -158,7 +165,11 @@ func login(t *testing.T, identity string) (session, string, string) {
 	}, identity, state
 }
 
-func beginLogin(t *testing.T) string {
+// beginLogin returns the state from the redirect AND the login-state cookie
+// the browser is expected to send back with the callback. The second value is
+// what binds the flow to one browser: without it the callback is a planted
+// callback and is refused (F-87).
+func beginLogin(t *testing.T) (string, string) {
 	t.Helper()
 	resp := getAs(t, "", "/v1/auth/login")
 	require.Equal(t, http.StatusFound, resp.Status, "GET /v1/auth/login: %s", resp.text())
@@ -171,12 +182,42 @@ func beginLogin(t *testing.T) string {
 		state = state[:amp]
 	}
 	require.NotEmpty(t, state)
-	return state
+
+	loginState := cookieValue(resp, loginStateCookieName)
+	require.NotEmpty(t, loginState, "the login redirect set no login-state cookie")
+	return state, loginState
 }
 
+// completeLogin sends the callback with NO login-state cookie, which is what a
+// planted callback looks like. The replay tests use it deliberately.
 func completeLogin(t *testing.T, code, state string) response {
 	t.Helper()
 	return getAs(t, "", "/v1/auth/callback?code="+code+"&state="+state)
+}
+
+// completeLoginFrom sends the callback from the browser that began the flow.
+func completeLoginFrom(t *testing.T, code, state, loginState string) response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		apiBaseURL+"/v1/auth/callback?code="+code+"&state="+state, nil)
+	require.NoError(t, err)
+	req.Header.Set("Cookie", loginStateCookieName+"="+loginState)
+	return do(t, req)
+}
+
+// cookieValue returns the value of a Set-Cookie by name, or "".
+func cookieValue(r response, name string) string {
+	for _, c := range r.Header.Values("Set-Cookie") {
+		if !strings.HasPrefix(c, name+"=") {
+			continue
+		}
+		v := strings.TrimPrefix(c, name+"=")
+		if semi := strings.IndexByte(v, ';'); semi >= 0 {
+			v = v[:semi]
+		}
+		return v
+	}
+	return ""
 }
 
 func sessionCookie(t *testing.T, r response) string {

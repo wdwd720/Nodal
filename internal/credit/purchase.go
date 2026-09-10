@@ -317,7 +317,8 @@ func (s *PurchaseService) Dispatch(ctx context.Context, tx pgx.Tx, ev PurchaseEv
 	if ev.Snapshot.Amount.Minor() != 0 && ev.Snapshot.Amount.Minor() != f.PaidAmount.Minor() {
 		return s.review(ctx, tx, f, fmt.Sprintf(
 			"provider reports %s for this payment and the funding records %s",
-			ev.Snapshot.Amount, f.PaidAmount), ev.Identity.EventID)
+			ev.Snapshot.Amount, f.PaidAmount,
+		), ev.Identity.EventID)
 	}
 
 	to, ok := FundingStateFor(ev.Snapshot.Status)
@@ -472,7 +473,8 @@ func (s *PurchaseService) Reconcile(ctx context.Context, tx pgx.Tx, id FundingID
 	if snap.Amount.Minor() != f.PaidAmount.Minor() {
 		if _, err := s.review(ctx, tx, f, fmt.Sprintf(
 			"reconciliation found the provider charging %s where the funding records %s",
-			snap.Amount, f.PaidAmount), "reconcile"); err != nil {
+			snap.Amount, f.PaidAmount,
+		), "reconcile"); err != nil {
 			return Funding{}, err
 		}
 		return s.credits.Funding(ctx, tx, id)

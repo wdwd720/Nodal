@@ -361,9 +361,11 @@ func (unverified) Capabilities() payout.Capabilities {
 		ContractReference: "somewhere",
 	}
 }
+
 func (unverified) Submit(context.Context, payout.SubmitRequest) (payout.SubmitResult, error) {
 	return payout.SubmitResult{}, nil
 }
+
 func (unverified) Lookup(context.Context, string) (payout.SubmitResult, error) {
 	return payout.SubmitResult{}, nil
 }
@@ -388,20 +390,41 @@ func TestCanPayRecipient_AgainstStripesActualLimits(t *testing.T) {
 	}{
 		{"a Californian individual", payout.RecipientProfile{Country: "US", Region: "CA", Kind: "individual"}, nil},
 		{"a sole proprietor in Mexico", payout.RecipientProfile{Country: "MX", Kind: "sole_proprietor"}, nil},
-		{"New York", payout.RecipientProfile{Country: "US", Region: "NY", Kind: "individual"},
-			[]payout.RecipientRefusal{payout.RefusalRegionExcluded}},
-		{"Hawaii", payout.RecipientProfile{Country: "US", Region: "HI", Kind: "individual"},
-			[]payout.RecipientRefusal{payout.RefusalRegionExcluded}},
-		{"a US recipient whose state we do not know", payout.RecipientProfile{Country: "US", Kind: "individual"},
-			[]payout.RecipientRefusal{payout.RefusalRegionUnknown}},
-		{"a company", payout.RecipientProfile{Country: "US", Region: "CA", Kind: "company"},
-			[]payout.RecipientRefusal{payout.RefusalKindUnsupported}},
-		{"a non-profit", payout.RecipientProfile{Country: "US", Region: "CA", Kind: "non_profit"},
-			[]payout.RecipientRefusal{payout.RefusalKindUnsupported}},
-		{"Germany", payout.RecipientProfile{Country: "DE", Kind: "individual"},
-			[]payout.RecipientRefusal{payout.RefusalCountryUnsupported}},
-		{"the United Kingdom", payout.RecipientProfile{Country: "GB", Kind: "individual"},
-			[]payout.RecipientRefusal{payout.RefusalCountryUnsupported}},
+		{
+			"New York",
+			payout.RecipientProfile{Country: "US", Region: "NY", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalRegionExcluded},
+		},
+		{
+			"Hawaii",
+			payout.RecipientProfile{Country: "US", Region: "HI", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalRegionExcluded},
+		},
+		{
+			"a US recipient whose state we do not know",
+			payout.RecipientProfile{Country: "US", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalRegionUnknown},
+		},
+		{
+			"a company",
+			payout.RecipientProfile{Country: "US", Region: "CA", Kind: "company"},
+			[]payout.RecipientRefusal{payout.RefusalKindUnsupported},
+		},
+		{
+			"a non-profit",
+			payout.RecipientProfile{Country: "US", Region: "CA", Kind: "non_profit"},
+			[]payout.RecipientRefusal{payout.RefusalKindUnsupported},
+		},
+		{
+			"Germany",
+			payout.RecipientProfile{Country: "DE", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalCountryUnsupported},
+		},
+		{
+			"the United Kingdom",
+			payout.RecipientProfile{Country: "GB", Kind: "individual"},
+			[]payout.RecipientRefusal{payout.RefusalCountryUnsupported},
+		},
 	}
 	for _, tc := range cases {
 		ok, why := caps.CanPayRecipient(tc.profile)

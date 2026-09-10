@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/auth/oidc"
 	"github.com/nodal/controlplane/internal/auth/pgstore"
+	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
@@ -248,9 +249,31 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("identity provider: %w", err)
 	}
+	// The ceilings are built here rather than inside the Credit purchase
+	// wiring: the launch cohort is a ceiling on how many accounts exist, and a
+	// deployment with no payment provider still has accounts (F-91).
+	capGuard, err := capacity.NewGuard(capacity.Budget{
+		MaxAccounts:        cfg.Capacity.MaxAccounts,
+		MaxPurchasesPerDay: cfg.Capacity.MaxPurchasesPerDay,
+		MaxAtRiskMinor:     cfg.Capacity.MaxAtRiskMinor,
+		MaxDatabaseBytes:   cfg.Capacity.MaxDatabaseBytes,
+	}, clk.Now)
+	if err != nil {
+		return nil, fmt.Errorf("capacity ceilings: %w", err)
+	}
+	log.Info("launch-tier capacity ceilings in force",
+		"max_accounts", cfg.Capacity.MaxAccounts,
+		"max_purchases_per_day", cfg.Capacity.MaxPurchasesPerDay,
+		"max_at_risk_minor", cfg.Capacity.MaxAtRiskMinor,
+		"max_database_bytes", cfg.Capacity.MaxDatabaseBytes)
+
 	identitySvc, err := identity.New(identity.Deps{
 		IdP: idp, DB: database, Accounts: accountRepo, Sessions: sessionMgr,
 		Audit: auditWriter, Clock: clk, AttemptTTL: identity.DefaultAttemptTTL,
+		AdmitAccount: func(ctx context.Context, tx pgx.Tx) error {
+			_, aerr := capGuard.Admit(ctx, tx, capacity.ActionOpenAccount)
+			return aerr
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("identity service: %w", err)
@@ -274,7 +297,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// reversible-card / irreversible-value problem the whole funding lifecycle
 	// exists to manage. One set of credentials for both would mean one mode
 	// for two products with different risk.
-	creditPurchases := wireCreditPurchase(ctx, cfg, database, in.resolver, clk, creditSvc, gateChecker, log)
+	creditPurchases := wireCreditPurchase(ctx, cfg, database, in.resolver, clk, creditSvc, gateChecker, capGuard, log)
+	// The launch tier deploys no worker, so the settlement sweep runs here or
+	// nowhere -- and nowhere turns the money-at-risk ceiling into a lifetime
+	// cumulative cap that refuses every purchase forever (F-90). See
+	// runCreditSettlement for why this is acceptable in the API process and
+	// what it deliberately does not become responsible for.
+	if creditPurchases.Service != nil {
+		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg.Credit.SettlementWindow, log)
+	}
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
@@ -477,6 +508,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		CookieDomain:      cfg.Auth.CookieDomain,
 		CookieSecure:      cfg.Auth.CookieSecure,
 		SessionTTL:        cfg.Auth.SessionTTL,
+		StepUpMaxAge:      cfg.Auth.StepUpMaxAge,
 		IdempotencyTTL:    httpapi.DefaultIdempotencyTTL,
 		Clock:             clk,
 		Logger:            log,

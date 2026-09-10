@@ -14,7 +14,31 @@ import (
 // operations that demand one. It matches the domain packages that enforce
 // their own step-up (gates.StepUpMaxAge, killswitch.StepUpMaxAge,
 // withdrawal.StepUpMaxAge) so the boundary never contradicts them.
+//
+// It is the CEILING, not the answer. CP_AUTH_STEP_UP_MAX_AGE tightens it and
+// can never loosen it -- see effectiveStepUpMaxAge.
 const stepUpMaxAge = 15 * time.Minute
+
+// effectiveStepUpMaxAge is the window the boundary actually enforces: the
+// tighter of this package's constant and the deployment's configured value.
+//
+// CP_AUTH_STEP_UP_MAX_AGE was loaded, validated as positive, and then read by
+// nothing at all. Every step-up window in the process was a hard-coded
+// constant, so a deployment that set it to 5 minutes -- as render.yaml does --
+// was enforcing 15, and an operator tightening it further changed nothing
+// (F-89).
+//
+// Taking the minimum rather than the configured value outright is deliberate.
+// The domain packages set their own windows per action, and a sensitive one
+// (break-glass, gate activation) is meant to be shorter than the general rule.
+// A deployment may make every window stricter; it may not use this variable to
+// widen one the code chose.
+func effectiveStepUpMaxAge(configured time.Duration) time.Duration {
+	if configured > 0 && configured < stepUpMaxAge {
+		return configured
+	}
+	return stepUpMaxAge
+}
 
 // operationPolicy is the explicit authorization requirement of one generated
 // operation. There is no implicit default: authorize refuses any operation
@@ -228,7 +252,7 @@ func policyFor(operationID string) (operationPolicy, bool) {
 
 // authorize enforces the operation's policy against the principal in ctx. It
 // is the single deny-by-default gate: an unknown operation id is FORBIDDEN.
-func authorize(ctx context.Context, operationID string, now func() time.Time) error {
+func authorize(ctx context.Context, operationID string, now func() time.Time, maxStepUpAge time.Duration) error {
 	pol, ok := policyFor(operationID)
 	if !ok {
 		return errs.Newf(errs.CodeForbidden, "operation %q has no authorization policy", operationID)
@@ -252,7 +276,7 @@ func authorize(ctx context.Context, operationID string, now func() time.Time) er
 		return err
 	}
 	if pol.StepUp {
-		if err := security.RequireStepUp(ctx, stepUpMaxAge, now); err != nil {
+		if err := security.RequireStepUp(ctx, maxStepUpAge, now); err != nil {
 			return err
 		}
 	}

@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -314,7 +315,7 @@ func (h *Handler[E]) recordFailure(ctx context.Context, ident Identity, cause er
 			h.cfg.Clock.Now().UTC(), text, meta.RequestID); err != nil {
 			return err
 		}
-		return h.cfg.Inbox.MarkFailed(ctx, tx, ident.Provider, ident.EventID, h.cfg.SchemaVersion, cause)
+		return h.cfg.Inbox.MarkFailed(ctx, tx, ident.Provider, ident.EventID, h.cfg.SchemaVersion, hex.EncodeToString(hash), cause)
 	})
 	if err != nil {
 		observability.LoggerFrom(ctx).ErrorContext(ctx, "webhook: could not record failure",

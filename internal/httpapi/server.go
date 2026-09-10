@@ -98,7 +98,11 @@ type Options struct {
 	CookieDomain      string
 	CookieSecure      bool
 	SessionTTL        time.Duration
-	IdempotencyTTL    time.Duration
+	// StepUpMaxAge is CP_AUTH_STEP_UP_MAX_AGE. It tightens every step-up
+	// window the boundary enforces and can never widen one (F-89). Zero
+	// leaves the package constant in force.
+	StepUpMaxAge   time.Duration
+	IdempotencyTTL time.Duration
 
 	Clock  clock.Clock
 	Logger *slog.Logger
@@ -232,7 +236,7 @@ func (s *Server) buildRouter() http.Handler {
 	r.Use(observe(s.log, s.clk, s.metrics))
 	r.Use(captureBody(s.opts.MaxBodyBytes))
 	r.Use(s.csrf())
-	r.Use(rateLimit(s.opts.Limits))
+	r.Use(rateLimit(s.opts.Limits, s.trusted))
 	r.Use(canonicalPathIdentifiers())
 
 	// Routes outside the /v1 contract are mounted before the generated ones
@@ -292,7 +296,7 @@ func (s *Server) csrf() func(http.Handler) http.Handler {
 func (s *Server) authorizeMiddleware() api.StrictMiddlewareFunc {
 	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
-			if err := authorize(ctx, operationID, s.clk.Now); err != nil {
+			if err := authorize(ctx, operationID, s.clk.Now, effectiveStepUpMaxAge(s.opts.StepUpMaxAge)); err != nil {
 				return nil, err
 			}
 			return f(withOperation(ctx, operationID), w, r, request)

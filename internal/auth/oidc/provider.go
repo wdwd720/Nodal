@@ -183,7 +183,8 @@ func New(ctx context.Context, cfg Config) (*Provider, error) {
 		!slices.Contains(disc.CodeChallengeMethodsSupported, "S256") {
 		return nil, fmt.Errorf(
 			"oidc: issuer advertises code_challenge_methods_supported %v and not S256; this client always sends a PKCE challenge, and an issuer that ignores it leaves the authorization code unbound",
-			disc.CodeChallengeMethodsSupported)
+			disc.CodeChallengeMethodsSupported,
+		)
 	}
 
 	// The same reasoning for acr_values. Step-up sends acr_values and is
@@ -210,7 +211,8 @@ func New(ctx context.Context, cfg Config) (*Provider, error) {
 		if !overlap {
 			return nil, fmt.Errorf(
 				"oidc: step-up asks for acr %v and the issuer advertises acr_values_supported %v, which share nothing; the request would be ignored",
-				cfg.StepUpACRValues, disc.ACRValuesSupported)
+				cfg.StepUpACRValues, disc.ACRValuesSupported,
+			)
 		}
 	}
 

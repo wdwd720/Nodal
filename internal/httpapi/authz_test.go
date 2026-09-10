@@ -330,11 +330,25 @@ func TestAgentPrincipalsAreRefusedEverywhere(t *testing.T) {
 // TestAuthorizeFailsClosedForAnUnknownOperation: the runtime half of
 // deny-by-default. An operation id with no policy is refused even though the
 // principal is a full administrator.
+// TestTheConfiguredStepUpAgeTightensButNeverWidens (F-89).
+//
+// CP_AUTH_STEP_UP_MAX_AGE was loaded, validated as positive, and read by
+// nothing: every window in the process was a hard-coded constant, so the
+// deployment's 5 minutes meant 15 and tightening it changed nothing.
+func TestTheConfiguredStepUpAgeTightensButNeverWidens(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 5*time.Minute, effectiveStepUpMaxAge(5*time.Minute), "a tighter value must be used")
+	assert.Equal(t, stepUpMaxAge, effectiveStepUpMaxAge(24*time.Hour),
+		"a deployment may not widen a window the code chose")
+	assert.Equal(t, stepUpMaxAge, effectiveStepUpMaxAge(0), "unset leaves the constant in force")
+	assert.Equal(t, stepUpMaxAge, effectiveStepUpMaxAge(-time.Hour), "a negative value cannot disable step-up")
+}
+
 func TestAuthorizeFailsClosedForAnUnknownOperation(t *testing.T) {
 	t.Parallel()
 	p := operatorPrincipal()
 	ctx := security.WithPrincipal(t.Context(), p)
-	err := authorize(ctx, "SomeOperationNobodyWroteAPolicyFor", func() time.Time { return testNow })
+	err := authorize(ctx, "SomeOperationNobodyWroteAPolicyFor", func() time.Time { return testNow }, stepUpMaxAge)
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 }

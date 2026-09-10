@@ -1,5 +1,30 @@
 # CURRENT SYSTEM INVENTORY
 
+> **2026-09-09.** The system is deployed. `https://api-nodal.actorvia.xyz` is a
+> Render free web service, one instance, `CP_ENV=STAGING`, against Neon Postgres
+> at migration 730, ZITADEL for identity and Stripe's sandbox for payments, at
+> $0 fixed cost with no payment method on file at any provider. STAGING means
+> every production rule with sandbox providers, so no real money can move
+> through it.
+>
+> `CREDIT_PURCHASE` is **not** activated: `capability_gates` has no row for it,
+> the verdict is `ReasonNoGateRow`, and activating it needs three distinct
+> principals and four external approval references. That is the control working,
+> and it is why no real Stripe PaymentIntent has been exercised through the
+> deployed service.
+>
+> What the deployment runs, what it does not, and what was verified rather than
+> claimed: `docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md` as corrected on
+> 2026-09-09, and `docs/audit/AUDIT_FINDINGS.md` F-83 to F-93.
+>
+> Two things a reader should carry. The tier deploys **one** binary, `cmd/api`,
+> so everything in the worker tier is code that exists and does not run there
+> — the Credit settlement sweep is the one exception, and it moved into the
+> API for the reason recorded in D-046. And the configuration hash changes with
+> this batch (D-046, D-047), so the value printed in the checkpoint is
+> superseded.
+
+
 Baseline frozen at git SHA **`b8da0c4ce73687e587b7d20c8abc00440afd694d`** (branch `main`, working tree
 clean except the new goal document `gola.md`).
 

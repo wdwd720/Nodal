@@ -271,6 +271,26 @@ func (h *harness) do(method, path string, body any, headers ...string) *response
 	return &response{ResponseRecorder: rec, t: h.t}
 }
 
+// doWithCookies is do with cookies attached, for a flow whose second request
+// has to prove it came from the browser that made the first.
+func (h *harness) doWithCookies(method, path string, body any, cookies []*http.Cookie) *response {
+	h.t.Helper()
+	var reader io.Reader
+	if body != nil {
+		reader = strings.NewReader(string(marshalJSON(body)))
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.server.Router().ServeHTTP(rec, req)
+	return &response{ResponseRecorder: rec, t: h.t}
+}
+
 // problem decodes the body as an RFC 9457 document and asserts the media type.
 func (r *response) problem() errs.Problem {
 	r.t.Helper()

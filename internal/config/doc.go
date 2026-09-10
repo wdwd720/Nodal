@@ -292,6 +292,10 @@
 //
 //	CP_SEED_ENABLED                 bool (false in STAGING/PROD)
 //
+// Credit (funding lifecycle):
+//
+//	CP_CREDIT_SETTLEMENT_WINDOW     how long a captured payment stays reversible
+//
 // Retention (days):
 //
 //	CP_RETENTION_LOGIN_ATTEMPT_DAYS     days a login_attempts row survives its expiry

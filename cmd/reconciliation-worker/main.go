@@ -225,7 +225,13 @@ func cmdRun(ctx context.Context, d *deps) error {
 		slog.Duration("verify_interval", verify), slog.Int("batch", batch))
 
 	if d.credits != nil {
-		d.credits.window = durationVar(d.lookup, envSettlementWindow, defaultSettlementWindow)
+		// From the configuration table, not the environment: the reversibility
+		// window is a recorded risk decision and belongs in the hash that
+		// proves what is running.
+		d.credits.window = d.cfg.Credit.SettlementWindow
+		if d.credits.window <= 0 {
+			d.credits.window = defaultSettlementWindow
+		}
 	}
 	creditEvery := durationVar(d.lookup, envCreditInterval, defaultCreditInterval)
 

@@ -300,7 +300,7 @@ func TestPAY004_RefundIsHandledSafely(t *testing.T) {
 
 	// The ledger must still balance. A refund that leaves the books unequal is
 	// worse than a refund that fails.
-	requireLedgerBalanced(t, f.ctx)
+	requireLedgerBalanced(f.ctx, t)
 }
 
 func TestPAY005_DisputeAffectsPayoutEligibilityImmediately(t *testing.T) {
@@ -362,7 +362,7 @@ func TestPAY006_ChargebackCannotCreateFreeWithdrawableValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "8000", deficit)
 
-	requireLedgerBalanced(t, f.ctx)
+	requireLedgerBalanced(f.ctx, t)
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +547,7 @@ func TestSettleDue_RefusesAZeroWindow(t *testing.T) {
 }
 
 // requireLedgerBalanced asserts the global double-entry invariant.
-func requireLedgerBalanced(t *testing.T, ctx context.Context) {
+func requireLedgerBalanced(ctx context.Context, t *testing.T) {
 	t.Helper()
 	var unbalanced int
 	require.NoError(t, testDB.QueryRow(ctx,

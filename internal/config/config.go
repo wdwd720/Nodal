@@ -77,6 +77,7 @@ type Config struct {
 	Telemetry         TelemetryConfig
 	Seed              SeedConfig
 	Capability        CapabilityConfig
+	Credit            CreditConfig
 	Retention         RetentionConfig
 }
 
@@ -493,6 +494,22 @@ type SeedConfig struct {
 // memory.
 type CapabilityConfig struct {
 	StoreConfigured bool
+}
+
+// CreditConfig holds the Credit funding lifecycle's one risk decision.
+type CreditConfig struct {
+	// SettlementWindow is how long a captured card payment stays reversible
+	// before its Credits may be treated as settled.
+	//
+	// It is in the table rather than read from the environment because it is a
+	// risk determination somebody has to make and record, and a value read
+	// straight from the environment is outside scripts/configcheck and outside
+	// the configuration hash -- so it could be changed in a dashboard while
+	// /v1/version reported the hash that exists to detect exactly that.
+	//
+	// The default is a CONSERVATIVE placeholder, not a determination: card
+	// scheme chargeback windows run to 120 days and beyond.
+	SettlementWindow time.Duration
 }
 
 // RetentionConfig holds retention in days for each retention class (goal

@@ -156,18 +156,6 @@ func TestParseCapabilities(t *testing.T) {
 	assert.Empty(t, parseCapabilities("nonsense"))
 }
 
-func TestDurationEnv(t *testing.T) {
-	t.Parallel()
-	lookup := config.LookupFromMap(map[string]string{
-		"GOOD": "30s", "BAD": "not-a-duration", "EMPTY": "  ", "NEGATIVE": "-5s",
-	})
-	assert.Equal(t, 30*time.Second, durationEnv(lookup, "GOOD", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "BAD", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "EMPTY", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "NEGATIVE", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "ABSENT", time.Minute))
-}
-
 func TestProviderCatalogCoversEverySlot(t *testing.T) {
 	t.Parallel()
 	cfg := localConfig(t)

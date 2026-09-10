@@ -367,6 +367,22 @@ Recorded because their absence might otherwise look like one:
 | The ten transition bindings that still compare the destination only | `agents` is fixed (D-044); the rest are not | `AUDIT_FINDINGS.md` F-78; `MASTER_BUILD_STATE.md` §4 |
 | 131 enum CHECK constraints with no Go list compared against them | named individually by `test/integration/enums` | `AUDIT_FINDINGS.md` F-74 |
 
+**Checkpoint 2026-09-09 — after reconciling the provider workstream.**
+The external blockers are unchanged in kind and sharper in detail. Selling
+Credits for real money needs, and cannot be given from inside this repository:
+
+| Item | Why external |
+|---|---|
+| `CREDIT_PURCHASE` capability activation | Three distinct principals with recent step-up and four approval references. Not fabricable, and doing so would defeat the control. Note F-93: three principals is three `users.id` values, not three people. |
+| Stripe production approval | A business relationship and a restricted-business/compliance review. Not an engineering artefact. |
+| Legal review reference | Counsel. |
+| Independent penetration test | A third party. This audit is not one and does not claim to be. |
+| Risk and security approval references | People with the authority to sign them. |
+| A real settlement mint | `CP_API_SETTLEMENT_MINT` is a Solana devnet USDC mint; the mainnet value is a fact about Solana, not a value to invent (F-93). |
+
+Everything else the reconciliation found was work, and is either fixed
+(F-83, F-86 to F-92) or recorded with its reason in F-93.
+
 **Checkpoint 2026-09-08.** The F-71..F-81 batch added **no** external blockers.
 Every item it left undone is work, and each is named above or in
 `MASTER_BUILD_STATE.md` §4 with the reason it was left. `CP_DATABASE_OPS_URL`

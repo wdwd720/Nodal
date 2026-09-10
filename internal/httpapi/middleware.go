@@ -331,19 +331,37 @@ type RateLimits struct {
 }
 
 // principalKey keys rate-limit counters by principal when there is one and by
-// remote address otherwise, so one tenant cannot exhaust another's budget.
-// ratelimit.ByRemoteIP already returns a namespaced key ("ip:<host>").
-func principalKey(r *http.Request) string {
-	if p, ok := security.PrincipalFrom(r.Context()); ok && p.SubjectID != "" {
-		return "sub:" + p.SubjectID
+// caller address otherwise, so one tenant cannot exhaust another's budget.
+//
+// The address is the one clientIP derives, not r.RemoteAddr. Behind a load
+// balancer that terminates TLS -- which is every deployment of this service --
+// RemoteAddr is the balancer, identical for every caller, so keying on it
+// collapses every unauthenticated bucket into ONE. The auth budget is the one
+// that matters: 30 requests a minute shared by everybody means one client can
+// hold the whole cohort out of logging in, and an attacker's attempts are not
+// counted against them but against the crowd (F-88).
+//
+// clientIP reads X-Forwarded-For only when the peer is in a configured trusted
+// network, so an untrusted caller still cannot forge its own key. When no
+// networks are trusted it returns the peer address unchanged -- the old
+// behaviour -- which is why config.Validate now requires the list to be stated
+// in a production-like environment.
+func principalKey(trusted []*net.IPNet) func(*http.Request) string {
+	return func(r *http.Request) string {
+		if p, ok := security.PrincipalFrom(r.Context()); ok && p.SubjectID != "" {
+			return "sub:" + p.SubjectID
+		}
+		if ip := clientIP(r, trusted); ip != "" {
+			return "ip:" + ip
+		}
+		return ratelimit.ByRemoteIP(r)
 	}
-	return ratelimit.ByRemoteIP(r)
 }
 
 // rateLimit selects the limiter that applies to the request. The order is
 // specific first: auth endpoints, quote previews, any other command, then the
 // general per-principal budget.
-func rateLimit(l RateLimits) func(http.Handler) http.Handler {
+func rateLimit(l RateLimits, trusted []*net.IPNet) func(http.Handler) http.Handler {
 	pick := func(r *http.Request) *ratelimit.Limiter {
 		p := r.URL.Path
 		switch {
@@ -357,6 +375,7 @@ func rateLimit(l RateLimits) func(http.Handler) http.Handler {
 			return l.General
 		}
 	}
+	key := principalKey(trusted)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			limiter := pick(r)
@@ -364,7 +383,7 @@ func rateLimit(l RateLimits) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			ratelimit.Middleware(limiter, principalKey)(next).ServeHTTP(w, r)
+			ratelimit.Middleware(limiter, key)(next).ServeHTTP(w, r)
 		})
 	}
 }

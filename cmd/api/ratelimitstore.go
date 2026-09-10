@@ -61,7 +61,8 @@ func newRateLimitStore(ctx context.Context, cfg *config.Config, resolver config.
 		if cfg.RateLimit.Replicas != 1 {
 			return nil, false, noop, fmt.Errorf(
 				"rate limit: %w: this deployment declares %d processes, so a limit of N would admit %d*N",
-				errRateLimitProcessLocalAcrossReplicas, cfg.RateLimit.Replicas, cfg.RateLimit.Replicas)
+				errRateLimitProcessLocalAcrossReplicas, cfg.RateLimit.Replicas, cfg.RateLimit.Replicas,
+			)
 		}
 		// Fail open. A MemoryStore.Incr cannot return an error, so this is a
 		// statement about a store that cannot fail rather than a policy for

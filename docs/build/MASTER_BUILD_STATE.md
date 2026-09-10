@@ -1434,7 +1434,70 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
-### RESUME HERE — checkpoint 2026-09-08, commit at the end of the F-71..F-81 batch
+### RESUME HERE — checkpoint 2026-09-09, after reconciling the provider workstream
+
+The `/goal` audit was paused at `80edf58` for a provider/deployment workstream.
+That workstream landed 58 commits, deployed the service to Render's free tier
+against Neon and Stripe's sandbox, and produced
+`docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md`. The audit has now **ingested
+and independently re-verified it** rather than adopting its conclusions.
+
+**What the reconciliation found.** Eleven findings, F-83 to F-93, four of them
+P1. Much of the checkpoint held and is credited in `AUDIT_FINDINGS.md`: the
+signature verification, the database-enforced replay dedup, exactly-once across
+all four crash boundaries, and fail-closed under database unavailability are all
+as described. What did not hold:
+
+- **F-87 (P1)** a planted OIDC callback signed the victim's browser in as the
+  attacker — `state` was a server-side lookup key and was never bound to a
+  browser. Fixed, with the exploit as a test in two suites.
+- **F-88 (P1)** every unauthenticated rate-limit bucket was one shared counter,
+  because the limiter keyed on the load balancer's address. Fixed, and a
+  production-like deployment must now declare its proxy networks.
+- **F-90 (P1)** nothing settled on a tier with no worker, so the money-at-risk
+  ceiling was a lifetime cumulative cap that would have refused every Credit
+  purchase forever at $2,000 of lifetime sales. Fixed.
+- **F-91 (P1)** the 50-account launch-cohort ceiling was configured, logged as
+  in force, and enforced nowhere. Fixed.
+- **F-83, F-86, F-89, F-92** and the partials **F-84, F-85**. See the register.
+- **F-93** is the inventory of what was verified and deliberately not fixed,
+  each with its reason.
+
+**The next thing on this surface**, and the reason two F-93 rows are joined: the
+Stripe call sits inside the purchase transaction, and the capacity ceiling is not
+authoritative under concurrency. Neither can be fixed alone — raising
+isolation while a 20-second provider call is inside the transaction makes a
+serialization retry re-call the provider, and an advisory lock instead holds one
+of eight pool connections across that call. The provider call comes out of the
+transaction first; then the ceiling can be made authoritative.
+
+**Then §4 as it stood**, with its counts recomputed from source rather than
+assumed:
+
+1. **Transition bindings: 16, not ten.** 17 destination-only
+   `cp_require_transition` triggers were created; 00726 replaced one (`agents`).
+   The F-78 exploit is **not** reachable on the other 16:
+   `agent_lifecycle_transitions` is the only transitions table in the schema with
+   a `from_X = to_X OR ...` CHECK, and 11 of the 16 have no CHECK at all. What is
+   present on all 16 is the weaker property that the recorded ORIGIN is whatever
+   the writer said. **A separate and sharper item came out of the recount:**
+   migration 00712 `CREATE OR REPLACE`d `cp_require_transition` so the flag
+   ACCUMULATES (`current || '|' || new_state`, checked with `= ANY(string_to_
+   array(flagged,'|'))`), so two transition rows for one entity in one
+   transaction mean either destination licenses the change. That applies to all
+   16 and wants a database test to confirm reachability.
+2. **Unpaired enum CHECKs: 130** (not 131 — 00726 paired one). The
+   inventory in `test/integration/enums` is exactly current as of 00730: 00728
+   widened `credit_fundings_state_check`, which is already paired and already
+   agrees with `credit.AllFundingStates()`; 00730's two CHECKs are arithmetic,
+   not enums; 00729 added none.
+3. **Retention classes: still three unenforced**, and F-93 adds a fourth
+   problem — `CP_RETENTION_LOGIN_ATTEMPT_DAYS` is set to 90 on a table
+   designed for 2, has no validation rule, and its purge cannot run on this tier
+   at all.
+4. **F-42 and F-47** remain open and unchanged.
+
+### The previous checkpoint — 2026-09-08, at the end of the F-71..F-81 batch
 
 The `/goal` run against `gola.md` (independent adversarial audit + final
 architecture migration + production proof) was **paused deliberately** at this
@@ -1561,7 +1624,7 @@ binary).
 
 ## 7. Migrations applied
 
-00001 through **00727**, 59 files, all embedded in `migrations.FS` and
+00001 through **00730**, 62 files, all embedded in `migrations.FS` and
 checksum-verified by `internal/db/migrate`. An applied migration is never
 edited; a correction is a new file. `go run ./cmd/migrate status` is
 authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
@@ -1578,8 +1641,10 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: 81 findings, of which three are
-open.
+`docs/audit/AUDIT_FINDINGS.md` is the register: 93 findings, of which four are
+open (F-42, F-47, F-69, F-93) and two are partial (F-65, F-84). F-85 is open by
+decision — reordering middleware on the money path is not a change to make
+at the end of a batch.
 
 | Finding | Priority | Why it is still open |
 |---|---|---|

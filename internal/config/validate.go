@@ -39,22 +39,38 @@ const (
 
 // Rules applied only when Environment.IsProductionLike (STAGING, PROD).
 const (
-	RuleNoDebugAuth        Rule = "NO_DEBUG_AUTH"
-	RuleNoSeed             Rule = "NO_SEED"
-	RuleDatabaseTLS        Rule = "DATABASE_TLS"
-	RuleRedisTLS           Rule = "REDIS_TLS"
-	RuleRedpandaTLS        Rule = "REDPANDA_TLS"
-	RuleClickHouseTLS      Rule = "CLICKHOUSE_TLS"
-	RuleTemporalTLS        Rule = "TEMPORAL_TLS"
-	RuleNoCORSWildcard     Rule = "NO_CORS_WILDCARD"
-	RuleArchiveConfigured  Rule = "ARCHIVE_CONFIGURED"
-	RuleArchiveObjectLock  Rule = "ARCHIVE_OBJECT_LOCK"
-	RuleKMSConfigured      Rule = "KMS_CONFIGURED"
-	RuleCookieSecure       Rule = "COOKIE_SECURE"
-	RulePublicBaseURLHTTPS Rule = "PUBLIC_BASE_URL_HTTPS"
-	RuleRetentionNonZero   Rule = "RETENTION_NON_ZERO"
-	RulePublicProductName  Rule = "PUBLIC_PRODUCT_NAME"
-	RuleCapabilityStore    Rule = "CAPABILITY_STORE_CONFIGURED"
+	RuleNoDebugAuth       Rule = "NO_DEBUG_AUTH"
+	RuleNoSeed            Rule = "NO_SEED"
+	RuleDatabaseTLS       Rule = "DATABASE_TLS"
+	RuleRedisTLS          Rule = "REDIS_TLS"
+	RuleRedpandaTLS       Rule = "REDPANDA_TLS"
+	RuleClickHouseTLS     Rule = "CLICKHOUSE_TLS"
+	RuleTemporalTLS       Rule = "TEMPORAL_TLS"
+	RuleNoCORSWildcard    Rule = "NO_CORS_WILDCARD"
+	RuleArchiveConfigured Rule = "ARCHIVE_CONFIGURED"
+	RuleArchiveObjectLock Rule = "ARCHIVE_OBJECT_LOCK"
+	RuleKMSConfigured     Rule = "KMS_CONFIGURED"
+	RuleCookieSecure      Rule = "COOKIE_SECURE"
+	// RuleTrustedProxyDeclared: a STAGING or PROD deployment says which
+	// networks its load balancer speaks from.
+	//
+	// Every deployment of this service sits behind something that terminates
+	// TLS, so the peer address the process sees is the balancer's and is the
+	// same for every caller. With no trusted networks declared, clientIP
+	// returns that address -- so every audit record names the balancer, and
+	// every unauthenticated rate-limit bucket collapses into one shared
+	// counter. The auth budget is then 30 requests a minute for the entire
+	// cohort together, which is not a per-client control at all (F-88).
+	//
+	// The list is what makes X-Forwarded-For readable, and reading it is the
+	// only way to tell callers apart. It is required rather than defaulted
+	// because the answer depends on the platform, and a default would be a
+	// guess that silently trusts the wrong thing.
+	RuleTrustedProxyDeclared Rule = "TRUSTED_PROXY_DECLARED"
+	RulePublicBaseURLHTTPS   Rule = "PUBLIC_BASE_URL_HTTPS"
+	RuleRetentionNonZero     Rule = "RETENTION_NON_ZERO"
+	RulePublicProductName    Rule = "PUBLIC_PRODUCT_NAME"
+	RuleCapabilityStore      Rule = "CAPABILITY_STORE_CONFIGURED"
 	// RuleRateLimitStated rejects a transport budget that cannot be parsed,
 	// and one switched off where money is at stake.
 	RuleRateLimitStated Rule = "RATE_LIMIT_STATED"
@@ -199,6 +215,15 @@ func (c *Config) Validate() error {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
 			add(RuleField, "HTTP.TrustedProxyCIDRs", fmt.Sprintf("%q is not a CIDR", cidr))
 		}
+	}
+	if c.Credit.SettlementWindow <= 0 {
+		add(RuleField, "Credit.SettlementWindow", "must be > 0: a zero window settles a payment the instant it is captured")
+	}
+	if prodLike && len(c.HTTP.TrustedProxyCIDRs) == 0 {
+		add(RuleTrustedProxyDeclared, "HTTP.TrustedProxyCIDRs",
+			"must name the networks the load balancer speaks from in STAGING/PROD: without them "+
+				"every caller looks like the balancer, so audit records its address and every "+
+				"unauthenticated rate-limit bucket becomes one shared counter")
 	}
 
 	// ---- database ----------------------------------------------------------

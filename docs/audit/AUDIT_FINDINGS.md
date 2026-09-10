@@ -106,6 +106,17 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-80 | P2 | NEW | fixed | Two admin action kinds with live executors had never been run by anything, including the one that decides what happens to a payout |
 | F-81 | P2 | NEW | fixed | An execution attempt could carry two signing decisions, and the reader silently preferred whichever was written last |
 | F-82 | P2 | NEW | fixed | Nothing constructed a Redis client, so the API's rate limits were counted per replica: a configured 600/min admitted 1800 at three tasks and 7200 at twelve |
+| F-83 | P3 | NEW | fixed | `make lint` was red at the provider workstream's HEAD, and two helpers that read configuration straight from the environment survived the fix that removed their callers |
+| F-84 | P3 | NEW | part | Request validation precedes authentication, so two endpoints the checkpoint records as answering 401 answer 400 |
+| F-85 | P2 | NEW | open | The request body is read into memory before the rate limiter runs, on a single 512 MB instance |
+| F-86 | P2 | NEW | fixed | The payload-hash binding covered a PROCESSED message and not a FAILED one, so a retry could be processed from different bytes than the evidence records |
+| F-87 | P1 | NEW | fixed | A planted OIDC callback signed the victim's browser in as the attacker, because `state` was a lookup key and never bound to a browser |
+| F-88 | P1 | NEW | fixed | Every unauthenticated rate-limit bucket collapsed into one, because the limiter keyed on the load balancer's address |
+| F-89 | P2 | NEW | fixed | `CP_AUTH_STEP_UP_MAX_AGE` was loaded, validated and read by nothing; the enforced window was three times the configured one |
+| F-90 | P1 | NEW | fixed | Nothing settled on the deployed tier, so the money-at-risk ceiling was a lifetime cumulative cap that would have refused every Credit purchase forever |
+| F-91 | P1 | NEW | fixed | The launch-cohort ceiling was configured, logged as in force, and enforced nowhere |
+| F-92 | P2 | NEW | fixed | Two of the seven capacity tests the checkpoint cites as VERIFIED PASS pass only against a database that already contains rows |
+| F-93 | P1 | NEW | open | Inventory: what the six provider audits found, verified against the source, and what has not been fixed — with the reason for each |
 
 ---
 
@@ -3968,6 +3979,332 @@ handed and startup errors are logged.
 `TestService_TheAPINeedsRedisOnlyWhenItsCountersAreShared` is the configuration
 half: the same binary in the same environment needs Redis or does not, according
 to one value.
+
+## Reconciling the provider workstream (F-83 – F-92)
+
+Fifty-eight commits landed after checkpoint `80edf58`, deploying the service to
+Render's free tier against Neon and Stripe's sandbox, and producing
+`docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md`. That document was read as a
+claim, not as evidence. Six read-only audits ran over the surfaces it covers,
+every claim they reported was re-verified against the source before anything was
+changed, and the live deployment was probed directly.
+
+**What the checkpoint got right, said plainly.** The signature verification is
+correct in every particular a reviewer would check: constant-time comparison,
+tolerance bounded on both sides, the signed payload exactly `<t>.<raw>`, multiple
+`v1=` candidates handled with no early exit, every malformed shape refused.
+Replay dedup is enforced by database constraints, not by a check-then-insert.
+The exactly-once property holds across duplicate delivery, concurrent delivery,
+and a crash at either boundary. Credit quantity is derived server-side and event
+metadata cannot redirect or inflate it. Fail-closed under database unavailability
+holds on every path traced: a dead Neon connection is an error, never
+`ReasonNoGateRow` and never "not at capacity". The `CAPTURED` regression the
+document reports is genuinely fixed and genuinely tested. The five-condition gate
+ceremony is re-derived in SQL as well as in Go.
+
+**What follows is what did not survive.**
+
+## F-83 · The lint gate was red, and the mechanism it removed was still there · NEW · P3 · FIXED
+
+`make lint` failed at `16cba60` at its first step. Eight files were not
+gofumpt-formatted, `staticcheck` reported `cmd/api.stringEnv` unused, and
+`golangci-lint` reported two `gosec` G101s and a `revive` argument-order issue.
+The repository's standing discipline is that every commit is gated on `make lint`
+and `make unit`; fifty-eight commits landed without it. The checkpoint says
+"`go test ./...` green", which is true and is narrower than a reader will take it.
+
+More than tidiness: `stringEnv` and `durationEnv` are the helpers that read
+configuration straight from the environment. The workstream's own defect #5 was
+that ten variables did exactly that and were therefore outside `configcheck` and
+outside the configuration hash. The variables moved; the mechanism stayed, with
+`durationEnv` kept alive by its own test. Both are deleted — a helper kept
+alive by a test is an invitation to use it again, and the next use would be
+invisible to the hash in the same way.
+
+## F-84 · Validation runs before authentication · NEW · P3 · PART
+
+Checkpoint §9 records that `/v1/payments`, `/v1/credits/balance` and
+`/v1/payouts` "each 401 without a session". Probed against the live deployment:
+
+```
+GET /v1/credits/balance            400  "Query argument account_id is required"
+GET /v1/payouts                    400  "Query argument account_id is required"
+GET /v1/credits/balance?account_id=<uuid>   401
+```
+
+The generated `ServerInterfaceWrapper` binds and validates parameters before the
+strict middleware where `authorize` runs, so an unauthenticated caller reaches
+the validator. The parameter names are in the published OpenAPI document, so
+what leaks is not secret; what is wrong is the readiness document asserting a
+behaviour the deployment does not have, in the section a reviewer would read to
+decide whether the surface is closed.
+
+Recorded as PART rather than fixed: moving authorization ahead of parameter
+binding means authorizing on the chi route pattern before the generated wrapper
+runs, which is a change to the boundary's structure and wants its own design.
+The document is corrected to say what the deployment does.
+
+## F-85 · The body is buffered before the rate limiter · NEW · P2 · OPEN
+
+`captureBody` is middleware position 233 and `rateLimit` is position 235, so
+every request — including the ones the limiter would refuse — has up to
+`CP_HTTP_MAX_BODY_BYTES` (1 MiB) read into memory with `io.ReadAll` first, and
+then copied again into a `bytes.Reader`.
+
+On the deployed topology that matters more than it usually would: one Render free
+instance, 512 MB, no horizontal capacity. An unauthenticated caller can force
+megabytes of allocation per second before any application-level limit applies.
+
+Left open deliberately. The fix is to move rate limiting ahead of body capture,
+and the ordering is load-bearing in the other direction too — `captureBody`
+is what makes the raw body available to the webhook signature check, and the
+limiter's key depends on the principal the authenticator attaches. Reordering
+middleware on the money path is not a change to make at the end of a batch.
+
+## F-86 · The payload-hash binding stopped at PROCESSED · NEW · P2 · FIXED
+
+Checkpoint §3: "An event id reused with different bytes is refused with 400
+rather than accepted as a repeat." True only when the first delivery reached
+PROCESSED.
+
+`Inbox.Once` calls `checkHash` in the two `StatusProcessed` branches. The
+`StatusFailed` branch relocks, re-checks for PROCESSED and RECEIVED, and then
+calls `i.run` with no comparison at all — and `markFailedInboxSQL` did not
+write `payload_hash`, so a row created straight into FAILED had nothing to
+compare against.
+
+So an event whose first delivery failed could be re-delivered under the same id
+with different bytes and be processed from them, while `provider_events` —
+immutable since F-56, written by the first delivery, `ON CONFLICT DO NOTHING`
+— went on recording the first delivery's `payload_hash` and `raw_ref`. The
+effect and the evidence would disagree, on the table this system argues with a
+provider from. It needs a valid signature, so it is Stripe or a secret-holder
+rather than an anonymous forgery, which is why it is P2.
+
+**Fix.** `MarkFailed` takes the payload hash and records it, with `COALESCE` on
+the conflict path so the FIRST payload seen under an id stays the identity;
+`markProcessedSQL` likewise prefers the stored hash over the incoming one; and
+the FAILED branch calls `checkHash` before it re-runs.
+
+## F-87 · A planted callback signed the victim in as the attacker · NEW · P1 · FIXED
+
+`internal/auth/identity.go` says "state binds the callback to the browser
+session". Nothing implemented that. `GetAuthLogin` discarded `res.State` and set
+no cookie; `Complete` found the attempt by `state` alone; the session cookie was
+then set in whichever browser made the callback request.
+
+That stops a callback being **replayed** — the attempt is claimed once under
+a row lock, which `test/security` proves. It does nothing about one being
+**planted**:
+
+1. the attacker calls `/v1/auth/login` and authenticates at the identity provider
+   as themselves, keeping `code=C&state=S` without following the redirect;
+2. the victim's browser is induced into a top-level navigation to
+   `/v1/auth/callback?code=C&state=S` — a link is enough, and `SameSite=Lax`
+   permits `Set-Cookie` on exactly that;
+3. the victim is silently signed in as the attacker.
+
+Everything the victim then does lands in the attacker's account: a Credit
+purchase on the victim's card, identity documents, a payout destination. The
+audit trail attributes all of it to the attacker's subject, which is exactly
+backwards.
+
+**Fix.** `SetLoginState` writes a short-lived `__Host-` cookie carrying
+`base64url(sha256(state))` — the digest, because a cookie is readable by
+anything that can read the browser's storage and the raw state is the key to a
+pending attempt row. The callback requires it to match, in constant time, before
+`Complete` runs, so a planted callback does not consume the attacker's attempt
+either. `SameSite` is Lax for the same reason the session cookie is: Strict would
+not be sent on the identity provider's top-level redirect, and would break every
+login rather than only the planted ones.
+
+**Evidence.** `TestAPlantedCallbackDoesNotSignAnybodyIn` drives the attack: a
+browser with no cookie is refused, a browser with a cookie for a different state
+is refused, and the browser that began the flow still completes it. Observed
+failing with the guard disabled: *"a callback that did not begin in this browser
+signed somebody in"*. `test/security`'s
+`TestReplay_APlantedCallbackCannotSignAnybodyIn` runs the same attack over HTTP
+against a real database and additionally asserts the refused callback consumed
+nothing.
+
+The suite's own login helper had to change to carry the cookie between the two
+requests — which is to say the security suite had been logging in the way
+the attack does.
+
+## F-88 · One rate-limit bucket for everybody · NEW · P1 · FIXED
+
+`principalKey` fell back to `ratelimit.ByRemoteIP`, which reads `r.RemoteAddr`
+and nothing else. Its comment says "after trusted proxy handling upstream"; no
+such handling existed. `clientIP` **is** proxy-aware and reads
+`CP_HTTP_TRUSTED_PROXY_CIDRS`, and it was used only for audit records.
+
+Render terminates TLS at its edge, so `RemoteAddr` is Render's and identical for
+every caller. `CP_API_RATE_LIMIT_AUTH: 30/1m` was therefore **one bucket for the
+whole deployment**: any unauthenticated client issuing 31 requests a minute to
+`/v1/auth/login` returns 429 to every user's login for the rest of the window,
+and an attacker's brute-force attempts are counted against the crowd rather than
+against the attacker. `CP_HTTP_TRUSTED_PROXY_CIDRS` was not set, and setting it
+would not have helped, because the rate-limit path never read it.
+
+**Fix.** The limiter keys on `clientIP`, so the limiter and the audit trail agree
+about who is calling. `config.Validate` gains `TRUSTED_PROXY_DECLARED`: a
+STAGING or PROD deployment must name the networks its balancer speaks from,
+because without them every caller looks like the balancer. `render.yaml` declares
+the private ranges, with the reason it is safe to trust them written down —
+nothing routes to that container except through the platform, and a caller
+arriving from a public address is not in those ranges, so its header is ignored
+and it is keyed on where it really came from.
+
+**Evidence.** `TestRateLimitKeyDistinguishesCallersBehindAProxy` asserts two
+callers through one balancer get two buckets, that the same caller is one bucket
+whatever ephemeral port the balancer used, that an untrusted caller cannot forge
+its key, and that an authenticated caller is keyed by subject. The new validation
+rule was observed firing against the real blueprint before `render.yaml` was
+changed.
+
+**Note for the operator:** `CP_HTTP_TRUSTED_PROXY_CIDRS` is in the configuration
+hash, so the deployed hash changes with this. That is the mechanism working.
+
+## F-89 · A configuration variable that bounded nothing · NEW · P2 · FIXED
+
+`CP_AUTH_STEP_UP_MAX_AGE` is parsed into `Auth.StepUpMaxAge`, validated `> 0`,
+and read by **nothing**. Every step-up window in the process is a hard-coded
+constant: 15 minutes at the HTTP boundary and in `internal/gates`, per-kind in
+`internal/admin`. `render.yaml` sets 5 minutes, so the enforced window was three
+times the configured one, and an operator tightening it further changed nothing.
+
+**Fix.** The boundary enforces the tighter of its constant and the configured
+value. Taking the minimum rather than the configured value outright is
+deliberate: a deployment may make every window stricter, and may not use this
+variable to widen one the code chose for a sensitive action.
+
+**Not fixed here:** the domain packages still carry their own constants, and
+`gates.Admin.Propose` enforces no step-up at all in the domain layer — the
+proposer's step-up exists only at the HTTP boundary, so a non-HTTP caller holding
+`gate:propose` proposes with no recent strong authentication. Recorded below.
+
+## F-90 · The ceiling that could only ever rise · NEW · P1 · FIXED
+
+`internal/capacity` counts CAPTURED and REVERSIBLE as money at risk and excludes
+SETTLED, and says why: counting SETTLED "would turn the ceiling into a lifetime
+cumulative cap that can only ever rise, so the tier would end up refusing every
+purchase forever — an outage, not a ceiling."
+
+The only exits from REVERSIBLE are `SettleDue` and a won dispute. `SettleDue`'s
+only caller is `cmd/reconciliation-worker`. `render.yaml` deploys one service, a
+web service, and says so: "No workers and no cron jobs. Both are paid service
+types on Render." So nothing settled, the sum was monotonically non-decreasing,
+and the deployment would have refused **every** Credit purchase with
+`AT_CAPACITY` — permanently — at $2,000 of lifetime sales. The
+reasoning behind the exclusion was right; the deployment removed the component
+that made it true. `LAUNCH_TIER.md` calls the ceiling "a revenue signal"; on that
+topology it was a terminal state.
+
+An abandoned checkout is the same shape: a `CREATED` funding counts as at risk
+and nothing cancels a stale one.
+
+**Fix.** The API process runs the settlement sweep on a ticker, once at startup
+and every 15 minutes. `cmd/api/creditsettle.go` states what makes that
+acceptable: the sweep is idempotent, takes its rows `FOR UPDATE SKIP LOCKED` so a
+worker tier added later needs no coordination with it, holds no provider call and
+no lock across a network hop, and is never the only reason a number is correct.
+
+`CP_CREDIT_SETTLEMENT_WINDOW` moves from an environment read in the worker into
+the configuration table, because it is a recorded risk determination and a value
+read from the environment is outside `configcheck` and outside the hash —
+the workstream's own defect #5, in a variable it did not reach.
+
+**Evidence.** `TestIntegration_SettlementDrainsTheMoneyAtRiskCeiling` measures
+the ceiling before a purchase, after it, after a settlement pass that finds
+nothing because the window is open, and after one that settles. The middle
+assertion is the one that matters: without it the test would pass against a sweep
+that settled everything the instant it was captured.
+
+## F-91 · The launch cohort admitted everybody · NEW · P1 · FIXED
+
+`CP_CAPACITY_MAX_ACCOUNTS: 50` is read, validated, and logged at startup as
+"launch-tier capacity ceilings in force". `capacity.ActionOpenAccount` had **no
+reference outside `internal/capacity`** and its own tests. Accounts are
+auto-provisioned on the first successful OIDC login, so the 51st authenticated
+user got one, and so would the five-thousandth.
+
+The guard was also built inside `wireCreditPurchase`, so a deployment with no
+payment provider had no ceilings at all — including the one about accounts,
+which has nothing to do with selling Credits.
+
+**Fix.** The guard is built once in `build()`, before identity, and given to
+both. `identity.Deps` gains `AdmitAccount`, asked before the account row is
+written so a refusal leaves no half-provisioned user. It is a function rather
+than a `capacity.Guard` so `internal/identity` keeps no dependency on the
+ceiling's implementation.
+
+**Evidence.** `TestEveryCapacityActionIsAskedAboutSomewhereReachable` reads the
+`Action` constants out of the package and requires each to be referenced by
+non-test code outside it. Observed failing with the wiring removed: *"capacity.
+ActionOpenAccount is declared and nothing outside internal/capacity ever asks for
+it, so the ceiling it names is configured, logged and unenforced."* It is the
+same question `test/reachability` already asks of methods that move money, aimed
+at a control, and it found the same answer.
+
+## F-92 · Two ceiling tests that needed the database to already have rows · NEW · P2 · FIXED
+
+Checkpoint §8: "All seven `internal/capacity` integration tests pass against
+Neon." Against a freshly migrated database, three subtests fail.
+
+`TestIntegration_EachCeilingRefusesAtTheMeasuredValue` sets each ceiling from a
+live measurement, on the stated grounds that this "is what makes this safe to run
+against a live database: it writes nothing and still exercises the real number".
+The instinct is good and it has a hole: when the measurement is **zero**,
+`max64(0, 1)` asks the guard to refuse at a ceiling of 1 with nothing at risk,
+and the guard correctly admits. The ceilings for accounts, daily purchases and
+money at risk therefore only pass where rows already exist — which is why
+they passed against Neon and fail on a clean database. That is a test that passes
+because of what the environment happened to contain.
+
+**Fix.** The test seeds one account and one CAPTURED funding inside a transaction
+it rolls back, so the suite still writes nothing durable and the numbers it
+exercises are ones it put there. It asserts the seed is visible to the
+measurement before using it, so a seed that stopped working would fail loudly
+rather than restore the old vacuity.
+
+## F-93 · Inventory: the provider workstream, verified and not fixed · NEW · P1 · OPEN
+
+Six read-only audits ran over the surfaces the provider workstream added:
+configuration and environment enforcement, the webhook and evidence path, the
+capacity guard, identity and ZITADEL, the Render/Neon topology, and the two
+inventories §4 depends on. Every claim below was re-verified against the
+source before being written down; the ones that were wrong are recorded as wrong
+in the last section.
+
+**Not fixed. Each was checked; the reason for leaving it is given, because "not
+fixed" without a reason is indistinguishable from "not noticed".**
+
+| What | Verified | Why not fixed here |
+|---|---|---|
+| The capacity ceiling is not authoritative under concurrency | `wiring_native.go` opens the purchase transaction `ReadCommitted` with no retries; `AdmitAmount` reads `sum(paid_amount_minor)`, which cannot see a concurrent uncommitted INSERT; there is no unique or exclusion constraint that could make the ceiling authoritative. `internal/credit/purchase.go` states the opposite in a comment: "The guard reads inside this transaction, so two concurrent purchases cannot both be admitted against the same headroom." **`db.Serializable` exists, its doc says "Use it for every financial state change (PART 22)", and it has zero production callers.** | The fix is entangled with the next row and must not be done separately. Raising isolation while an outbound Stripe call sits inside the transaction means a serialization retry re-calls the provider; taking an advisory lock instead holds one of eight pool connections across that call and queues every other purchase behind it. The provider call has to come out of the transaction first. |
+| The provider call is inside the purchase transaction | `internal/credit/purchase.go` calls `s.provider.CreatePurchase` between `CreateFunding` and the transaction's commit, with a 20s provider timeout. The comment above it claims the funding row is "persisted BEFORE the provider is called"; it is written, not persisted, and a rollback erases it while the Stripe object survives. `cmd/reconciliation-worker/creditsweep.go` documents the opposite rule for itself — "a provider call inside a transaction holds a database connection across the network... The pool starvation that caused (F-27)". | A real restructure of the money path: `StartPurchase` takes a `pgx.Tx` from its caller, so splitting it into commit-then-call-then-record changes the port, the adapter and the replay path. It is the next thing to do on this surface and it is not a change to make at the end of a batch. The existing replay path (`if f.ProviderReference != ""`) already anticipates the shape. |
+| A ceiling set to zero means "unlimited", per ceiling | `Measure` skips the query and `Admit` skips the comparison when a ceiling is 0; `NewGuard` and `config.Validate` refuse only when **all four** are zero. So `CP_CAPACITY_MAX_AT_RISK_MINOR=0` loads, validates, and logs "ceilings in force" with the money cap silently off. | Genuine fail-open, and the fix is a semantic decision rather than a patch: `0` legitimately means "no quota" for `MaxDatabaseBytes`, which `doc.go` documents. Making zero mean "refuse everything" for the other three needs the four to stop sharing one rule. |
+| A wrong Stripe account is a warning, not a refusal to start | `cmd/api/wire_credit.go` logs WARN and returns an empty wiring, so the webhook route 404s while `/v1/healthz` answers 200. The checkpoint claims the opposite: "Naming it also makes a key rotated to the wrong account **a refusal to start**". It is the same "warning nobody reads plus a silently disabled capability on a service answering 200" the same document lists as its own defect #2. | The checkpoint's sentence is corrected. Whether the API should refuse to start when a configured payment provider cannot be verified is a real decision with an availability cost on a tier that cold-starts, and it belongs with the cold-start work rather than with a one-line change. |
+| `CP_API_SETTLEMENT_MINT` is a Solana **devnet** USDC mint | `render.yaml` sets it and says so; `config.Validate` checks only non-emptiness; `cmd/api/wire.go` checks only that the pair resolves to a registered stablecoin in this database. | The checkpoint's "going live is two changes" is corrected to three. A validation rule that refuses a devnet mint in PROD needs a list of known devnet mints, which is a fact about Solana this repository should not invent. |
+| The JWKS cache has no maximum age | `internal/auth/oidc/keyset.go` refreshes only when the cache is empty or a token names an unknown `kid`. A key removed from the JWKS keeps validating tokens for the life of the process. | A hard TTL is a small change and a real behaviour change to token validation. It belongs with a test that can advance the clock over the cache, which this batch did not build. |
+| `cmd/api` requires `CP_DATABASE_MIGRATE_URL` | Declared as an unconditional `req`; the only reader anywhere is `cmd/migrate`. So the internet-facing process is given the schema-owner credential, and the owner can `ALTER TABLE ... DISABLE TRIGGER` — which is the guard the evidence-immutability argument rests on. | Making it service-conditional is exactly what `internal/config/service.go` is for and is a small change; what makes it more than that is that Render supplies it today, so the fix has to land with a blueprint change and a redeploy, and the hash moves with it. Next batch. |
+| Three IdP identities satisfy the whole gate ceremony | Every distinctness check compares `security.Principal.SubjectID`, which is `users.id`, keyed by `UNIQUE (idp_issuer, idp_subject)`. There is no person entity and no uniqueness on email. | An identity-model decision, not a code fix — the same conclusion F-64 reached. What is new is that the checkpoint presents "three distinct principals" as the control that stands between this deployment and selling Credits, without saying that three subject strings are not three people. The document is corrected. |
+| `email_verified` does not gate buying Credits | It gates Domain A (native assets, commerce, on-chain trade) through `NODAL_IDENTITY`, and payouts through `PAYOUT_KYC`. `StartPurchase` checks the capability gate and the ceiling and nothing about verification. | Whether an unverified account may pay money in — as opposed to take value out — is a product and compliance decision, not a defect. Recorded so it is decided rather than defaulted. |
+| `gates.Admin.Propose` enforces no step-up in the domain layer | `Approve`, `Activate` and `Resume` call `requireStepUp`; `Propose` does not. The proposer's step-up exists only at the HTTP boundary. | Adding it is one line and changes a ceremony that is about to be performed for real. It wants its own test and its own commit, not a rider on F-89. |
+| `CP_RETENTION_LOGIN_ATTEMPT_DAYS` is 90 on a table designed for 2 | `render.yaml` sets 90; the table entry says "Minimum 1", defaults to 2, and explains the row holds "a plaintext OIDC nonce and PKCE verifier". It is also the one retention variable with no validation rule. And it is inert: the purge lives in `cmd/audit-worker`, which this tier does not deploy, and `CP_DATABASE_OPS_URL` is unset. | The number is a deployment decision to make deliberately, and the purge needs the same treatment F-90 gave the settlement sweep. Both belong together. |
+| The 48-name configuration backlog can grow | `test/infra` really does parse `cmd/` for `CP_*` literals and really does hold `cmd/api` to zero. It walks `cmd/` only, misses a name built by concatenation, and its "frozen" list is frozen only against accidents — adding a line to the slice makes it green. | The scan is honest about what it is; the sentence in the checkpoint is not. Widening it to `internal/` and to non-literal reads is a real improvement and a separate piece of work. |
+| Render replica count is an assumption, not an assertion | Three controls compare configuration against configuration; nothing observes the platform, and `cmd/api/ratelimitstore.go` says so in as many words. `render.yaml` sets no `numInstances`, so the dashboard is authoritative for it. | A startup `pg_try_advisory_lock` held for process life would turn it into an assertion and costs nothing on this tier. It is the right fix and it interacts with cold starts, which is the next surface. |
+| Neon: no `MaxConnIdleTime`, no `ConnectTimeout` | `db.Config` exposes neither, so pgxpool's 30-minute idle default stands against a compute that suspends after about five. The first request after each suspension pays a dial-and-fail on a stale pooled connection, and a connection failure is not retryable by design. | Correct-but-slow rather than incorrect: the failure is a 500, not a wrong answer. Adding the knobs is small; choosing the values is a Neon-specific decision this repository has no measurement for yet. |
+| The in-process provider circuit-breaker resets on restart | `internal/provider/health.go` holds `disabled` in memory and `NewTracker` always starts healthy, so an operator disable is lifted by a redeploy. | Latent on this deployment: `cmd/api` builds an empty registry and no admin route calls `Disable`. Live on the workers, which this tier does not run. Recorded against the day either changes. |
+
+**Two claims from the audits that were wrong, recorded as such.** An audit
+reported that `Dispatch` returning `Ignored` for an unresolvable provider
+reference is a silent loss; it is a durable, committed `IGNORED` record with an
+inbox row, which is the correct outcome for a foreign object on a shared account.
+Another reported the archive-replay translation as untested; it is untested by
+`go test ./...`, and it *is* covered by `test/deployed`, which CI does not run
+— which is a different and more useful statement, and is recorded in the
+CI row above rather than as a missing test.
 
 ## Findings deliberately NOT raised
 

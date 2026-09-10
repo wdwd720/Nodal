@@ -41,7 +41,7 @@ func TestInbox_Process_ValidatesArguments(t *testing.T) {
 			ee, _ := errs.As(err)
 			assert.Contains(t, ee.Fields, tc.field)
 
-			err = in.MarkFailed(ctx, nil, tc.source, tc.message, tc.version, errors.New("x"))
+			err = in.MarkFailed(ctx, nil, tc.source, tc.message, tc.version, "", errors.New("x"))
 			assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 		})
 	}
@@ -50,7 +50,7 @@ func TestInbox_Process_ValidatesArguments(t *testing.T) {
 	assert.Equal(t, errs.CodeInternal, errs.CodeOf(err), "nil fn")
 	_, err = in.Process(ctx, nil, "s", "m", 1, fn)
 	assert.Equal(t, errs.CodeInternal, errs.CodeOf(err), "nil tx")
-	err = in.MarkFailed(ctx, nil, "s", "m", 1, errors.New("x"))
+	err = in.MarkFailed(ctx, nil, "s", "m", 1, "", errors.New("x"))
 	assert.Equal(t, errs.CodeInternal, errs.CodeOf(err), "nil querier")
 }
 

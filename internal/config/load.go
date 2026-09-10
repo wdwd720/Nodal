@@ -339,6 +339,7 @@ const (
 	secProviders  = "Providers"
 	secTelemetry  = "Telemetry"
 	secSeed       = "Seed"
+	secCredit     = "Credit (funding lifecycle)"
 	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
 )
 
@@ -567,6 +568,9 @@ func specs() []varSpec {
 
 		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
+
+		req("CP_CREDIT_SETTLEMENT_WINDOW", secCredit, "How long a captured card payment stays reversible before its Credits may be treated as settled. A risk determination, not a default worth trusting: card scheme chargeback windows run to 120 days.", "720h",
+			setDuration(func(c *Config) *time.Duration { return &c.Credit.SettlementWindow })),
 
 		req("CP_RETENTION_LOGIN_ATTEMPT_DAYS", secRetention, "Days a login_attempts row is kept after it expired. It holds a plaintext OIDC nonce and PKCE verifier; the durable record of a login is a security_events row. Minimum 1.", "2",
 			setInt(func(c *Config) *int { return &c.Retention.LoginAttemptDays })),

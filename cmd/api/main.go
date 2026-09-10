@@ -327,23 +327,3 @@ func withRequestTimeout(next http.Handler, d time.Duration) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
-
-func durationEnv(lookup func(string) (string, bool), name string, def time.Duration) time.Duration {
-	v, ok := lookup(name)
-	if !ok || strings.TrimSpace(v) == "" {
-		return def
-	}
-	d, err := time.ParseDuration(strings.TrimSpace(v))
-	if err != nil || d < 0 {
-		return def
-	}
-	return d
-}
-
-func stringEnv(lookup func(string) (string, bool), name, def string) string {
-	v, ok := lookup(name)
-	if !ok || strings.TrimSpace(v) == "" {
-		return def
-	}
-	return strings.TrimSpace(v)
-}

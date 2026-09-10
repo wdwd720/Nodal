@@ -52,6 +52,7 @@ func wireCreditPurchase(
 	clk clock.Clock,
 	credits *credit.Service,
 	gateChecker *gates.Checker,
+	capGuard *capacity.Guard,
 	log *slog.Logger,
 ) creditPurchaseWiring {
 	slot := cfg.Providers.CreditPurchase
@@ -98,22 +99,10 @@ func wireCreditPurchase(
 		return creditPurchaseWiring{}
 	}
 
-	capGuard, err := capacity.NewGuard(capacity.Budget{
-		MaxAccounts:        cfg.Capacity.MaxAccounts,
-		MaxPurchasesPerDay: cfg.Capacity.MaxPurchasesPerDay,
-		MaxAtRiskMinor:     cfg.Capacity.MaxAtRiskMinor,
-		MaxDatabaseBytes:   cfg.Capacity.MaxDatabaseBytes,
-	}, clk.Now)
-	if err != nil {
-		log.Warn("capacity ceilings could not be built; selling Credits is disabled",
-			"error", err.Error())
+	if capGuard == nil {
+		log.Warn("capacity ceilings are not available; selling Credits is disabled")
 		return creditPurchaseWiring{}
 	}
-	log.Info("launch-tier capacity ceilings in force",
-		"max_accounts", cfg.Capacity.MaxAccounts,
-		"max_purchases_per_day", cfg.Capacity.MaxPurchasesPerDay,
-		"max_at_risk_minor", cfg.Capacity.MaxAtRiskMinor,
-		"max_database_bytes", cfg.Capacity.MaxDatabaseBytes)
 
 	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
 		Credits:  credits,

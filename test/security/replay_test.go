@@ -24,14 +24,14 @@ import (
 func TestReplay_AuthorizationCodeAndStateCannotBeReplayed(t *testing.T) {
 	requireAPI(t)
 
-	state := beginLogin(t)
+	state, loginState := beginLogin(t)
 	require.Equal(t, 1, countRows(t, `SELECT count(*) FROM login_attempts WHERE state = $1`, state),
 		"the login attempt must be persisted server-side before the callback, or there is nothing to replay against")
 	require.Zero(t, countRows(t, `SELECT count(*) FROM login_attempts WHERE state = $1 AND consumed_at IS NOT NULL`, state),
 		"the attempt must start unconsumed")
 
 	before := dbNow(t)
-	first := completeLogin(t, "customer-a", state)
+	first := completeLoginFrom(t, "customer-a", state, loginState)
 	require.Equal(t, http.StatusFound, first.Status, "first callback: %s", first.text())
 	token := sessionCookie(t, first)
 	require.NotEmpty(t, token)
@@ -48,11 +48,11 @@ func TestReplay_AuthorizationCodeAndStateCannotBeReplayed(t *testing.T) {
 	// The negative control replays a FRESH, unconsumed state, so a second
 	// session is created and both assertions below fire.
 	if secBreak(t, "replay_uses_a_fresh_state") {
-		replayState = beginLogin(t)
+		replayState, loginState = beginLogin(t)
 	}
 
 	// GET replay.
-	second := completeLogin(t, "customer-a", replayState)
+	second := completeLoginFrom(t, "customer-a", replayState, loginState)
 	require.Equal(t, http.StatusUnauthorized, second.Status, "the replayed callback was not refused: %s", second.text())
 	require.Equal(t, string(errs.CodeUnauthenticated), second.Problem.Code)
 	require.Empty(t, sessionCookie(t, second), "the replayed callback issued a session cookie")
@@ -68,7 +68,7 @@ func TestReplay_AuthorizationCodeAndStateCannotBeReplayed(t *testing.T) {
 		"the replay created another session for %s", subject)
 
 	// A third identity replaying the same state must not get in either.
-	third := completeLogin(t, "admin", replayState)
+	third := completeLoginFrom(t, "admin", replayState, loginState)
 	require.Equal(t, http.StatusUnauthorized, third.Status, "a different identity replayed the state: %s", third.text())
 	require.Empty(t, sessionCookie(t, third))
 }
@@ -91,14 +91,14 @@ func TestReplay_UnknownAndExpiredStateAreRefused(t *testing.T) {
 	}
 	// An unknown code against a valid state consumes the attempt and issues
 	// nothing: the attempt must not remain redeemable after a failed exchange.
-	state := beginLogin(t)
-	bad := completeLogin(t, "not-an-identity", state)
+	state, loginState := beginLogin(t)
+	bad := completeLoginFrom(t, "not-an-identity", state, loginState)
 	require.GreaterOrEqual(t, bad.Status, 400, "an unknown identity was accepted: %s", bad.text())
 	require.Empty(t, sessionCookie(t, bad))
 	require.Equal(t, 1, countRows(t,
 		`SELECT count(*) FROM login_attempts WHERE state = $1 AND consumed_at IS NOT NULL`, state),
 		"a failed exchange left the attempt redeemable")
-	retry := completeLogin(t, "customer-a", state)
+	retry := completeLoginFrom(t, "customer-a", state, loginState)
 	require.Equal(t, http.StatusUnauthorized, retry.Status,
 		"an attempt burned by a failed exchange was redeemable by a valid identity: %s", retry.text())
 	require.Empty(t, sessionCookie(t, retry))
@@ -303,4 +303,42 @@ func flipOneBit(t *testing.T, token string) string {
 	require.NotEqual(t, token, out)
 	require.Len(t, out, len(token))
 	return out
+}
+
+// TestReplay_APlantedCallbackCannotSignAnybodyIn is the other half of what
+// `state` is for, and the half that was missing (F-87).
+//
+// The suite above proves a callback cannot be REPLAYED: the attempt is claimed
+// once under a row lock. It said nothing about a callback being PLANTED, and
+// those are different attacks. An attacker begins a flow in their own browser,
+// authenticates as themselves, keeps code and state without following the
+// redirect, and induces a victim's browser to load the callback. The server
+// found the attempt by state, exchanged the code, and set a session cookie in
+// the victim's browser for the attacker's subject -- so everything the victim
+// then did landed in the attacker's account.
+func TestReplay_APlantedCallbackCannotSignAnybodyIn(t *testing.T) {
+	requireAPI(t)
+
+	state, loginState := beginLogin(t)
+	before := dbNow(t)
+
+	// The victim's browser: the parameters are valid, the cookie is not there.
+	planted := completeLogin(t, "customer-a", state)
+	require.Equal(t, http.StatusUnauthorized, planted.Status,
+		"a callback that did not begin in this browser signed somebody in: %s", planted.text())
+	require.Empty(t, sessionCookie(t, planted), "no session may be established")
+
+	// And it consumed nothing, so the refusal costs the real browser nothing.
+	require.Zero(t, countRows(t,
+		`SELECT count(*) FROM login_attempts WHERE state = $1 AND consumed_at IS NOT NULL`, state),
+		"a refused callback must not consume the attempt")
+
+	// The control: the browser that began the flow still completes it. Without
+	// this the refusal above could be a login that no longer works at all.
+	ok := completeLoginFrom(t, "customer-a", state, loginState)
+	require.Equal(t, http.StatusFound, ok.Status, "callback from the right browser: %s", ok.text())
+	token := sessionCookie(t, ok)
+	require.NotEmpty(t, token)
+	require.Equal(t, 1, sessionsSince(t, subjectOfToken(t, token), before),
+		"exactly one session, and it belongs to the browser that asked for it")
 }
