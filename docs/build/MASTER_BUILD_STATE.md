@@ -1748,7 +1748,7 @@ external blockers, the five launch flags, the human actions and where to resume.
 Read it before this file if you want the state; read this file for how it got
 there.
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **131 findings**, of which three
+`docs/audit/AUDIT_FINDINGS.md` is the register: **132 findings**, of which three
 are open (F-47, F-69, F-93) and four are partial (F-65, F-84, F-95, F-118); the
 rest are fixed. **F-125 closed on 2026-09-10** — the race detector links on this
 host now, so both race tiers run here and no race claim rests on CI alone.
@@ -1758,7 +1758,7 @@ inventory row across six provider audits, whose constituent items are tracked
 individually. F-105 closed with 00740 and F-42 with 00741 — the latter after
 four sessions open and three fixes tried and rejected.
 
-F-100 through F-131 landed on 2026-09-10: **32 findings, 17 P1, 9 P2, 6 P3**, and F-42’s stronger remedy is **complete**: zero of its seventeen bound tables still grant the application blanket UPDATE,
+F-100 through F-132 landed on 2026-09-10: **33 findings, 17 P1, 10 P2, 6 P3**, and F-42’s stronger remedy is **complete**: zero of its seventeen bound tables still grant the application blanket UPDATE,
 from eleven parallel read-only audits whose claims were re-verified here before
 anything was changed, plus two the fuzz tier found on its own. Every P1 was
 observed failing before it was believed:

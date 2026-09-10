@@ -155,6 +155,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-129 | P2 | NEW | fixed | A restore that lost one table would pass every comparison the restore drill makes and then refuse every state change in the system, with an error blaming the caller |
 | F-130 | P3 | NEW | fixed | This register states every finding's status twice and nothing checked the two agreed; four disagreed, and five findings have no evidence section at all |
 | F-131 | P3 | NEW | fixed | A fixture wrote agent rows with v4 UUIDs into a column the application reads as a v7 typed id, so it created rows this system can write and cannot read |
+| F-132 | P2 | NEW | fixed | The webhook route's "declared public" assertion has never been measured: the probe was answered 404 by a provider lookup, which satisfies "not 401" while proving nothing |
 
 ---
 
@@ -7124,6 +7125,52 @@ mattered.
 
 **Evidence.** `REAL_DB_INTEGRATION` — the scanner's refusal, observed against a
 database holding the fixture's rows.
+
+## F-132 · A public-route assertion that a 404 satisfied · NEW · P2 · FIXED
+
+**Found by** reading `authz_test.go` while scoping F-84, and noticing that its
+public-route list still named `POST /v1/webhooks/stripe` — the path F-124
+established is **not** the one the service registers.
+
+`TestNoRouteIsUnintentionallyUnauthenticated` walks every mounted route and, for
+routes on an explicit public list, asserts the anonymous response is **not 401**.
+
+A 404 is not 401. And the webhook probe was a 404, for two compounding reasons:
+
+1. The route-probe substitution replaced `{provider}` with `"stripe"`.
+2. The harness registered its fake webhook under `"stripe"` as well.
+
+`stripecredit.ProviderName` is `"stripe_credit"`. So the harness and the probe
+agreed with each other and **both disagreed with production** — and when the
+probe was corrected to the real provider, it still 404'd, because the harness
+had the old key too. The assertion had therefore never measured what it claims:
+whether that route is reachable without a session.
+
+**Why P2.** This is the test that exists to catch a newly generated route nobody
+wrote an auth policy for. It works for every other route; it was blind on the one
+route that is deliberately unauthenticated and takes money instructions from an
+external party. A future change making that route require a session — or a
+future route landing on the same blind spot — would not have been caught.
+
+**Fix, in three parts.**
+
+- The harness registers its webhook under `stripecredit.ProviderName` rather
+  than a literal, so the key cannot drift from production again. Three router
+  tests that posted to the literal path now build it from the same constant.
+- The public branch asserts the probe **reached** the route:
+  `assert.NotEqual(http.StatusNotFound, ...)` with the reason in the message. A
+  declared-public route that 404s is a claim nobody checked.
+- Proven by construction: the strengthened assertion fails against the previous
+  provider key, naming the route and saying the earlier assertion was vacuous.
+
+**The transferable part is the assertion shape, not the provider name.**
+`NotEqual(401)` is satisfied by every status except one. An assertion whose
+negative space is that large is not measuring the thing it is named for. This is
+the same defect as "a test that passes because a different guard fired", written
+in the language of HTTP status codes.
+
+**Evidence.** `REAL_DB_INTEGRATION` — the 404 and the corrected pass both
+observed in this package's harness.
 
 ## Findings deliberately NOT raised
 

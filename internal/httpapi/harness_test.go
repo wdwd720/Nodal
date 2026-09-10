@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/quote"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -202,7 +203,13 @@ func (f *fixtures) ports() Ports {
 		Withdrawals: f.withdrawals, Gates: f.gates, KillSwitches: f.kill,
 		AdminActions: f.adminActs, Providers: f.providers, Reconciliation: f.reconcile,
 		Health: f.health, Idempotency: f.idem,
-		Webhooks: map[string]WebhookPort{"stripe": f.webhook},
+		// Keyed by the constant the service actually registers under, not by a
+		// literal. F-124 changed that key from "stripe" to "stripe_credit" and
+		// this harness kept the old one, so every webhook test in this package
+		// exercised a provider key production does not have -- and the
+		// public-route probe was answered 404 by the provider lookup, which
+		// satisfied its "not 401" assertion while measuring nothing (F-132).
+		Webhooks: map[string]WebhookPort{stripecredit.ProviderName: f.webhook},
 		Stream:   f.stream,
 	}
 }

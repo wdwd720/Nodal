@@ -162,7 +162,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{capability}":   "LIVE_FUNDING",
 		"{action}":       "propose",
 		"{decision}":     "approve",
-		"{provider}":     "stripe",
+		"{provider}":     "stripe_credit",
 		"{assetId}":      testInstrument.String(),
 		"{marketId}":     testOrderID.String(),
 		"{payoutId}":     testSessionID,
@@ -208,7 +208,7 @@ func publicPaths() map[string]struct{} {
 		"GET /v1/healthz":          {},
 		"GET /v1/readyz":           {},
 		"GET /v1/version":          {},
-		"POST /v1/webhooks/stripe": {},
+		"POST /v1/webhooks/stripe_credit": {},
 	}
 }
 
@@ -234,6 +234,15 @@ func TestNoRouteIsUnintentionallyUnauthenticated(t *testing.T) {
 			if _, isPublic := public[key]; isPublic {
 				assert.NotEqual(t, http.StatusUnauthorized, res.Code,
 					"%s is declared public but refused anonymous access", key)
+				// And the probe must have REACHED the route. A 404 satisfies
+				// "not 401" while proving nothing, and this assertion existed
+				// in that weaker form: `{provider}` was substituted with
+				// "stripe", which is not a registered provider (F-124 corrected
+				// the contract to `stripe_credit`), so the webhook probe was
+				// answered 404 by the provider lookup and the public claim was
+				// never measured.
+				assert.NotEqual(t, http.StatusNotFound, res.Code,
+					"%s is declared public but the probe never reached it: a 404 makes the assertion above vacuous", key)
 				return
 			}
 			require.Equal(t, http.StatusUnauthorized, res.Code,

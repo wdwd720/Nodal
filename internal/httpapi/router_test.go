@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stream"
 )
@@ -1066,7 +1067,7 @@ func TestWebhookReceivesTheRawBody(t *testing.T) {
 	h.as(nil)
 	const raw = `{"id":"evt_1","type":"crypto.onramp_session.updated","data":{"object":{"id":"cos_1"}}}`
 
-	res := h.do(http.MethodPost, "/v1/webhooks/stripe", raw, "Stripe-Signature", "t=1,v1=deadbeef")
+	res := h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, raw, "Stripe-Signature", "t=1,v1=deadbeef")
 	require.Equal(t, http.StatusOK, res.Code)
 	assert.Equal(t, 1, h.ports.webhook.seen)
 	assert.Equal(t, raw, string(h.ports.webhook.raw), "the pipeline must see the exact bytes")
@@ -1077,11 +1078,11 @@ func TestWebhookForAnUnknownProviderIsNotFound(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.as(nil)
-	res := h.do(http.MethodPost, "/v1/webhooks/stripe", `{"id":"evt"}`)
+	res := h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, `{"id":"evt"}`)
 	require.Equal(t, http.StatusOK, res.Code)
 
 	h.ports.webhook.status = http.StatusBadRequest
-	res = h.do(http.MethodPost, "/v1/webhooks/stripe", `{"id":"evt"}`)
+	res = h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, `{"id":"evt"}`)
 	assert.Equal(t, http.StatusBadRequest, res.Code)
 }
 
@@ -1159,7 +1160,7 @@ func TestCSRFAppliesOnlyToCookieAuthenticatedRequests(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, ok.Code, "body=%s", ok.Body.String())
 
 	// A webhook with no cookie is not subject to the check.
-	wh := h.do(http.MethodPost, "/v1/webhooks/stripe", `{"id":"evt"}`, "Origin", "https://evil.test")
+	wh := h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, `{"id":"evt"}`, "Origin", "https://evil.test")
 	assert.Equal(t, http.StatusOK, wh.Code)
 }
 

@@ -15,9 +15,10 @@ false for reasons no amount of engineering can clear.
 
 ## 1 · Final HEAD
 
-**`652dd67` — `accounts: an account status is not the application's to write`.**
-
-That is the exact hash of the last commit that changes code or schema. Every
+**Run `git log -1` for the value.** This document has been rewritten by later
+commits more than once, and a hash written into the object it hashes is wrong
+the moment anything lands after it. The session's own commits are listed below;
+`git log --oneline 05ec7f3..HEAD` gives the rest. Every
 commit after it edits this document only, and a hash cannot be inside the object
 it hashes, so the value below is the one a reader should check the tree against.
 `git log --oneline 05ec7f3..HEAD` gives the rest.
@@ -37,8 +38,14 @@ The commits that end the session:
 | `02f8bdf` | `restore: prove the restored database works, not only that it matches` — F-129 |
 | `54ed595` | `credit: a funding state is not the application's to write` — F-42's remedy, table 1 |
 | `652dd67` | `accounts: an account status is not the application's to write` — F-42's remedy, table 2 |
+| `0947e63` | `docs: the register did to itself what it keeps finding` — F-130 |
+| `1370194` | `F-42: four more tables, and the race detector runs on this host` — F-125 closed |
+| `6ebfdf4` | `F-42: trade_intents and agents, and a mirror that is checked` — F-131 |
+| `609eef4` | `F-42: reconciliation_records, and the two actors that are not the same one` |
+| `6226281` | `F-42: deposits and kill_switches, and the remedy is complete` |
+| `5b48a39` | `F-65: the deferral is now watched, because it rested on an unwatched fact` |
 
-**Twenty-eight commits since `05ec7f3`**, the session's starting point.
+**Thirty-four commits since `05ec7f3`**, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
@@ -46,16 +53,21 @@ The commits that end the session:
 
 ## 2 · Findings — opened, closed, remaining
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **129 findings**, of which
-**121 are fixed, 4 are open and 4 are partial.**
+`docs/audit/AUDIT_FINDINGS.md` is the register: **132 findings**, of which
+**125 are fixed, 3 are open and 4 are partial.**
 
-Opened this session: **F-100 through F-129 — 30 findings, 17 P1, 9 P2, 4 P3.**
-Twenty-nine are fixed and one is open (F-125, a host limitation). Twenty-five
-came from eleven parallel read-only audits whose claims were re-verified before
-anything was changed; **two the fuzz tier found on its own** (F-123, F-126);
-**two were found by attacking this session's own fixes before writing them**
-(F-127, F-128); and **one was caused by a fix in this session and found by the
-restore drill within the hour** (F-129).
+Opened this session: **F-100 through F-132 — 33 findings, 17 P1, 10 P2, 6 P3.**
+Every one is fixed. Twenty-five came from eleven parallel read-only audits whose
+claims were re-verified before anything was changed; **two the fuzz tier found on
+its own** (F-123, F-126); **two were found by attacking this session's own fixes
+before writing them** (F-127, F-128); **one was caused by a fix in this session
+and found by the restore drill within the hour** (F-129); and **three were found
+by re-reading this repository's own checks rather than its code** — the register
+disagreeing with itself (F-130), a fixture writing rows the system cannot read
+(F-131), and a public-route assertion a 404 satisfied (F-132).
+
+**Nothing opened this session remains open.** F-125 closed when the race
+detector was made to link on this host.
 
 **No P1 in the register is unfixed.** The last one not marked fixed is F-93, an
 inventory row across six provider audits whose constituent items are tracked
@@ -192,8 +204,8 @@ reproduced against a real PostgreSQL 16 before and after);
 
 | | |
 |---|---|
-| Migration head | **`00744_an_account_status_is_not_the_applications_to_write.sql`** |
-| Migration files | **76** |
+| Migration head | **`00753_a_kill_switch_is_released_by_its_transition.sql`** |
+| Migration files | **85** |
 | Tables | **120**, plus **14 partitions** of `security_events` |
 | CHECK constraints | 462 declared on parents |
 
@@ -212,7 +224,13 @@ version 739, not from the files.
 
 ## 5 · Test evidence
 
-Every tier below was re-run at `652dd67`, the last commit that changes code or schema.
+Every tier below was re-run at the session's last code-bearing commit.
+
+**The race tier now runs here.** F-125 recorded that `go test -race` could not
+link on this host; it can, and the fix is a plain copy of the toolchain to a
+path without a space. A junction and an 8.3 short path both fail for the same
+reason — GCC resolves through them and reports the original path. The property
+is not "a path without spaces" but "a path GCC resolves to without spaces".
 
 | Command | Result |
 |---|---|
@@ -242,10 +260,11 @@ The transferable part is not the diagnosis: it is that **a torture test with a
 lock timeout reports on the machine as much as on the code**, so a gate run
 concurrent with anything else is not a gate run.
 
-**The one tier that cannot run here:** `go test -race`. It fails to LINK for
-every package, because this GCC's install path contains a space. Recorded as
-F-125. Both race tiers run in CI on Linux, so the coverage exists — but
-**no race claim in this repository can be checked from this host.**
+| `make race` | **7 packages, 0 data races** |
+| `make integration-race` | **12 packages, a database each, 7m27s, 0 data races** |
+
+**No race claim in this repository rests on CI alone any more.** Both tiers were
+run on this host and both are clean.
 
 **Evidence:** `LIVE_OBSERVED` for every row above, each run to a log file with
 its exit status appended. `REAL_DB_INTEGRATION` for the 51 integration packages
@@ -349,7 +368,8 @@ name cannot forge a transition edge (F-101).
 | Race detector | Cannot link on this host. Rests entirely on CI. | See F-125 |
 | The audit binding cannot be forged | Fixed (F-42, F-128). The transition flag is a keyed tag over a secret no role but the owner can read, salted with the top-level transaction id, and EXECUTE on every function that touches it is revoked from PUBLIC. Seventeen audited tables. | `REAL_DB_INTEGRATION` |
 | `security_events` retention | Fixed (F-105). Partitioned by month; retention is partition detachment, never row deletion, and the immutability trigger is unchanged for every role including the owner. | `REAL_DB_INTEGRATION` |
-| A state column the application cannot write at all | **Done for eight of seventeen tables, nine remain.** F-42's stronger remedy: privilege beats detection. `credit_fundings` (00743) because its forgery costs money, then `accounts` (00744) because freezing is the control that stops an abusive one. The refusal moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied` at the statement, and on `accounts` the only grant left exists to permit a row lock rather than a write. | `REAL_DB_INTEGRATION` for the eight; open for the nine |
+| A state column the application cannot write at all | **Done. Zero of seventeen bound tables still grant the application blanket UPDATE** (00743-00753), counted from the schema rather than from a list. The refusal moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied` at the statement, everywhere. | `REAL_DB_INTEGRATION` |
+| The race detector | Runs on this host, both tiers, 0 data races (F-125). | `LIVE_OBSERVED` |
 
 Eighteen files under `test/security/` cover authority boundaries, dual control,
 idempotency abuse and break scanning, and run as part of the 51-package
@@ -588,15 +608,15 @@ document; this file is the checkpoint that points into it.
 
 The next four pieces of software work, in the order they are worth doing:
 
-1. **F-42's stronger remedy: revoke UPDATE on the state column of the eleven
-   remaining bound tables and route state changes through SECURITY DEFINER
-   functions.** The audit binding can no longer be forged (00741), but that is
-   detection; this is privilege, and it makes a bare state update impossible
-   rather than unprovable. The design is settled — `capability_gates` (00701) is
-   the worked example and `00733` did the four money tables. It is a change to
-   every state machine's call sites, so it wants one table at a time with its
-   own tests, and it wants a session that starts with it rather than one that
-   reaches it.
+1. **~~F-42's stronger remedy~~ — done (00743-00753).** All seventeen bound
+   tables. Four rules were paid for and are in the register under F-42, because
+   they will apply to any table that acquires a transition binding later: a row
+   lock needs UPDATE privilege, so budget one column grant per table and say it
+   is for the lock; binding tests move to the migration role, which can still
+   write the column and is still refused by the trigger; a column with no home
+   on the transition row usually belongs ON it rather than granted back; and
+   where a destination is constrained, mirror the constraint onto the transition
+   so an incomplete row is refused where it is written.
 
    **Two are done and are the worked examples to copy: `credit_fundings`
    (00743) and `accounts` (00744).** The
@@ -608,7 +628,7 @@ The next four pieces of software work, in the order they are worth doing:
    assertion had to move, and the pattern of what breaks is in the register
    under F-42.
 
-   **Two rules were paid for and should not be rediscovered.**
+   **The rules that were paid for, kept here because they outlive the task.**
 
    *The row-lock rule.* `SELECT ... FOR UPDATE` requires UPDATE privilege, and
    so do all three other row-lock modes. Every one of these transitions locks
