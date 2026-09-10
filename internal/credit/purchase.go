@@ -381,6 +381,35 @@ func (s *PurchaseService) Dispatch(ctx context.Context, tx pgx.Tx, ev PurchaseEv
 			ref, ev.FundingID, f.ID)
 	}
 
+	// A funding parked for a person waits for that person.
+	//
+	// fundingTransitions gives MANUAL_REVIEW ten destinations, because an
+	// operator resolving a review may send the funding anywhere a provider
+	// event could legitimately have sent it. Dispatch reads the same table, so
+	// every destination written for a human was also one the next provider
+	// event could take -- and MANUAL_REVIEW -> CAPTURED is the edge that mints.
+	//
+	// The sequence that costs money: a refund arrives before the capture, is
+	// not a legal transition from CAPTURE_PENDING, and parks the funding. It is
+	// reported Applied, so the inbox marks it PROCESSED and it is never
+	// redelivered. The later payment_intent.succeeded then finds a parked
+	// funding, MANUAL_REVIEW -> CAPTURED is legal, and Credits are minted for
+	// money that was returned. Observed against a real database: balance 10000
+	// where it must be 0 (F-100).
+	//
+	// So events for a parked funding are recorded and not acted on. Applied
+	// rather than an error for the same reason review() uses it: an error rolls
+	// back and the provider redelivers forever, and the review is already the
+	// durable statement that something needs a human. The identity check above
+	// stays above this, because two identities that disagree is tampering and
+	// deserves an error whatever state the funding is in.
+	if f.State == FundingManualReview {
+		log.WarnContext(ctx, "credit: provider event arrived for a funding parked for review",
+			"event_id", ev.Identity.EventID, "event_type", ev.Identity.EventType,
+			"funding_id", f.ID.String(), "event_would_set", string(stateOrUnmapped(ev.Snapshot.Status)))
+		return webhook.Applied, nil
+	}
+
 	// The provider is authoritative about what it charged. If that disagrees
 	// with what we recorded, minting Credits against it would issue value for
 	// a payment we do not understand.
@@ -502,6 +531,134 @@ func (s *PurchaseService) review(ctx context.Context, tx pgx.Tx, f Funding, reas
 		return "", err
 	}
 	return webhook.Applied, nil
+}
+
+// stateOrUnmapped names what an event would have set, for a log line that has
+// to say something useful even when the status has no mapping in this binary.
+func stateOrUnmapped(s PurchaseStatus) FundingState {
+	if to, ok := FundingStateFor(s); ok {
+		return to
+	}
+	return FundingState("UNMAPPED:" + s)
+}
+
+// ManualResolution is an operator's decision about a funding parked in
+// MANUAL_REVIEW.
+//
+// Two things are deliberately absent from this vocabulary.
+//
+// There is no resolution to SETTLED. Settlement means the reversibility window
+// closed, which is a fact about a clock and a policy; an operator who could
+// assert it by hand could make value payout-eligible by closing a ticket.
+//
+// There is no resolution that returns a funding to the provider-driven path
+// either. Resuming would hand it back to Dispatch, and Dispatch parked it
+// because this binary could not decide what the provider was saying -- being
+// told to look again does not make it able to. An operator who believes the
+// payment succeeded says CAPTURED; one who believes it did not says FAILED.
+//
+// So every resolution is an assertion about what actually happened, and each
+// carries the same economic effect the equivalent provider event would have.
+type ManualResolution string
+
+const (
+	// ResolutionCaptured: the provider shows the money arrived. Mints.
+	ResolutionCaptured ManualResolution = "CAPTURED"
+	// ResolutionRefunded: the money was returned. Claws back.
+	ResolutionRefunded ManualResolution = "REFUNDED"
+	// ResolutionReversed: a dispute was lost. Claws back and books the
+	// remainder as a recorded deficit.
+	ResolutionReversed ManualResolution = "REVERSED"
+	// ResolutionDisputed: a dispute is open. Freezes the Credits so they stop
+	// being spendable while it runs.
+	ResolutionDisputed ManualResolution = "DISPUTED"
+	// ResolutionFailed: the payment never completed.
+	ResolutionFailed ManualResolution = "FAILED"
+	// ResolutionCanceled: the payment was abandoned before it completed.
+	ResolutionCanceled ManualResolution = "CANCELED"
+)
+
+var allManualResolutions = []ManualResolution{
+	ResolutionCaptured, ResolutionRefunded, ResolutionReversed,
+	ResolutionDisputed, ResolutionFailed, ResolutionCanceled,
+}
+
+// AllManualResolutions returns every declared resolution.
+func AllManualResolutions() []ManualResolution {
+	return append([]ManualResolution(nil), allManualResolutions...)
+}
+
+// Valid reports whether r is a declared resolution.
+func (r ManualResolution) Valid() bool {
+	for _, x := range allManualResolutions {
+		if x == r {
+			return true
+		}
+	}
+	return false
+}
+
+func (r ManualResolution) String() string { return string(r) }
+
+// fundingStateFor maps a resolution to the state it asserts. Every one of them
+// is in fundingTransitions[FundingManualReview]; the pairing is checked by
+// TestManualResolutionsAreAllLegalFromReview rather than assumed.
+func (r ManualResolution) fundingState() FundingState {
+	switch r {
+	case ResolutionCaptured:
+		return FundingCaptured
+	case ResolutionRefunded:
+		return FundingRefunded
+	case ResolutionReversed:
+		return FundingReversed
+	case ResolutionDisputed:
+		return FundingDisputed
+	case ResolutionFailed:
+		return FundingFailed
+	case ResolutionCanceled:
+		return FundingCanceled
+	}
+	return ""
+}
+
+// ResolveManualReview applies an operator's decision to a parked funding.
+//
+// It is the only exit from MANUAL_REVIEW. Dispatch stopped being one in F-100,
+// and without this a parked funding would stay parked forever -- with its money
+// counted against the at-risk ceiling for the life of the deployment, which is
+// F-90's failure returning through a different door.
+//
+// The effect runs through apply, the same function a provider event uses, so a
+// hand resolution mints, freezes or claws back by exactly the audited path an
+// automatic one would. approvalID is recorded where an event id would be, so
+// the funding's transition row names the approval that authorised it.
+func (s *PurchaseService) ResolveManualReview(
+	ctx context.Context, tx pgx.Tx, id FundingID, r ManualResolution, reason, approvalID string,
+) (Funding, error) {
+	if !r.Valid() {
+		return Funding{}, errs.Newf(errs.CodeValidationFailed,
+			"unknown credit funding resolution %q; a funding is never declared settled by hand", r)
+	}
+	f, err := s.credits.Funding(ctx, tx, id)
+	if err != nil {
+		return Funding{}, err
+	}
+	if f.State != FundingManualReview {
+		// Not a race to retry: the funding is not the thing the approval was
+		// written about any more, and applying the decision anyway would move
+		// it from a state nobody reviewed.
+		return Funding{}, errs.Newf(errs.CodeConflict,
+			"this credit funding is %s, not MANUAL_REVIEW; there is no review to resolve", f.State)
+	}
+	to := r.fundingState()
+	if !CanTransitionFunding(f.State, to) {
+		return Funding{}, errs.Newf(errs.CodeConflict,
+			"resolving to %s would move the funding %s -> %s, which is not a legal transition", r, f.State, to)
+	}
+	if _, err := s.apply(ctx, tx, f, to, "operator resolution "+string(r)+": "+reason, approvalID); err != nil {
+		return Funding{}, err
+	}
+	return s.credits.Funding(ctx, tx, id)
 }
 
 // isBackwards reports whether to is behind from on the pre-capture path.

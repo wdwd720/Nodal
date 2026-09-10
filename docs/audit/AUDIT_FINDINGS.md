@@ -123,8 +123,9 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-97 | P2 | NEW | fixed | A money ceiling set to zero loaded, validated, and logged as in force with the cap silently off |
 | F-98 | P2 | NEW | fixed | A key withdrawn from the JWKS kept verifying tokens for the life of the process, because only an unknown kid triggered a refresh |
 | F-99 | P2 | NEW | fixed | Every step of the gate ceremony demanded a recent step-up except the first one |
-| F-100 | P1 | NEW | open | A funding parked for a human is un-parked by the next provider event, and a refund followed by a late success mints Credits for money that was returned |
+| F-100 | P1 | NEW | fixed | A funding parked for a human is un-parked by the next provider event, and a refund followed by a late success mints Credits for money that was returned |
 | F-101 | P1 | NEW | fixed | One transition row licenses a second, unrelated edge, because the edge encoding's delimiters are in band and a state name is unconstrained text |
+| F-102 | P1 | NEW | fixed | Two write routes scoped through the read-grade helper, so one ADMIN session could cancel any customer's intent and move any seller's product; the guard that exists to prevent it matched one helper name of four |
 
 ---
 
@@ -4606,15 +4607,63 @@ and the HTTP surface over fundings is read-only
 widened so that a human could resolve it has exactly one resolver, and it is a
 machine.
 
-**Status.** CONFIRMED from source; the transition table, the two call sites and
-the absent admin kind were each read. Not yet fixed: the repair is to stop
-`Dispatch` acting on a parked funding at all, which means splitting one table
-into "what a provider event may cause" and "what an operator may cause", and
-that is a change to the money path's shape rather than a line.
+**Reproduced against a real database.** The sequence above, driven through the
+real services: `processing` → CAPTURE_PENDING, `charge.refunded` → parked in
+MANUAL_REVIEW, `payment_intent.succeeded` →
 
-**Evidence classification.** STATIC_PROOF. The sequence has not been driven
-against a real database or a real Stripe sandbox, and it is not called
-end-to-end until it has been.
+```
+    expected: "MANUAL_REVIEW"      actual: "REVERSIBLE"
+    Expected nil, but got: &id.ID[credit.lotKind]{...}
+      "Credits were minted for a payment that was refunded"
+    expected: "0"                  actual: "10000"
+      "the refund was consumed and the balance says the money is ours"
+```
+
+DISPUTED and CHARGEBACK events resolve a review the same way, which is the same
+defect without the mint.
+
+**Fix, first half.** `Dispatch` refuses to act on a parked funding at all. The
+event is recorded and reported Applied — an error would roll back and the
+provider would redeliver forever, and the review is already the durable
+statement that something needs a human. The identity-mismatch check stays above
+the guard, because two identities that disagree is tampering and deserves an
+error whatever state the funding is in.
+
+**Fix, second half, and why it was not optional.** Refusing the webhook is only
+safe if something else can resolve a review. Nothing could: there was no admin
+kind for a credit funding, `AdvanceFunding` and `DisputeFunding` had no caller
+outside the package, and the HTTP surface over fundings is read-only. Left
+there, the fix would have converted "mints the wrong amount" into "parked
+forever, with its money counted against the at-risk ceiling for the life of the
+deployment" — which is F-90's failure returning through a different door.
+
+So `KindCreditFundingReviewResolve` exists, dual-controlled, on the
+`KindPayoutManualReviewResolve` template. It differs from that template in the
+one way that decides its permissions: resolving to CAPTURED **mints**. So the
+approve half is `credit:adjust`, the dual-control permission that already
+guarded an administrative balance adjustment, rather than a review-side one of
+its own; the propose half is the new `credit:review`, held by OPERATIONS and
+FINANCE. The effect runs through `apply`, the same function a provider event
+uses, so a hand resolution mints, freezes or claws back by exactly the audited
+path an automatic one would, and the approval id is recorded where an event id
+would be.
+
+The resolution vocabulary omits two things deliberately. There is no resolution
+to SETTLED — the reason `fundingTransitions` already gave, that settlement is a
+fact about a clock and an operator who could assert it by hand could make value
+payout-eligible by closing a ticket. And there is no resolution that returns a
+funding to the provider-driven path: resuming would hand it back to `Dispatch`,
+which parked it because this binary could not read what the provider was saying,
+and being told to look again does not make it able to.
+
+**Evidence.** REAL_DB_INTEGRATION. Observed failing with the three assertions
+above before the guard, passing after. Six subtests cover both halves: the
+un-park refusal for CAPTURED, DISPUTED and CHARGEBACK; the control that an
+unparked funding still mints normally; that a resolution to CAPTURED mints and
+one to FAILED does not; that a funding which is not parked has no review to
+resolve; that SETTLED is refused and leaves the funding parked; and that every
+resolution names a state MANUAL_REVIEW can legally reach, so a resolution that
+always refuses cannot be added by accident.
 
 ## F-101 · One transition row licenses a second, unrelated edge · NEW · P1 · FIXED
 
@@ -4688,6 +4737,63 @@ was checked and the origin was not; then the origin was checked and the encoding
 that carried it was not. The register's standing note -- that a control nobody
 executes decays to a claim -- has a sibling here: a control whose input is
 attacker-shaped is only as strong as the parser in front of it.
+
+## F-102 · Two writes kept the operator read override, and the guard could not see them · NEW · P1 · FIXED
+
+**Found by** an independent authorization audit enumerating, per route, where
+ownership is actually proven.
+
+F-36 established the rule and this repository states it in the helper's own doc
+comment: `accountScope` honours the operator override `account:read_any`, which
+is right for a read and wrong for a write, because RoleAdmin holds that
+permission **and** the customer surface. `accountScopeWrite` has no override.
+
+Two write routes did not use either helper. They scoped through helpers written
+for records fetched by their own id, where there is no account id in the
+request to hand to `accountScopeWrite`:
+
+- `POST /v1/intents/{id}/cancel` → `requireIntentScope` → `security.RequireAccount`
+- `POST /v1/internal-products/{id}/status` → `securityRequireAccount` → the same
+
+Both are the read-grade primitive. So one ADMIN session could cancel any
+customer's trade intent, and publish, pause or withdraw any seller's product —
+with no reason, no second principal and no admin action, which is exactly the
+accountability the admin plane exists to impose. `internal/commerce`'s
+`SetStatus` takes no principal, so nothing downstream compensated.
+
+**Reproduced.** An ADMIN principal with no account memberships, against an
+intent belonging to another account:
+
+```
+POST /v1/intents/{id}/cancel   ->  202 Accepted
+```
+
+with the cancellation reaching the port. After the fix, 403, the port not
+called, the owner's own cancel still 202, and an operator's READ of the same
+intent still 200 — the override was never the problem on reads.
+
+**The finding behind the finding.** `TestAccountScope_EveryWriteUsesOwnershipOnly`
+exists precisely to stop this, and passed throughout. It is a source scan that
+matched the literal string `accountScope(ctx`. Neither offender contains it.
+A guard over a two-helper invariant, defeated by naming a third helper.
+
+**Fix.** `requireIntentScopeWrite` (ownership only) for the cancel;
+`securityRequireAccountOwner`, which already existed, for the product status.
+Then the guard was given the full list of read-grade helpers — and a second
+test, `TestAccountScope_TheReadGradeListIsComplete`, which derives that list
+instead of trusting it: every function in the package that calls
+`security.RequireAccount` must be declared, so a fourth helper cannot appear
+unchecked.
+
+**It found one on its first run.** `requireOrderScope`, guarding
+`GET /v1/orders/{id}`. Read-only and correct — and nothing had ever confirmed
+that. Four read-grade helpers existed where the guard knew of one.
+
+**Evidence.** TEST_DOUBLE_ONLY for the route behaviour — the harness drives the
+real router, the real generated wrapper and the real authorization middleware,
+but the intent port is a fake, so what is proven is the boundary's decision and
+not the domain's. STATIC_PROOF for the completeness check. That is the right
+level for this defect: the refusal being tested belongs to the boundary.
 
 ## Findings deliberately NOT raised
 

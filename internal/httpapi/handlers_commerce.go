@@ -264,7 +264,11 @@ func (s *Server) PostInternalProductsProductIdStatus(ctx context.Context, reques
 	if err != nil {
 		return nil, err
 	}
-	if serr := securityRequireAccount(ctx, current.SellerAccountID.String()); serr != nil {
+	// Ownership only. Publishing, pausing or withdrawing a product is a write,
+	// and an operator who needs to take a listing down does it through the
+	// admin plane, where COMMERCE_PRODUCT_WITHDRAW gives it a reason and a
+	// permanent record (F-102).
+	if serr := securityRequireAccountOwner(ctx, current.SellerAccountID.String()); serr != nil {
 		return nil, serr
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,

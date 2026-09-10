@@ -443,6 +443,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				Commerce:      commerceSvc,
 				Payouts:       payoutSvc,
 				Credits:       creditSvc,
+				// The only exit from a funding parked in MANUAL_REVIEW. Nil
+				// when the Credit purchase provider is not configured, which
+				// leaves the kind unregistered rather than half-wired.
+				CreditPurchases: creditPurchases.Service,
 			}),
 		),
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,

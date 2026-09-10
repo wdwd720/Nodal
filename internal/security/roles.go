@@ -114,6 +114,11 @@ const (
 	// PermCreditAdjust is the privileged, audited administrative adjustment
 	// of a Credit balance (PART XLIX). No standing role holds it.
 	PermCreditAdjust Permission = "credit:adjust"
+	// PermCreditReview is the operator side of a manual Credit funding review:
+	// the propose half of deciding what happened to a payment this binary could
+	// not read. The approve half is PermCreditAdjust, because the decision can
+	// mint (F-100).
+	PermCreditReview Permission = "credit:review"
 
 	// PermNativeAssetCreate creates a Nodal-native asset.
 	PermNativeAssetCreate Permission = "native_asset:create"
@@ -182,7 +187,7 @@ var allPermissions = []Permission{
 	PermAdminAuditRead,
 	PermSessionListOwn, PermSessionRevokeOwn, PermSessionRevokeAny,
 	PermBreakGlassRequest, PermBreakGlassApprove,
-	PermCreditRead, PermCreditPurchase, PermCreditAdjust,
+	PermCreditRead, PermCreditPurchase, PermCreditAdjust, PermCreditReview,
 	PermNativeAssetCreate, PermNativeAssetRead, PermNativeAssetModerate,
 	PermNativeMarketTrade, PermNativeMarketHalt, PermNativeMarketSurveil, PermNativeMarketResume,
 	PermPayoutCreate, PermPayoutRead, PermPayoutReview, PermPayoutApprove,
@@ -276,6 +281,7 @@ var RolePermissions = map[Role][]Permission{
 	RoleOperations: union(operatorBase, []Permission{
 		PermAgentPause, PermAgentPromote, PermProviderDisable, PermKillActivate, PermInstrumentStatusWrite, PermReconciliationResolve,
 		PermNativeMarketHalt, PermNativeMarketSurveil, PermPayoutReview, PermCommerceModerate,
+		PermCreditReview,
 	}),
 	RoleRisk: union(operatorBase, []Permission{
 		PermRiskPolicyWrite, PermKillActivate, PermInstrumentStatusWrite, PermGatePropose, PermEnvelopeAuthorityWrite, PermAgentPromote,
@@ -285,7 +291,7 @@ var RolePermissions = map[Role][]Permission{
 		PermAccountFreeze, PermGatePropose, PermWithdrawalReview, PermCommerceModerate,
 	}),
 	RoleFinance: union(operatorBase, []Permission{
-		PermLedgerPostCorrection, PermReconciliationResolve, PermWithdrawalReview,
+		PermLedgerPostCorrection, PermReconciliationResolve, PermWithdrawalReview, PermCreditReview,
 	}),
 	// break_glass:approve is a standing SECURITY/ADMIN permission rather than a
 	// dual-control one: the first elevation must be approvable by a second

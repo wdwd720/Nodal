@@ -282,12 +282,29 @@ func (s *Server) GetIntentsIntentId(ctx context.Context, request api.GetIntentsI
 }
 
 // requireIntentScope enforces tenant scoping on a record fetched by its own
-// id: the caller must own the account the record belongs to.
+// id, for a READ: the caller must own the account the record belongs to, or
+// hold the operator read override.
 func requireIntentScope(ctx context.Context, accountID string) error {
 	if accountID == "" {
 		return errs.New(errs.CodeNotFound, "not found")
 	}
 	return security.RequireAccount(ctx, accountID)
+}
+
+// requireIntentScopeWrite is requireIntentScope for a WRITE: ownership only.
+//
+// The split is F-36's rule applied to a record fetched by its own id.
+// account:read_any is a READ permission and RoleAdmin holds it alongside the
+// customer surface, so scoping a write through the read helper let one ADMIN
+// session cancel any customer's intent with no second signature, no reason and
+// no admin action. accountScope/accountScopeWrite already say this for routes
+// that take an account id; this pair says it for routes that do not, which is
+// how the two survived the fix (F-102).
+func requireIntentScopeWrite(ctx context.Context, accountID string) error {
+	if accountID == "" {
+		return errs.New(errs.CodeNotFound, "not found")
+	}
+	return security.RequireAccountOwner(ctx, accountID)
 }
 
 // PostIntentsIntentIdCancel records a cancellation request. Only external
@@ -309,7 +326,7 @@ func (s *Server) PostIntentsIntentIdCancel(ctx context.Context, request api.Post
 	if err != nil {
 		return nil, err
 	}
-	if err := requireIntentScope(ctx, base.AccountID); err != nil {
+	if err := requireIntentScopeWrite(ctx, base.AccountID); err != nil {
 		return nil, err
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,

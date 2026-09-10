@@ -303,6 +303,12 @@ func (f *fakeIntents) submitCount() int {
 	return f.submits
 }
 
+func (f *fakeIntents) cancelCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cancels
+}
+
 type fakeOrders struct {
 	stubErr
 	page   OrderPage

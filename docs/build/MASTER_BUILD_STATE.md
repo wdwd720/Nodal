@@ -138,7 +138,7 @@ migration.
 
 API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
 into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
-60, up from 42 at the baseline; capabilities: 20, of which 18 are high-risk. (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
+61, up from 42 at the baseline; capabilities: 20, of which 18 are high-risk. (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
 
 ### Stage 8 as built
 
@@ -250,7 +250,7 @@ sending it back to VERIFIED is how a payout gets paid twice.
 **One new permission.** `native_market:resume` is the approve half of restarting
 a market and is a dual-control permission: no standing role holds it, so it
 requires a live break-glass elevation, exactly like releasing a kill switch.
-Permissions are now 60.
+Permissions are now 61.
 
 **What the console already does.** `apps/admin`'s propose form is generated from
 `authority.json`, which now lists all nine kinds, and it carries a free-form
