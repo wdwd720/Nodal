@@ -133,6 +133,40 @@ func TestProp_LayoutKeyRoundTripsThroughParseKey(t *testing.T) {
 	})
 }
 
+// One archive object has exactly one key.
+//
+// Both halves of this were found by the fuzz round-trip above rather than by
+// reading the parser, and neither is cosmetic. An archive key IS the identity
+// of the object: dedup compares keys, retention lists a prefix, and an audit
+// reconstruction lists a prefix. A second spelling of the same key is an object
+// that dedup does not see, retention does not delete, and an auditor does not
+// find.
+//
+// Kept as a named test and not only as a fuzz corpus entry because a corpus
+// file says which input failed, not which rule holds.
+func TestParseKey_OneObjectHasOneKey(t *testing.T) {
+	t.Parallel()
+	canonical := "raw/a/b/v1/2026/09/05/13/1788613200000000000-x.json"
+	_, err := archive.ParseKey(canonical)
+	require.NoError(t, err, "the canonical spelling must parse")
+
+	// Every one of these names the same hour and the same schema version as
+	// `canonical`, and re-renders to it.
+	for _, alias := range []string{
+		"raw/a/b/v01/2026/09/05/13/1788613200000000000-x.json",
+		"raw/a/b/v0001/2026/09/05/13/1788613200000000000-x.json",
+		"raw/a/b/v00001/2026/09/05/13/1788613200000000000-x.json",
+		"raw/a/b/v+1/2026/09/05/13/1788613200000000000-x.json",
+		"raw/a/b/v1/2026/9/05/13/1788613200000000000-x.json",
+		"raw/a/b/v1/2026/09/5/13/1788613200000000000-x.json",
+		"raw/a/b/v1/2026/09/05/3/1788613200000000000-x.json",
+		"raw/a/b/v1/026/09/05/13/1788613200000000000-x.json",
+	} {
+		_, err := archive.ParseKey(alias)
+		require.Error(t, err, "second spelling accepted: %s", alias)
+	}
+}
+
 func FuzzParseKey(f *testing.F) {
 	key, _ := archive.Layout{}.Key(provenance())
 	f.Add(key)

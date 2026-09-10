@@ -149,6 +149,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-123 | P3 | NEW | fixed | Six rapid property-failure seeds were committed by accident, and rapid replays them on every run, pinning the property tier to cases that no longer fail |
 | F-124 | P1 | NEW | fixed | The webhook path the published contract documents is not the one the service registers, so a delivery to it answers 404 and the provider eventually gives up |
 | F-125 | P3 | NEW | open | The race detector cannot link on this host, so every race claim in this repository rests on CI |
+| F-126 | P2 | NEW | fixed | Five spellings of one archive key parse to the same object, so a dedup check, a retention sweep and an audit reconstruction each miss what the other wrote |
 
 ---
 
@@ -6317,6 +6318,63 @@ one, which is why this is OPEN rather than fixed.
 **Evidence.** LIVE_OBSERVED on this host — the failure above is the actual
 output, reproduced for three packages and three workarounds. STATIC_PROOF that
 CI runs both race tiers (`ci.yml` lines 128 and 312-327).
+
+## F-126 · Five spellings of one archive key · NEW · P2 · FIXED
+
+**Found by** the fuzz tier, unprompted — `go run ./scripts/fuzzall
+-fuzztime=10s`, on the last gate run of this session, discovered and persisted
+a new failing input for `internal/archive.FuzzParseKey`:
+
+```
+string("0/0/0/v00001/2026/09/05/13/1788613200000000000-0.0")
+```
+
+The round-trip property says anything `ParseKey` accepts must re-render to a key
+containing the same partition. `v00001` parsed to `SchemaVersion: 1`, which
+`PartitionKey` renders as `v1`:
+
+```
+layout_test.go:157: partition "0/0/v1/2026/09/05/13"
+                    not in key "0/0/0/v00001/2026/09/05/13/1788613200000000000-0.0"
+```
+
+Enumerated from there, `strconv.Atoi` accepted **five** spellings of schema
+version 1 — `v1`, `v01`, `v0001`, `v00001` and `v+1` — and there are infinitely
+many more.
+
+**What that costs.** An archive key IS the identity of the object. Dedup
+compares keys; retention lists a prefix; an audit reconstruction lists a prefix.
+A second spelling of the same key is an object that dedup does not see, that a
+retention sweep listing `.../v1/` does not delete, and that an auditor asking
+for schema version 1 does not find. This is the "same object, two keys" hazard
+that `SegmentPattern`'s own comment already refuses for casing, arriving through
+the one segment that comment does not cover.
+
+**Not exploitable through any writer in this tree.** `PartitionKey` is the only
+renderer of archive keys, and `%d` emits the canonical spelling; a grep for
+other key writers found none. The exposure is a key arriving from outside — a
+restore from a mirror, a hand-written retention argument, a migrated bucket —
+which is exactly the direction `ParseKey` exists to face.
+
+**Fix.** `canonicalUint` requires the digits after `v` to be the one spelling
+`%d` produces: no sign, no leading zeros. It is the same rule the date partition
+below it already gets, and the comment says so, because these are one defect
+found twice.
+
+`TestParseKey_OneObjectHasOneKey` states the rule the corpus file only
+illustrates: eight aliases of one canonical key, four schema spellings and four
+unpadded dates, each required to be refused. Verified non-vacuous by disabling
+the guard and watching it fail on the first alias.
+
+**Why P2 and not P3.** The archive is the evidence of record for provider
+truth, and `POINT_IN_TIME.md` §2 makes prefix listing the reconstruction
+mechanism. A silently unlistable object is a hole in the evidence, not a
+cosmetic parse bug. It is not P1 because nothing in this repository writes such
+a key today.
+
+**Evidence.** LIVE_OBSERVED — the failing input was produced by the fuzzer on
+this host, preserved as a corpus entry before the fix, and re-run against the
+fix. STATIC_PROOF that no writer in the tree emits a non-canonical key.
 
 ## Findings deliberately NOT raised
 
