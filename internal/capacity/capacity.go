@@ -72,9 +72,10 @@ type Budget struct {
 	// rather than a month: a month-long ceiling can be exhausted in an hour.
 	MaxPurchasesPerDay int64
 
-	// MaxAtRiskMinor is the most money that may be in a non-terminal funding
-	// state at once, in minor units. This is the cap that matters most, because
-	// it bounds what a failure can cost rather than what it can consume.
+	// MaxAtRiskMinor is the most money that may be undecided at once, in minor
+	// units -- see atRiskFundingStates for exactly which funding states that
+	// means. This is the cap that matters most, because it bounds what a
+	// failure can cost rather than what it can consume.
 	MaxAtRiskMinor int64
 
 	// MaxDatabaseBytes is the free tier's storage quota. Zero disables the
@@ -114,6 +115,53 @@ func LaunchTier() Budget {
 		MaxDatabaseBytes:   500 * 1024 * 1024,
 		DatabaseHeadroom:   DefaultDatabaseHeadroom,
 	}
+}
+
+// atRiskFundingStates are the credit_fundings states whose money is not yet
+// decided, and so the states the money-at-risk ceiling sums over. It is every
+// state in internal/credit's funding machine that is neither terminal nor
+// SETTLED:
+//
+//   - CREATED, AUTHORIZATION_PENDING, AUTHORIZED and CAPTURE_PENDING are money
+//     promised. No Credit exists yet, but the provider can complete any of
+//     them without asking this system first.
+//   - CAPTURED is money already taken from the payer, one transition away from
+//     minting Credit against it. It is the single largest exposure in the list.
+//   - REVERSIBLE and DISPUTED are money taken with Credit already spendable
+//     against it, which the funder can still take back.
+//   - MANUAL_REVIEW is money nobody has decided about yet.
+//
+// SETTLED is deliberately left out even though the machine can still move it
+// to DISPUTED or REFUNDED. Settlement is the point at which this system stops
+// treating money as reversible; it is what makes value payout-eligible.
+// Counting it would turn the ceiling into a lifetime cumulative cap that can
+// only ever rise, so the tier would end up refusing every purchase forever --
+// an outage, not a ceiling. REVERSED, REFUNDED, FAILED and CANCELED are
+// terminal: the money went back, or was never taken.
+//
+// This list named four states and omitted CAPTURED. The ceiling therefore
+// measured less exposure than existed and admitted purchases it should have
+// refused, in the one direction that costs money. It was found by running the
+// real query against the real schema; the four-state version parses fine and
+// simply returns a smaller number, so nothing short of that could catch it.
+// internal/credit's TestFundingStates_TheCapacityCeilingClassifiesEveryState
+// now fails if a state is added to the machine and not classified here.
+var atRiskFundingStates = []string{
+	"CREATED",
+	"AUTHORIZATION_PENDING",
+	"AUTHORIZED",
+	"CAPTURE_PENDING",
+	"CAPTURED",
+	"REVERSIBLE",
+	"DISPUTED",
+	"MANUAL_REVIEW",
+}
+
+// AtRiskFundingStates returns the funding states the money-at-risk ceiling
+// counts (a copy). It is exported so the package that owns the funding state
+// machine can check this classification still covers it.
+func AtRiskFundingStates() []string {
+	return append([]string(nil), atRiskFundingStates...)
 }
 
 // Reading is what the guard measured, for logging and for the operator
@@ -196,16 +244,14 @@ func (g *Guard) Measure(ctx context.Context, q db.Querier) (Reading, error) {
 	}
 
 	if g.budget.MaxAtRiskMinor > 0 {
-		// Money at risk is every funding that has not reached a terminal
-		// state. AUTHORIZATION_PENDING is money promised and not yet captured;
-		// REVERSIBLE and DISPUTED are money captured with Credit already
-		// issued against it that could still be taken back; MANUAL_REVIEW is
-		// money nobody has decided about. SETTLED, CANCELED, REVERSED and
-		// REFUNDED are all decided, and carry no further exposure.
+		// The states are atRiskFundingStates, not literals written here: the
+		// set they have to agree with lives in internal/credit, and a list
+		// spelled out at the point of use is a list that drifts from it.
 		if err := q.QueryRow(ctx,
 			`SELECT coalesce(sum(paid_amount_minor), 0)::bigint
 			   FROM credit_fundings
-			  WHERE state IN ('AUTHORIZATION_PENDING','REVERSIBLE','DISPUTED','MANUAL_REVIEW')`,
+			  WHERE state = ANY($1)`,
+			atRiskFundingStates,
 		).Scan(&r.AtRiskMinor); err != nil {
 			return r, fmt.Errorf("%w: money at risk: %v", ErrUnmeasurable, err)
 		}
