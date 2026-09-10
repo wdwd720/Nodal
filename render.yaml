@@ -336,7 +336,7 @@ services:
       # start here: personal data is encrypted, or it is not stored, and a
       # STAGING that silently stored nothing is the state F-47 sat in.
       # Rotation: add a key, raise "active", deploy, reseal, remove the old key.
-      - key: CP_PII_KEYRING
+      - key: CP_PII_KEYRING_REF
         value: env://NODAL_PII_KEYRING
 
       # --- retention -----------------------------------------------------

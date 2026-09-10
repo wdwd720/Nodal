@@ -24,7 +24,7 @@ encryption was DESIGNED. A decision taken then would have been a preference.
 
 1. **Personal data is encrypted in the application, or it is not stored.**
    `internal/pii` seals each column with AES-256-GCM under a versioned keyring
-   the deployment supplies as one SecretRef (`CP_PII_KEYRING`). The additional
+   the deployment supplies as one SecretRef (`CP_PII_KEYRING_REF`). The additional
    authenticated data binds every ciphertext to the table, the column, the
    user id and the key version, so whoever can write the table cannot
    rearrange it. The key never touches the database. STAGING and PROD refuse

@@ -45,7 +45,7 @@ func TestNoKeyringIsSaidOutLoud(t *testing.T) {
 	cfg := &config.Config{Env: config.EnvLocal}
 	assert.Nil(t, newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log))
 	assert.Contains(t, buf.String(), "level=WARN")
-	assert.Contains(t, buf.String(), "CP_PII_KEYRING")
+	assert.Contains(t, buf.String(), "CP_PII_KEYRING_REF")
 	assert.Contains(t, buf.String(), "consequence")
 }
 

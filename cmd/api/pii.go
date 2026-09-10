@@ -20,14 +20,14 @@ import (
 // no personal data, never plaintext, and never a stopped service.
 func newPIIStore(ctx context.Context, cfg *config.Config, resolver config.Resolver, log *slog.Logger) *pii.Store {
 	if cfg.PII.Keyring.IsZero() {
-		log.Warn("personal data is not stored: CP_PII_KEYRING is not set",
+		log.Warn("personal data is not stored: CP_PII_KEYRING_REF is not set",
 			"consequence", "a customer's verified e-mail address is hashed for lookup and otherwise discarded at login",
 			"note", "config.Validate requires the keyring in STAGING and PROD")
 		return nil
 	}
 	raw, err := resolver.Resolve(ctx, cfg.PII.Keyring)
 	if err != nil {
-		log.Error("personal data is not stored: CP_PII_KEYRING could not be resolved",
+		log.Error("personal data is not stored: CP_PII_KEYRING_REF could not be resolved",
 			"error", err.Error(),
 			"consequence", "a customer's verified e-mail address is hashed for lookup and otherwise discarded at login")
 		return nil
@@ -35,7 +35,7 @@ func newPIIStore(ctx context.Context, cfg *config.Config, resolver config.Resolv
 	kr, err := pii.ParseKeyring(raw)
 	if err != nil {
 		// The parse error names a version at most, never key material.
-		log.Error("personal data is not stored: CP_PII_KEYRING is not usable",
+		log.Error("personal data is not stored: CP_PII_KEYRING_REF is not usable",
 			"error", err.Error(),
 			"consequence", "a customer's verified e-mail address is hashed for lookup and otherwise discarded at login")
 		return nil

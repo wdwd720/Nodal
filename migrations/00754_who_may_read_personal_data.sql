@@ -39,6 +39,4 @@ REVOKE SELECT ON sessions FROM cp_readonly, cp_ops;
 GRANT SELECT (expires_at) ON sessions TO cp_ops;
 
 -- +goose Down
-REVOKE SELECT (expires_at) ON sessions FROM cp_ops;
-GRANT SELECT ON sessions TO cp_readonly, cp_ops;
-GRANT SELECT ON identity_pii TO cp_readonly, cp_ops;
+SELECT 1; -- protected: reverting would let two roles with no use for personal data read it again, and a Down is not where that decision is retaken

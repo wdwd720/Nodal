@@ -302,7 +302,7 @@
 //
 // Personal data (F-47: the encryption identity_pii was designed for):
 //
-//	CP_PII_KEYRING                  secret; JSON keyring {"active": N, "keys": {"N": base64}};
+//	CP_PII_KEYRING_REF                  secret; JSON keyring {"active": N, "keys": {"N": base64}};
 //	                                required in STAGING/PROD, empty in LOCAL/TEST stores nothing
 //
 // Seed:

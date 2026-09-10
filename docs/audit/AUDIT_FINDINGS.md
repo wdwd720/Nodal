@@ -2369,7 +2369,7 @@ seal, and additional authenticated data that binds each ciphertext to the
 table, the column, the user id and the key version — so a ciphertext moved to
 another row, relabelled as another column, or tagged with another version does
 not open. Keys come from a versioned keyring in one SecretRef
-(`CP_PII_KEYRING`, `{"active": N, "keys": {"N": "<base64 32 bytes>"}}`):
+(`CP_PII_KEYRING_REF`, `{"active": N, "keys": {"N": "<base64 32 bytes>"}}`):
 writes seal under the active version, reads open under whichever version the
 row names, and rotation is add-a-key, raise-active, deploy, `Reseal`, remove.
 No KMS, because a key there is a fixed monthly cost and the launch tier may
