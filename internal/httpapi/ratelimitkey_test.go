@@ -74,10 +74,15 @@ func TestRateLimitKeyDistinguishesCallersBehindAProxy(t *testing.T) {
 // A webhook used to fall through to the Command bucket, at 120/min, alongside
 // every admin command. It is reachable without a session -- rejection is what
 // happens when the signature does not verify -- and every rejected delivery
-// wrote a durable security_events row that no role can ever delete, on a
-// deployment whose database ceiling halts every financial action when it is
-// reached. A provider's real delivery volume is a few a minute, and a 429 makes
-// it retry rather than lose the event.
+// wrote a durable security_events row no role can delete, on a deployment whose
+// database ceiling halts every financial action when it is reached. A
+// provider's real delivery volume is a few a minute, and a 429 makes it retry
+// rather than lose the event.
+//
+// Since 00740 the table is partitioned and a whole MONTH can be dropped once a
+// retention period is chosen, so the ceiling is no longer a countdown. The rate
+// limit is still what it was for: it stops an unauthenticated caller choosing
+// how fast the table grows, which retention does not.
 func TestRateLimit_TheUnauthenticatedRoutesShareTheStrictBudget(t *testing.T) {
 	t.Parallel()
 	now := func() time.Time { return time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC) }

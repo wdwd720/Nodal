@@ -1676,11 +1676,22 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: eleven of the
-seventeen bound tables still grant `cp_app` blanket UPDATE. 00733 (F-109) did the
-four whose columns are money, and 00701 did `capability_gates`. That work makes a
-bare state update impossible rather than unforgeable, which is strictly stronger
-— but the claim this finding was raised about is now true.
+tracked on its own terms rather than as this finding's blocker: **eleven of the
+seventeen bound tables still grant `cp_app` blanket UPDATE.** Six do not, and
+they are the worked examples — `capability_gates` (00701), `withdrawals`,
+`assets`, `instruments` and `payout_requests` (00733, F-109, the four whose
+columns are money), and `admin_actions`. That work makes a bare state update
+impossible rather than unforgeable, which is strictly stronger — but the claim
+this finding was raised about is now true.
+
+Counted from the schema rather than from memory:
+
+```
+SELECT c.relname, has_table_privilege('cp_app', c.oid, 'UPDATE')
+  FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+  JOIN pg_proc p ON p.oid = t.tgfoid
+ WHERE NOT t.tgisinternal AND p.proname LIKE '%require_transition%';
+```
 
 **Proof.** Both forgeries reproduced as `cp_app` before the migration and
 refused after it; a legitimate transition still commits, including one written

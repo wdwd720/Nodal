@@ -199,7 +199,7 @@ Every tier below was re-run at `952b9fd`, the last commit of the session.
 |---|---|
 | `go build ./...` | pass |
 | `go test ./...` | **140 packages, 0 failures** |
-| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed** |
+| `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 11m51s** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
 | `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
 | `go run ./scripts/restoredrill` | **OK, 11.8s, at version 741** |
@@ -209,6 +209,19 @@ Every tier below was re-run at `952b9fd`, the last commit of the session.
 | `go run ./scripts/configcheck -service api .env.example` | 245 variables, valid |
 | `terraform validate` × dev, staging, prod | Success, all three |
 | `terraform fmt -check -recursive` | clean |
+
+**One failure is recorded here rather than dropped, because it is the kind that
+looks like a regression.** An earlier run of this tier reported
+`internal/capital` failing `TestTorture_MixedOperationsConserveCapital` with
+`lock timeout (SQLSTATE 55P03)`, at 211s against a historical 88s. It was my own
+doing: the fuzz tier was running concurrently on the same machine, and that test
+drives twenty goroutines against a lock timeout. In isolation it passes in 3.8s,
+and in the clean run above the package took **87.7s, matching its 87.7s baseline
+exactly**. Nothing in this session touches a table `internal/capital` writes.
+
+The transferable part is not the diagnosis: it is that **a torture test with a
+lock timeout reports on the machine as much as on the code**, so a gate run
+concurrent with anything else is not a gate run.
 
 **The one tier that cannot run here:** `go test -race`. It fails to LINK for
 every package, because this GCC's install path contains a space. Recorded as
@@ -516,9 +529,16 @@ length of the list behind `SOFTWARE_COMPLETE`, not its value.
 8. **Activate `CREDIT_PURCHASE`** — three distinct principals, four approval
    references, step-up within 15 minutes. Not fabricable, and fabricating it
    would defeat the control.
-9. **Give the deployed binary a commit identity.** `build_version` is `dev`, so
-   the deployment cannot be pinned to a commit from outside.
-10. **Install a GCC whose path has no space**, if race claims are ever to be
+9. **Sync the Render blueprint on the next deploy, not just the code.**
+   `CP_RETENTION_SECURITY_EVENT_DAYS` is new and required outside LOCAL/TEST.
+   It is in `render.yaml` with value `0`, so a blueprint sync carries it — but a
+   code-only push leaves it unset and **`cmd/api` will refuse to start**, by
+   design: a missing required variable is a startup error, never a silent
+   default. This is the intended behaviour of the config contract and it is
+   stated here so it is not discovered during a deploy.
+10. **Give the deployed binary a commit identity.** `build_version` is `dev`, so
+    the deployment cannot be pinned to a commit from outside.
+11. **Install a GCC whose path has no space**, if race claims are ever to be
     checkable off CI (F-125).
 
 ---
