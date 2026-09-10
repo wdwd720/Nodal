@@ -168,6 +168,22 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	}
 	defer closeRateLimitStore()
 
+	// Process-local counters are correct for exactly one process, and until now
+	// that was a number an operator typed rather than a fact anything checked --
+	// `render.yaml` sets no numInstances, so the dashboard is authoritative
+	// (F-93). An advisory lock makes it something this process verified.
+	//
+	// Only for the memory backend: a shared Redis store is what makes several
+	// instances correct, so locking there would refuse a topology that works.
+	if cfg.RateLimit.Backend == config.RateLimitMemory {
+		release, lerr := holdSingleInstanceLock(ctx, database, log)
+		if lerr != nil {
+			log.Error("refusing to start", "error", lerr.Error())
+			return exitFailure
+		}
+		defer release()
+	}
+
 	clk := clock.System()
 	server, err := build(ctx, buildInput{
 		cfg:               cfg,

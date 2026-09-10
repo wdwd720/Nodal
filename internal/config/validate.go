@@ -707,6 +707,18 @@ func (c *Config) Validate() error {
 			add(RuleField, name, "must not be negative")
 		}
 	}
+	// The login-attempt window has a documented minimum of 1 day and nothing
+	// enforced it (F-93). The row holds a plaintext OIDC nonce and PKCE
+	// verifier; the durable record of a login is a security_events row, which is
+	// why the documented default is 2 and not 2555.
+	//
+	// Enforcing the variable's own stated minimum rather than inventing a
+	// maximum: how long single-use secrets are kept is a deployment decision,
+	// and this rule only refuses the value the documentation already refuses.
+	if c.Retention.LoginAttemptDays > 0 && c.Retention.LoginAttemptDays < 1 {
+		add(RuleField, "Retention.LoginAttemptDays", "must be at least 1 day when purging is enabled; its own documentation says so")
+	}
+
 	// Zero disables security-event pruning. Anything positive is a real
 	// retention decision about a security audit trail, and the floor is the
 	// same 90 days cp_security_events_drop_expired refuses below -- checked
