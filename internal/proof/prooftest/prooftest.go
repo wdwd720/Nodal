@@ -45,6 +45,19 @@ func NewMemArchive() *MemArchive {
 
 const memScheme = "mem://audit/"
 
+// ErrObjectExists and ErrObjectExistsIdentical mirror the sentinels of the
+// same names in internal/proof.
+//
+// They are separate values rather than the real ones because this package
+// cannot import internal/proof: package proof's own tests import this one, and
+// that would be a cycle. Two sets of sentinels is a thing that can drift, so
+// internal/proof's TestMemArchiveRefusesTheSameWayTheRealArchivesDo asserts
+// this fake refuses in the same shape the real implementations do.
+var (
+	ErrObjectExists          = errors.New("prooftest: archive object already exists")
+	ErrObjectExistsIdentical = fmt.Errorf("%w (identical bytes: a replay of a Put that already succeeded)", ErrObjectExists)
+)
+
 // Put stores body under key and refuses to overwrite.
 func (a *MemArchive) Put(_ context.Context, key string, body []byte, retention *time.Duration) (string, []byte, error) {
 	a.mu.Lock()
@@ -56,8 +69,15 @@ func (a *MemArchive) Put(_ context.Context, key string, body []byte, retention *
 		return "", nil, errors.New("prooftest: empty key")
 	}
 	uri := memScheme + key
-	if _, exists := a.objects[uri]; exists {
-		return "", nil, fmt.Errorf("prooftest: object %s already exists", key)
+	if stored, exists := a.objects[uri]; exists {
+		// Refuse, but say which refusal it is, the way the real archives do.
+		// A fake that collapses the two teaches a caller that identical bytes
+		// and a rewritten object are the same event, and they are not.
+		have := sha256.Sum256(stored)
+		if have == sha256.Sum256(body) {
+			return uri, have[:], fmt.Errorf("%w: %s", ErrObjectExistsIdentical, key)
+		}
+		return uri, have[:], fmt.Errorf("%w: %s (a different object is already stored under this key)", ErrObjectExists, key)
 	}
 	cp := append([]byte(nil), body...)
 	a.objects[uri] = cp

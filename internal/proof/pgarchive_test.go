@@ -144,10 +144,12 @@ func TestIntegration_PgArchiveRefusesEvenAReplayOfIdenticalBytes(t *testing.T) {
 	uri, _, err := a.Put(ctx, key, body, nil)
 	require.NoError(t, err)
 
-	_, _, err = a.Put(ctx, key, append([]byte(nil), body...), nil)
-	require.ErrorIs(t, err, ErrObjectExists)
-	assert.Contains(t, err.Error(), "identical bytes",
-		"the message is what tells an operator a retry apart from a collision")
+	gotURI, gotSum, err := a.Put(ctx, key, append([]byte(nil), body...), nil)
+	require.ErrorIs(t, err, ErrObjectExists, "a replay is still refused; nothing is overwritten")
+	require.ErrorIs(t, err, ErrObjectExistsIdentical,
+		"a retry must be distinguishable from a collision by the error, not only by reading its message")
+	assert.Equal(t, uri, gotURI, "the refusal must name the object that is already stored")
+	assert.NotEmpty(t, gotSum, "and hand back its digest")
 
 	got, err := a.Get(ctx, uri)
 	require.NoError(t, err)
@@ -157,6 +159,28 @@ func TestIntegration_PgArchiveRefusesEvenAReplayOfIdenticalBytes(t *testing.T) {
 	require.NoError(t, testDB.QueryRow(ctx,
 		`SELECT count(*) FROM provider_evidence WHERE key = $1`, key).Scan(&rows))
 	assert.Equal(t, 1, rows, "the replay must not have stored a second copy")
+}
+
+// TestIntegration_PgArchiveSaysWhichCollisionADifferentObjectIs is the other
+// half: different bytes under a live key must NOT come back as a replay, or
+// the webhook pipeline would accept a rewritten delivery as a retry.
+func TestIntegration_PgArchiveSaysWhichCollisionADifferentObjectIs(t *testing.T) {
+	a := newPgArchive(t)
+	ctx := context.Background()
+	key := freshArchiveKey(t)
+	body := []byte(`{"provider_event_id":"evt_2","attempt":1}`)
+
+	uri, _, err := a.Put(ctx, key, body, nil)
+	require.NoError(t, err)
+
+	_, _, err = a.Put(ctx, key, []byte(`{"provider_event_id":"evt_2","attempt":"rewritten"}`), nil)
+	require.ErrorIs(t, err, ErrObjectExists)
+	assert.NotErrorIs(t, err, ErrObjectExistsIdentical,
+		"a different object under a live key is an attempted rewrite, not a retry")
+
+	got, err := a.Get(ctx, uri)
+	require.NoError(t, err)
+	assert.Equal(t, body, got, "the first object must survive the attempt")
 }
 
 func TestIntegration_PgArchiveDistinguishesAMissingObjectFromTheWrongStore(t *testing.T) {

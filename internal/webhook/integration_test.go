@@ -353,3 +353,35 @@ func TestIntegration_PayloadMismatchAndArchiveDown(t *testing.T) {
 	require.Equal(t, "unavailable", outcome)
 	require.Equal(t, int32(1), f.disp.calls.Load(), "no dispatch without a preserved raw request")
 }
+
+// TestIntegration_ARetriedDeliveryIsNotAnArchiveFailure.
+//
+// Evidence is archived BEFORE the inbox deduplicates, and the archive key is
+// the event id plus the payload hash -- so every retry lands on exactly the
+// same key with exactly the same bytes, and a write-once archive refuses it.
+// If the pipeline treats that refusal as "archive unavailable" it answers 503,
+// which is itself a request to retry, and a provider doing precisely what its
+// delivery contract says never gets a 2xx from us.
+//
+// That is not hypothetical. It is what the deployed launch tier did to every
+// Stripe retry, and no test in this package could see it: the archive double
+// used to overwrite silently and never fail, so the duplicate tests above ran
+// against an archive that had no write-once behaviour to get wrong.
+func TestIntegration_ARetriedDeliveryIsNotAnArchiveFailure(t *testing.T) {
+	f := newFixture(t)
+	eventID := "evt_" + uuid.NewString()
+	raw, headers := f.provider.Webhook(eventID, "session.updated", f.session)
+
+	before := f.archive.Len()
+	for i := 1; i <= 4; i++ {
+		status, _ := f.deliver(raw, headers)
+		require.Equal(t, http.StatusOK, status,
+			"delivery %d was refused; a 503 here is a request for yet another retry", i)
+	}
+
+	require.Equal(t, before+1, f.archive.Len(),
+		"four deliveries of one event stored more than one object")
+	require.GreaterOrEqual(t, f.archive.Puts(), 4,
+		"the archive must be asked on every delivery, not skipped after the first")
+	require.Equal(t, 1, f.effects(eventID), "more than one economic effect")
+}

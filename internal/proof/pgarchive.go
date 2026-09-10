@@ -103,27 +103,24 @@ const pgArchiveDigestSQL = `SELECT sha256 FROM provider_evidence WHERE key = $1`
 const pgArchiveSelectSQL = `SELECT body, sha256 FROM provider_evidence WHERE key = $1`
 
 // Put implements Archive. It is create-only: the first Put of a key stores the
-// object, and every later Put of that key is refused with ErrObjectExists --
-// including one carrying byte-for-byte identical bytes.
+// object, and every later Put of that key is refused -- including one carrying
+// byte-for-byte identical bytes. Nothing is ever overwritten.
 //
-// That last clause is deliberate, and is worth a paragraph, because the
-// tempting alternative is to treat an identical re-Put as the idempotent replay
-// it usually is and hand back the original URI and digest. DirArchive does not
-// do that. It opens with O_CREATE|O_EXCL, which fails on an existing path
-// without ever looking at the bytes, and prooftest.MemArchive refuses identical
-// bytes too (its own test asserts it, under the label "write-once"). Two
-// implementations of one interface answering the same retry differently is a
-// worse problem than a caller having to handle ErrObjectExists: which answer a
-// caller gets would then depend on which archive the deployment happened to
-// wire. So this implementation follows DirArchive, and the Archive contract
-// stays the one its doc comment states -- refuse to overwrite an existing key.
+// The two collisions are told apart in the ERROR rather than only in its
+// message: identical bytes give ErrObjectExistsIdentical, different bytes give
+// ErrObjectExists, and errors.Is matches ErrObjectExists for both. All three
+// implementations of the interface answer a retry the same way, which is what
+// the earlier version of this comment was protecting; what changed is that a
+// caller can now act on the distinction rather than read it in a log. Both
+// refusals also return the URI and digest of the object already stored.
 //
-// The two cases are distinguished in the error message rather than in the
-// error, because they mean different things to whoever reads the log: identical
-// bytes are a retry of something that already succeeded, different bytes under
-// a live key are a collision worth waking someone for. No caller in the tree is
-// inconvenienced by the strictness; ObjectKey puts the checkpoint id in the key
-// precisely "so a retried run never collides with an orphaned object".
+// That earlier comment claimed no caller in the tree was inconvenienced by
+// refusing identical bytes. It was wrong, and expensively: the webhook
+// evidence pipeline archives the raw delivery BEFORE the inbox deduplicates
+// it, and its key is the event id plus the payload hash -- so every retry a
+// provider makes lands on the same key with the same bytes. Every one became a
+// 503, which is itself a request to retry, so a provider doing exactly what
+// its delivery contract says would be told to try again forever.
 //
 // retention is honoured as a retain_until timestamp computed from the
 // database's own now(), not from this process's clock: a deadline measured by
@@ -177,9 +174,13 @@ func (a *PgArchive) Put(ctx context.Context, key string, body []byte, retention 
 		return "", nil, fmt.Errorf("proof: archive put: %w", err)
 	}
 	if bytes.Equal(existing, sum[:]) {
-		return "", nil, fmt.Errorf("%w: %s (identical bytes: a replay of a Put that already succeeded)", ErrObjectExists, key)
+		// The URI and digest of what is already stored come back with the
+		// refusal. A caller for whom a replay is the provider delivery
+		// contract rather than an anomaly can use them; one that treats every
+		// ErrObjectExists as fatal is unchanged.
+		return pgObjectURI(key), existing, fmt.Errorf("%w: %s", ErrObjectExistsIdentical, key)
 	}
-	return "", nil, fmt.Errorf("%w: %s (a different object is already stored under this key)", ErrObjectExists, key)
+	return pgObjectURI(key), existing, fmt.Errorf("%w: %s (a different object is already stored under this key)", ErrObjectExists, key)
 }
 
 // Get implements Archive. It returns ErrObjectNotFound for a key nothing was

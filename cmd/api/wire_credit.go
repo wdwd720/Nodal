@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -248,10 +249,24 @@ type pgEvidence struct{ a *proof.PgArchive }
 
 func (p pgEvidence) Put(ctx context.Context, key, _ string, body []byte) (string, error) {
 	uri, _, err := p.a.Put(ctx, key, body, nil)
-	if err != nil {
+	switch {
+	case err == nil:
+		return uri, nil
+	case errors.Is(err, proof.ErrObjectExistsIdentical):
+		// A retry, not a collision. The archive key is the event id plus the
+		// payload hash, so the same key with the same bytes is by construction
+		// the same delivery arriving again -- which is what Stripe's at-least-
+		// once contract guarantees will happen. The object is already stored,
+		// unchanged, and its reference is what the caller needed.
+		//
+		// This is not a weakening of write-once: the archive still refused,
+		// nothing was overwritten, and different bytes under the same key
+		// still fail below. Treating this as an error is what made every
+		// retry a 503, and a 503 asks the provider to retry again.
+		return uri, nil
+	default:
 		return "", err
 	}
-	return uri, nil
 }
 
 // evidenceArchive adapts the object archive to what the webhook pipeline asks

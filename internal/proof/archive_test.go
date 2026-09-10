@@ -96,3 +96,67 @@ func TestMemArchive_Behaves(t *testing.T) {
 	_, err = a.Get(ctx, uri)
 	assert.Error(t, err)
 }
+
+// TestArchivesTellARetryFromAnOverwrite.
+//
+// Refusing to overwrite is the whole point of an evidence archive. But two
+// very different things reach that refusal, and collapsing them cost a
+// deployment its webhook pipeline: identical bytes under an existing key are a
+// retry of a Put that already succeeded, and different bytes are an attempt to
+// rewrite evidence. The first is routine -- a provider that delivers at least
+// once will produce it -- and the second is worth waking someone for.
+//
+// Every implementation must distinguish them the same way, because which one a
+// caller gets must not depend on which archive the deployment wired.
+func TestArchivesTellARetryFromAnOverwrite(t *testing.T) {
+	ctx := context.Background()
+	body := []byte(`{"delivery":"one"}`)
+	other := []byte(`{"delivery":"rewritten"}`)
+
+	t.Run("DirArchive", func(t *testing.T) {
+		a, err := NewDirArchive(config.EnvLocal, t.TempDir())
+		require.NoError(t, err)
+
+		uri, sum, err := a.Put(ctx, "webhooks/stripe/evt_1/abcd.json", body, nil)
+		require.NoError(t, err)
+
+		gotURI, gotSum, err := a.Put(ctx, "webhooks/stripe/evt_1/abcd.json", body, nil)
+		assert.ErrorIs(t, err, ErrObjectExistsIdentical, "a replay of the same bytes")
+		assert.ErrorIs(t, err, ErrObjectExists, "and it is still a refusal")
+		assert.Equal(t, uri, gotURI, "the refusal must name the object that is already there")
+		assert.Equal(t, sum, gotSum)
+
+		_, _, err = a.Put(ctx, "webhooks/stripe/evt_1/abcd.json", other, nil)
+		assert.ErrorIs(t, err, ErrObjectExists)
+		assert.NotErrorIs(t, err, ErrObjectExistsIdentical, "different bytes are not a replay")
+
+		// And through all of that, nothing was overwritten.
+		stored, err := a.Get(ctx, uri)
+		require.NoError(t, err)
+		assert.Equal(t, body, stored)
+	})
+
+	t.Run("MemArchive", func(t *testing.T) {
+		// The fake has its own sentinels -- it cannot import this package,
+		// because this package's tests import it -- so this is what keeps the
+		// two sets in step.
+		a := prooftest.NewMemArchive()
+
+		uri, sum, err := a.Put(ctx, "k/1", body, nil)
+		require.NoError(t, err)
+
+		gotURI, gotSum, err := a.Put(ctx, "k/1", body, nil)
+		assert.ErrorIs(t, err, prooftest.ErrObjectExistsIdentical)
+		assert.ErrorIs(t, err, prooftest.ErrObjectExists)
+		assert.Equal(t, uri, gotURI)
+		assert.Equal(t, sum, gotSum)
+
+		_, _, err = a.Put(ctx, "k/1", other, nil)
+		assert.ErrorIs(t, err, prooftest.ErrObjectExists)
+		assert.NotErrorIs(t, err, prooftest.ErrObjectExistsIdentical)
+
+		stored, err := a.Get(ctx, uri)
+		require.NoError(t, err)
+		assert.Equal(t, body, stored)
+	})
+}

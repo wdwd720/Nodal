@@ -3,16 +3,32 @@
 package webhooktest
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 )
 
 // MemoryArchive is an in-memory ArchiveWriter. Set Err to simulate an
 // unavailable archive.
+//
+// It is write-once, like every real archive behind this interface, and that
+// was not always true. It used to overwrite whatever was under the key and
+// never fail -- which meant the duplicate-delivery tests in this package ran
+// against an archive that could not refuse, and could not have caught the
+// deployment defect they were written to prevent: the database-backed archive
+// refused a provider's own retry, and the pipeline turned that refusal into a
+// 503, which asks the provider to retry again.
+//
+// So the contract this models is the one the pipeline actually depends on: a
+// replay of the same bytes under the same key is the delivery arriving twice,
+// and returns the reference that already exists; different bytes under a live
+// key is an attempt to rewrite evidence, and fails.
 type MemoryArchive struct {
 	mu      sync.Mutex
 	objects map[string][]byte
+	puts    int
 	Err     error
 }
 
@@ -29,8 +45,24 @@ func (m *MemoryArchive) Put(_ context.Context, key, _ string, body []byte) (stri
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.puts++
+	if stored, ok := m.objects[key]; ok {
+		if !bytes.Equal(stored, body) {
+			return "", fmt.Errorf("webhooktest: %s is already stored with different bytes", key)
+		}
+		return "mem://" + key, nil
+	}
 	m.objects[key] = append([]byte(nil), body...)
 	return "mem://" + key, nil
+}
+
+// Puts returns how many times Put was called, including the calls that found
+// the object already there. Len counts distinct objects; the difference
+// between the two is what a replay looks like.
+func (m *MemoryArchive) Puts() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.puts
 }
 
 // Get returns a stored object.

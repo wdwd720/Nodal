@@ -94,15 +94,30 @@ func TestRender_NoSecretIsWrittenIntoTheBlueprint(t *testing.T) {
 	}
 	assert.NotEmpty(t, prompted, "a deployment with no prompted secrets is one with its secrets in the file")
 
+	// Which variables are secrets is internal/config's answer, not a guess
+	// from the name. A suffix rule read CP_PROVIDER_CREDIT_PURCHASE_ACCOUNT_REF
+	// as key material because it ends in _REF -- it is a Stripe account id,
+	// and it belongs in the file precisely so it can be reviewed. Asking the
+	// configuration means this cannot be wrong in either direction.
+	secret := map[string]bool{}
+	for _, v := range config.Vars() {
+		if v.Secret {
+			secret[v.Name] = true
+		}
+	}
+	// The two connection strings carry a password in the value itself rather
+	// than as a SecretRef, so they are secrets that the table cannot mark.
+	secret["CP_DATABASE_APP_URL"] = true
+	secret["CP_DATABASE_MIGRATE_URL"] = true
+
 	for _, e := range svc.EnvVars {
 		if e.Value == nil {
 			continue
 		}
 		v := *e.Value
-		// Every *_REF and *_URL that names a credential must be an indirection.
-		if strings.HasSuffix(e.Key, "_REF") || e.Key == "CP_DATABASE_APP_URL" || e.Key == "CP_DATABASE_MIGRATE_URL" {
+		if secret[e.Key] {
 			require.True(t, strings.HasPrefix(v, "env://"),
-				"%s must reference a variable, not carry a value", e.Key)
+				"%s is a secret and must reference a variable, not carry a value", e.Key)
 			assert.True(t, prompted[strings.TrimPrefix(v, "env://")],
 				"%s points at %q, which is not declared as a prompted secret", e.Key, v)
 			continue
