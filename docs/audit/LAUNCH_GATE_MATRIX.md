@@ -6,8 +6,14 @@ work and is tracked, or something a person outside this repository has to
 produce, in which case it is BLOCKED_EXTERNAL and no amount of engineering
 changes it.
 
-Last audited: **2026-09-09**, against commit `d1092d1` and the deployment at
-`https://api-nodal.actorvia.xyz`.
+Last audited: **2026-09-10**, against the working tree at migration 00739 and
+the deployment at `https://api-nodal.actorvia.xyz`.
+
+The five flags are unchanged and all still false. Twenty-three findings closed
+since the previous audit did not move any of them, which is the honest
+headline: **none of the four independent reasons `LIVE_READY` is false was a
+thing this audit could fix**, and the fifth flag — `SOFTWARE_COMPLETE` — has a
+shorter list behind it than it did, not an empty one.
 
 ## The five launch flags
 
@@ -71,7 +77,9 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 
 | Item | Finding | Shape |
 |---|---|---|
-| The request body is buffered before the rate limiter runs | F-85 | Middleware ordering on the money path; open by decision, not oversight |
+| **Nothing pages anyone about anything** | F-118 | The largest of these. Alerts now log and both roots build the real instruments; what remains is a destination and something on a timer. Half deployment decision. Before the Terraform is ever applied, its five application alarms set `treat_missing_data = "notBreaching"`, so a metric that never arrives reads OK |
+| `security_events` is bounded per minute and still unprunable | F-105 | Any steady rate eventually fills a 500 MB database when nothing can remove a row. ADR-0020's remedy: partition and detach |
+| `login_attempts` has a purge that this deployment never runs | F-105 | A cron on the blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is |
 | Request validation precedes authentication | F-84 | Authorising on the route pattern before the generated wrapper; wants its own design |
 | `cmd/api` requires the schema-owner credential | F-93 | Make `CP_DATABASE_MIGRATE_URL` service-conditional; needs a blueprint change and a redeploy |
 | A wrong Stripe account warns rather than refusing to start | F-93 | A real availability decision on a tier that cold-starts |
@@ -79,11 +87,72 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | Neon pool has no idle or connect timeout | F-93 | Small change, needs measurements this repository does not have |
 | Three retention classes are declared and unenforced | ADR-0020 | The ADR decides how; the migration and the partition manager remain |
 | 121 enum CHECKs have no Go counterpart | F-95 | Most have no Go list to compare against, by their nature |
-| Fifteen destination-only transition bindings | F-94 | **Done.** Listed for completeness |
-| The AU001 binding trusts a transaction-local setting | F-42 | Privilege work on the state columns |
+| The AU001 binding trusts a transaction-local setting | F-42 | Privilege work on the state columns. F-109 did four of them — the ones whose columns are money |
+| An agent can be born SHADOW without its promotion evidence | F-122 | A provenance gap, not a money one; closing it is a decision about how the suite seeds agents |
+| `wallets`, `assets` and `instruments` have no birth control | F-122 | Named in an assertion that fails when one is closed, so the list cannot go stale |
 | Two statements about who may read encrypted PII contradict each other | F-47 | A policy decision |
 
-## What this audit changed about the matrix
+Closed since the previous audit, and listed because their absence from this
+table is the change: the buffered request body (F-85), the fifteen
+destination-only transition bindings (F-94), and the forged dual control that
+made every other approval-bearing control conditional (F-42's INSERT half, now
+F-121).
+
+## What the 2026-09-10 audit changed
+
+Twenty-three findings, F-100 to F-122, from eleven parallel read-only audits
+whose claims were re-verified before anything was changed. **Ten were P1 and
+every one of them was observed failing before it was believed.** The ones that
+would have cost real money or real authority:
+
+- a refund parked a funding for review, the next webhook un-parked it, and
+  Credits were minted for money that had been returned — with no operator path
+  out of review at all (F-100);
+- one transition row licensed a second, unrelated edge, because the previous
+  audit's own migration put its delimiters in band (F-101);
+- one ADMIN session could cancel any customer's intent and move any seller's
+  product, past a guard that matched one helper name of four (F-102);
+- five configuration rules permitted what the deployment cannot survive,
+  including live payment credentials in DEV (F-103);
+- an unauthenticated caller chose how many permanent, undeletable rows the
+  service wrote, on a deployment whose database ceiling halts every financial
+  action (F-105);
+- three money tables handed one account's record to another on a reused
+  idempotency key (F-106);
+- the seller set the platform's own commission, and a payout the provider may
+  already have paid could be cancelled by its owner (F-107);
+- two failed RPCs were read as proof a transaction never happened (F-108);
+- the application role could rewrite an amount, a destination, or the definition
+  of what counts as money (F-109);
+- a shipped configuration removed the cookie prefix a takeover fix depends on
+  (F-112);
+- a revoked agent could return to live capital with no approval (F-114);
+- the branch whose comment reads "do not resubmit" was the one that resubmitted
+  (F-115);
+- and dual control itself could be forged at INSERT, which is the missing half
+  of a fully-evidenced agent promotion to LIVE (F-121).
+
+**Three things this audit got wrong and corrected**, recorded because a matrix
+that only lists successes is the kind of document this audit exists to
+distrust:
+
+1. An integration run was reported as passing when a pipe had hidden two package
+   failures. Both were fixtures the audit's own grant migration exposed.
+2. One reported finding — that a negative money ceiling could be silently
+   accepted — was not true. Only its test was passing for the wrong reason, and
+   F-104 records the narrower fact rather than the reported one.
+3. The birth controls took three attempts. Two constraints asserted an ordering
+   the money path does not have and were dropped with the reason written into
+   00738; the replacement was keyed on the code's happy path rather than on the
+   property being protected, and 00739 restates it against the lines the schema
+   already draws.
+
+**Six fixtures encoded the defect they were meant to guard against**, and every
+one was found by closing a control rather than by reading the fixture. That is
+the most transferable thing here: a suite's known-good fixture is an assertion
+about what is safe, and nothing was checking it.
+
+## What the 2026-09-09 audit changed about the matrix
 
 Before it, four of the rows in "what software still owes" were not known to
 exist, and four defects that would have stopped the product were not either:

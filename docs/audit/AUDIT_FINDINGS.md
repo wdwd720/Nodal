@@ -145,6 +145,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-119 | P3 | NEW | fixed | An as-of price read was bounded by event time and not by knowledge time, so it could answer with something the platform had not yet received |
 | F-120 | P3 | NEW | fixed | A calibration snapshot folded in every outcome resolved since, so the evidence a promotion decision reads changed when you looked at it again |
 | F-121 | P1 | NEW | fixed | Every control on the dual-control table guarded UPDATE, so the application role could INSERT a row born APPROVED and forge two-person control outright |
+| F-122 | P1 | NEW | fixed | An agent could be born LIVE, a funding born minted and a payout born settled, because every binding in the schema is about changes and a row inserted in a privileged state never changed |
 
 ---
 
@@ -6065,6 +6066,110 @@ checking it. Closing a control is how you find out.
 AD001 as the real `cp_app` role, and the control — an honest proposal created
 and then approved through the real service by a second principal — observed
 passing, which is what proves the birth control is not one condition too strict.
+
+## F-122 · Nothing is born finished · NEW · P1 · FIXED
+
+**Found by** the state-machine audit's INSERT-time sweep, the same one that
+produced F-121.
+
+Every binding in this schema is about CHANGES. 00603 tied a state change to a
+transition row; 00726 and 00731 made that row name both endpoints; 00732 stopped
+the endpoints being forgeable; 00734 closed the exit from a terminal state.
+
+**A row INSERTED in a privileged state never changed, so none of it applied.**
+Until 00735, `capability_gates` was the only entity in the schema that could not
+be born decided. These are the remaining three where the birth state means money
+or authority:
+
+| table | born as | what that is |
+|---|---|---|
+| `agents` | LIVE/LIVE with an envelope | the entire promotion ladder skipped at INSERT — every evidence and approval CHECK on `agent_lifecycle_transitions` guards a **transition**, and creating an agent is not one |
+| `credit_fundings` | SETTLED with a `lot_id` | `LotFinalityFor(SETTLED)` is what makes value payout-eligible; minted from nothing |
+| `payout_requests` | SETTLED with `settled_quantity` | `settled <= reserved <= requested` is satisfied by naming all three |
+
+Each is created by exactly one statement in the tree, and each names a literal
+birth state — `StageDraft`/`StateDraft`, `'CREATED'`, `'ELIGIBILITY_CHECK'` —
+so the constraint is what the code already does, and everything after it is a
+transition with a row behind it.
+
+### I got the first attempt wrong, and the suite said so
+
+00736 added the agent trigger (correct) **and two CHECK constraints** asserting
+that a funding's lot and a payout's money agree with its state. Both are wrong.
+The integration suite failed within minutes, and the reason is a fact about the
+money path worth recording:
+
+- `MintFrom` calls `AdvanceFunding(REVERSIBLE)` **first** and writes `lot_id`
+  **second**, so between those statements the row is REVERSIBLE with a NULL lot.
+  The ordering is deliberate: the advance carries the transition row AU001
+  requires, and the lot id is the idempotency marker that makes a second mint a
+  no-op. Reversing them to satisfy a constraint would put the marker before the
+  state change it marks.
+- `reserve` posts the ledger entries and writes `reserved_quantity` while the
+  request is still in ELIGIBILITY_CHECK, and transitions afterwards. Same shape.
+
+A row-lifetime CHECK was the wrong instrument for a birth-time rule. 00738 drops
+both with that reasoning written into it, rather than weakening them until they
+passed.
+
+**And the second attempt was still incomplete.** The dropped CHECK said a
+SETTLED funding HAS a lot — which a row born SETTLED **with** one satisfies. It
+refused a settlement of nothing; it never refused a settlement minted from
+nothing. 00737's birth triggers are what close that.
+
+**Fix.** Three BEFORE INSERT triggers (00736 for agents, 00737 for the other
+two), each constraining creation and saying nothing about the orderings above.
+
+### And the third attempt narrowed them, which is the part worth reading
+
+Those triggers required each table's exact creation state — DRAFT/DRAFT,
+CREATED, ELIGIBILITY_CHECK. That is what the code does, and "what the code does"
+is a defensible default for a birth control. It is not the property being
+protected, and the difference cost **seven integration packages**.
+
+What those packages were doing is not the forgery: `internal/capital` seeds an
+agent VALIDATED with no mode and no envelope; `internal/intent`,
+`internal/nativemarket` and `internal/prediction` seed one SHADOW in SHADOW
+mode; `internal/capacity` seeds a funding CAPTURED with no lot; and
+`internal/httpapi` seeds a payout DRAFT — which is **earlier** than the state
+the trigger demanded, not later. None of them mints value, moves real capital or
+forges an approval.
+
+Migration 00739 restates all three against lines this schema already draws:
+
+| table | refused at birth | the line it uses |
+|---|---|---|
+| `agents` | CANARY/LIMITED/LIVE stage or mode, or an envelope | `agent_lifecycle_transitions_check1` already names those three as the approval-bearing stages; `Mode.RealCapital()` names the same three; `NewAuthority` already refuses a real-capital stage with no envelope |
+| `credit_fundings` | REVERSIBLE, SETTLED, DISPUTED, REVERSED, REFUNDED, or a lot | `LotFinalityFor` returns a finality for exactly those states — they are the ones that assert value exists |
+| `payout_requests` | anything past the four pre-reservation states, or anything reserved/settled/submitted | the reservation is where money moves |
+
+Every forgery is still refused, and one more besides: an agent born SHADOW but
+in LIVE **mode**, which the creation-literal rule caught only incidentally and
+this one catches on purpose.
+
+**What it deliberately gives up.** An agent can now be born SHADOW, and SHADOW
+requires promotion evidence — strategy version, IR hash, risk policy hash,
+evidence hash — which a row born there has none of. That is a **provenance**
+gap: nothing records what the agent was validated against. It is not a **money**
+gap, because a SHADOW agent cannot move real capital: the mode, the envelope and
+every real-capital stage are each refused above.
+
+Recorded as the residual rather than closed, because closing it means either
+rewriting five fixtures to walk the promotion ladder or accepting that a test
+seeding a shadow agent must carry evidence hashes — a decision about how this
+suite is built, not a defect in the schema.
+
+**Evidence.** REAL_DB_INTEGRATION. All four forgeries — the three here plus
+F-121's — observed refused with AD001 as the real `cp_app` role, in a test that
+writes them with random foreign keys **on purpose**: a BEFORE INSERT trigger
+fires before the keys are checked, so a refusal is the birth control speaking
+and not an accident of the fixture, and the assertions name both the SQLSTATE
+and the message to be sure.
+
+The test also carries a **negative control naming what is still open**:
+`wallets`, `assets` and `instruments` have no birth control, and the assertion
+fails if one gains one — so closing the next of them forces this list to be
+updated rather than quietly diverging.
 
 ## Findings deliberately NOT raised
 

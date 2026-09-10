@@ -275,3 +275,103 @@ func TestIntegration_EveryAuditedEntityBindsTheEdge(t *testing.T) {
 	assert.GreaterOrEqual(t, edges, 17,
 		"the fifteen conversions plus agents' two columns should all bind the edge; found %d", edges)
 }
+
+// Nothing is born finished (F-122, migrations 00735-00737).
+//
+// Every binding in this schema is about CHANGES: 00603 tied a state change to a
+// transition row, 00726 and 00731 made that row name both endpoints, 00732
+// stopped the endpoints being forgeable, 00734 closed the exit from a terminal
+// state. A row INSERTED in a privileged state never changed, so none of it
+// applied -- and until 00735, capability_gates was the only entity in the
+// schema that could not be born decided.
+//
+// The rows below are written with random foreign keys on purpose. A BEFORE
+// INSERT trigger fires before the foreign keys are checked, so a refusal here
+// is the birth control speaking and not an accident of the fixture; the
+// assertions name the SQLSTATE and the message to make sure of it.
+func TestIntegration_NothingIsBornFinished(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	app := connect(t, appURL)
+
+	for _, tc := range []struct {
+		name   string
+		sql    string
+		expect string
+	}{
+		{
+			// The whole promotion ladder, skipped at INSERT: every evidence and
+			// approval CHECK on agent_lifecycle_transitions guards a
+			// transition, and creating an agent is not one.
+			name: "an agent born LIVE",
+			sql: `INSERT INTO agents (id, account_id, strategy_id, name, stage, state, mode, version,
+			                          created_by_actor_type, created_by_actor_id)
+			      VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'forged',
+			              'LIVE', 'LIVE', 'LIVE', 1, 'SYSTEM', 'x')`,
+			expect: "AGENT_BORN_PROMOTED",
+		},
+		{
+			// SETTLED carries FinalitySettled, which is what makes value
+			// payout-eligible. Born with a lot, it is minted from nothing.
+			name: "a funding born SETTLED with a lot",
+			sql: `INSERT INTO credit_fundings (id, account_id, provider, provider_reference, state,
+			                                   credit_quantity, paid_amount_minor, paid_currency,
+			                                   fee_amount_minor, idempotency_key, lot_id)
+			      VALUES (gen_random_uuid(), gen_random_uuid(), 'p', 'r', 'SETTLED', 100, 100, 'USD', 0,
+			              'k-' || gen_random_uuid(), gen_random_uuid())`,
+			expect: "FUNDING_BORN_FINISHED",
+		},
+		{
+			// settled <= reserved <= requested is satisfied by naming all three.
+			name: "a payout born SETTLED",
+			sql: `INSERT INTO payout_requests (id, account_id, credit_asset_id, state, requested_quantity,
+			                                   reserved_quantity, settled_quantity, policy_version,
+			                                   policy_hash, verification_level, idempotency_key)
+			      VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'SETTLED',
+			              1000, 1000, 1000, 'v', 'h', 'NONE', 'k-' || gen_random_uuid())`,
+			expect: "PAYOUT_BORN_FINISHED",
+		},
+		{
+			// Dual control forged outright: no proposal, no second person, and
+			// no transition row because there was no transition. This is the
+			// one that matters most -- agent_lifecycle_transitions.approval_id
+			// references this table, so a forged row completes a
+			// fully-evidenced promotion to LIVE.
+			name: "an admin action born APPROVED",
+			sql: `INSERT INTO admin_actions (id, kind, target_type, target_id, params, params_hash, reason,
+			                                 requires_dual, status, proposed_by_user_id, proposed_at,
+			                                 proposer_step_up_at, approved_by_user_id, approved_at, expires_at)
+			      VALUES (gen_random_uuid(), 'LEDGER_CORRECTION', 'ACCOUNT', gen_random_uuid()::text, '{}', 'h',
+			              'forging dual control', true, 'APPROVED', gen_random_uuid(), now(), now(),
+			              gen_random_uuid(), now(), now() + interval '1 hour')`,
+			expect: "ADMIN_ACTION_BORN_DECIDED",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := app.Exec(ctx, tc.sql)
+			require.Error(t, err, "the row committed")
+			assert.Equal(t, "AD001", db.SQLState(err), "got %v", err)
+			assert.Contains(t, err.Error(), tc.expect)
+		})
+	}
+
+	// The negative control. Three of these tables are still open at birth, and
+	// listing them here is what stops that being forgotten: kill_switches has
+	// an INSERT binding (00724) and capability_gates a birth trigger (00701),
+	// but wallets, assets and instruments have neither, and a wallet born
+	// ACTIVE or an asset born SETTLEMENT has no audited provenance at all.
+	//
+	// It is an assertion rather than a comment so that closing one of them
+	// fails here and forces this list to be updated with what changed.
+	stillOpen := []string{"wallets", "assets", "instruments"}
+	for _, table := range stillOpen {
+		var n int
+		require.NoError(t, app.QueryRow(ctx, `
+			SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+			 WHERE c.relname = $1 AND NOT t.tgisinternal
+			   AND pg_get_triggerdef(t.oid) LIKE '%BEFORE INSERT%'`, table).Scan(&n))
+		assert.Zero(t, n,
+			"%s gained a birth control; that is good, and this list is now out of date", table)
+	}
+}
