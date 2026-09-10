@@ -70,7 +70,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-44 | P1 | BASELINE | fixed | Every native-market price was displayed at the wrong scale, as a sixteen-digit number of Credits |
 | F-45 | P2 | NEW | fixed | The web unit suite had been red on the purchase spec, which parsed money into doubles |
 | F-46 | P2 | BASELINE | fixed | The nine-page browser check asserted absences before the page had loaded |
-| F-47 | P2 | BASELINE | **OPEN** | Two deliberate statements about who may read encrypted PII contradict each other |
+| F-47 | P2 | BASELINE | fixed | Two deliberate statements about who may read encrypted PII contradict each other |
 | F-48 | P2 | BASELINE | fixed | Five SECURITY DEFINER functions did not pin `pg_temp` |
 | F-49 | P2 | BASELINE | fixed | An account chose its own exemption from the negative-balance guard |
 | F-50 | P2 | BASELINE | fixed | An asset could be stored with no value domain: a CHECK that evaluates to NULL accepts |
@@ -156,6 +156,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-130 | P3 | NEW | fixed | This register states every finding's status twice and nothing checked the two agreed; four disagreed, and five findings have no evidence section at all |
 | F-131 | P3 | NEW | fixed | A fixture wrote agent rows with v4 UUIDs into a column the application reads as a v7 typed id, so it created rows this system can write and cannot read |
 | F-132 | P2 | NEW | fixed | The webhook route's "declared public" assertion has never been measured: the probe was answered 404 by a provider lookup, which satisfies "not 401" while proving nothing |
+| F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 
 ---
 
@@ -2227,7 +2228,7 @@ Home, Trade, Portfolio, Settings, Lab, Agents and Activity therefore passed with
 every panel on them showing an error. All nine now settle first and assert the
 same three things the other five do.
 
-## F-47 · Two deliberate statements about who may read encrypted PII contradict each other · BASELINE · P2 · OPEN
+## F-47 · Two deliberate statements about who may read encrypted PII contradict each other · BASELINE · P2 · FIXED
 
 **Found by** an adversarial read of the database as a security boundary,
 enumerating what each role can actually do rather than what each migration says
@@ -2338,7 +2339,7 @@ birth to two roles that were meant not to have it. The finding is not urgent; it
 becomes urgent at an identifiable moment.
 
 **That moment now fails a test.**
-`TestPII_NothingWritesPersonalDataWhileTheGrantIsUnresolved` scans `internal`,
+The fuse test (then named for the grant being unresolved; now `TestPII_OnlyTheEncryptingStoreWritesPersonalData`, asserting the resolved contract) scans `internal`,
 `cmd` and `scripts` for a statement that writes `identity_pii`, and fails when
 one appears, saying what has to be decided before it lands. Observed failing on
 a planted writer, which it named by file. Its companion is the positive signal:
@@ -2356,6 +2357,73 @@ about column-level grants — `token_hash` and `break_glass_until` are not
 the decision. Who may read encrypted personal data in a deployment is a policy
 question with an operational constraint attached, and it is not one to settle
 inside a migration.
+
+### Update 2026-09-10, later: resolved, because the precondition now holds
+
+The two earlier updates said exactly what would resolve this: the grant
+question is downstream of an encryption that had not been built, and it could
+not be answered before it. It is built now, and the answer follows.
+
+**The encryption.** `internal/pii`: AES-256-GCM, a fresh 96-bit nonce per
+seal, and additional authenticated data that binds each ciphertext to the
+table, the column, the user id and the key version — so a ciphertext moved to
+another row, relabelled as another column, or tagged with another version does
+not open. Keys come from a versioned keyring in one SecretRef
+(`CP_PII_KEYRING`, `{"active": N, "keys": {"N": "<base64 32 bytes>"}}`):
+writes seal under the active version, reads open under whichever version the
+row names, and rotation is add-a-key, raise-active, deploy, `Reseal`, remove.
+No KMS, because a key there is a fixed monthly cost and the launch tier may
+not carry one; the row format does not change when the paid tier wraps the
+same keyring in an envelope. The key never touches the database.
+
+**The writer.** The login path keeps the verified e-mail address, encrypted,
+beside the hash that finds it — filling an absence on every login the way
+`email_hash` learned to, never following a change. `internal/pii/store.go` is
+the only file that writes `identity_pii`, and `test/security` now asserts
+that instead of asserting that nothing does. `legal_name` and `dob` have a
+sealed home and no source yet: the identity-verification provider is B-06.
+
+**The decision, derived rather than chosen.** With the columns ciphertext
+under a key the database never holds, a grant with no use is a grant waiting
+to become an exposure the day a key leaks. `cp_readonly` is analytics and
+support reads, and PART 121 says personal data does not travel there.
+`cp_ops` runs retention, which never touches `identity_pii`, and its one use
+of `sessions` is `DELETE … WHERE expires_at < now() - <window>`, which needs
+DELETE plus SELECT on that one column. So migration 00754 does what 00010
+meant: both tables are revoked from both roles, and `cp_ops` is granted
+`SELECT (expires_at)` on `sessions` and nothing else there. The bootstrap's
+blanket default stays, because it is what makes every *new* table readable
+without a migration remembering to say so; the withheld tables are a named
+list in `privileges_test.go`, asserted in the strong direction like
+`cp_transition_key`, so the list cannot grow silently.
+
+**What the `sessions` half turned up.** Checking what `cp_ops` actually did
+with the table before deciding what it may read: nothing. `PurgeExpired`
+had no caller on any tier. That is F-133, fixed in the same change.
+
+**Evidence.** TEST_UNIT: `internal/pii` — a keyring refused whole for eight
+kinds of malformation without printing key material; seal/open round trip;
+distinct ciphertexts for equal plaintexts; a ciphertext moved to another user,
+another column or another version refuses to open, as does one altered by a
+bit or too short to be one; rotation opens old rows and seals new ones under
+the active version and a ring that dropped a key cannot open rows under it; a
+nil store refuses. `cmd/api` — `identity.Deps` is built with the store; no
+keyring is a WARN naming the variable and the consequence; an unusable keyring
+is an ERROR and no store; a usable one names its versions and not its bytes.
+`internal/config` — the variable, the golden `.env.example`, the STAGING/PROD
+refusal (`RulePIIKeyring`). `test/security` — every writer of `identity_pii`
+is the encrypting store, and the store is a writer. TEST_INTEGRATION:
+`internal/pii` — the column holds ciphertext and NULL for an absent value; a
+partial update keeps what it did not touch; rotation re-seals the row and a
+ring holding only the new key then reads it; the wrong key of the right
+version is an error, not an empty record. `internal/identity` — a login
+stores `customer-a@dev.invalid` sealed, the column does not contain it, the
+lookup hash agrees with it, and a second login does not rewrite the row.
+`test/integration/migrations` — neither role can SELECT `identity_pii` or
+`sessions`; `cp_ops` can SELECT `sessions.expires_at` and not `token_hash`,
+`roles`, `break_glass_until`, `ip`, `user_agent` or `user_id`; `cp_ops` keeps
+DELETE; `cp_app` still cannot DELETE. And the purge runs as `cp_ops` under
+that grant (F-133). ADR-0021 records the decision; D-050 the reasoning.
 
 ## F-48 · Five SECURITY DEFINER functions did not pin `pg_temp` · BASELINE · P2 · FIXED
 
@@ -7306,3 +7374,37 @@ Stated so their absence is a decision rather than an oversight:
   is under-built rather than wrong.
 - **`internal/instruments` has 593 lines and one test function** for a package with status authority
   over what may be traded. Under-tested for its authority; not observed to be incorrect.
+
+## F-133 · Expired sessions were never purged · BASELINE · P2 · FIXED
+
+**Found by** the F-47 work, checking what `cp_ops` actually does with
+`sessions` before deciding what it may read.
+
+Migration 00011 granted `cp_ops` DELETE on `sessions` and said *"Expired-session
+purge is an operations job (auth/pgstore.PurgeExpired)"*. `PurgeExpired`
+exists, is tested, and had **no caller outside its own test** on any tier —
+not `cmd/api`'s retention loop, not `cmd/audit-worker`. So every session ever
+issued — token hash, roles, `break_glass_until`, IP, user agent — was kept
+forever, on a database whose ceiling halts every financial action when it
+fills (F-105), readable by two roles that had no use for it (F-47).
+
+The same shape as F-79 (login attempts) and F-105 (security events): a job
+that exists, is documented as someone's, and is nobody's. Three times in one
+subsystem is a pattern, and the pattern is that "operations job" named a role
+and not a process.
+
+**Fix.** A third pass in `runOpsRetention`: `PurgeExpired` after the
+login-attempt window, on the same hourly ticker as the login-attempt purge and
+the partition maintenance. The window is reused rather than a new variable
+added — both are transient authentication rows whose only afterlife is
+forensic, and one number for "how long after expiry does an auth row survive"
+is easier to reason about than two. Migration 00754 narrows `cp_ops` to SELECT
+on `expires_at` alone, which is exactly what the DELETE filters by, and the
+purge is proven to still run under that grant.
+
+**Evidence.** STATIC_PROOF: `grep -rn "PurgeExpired(" cmd/ internal/` — the
+definition, nothing else. TEST_INTEGRATION:
+`TestIntegration_ExpiredSessionsArePurgedAsOps` — a session expired beyond
+the window is deleted by `cp_ops` under 00754's column grant, one inside the
+window survives, `SELECT expires_at` as `cp_ops` works and `SELECT token_hash`
+is refused with `permission denied`.

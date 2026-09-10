@@ -38,6 +38,7 @@ The set of ADRs is the one required by goal PART 210.
 | [0018](0018-no-proprietary-stablecoin.md) | No proprietary stablecoin or platform-issued dollar token | Accepted | 4, 11, 13, 20, 26, 27, 32, 33, 94 | EB-002, EB-009, EB-010 |
 | [0019](0019-no-internal-crossing.md) | No internal order matching, crossing, or principal trading | Accepted | 3, 4, 10, 41, 46, 50, 163, 182 | EB-009, EB-011 |
 | [0020](0020-retention-against-append-only-tables.md) | Retention on an append-only table is partition detachment, never row deletion under a disabled trigger | Accepted | 122 | — |
+| [0021](0021-who-may-read-personal-data.md) | Personal data is encrypted in the application or not stored, and a role with no use for it cannot read it | Accepted | 121 | — |
 
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.

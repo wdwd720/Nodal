@@ -65,7 +65,7 @@ The seven that are not fixed, and what each is now:
 
 | Finding | State | What it is |
 |---|---|---|
-| **F-47** | open | A decision about who may read encrypted PII. **Premature rather than undecided**: whether SELECT on `identity_pii` is an exposure depends on whether it holds ciphertext, and the application-layer encryption is DESIGNED, not built — nothing writes those columns, so the table is empty everywhere. `cp_ops` needs SELECT on `sessions` regardless, so the answer differs by role. Nothing in the tree now asserts one side of it as settled. |
+| **F-47** | fixed | **Closed this session, the way its own updates said it would be.** `internal/pii` is the encryption (AES-256-GCM, ciphertext bound to row, column and key version, a versioned keyring in one SecretRef); the login path writes the verified e-mail sealed; and with the columns ciphertext under a key the database never holds, 00754 does what 00010 meant — neither role reads `identity_pii`, `cp_readonly` does not read `sessions`, `cp_ops` reads exactly `sessions.expires_at`. Checking what `cp_ops` did with the table found F-133. |
 | **F-65** | part | Two kill switches reach nothing, and the bridge is deliberately unbuilt because the agent runtime is inert. **The premise is now watched**: a test fails when the runtime acquires a production caller, and says what becomes owed. |
 | **F-69** | open | An inventory row across six audits, drawn down as each item closed. Not a defect. |
 | **F-84** | part | Request validation precedes authentication, so two endpoints answer 400 where 401 would be truthful. Fixing it means authorising on the chi route pattern before the generated wrapper, which is a change to the boundary's structure. |
@@ -94,7 +94,7 @@ individually.
 
 | Finding | Sev | State | Exact reason it remains |
 |---|---|---|---|
-| **F-47** | P2 | open | Two deliberate statements about who may read encrypted PII contradict each other. **This is a policy decision, not a defect** — the architecture does not derive which statement wins, so §42's "the decision can be derived from the architecture" does not apply. |
+| **F-47** | P2 | fixed | Two deliberate statements about who may read encrypted PII contradicted each other. Once the encryption existed the architecture did derive which wins: a grant with no use on ciphertext is a grant waiting for a key leak. `internal/pii`, migration 00754, ADR-0021. |
 | **F-65** | P2 | part | Two kill-switch kinds reach nothing. The reachable half is fixed; the remainder needs the kill-switch to own surfaces it does not currently own. |
 | **F-69** | P2 | open | An inventory row, not a defect: it names what six audits found and has been drawn down as each was closed. |
 | **F-84** | P3 | part | Request validation precedes authentication. **Confirmed LIVE today** — `POST /v1/payouts` with no session answers `400 "Header parameter Idempotency-Key is required"`, not 401. Authentication still holds: the same request *with* an idempotency key answers 401. Fixing it means authorising on the route pattern before the generated wrapper, which wants its own design. |
@@ -596,8 +596,11 @@ different position from where this session started, and it is still not
 
 ## 16 · Remaining human actions
 
-1. **Decide the PII-read policy** (F-47). Two deliberate statements contradict
-   each other and the architecture does not derive which wins.
+1. **Paste a PII keyring** (F-47). `openssl rand -base64 32` into
+   `NODAL_PII_KEYRING` as `{"active":1,"keys":{"1":"<that>"}}` in the Render
+   dashboard. The policy itself is decided and in the schema (00754); the key
+   is the one thing the repository cannot contain. Without it the next deploy
+   refuses to start, like the alert destination and for the same reason.
 2. **Paste an alert destination** (F-118). Set `NODAL_ALERT_WEBHOOK_URL` in the
    Render dashboard to a Slack or Discord incoming-webhook URL, an ntfy topic,
    or any endpoint that takes a JSON POST; the shape is chosen from the host.

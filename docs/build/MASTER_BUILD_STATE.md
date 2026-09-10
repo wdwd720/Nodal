@@ -1467,8 +1467,15 @@ observed failing first.
    open is `wallets`, `assets` and `instruments`, which
    `TestIntegration_NothingIsBornFinished` names in an assertion that fails when
    one of them is closed, so the list cannot go stale.
-4. **F-42 and F-47**, unchanged. F-109 applied the privilege treatment to the
-   four tables whose columns are money; the rest of F-42's list stands.
+4. **F-47, resolved.** `internal/pii` is the application-layer encryption
+   `identity_pii` was designed for — AES-256-GCM, each ciphertext bound to its
+   row, column and key version, a versioned keyring in one SecretRef — and the
+   login path writes the verified e-mail sealed. With the columns ciphertext
+   under a key the database never holds, migration 00754 does what 00010
+   meant: neither role reads `identity_pii`, `cp_readonly` does not read
+   `sessions`, `cp_ops` reads exactly the column its retention DELETE filters
+   by. Checking what `cp_ops` actually did with `sessions` found that nothing
+   purged them, on any tier (F-133, fixed in the same change). ADR-0021.
 5. **Nothing pages anyone about anything** (F-118, FIXED). Alerts log, both
    composition roots construct the real instruments, and now `internal/alert`
    delivers them to a webhook — in Slack's, Discord's or ntfy's own shape,
@@ -1752,8 +1759,8 @@ external blockers, the five launch flags, the human actions and where to resume.
 Read it before this file if you want the state; read this file for how it got
 there.
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **132 findings**, of which three
-are open (F-47, F-69, F-93) and three are partial (F-65, F-84, F-95); the
+`docs/audit/AUDIT_FINDINGS.md` is the register: **133 findings**, of which two
+are open (F-69, F-93) and three are partial (F-65, F-84, F-95); the
 rest are fixed. **F-125 closed on 2026-09-10** — the race detector links on this
 host now, so both race tiers run here and no race claim rests on CI alone.
 
@@ -1813,7 +1820,7 @@ step is not optional.
 | Finding | Priority | Why it is still open |
 |---|---|---|
 | F-42 | P2 | The AU001 binding trusts a transaction-local setting any caller with the application credential can set. The remedy is privilege work on the state columns, and F-78 has now narrowed what that work has to cover for `agents`. |
-| F-47 | P2 | Two deliberate statements about who may read encrypted PII contradict each other. It is a policy decision, not a code fix, and an agent has misread the migration comment as the code twice. |
+| F-47 | P2 | ~~Two deliberate statements about who may read encrypted PII contradict each other.~~ Resolved 2026-09-10: `internal/pii` built the encryption the decision was waiting on, and 00754 made the schema say what 00010 meant. The two earlier misreadings of 00717's comment are still worth knowing about: the REVOKE now really is in the tree, in 00754, and the comment in 00717 still describes one that was taken out. |
 | F-69 | P2 | The inventory itself. It shrinks as its items are fixed; §4 names the three that are real work. |
 
 Everything else is FIXED or PART, with the evidence named in the finding.

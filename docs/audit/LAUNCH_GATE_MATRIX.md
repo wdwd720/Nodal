@@ -90,7 +90,7 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | 121 enum CHECKs have no Go counterpart | F-95 | Most have no Go list to compare against, by their nature |
 | An agent can be born SHADOW without its promotion evidence | F-122 | A provenance gap, not a money one; closing it is a decision about how the suite seeds agents |
 | `wallets`, `assets` and `instruments` have no birth control | F-122 | Named in an assertion that fails when one is closed, so the list cannot go stale |
-| Two statements about who may read encrypted PII contradict each other | F-47 | A policy decision |
+| Two statements about who may read encrypted PII contradict each other | F-47 | **Resolved in the schema** (00754) once `internal/pii` made the columns ciphertext: neither role reads `identity_pii`, `cp_readonly` does not read `sessions`, `cp_ops` reads `sessions.expires_at` alone. Remaining: `NODAL_PII_KEYRING` in the Render dashboard; STAGING/PROD refuse to start without it |
 
 Closed since the previous audit, and listed because their absence from this
 table is the change: the buffered request body (F-85), the fifteen
