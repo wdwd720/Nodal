@@ -2282,6 +2282,39 @@ the evidence for both sides, and the constraint any resolution has to satisfy.
 files carry a note saying the default is deliberate, and pointing at the
 contradiction rather than resolving it.
 
+### Update 2026-09-10: half of this IS resolvable, and it was the wrong half that stayed silent
+
+The PII decision is not derivable and should not be forced — but **the
+contradiction is not the decision**, and one half of it was a test asserting a
+contract this repository does not have.
+
+`privileges_test.go` said, flatly, *"cp_readonly and cp_ops can SELECT
+everything and write nothing"*, and asserted it for every table. That is one
+side of the disagreement stated as settled fact, in the file a reader would
+check to learn what the contract IS.
+
+It now names `identity_pii` and `sessions` as the exception, with the reason,
+and asserts their current state as **"readable, and that is an open question"**
+rather than as intent. Everything else is checked exactly as before. The
+disagreement is now visible from either side of it instead of silently won by
+the blanket default.
+
+**And the decision's precondition is now stated**, which is the difference
+between "needs a decision" and "the decision is premature". Whether SELECT on
+`identity_pii` is an exposure depends on whether those columns hold ciphertext.
+`SECURITY.md` records the application-layer encryption as **DESIGNED**, and
+nothing in this repository writes those columns, so the table is empty in every
+deployment that exists. The grant question is downstream of a control that has
+not been built, and it cannot be answered before it — which is a reason, not an
+absence of one.
+
+`cp_ops` also needs SELECT on `sessions` to run retention, so the answer is not
+even the same for the two roles. Any resolution has to satisfy that.
+
+The finding stays OPEN. The decision is genuinely outstanding and marking it
+otherwise would be the overstatement this register refuses. What changed is that
+nothing in the tree now asserts one side of it as though it were decided.
+
 ### Update 2026-09-08: the table is empty, and there is now a fuse on it
 
 Two facts that size the finding, both checkable rather than argued.

@@ -93,51 +93,19 @@ func reloadSwitch(ctx context.Context, tx pgx.Tx, s *Switch) error {
 	return nil
 }
 
-// saveSwitch no longer writes anything.
+// The statement 00753 replaced, kept here because the shape of what moved is
+// worth being able to read:
 //
-// 00753 revoked UPDATE on kill_switches from cp_app and moved every mutable
-// column -- including the version bump and the compare-and-swap this function
-// carried -- onto the transition row's trigger. Inserting the transition IS the
-// change, and the concurrency check now applies to every writer rather than to
-// this statement.
+//	UPDATE kill_switches SET active = $2, severity = $3, reason = $4,
+//	    activated_by_actor_id = ..., released_by_actor_id = ...,
+//	    version = version + 1
+//	  WHERE id = $1 AND version = $11
+//	  RETURNING version, updated_at
 //
-// Kept as a no-op with this comment rather than deleted, for the reason 00750
-// gives about updateAgentState: the call sites read as "change it, then record
-// it", and the middle step silently vanishing would invite someone to re-add it.
-func saveSwitch(context.Context, pgx.Tx, *Switch) error { return nil }
-
-// saveSwitchUnused is the statement 00753 replaced, kept only in this comment:
-//
-//	UPDATE kill_switches SET active = $2, severity = $3, reason = $4, ...
-//	    version = version + 1 WHERE id = $1 AND version = $11
-//	    RETURNING version, updated_at
-//
-// oldSaveSwitch wrote the mutable columns under optimistic concurrency.
-func oldSaveSwitch(ctx context.Context, tx pgx.Tx, s *Switch) error {
-	var approvalID *string
-	if s.ReleaseApprovalID != "" {
-		v := s.ReleaseApprovalID
-		approvalID = &v
-	}
-	err := tx.QueryRow(ctx, `UPDATE kill_switches SET
-			active = $2, severity = $3, reason = $4,
-			activated_by_actor_id = nullif($5,''), activated_at = $6,
-			released_by_actor_id = nullif($7,''), released_at = $8,
-			release_approval_id = $9::uuid, release_reason = nullif($10,''),
-			version = version + 1
-		WHERE id = $1 AND version = $11
-		RETURNING version, updated_at`,
-		s.ID, s.Active, string(s.Severity), s.Reason,
-		s.ActivatedBy, s.ActivatedAt, s.ReleasedBy, s.ReleasedAt,
-		approvalID, s.ReleaseReason, s.Version).Scan(&s.Version, &s.UpdatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errs.New(errs.CodeConflict, "kill switch was modified concurrently").WithField("switch", string(s.Kind))
-		}
-		return fmt.Errorf("killswitch: save %s/%s: %w", s.Kind, s.ScopeID, err)
-	}
-	return nil
-}
+// Every part of it is now in cp_kill_switch_apply_transition, driven by the
+// transition row: the column writes, the optimistic-concurrency check and the
+// version bump. Inserting the transition IS the change, and the check applies
+// to every writer rather than to this one statement.
 
 // Transition is a kill_switch_transitions row.
 type Transition struct {

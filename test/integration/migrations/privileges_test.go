@@ -57,7 +57,19 @@ var opsHousekeeping = map[string]bool{
 //   - cp_app cannot UPDATE append-only tables;
 //   - cp_app can at least SELECT every other table (a table nobody granted is
 //     a migration bug, not a feature);
-//   - cp_readonly and cp_ops can SELECT everything and write nothing.
+//   - cp_readonly and cp_ops can SELECT everything and write nothing, EXCEPT
+//     where a table is named below as an exception with its reason.
+//
+// That last clause used to read "everything", flatly, and F-47 is the finding
+// that it contradicts migration 00010 -- which grants those two roles SELECT on
+// a named list that deliberately excludes `identity_pii` and `sessions`. Both
+// statements are in the tree; only the blanket ALTER DEFAULT PRIVILEGES has any
+// effect, so this test was asserting one side of a contradiction as if it were
+// the settled contract.
+//
+// It is not settled and this test no longer pretends it is. The exception list
+// below records which tables are unresolved and why, so that a reader who
+// arrives at the grant question is told there IS a question.
 func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 	requireEnv(t)
 	ctx := context.Background()
@@ -106,6 +118,34 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 		// change on seventeen audited tables. "cp_readonly reads everything" is
 		// the rule below and this is the deliberate hole in it, so it is
 		// checked in the strong direction here instead of being excused.
+		// F-47: two deliberate statements about who may read these disagree, and
+		// the disagreement is the finding. The blanket default currently wins.
+		//
+		// The decision is downstream of a control that does not exist yet:
+		// `identity_pii`'s columns are encrypted at the application layer
+		// according to SECURITY.md, and that encryption is DESIGNED rather than
+		// built -- nothing in this repository writes those columns, so the table
+		// is empty in every deployment. Whether SELECT on it is an exposure
+		// depends on whether it holds ciphertext, which depends on the
+		// unimplemented encryption. `cp_ops` additionally NEEDS SELECT on
+		// `sessions` for retention, so the answer is not even the same for both.
+		//
+		// Asserted here as "currently readable, and that is an open question"
+		// rather than "readable, as intended". The moment anything writes
+		// identity_pii, TestPII_NothingWritesPersonalDataWhileTheGrantIsUnresolved
+		// fails and says what has to be decided first.
+		if tbl == "identity_pii" || tbl == "sessions" {
+			for _, ro := range []string{"cp_readonly", "cp_ops"} {
+				assert.True(t, priv(ro, tbl, "SELECT"),
+					"%s: %s lost SELECT. That may be right, but F-47 is the open question and this test is not where it gets decided", tbl, ro)
+				for _, p := range []string{"INSERT", "UPDATE", "TRUNCATE"} {
+					assert.False(t, priv(ro, tbl, p), "%s: %s must not %s", tbl, ro, p)
+				}
+			}
+			assert.False(t, priv("cp_app", tbl, "DELETE"), "%s: cp_app must never DELETE", tbl)
+			assert.True(t, priv("cp_app", tbl, "SELECT"), "%s: cp_app has no SELECT", tbl)
+			continue
+		}
 		if tbl == "cp_transition_key" {
 			for _, r := range []string{"cp_app", "cp_readonly", "cp_ops"} {
 				for _, p := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"} {

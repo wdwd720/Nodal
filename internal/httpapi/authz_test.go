@@ -203,11 +203,11 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 // publicPaths are the concrete paths of the operations declared public.
 func publicPaths() map[string]struct{} {
 	return map[string]struct{}{
-		"GET /v1/auth/login":       {},
-		"GET /v1/auth/callback":    {},
-		"GET /v1/healthz":          {},
-		"GET /v1/readyz":           {},
-		"GET /v1/version":          {},
+		"GET /v1/auth/login":              {},
+		"GET /v1/auth/callback":           {},
+		"GET /v1/healthz":                 {},
+		"GET /v1/readyz":                  {},
+		"GET /v1/version":                 {},
 		"POST /v1/webhooks/stripe_credit": {},
 	}
 }

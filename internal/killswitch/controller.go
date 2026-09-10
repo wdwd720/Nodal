@@ -234,8 +234,8 @@ func (c *Controller) Activate(ctx context.Context, tx pgx.Tx, kind Kind, scope, 
 	// underneath -- the compare-and-swap saveSwitch used to carry.
 	var expect *int64
 	if s.Version == 0 {
-		if err = insertActive(ctx, tx, s); err != nil {
-			return Switch{}, err
+		if ierr := insertActive(ctx, tx, s); ierr != nil {
+			return Switch{}, ierr
 		}
 	} else {
 		v := s.Version
