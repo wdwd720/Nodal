@@ -3463,6 +3463,34 @@ spent its time removing, a control only a test can reach. It belongs with the
 work that makes `internal/agent` reachable, and the runbooks now say so where an
 operator will read it.
 
+### 2026-09-10: the deferral is now watched, because it rested on an unwatched fact
+
+The reasoning above is sound and it rests on a **fact about the code** —
+`agent.NewLifecycle` and `agent.NewEmitter` have no production callers, and
+`cmd/agent-worker`'s `EmitterFor` returns UNSUPPORTED. Both were re-verified
+before writing this, and both still hold.
+
+Nothing was watching them. **The day the agent runtime becomes reachable is
+exactly the day nobody re-reads a finding from months earlier**, and that is the
+day two runbooks start describing a control that does not work while an operator
+is following them.
+
+`TestDeferredBridge_TheAgentRuntimeIsStillInert` (`test/security`) watches the
+premise rather than the bridge — there is no bridge to test yet. When the
+runtime acquires a production caller it fails and states what has become owed:
+the `agent_pauses` bridge for `AGENT_PAUSE`, and a separate decision for
+`MODEL_DISABLE`, which cannot be fixed at the call site because
+`internal/killswitch` is in `forbiddenForAgents` and the model path may not
+consult it.
+
+Proven non-vacuous by planting a file that mentions the constructor and watching
+it fail, naming the file.
+
+**This is what a deliberate deferral should look like in this repository.** The
+finding stays PART, because the bridge is genuinely not built and pretending
+otherwise would be the overstatement this register exists to refuse. What
+changed is that the deferral can no longer expire quietly.
+
 ## F-66 · A future authentication time satisfied every step-up window · NEW · P1 · FIXED
 
 **Found by** an independent adversarial read of `internal/auth` and
