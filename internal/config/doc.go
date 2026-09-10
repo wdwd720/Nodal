@@ -299,6 +299,7 @@
 // Retention (days):
 //
 //	CP_RETENTION_LOGIN_ATTEMPT_DAYS     days a login_attempts row survives its expiry
+//	CP_RETENTION_SECURITY_EVENT_DAYS    days a security_events partition is kept; 0 = never pruned, else >= 90
 //	CP_RETENTION_FINANCIAL_RECORD_DAYS  > 0 in STAGING/PROD
 //	CP_RETENTION_SECURITY_AUDIT_DAYS    > 0 in STAGING/PROD
 //	CP_RETENTION_RAW_MARKET_DATA_DAYS

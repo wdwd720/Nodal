@@ -520,7 +520,20 @@ type RetentionConfig struct {
 	// nonce and PKCE verifier after the attempt expired. Short by design: the
 	// secrets are single-use and the durable record of a login is a
 	// security_events row.
-	LoginAttemptDays    int
+	LoginAttemptDays int
+	// SecurityEventDays is how long a monthly partition of security_events is
+	// kept before it is detached and dropped (00740, ADR-0020 decision 2).
+	//
+	// Zero means the trail is never pruned, and that is the default on purpose:
+	// the period is the question ADR-0020 leaves open, and dropping a security
+	// audit trail because nobody chose a number is worse than a table that
+	// grows. What a growing table costs is a capacity refusal, which is
+	// fail-closed and visible; what a wrong number costs is evidence.
+	//
+	// When it is set it must be at least 90 days, the same floor
+	// cp_security_events_drop_expired enforces in the database. The floor is in
+	// both places because the SQL function is the one an attacker would call.
+	SecurityEventDays   int
 	FinancialRecordDays int
 	SecurityAuditDays   int
 	RawMarketDataDays   int

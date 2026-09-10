@@ -292,10 +292,19 @@ func TestIntegration_TheStageModeMappingMatchesTheDatabase(t *testing.T) {
 func TestIntegration_NoEnumCheckAppearsUnnoticed(t *testing.T) {
 	requireEnv(t)
 	rows, err := testDB.Query(context.Background(),
-		`SELECT conrelid::regclass::text || '.' || conname
-			FROM pg_constraint
-			WHERE contype = 'c' AND connamespace = 'public'::regnamespace
-			  AND pg_get_constraintdef(oid) LIKE '%= ANY (ARRAY[%'
+		// Partitions are excluded, and that is not a convenience. A partition
+		// carries a copy of every CHECK its parent declares -- PostgreSQL puts
+		// it there, nobody wrote it -- so counting them would make this
+		// inventory grow by thirteen every time a table is partitioned and
+		// shrink every time a month is dropped. The decision this test tracks
+		// is "someone declared an enum in SQL", and that happens once, on the
+		// parent (00740).
+		`SELECT c.conrelid::regclass::text || '.' || c.conname
+			FROM pg_constraint c
+			JOIN pg_class t ON t.oid = c.conrelid
+			WHERE c.contype = 'c' AND c.connamespace = 'public'::regnamespace
+			  AND NOT t.relispartition
+			  AND pg_get_constraintdef(c.oid) LIKE '%= ANY (ARRAY[%'
 			ORDER BY 1`)
 	require.NoError(t, err)
 	defer rows.Close()

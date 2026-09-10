@@ -574,6 +574,8 @@ func specs() []varSpec {
 
 		req("CP_RETENTION_LOGIN_ATTEMPT_DAYS", secRetention, "Days a login_attempts row is kept after it expired. It holds a plaintext OIDC nonce and PKCE verifier; the durable record of a login is a security_events row. Minimum 1.", "2",
 			setInt(func(c *Config) *int { return &c.Retention.LoginAttemptDays })),
+		req("CP_RETENTION_SECURITY_EVENT_DAYS", secRetention, "Days a monthly partition of security_events is kept before it is detached and dropped. 0 disables pruning entirely, which is the default because ADR-0020 leaves the period open; when set it must be at least 90.", "0",
+			setInt(func(c *Config) *int { return &c.Retention.SecurityEventDays })),
 		req("CP_RETENTION_FINANCIAL_RECORD_DAYS", secRetention, "Retention of the FINANCIAL_RECORD class. Must be > 0 in STAGING/PROD.", "2555",
 			setInt(func(c *Config) *int { return &c.Retention.FinancialRecordDays })),
 		req("CP_RETENTION_SECURITY_AUDIT_DAYS", secRetention, "Retention of the SECURITY_AUDIT class. Must be > 0 in STAGING/PROD.", "2555",

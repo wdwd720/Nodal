@@ -128,7 +128,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-102 | P1 | NEW | fixed | Two write routes scoped through the read-grade helper, so one ADMIN session could cancel any customer's intent and move any seller's product; the guard that exists to prevent it matched one helper name of four |
 | F-103 | P1 | NEW | fixed | Five configuration rules permitted what the deployment cannot survive: live provider credentials outside PROD, a trusted-proxy list that trusts everyone, a retention class with no floor, a legal policy the binary refuses to boot on, and a TLS flag nothing read |
 | F-104 | P2 | NEW | fixed | Three controls reported something other than what they enforced: a secret redactor that never satisfied the interface it named, a step-up window three times the one applied, and a ceiling test that passed because a different guard fired |
-| F-105 | P1 | NEW | part | An unauthenticated caller chose how many permanent, undeletable rows the service wrote, and the deployment's database ceiling halts every financial action when it is reached |
+| F-105 | P1 | NEW | fixed | An unauthenticated caller chose how many permanent, undeletable rows the service wrote, and the deployment's database ceiling halts every financial action when it is reached |
 | F-106 | P1 | NEW | fixed | Three money tables handed one account's record to another on a reused idempotency key, and discarded the caller's own request; four sibling tables already compared the account |
 | F-107 | P1 | NEW | fixed | The seller set the platform's own commission on their own sales, with a ceiling, no floor and a zero default; and a payout the provider may already have paid could be cancelled by its owner, releasing the reservation |
 | F-108 | P1 | NEW | fixed | Two failed RPCs were read as proof a transaction never happened, closing the record as MATCHED and terminal while the user's tokens were spent |
@@ -150,6 +150,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-124 | P1 | NEW | fixed | The webhook path the published contract documents is not the one the service registers, so a delivery to it answers 404 and the provider eventually gives up |
 | F-125 | P3 | NEW | open | The race detector cannot link on this host, so every race claim in this repository rests on CI |
 | F-126 | P2 | NEW | fixed | Five spellings of one archive key parse to the same object, so a dedup check, a retention sweep and an audit reconstruction each miss what the other wrote |
+| F-127 | P2 | NEW | fixed | The ADR deciding how an unprunable table must be pruned records that the table does not refuse DELETE; it does, and that was the fact the choice of remedy rested on |
 
 ---
 
@@ -6375,6 +6376,50 @@ a key today.
 **Evidence.** LIVE_OBSERVED — the failing input was produced by the fuzzer on
 this host, preserved as a corpus entry before the fix, and re-run against the
 fix. STATIC_PROOF that no writer in the tree emits a non-canonical key.
+
+## F-127 · The ADR got the fact its decision rested on wrong · NEW · P2 · FIXED
+
+**Found by** closing F-105's remaining half, and only because the schema was
+checked before the migration was written rather than after.
+
+ADR-0020's classification table places `security_events` under OPERATIONAL_LOG
+and records that it does **not** refuse DELETE — grouping it with
+`login_attempts`, whose retention is a plain DELETE on a ticker (F-79).
+
+It does refuse. The trigger is `BEFORE DELETE OR UPDATE`, and it was reproduced
+as the table OWNER, which is the strongest caller there is:
+
+```
+DELETE FROM security_events WHERE kind = 'TEST_PROBE';
+ERROR:  immutable row: DELETE on public.security_events is forbidden
+CONTEXT:  PL/pgSQL function forbid_mutation() line 3 at RAISE
+```
+
+**What that costs.** ADR-0020 decision 2 says retention on a table that refuses
+DELETE must be partition detachment. Decision 1 says a retention scheme must
+never disable a trigger or grant DELETE on such a table, permanently. An
+implementer following the uncorrected table would have written the DELETE
+version — which fails at runtime, and whose obvious next step is the one
+decision 1 forbids. The document that exists to prevent that outcome was
+pointing at it.
+
+**Why P2 and not P3.** The ADR is the standing instruction for three retention
+classes that are still unimplemented. A wrong fact in it does not decay; it
+waits.
+
+**Fix.** The row is corrected, and the correction is written into the ADR with
+the reproduction rather than silently edited, because "the table was wrong" is
+less useful to the next reader than "this is how it was caught."
+
+**The transferable part.** It was not caught by review — the ADR was reviewed
+and accepted the day before. It was caught by checking the schema before writing
+the migration, which is the only thing that would have caught it. The same
+sentence covers the six fixtures this session found: **a document, a fixture and
+a comment are all claims, and this register keeps finding that nothing was
+checking them.**
+
+**Evidence.** `REAL_DB_INTEGRATION` — reproduced against PostgreSQL 16 as the
+owner, before anything was changed. `STATIC_PROOF` for the trigger definition.
 
 ## Findings deliberately NOT raised
 

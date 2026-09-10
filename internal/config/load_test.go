@@ -297,7 +297,11 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// joined it. Each of those was read straight from the environment by
 	// cmd/api, which is the one route into production that this table's whole
 	// purpose is to close; test/infra now fails if another appears.
-	assert.Equal(t, 3+8+9+8+4+6+2+5+5+4+10+2+11+14*11+4+1+1+7, len(seen))
+	// The trailing 7 became 8 when CP_RETENTION_SECURITY_EVENT_DAYS joined the
+	// retention section: security_events is partitioned by month (00740) and
+	// how many months are kept is a retention decision that had nowhere to be
+	// written down.
+	assert.Equal(t, 3+8+9+8+4+6+2+5+5+4+10+2+11+14*11+4+1+1+8, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

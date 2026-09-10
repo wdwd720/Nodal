@@ -452,11 +452,18 @@ func rateLimit(l RateLimits, trusted []*net.IPNet) func(http.Handler) http.Handl
 			return l.Auth
 		// A webhook is unauthenticated -- rejection is what happens when the
 		// signature does not verify -- and it shared the Command budget with
-		// every admin command, at 120/min. Every rejected delivery wrote a
-		// durable security_events row that no role can ever delete, on a
-		// deployment whose database ceiling halts every financial action when
-		// it is reached (F-105). A provider's real delivery volume is a few a
-		// minute, and a 429 makes it retry rather than lose the event.
+		// every admin command, at 120/min. Every rejected delivery writes a
+		// durable security_events row that no role can delete, on a deployment
+		// whose database ceiling halts every financial action when it is
+		// reached (F-105). A provider's real delivery volume is a few a minute,
+		// and a 429 makes it retry rather than lose the event.
+		//
+		// "no role can delete" is still true of a ROW and is no longer true of
+		// the table: 00740 partitions security_events by month, so the owner can
+		// drop a whole month once a retention period is chosen. Both halves
+		// matter here. The rate limit is what keeps an unauthenticated caller
+		// from choosing how fast the table grows; retention is what keeps it
+		// from growing forever. Neither substitutes for the other.
 		case l.Auth != nil && strings.HasPrefix(p, "/v1/webhooks/"):
 			return l.Auth
 		case l.Quote != nil && strings.HasSuffix(p, "/quotes/preview"):

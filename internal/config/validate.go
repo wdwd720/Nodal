@@ -37,6 +37,18 @@ const (
 	RuleProviderModeMatchesEnv Rule = "PROVIDER_MODE_MATCHES_ENV"
 )
 
+// SecurityEventRetentionFloorDays is the shortest security-event retention
+// window this system will accept once pruning is switched on at all.
+//
+// It is duplicated in the database, in cp_security_events_drop_expired (00740),
+// and that is deliberate rather than an oversight of the kind this register
+// keeps recording. The two copies do not guard the same thing: this one refuses
+// a bad value at boot, where an operator sees it; the SQL one refuses a bad
+// argument at call time, where an attacker holding the operations credential
+// would be. A floor that only exists in Go is a floor an attacker can step over
+// by calling the function directly.
+const SecurityEventRetentionFloorDays = 90
+
 // Rules applied only when Environment.IsProductionLike (STAGING, PROD).
 const (
 	RuleNoDebugAuth       Rule = "NO_DEBUG_AUTH"
@@ -680,11 +692,21 @@ func (c *Config) Validate() error {
 		// OIDC nonces and PKCE verifiers it exists to delete are never deleted,
 		// and the operator sees a failing worker rather than a failing config
 		// check (F-103).
-		"Retention.LoginAttemptDays": c.Retention.LoginAttemptDays,
+		"Retention.LoginAttemptDays":  c.Retention.LoginAttemptDays,
+		"Retention.SecurityEventDays": c.Retention.SecurityEventDays,
 	} {
 		if d < 0 {
 			add(RuleField, name, "must not be negative")
 		}
+	}
+	// Zero disables security-event pruning. Anything positive is a real
+	// retention decision about a security audit trail, and the floor is the
+	// same 90 days cp_security_events_drop_expired refuses below -- checked
+	// here too so the refusal arrives at boot rather than on the first pass,
+	// months later, in a log nobody is reading (F-105).
+	if c.Retention.SecurityEventDays > 0 && c.Retention.SecurityEventDays < SecurityEventRetentionFloorDays {
+		add(RuleField, "Retention.SecurityEventDays",
+			fmt.Sprintf("must be 0 (no pruning) or at least %d days; a shorter window on a security audit trail is an erase control with a retention control's name", SecurityEventRetentionFloorDays))
 	}
 	if prodLike {
 		if c.Retention.FinancialRecordDays <= 0 {

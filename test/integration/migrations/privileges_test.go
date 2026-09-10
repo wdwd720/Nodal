@@ -64,7 +64,18 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 	admin := connect(t, migrateURL)
 	require.NoError(t, migrate.Up(ctx, migrateURL))
 
-	rows, err := admin.Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`)
+	// Partitions are excluded. Privileges on a partitioned table are checked on
+	// the parent when the parent is what the query names, which is how every
+	// reader and writer in this system reaches one -- so a partition carries no
+	// grants of its own and is expected to carry none. Sweeping them would
+	// demand a GRANT on each, which is both unnecessary and a standing invitation
+	// to grant something directly on a partition that the parent does not have
+	// (00740).
+	rows, err := admin.Query(ctx,
+		`SELECT c.relname FROM pg_class c
+		   JOIN pg_namespace n ON n.oid = c.relnamespace
+		  WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+		  ORDER BY c.relname`)
 	require.NoError(t, err)
 	var tables []string
 	for rows.Next() {

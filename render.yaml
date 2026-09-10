@@ -262,6 +262,18 @@ services:
 
       - key: CP_RETENTION_LOGIN_ATTEMPT_DAYS
         value: "90"
+      # security_events is partitioned by month (00740) and this says how many
+      # months are kept. ZERO, deliberately: the mechanism exists, the period
+      # does not, and ADR-0020 leaves the period open as a product and
+      # compliance question. Dropping a security audit trail because nobody
+      # chose a number is worse than a table that grows -- what a growing table
+      # costs is a capacity refusal, which is fail-closed and visible.
+      #
+      # Setting it is one value and a redeploy. The floor is 90, enforced both
+      # by config.Validate at boot and by cp_security_events_drop_expired at
+      # call time.
+      - key: CP_RETENTION_SECURITY_EVENT_DAYS
+        value: "0"
       - key: CP_RETENTION_FINANCIAL_RECORD_DAYS
         value: "2555"
       - key: CP_RETENTION_SECURITY_AUDIT_DAYS

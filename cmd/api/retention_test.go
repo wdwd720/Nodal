@@ -65,7 +65,7 @@ func TestLoginAttemptRetention_SaysSoWhenItCannotRun(t *testing.T) {
 			// not hold the goroutine open either.
 			done := make(chan struct{})
 			go func() {
-				runLoginAttemptRetention(context.Background(), tc.cfg, func(string) (string, bool) { return "", false }, log)
+				runOpsRetention(context.Background(), tc.cfg, func(string) (string, bool) { return "", false }, log)
 				close(done)
 			}()
 			select {

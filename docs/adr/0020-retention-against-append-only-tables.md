@@ -32,7 +32,7 @@ outright, for every role including the table owner**:
 |---|---|---|
 | MODEL_IO | `model_calls`, `tool_invocations`, `compile_attempts` | yes, all three |
 | SOCIAL_DATA | `raw_archive_objects` (rows classified SOCIAL_DATA), the ClickHouse side | yes |
-| OPERATIONAL_LOG | `provider_health_samples`, `provider_events`, `login_attempts`, `security_events` | `provider_health_samples` and `provider_events` yes; `login_attempts` no (F-79 purges it); `security_events` no |
+| OPERATIONAL_LOG | `provider_health_samples`, `provider_events`, `login_attempts`, `security_events` | `provider_health_samples`, `provider_events` and **`security_events`** yes; `login_attempts` no (F-79 purges it) |
 
 Fifty-three tables in the schema carry `forbid_mutation`. That immutability is
 not incidental: it is what makes `internal/proof`'s hash chain verifiable, what
@@ -46,6 +46,30 @@ There is a second constraint that is easy to miss. A row is not the only copy.
 by Merkle checkpoints; `model_calls` are referenced by `agent_runs`. Deleting a
 row that something else proves the existence of turns a verifiable chain into a
 broken one, which reads as tampering.
+
+**Correction, 2026-09-10.** The row above said `security_events` does not refuse
+DELETE. It does, and this was the one fact the choice of remedy for that table
+rested on. Verified against the schema and reproduced as the table OWNER, which
+is the strongest caller there is:
+
+```
+CREATE TRIGGER security_events_immutable BEFORE DELETE OR UPDATE
+  ON public.security_events FOR EACH ROW EXECUTE FUNCTION forbid_mutation()
+
+DELETE FROM security_events WHERE kind = 'TEST_PROBE';
+ERROR:  immutable row: DELETE on public.security_events is forbidden
+```
+
+So decision 2 below applies to `security_events` and the `login_attempts`
+precedent does not. An implementer reading the uncorrected table would have
+written a plain DELETE that fails at runtime -- or reached for the trigger,
+which decision 1 forbids permanently. `security_events` was partitioned in
+00740 and is the first partitioned table in this schema.
+
+That an ADR deciding how to fix a problem got a load-bearing fact about the
+problem wrong is worth more than the correction. It was not caught by review; it
+was caught by checking the schema before writing the migration, which is the
+only thing that would have caught it.
 
 ## Decision
 
