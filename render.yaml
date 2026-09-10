@@ -104,6 +104,20 @@ services:
       # exactly. Raising the instance count without raising this produces a
       # limit looser than the one configured, which is why the number is stated
       # rather than inferred.
+      # The four transport budgets, stated rather than inherited. They used to
+      # be read straight from the environment by cmd/api, which kept them out
+      # of the configuration hash -- so a budget loosened in the Render
+      # dashboard would leave /v1/version reporting the same hash that is
+      # supposed to prove which configuration is running.
+      - key: CP_API_RATE_LIMIT_GENERAL
+        value: 600/1m
+      - key: CP_API_RATE_LIMIT_AUTH
+        value: 30/1m
+      - key: CP_API_RATE_LIMIT_QUOTE
+        value: 120/1m
+      - key: CP_API_RATE_LIMIT_COMMAND
+        value: 120/1m
+
       - key: CP_RATELIMIT_BACKEND
         value: memory
       - key: CP_HTTP_REPLICAS

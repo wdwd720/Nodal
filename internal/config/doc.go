@@ -94,6 +94,10 @@
 //
 //	CP_RATELIMIT_BACKEND            memory | redis
 //	CP_HTTP_REPLICAS                int; memory counters need exactly 1
+//	CP_API_RATE_LIMIT_GENERAL       <requests>/<window>, or off (not in STAGING/PROD)
+//	CP_API_RATE_LIMIT_AUTH          <requests>/<window>, or off
+//	CP_API_RATE_LIMIT_QUOTE         <requests>/<window>, or off
+//	CP_API_RATE_LIMIT_COMMAND       <requests>/<window>, or off
 //
 // Redis (required of cmd/api when CP_RATELIMIT_BACKEND is redis):
 //

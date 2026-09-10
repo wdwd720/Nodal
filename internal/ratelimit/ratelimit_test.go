@@ -153,3 +153,50 @@ func TestProp_NeverExceedsBudgetWithinWindow(t *testing.T) {
 		}
 	})
 }
+
+// TestParseLimit covers the "<requests>/<window>" form, the disable forms and
+// everything that must be refused rather than silently defaulted.
+//
+// It lives here rather than in cmd/api because the parser does: internal/config
+// refuses a deployment whose spec is unparseable or switched off where money is
+// at stake, and cmd/api turns the same spec into the budget it enforces. One
+// parser, one test.
+func TestParseLimit(t *testing.T) {
+	t.Parallel()
+	def := Limit{Requests: 600, Window: time.Minute}
+	cases := []struct {
+		spec    string
+		limit   Limit
+		enabled bool
+		wantErr bool
+	}{
+		{"", def, true, false},
+		{"   ", def, true, false},
+		{"600/1m", Limit{Requests: 600, Window: time.Minute}, true, false},
+		{"50/10s", Limit{Requests: 50, Window: 10 * time.Second}, true, false},
+		{" 5000 / 1h ", Limit{Requests: 5000, Window: time.Hour}, true, false},
+		{"off", Limit{}, false, false},
+		{"OFF", Limit{}, false, false},
+		{"0", Limit{}, false, false},
+		{"0/1m", Limit{}, false, false},
+		{"600", Limit{}, false, true},
+		{"abc/1m", Limit{}, false, true},
+		{"-1/1m", Limit{}, false, true},
+		{"600/nonsense", Limit{}, false, true},
+		{"600/0s", Limit{}, false, true},
+		{"600/-1m", Limit{}, false, true},
+	}
+	for _, tc := range cases {
+		t.Run("spec="+tc.spec, func(t *testing.T) {
+			t.Parallel()
+			limit, enabled, err := ParseLimit(tc.spec, def)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.enabled, enabled)
+			assert.Equal(t, tc.limit, limit)
+		})
+	}
+}

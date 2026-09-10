@@ -192,6 +192,22 @@ type CapacityConfig struct {
 type RateLimitConfig struct {
 	Backend RateLimitBackend
 
+	// General, Auth, Quote and Command are the four transport budgets, each
+	// written as "<requests>/<window>" or "off".
+	//
+	// They were read straight from the environment in cmd/api and appeared in
+	// no requirements table -- the same gap the settlement asset was in, with
+	// the same three consequences. .env.example did not document them,
+	// scripts/configcheck could not see a typo that would stop the binary
+	// starting, and, worst of the three, they were absent from the
+	// configuration hash: a deployment could have its transport budget
+	// loosened in a platform dashboard and still report the same hash that is
+	// supposed to prove which configuration is running.
+	General string
+	Auth    string
+	Quote   string
+	Command string
+
 	// Replicas is how many processes of this binary serve HTTP.
 	//
 	// It is here because it is the fact the rate-limit invariant actually

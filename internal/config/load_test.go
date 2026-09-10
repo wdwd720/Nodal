@@ -288,10 +288,12 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// The 14*11 term is the provider slots: fourteen of them, eleven variables
 	// each. It was 12*6 before the Stripe workstream added the credit-purchase
 	// and payout slots, and then ACCOUNT_REF, SHARED_ACCOUNT, AVAILABILITY and
-	// the two statement-descriptor variables to every slot. The lone 1 is the
-	// rate-limit section: the backend and the replica count. The 4 is the
-	// capacity ceilings, and the 2 before it the API settlement asset.
-	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+1+7, len(seen))
+	// the two statement-descriptor variables to every slot. The 5 is the
+	// rate-limit section: the backend, the replica count and the four
+	// transport budgets, which cmd/api used to read straight from the
+	// environment. The 4 is the capacity ceilings, and the 2 before it the API
+	// settlement asset.
+	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+5+7, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

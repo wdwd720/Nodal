@@ -191,7 +191,7 @@ func TestRateLimitStore_AnUnknownBackendIsRefused(t *testing.T) {
 func TestRateLimitStore_TheLimitersUseTheStoreTheyWereGiven(t *testing.T) {
 	t.Parallel()
 	_, err := rateLimits(clock.NewFake(time.Now().UTC()), config.EnvLocal,
-		config.LookupFromMap(map[string]string{}), nil, false)
+		config.RateLimitConfig{}, nil, false)
 	require.Error(t, err, "no store, no limiters")
 	assert.Contains(t, err.Error(), "no store")
 }

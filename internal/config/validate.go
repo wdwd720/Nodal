@@ -7,6 +7,9 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/nodal/controlplane/internal/ratelimit"
 )
 
 // Rule names a validation rule. Every Violation carries one so that tests and
@@ -52,6 +55,9 @@ const (
 	RuleRetentionNonZero   Rule = "RETENTION_NON_ZERO"
 	RulePublicProductName  Rule = "PUBLIC_PRODUCT_NAME"
 	RuleCapabilityStore    Rule = "CAPABILITY_STORE_CONFIGURED"
+	// RuleRateLimitStated rejects a transport budget that cannot be parsed,
+	// and one switched off where money is at stake.
+	RuleRateLimitStated Rule = "RATE_LIMIT_STATED"
 	// RuleDistributedRateLimit rejects a per-process rate-limit store on a
 	// binary that serves public HTTP in STAGING/PROD, where it runs as more
 	// than one replica.
@@ -219,6 +225,29 @@ func (c *Config) Validate() error {
 	}
 	if prodLike && !c.Capability.StoreConfigured {
 		add(RuleCapabilityStore, "Capability.StoreConfigured", "capability store (application database) must be configured in STAGING/PROD")
+	}
+
+	// ---- the transport budgets ---------------------------------------------
+	//
+	// Checked here so that an unparseable spec is a failed configuration check
+	// rather than a binary that will not start, and so that "off" is refused
+	// before a deployment carrying it goes anywhere near production.
+	if c.Service.ServesHTTP() {
+		for field, spec := range map[string]string{
+			"RateLimit.General": c.RateLimit.General,
+			"RateLimit.Auth":    c.RateLimit.Auth,
+			"RateLimit.Quote":   c.RateLimit.Quote,
+			"RateLimit.Command": c.RateLimit.Command,
+		} {
+			_, enabled, err := ratelimit.ParseLimit(spec, ratelimit.Limit{Requests: 1, Window: time.Minute})
+			switch {
+			case err != nil:
+				add(RuleRateLimitStated, field, err.Error())
+			case !enabled && prodLike:
+				add(RuleRateLimitStated, field,
+					"a transport rate limit may not be switched off in STAGING/PROD")
+			}
+		}
 	}
 
 	// ---- the settlement asset ----------------------------------------------

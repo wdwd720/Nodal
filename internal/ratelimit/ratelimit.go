@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,46 @@ import (
 
 	"github.com/nodal/controlplane/internal/errs"
 )
+
+// ParseLimit reads a budget written as "<requests>/<window>", e.g. "600/1m" or
+// "50/10s". "off" (or a zero request count) disables the limiter and returns
+// enabled=false. An empty spec takes def.
+//
+// It lives here rather than in the binary that reads the variable because two
+// things need the same answer: internal/config, which refuses a deployment
+// whose spec is unparseable or switched off where money is at stake, and
+// cmd/api, which turns the spec into the Limit it enforces. Two parsers would
+// eventually disagree, and the one that disagrees quietly is the one that
+// admits more requests than anybody declared.
+func ParseLimit(spec string, def Limit) (Limit, bool, error) {
+	spec = strings.TrimSpace(spec)
+	switch {
+	case spec == "":
+		return def, true, nil
+	case strings.EqualFold(spec, "off"), spec == "0":
+		return Limit{}, false, nil
+	}
+	count, window, found := strings.Cut(spec, "/")
+	if !found {
+		return Limit{}, false, fmt.Errorf("rate limit %q must be \"<requests>/<window>\", e.g. 600/1m", spec)
+	}
+	requests, err := strconv.Atoi(strings.TrimSpace(count))
+	if err != nil || requests < 0 {
+		return Limit{}, false, fmt.Errorf("rate limit %q has a non-numeric request count", spec)
+	}
+	if requests == 0 {
+		return Limit{}, false, nil
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(window))
+	if err != nil || d <= 0 {
+		return Limit{}, false, fmt.Errorf("rate limit %q has an invalid window", spec)
+	}
+	limit := Limit{Requests: requests, Window: d}
+	if verr := limit.Validate(); verr != nil {
+		return Limit{}, false, fmt.Errorf("rate limit %q: %w", spec, verr)
+	}
+	return limit, true, nil
+}
 
 // Limit is a fixed-window budget: at most Requests per Window.
 type Limit struct {

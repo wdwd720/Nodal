@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -431,7 +430,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		ports.Webhooks[creditPurchases.ProviderKey] = creditPurchases.WebhookPort
 	}
 
-	limits, err := rateLimits(clk, cfg.Env, in.lookup, in.rateLimitStore, in.rateLimitFailOpen)
+	limits, err := rateLimits(clk, cfg.Env, cfg.RateLimit, in.rateLimitStore, in.rateLimitFailOpen)
 	if err != nil {
 		return nil, fmt.Errorf("rate limits: %w", err)
 	}
@@ -617,39 +616,6 @@ var defaultRateLimits = map[string]ratelimit.Limit{
 // development affordance, never a production one.
 var errRateLimitDisabledInProduction = errors.New("a transport rate limit may not be disabled in this environment")
 
-// parseRateLimit reads "<requests>/<window>", e.g. "600/1m" or "50/10s".
-// "off" (or a zero request count) disables the limiter entirely. An empty
-// value takes the default.
-func parseRateLimit(spec string, def ratelimit.Limit) (ratelimit.Limit, bool, error) {
-	spec = strings.TrimSpace(spec)
-	switch {
-	case spec == "":
-		return def, true, nil
-	case strings.EqualFold(spec, "off"), spec == "0":
-		return ratelimit.Limit{}, false, nil
-	}
-	count, window, found := strings.Cut(spec, "/")
-	if !found {
-		return ratelimit.Limit{}, false, fmt.Errorf("rate limit %q must be \"<requests>/<window>\", e.g. 600/1m", spec)
-	}
-	requests, err := strconv.Atoi(strings.TrimSpace(count))
-	if err != nil || requests < 0 {
-		return ratelimit.Limit{}, false, fmt.Errorf("rate limit %q has a non-numeric request count", spec)
-	}
-	if requests == 0 {
-		return ratelimit.Limit{}, false, nil
-	}
-	d, err := time.ParseDuration(strings.TrimSpace(window))
-	if err != nil || d <= 0 {
-		return ratelimit.Limit{}, false, fmt.Errorf("rate limit %q has an invalid window", spec)
-	}
-	limit := ratelimit.Limit{Requests: requests, Window: d}
-	if verr := limit.Validate(); verr != nil {
-		return ratelimit.Limit{}, false, fmt.Errorf("rate limit %q: %w", spec, verr)
-	}
-	return limit, true, nil
-}
-
 // rateLimits builds the four transport limiters from configuration, defaulting
 // to the values above. The limiter behavior itself is internal/ratelimit's:
 // 429 with RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset and
@@ -663,13 +629,18 @@ func parseRateLimit(spec string, def ratelimit.Limit) (ratelimit.Limit, bool, er
 // because where the counters live is a deployment decision (see
 // rateLimitStore), and because a limiter that silently made its own store would
 // be a second, invisible answer to that question.
-func rateLimits(clk clock.Clock, env config.Environment, lookup func(string) (string, bool), store ratelimit.Store, failOpen bool) (httpapi.RateLimits, error) {
+func rateLimits(clk clock.Clock, env config.Environment, cfg config.RateLimitConfig, store ratelimit.Store, failOpen bool) (httpapi.RateLimits, error) {
 	if store == nil {
 		return httpapi.RateLimits{}, errors.New("rate limits: no store")
 	}
-	build := func(name string) (*ratelimit.Limiter, error) {
-		raw, _ := lookup(name)
-		limit, enabled, err := parseRateLimit(raw, defaultRateLimits[name])
+	// The specs come from the configuration, not from the environment. They
+	// were read here directly, which kept them out of the one table that
+	// documents, validates and hashes everything else -- so a typo was a
+	// binary that would not start rather than a failed configuration check,
+	// and a budget loosened in a platform dashboard left the configuration
+	// hash unchanged.
+	build := func(name, spec string) (*ratelimit.Limiter, error) {
+		limit, enabled, err := ratelimit.ParseLimit(spec, defaultRateLimits[name])
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -690,16 +661,16 @@ func rateLimits(clk clock.Clock, env config.Environment, lookup func(string) (st
 		out httpapi.RateLimits
 		err error
 	)
-	if out.General, err = build(envRateLimitGeneral); err != nil {
+	if out.General, err = build(envRateLimitGeneral, cfg.General); err != nil {
 		return httpapi.RateLimits{}, err
 	}
-	if out.Auth, err = build(envRateLimitAuth); err != nil {
+	if out.Auth, err = build(envRateLimitAuth, cfg.Auth); err != nil {
 		return httpapi.RateLimits{}, err
 	}
-	if out.Quote, err = build(envRateLimitQuote); err != nil {
+	if out.Quote, err = build(envRateLimitQuote, cfg.Quote); err != nil {
 		return httpapi.RateLimits{}, err
 	}
-	if out.Command, err = build(envRateLimitCommand); err != nil {
+	if out.Command, err = build(envRateLimitCommand, cfg.Command); err != nil {
 		return httpapi.RateLimits{}, err
 	}
 	return out, nil
