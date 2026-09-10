@@ -209,6 +209,31 @@ services:
         value: "8"
       - key: CP_DATABASE_MIN_CONNS
         value: "0"
+      # Five seconds, under the ten-second request timeout below it.
+      #
+      # Neon's free tier scales to zero and this file already says so, so the
+      # first request after each suspension dials a compute that is waking up.
+      # An unbounded dial there finishes after the request that opened it has
+      # gone, holding a pool slot the next request wanted. config.Validate
+      # refuses a value at or above CP_API_REQUEST_TIMEOUT for exactly that
+      # reason (F-93).
+      - key: CP_DATABASE_CONNECT_TIMEOUT
+        value: 5s
+      # Four minutes, and this one is a judgement rather than a derivation.
+      #
+      # A pooled connection to a suspended compute is broken and the pool does
+      # not know it; the next request gets a dial failure, which is not
+      # retryable by design. Discarding idle connections before the database
+      # goes away trades a cheap reconnect for that failure.
+      #
+      # Neon does not publish the free tier's exact idle threshold and this
+      # repository has no measurement of it, so four minutes is chosen to sit
+      # under the commonly reported five rather than derived from anything. It
+      # is written here rather than defaulted in code because it is a fact about
+      # this provider, and the knob's default of 0 keeps pgxpool's behaviour for
+      # every deployment that has not measured its own.
+      - key: CP_DATABASE_MAX_CONN_IDLE_TIME
+        value: 4m
       - key: CP_DATABASE_STATEMENT_TIMEOUT
         value: 30s
       - key: CP_DATABASE_LOCK_TIMEOUT

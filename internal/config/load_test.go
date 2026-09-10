@@ -301,7 +301,7 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// retention section: security_events is partitioned by month (00740) and
 	// how many months are kept is a retention decision that had nowhere to be
 	// written down.
-	assert.Equal(t, 3+8+9+8+4+6+2+5+5+4+10+2+11+14*11+4+1+1+8, len(seen))
+	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+2+11+14*11+4+1+1+8, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

@@ -96,9 +96,14 @@ type HTTPConfig struct {
 // DatabaseConfig configures Postgres. The URLs embed credentials and are
 // therefore SecretRefs (plain only in LOCAL/TEST).
 type DatabaseConfig struct {
-	AppURL      SecretRef
-	MigrateURL  SecretRef
-	ReadOnlyURL SecretRef
+	AppURL     SecretRef
+	MigrateURL SecretRef
+	// ConnectTimeout bounds one dial; MaxConnIdleTime discards a pooled
+	// connection before the database it points at suspends underneath it. Both
+	// exist because Neon's free tier scales to zero (F-93).
+	ConnectTimeout  time.Duration
+	MaxConnIdleTime time.Duration
+	ReadOnlyURL     SecretRef
 	// OpsURL is the cp_ops role. It exists for the deletions the application
 	// role is deliberately refused: cp_app may write a login attempt and never
 	// remove one, so an attacker holding it cannot erase the record of the

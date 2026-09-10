@@ -296,6 +296,23 @@ func (c *Config) Validate() error {
 	if c.Database.MinConns < 0 || c.Database.MinConns > c.Database.MaxConns {
 		add(RuleField, "Database.MinConns", "must be between 0 and MaxConns")
 	}
+	// A dial must be bounded, and bounded below the request it serves.
+	//
+	// The second half is the one worth stating: an unbounded or over-long
+	// connect on a database that suspends means the request that opened it has
+	// already been abandoned by the time the connection arrives, and the slot it
+	// took belonged to the next request. The API's own request deadline is the
+	// natural ceiling, so the rule is derived rather than picked (F-93).
+	if c.Database.ConnectTimeout <= 0 {
+		add(RuleField, "Database.ConnectTimeout", "must be > 0: an unbounded dial outlives the request that needed it")
+	}
+	if c.Service.ServesHTTP() && c.API.RequestTimeout > 0 && c.Database.ConnectTimeout >= c.API.RequestTimeout {
+		add(RuleField, "Database.ConnectTimeout",
+			"must be shorter than CP_API_REQUEST_TIMEOUT: a connect that outlives its request holds a pool slot for nobody")
+	}
+	if c.Database.MaxConnIdleTime < 0 {
+		add(RuleField, "Database.MaxConnIdleTime", "must not be negative")
+	}
 	if c.Database.StatementTimeout <= 0 {
 		add(RuleField, "Database.StatementTimeout", "must be > 0")
 	}

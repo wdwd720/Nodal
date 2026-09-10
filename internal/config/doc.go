@@ -73,6 +73,8 @@
 //	CP_DATABASE_REQUIRE_TLS         bool (true in STAGING/PROD)
 //	CP_DATABASE_MAX_CONNS           int32
 //	CP_DATABASE_MIN_CONNS           int32
+//	CP_DATABASE_CONNECT_TIMEOUT     duration; bounded below CP_API_REQUEST_TIMEOUT
+//	CP_DATABASE_MAX_CONN_IDLE_TIME  duration; 0 leaves pgxpool's 30-minute default
 //	CP_DATABASE_STATEMENT_TIMEOUT   duration
 //	CP_DATABASE_LOCK_TIMEOUT        duration
 //
