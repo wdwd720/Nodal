@@ -15,14 +15,19 @@ false for reasons no amount of engineering can clear.
 
 ## 1 · Final HEAD
 
-The commit carrying this document. The two commits before it:
+**`d483b07a17e1d8867dd9bc9f8e1d8ac0ce782b01`** — the commit carrying this
+document. Written in after the commit, because a hash cannot be in the object it
+hashes; `git log -1` is the check.
+
+The three commits that end the session:
 
 | Commit | What |
 |---|---|
 | `9e9278c` | `archive: five spellings of one key is five objects` — F-126 |
 | `8c5d8a9` | `docs: two blockers were resolved before this file said so` — B-13, B-14 |
+| `d483b07` | `docs: the seventeen-item final checkpoint` — this file |
 
-Fifteen commits since `05ec7f3`, the session's starting point.
+Sixteen commits since `05ec7f3`, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
