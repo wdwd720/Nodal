@@ -78,6 +78,12 @@ services:
         sync: false
       - key: NODAL_STRIPE_WEBHOOK_SECRET
         sync: false
+      # The alert destination. A Slack or Discord incoming-webhook URL IS its
+      # credential -- anyone holding it can post as the integration -- so it is
+      # a dashboard secret and not a value in this file, like every other line
+      # in this block.
+      - key: NODAL_ALERT_WEBHOOK_URL
+        sync: false
 
       # --- core ----------------------------------------------------------
       # STAGING, not PROD, and the difference is one thing only: whose money
@@ -281,6 +287,41 @@ services:
         value: "0.1"
       - key: CP_TELEMETRY_METRICS_INTERVAL
         value: 60s
+
+      # --- alerting ------------------------------------------------------
+      # Where an alert goes. Until this existed, reconciliation.Metrics.Raise
+      # incremented a counter that died with the process and wrote a log line
+      # to a stream nobody watches: a ledger-integrity violation reached no
+      # human at all (F-118).
+      #
+      # A webhook rather than a paging vendor, because the launch tier may not
+      # incur a fixed monthly cost and an outbound HTTPS POST is the only shape
+      # that both leaves the process and costs nothing. Slack, Discord, ntfy,
+      # healthchecks.io and a Cloudflare Worker all accept one on a free tier,
+      # so the operator picks and this repository commits to nobody.
+      #
+      # This is a real destination, not a placeholder: config.Validate refuses
+      # to start in STAGING or PROD when it is empty, so a deployment that
+      # forgets it does not boot silently unalerted -- it does not boot.
+      - key: CP_ALERT_WEBHOOK_URL
+        value: env://NODAL_ALERT_WEBHOOK_URL
+      # Derived from the URL's host: a Slack hook is spoken to as Slack, a
+      # Discord hook as Discord, ntfy as ntfy, anything else gets the event as
+      # JSON. Slack and Discord answer any other shape with a 400, and a
+      # destination that rejects every alert is the finding with a URL attached.
+      - key: CP_ALERT_WEBHOOK_FORMAT
+        value: auto
+      # SEV2, so an unknown submission and an unauthorised signing candidate
+      # page as well as a ledger-integrity violation. There are few enough
+      # raise sites that the floor can afford to be low; a channel that is
+      # noisy is a channel somebody mutes, and this one has room before then.
+      - key: CP_ALERT_MIN_SEVERITY
+        value: SEV2
+      # Under the 5s shutdown headroom, so a delivery in flight cannot turn a
+      # clean stop into a kill. cmd/api trims it further if the shutdown budget
+      # ever shrinks below it.
+      - key: CP_ALERT_TIMEOUT
+        value: 5s
 
       # --- retention -----------------------------------------------------
       # --- credit funding lifecycle ---------------------------------------

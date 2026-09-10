@@ -110,6 +110,11 @@ func prodEnv() map[string]string {
 		"CP_TELEMETRY_TRACE_SAMPLE_RATIO": "0.1",
 		"CP_TELEMETRY_METRICS_INTERVAL":   "30s",
 
+		"CP_ALERT_WEBHOOK_URL":    "env://CP_SECRET_ALERT_WEBHOOK_URL",
+		"CP_ALERT_WEBHOOK_FORMAT": "auto",
+		"CP_ALERT_MIN_SEVERITY":   "SEV2",
+		"CP_ALERT_TIMEOUT":        "5s",
+
 		"CP_SEED_ENABLED": "false",
 
 		"CP_CREDIT_SETTLEMENT_WINDOW":        "720h",

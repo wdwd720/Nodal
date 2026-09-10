@@ -338,6 +338,7 @@ const (
 	secAuth       = "Auth"
 	secProviders  = "Providers"
 	secTelemetry  = "Telemetry"
+	secAlert      = "Alerting"
 	secSeed       = "Seed"
 	secCredit     = "Credit (funding lifecycle)"
 	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
@@ -590,6 +591,16 @@ func specs() []varSpec {
 			setString(func(c *Config) *string { return &c.Telemetry.TraceSampleRatio })),
 		req("CP_TELEMETRY_METRICS_INTERVAL", secTelemetry, "Metric export interval (Go duration).", "30s",
 			setDuration(func(c *Config) *time.Duration { return &c.Telemetry.MetricsInterval })),
+
+		secretVar(opt("CP_ALERT_WEBHOOK_URL", secAlert, "Where a raised alert is POSTed as JSON. Empty means alerts are logged and delivered nowhere, which is said at startup rather than assumed. A SecretRef because a Slack or Discord webhook URL is itself the credential.",
+			"https://hooks.example.test/services/AAA/BBB/CCC",
+			setSecret(func(c *Config) *SecretRef { return &c.Alert.WebhookURL }))),
+		req("CP_ALERT_WEBHOOK_FORMAT", secAlert, "Payload shape the destination accepts: auto, generic, slack, discord or ntfy. Slack and Discord refuse a body that is not their own shape with a 400, so a wrong value here is a destination that rejects every alert. auto derives it from the URL's host and is right for hooks.slack.com, discord.com and ntfy.sh; name it explicitly for a self-hosted ntfy or a Mattermost hook.", "auto",
+			setString(func(c *Config) *string { return &c.Alert.WebhookFormat })),
+		req("CP_ALERT_MIN_SEVERITY", secAlert, "Lowest severity worth delivering: SEV1 or SEV2. SEV2 delivers everything.", "SEV2",
+			setString(func(c *Config) *string { return &c.Alert.MinSeverity })),
+		req("CP_ALERT_TIMEOUT", secAlert, "Bound on one delivery attempt. Short on purpose: delivery runs behind a small queue and a slow destination delays every alert behind it.", "5s",
+			setDuration(func(c *Config) *time.Duration { return &c.Alert.Timeout })),
 
 		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),

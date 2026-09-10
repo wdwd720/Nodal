@@ -120,6 +120,12 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	}
 
 	log := observability.NewLogger(cfg.Env, stderr)
+	// The root context carries the logger, so a background pass that logs
+	// through LoggerFrom -- the reconciliation engine raising an alert, the
+	// settlement sweep parking a funding -- writes through the process logger
+	// rather than LoggerFrom's slog.Default fallback. Requests already get
+	// this from the middleware; the tickers had nothing giving it to them.
+	ctx = observability.WithLogger(ctx, log)
 
 	shutdownTelemetry, err := observability.Setup(ctx, cfg.Telemetry, cfg.ServiceName, config.BuildVersion, cfg.Env)
 	if err != nil {
@@ -184,6 +190,14 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 		defer release()
 	}
 
+	// Where a raised alert goes when it leaves the process (F-118).
+	//
+	// Opened here rather than in build because it owns a goroutine and a queue
+	// that must be drained on shutdown -- the same reason the database and the
+	// rate-limit store are opened here. Closed AFTER the server stops, below,
+	// so an alert raised by the last request in flight still gets delivered.
+	alerts := newAlertDispatcher(ctx, cfg, resolver, log)
+
 	clk := clock.System()
 	server, err := build(ctx, buildInput{
 		cfg:               cfg,
@@ -194,6 +208,7 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 		logger:            log,
 		rateLimitStore:    rlStore,
 		rateLimitFailOpen: rlFailOpen,
+		alerts:            alerts,
 	})
 	if err != nil {
 		log.Error("composition failed", "error", err.Error())
@@ -272,9 +287,15 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 			log.Warn("close failed", "error", cerr.Error())
 		}
 		<-serveErr
+		// Drained even on the unclean path: an alert raised by a request that
+		// was aborted is exactly the one worth delivering.
+		alerts.Close()
 		return exitFailure
 	}
 	<-serveErr
+	// After the server has stopped, so an alert raised by the last request in
+	// flight is delivered rather than discarded.
+	alerts.Close()
 	log.Info("api stopped")
 	return exitOK
 }

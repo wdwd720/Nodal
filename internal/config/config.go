@@ -75,6 +75,7 @@ type Config struct {
 	Auth              AuthConfig
 	Providers         ProvidersConfig
 	Telemetry         TelemetryConfig
+	Alert             AlertConfig
 	Seed              SeedConfig
 	Capability        CapabilityConfig
 	Credit            CreditConfig
@@ -486,6 +487,33 @@ type TelemetryConfig struct {
 	OTLPInsecure     bool
 	TraceSampleRatio string
 	MetricsInterval  time.Duration
+}
+
+// AlertConfig is where operational alerts go when they leave the process.
+//
+// F-118: nothing in this deployment pages, and the reason that is SOFTWARE was
+// that the raise path's callback had no production caller. The reason that is a
+// DEPLOYMENT DECISION is this: somebody has to say where an alert should be
+// sent.
+//
+// A webhook URL is the shape that satisfies "$0 fixed cost" and "commits to no
+// vendor" at once -- Slack, Discord, ntfy, healthchecks.io and a three-line
+// Worker all accept the same POST. The constraint chose the design.
+type AlertConfig struct {
+	// WebhookFormat is the payload shape: auto, generic, slack, discord or
+	// ntfy. Auto derives it from the URL's host.
+	WebhookFormat string
+
+	// WebhookURL is the destination. Empty means alerts are logged and go
+	// nowhere, which is said out loud at startup rather than assumed.
+	//
+	// A SecretRef because a Slack or Discord webhook URL IS its credential:
+	// anyone holding it can post to the channel.
+	WebhookURL SecretRef
+	// MinSeverity is the lowest severity worth sending. SEV2 sends everything.
+	MinSeverity string
+	// Timeout bounds one delivery attempt.
+	Timeout time.Duration
 }
 
 // SeedConfig controls seeding of clearly-labeled fake data.

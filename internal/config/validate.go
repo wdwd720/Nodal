@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nodal/controlplane/internal/alert"
+
 	"github.com/nodal/controlplane/internal/ratelimit"
 )
 
@@ -51,6 +53,8 @@ const SecurityEventRetentionFloorDays = 90
 
 // Rules applied only when Environment.IsProductionLike (STAGING, PROD).
 const (
+	// RuleAlertDestination requires somewhere for a raised alert to go.
+	RuleAlertDestination  Rule = "ALERT_DESTINATION"
 	RuleNoDebugAuth       Rule = "NO_DEBUG_AUTH"
 	RuleNoSeed            Rule = "NO_SEED"
 	RuleDatabaseTLS       Rule = "DATABASE_TLS"
@@ -296,6 +300,37 @@ func (c *Config) Validate() error {
 	if c.Database.MinConns < 0 || c.Database.MinConns > c.Database.MaxConns {
 		add(RuleField, "Database.MinConns", "must be between 0 and MaxConns")
 	}
+	// ---- alerting ----------------------------------------------------------
+	//
+	// The severity is a closed set and the timeout must be positive: an
+	// unbounded delivery attempt would hold the single delivery goroutine
+	// against one slow destination and stall every alert behind it.
+	switch c.Alert.MinSeverity {
+	case "SEV1", "SEV2":
+	default:
+		add(RuleField, "Alert.MinSeverity", "must be SEV1 or SEV2")
+	}
+	if !alert.Format(c.Alert.WebhookFormat).Valid() {
+		add(RuleField, "Alert.WebhookFormat", "must be one of auto, generic, slack, discord, ntfy")
+	}
+	if c.Alert.Timeout <= 0 {
+		add(RuleField, "Alert.Timeout", "must be > 0")
+	}
+	// STAGING and PROD must name a destination.
+	//
+	// This is the rule that turns F-118's remaining half from a deployment
+	// decision into a deployment REQUIREMENT. The software half is done -- the
+	// raise path has a production caller now -- and what was left was that
+	// nobody had to say where alerts go. On a tier where the answer costs
+	// nothing, "nowhere" should not be reachable by omission.
+	//
+	// LOCAL, TEST and DEV are exempt: a developer running the API should not
+	// need a webhook, and alerts there are logged like everything else.
+	if prodLike && c.Alert.WebhookURL.IsZero() {
+		add(RuleAlertDestination, "Alert.WebhookURL",
+			"must be set in STAGING/PROD: an alert nobody receives is not an alert, and a webhook destination costs nothing")
+	}
+
 	// A dial must be bounded, and bounded below the request it serves.
 	//
 	// The second half is the one worth stating: an unbounded or over-long

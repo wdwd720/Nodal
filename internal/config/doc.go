@@ -290,6 +290,16 @@
 //	CP_TELEMETRY_TRACE_SAMPLE_RATIO decimal string in [0,1]
 //	CP_TELEMETRY_METRICS_INTERVAL   duration
 //
+// Alerting (F-118: the destination an alert actually reaches):
+//
+//	CP_ALERT_WEBHOOK_URL            secret; POST target for alerts. Required in
+//	                                STAGING/PROD. Any endpoint that accepts a JSON
+//	                                POST -- Slack, Discord, ntfy, a Worker -- so the
+//	                                launch tier commits to no paid vendor.
+//	CP_ALERT_WEBHOOK_FORMAT         auto | generic | slack | discord | ntfy; auto reads the host
+//	CP_ALERT_MIN_SEVERITY           SEV1 or SEV2; the floor below which nothing is sent
+//	CP_ALERT_TIMEOUT                per-delivery budget; trimmed to fit the shutdown budget
+//
 // Seed:
 //
 //	CP_SEED_ENABLED                 bool (false in STAGING/PROD)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/admin"
+	"github.com/nodal/controlplane/internal/alert"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/auth"
@@ -76,6 +77,13 @@ type buildInput struct {
 	// a process lifetime, and build has no shutdown of its own to close it in.
 	rateLimitStore    ratelimit.Store
 	rateLimitFailOpen bool
+
+	// alerts is where a raised alert goes when it leaves the process. Opened by
+	// main for the same reason as the two above: it owns a goroutine and a queue
+	// that have to be drained on shutdown, and build has no shutdown of its own.
+	// Nil is a working configuration -- LOCAL and TEST have no destination --
+	// and config.Validate refuses that in STAGING and PROD.
+	alerts *alert.Dispatcher
 }
 
 // build constructs every dependency explicitly and returns the mounted server.
@@ -105,6 +113,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 	// --- authority plane ------------------------------------------------
 	adminSvc := admin.NewService(clk, auditWriter)
+	// Built here rather than inline so the alert dispatcher can be joined to
+	// it: OnAlert is the seam F-118 recorded as having no production caller,
+	// and this is the caller.
+	reconMetrics := financialMetrics(log)
+	attachAlertDispatcher(reconMetrics, in.alerts, cfg)
 	// A resolution-shaped reconciliation engine (F-52). The worker owns
 	// detection; this owns the operator's answer to it. No observers, no
 	// adapters and no ledger: this plane clears a record, it does not post.
@@ -128,7 +141,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		//
 		// Safe to arm only because F-117 bounded the caller-chosen labels
 		// first; the order mattered.
-		Metrics: financialMetrics(log),
+		Metrics: reconMetrics,
 		Logger:  log,
 	})
 	if rerr != nil {
@@ -329,6 +342,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// run; and security_events partitions are created and pruned there too,
 	// because a table nothing can prune is what fills the ceiling (F-105).
 	go runOpsRetention(ctx, cfg, in.lookup, log)
+	// And the pass that produces the alert F-118 is about. A destination
+	// (internal/alert) with nothing on this deployment raising into it would
+	// have been the same silence with a URL attached; see runInternalVerification
+	// for what runs here and what deliberately does not.
+	go runInternalVerification(ctx, reconEngine, log)
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
