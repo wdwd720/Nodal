@@ -344,7 +344,7 @@ func dbName(pkg string) string {
 // provision runs scripts/testdb and parses the `export NAME=value` lines it
 // prints, returning them as environment entries.
 func provision(ctx context.Context, root, name string) ([]string, error) {
-	// #nosec G204 -- a constant command line; `name` is derived from a package
+	// #nosec G204 G702 -- a constant command line; `name` is derived from a package
 	// path this program enumerated, not from input.
 	cmd := exec.CommandContext(ctx, "go", "run", "./scripts/testdb", "-name", name, "-export")
 	cmd.Dir = root
@@ -371,7 +371,7 @@ func provision(ctx context.Context, root, name string) ([]string, error) {
 // drop removes a package's database. A failure here is reported and ignored:
 // leaking a local test database is untidy, not a test result.
 func drop(ctx context.Context, root, name string) {
-	// #nosec G204 -- a constant command line; `name` is derived from a package
+	// #nosec G204 G702 -- a constant command line; `name` is derived from a package
 	// path this program enumerated, not from input.
 	cmd := exec.CommandContext(ctx, "go", "run", "./scripts/testdb", "-name", name, "-drop")
 	cmd.Dir = root
