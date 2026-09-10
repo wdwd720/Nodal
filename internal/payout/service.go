@@ -94,6 +94,30 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 		return existing, Decision{}, nil
 	}
 
+	// The quote is consumed BEFORE eligibility is evaluated, so a quote that
+	// has expired or has already funded a payout refuses the request without
+	// anything having been decided about the money. It is also what makes a
+	// quote fund exactly one payout: the row is locked here and the same
+	// transaction carries the reservation.
+	var quote *Quote
+	if r.QuoteID != nil && !r.QuoteID.IsZero() {
+		consumed, qerr := s.ConsumeQuote(ctx, tx, *r.QuoteID, r.AccountID, r.EffectiveAt)
+		if qerr != nil {
+			return Request{}, Decision{}, qerr
+		}
+		if r.DestinationID == nil || *r.DestinationID != consumed.DestinationID {
+			return Request{}, Decision{}, errs.New(errs.CodeValidationFailed,
+				"that quote was given for a different destination")
+		}
+		if consumed.GrossQuantity.Cmp(r.Quantity) != 0 {
+			return Request{}, Decision{}, errs.New(errs.CodeValidationFailed,
+				"that quote was given for a different amount").
+				WithField("quoted", consumed.GrossQuantity.String()).
+				WithField("requested", r.Quantity.String())
+		}
+		quote = &consumed
+	}
+
 	in.AccountID = r.AccountID
 	in.Requested = r.Quantity
 	decision, err := s.engine.Evaluate(ctx, tx, in)
@@ -121,15 +145,20 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 	if r.DestinationID != nil {
 		destID = *r.DestinationID
 	}
+	var quoteID any
+	if quote != nil {
+		quoteID = quote.ID
+		req.QuoteID = &quote.ID
+	}
 	err = tx.QueryRow(ctx,
 		`INSERT INTO payout_requests
 		   (id, account_id, destination_id, credit_asset_id, state, requested_quantity,
-		    policy_version, policy_hash, eligibility_reasons, verification_level, idempotency_key)
-		 VALUES ($1,$2,$3,$4,'ELIGIBILITY_CHECK',$5::numeric,$6,$7,$8,$9,$10)
+		    policy_version, policy_hash, eligibility_reasons, verification_level, idempotency_key, quote_id)
+		 VALUES ($1,$2,$3,$4,'ELIGIBILITY_CHECK',$5::numeric,$6,$7,$8,$9,$10,$11)
 		 RETURNING created_at, updated_at`,
 		req.ID, req.AccountID, destID, req.CreditAssetID, req.RequestedQuantity.String(),
 		req.PolicyVersion, req.PolicyHash, reasons, string(req.VerificationLevel),
-		req.IdempotencyKey).Scan(&req.CreatedAt, &req.UpdatedAt)
+		req.IdempotencyKey, quoteID).Scan(&req.CreatedAt, &req.UpdatedAt)
 	if err != nil {
 		return Request{}, Decision{}, mapError(err)
 	}

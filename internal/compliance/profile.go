@@ -20,16 +20,50 @@ import (
 )
 
 // IdentityState is the identity-verification state.
+//
+// It is the financial verification state machine of goal §20, and
+// `internal/verification` owns its edges: this package declares the values and
+// the attribute half of the profile, and migration 00761 makes a transition row
+// the only way the column moves. `verification.AllStates` and the list below
+// are the same list, held together by TestIdentityStatesMirrorTheStateMachine.
 type IdentityState string
 
-// Identity states.
+// Identity states. The first five predate migration 00761; the last five are
+// the remainder of §20's canonical list.
 const (
-	IdentityUnverified IdentityState = "UNVERIFIED"
-	IdentityPending    IdentityState = "PENDING"
-	IdentityVerified   IdentityState = "VERIFIED"
-	IdentityRejected   IdentityState = "REJECTED"
-	IdentityExpired    IdentityState = "EXPIRED"
+	IdentityUnverified       IdentityState = "UNVERIFIED"
+	IdentityPending          IdentityState = "PENDING"
+	IdentityVerified         IdentityState = "VERIFIED"
+	IdentityRejected         IdentityState = "REJECTED"
+	IdentityExpired          IdentityState = "EXPIRED"
+	IdentityRequired         IdentityState = "REQUIRED"
+	IdentityStarted          IdentityState = "STARTED"
+	IdentityNeedsInformation IdentityState = "NEEDS_INFORMATION"
+	IdentityRestricted       IdentityState = "RESTRICTED"
+	IdentitySuspended        IdentityState = "SUSPENDED"
 )
+
+var allIdentityStates = []IdentityState{
+	IdentityUnverified, IdentityRequired, IdentityStarted, IdentityPending, IdentityNeedsInformation,
+	IdentityVerified, IdentityRejected, IdentityExpired, IdentityRestricted, IdentitySuspended,
+}
+
+// AllIdentityStates returns every declared identity state (a copy). It is
+// compared against compliance_profiles_identity_state_check by
+// test/integration/enums.
+func AllIdentityStates() []IdentityState {
+	return append([]IdentityState(nil), allIdentityStates...)
+}
+
+// Valid reports whether s is declared.
+func (s IdentityState) Valid() bool {
+	for _, x := range allIdentityStates {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
 
 // SanctionsState is the sanctions-screening state.
 type SanctionsState string
@@ -41,6 +75,25 @@ const (
 	SanctionsHit     SanctionsState = "HIT"
 	SanctionsReview  SanctionsState = "REVIEW"
 )
+
+var allSanctionsStates = []SanctionsState{
+	SanctionsUnknown, SanctionsClear, SanctionsHit, SanctionsReview,
+}
+
+// AllSanctionsStates returns every declared sanctions state (a copy).
+func AllSanctionsStates() []SanctionsState {
+	return append([]SanctionsState(nil), allSanctionsStates...)
+}
+
+// Valid reports whether s is declared.
+func (s SanctionsState) Valid() bool {
+	for _, x := range allSanctionsStates {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
 
 var countryRE = regexp.MustCompile(`^[A-Z]{2}$`)
 
@@ -65,23 +118,34 @@ type Profile struct {
 // Validate checks enum and code formats. Unknown values fail closed here so
 // that a malformed profile can never reach the eligibility engine as "valid".
 func (p Profile) Validate() error {
-	switch p.IdentityState {
-	case IdentityUnverified, IdentityPending, IdentityVerified, IdentityRejected, IdentityExpired:
-	default:
+	if !p.IdentityState.Valid() {
 		return errs.Newf(errs.CodeValidationFailed, "unknown identity state %q", p.IdentityState)
 	}
-	switch p.SanctionsState {
-	case SanctionsUnknown, SanctionsClear, SanctionsHit, SanctionsReview:
-	default:
+	if err := p.validateAttributes(); err != nil {
+		return err
+	}
+	if p.IdentityState == IdentityVerified && p.VerifiedAt == nil {
+		return errs.New(errs.CodeValidationFailed, "verified profiles require verified_at")
+	}
+	return nil
+}
+
+// validateAttributes checks the half of the profile the application still owns.
+//
+// It exists because migration 00761 took the state half away: `identity_state`,
+// `verified_at` and `expires_at` are written by the transition trigger and are
+// not in `Upsert`'s reach, so validating them there would refuse a caller for a
+// field the statement does not use. Validate keeps checking them, because a
+// Profile READ back from the database is a complete one and its internal
+// consistency is still worth asserting.
+func (p Profile) validateAttributes() error {
+	if !p.SanctionsState.Valid() {
 		return errs.Newf(errs.CodeValidationFailed, "unknown sanctions state %q", p.SanctionsState)
 	}
 	for _, c := range []string{p.JurisdictionCountry, p.ResidencyCountry} {
 		if c != "" && !countryRE.MatchString(c) {
 			return errs.Newf(errs.CodeValidationFailed, "country code %q must be ISO 3166-1 alpha-2 upper case", c)
 		}
-	}
-	if p.IdentityState == IdentityVerified && p.VerifiedAt == nil {
-		return errs.New(errs.CodeValidationFailed, "verified profiles require verified_at")
 	}
 	if p.UserID.IsZero() {
 		return errs.New(errs.CodeValidationFailed, "user required")
@@ -139,9 +203,18 @@ type Change struct {
 	CorrelationID string
 }
 
-// Upsert writes the profile (insert or full update) and appends an audit
-// event with before/after hashes. AGENT and USER actors are refused: customers
-// cannot self-attest compliance state.
+// Upsert writes the ATTRIBUTE half of the profile — age, jurisdiction,
+// residency, sanctions, provider, policy version, restrictions — and appends an
+// audit event with before/after hashes. AGENT and USER actors are refused:
+// customers cannot self-attest compliance state.
+//
+// It does NOT write identity_state, verified_at or expires_at, and passing them
+// in has no effect. Migration 00761 made a transition row the only way the
+// verification state moves and revoked the application's UPDATE on all three
+// columns; a profile is born UNVERIFIED and reaches every other state through
+// `internal/verification`. The returned Profile is the row as it actually
+// stands, so a caller reading the state back gets the truth rather than what it
+// asked for.
 func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change) (Profile, error) {
 	if ch.ActorType != security.ActorSystem && ch.ActorType != security.ActorOperator {
 		return Profile{}, errs.New(errs.CodeForbidden, "compliance profiles are written only by SYSTEM or OPERATOR actors")
@@ -149,7 +222,7 @@ func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change
 	if ch.Reason == "" || ch.ActorID == "" {
 		return Profile{}, errs.New(errs.CodeValidationFailed, "actor id and reason required")
 	}
-	if err := p.Validate(); err != nil {
+	if err := p.validateAttributes(); err != nil {
 		return Profile{}, err
 	}
 	restrictions := append([]string(nil), p.Restrictions...)
@@ -169,18 +242,21 @@ func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change
 		return Profile{}, fmt.Errorf("compliance: lock: %w", err)
 	}
 
+	// The birth state is a literal, not p.IdentityState: a BEFORE INSERT
+	// trigger (00761) refuses any other, and the ON CONFLICT branch cannot
+	// name the column at all because cp_app has no UPDATE privilege on it.
 	row := tx.QueryRow(ctx, `INSERT INTO compliance_profiles
-		(user_id, identity_state, age_verified, jurisdiction_country, jurisdiction_region, residency_country, sanctions_state, provider, provider_ref, policy_version, restrictions, verified_at, expires_at)
-		VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),$7,NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),$11,$12,$13)
+		(user_id, identity_state, age_verified, jurisdiction_country, jurisdiction_region, residency_country, sanctions_state, provider, provider_ref, policy_version, restrictions)
+		VALUES ($1,'UNVERIFIED',$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
 		ON CONFLICT (user_id) DO UPDATE SET
-			identity_state = EXCLUDED.identity_state, age_verified = EXCLUDED.age_verified,
+			age_verified = EXCLUDED.age_verified,
 			jurisdiction_country = EXCLUDED.jurisdiction_country, jurisdiction_region = EXCLUDED.jurisdiction_region,
 			residency_country = EXCLUDED.residency_country, sanctions_state = EXCLUDED.sanctions_state,
 			provider = EXCLUDED.provider, provider_ref = EXCLUDED.provider_ref, policy_version = EXCLUDED.policy_version,
-			restrictions = EXCLUDED.restrictions, verified_at = EXCLUDED.verified_at, expires_at = EXCLUDED.expires_at
+			restrictions = EXCLUDED.restrictions
 		RETURNING `+columns,
-		p.UserID, p.IdentityState, p.AgeVerified, p.JurisdictionCountry, p.JurisdictionRegion, p.ResidencyCountry, p.SanctionsState,
-		p.Provider, p.ProviderRef, p.PolicyVersion, rjson, p.VerifiedAt, p.ExpiresAt)
+		p.UserID, p.AgeVerified, p.JurisdictionCountry, p.JurisdictionRegion, p.ResidencyCountry, p.SanctionsState,
+		p.Provider, p.ProviderRef, p.PolicyVersion, rjson)
 	after, err := scan(row)
 	if err != nil {
 		return Profile{}, fmt.Errorf("compliance: upsert: %w", err)
