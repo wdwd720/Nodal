@@ -539,6 +539,8 @@ func specs() []varSpec {
 			setSecret(func(c *Config) *SecretRef { return &c.Auth.ClientSecretRef }))),
 		opt("CP_AUTH_REDIRECT_URL", secAuth, "OIDC redirect URL. Required when CP_AUTH_MODE=oidc; https in STAGING/PROD.", "",
 			setString(func(c *Config) *string { return &c.Auth.RedirectURL })),
+		opt("CP_AUTH_POST_LOGIN_URL", secAuth, "Where the OIDC callback sends the browser after setting the session cookie. Empty means the API's own root, which is only right when the web app is served from the API's origin. Set it to the web app's origin (https in STAGING/PROD) when the app is hosted separately; the API's root is a 404 problem document.", "https://app-nodal.actorvia.xyz/",
+			setString(func(c *Config) *string { return &c.Auth.PostLoginURL })),
 		req("CP_AUTH_COOKIE_NAME", secAuth, "Session cookie name.", "cp_session",
 			setString(func(c *Config) *string { return &c.Auth.CookieName })),
 		opt("CP_AUTH_COOKIE_DOMAIN", secAuth, "Session cookie Domain attribute. Empty means host-only.", "",

@@ -956,3 +956,9 @@ textarea.input {
     border: 1px solid CanvasText;
   }
 }
+
+
+/* The starting screen: one sentence, one reason, one elapsed counter. */
+.boot-title { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+.boot-body { margin: 0 0 0.75rem; max-width: 36rem; }
+.boot-meta { opacity: 0.8; }

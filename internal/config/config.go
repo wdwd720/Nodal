@@ -366,11 +366,18 @@ type KMSConfig struct {
 
 // AuthConfig configures authentication and sessions.
 type AuthConfig struct {
-	Mode             string
-	Issuer           string
-	ClientID         string
-	ClientSecretRef  SecretRef
-	RedirectURL      string
+	Mode            string
+	Issuer          string
+	ClientID        string
+	ClientSecretRef SecretRef
+	RedirectURL     string
+	// PostLoginURL is where the callback sends the browser once the session
+	// cookie is set. Empty means "/", which is right when the app is served
+	// from the API's own origin and wrong when it is not: the API's root is
+	// a 404 problem document, so a customer who signed in from a separate
+	// frontend origin would land on JSON holding a cookie they cannot see.
+	// An operator value, never user input, so it is not an open redirect.
+	PostLoginURL     string
 	CookieName       string
 	CookieDomain     string
 	CookieSecure     bool

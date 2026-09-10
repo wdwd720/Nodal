@@ -44,7 +44,14 @@ func loadBlueprint(t *testing.T) renderBlueprint {
 	require.NoError(t, err, "render.yaml must exist; it is what deploys the launch tier")
 	var bp renderBlueprint
 	require.NoError(t, yaml.Unmarshal(b, &bp))
-	require.Len(t, bp.Services, 1, "the launch tier is one service; anything else costs money")
+	// Two entries: the API, first, and the static site that serves the web
+	// app. A static site is free and consumes no instance-hours; a third
+	// entry, or a second entry that is not a static site, is how a $0 tier
+	// stops being one. The rest of this file reads Services[0] as the API.
+	require.Len(t, bp.Services, 2, "the launch tier is one free web service and one static site; anything else costs money")
+	require.Equal(t, "nodal-api", bp.Services[0].Name, "the API must stay first: every check below reads Services[0]")
+	require.Equal(t, "static", bp.Services[1].Runtime, "the second service must be a static site, the only other kind that is free")
+	require.Empty(t, bp.Services[1].Plan, "a static site has no plan; one here means a paid kind was added")
 	return bp
 }
 

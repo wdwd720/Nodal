@@ -677,3 +677,27 @@ func TestValidate_AProductionCookieIsHostOnly(t *testing.T) {
 	assert.Empty(t, ok.Auth.CookieDomain)
 	assert.NoError(t, ok.Validate())
 }
+
+// A post-login destination is an operator value the callback redirects to
+// unconditionally, so a malformed one is refused at boot rather than sent to
+// every customer who signs in.
+func TestValidate_PostLoginURL(t *testing.T) {
+	t.Parallel()
+	cfg := validProdConfig(t)
+	cfg.Auth.PostLoginURL = "http://app-nodal.actorvia.xyz/"
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Auth.PostLoginURL")
+
+	cfg = validProdConfig(t)
+	cfg.Auth.PostLoginURL = "not a url"
+	require.Error(t, cfg.Validate())
+
+	cfg = validProdConfig(t)
+	cfg.Auth.PostLoginURL = "https://app-nodal.actorvia.xyz/"
+	require.NoError(t, cfg.Validate())
+
+	cfg = validProdConfig(t)
+	cfg.Auth.PostLoginURL = ""
+	require.NoError(t, cfg.Validate(), "empty keeps the same-origin default")
+}

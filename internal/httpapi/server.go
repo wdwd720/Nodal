@@ -97,7 +97,13 @@ type Options struct {
 	CookieName        string
 	CookieDomain      string
 	CookieSecure      bool
-	SessionTTL        time.Duration
+	// PostLoginURL is where the OIDC callback sends the browser once the
+	// session cookie is set. Empty means the API's own root. When the web app
+	// lives on another origin this is its origin; a local return-to path,
+	// when one is ever recorded, is resolved beneath it rather than beneath
+	// the API's root.
+	PostLoginURL string
+	SessionTTL   time.Duration
 	// StepUpMaxAge is CP_AUTH_STEP_UP_MAX_AGE. It tightens every step-up
 	// window the boundary enforces and can never widen one (F-89). Zero
 	// leaves the package constant in force.

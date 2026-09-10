@@ -113,8 +113,14 @@ services:
         value: 0.0.0.0:10000
       - key: CP_HTTP_PUBLIC_BASE_URL
         value: https://api-nodal.actorvia.xyz
+      # The API's own origin and the web app's. The list is also the CSRF
+      # allowlist, so a request from the app's origin passes both checks with
+      # this one value. No wildcard, no trailing slash: config.Validate refuses
+      # both. The session cookie is __Host- and SameSite=Lax, which the two
+      # hostnames satisfy because they share the registrable domain -- a
+      # *.onrender.com preview could never sign in, by design.
       - key: CP_HTTP_CORS_ORIGINS
-        value: https://api-nodal.actorvia.xyz
+        value: https://api-nodal.actorvia.xyz,https://app-nodal.actorvia.xyz
       - key: CP_HTTP_READ_TIMEOUT
         value: 15s
       - key: CP_HTTP_WRITE_TIMEOUT
@@ -271,6 +277,11 @@ services:
         value: env://NODAL_OIDC_CLIENT_SECRET
       - key: CP_AUTH_REDIRECT_URL
         value: https://api-nodal.actorvia.xyz/v1/auth/callback
+      # The web app is its own site. The callback sets the cookie on this API
+      # host and sends the browser there; without this it sends the browser to
+      # the API's root, which is a 404 problem document.
+      - key: CP_AUTH_POST_LOGIN_URL
+        value: https://app-nodal.actorvia.xyz/
       - key: CP_AUTH_COOKIE_NAME
         value: nodal_session
       - key: CP_AUTH_COOKIE_SECURE
@@ -526,3 +537,57 @@ services:
         value: ses
       - key: CP_PROVIDER_NOTIFICATION_TIMEOUT
         value: 20s
+
+  # --- the web app --------------------------------------------------------
+  # A static site, which Render serves from its CDN at no charge and which
+  # consumes none of the free web service's instance-hours. It is the second
+  # entry in this file and the first that is not the API; test/infra holds
+  # the list to exactly these two and to nothing that carries a fixed charge.
+  #
+  # The app calls the API cross-origin (VITE_API_ORIGIN) with credentials; the
+  # session cookie is set by the API on its own host and travels because the
+  # two hostnames share a registrable domain. CP_HTTP_CORS_ORIGINS on the API
+  # names this origin, which is the whole of the cross-origin configuration.
+  #
+  # Every route is the single-page app, so an unknown path is rewritten to
+  # index.html and the router answers -- without this, a deep link or a reload
+  # on /portfolio is a 404 from the CDN.
+  - type: web
+    name: nodal-web
+    runtime: static
+    branch: main
+    buildCommand: corepack enable && corepack prepare pnpm@10.34.5 --activate && pnpm install --frozen-lockfile && pnpm --filter @controlplane/generated-client generate && pnpm --filter @controlplane/web build
+    staticPublishPath: apps/web/dist
+    domains:
+      - app-nodal.actorvia.xyz
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: VITE_API_ORIGIN
+        value: https://api-nodal.actorvia.xyz
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    # The app's own security headers. The API emits its own set for its own
+    # responses; a separately hosted page gets none of them unless they are
+    # declared here. The CSP names the one origin the app may talk to.
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; connect-src 'self' https://api-nodal.actorvia.xyz; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://api-nodal.actorvia.xyz; object-src 'none'"
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+      - path: /*
+        name: Strict-Transport-Security
+        value: "max-age=31536000; includeSubDomains"

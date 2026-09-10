@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell.tsx";
-import { Explanation, Loading } from "./components/DataState.tsx";
+import { Boot } from "./components/Boot.tsx";
+import { Loading } from "./components/DataState.tsx";
+import { Explanation } from "./components/DataState.tsx";
 import { useSession } from "./session.tsx";
 import { Activity } from "./pages/Activity.tsx";
 import { AddFunds } from "./pages/AddFunds.tsx";
@@ -40,17 +42,11 @@ export function App(): ReactNode {
     return <SignIn />;
   }
 
+  // The backend could not be reached at all. On the launch tier that is
+  // usually an instance waking from idle, so this waits for readiness before
+  // it reports anything as broken.
   if (!session.signedIn) {
-    return (
-      <div className="boot">
-        <Explanation error={session.error} onRetry={session.refetch}>
-          <p>
-            This is a failure to reach the backend, not a statement about your session. Nothing has
-            signed you out.
-          </p>
-        </Explanation>
-      </div>
-    );
+    return <Boot error={session.error} onReady={session.refetch} />;
   }
 
   return (

@@ -164,6 +164,7 @@
 //	CP_AUTH_COOKIE_DOMAIN           cookie domain (optional)
 //	CP_AUTH_COOKIE_SECURE           bool (true in STAGING/PROD)
 //	CP_AUTH_SESSION_TTL             duration
+//	CP_AUTH_POST_LOGIN_URL          where the callback sends the browser; empty = "/" (same-origin app only)
 //	CP_AUTH_STEP_UP_MAX_AGE         duration
 //	CP_AUTH_DEBUG_ENABLED           bool (false in STAGING/PROD)
 //

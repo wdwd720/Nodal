@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/errs"
@@ -85,10 +86,7 @@ func (s *Server) GetAuthCallback(ctx context.Context, request api.GetAuthCallbac
 		return nil, err
 	}
 
-	dest := "/"
-	if done.ReturnTo != "" {
-		dest = done.ReturnTo
-	}
+	dest := postLoginDestination(s.opts.PostLoginURL, done.ReturnTo)
 	token := done.Issued.Token
 	return redirectResponse{
 		location: dest,
@@ -181,4 +179,23 @@ func (s *Server) DeleteSessionsSessionId(ctx context.Context, request api.Delete
 		return nil, err
 	}
 	return api.DeleteSessionsSessionId204Response{}, nil
+}
+
+// postLoginDestination is where the browser goes once the cookie is set.
+//
+// The API's own root is a 404 problem document, so "/" is only right when the
+// web app is served from the API's origin. When the app has its own origin the
+// deployment names it, and a local return-to path -- always a path, never a
+// URL; internal/identity refuses anything else -- is resolved beneath that
+// origin rather than beneath the API's. Neither input is the user's, so this
+// is not an open redirect: the base is configuration and the path is what the
+// login service recorded.
+func postLoginDestination(base, returnTo string) string {
+	if returnTo == "" {
+		returnTo = "/"
+	}
+	if base == "" {
+		return returnTo
+	}
+	return strings.TrimRight(base, "/") + returnTo
 }

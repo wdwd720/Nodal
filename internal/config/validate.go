@@ -632,6 +632,14 @@ func (c *Config) Validate() error {
 				add(RuleOIDCConfigured, name, "must use https in STAGING/PROD")
 			}
 		}
+		if v := c.Auth.PostLoginURL; v != "" {
+			u, err := parseHTTPURL(v)
+			if err != nil {
+				add(RuleOIDCConfigured, "Auth.PostLoginURL", err.Error())
+			} else if prodLike && u.Scheme != "https" {
+				add(RuleOIDCConfigured, "Auth.PostLoginURL", "must use https in STAGING/PROD")
+			}
+		}
 	case AuthModeDev:
 		if !env.AllowsDevAuth() {
 			add(RuleNoDevAuth, "Auth.Mode", "dev auth is only allowed in LOCAL/TEST/DEV")

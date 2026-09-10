@@ -572,6 +572,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		CookieName:        cookieName,
 		CookieDomain:      cfg.Auth.CookieDomain,
 		CookieSecure:      cfg.Auth.CookieSecure,
+		PostLoginURL:      cfg.Auth.PostLoginURL,
 		SessionTTL:        cfg.Auth.SessionTTL,
 		StepUpMaxAge:      cfg.Auth.StepUpMaxAge,
 		IdempotencyTTL:    httpapi.DefaultIdempotencyTTL,

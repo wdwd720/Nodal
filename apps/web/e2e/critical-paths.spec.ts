@@ -157,8 +157,9 @@ test.describe("the internal economy is separate from the rest", () => {
 
   const figureIn = (text: string, what: string): bigint => {
     const match = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text);
-    if (match === null) throw new Error(`no ${what} in ${text}`);
-    return baseUnits(match[1]);
+    const digits = match?.[1];
+    if (digits === undefined) throw new Error(`no ${what} in ${text}`);
+    return baseUnits(digits);
   };
 
   test("a customer can buy something and their Credits fall by exactly the price", async ({ page }) => {
