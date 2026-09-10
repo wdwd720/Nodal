@@ -119,6 +119,10 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-93 | P1 | NEW | open | Inventory: what the six provider audits found, verified against the source, and what has not been fixed — with the reason for each |
 | F-94 | P2 | NEW | fixed | Nothing in the schema read a transition row's ORIGIN, so a row recording an origin the entity was never in licensed a change it did not describe |
 | F-95 | P3 | NEW | part | Nine more enum CHECKs are compared against the Go list that declares them; 121 remain, and three were deliberately left unpaired |
+| F-96 | P1 | NEW | fixed | The Stripe call ran inside the purchase transaction, so the funding row was not persisted before it and eight concurrent purchases could each pass one ceiling |
+| F-97 | P2 | NEW | fixed | A money ceiling set to zero loaded, validated, and logged as in force with the cap silently off |
+| F-98 | P2 | NEW | fixed | A key withdrawn from the JWKS kept verifying tokens for the life of the process, because only an unknown kid triggered a refresh |
+| F-99 | P2 | NEW | fixed | Every step of the gate ceremony demanded a recent step-up except the first one |
 
 ---
 
@@ -4283,16 +4287,16 @@ fixed" without a reason is indistinguishable from "not noticed".**
 
 | What | Verified | Why not fixed here |
 |---|---|---|
-| The capacity ceiling is not authoritative under concurrency | `wiring_native.go` opens the purchase transaction `ReadCommitted` with no retries; `AdmitAmount` reads `sum(paid_amount_minor)`, which cannot see a concurrent uncommitted INSERT; there is no unique or exclusion constraint that could make the ceiling authoritative. `internal/credit/purchase.go` states the opposite in a comment: "The guard reads inside this transaction, so two concurrent purchases cannot both be admitted against the same headroom." **`db.Serializable` exists, its doc says "Use it for every financial state change (PART 22)", and it has zero production callers.** | The fix is entangled with the next row and must not be done separately. Raising isolation while an outbound Stripe call sits inside the transaction means a serialization retry re-calls the provider; taking an advisory lock instead holds one of eight pool connections across that call and queues every other purchase behind it. The provider call has to come out of the transaction first. |
-| The provider call is inside the purchase transaction | `internal/credit/purchase.go` calls `s.provider.CreatePurchase` between `CreateFunding` and the transaction's commit, with a 20s provider timeout. The comment above it claims the funding row is "persisted BEFORE the provider is called"; it is written, not persisted, and a rollback erases it while the Stripe object survives. `cmd/reconciliation-worker/creditsweep.go` documents the opposite rule for itself — "a provider call inside a transaction holds a database connection across the network... The pool starvation that caused (F-27)". | A real restructure of the money path: `StartPurchase` takes a `pgx.Tx` from its caller, so splitting it into commit-then-call-then-record changes the port, the adapter and the replay path. It is the next thing to do on this surface and it is not a change to make at the end of a batch. The existing replay path (`if f.ProviderReference != ""`) already anticipates the shape. |
-| A ceiling set to zero means "unlimited", per ceiling | `Measure` skips the query and `Admit` skips the comparison when a ceiling is 0; `NewGuard` and `config.Validate` refuse only when **all four** are zero. So `CP_CAPACITY_MAX_AT_RISK_MINOR=0` loads, validates, and logs "ceilings in force" with the money cap silently off. | Genuine fail-open, and the fix is a semantic decision rather than a patch: `0` legitimately means "no quota" for `MaxDatabaseBytes`, which `doc.go` documents. Making zero mean "refuse everything" for the other three needs the four to stop sharing one rule. |
+| ~~The capacity ceiling is not authoritative under concurrency~~ — **fixed as F-96** | `wiring_native.go` opens the purchase transaction `ReadCommitted` with no retries; `AdmitAmount` reads `sum(paid_amount_minor)`, which cannot see a concurrent uncommitted INSERT; there is no unique or exclusion constraint that could make the ceiling authoritative. `internal/credit/purchase.go` states the opposite in a comment: "The guard reads inside this transaction, so two concurrent purchases cannot both be admitted against the same headroom." **`db.Serializable` exists, its doc says "Use it for every financial state change (PART 22)", and it has zero production callers.** | The fix is entangled with the next row and must not be done separately. Raising isolation while an outbound Stripe call sits inside the transaction means a serialization retry re-calls the provider; taking an advisory lock instead holds one of eight pool connections across that call and queues every other purchase behind it. The provider call has to come out of the transaction first. |
+| ~~The provider call is inside the purchase transaction~~ — **fixed as F-96** | `internal/credit/purchase.go` calls `s.provider.CreatePurchase` between `CreateFunding` and the transaction's commit, with a 20s provider timeout. The comment above it claims the funding row is "persisted BEFORE the provider is called"; it is written, not persisted, and a rollback erases it while the Stripe object survives. `cmd/reconciliation-worker/creditsweep.go` documents the opposite rule for itself — "a provider call inside a transaction holds a database connection across the network... The pool starvation that caused (F-27)". | A real restructure of the money path: `StartPurchase` takes a `pgx.Tx` from its caller, so splitting it into commit-then-call-then-record changes the port, the adapter and the replay path. It is the next thing to do on this surface and it is not a change to make at the end of a batch. The existing replay path (`if f.ProviderReference != ""`) already anticipates the shape. |
+| ~~A ceiling set to zero means "unlimited", per ceiling~~ — **fixed as F-97**, at the configuration boundary rather than by changing the guard's semantics | `Measure` skips the query and `Admit` skips the comparison when a ceiling is 0; `NewGuard` and `config.Validate` refuse only when **all four** are zero. So `CP_CAPACITY_MAX_AT_RISK_MINOR=0` loads, validates, and logs "ceilings in force" with the money cap silently off. | Genuine fail-open, and the fix is a semantic decision rather than a patch: `0` legitimately means "no quota" for `MaxDatabaseBytes`, which `doc.go` documents. Making zero mean "refuse everything" for the other three needs the four to stop sharing one rule. |
 | A wrong Stripe account is a warning, not a refusal to start | `cmd/api/wire_credit.go` logs WARN and returns an empty wiring, so the webhook route 404s while `/v1/healthz` answers 200. The checkpoint claims the opposite: "Naming it also makes a key rotated to the wrong account **a refusal to start**". It is the same "warning nobody reads plus a silently disabled capability on a service answering 200" the same document lists as its own defect #2. | The checkpoint's sentence is corrected. Whether the API should refuse to start when a configured payment provider cannot be verified is a real decision with an availability cost on a tier that cold-starts, and it belongs with the cold-start work rather than with a one-line change. |
 | `CP_API_SETTLEMENT_MINT` is a Solana **devnet** USDC mint | `render.yaml` sets it and says so; `config.Validate` checks only non-emptiness; `cmd/api/wire.go` checks only that the pair resolves to a registered stablecoin in this database. | The checkpoint's "going live is two changes" is corrected to three. A validation rule that refuses a devnet mint in PROD needs a list of known devnet mints, which is a fact about Solana this repository should not invent. |
-| The JWKS cache has no maximum age | `internal/auth/oidc/keyset.go` refreshes only when the cache is empty or a token names an unknown `kid`. A key removed from the JWKS keeps validating tokens for the life of the process. | A hard TTL is a small change and a real behaviour change to token validation. It belongs with a test that can advance the clock over the cache, which this batch did not build. |
+| ~~The JWKS cache has no maximum age~~ — **fixed as F-98** | `internal/auth/oidc/keyset.go` refreshes only when the cache is empty or a token names an unknown `kid`. A key removed from the JWKS keeps validating tokens for the life of the process. | A hard TTL is a small change and a real behaviour change to token validation. It belongs with a test that can advance the clock over the cache, which this batch did not build. |
 | `cmd/api` requires `CP_DATABASE_MIGRATE_URL` | Declared as an unconditional `req`; the only reader anywhere is `cmd/migrate`. So the internet-facing process is given the schema-owner credential, and the owner can `ALTER TABLE ... DISABLE TRIGGER` — which is the guard the evidence-immutability argument rests on. | Making it service-conditional is exactly what `internal/config/service.go` is for and is a small change; what makes it more than that is that Render supplies it today, so the fix has to land with a blueprint change and a redeploy, and the hash moves with it. Next batch. |
 | Three IdP identities satisfy the whole gate ceremony | Every distinctness check compares `security.Principal.SubjectID`, which is `users.id`, keyed by `UNIQUE (idp_issuer, idp_subject)`. There is no person entity and no uniqueness on email. | An identity-model decision, not a code fix — the same conclusion F-64 reached. What is new is that the checkpoint presents "three distinct principals" as the control that stands between this deployment and selling Credits, without saying that three subject strings are not three people. The document is corrected. |
 | `email_verified` does not gate buying Credits | It gates Domain A (native assets, commerce, on-chain trade) through `NODAL_IDENTITY`, and payouts through `PAYOUT_KYC`. `StartPurchase` checks the capability gate and the ceiling and nothing about verification. | Whether an unverified account may pay money in — as opposed to take value out — is a product and compliance decision, not a defect. Recorded so it is decided rather than defaulted. |
-| `gates.Admin.Propose` enforces no step-up in the domain layer | `Approve`, `Activate` and `Resume` call `requireStepUp`; `Propose` does not. The proposer's step-up exists only at the HTTP boundary. | Adding it is one line and changes a ceremony that is about to be performed for real. It wants its own test and its own commit, not a rider on F-89. |
+| ~~`gates.Admin.Propose` enforces no step-up in the domain layer~~ — **fixed as F-99** | `Approve`, `Activate` and `Resume` call `requireStepUp`; `Propose` does not. The proposer's step-up exists only at the HTTP boundary. | Adding it is one line and changes a ceremony that is about to be performed for real. It wants its own test and its own commit, not a rider on F-89. |
 | `CP_RETENTION_LOGIN_ATTEMPT_DAYS` is 90 on a table designed for 2 | `render.yaml` sets 90; the table entry says "Minimum 1", defaults to 2, and explains the row holds "a plaintext OIDC nonce and PKCE verifier". It is also the one retention variable with no validation rule. And it is inert: the purge lives in `cmd/audit-worker`, which this tier does not deploy, and `CP_DATABASE_OPS_URL` is unset. | The number is a deployment decision to make deliberately, and the purge needs the same treatment F-90 gave the settlement sweep. Both belong together. |
 | The 48-name configuration backlog can grow | `test/infra` really does parse `cmd/` for `CP_*` literals and really does hold `cmd/api` to zero. It walks `cmd/` only, misses a name built by concatenation, and its "frozen" list is frozen only against accidents — adding a line to the slice makes it green. | The scan is honest about what it is; the sentence in the checkpoint is not. Widening it to `internal/` and to non-literal reads is a real improvement and a separate piece of work. |
 | Render replica count is an assumption, not an assertion | Three controls compare configuration against configuration; nothing observes the platform, and `cmd/api/ratelimitstore.go` says so in as many words. `render.yaml` sets no `numInstances`, so the dashboard is authoritative for it. | A startup `pg_try_advisory_lock` held for process life would turn it into an assertion and costs nothing on this tier. It is the right fix and it interacts with cold starts, which is the next surface. |
@@ -4411,6 +4415,147 @@ counterpart to compare against: they are schema-only enums that no Go code
 switches on. Manufacturing a hundred Go lists to pair with them would be
 inventing structure to satisfy a test. The ones that matter are the ones a
 switch statement depends on, and those are now covered.
+
+## F-96 · A provider call inside the transaction, and a ceiling that was not one · NEW · P1 · FIXED
+
+The two rows F-93 said had to be fixed together. They were.
+
+**The ordering.** `StartPurchase`'s doc said the point of it was that "the
+funding row and its idempotency key are persisted BEFORE the provider is
+called, so that a lost response leaves a record to reconcile against rather
+than a charge nobody knows about". Everything ran inside one transaction the
+caller opened, with `s.provider.CreatePurchase` between the INSERT and the
+COMMIT. The row was written before the call; it was not persisted before it.
+
+A rollback — a request deadline, a killed instance, a dropped connection
+during the 20-second provider timeout — erased the funding row and left the
+Stripe object. The retry then made a NEW funding row, and Stripe's idempotency
+returned the SAME object, still carrying the first funding's id in its metadata.
+Every subsequent webhook delivery hit the metadata-disagreement check, which is
+a hard error rather than a `review()`, so the transaction rolled back and the
+answer was 500 — for three days, until Stripe gave up. Money captured,
+Credits never minted.
+
+It also held one of eight pool connections across a network call, which is the
+starvation `cmd/reconciliation-worker` documents itself avoiding for exactly
+this reason: *"a provider call inside a transaction holds a database connection
+across the network... The pool starvation that caused (F-27) is the reason this
+loop looks inefficient and is not."* The same repository, the opposite practice,
+on the money path.
+
+**The ceiling.** `internal/credit` said: *"The guard reads inside this
+transaction, so two concurrent purchases cannot both be admitted against the
+same headroom."* Under READ COMMITTED that is false. `AdmitAmount` sums
+`paid_amount_minor`; a concurrent uncommitted INSERT is invisible to that sum;
+there is no constraint on `credit_fundings` that could catch it afterwards. So N
+transactions measure the same headroom and all N are admitted, and the window is
+as wide as the provider call inside it.
+
+`db.Serializable` exists, its doc says *"Use it for every financial state change
+(PART 22)"*, and it has **zero production callers**.
+
+**Why one fix and not two.** Raising isolation while the provider call is inside
+the transaction means a serialization retry re-calls the provider. Taking a lock
+instead holds a pool connection across that call and queues every other purchase
+behind one HTTP request. Neither is safe until the call is outside.
+
+**Fix.** `StartPurchase` takes a `Transactor` rather than a transaction and runs
+three phases: commit the gate, the ceiling, the price and the funding row; call
+the provider with nothing held; commit the provider reference and any state it
+reported. The capacity guard then takes `pg_advisory_xact_lock` before it
+measures — transaction-scoped, so it cannot be leaked, and sound only
+because that transaction no longer contains a network call. One key per action,
+so opening an account does not queue behind buying Credits.
+
+A crash between any two phases leaves a funding row with no provider reference,
+which is the state the replay path already handled: the same idempotency key
+returns the same funding and the provider returns the same object.
+
+**Evidence.**
+`TestIntegration_ConcurrentPurchasesCannotAllPassOneCeiling` fires eight
+simultaneous purchases of 10,000 minor units at a ceiling of 30,000 and requires
+**exactly three** to be admitted, every refusal to carry `AT_CAPACITY`, and the
+database's own sum to equal 30,000. Asserting the exact count rather than "some
+were refused" is deliberate: the looser assertion passes against a guard that
+refuses at random.
+
+Observed failing with the lock disabled: *"the ceiling admitted 8 purchases of
+10000 against a ceiling of 30000"*. The whole 51-package sweep passes with it.
+
+## F-97 · A ceiling set to zero was a ceiling switched off · NEW · P2 · FIXED
+
+`Measure` skips a query when its ceiling is 0 and `Admit` skips the comparison,
+so zero means "this ceiling does not apply". That is right for a library:
+`MaxDatabaseBytes` is genuinely zero on managed Postgres with no storage quota.
+
+What it must not be is reachable by a one-character edit on a deployment that
+takes money. `config.Validate` refused only the all-four-zero case, so
+`CP_CAPACITY_MAX_AT_RISK_MINOR=0` loaded, validated, and produced a startup log
+line reading `launch-tier capacity ceilings in force max_at_risk_minor=0`.
+
+**Fix.** In STAGING and PROD the three ceilings about people and money must each
+be stated. `MaxDatabaseBytes` is deliberately excluded, with the reason in the
+code: a deployment with no storage quota has nothing to state.
+
+**Evidence.** `TestValidate_AMoneyCeilingMustBeStated` sets each of the three to
+zero in turn and requires the load to fail, and carries the control that a zero
+database ceiling still loads — without it the rule could have been written
+as "no ceiling may be zero" and looked correct.
+
+## F-98 · A withdrawn signing key kept working · NEW · P2 · FIXED
+
+The JWKS cache refreshed in exactly two situations: when it was empty, and when
+a token named a `kid` it did not have. Both are right for **rotation**, which
+introduces a new key and therefore a new kid.
+
+Neither serves **revocation**. An operator withdrawing a compromised key removes
+it and introduces nothing, so no unknown kid ever arrives, no refresh is
+triggered, and the withdrawn key goes on verifying tokens for the life of the
+process. It self-heals only by accident, at the next ordinary rotation. That is
+the emergency case, and it was the one case the refresh policy could not serve.
+
+**Fix.** A maximum cache age of fifteen minutes, so a set older than that is
+re-fetched before it is used. Fifteen minutes is the window an emergency
+revocation takes to land; the cost is one small HTTP request per process per
+fifteen minutes.
+
+A refresh that fails inside the window keeps serving the cached set, because a
+briefly unreachable issuer should not stop every login. Past the window it does
+not: "the provider is down" must not come to mean "the withdrawn key works
+again".
+
+**Evidence.** `TestKeySet_AWithdrawnKeyStopsVerifyingWithinMaxAge` publishes two
+keys, withdraws one, and asserts three things: the withdrawn key still resolves
+inside the window **and the set is not re-fetched** (so the test is about the
+age and not about a cache that refetches constantly), it stops resolving past
+it, and the key that is still published still resolves (so the expiry refreshed
+the set rather than emptying it). Observed failing with the age check removed:
+*"a key withdrawn from the JWKS still verified"*.
+
+## F-99 · The first signature needed no authentication · NEW · P2 · FIXED
+
+`gates.Admin.Approve`, `Activate` and `Resume` each call `requireStepUp`.
+`Propose` did not. The proposer's step-up existed only at the HTTP boundary, in
+`internal/httpapi/authz.go`.
+
+So any caller that is not the REST surface — a worker, a script, an admin
+CLI holding `gate:propose` — opened a proposal for a high-risk capability
+with no recent strong authentication at all. `scripts/gateceremony` is the
+existing non-HTTP caller; it is fenced to LOCAL/DEV/TEST and a loopback database
+host, so it is not itself the hole, but it proves the path is reachable.
+
+The first signature of a dual-controlled ceremony is a signature. It is also the
+one that names the four evidence references, which makes it the step where the
+external approvals enter the system.
+
+**Fix.** `Propose` requires a step-up like every other step.
+
+**Evidence.** `internal/gates`' own expiry test caught it immediately and
+correctly: the renewal proposal it makes an hour after the ceremony began was
+refused, because the proposer's authentication was an hour old. The test now
+builds a freshly authenticated proposer, which is what the real ceremony
+requires — the change makes the test describe the ceremony more accurately
+than it did.
 
 ## Findings deliberately NOT raised
 

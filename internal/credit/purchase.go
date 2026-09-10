@@ -135,13 +135,49 @@ type StartedPurchase struct {
 	PricingVersion string
 }
 
+// Transactor is the database a purchase needs: one that can run a function in
+// a transaction. StartPurchase needs three of them, so it cannot be handed a
+// single transaction by its caller.
+type Transactor interface {
+	InTx(ctx context.Context, opts db.TxOptions, fn func(ctx context.Context, tx pgx.Tx) error) error
+}
+
 // StartPurchase opens a Credit purchase.
 //
-// The order of operations is the point. The funding row and its idempotency
-// key are persisted BEFORE the provider is called, so that a lost response
-// leaves a record to reconcile against rather than a charge nobody knows
-// about. The provider call uses that same key, so a retry is the same payment.
-func (s *PurchaseService) StartPurchase(ctx context.Context, tx pgx.Tx, r StartPurchaseRequest) (StartedPurchase, error) {
+// # The order of operations, and why it is three transactions
+//
+// The funding row and its idempotency key are persisted — committed —
+// BEFORE the provider is called, so a lost response leaves a record to
+// reconcile against rather than a charge nobody knows about. The provider call
+// uses that same key, so a retry is the same payment.
+//
+// That was the intent and it was not what happened. All of it ran inside one
+// transaction the caller opened, with the provider call between the INSERT and
+// the COMMIT, so the row was WRITTEN before the call and not PERSISTED before
+// it. A rollback erased the funding row and left the Stripe object, and the
+// retry then created a second funding row that the first object's metadata
+// still named — a permanent disagreement that every webhook delivery
+// reproduced as a 500 until Stripe gave up (F-96).
+//
+// It also held a database connection across a 20-second network call, out of a
+// pool of eight, which is the pool starvation cmd/reconciliation-worker
+// documents itself avoiding for exactly this reason.
+//
+// So:
+//
+//  1. commit the gate check, the ceiling, the pricing and the funding row;
+//  2. call the provider with no transaction open;
+//  3. commit the provider reference and any state the provider reported.
+//
+// Step 1 is also where the capacity ceiling becomes authoritative: the guard
+// takes a transaction-scoped advisory lock, which is only sound because this
+// transaction no longer contains a network call.
+//
+// A crash between 1 and 2, or between 2 and 3, leaves a funding row with no
+// provider reference. That is the state the replay path below already handles:
+// the same idempotency key returns the same funding, and the provider returns
+// the same object for the same key.
+func (s *PurchaseService) StartPurchase(ctx context.Context, database Transactor, r StartPurchaseRequest) (StartedPurchase, error) {
 	if r.AccountID.IsZero() {
 		return StartedPurchase{}, errs.New(errs.CodeValidationFailed, "credit: a purchase needs an account")
 	}
@@ -157,59 +193,32 @@ func (s *PurchaseService) StartPurchase(ctx context.Context, tx pgx.Tx, r StartP
 			"credit: Credits are priced in %s, not %s", s.pricing.Currency, currency)
 	}
 
-	// The gate first. Nothing below this line should run in a deployment that
-	// has not been approved to sell Credits, and a provider call is the most
-	// expensive thing to have to undo.
-	if err := s.gates.RequireActive(ctx, tx, gates.CreditPurchase); err != nil {
+	var (
+		f    Funding
+		qty  money.Quantity
+		hash string
+	)
+	// Phase 1. Everything that decides whether this purchase may happen, and
+	// the row that records that it did, in one short transaction with no
+	// network call in it.
+	if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 2},
+		func(ctx context.Context, tx pgx.Tx) error {
+			return s.openFunding(ctx, tx, r, currency, &f, &qty, &hash)
+		}); err != nil {
 		return StartedPurchase{}, err
 	}
 
-	// Then whether there is room. After the gate, because an unapproved
-	// deployment should hear that rather than a capacity number; before
-	// pricing and before the provider, because the provider call is the
-	// expensive thing to undo and because a ceiling reached is not a reason to
-	// have taken somebody's money first.
-	//
-	// The guard reads inside this transaction, so two concurrent purchases
-	// cannot both be admitted against the same headroom.
-	if s.capacity != nil {
-		if _, err := s.capacity.AdmitAmount(ctx, tx, capacity.ActionCreditPurchase, r.Amount.Minor()); err != nil {
-			return StartedPurchase{}, err
-		}
-	}
-
-	// The server decides the Credits. This is the whole defence against a
-	// client asking for nine million.
-	qty, err := s.pricing.CreditsFor(r.Amount)
-	if err != nil {
-		return StartedPurchase{}, err
-	}
-	hash, err := s.pricing.Hash()
-	if err != nil {
-		return StartedPurchase{}, err
-	}
-
-	f, err := s.credits.CreateFunding(ctx, tx, CreateFundingRequest{
-		AccountID:      r.AccountID,
-		Provider:       s.provider.Name(),
-		CreditQuantity: qty,
-		PaidAmount:     r.Amount,
-		PaidCurrency:   currency,
-		IdempotencyKey: r.IdempotencyKey,
-	})
-	if err != nil {
-		return StartedPurchase{}, err
-	}
 	// A replayed request that found the existing funding must not open a
 	// second payment. It has a provider reference already; hand back what is
-	// there. The client secret is not re-derivable, which is correct: a
-	// second browser cannot resume somebody else's payment form.
+	// there. The client secret is not re-derivable, which is correct: a second
+	// browser cannot resume somebody else's payment form.
 	if f.ProviderReference != "" {
 		return StartedPurchase{
 			Funding: f, CreditQuantity: f.CreditQuantity, PricingVersion: s.pricing.Version,
 		}, nil
 	}
 
+	// Phase 2. The provider, with nothing held.
 	sess, err := s.provider.CreatePurchase(ctx, CreatePurchaseRequest{
 		IdempotencyKey: r.IdempotencyKey,
 		FundingID:      f.ID,
@@ -226,24 +235,85 @@ func (s *PurchaseService) StartPurchase(ctx context.Context, tx pgx.Tx, r StartP
 		return StartedPurchase{}, err
 	}
 
-	if _, err := tx.Exec(ctx,
-		`UPDATE credit_fundings SET provider_reference = $2 WHERE id = $1 AND provider_reference IS NULL`,
-		f.ID, sess.ProviderReference); err != nil {
-		return StartedPurchase{}, mapError(err)
+	// Phase 3. Record what the provider said.
+	if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 2},
+		func(ctx context.Context, tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx,
+				`UPDATE credit_fundings SET provider_reference = $2 WHERE id = $1 AND provider_reference IS NULL`,
+				f.ID, sess.ProviderReference); err != nil {
+				return mapError(err)
+			}
+			f.ProviderReference = sess.ProviderReference
+			if to, ok := FundingStateFor(sess.Status); ok && to != f.State {
+				var aerr error
+				f, aerr = s.credits.AdvanceFunding(ctx, tx, f.ID, to,
+					"provider opened the payment", sess.RawStatus)
+				return aerr
+			}
+			return nil
+		}); err != nil {
+		return StartedPurchase{}, err
 	}
-	f.ProviderReference = sess.ProviderReference
 
-	if to, ok := FundingStateFor(sess.Status); ok && to != f.State {
-		f, err = s.credits.AdvanceFunding(ctx, tx, f.ID, to,
-			"provider opened the payment", sess.RawStatus)
-		if err != nil {
-			return StartedPurchase{}, err
-		}
-	}
 	return StartedPurchase{
 		Funding: f, ClientSecret: sess.ClientSecret,
 		CreditQuantity: qty, PricingVersion: s.pricing.Version,
 	}, nil
+}
+
+// openFunding is phase 1: the gate, the ceiling, the price and the row.
+func (s *PurchaseService) openFunding(
+	ctx context.Context, tx pgx.Tx, r StartPurchaseRequest, currency string,
+	f *Funding, qty *money.Quantity, hash *string,
+) error {
+	// The gate first. Nothing below this line should run in a deployment that
+	// has not been approved to sell Credits, and a provider call is the most
+	// expensive thing to have to undo.
+	if err := s.gates.RequireActive(ctx, tx, gates.CreditPurchase); err != nil {
+		return err
+	}
+
+	// Then whether there is room. After the gate, because an unapproved
+	// deployment should hear that rather than a capacity number; before
+	// pricing and before the provider, because the provider call is the
+	// expensive thing to undo and because a ceiling reached is not a reason to
+	// have taken somebody's money first.
+	//
+	// The guard takes an advisory lock for the duration of this transaction,
+	// so the measurement and the row that changes it are one step. That is
+	// only sound because this transaction contains no network call -- see
+	// StartPurchase's doc for what used to be in here.
+	if s.capacity != nil {
+		if _, err := s.capacity.AdmitAmount(ctx, tx, capacity.ActionCreditPurchase, r.Amount.Minor()); err != nil {
+			return err
+		}
+	}
+
+	// The server decides the Credits. This is the whole defence against a
+	// client asking for nine million.
+	q, err := s.pricing.CreditsFor(r.Amount)
+	if err != nil {
+		return err
+	}
+	h, err := s.pricing.Hash()
+	if err != nil {
+		return err
+	}
+	*qty, *hash = q, h
+
+	out, err := s.credits.CreateFunding(ctx, tx, CreateFundingRequest{
+		AccountID:      r.AccountID,
+		Provider:       s.provider.Name(),
+		CreditQuantity: q,
+		PaidAmount:     r.Amount,
+		PaidCurrency:   currency,
+		IdempotencyKey: r.IdempotencyKey,
+	})
+	if err != nil {
+		return err
+	}
+	*f = out
+	return nil
 }
 
 // FundingByProviderReference finds the funding a provider object belongs to.

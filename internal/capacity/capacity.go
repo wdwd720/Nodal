@@ -268,12 +268,56 @@ func (g *Guard) Measure(ctx context.Context, q db.Querier) (Reading, error) {
 	return r, nil
 }
 
+// lockKeys serialise the measure-then-act window, one key per action so that
+// opening an account does not queue behind buying Credits.
+//
+// The numbers are arbitrary and permanent: an advisory lock key means nothing
+// except "the same number is the same lock", and changing one would silently
+// stop coordinating with a deployment still running the old value.
+var lockKeys = map[Action]int64{
+	ActionOpenAccount:    7_010_001,
+	ActionCreditPurchase: 7_010_002,
+}
+
 // Admit decides whether one action may proceed.
 //
 // Every refusal names the number that caused it, because "at capacity" without
 // a number is an outage report rather than a decision. Every measurement
 // failure is also a refusal: see ErrUnmeasurable.
+//
+// # Why it takes a lock
+//
+// A ceiling that is read and then acted on is not a ceiling unless the read and
+// the act are one step. internal/credit's comment used to claim they were --
+// "The guard reads inside this transaction, so two concurrent purchases cannot
+// both be admitted against the same headroom" -- and under READ COMMITTED that
+// is false: a concurrent uncommitted INSERT is invisible to sum(), so N
+// transactions each measure the same headroom and all N are admitted. With the
+// shipped numbers that is eight simultaneous $2,000 purchases against a $2,000
+// ceiling (F-96).
+//
+// pg_advisory_xact_lock is the smallest thing that makes the window atomic
+// without raising the isolation level of a transaction that also writes a
+// funding row. It is transaction-scoped, so it is released by the commit or
+// rollback that ends the caller's transaction and cannot be leaked.
+//
+// It is only sound while that transaction is short. It became short in the same
+// change: the provider call moved out of it, because holding this lock across a
+// 20-second network call would queue every other purchase behind one HTTP
+// request and hold one of eight pool connections while doing it.
 func (g *Guard) Admit(ctx context.Context, q db.Querier, a Action) (Reading, error) {
+	if q == nil {
+		// Measure says the same thing a line later; the lock has to be told
+		// first because it is now the first thing that touches the database.
+		return Reading{}, errs.Wrap(fmt.Errorf("%w: nil querier", ErrUnmeasurable), errs.CodeAtCapacity,
+			"the launch-tier capacity guard could not measure usage, so the action is refused")
+	}
+	if key, ok := lockKeys[a]; ok {
+		if _, err := q.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, key); err != nil {
+			return Reading{}, errs.Wrap(fmt.Errorf("%w: %v", ErrUnmeasurable, err), errs.CodeAtCapacity,
+				"the launch-tier capacity guard could not take its lock, so the action is refused")
+		}
+	}
 	r, err := g.Measure(ctx, q)
 	if err != nil {
 		return r, errs.Wrap(err, errs.CodeAtCapacity,

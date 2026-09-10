@@ -108,7 +108,7 @@ func TestKeySet_Candidates(t *testing.T) {
 	set := newTestJWKS(t)
 	srv, hits := serveJWKS(t, set.body)
 	now := t0
-	ks := newKeySet(srv.URL, srv.Client(), func() time.Time { return now }, time.Minute, []string{"RS256", "ES256"})
+	ks := newKeySet(srv.URL, srv.Client(), func() time.Time { return now }, time.Minute, time.Hour, []string{"RS256", "ES256"})
 	ctx := context.Background()
 
 	all, err := ks.candidates(ctx, "")
@@ -137,14 +137,14 @@ func TestKeySet_Candidates(t *testing.T) {
 	}
 	// A set with no usable keys is refused rather than cached as empty.
 	empty, _ := serveJWKS(t, []byte(`{"keys":[{"kty":"oct","k":"AA"}]}`))
-	ks = newKeySet(empty.URL, empty.Client(), func() time.Time { return now }, time.Minute, []string{"RS256"})
+	ks = newKeySet(empty.URL, empty.Client(), func() time.Time { return now }, time.Minute, time.Hour, []string{"RS256"})
 	if _, err := ks.candidates(ctx, ""); err == nil || !strings.Contains(err.Error(), "no usable") {
 		t.Fatalf("empty set: %v", err)
 	}
 	// A fetch failure is reported as such, not as an invalid token.
 	down, _ := serveJWKS(t, nil)
 	down.Close()
-	ks = newKeySet(down.URL, down.Client(), func() time.Time { return now }, time.Minute, []string{"RS256"})
+	ks = newKeySet(down.URL, down.Client(), func() time.Time { return now }, time.Minute, time.Hour, []string{"RS256"})
 	if _, err := ks.candidates(ctx, ""); err == nil || errors.Is(err, ErrInvalidIDToken) {
 		t.Fatalf("fetch failure: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestKeySet_Candidates(t *testing.T) {
 func TestKeySet_VerifySignature(t *testing.T) {
 	set := newTestJWKS(t)
 	srv, _ := serveJWKS(t, set.body)
-	ks := newKeySet(srv.URL, srv.Client(), func() time.Time { return t0 }, time.Minute, []string{"RS256", "ES256"})
+	ks := newKeySet(srv.URL, srv.Client(), func() time.Time { return t0 }, time.Minute, time.Hour, []string{"RS256", "ES256"})
 	sign := func(alg jose.SignatureAlgorithm, key any, kid string) string {
 		t.Helper()
 		signer, err := jose.NewSigner(jose.SigningKey{Algorithm: alg, Key: &jose.JSONWebKey{Key: key, KeyID: kid}}, nil)

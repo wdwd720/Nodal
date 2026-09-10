@@ -1434,7 +1434,53 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
-### RESUME HERE — checkpoint 2026-09-09, after reconciling the provider workstream
+### RESUME HERE — checkpoint 2026-09-09, after reconciling the provider work AND clearing §4
+
+Three commits since `80edf58`'s successor. The audit ingested the provider
+workstream, re-verified it rather than adopting it, and then cleared the §4
+queue it had been paused on.
+
+**Findings F-83 to F-99.** Fifteen fixed, one partial, one open by decision, and
+F-93 as the inventory of what was verified and deliberately left. Six were P1:
+a planted OIDC callback that signed the victim in as the attacker (F-87); every
+unauthenticated rate-limit bucket collapsed into one (F-88); a money-at-risk
+ceiling that could only rise and would have refused every purchase forever at
+$2,000 of lifetime sales (F-90); a 50-account cohort ceiling enforced nowhere
+(F-91); and the Stripe call inside the purchase transaction, which meant the row
+was not persisted before the call and eight concurrent purchases could each pass
+one ceiling (F-96).
+
+**§4 is clear.** Item 1 (F-94, migration 00731): sixteen bindings, not ten,
+and the recount changed the finding — F-78's exploit is not reachable
+elsewhere, but nothing anywhere read a transition row's ORIGIN, and 00712's
+"membership is exactly as strong as equality" was not. Item 2 (F-95): the
+inventory was exactly current, nine constraints are now compared against the
+list that declares them, three were deliberately left unpaired, and there is no
+live drift. Item 3: ADR-0020, because retention on tables that refuse DELETE is
+partition detachment and that is a decision before it is a commit.
+
+**What to do next, in order.**
+
+1. **F-85** — the request body is read into memory before the rate limiter
+   runs, on a 512 MB single instance. The fix is middleware reordering on the
+   money path, and the ordering is load-bearing in the other direction too:
+   `captureBody` is what makes the raw body available to the webhook signature
+   check. It wants its own change and its own test.
+2. **F-84** — authorization after parameter binding. Authorising on the chi
+   route pattern before the generated wrapper runs is the shape; it is a change
+   to the boundary's structure.
+3. **The rest of F-93's inventory**, each with its recorded reason: the
+   schema-owner credential in `cmd/api`, the warn-and-disable on a wrong Stripe
+   account, the replica-count assumption, the Neon pool timeouts.
+4. **F-42 and F-47**, unchanged and still open.
+5. **ADR-0020's implementation** when a retention period is actually decided.
+
+`docs/audit/LAUNCH_GATE_MATRIX.md` is new and is the honest summary of what
+stands between this repository and real money. `SOFTWARE_COMPLETE` is false for
+the reasons in item 1 to 3 above; the other four launch flags are false for
+reasons no engineering can move.
+
+### The previous checkpoint — 2026-09-09, after reconciling the provider workstream
 
 The `/goal` audit was paused at `80edf58` for a provider/deployment workstream.
 That workstream landed 58 commits, deployed the service to Render's free tier
@@ -1630,7 +1676,7 @@ binary).
 
 ## 7. Migrations applied
 
-00001 through **00730**, 62 files, all embedded in `migrations.FS` and
+00001 through **00731**, 63 files, all embedded in `migrations.FS` and
 checksum-verified by `internal/db/migrate`. An applied migration is never
 edited; a correction is a new file. `go run ./cmd/migrate status` is
 authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
@@ -1647,10 +1693,10 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: 93 findings, of which four are
-open (F-42, F-47, F-69, F-93) and two are partial (F-65, F-84). F-85 is open by
-decision — reordering middleware on the money path is not a change to make
-at the end of a batch.
+`docs/audit/AUDIT_FINDINGS.md` is the register: 99 findings, of which four are
+open (F-42, F-47, F-69, F-93), three are partial (F-65, F-84, F-95), and one
+(F-85) is open by decision — reordering middleware on the money path is not
+a change to make at the end of a batch.
 
 | Finding | Priority | Why it is still open |
 |---|---|---|

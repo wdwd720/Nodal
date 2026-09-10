@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -65,6 +66,28 @@ func prodRuleCases() []struct {
 		{"oidc redirect http", RuleOIDCConfigured, "", "Auth.RedirectURL", func(c *Config) { c.Auth.RedirectURL = "http://api.example.com/cb" }},
 		{"oidc missing client secret", RuleOIDCConfigured, "", "Auth.ClientSecretRef", func(c *Config) { c.Auth.ClientSecretRef = "" }},
 	}
+}
+
+// TestValidate_AMoneyCeilingMustBeStated (F-97). Zero disables a ceiling in the
+// guard, which is right for a library and wrong for a deployment that takes
+// money: setting the money-at-risk cap to 0 in a dashboard loaded cleanly,
+// validated, and logged "capacity ceilings in force" with it off.
+func TestValidate_AMoneyCeilingMustBeStated(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"CP_CAPACITY_MAX_ACCOUNTS", "CP_CAPACITY_MAX_PURCHASES_PER_DAY", "CP_CAPACITY_MAX_AT_RISK_MINOR",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Load(context.Background(), ServiceAPI, LookupFromMap(withVars(prodEnv(), map[string]string{name: "0"})))
+			require.Error(t, err, "%s = 0 disables a ceiling and was accepted", name)
+			assert.Contains(t, err.Error(), string(RuleCapacityCeiling))
+		})
+	}
+	// The control: the database ceiling may legitimately be zero, because
+	// managed Postgres with no storage quota has nothing to state.
+	_, err := Load(context.Background(), ServiceAPI, LookupFromMap(withVars(prodEnv(), map[string]string{"CP_CAPACITY_MAX_DATABASE_BYTES": "0"})))
+	require.NoError(t, err)
 }
 
 func TestValidate_ValidProdHasNoViolations(t *testing.T) {

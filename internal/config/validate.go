@@ -315,6 +315,32 @@ func (c *Config) Validate() error {
 			add(RuleCapacityCeiling, "Capacity",
 				"every ceiling is zero, so nothing bounds how much this deployment may take or store; state at least one")
 		}
+		// In STAGING and PROD the three ceilings about people and money must
+		// each be stated, not merely one of them.
+		//
+		// Zero means "this ceiling does not apply" to the guard, and that is
+		// the right library semantics -- MaxDatabaseBytes is genuinely zero on
+		// paid infrastructure with no quota. What it must not be is reachable
+		// by a one-character edit in a dashboard on a deployment that takes
+		// money: setting CP_CAPACITY_MAX_AT_RISK_MINOR to 0 loaded cleanly,
+		// passed validation, and logged "launch-tier capacity ceilings in
+		// force" with the cap that matters most silently off (F-97).
+		//
+		// MaxDatabaseBytes is deliberately not in this list: a deployment on
+		// managed Postgres with no storage quota has nothing to state.
+		if prodLike {
+			for name, v := range map[string]int64{
+				"Capacity.MaxAccounts":        c.Capacity.MaxAccounts,
+				"Capacity.MaxPurchasesPerDay": c.Capacity.MaxPurchasesPerDay,
+				"Capacity.MaxAtRiskMinor":     c.Capacity.MaxAtRiskMinor,
+			} {
+				if v == 0 {
+					add(RuleCapacityCeiling, name,
+						"must be stated in STAGING/PROD: zero disables this ceiling, and a deployment that "+
+							"takes money says what it is prepared to owe")
+				}
+			}
+		}
 	}
 
 	// ---- rate limiting -----------------------------------------------------

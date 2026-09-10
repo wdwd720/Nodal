@@ -20,6 +20,8 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/webhook"
+
+	"github.com/nodal/controlplane/internal/capacity"
 )
 
 // ---------------------------------------------------------------------------
@@ -160,6 +162,24 @@ func newPurchaseFixture(t *testing.T) *purchaseFixture {
 	return &purchaseFixture{fixture: f, svcP: svcP, prov: prov, gate: gate, keyPrefix: uuid.NewString()}
 }
 
+// newPurchaseFixtureWithCeiling is newPurchaseFixture with a money-at-risk
+// ceiling in force, for the tests that are about the ceiling rather than about
+// the purchase.
+func newPurchaseFixtureWithCeiling(t *testing.T, maxAtRiskMinor int64) *purchaseFixture {
+	t.Helper()
+	f := newFixture(t)
+	prov := newFakeProvider()
+	gate := &fakeGate{active: true}
+	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: maxAtRiskMinor}, f.clk.Now)
+	require.NoError(t, err)
+	svcP, err := NewPurchaseService(PurchaseServiceConfig{
+		Credits: f.svc, Provider: prov, Pricing: DefaultPricingPolicy(),
+		Gates: gate, Clock: f.clk, Environment: "TEST", Capacity: guard,
+	})
+	require.NoError(t, err)
+	return &purchaseFixture{fixture: f, svcP: svcP, prov: prov, gate: gate, keyPrefix: uuid.NewString()}
+}
+
 // start buys Credits. The key is namespaced per fixture because the suite
 // shares one database across runs and credit_fundings.idempotency_key is
 // globally unique -- a fixed key would pass once and then report a reused key
@@ -167,15 +187,13 @@ func newPurchaseFixture(t *testing.T) *purchaseFixture {
 func (f *purchaseFixture) start(t *testing.T, key string, minor int64) StartedPurchase {
 	t.Helper()
 	key = f.keyPrefix + ":" + key
-	var out StartedPurchase
-	require.NoError(t, f.tx(func(tx pgx.Tx) error {
-		var err error
-		out, err = f.svcP.StartPurchase(f.ctx, tx, StartPurchaseRequest{
-			AccountID: f.account, Amount: money.USDFromMinor(minor),
-			Currency: "USD", IdempotencyKey: key,
-		})
-		return err
-	}))
+	// No wrapping transaction: StartPurchase opens its own, because the
+	// provider call has to happen between two of them (F-96).
+	out, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(minor),
+		Currency: "USD", IdempotencyKey: key,
+	})
+	require.NoError(t, err)
 	return out
 }
 
@@ -438,12 +456,9 @@ func TestStartPurchase_RefusedWhenTheCapabilityIsNotActive(t *testing.T) {
 	f := newPurchaseFixture(t)
 	f.gate.active = false
 
-	err := f.tx(func(tx pgx.Tx) error {
-		_, err := f.svcP.StartPurchase(f.ctx, tx, StartPurchaseRequest{
-			AccountID: f.account, Amount: money.USDFromMinor(10000),
-			Currency: "USD", IdempotencyKey: f.keyPrefix + ":gated",
-		})
-		return err
+	_, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(10000),
+		Currency: "USD", IdempotencyKey: f.keyPrefix + ":gated",
 	})
 	require.Equal(t, errs.CodeCapabilityNotApproved, errs.CodeOf(err))
 	require.Equal(t, 0, f.prov.created, "the provider must not be called when the gate refuses")
@@ -459,12 +474,9 @@ func TestStartPurchase_LostResponseReconcilesWithoutASecondCharge(t *testing.T) 
 	f.prov.loseResponse = true
 
 	// The provider created the payment and we never heard back.
-	err := f.tx(func(tx pgx.Tx) error {
-		_, err := f.svcP.StartPurchase(f.ctx, tx, StartPurchaseRequest{
-			AccountID: f.account, Amount: money.USDFromMinor(10000),
-			Currency: "USD", IdempotencyKey: f.keyPrefix + ":lost",
-		})
-		return err
+	_, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(10000),
+		Currency: "USD", IdempotencyKey: f.keyPrefix + ":lost",
 	})
 	require.Error(t, err)
 	require.Equal(t, 1, f.prov.created, "the payment exists at the provider")

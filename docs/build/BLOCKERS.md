@@ -367,6 +367,12 @@ Recorded because their absence might otherwise look like one:
 | The ten transition bindings that still compare the destination only | `agents` is fixed (D-044); the rest are not | `AUDIT_FINDINGS.md` F-78; `MASTER_BUILD_STATE.md` §4 |
 | 131 enum CHECK constraints with no Go list compared against them | named individually by `test/integration/enums` | `AUDIT_FINDINGS.md` F-74 |
 
+**Checkpoint 2026-09-09 (second) — after clearing §4.** Unchanged. Nothing in
+F-94 through F-99, and nothing in the §4 queue, produced a new external blocker.
+`docs/audit/LAUNCH_GATE_MATRIX.md` is now the single place the seven external
+items are listed with what the code already does for each, and it is what a
+reader should look at before this file.
+
 **Checkpoint 2026-09-09 — after reconciling the provider workstream.**
 The external blockers are unchanged in kind and sharper in detail. Selling
 Credits for real money needs, and cannot be given from inside this repository:

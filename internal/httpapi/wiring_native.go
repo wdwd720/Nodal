@@ -206,18 +206,16 @@ func (a creditsAdapter) StartPurchase(ctx context.Context, r StartCreditPurchase
 	if a.deps.CreditPurchases == nil {
 		return credit.StartedPurchase{}, errNotWired("credit purchases")
 	}
-	var out credit.StartedPurchase
-	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-		func(ctx context.Context, tx pgx.Tx) error {
-			var serr error
-			out, serr = a.deps.CreditPurchases.StartPurchase(ctx, tx, credit.StartPurchaseRequest{
-				AccountID:      r.AccountID,
-				Amount:         money.USDFromMinor(r.AmountMinor),
-				Currency:       r.Currency,
-				IdempotencyKey: r.IdempotencyKey,
-			})
-			return serr
-		})
+	// No transaction is opened here. StartPurchase needs three of them, with
+	// the provider call between the first and the third, and a caller that
+	// wrapped the whole thing would put that call back inside a transaction --
+	// which is the defect F-96 removed.
+	out, err := a.deps.CreditPurchases.StartPurchase(ctx, a.db, credit.StartPurchaseRequest{
+		AccountID:      r.AccountID,
+		Amount:         money.USDFromMinor(r.AmountMinor),
+		Currency:       r.Currency,
+		IdempotencyKey: r.IdempotencyKey,
+	})
 	if err != nil {
 		return credit.StartedPurchase{}, err
 	}

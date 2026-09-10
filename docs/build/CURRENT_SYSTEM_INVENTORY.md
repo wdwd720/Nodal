@@ -23,6 +23,9 @@
 > API for the reason recorded in D-046. And the configuration hash changes with
 > this batch (D-046, D-047), so the value printed in the checkpoint is
 > superseded.
+>
+> Schema is at migration **731**. `docs/audit/LAUNCH_GATE_MATRIX.md` states which
+> launch flags are true (none) and why.
 
 
 Baseline frozen at git SHA **`b8da0c4ce73687e587b7d20c8abc00440afd694d`** (branch `main`, working tree

@@ -198,6 +198,15 @@ func (a *Admin) Propose(ctx context.Context, tx pgx.Tx, c Capability, req Propos
 	if err := a.require(ctx, security.PermGatePropose); err != nil {
 		return Gate{}, err
 	}
+	// Approve, Activate and Resume demand a recent strong authentication and
+	// Propose did not, so the proposer's step-up existed only at the HTTP
+	// boundary. A caller that is not the REST surface -- a worker, a script, an
+	// admin CLI holding gate:propose -- opened a high-risk gate proposal with no
+	// recent authentication at all (F-99). The first signature of a
+	// dual-controlled ceremony is a signature.
+	if err := a.requireStepUp(ctx); err != nil {
+		return Gate{}, err
+	}
 	if !c.Valid() {
 		return Gate{}, errs.Newf(errs.CodeValidationFailed, "unknown capability %q", c)
 	}

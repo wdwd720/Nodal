@@ -48,6 +48,7 @@ func (r stubRow) Scan(dest ...any) error {
 // names, rather than by call order. Order-based stubs pass when the guard
 // silently stops asking a question, which is the failure most worth catching.
 type stubQuerier struct {
+	locks                                int
 	accounts, purchases, atRisk, dbBytes int64
 	failOn                               string // substring of the query to fail
 	asked                                []string
@@ -71,8 +72,16 @@ func (q *stubQuerier) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row 
 	return stubRow{err: errors.New("stub: unexpected query: " + sql)}
 }
 
-func (q *stubQuerier) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errors.New("stub: Exec not expected")
+// Exec answers the advisory lock Admit takes before it measures, and nothing
+// else. The lock is what makes the measure-then-act window atomic (F-96), so a
+// stub that refused it would make every ceiling test fail for the wrong reason
+// -- and one that accepted ANY Exec would hide a guard that had started writing.
+func (q *stubQuerier) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	if strings.Contains(sql, "pg_advisory_xact_lock") {
+		q.locks++
+		return pgconn.CommandTag{}, nil
+	}
+	return pgconn.CommandTag{}, errors.New("stub: Exec not expected: " + sql)
 }
 
 func (q *stubQuerier) Query(context.Context, string, ...any) (pgx.Rows, error) {
