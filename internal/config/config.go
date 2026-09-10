@@ -63,6 +63,7 @@ type Config struct {
 	BuildVersion      string
 	HTTP              HTTPConfig
 	Database          DatabaseConfig
+	API               APIConfig
 	Capacity          CapacityConfig
 	RateLimit         RateLimitConfig
 	Redis             RedisConfig
@@ -149,6 +150,23 @@ func (b RateLimitBackend) Distributed() bool { return b == RateLimitRedis }
 // two ways: one set of counters.
 func (c RateLimitConfig) EnforcesOneBudget() bool {
 	return c.Backend.Distributed() || c.Replicas == 1
+}
+
+// APIConfig is what cmd/api needs and no other binary does.
+//
+// These two were read straight from the environment in cmd/api/wire.go and
+// appeared in no requirements table at all -- so .env.example did not document
+// them, scripts/configcheck could not see them, and a deployment could pass
+// every configuration check and then refuse to start. That is the exact failure
+// internal/config exists to prevent, and it was reached by the one route the
+// table does not cover: a variable that never joined it.
+type APIConfig struct {
+	// SettlementChain and SettlementMint name the USD-pegged asset that funds
+	// settle into. Both are required in STAGING and PROD, and cmd/api
+	// additionally checks that the pair resolves to a known stablecoin -- which
+	// stays in wire.go, because it needs the database and this does not.
+	SettlementChain string
+	SettlementMint  string
 }
 
 // CapacityConfig is the deployment tier's hard ceilings on financial activity.

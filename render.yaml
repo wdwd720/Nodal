@@ -102,6 +102,16 @@ services:
       - key: CP_HTTP_REPLICAS
         value: "1"
 
+      # --- the settlement asset ------------------------------------------
+      # The USD-pegged asset funds settle into. cmd/api refuses to start in
+      # PROD without both, and additionally checks the pair resolves to a known
+      # stablecoin -- which needs the database, so it happens at composition
+      # rather than at configuration.
+      - key: CP_API_SETTLEMENT_CHAIN
+        value: solana
+      - key: CP_API_SETTLEMENT_MINT
+        value: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+
       # --- capacity ceilings ---------------------------------------------
       # The launch tier's hard limits, checked inside the transaction of every
       # financial action and before the provider is called. See

@@ -66,6 +66,9 @@ func prodEnv() map[string]string {
 		"CP_TEMPORAL_TASK_QUEUE_PREFIX": "cp-prod",
 		"CP_TEMPORAL_REQUIRE_TLS":       "true",
 
+		"CP_API_SETTLEMENT_CHAIN": "solana",
+		"CP_API_SETTLEMENT_MINT":  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+
 		"CP_ARCHIVE_BACKEND":              "s3",
 		"CP_ARCHIVE_ENDPOINT":             "https://s3.us-east-1.amazonaws.com",
 		"CP_ARCHIVE_REGION":               "us-east-1",

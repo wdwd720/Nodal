@@ -290,8 +290,8 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// and payout slots, and then ACCOUNT_REF, SHARED_ACCOUNT, AVAILABILITY and
 	// the two statement-descriptor variables to every slot. The lone 1 is the
 	// rate-limit section: the backend and the replica count. The 4 is the
-	// capacity ceilings.
-	assert.Equal(t, 3+8+9+2+4+2+5+5+4+10+2+11+14*11+4+1+7, len(seen))
+	// capacity ceilings, and the 2 before it the API settlement asset.
+	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+1+7, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

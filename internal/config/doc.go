@@ -78,6 +78,11 @@
 //
 // Rate limiting (cmd/api only):
 //
+// API (cmd/api only; both required in STAGING/PROD):
+//
+//	CP_API_SETTLEMENT_CHAIN            chain of the USD-pegged settlement asset
+//	CP_API_SETTLEMENT_MINT             its mint address
+//
 // Capacity ceilings (cmd/api only; every one 0 is refused):
 //
 //	CP_CAPACITY_MAX_ACCOUNTS           int64

@@ -326,6 +326,7 @@ const (
 	secCore       = "Core"
 	secHTTP       = "HTTP"
 	secDatabase   = "Database (Postgres)"
+	secAPI        = "API (cmd/api only)"
 	secCapacity   = "Capacity ceilings"
 	secRateLimit  = "Rate limiting"
 	secRedis      = "Redis"
@@ -401,6 +402,10 @@ func specs() []varSpec {
 		req("CP_DATABASE_LOCK_TIMEOUT", secDatabase, "Postgres lock_timeout applied per session.", "5s",
 			setDuration(func(c *Config) *time.Duration { return &c.Database.LockTimeout })),
 
+		only(ServiceAPI, opt("CP_API_SETTLEMENT_CHAIN", secAPI, "Chain of the USD-pegged asset that funds settle into, e.g. solana. Required in STAGING/PROD; cmd/api also checks the pair resolves to a known stablecoin, which needs the database and so stays there.", "solana",
+			setString(func(c *Config) *string { return &c.API.SettlementChain }))),
+		only(ServiceAPI, opt("CP_API_SETTLEMENT_MINT", secAPI, "Mint address of that asset. Required in STAGING/PROD.", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+			setString(func(c *Config) *string { return &c.API.SettlementMint }))),
 		only(ServiceAPI, req("CP_CAPACITY_MAX_ACCOUNTS", secCapacity, "Most accounts this deployment tier will hold. Reached, it refuses to open more. 0 disables the ceiling, which is only correct where the tier has no such limit.", "50",
 			setInt64(func(c *Config) *int64 { return &c.Capacity.MaxAccounts }))),
 		only(ServiceAPI, req("CP_CAPACITY_MAX_PURCHASES_PER_DAY", secCapacity, "Most Credit purchases in any rolling 24 hours. It bounds provider webhook volume and database growth together. 0 disables it.", "200",

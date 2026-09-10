@@ -491,8 +491,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 // developer environment may leave it unset, in which case the endpoints that
 // need it answer UNSUPPORTED instead of guessing.
 func resolveSettlementAsset(ctx context.Context, in buildInput, repo *assets.Repository) (httpapi.FundingSettlement, error) {
-	chain := stringEnv(in.lookup, envSettlementChain, "")
-	mint := stringEnv(in.lookup, envSettlementMint, "")
+	// From the configuration, not from the environment. They were read straight
+	// from the environment here, which put them outside the one table that
+	// documents and validates everything else -- so a deployment could pass
+	// every configuration check and still refuse to start on these two.
+	chain := strings.TrimSpace(in.cfg.API.SettlementChain)
+	mint := strings.TrimSpace(in.cfg.API.SettlementMint)
 	out := httpapi.FundingSettlement{
 		Network:  stringEnv(in.lookup, envFundingNetwork, defaultFundingNetwork),
 		Currency: stringEnv(in.lookup, envFundingCurrency, defaultFundingCurrency),

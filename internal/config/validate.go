@@ -55,6 +55,9 @@ const (
 	// RuleCapacityCeiling requires a binary that takes money to state at least
 	// one ceiling on how much it may take or store.
 	RuleCapacityCeiling Rule = "CAPACITY_CEILING"
+	// RuleSettlementAsset requires the API to name the asset funds settle
+	// into before it will serve production traffic.
+	RuleSettlementAsset Rule = "SETTLEMENT_ASSET"
 	// RuleNoInsecureOTLP applies to PROD only: telemetry must be exported
 	// over TLS.
 	RuleNoInsecureOTLP Rule = "NO_INSECURE_OTLP"
@@ -212,6 +215,22 @@ func (c *Config) Validate() error {
 	}
 	if prodLike && !c.Capability.StoreConfigured {
 		add(RuleCapabilityStore, "Capability.StoreConfigured", "capability store (application database) must be configured in STAGING/PROD")
+	}
+
+	// ---- the settlement asset ----------------------------------------------
+	//
+	// cmd/api refuses to start in STAGING or PROD without both, and used to
+	// discover that after configuration had already passed -- because it read
+	// them from the environment directly and they were in no table. Checking
+	// here is what lets scripts/configcheck and the deployment tests catch it
+	// before anything is deployed.
+	if c.Service.ServesHTTP() && prodLike {
+		if strings.TrimSpace(c.API.SettlementChain) == "" {
+			add(RuleSettlementAsset, "API.SettlementChain", "must name the chain of the settlement asset in STAGING/PROD")
+		}
+		if strings.TrimSpace(c.API.SettlementMint) == "" {
+			add(RuleSettlementAsset, "API.SettlementMint", "must name the mint of the settlement asset in STAGING/PROD")
+		}
 	}
 
 	// ---- capacity ceilings -------------------------------------------------
