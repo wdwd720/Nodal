@@ -117,8 +117,8 @@ export async function renderAccounts(ctx: ViewContext, root: HTMLElement): Promi
 
 function searchPanel(ctx: ViewContext, query: string): HTMLElement {
   // `placeholder` here is the DOM input attribute -- the grey hint inside an
-  // empty field. It is not a productization stub; see the note on Attrs in
-  // dom.ts, which every §62 scan of this app will keep finding.
+  // empty field. It stands in for nothing; see the note on Attrs in dom.ts,
+  // which every §62 scan of this app will keep finding.
   const input = el("input", { type: "text", name: "q", value: query, placeholder: "account id or search term" });
   input.value = query;
   const form = el("form", {
