@@ -1447,7 +1447,7 @@ deployed, verified in a browser, adversarially audited and reconciled with the
 architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
 identity source of truth) is the first productization decision.
 
-**State at the last update (2026-09-10, ~23:15 local).**
+**State at the last update (2026-09-10, 16:45 PDT; refreshed at least hourly while the wave runs).**
 
 - **Done on `productization`:** deploy enablement for the web app (`df48cb4`:
   Render static site `nodal-web`, `CP_AUTH_POST_LOGIN_URL`, same-site cookie
@@ -1460,13 +1460,24 @@ identity source of truth) is the first productization decision.
   secrets, the push of `main` (`9906c9f`), and later the `app-nodal` CNAME.
   §2's live verification happens the moment those are done; nothing else
   waits for it.
-- **In flight:** the design-system foundation in `apps/web` (tokens, fonts,
-  primitives — uncommitted until its agent reports), then backend domain
-  work in parallel git worktrees: profile/account lifecycle (P), verification
-  and withdrawal (V), native positions/P&L/candles/activity/demo data (M),
-  notifications + SSE producer (N), agents (A2). Each lands on its own
-  `wt/*` branch and is merged here, followed by one `make restore-drill` and
-  the docs count test.
+- **Also done:** the design-system foundation (`653fc44`, `docs/product/UI_UX_SYSTEM.md`),
+  `PRODUCT_ARCHITECTURE.md` and `USER_JOURNEY.md` (`d9c03a0`), D-077 (the
+  customer app's route map) and `STAGING_E2E.md` (`d36fa29`).
+- **In flight, each in its own git worktree under `C:/Dev/Nodal-wt/` on a
+  `wt/*` branch, all from `productization`:** backend — profile/account
+  lifecycle/operator bootstrap (P, `wt/profile`, migrations 00756–00760),
+  verification/eligibility/withdrawal (V, `wt/verification`, 00761–00770),
+  native positions/P&L/candles/discovery/activity/safety/demo data (M,
+  `wt/markets`, 00771–00780), notifications + realtime (N,
+  `wt/notifications`, 00781–00785), agents surface (A2, `wt/agents`,
+  00786–00790); frontend — public site/shell/sign-in/policies (F1,
+  `wt/web-shell`); operator console (X, `wt/admin`). Decision numbers are
+  reserved per agent (P D-053–056, V D-057–062, M D-063–068, N D-069–072, A2
+  D-073–076; orchestrator from D-077). Merge order: P, V, M, N, A2, then one
+  `make restore-drill` + `BACKUP_RESTORE.md`, the docs count test, `make
+  lint`, unit + integration; then X and F1; then the remaining frontend
+  agents (dashboard/Buy Credits/portfolio/activity/settings; markets/trade/
+  charts; withdraw/verify/agents) against the merged API.
 - **Then:** frontend pages (public site, onboarding, shell, dashboard, markets,
   trade, portfolio, activity, buy Credits, withdraw, verification, settings,
   notifications, agents), terms/policy routes, admin console, E2E scenarios
