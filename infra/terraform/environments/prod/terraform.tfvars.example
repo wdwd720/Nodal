@@ -20,7 +20,9 @@ auth = {
 # live where a contract exists (BLOCKERS EB-001..EB-016); capability gates stay
 # DISABLED until dual-approved evidence exists regardless of these modes.
 provider_slots = {
-  funding                 = { mode = "live", name = "stripe-onramp", base_url = "https://api.stripe.com" }
+  funding                 = { mode = "live", name = "stripe", base_url = "https://api.stripe.com" }
+  credit_purchase         = { mode = "live", name = "stripe_credit", base_url = "https://api.stripe.com" }
+  payout                  = { mode = "live", name = "stripe_stablecoin_payout", base_url = "https://api.stripe.com" }
   wallet                  = { mode = "live", name = "privy" }
   signing                 = { mode = "live", name = "privy" }
   execution               = { mode = "live", name = "jupiter", base_url = "https://api.jup.ag" }

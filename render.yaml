@@ -220,10 +220,14 @@ services:
       # Only credit_purchase is exercised by this tier. The rest are named
       # because the configuration requires a name once a slot is not fake, and
       # the name records intent rather than a live integration.
+      #
+      # A name that no adapter answers to is not inert: the adapter refuses to
+      # build and the capability is disabled with a WARN nobody reads. These
+      # match the ProviderName constants exactly, and test/infra checks it.
       - key: CP_PROVIDER_CREDIT_PURCHASE_MODE
         value: sandbox
       - key: CP_PROVIDER_CREDIT_PURCHASE_NAME
-        value: stripe-credit
+        value: stripe_credit
       - key: CP_PROVIDER_CREDIT_PURCHASE_TIMEOUT
         value: 20s
       - key: CP_PROVIDER_CREDIT_PURCHASE_API_KEY_REF
@@ -234,14 +238,14 @@ services:
       - key: CP_PROVIDER_PAYOUT_MODE
         value: sandbox
       - key: CP_PROVIDER_PAYOUT_NAME
-        value: stripe-payout
+        value: stripe_stablecoin_payout
       - key: CP_PROVIDER_PAYOUT_TIMEOUT
         value: 20s
 
       - key: CP_PROVIDER_FUNDING_MODE
         value: sandbox
       - key: CP_PROVIDER_FUNDING_NAME
-        value: stripe-onramp
+        value: stripe
       - key: CP_PROVIDER_FUNDING_TIMEOUT
         value: 20s
 

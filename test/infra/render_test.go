@@ -11,6 +11,9 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/nodal/controlplane/internal/config"
+	"github.com/nodal/controlplane/internal/provider/stripe"
+	"github.com/nodal/controlplane/internal/provider/stripecredit"
+	"github.com/nodal/controlplane/internal/provider/stripepayout"
 )
 
 // renderBlueprint is the shape this test cares about. Render's schema is much
@@ -197,5 +200,62 @@ func TestRender_EveryCapacityCeilingIsStated(t *testing.T) {
 		v, ok := got[k]
 		require.True(t, ok, "%s is not stated", k)
 		assert.NotEqual(t, "0", v, "%s is disabled, which is not a launch-tier ceiling", k)
+	}
+}
+
+// TestRender_EveryProviderNameMatchesAnAdapter.
+//
+// A provider slot's name is not decoration: the adapter compares it against its
+// own ProviderName and refuses to build if they differ. The refusal is a WARN
+// at startup and a silently disabled capability -- so the whole Credit purchase
+// path can be dark in production with a healthy service and a 200 on every
+// health check.
+//
+// That is not hypothetical. This test was written because it happened: the
+// blueprint said "stripe-credit" and the adapter is "stripe_credit", and the
+// only symptom was the webhook route returning 404. The shipped AWS tfvars
+// example had the same defect independently, naming "stripe-onramp" for an
+// adapter called "stripe".
+//
+// The expected names are imported from the adapters, so this cannot drift: a
+// renamed adapter fails to compile here rather than failing quietly in a
+// deployment.
+func TestRender_EveryProviderNameMatchesAnAdapter(t *testing.T) {
+	t.Parallel()
+	svc := loadBlueprint(t).Services[0]
+
+	// Only slots that a binary actually constructs an adapter for. The rest may
+	// carry any name, because nothing ever compares it to anything.
+	wantBySlot := map[string]string{
+		"CP_PROVIDER_FUNDING_NAME":         stripe.ProviderName,
+		"CP_PROVIDER_CREDIT_PURCHASE_NAME": stripecredit.ProviderName,
+		"CP_PROVIDER_PAYOUT_NAME":          stripepayout.ProviderName,
+	}
+
+	got := map[string]string{}
+	for _, e := range svc.EnvVars {
+		if e.Value != nil && strings.HasPrefix(e.Key, "CP_PROVIDER_") && strings.HasSuffix(e.Key, "_NAME") {
+			got[e.Key] = *e.Value
+		}
+	}
+
+	for key, want := range wantBySlot {
+		have, ok := got[key]
+		require.True(t, ok, "%s is not set; the adapter would take the empty name and build, which is worse than refusing", key)
+		assert.Equal(t, want, have,
+			"%s must equal the adapter's own ProviderName, or the adapter refuses to build and the capability is silently disabled", key)
+	}
+
+	// And nothing else claims to be a Stripe adapter under a name no Stripe
+	// adapter answers to.
+	real := map[string]bool{
+		stripe.ProviderName:       true,
+		stripecredit.ProviderName: true,
+		stripepayout.ProviderName: true,
+	}
+	for key, v := range got {
+		if strings.HasPrefix(v, "stripe") {
+			assert.True(t, real[v], "%s names %q, which no Stripe adapter answers to", key, v)
+		}
 	}
 }
