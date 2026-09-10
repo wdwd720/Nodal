@@ -3,8 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!--
+      Both themes are real. The token sheet declares light and re-derives dark,
+      and this tells the browser to paint its own furniture — form controls,
+      scrollbars, the canvas behind the document — to match whichever the reader
+      has chosen, so nothing arrives as a white flash on a dark screen.
+    -->
     <meta name="color-scheme" content="light dark" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!--
+      The theme colour is the surface the masthead sits on, per scheme, so a
+      mobile browser's own chrome continues the page rather than cutting it off.
+    -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#15181b" media="(prefers-color-scheme: dark)" />
+    <!--
+      The compact mark: a path, interrupted by a node, continuing. It states its
+      own colour per scheme because a standalone SVG has no inherited `color`
+      for `currentColor` to resolve against.
+    -->
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="mask-icon" href="/brand/mark-compact.svg" color="#0f766e" />
     <title>Nodal</title>
   </head>
   <body>

@@ -1,0 +1,23 @@
+<!--
+  NODAL — favicon.
+
+  The compact mark from `mark-compact.svg`, with one difference that a favicon
+  forces: a standalone SVG has no inherited `color`, so `currentColor` would
+  resolve to black and vanish against a dark browser chrome. The colour is
+  therefore stated here, once per scheme, and nowhere else. Everything else —
+  the geometry, the stroke, the node — is the compact mark unchanged.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     fill="none" role="img" aria-label="Nodal">
+  <style>
+    .ink { stroke: #1a1917; fill: #1a1917; }
+    @media (prefers-color-scheme: dark) {
+      .ink { stroke: #e9ebed; fill: #e9ebed; }
+    }
+  </style>
+  <g class="ink" stroke-width="2.25" stroke-linecap="round" fill="none">
+    <path d="M1 12 L7 12"/>
+    <path d="M17 12 L23 12"/>
+  </g>
+  <circle class="ink" cx="12" cy="12" r="4" stroke="none"/>
+</svg>

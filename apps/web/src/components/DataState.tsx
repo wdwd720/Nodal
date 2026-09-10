@@ -47,12 +47,24 @@ export function Explanation(props: {
   );
 }
 
-/** Says nothing was returned, and why that is not the same as zero. */
-export function EmptyState(props: { readonly title: string; readonly body: string }): ReactNode {
+/**
+ * Says nothing was returned, and why that is not the same as zero.
+ *
+ * It says what WOULD be here and, where there is one, how to cause it. Never an
+ * illustration with the word "Nothing" under it: an empty table is a fact about
+ * the account, and a fact deserves a sentence.
+ */
+export function EmptyState(props: {
+  readonly title: string;
+  readonly body: string;
+  /** How to cause the thing that is missing, when there is a way. */
+  readonly action?: ReactNode;
+}): ReactNode {
   return (
     <div className="empty" role="status">
       <p className="empty-title">{props.title}</p>
       <p className="empty-body">{props.body}</p>
+      {props.action !== undefined && <div className="form-actions">{props.action}</div>}
     </div>
   );
 }
@@ -74,6 +86,12 @@ export interface AsyncPanelProps<T> {
     readonly refetch: () => unknown;
   };
   readonly loadingLabel: string;
+  /**
+   * A shape-accurate skeleton for the region, shown instead of the one-line
+   * loading label. A skeleton is honest in a way a stale number is not, and it
+   * stops the layout jumping when the data lands.
+   */
+  readonly skeleton?: ReactNode;
   readonly children: (data: T) => ReactNode;
   /** Rendered instead of the children when the data set is empty. */
   readonly empty?: { readonly isEmpty: (data: T) => boolean; readonly title: string; readonly body: string };
@@ -84,7 +102,7 @@ export interface AsyncPanelProps<T> {
 export function AsyncPanel<T>(props: AsyncPanelProps<T>): ReactNode {
   const { query } = props;
   if (query.isPending) {
-    return <Loading label={props.loadingLabel} />;
+    return props.skeleton ?? <Loading label={props.loadingLabel} />;
   }
   if (query.isError) {
     return (

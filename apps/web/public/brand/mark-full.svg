@@ -1,0 +1,28 @@
+<!--
+  NODAL — full mark
+
+  Three paths enter. One node. One path leaves.
+
+  The product's first principle is that humans and software express economic
+  intent, and the platform deterministically translates that intent into a
+  single safe operation. The mark is that sentence: many intents converge on
+  one node, and exactly one operation emerges.
+
+  It also reads as the three capital pots meeting a control plane that never
+  lets them merge — they touch the node, they do not touch each other.
+
+  Draws in currentColor. Use at 24px and above; below that use mark-compact.svg.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"
+     fill="none" role="img" aria-label="Nodal">
+  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <!-- intents in -->
+    <path d="M2 6 L13.76 13.35" opacity="0.55"/>
+    <path d="M2 16 L13 16"      opacity="0.75"/>
+    <path d="M2 26 L13.76 18.65" opacity="0.55"/>
+    <!-- the one operation out -->
+    <path d="M23 16 L30 16"/>
+  </g>
+  <!-- the node -->
+  <circle cx="18" cy="16" r="3.5" fill="currentColor"/>
+</svg>

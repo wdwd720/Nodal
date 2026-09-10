@@ -1,0 +1,17 @@
+<!--
+  NODAL — compact mark (favicon, 16px nav, app icon)
+
+  The full mark reduced to its irreducible statement: a path, interrupted by
+  a node, continuing. Nothing passes through this system without passing
+  through the checkpoint.
+
+  Legible at 16px. Draws in currentColor.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"
+     fill="none" role="img" aria-label="Nodal">
+  <g stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+    <path d="M1 12 L7 12"/>
+    <path d="M17 12 L23 12"/>
+  </g>
+  <circle cx="12" cy="12" r="4" fill="currentColor"/>
+</svg>

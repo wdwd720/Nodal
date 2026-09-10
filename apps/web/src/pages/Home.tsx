@@ -93,6 +93,7 @@ export function Home(): ReactNode {
       </Panel>
 
       <Panel
+        temp="real"
         title="Balances"
         description="Real capital, recomputed by the backend on every request. Never cached as truth."
       >
@@ -105,6 +106,7 @@ export function Home(): ReactNode {
       </Panel>
 
       <Panel
+        temp="real"
         title="Underlying assets"
         description="What the USD figures above are a valuation of."
       >
@@ -150,6 +152,7 @@ export function Home(): ReactNode {
       </Panel>
 
       <Panel
+        temp="real"
         title="Profit and loss"
         description="Per holding, exactly as the backend reports it."
       >

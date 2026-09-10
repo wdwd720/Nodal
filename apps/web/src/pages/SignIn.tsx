@@ -9,6 +9,7 @@
 import type { ReactNode } from "react";
 
 import { LOGIN_PATH, startSignIn } from "../api/client.ts";
+import { BrandLockup } from "../components/Brand.tsx";
 import { Button } from "../components/Button.tsx";
 import { Disclosure } from "../components/Layout.tsx";
 import { RISK_FOOTER, USDC_DISCLOSURE } from "../lib/honesty.ts";
@@ -17,10 +18,7 @@ export function SignIn(): ReactNode {
   return (
     <div className="signin">
       <div className="signin-card">
-        <div className="brand brand-large">
-          <span className="brand-mark" aria-hidden="true" />
-          <span className="brand-name">Nodal</span>
-        </div>
+        <BrandLockup large />
         <h1>Sign in</h1>
         <p className="lead">
           This session is not signed in. Signing in hands you to the identity provider; the backend

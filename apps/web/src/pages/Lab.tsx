@@ -95,6 +95,7 @@ export function Lab(): ReactNode {
       </p>
 
       <Panel
+        temp="simulated"
         title="Comparison"
         description="Records the backend holds, grouped by the mode that produced them."
       >
@@ -150,7 +151,7 @@ export function Lab(): ReactNode {
         </AsyncPanel>
       </Panel>
 
-      <Panel title="Shadow" description="Decisions made alongside real activity but never submitted.">
+      <Panel temp="simulated" title="Shadow" description="Decisions made alongside real activity but never submitted.">
         <ShadowOrPaper
           groups={groups.filter((group) => group.mode === "SHADOW")}
           emptyTitle="No shadow runs recorded"
@@ -158,7 +159,7 @@ export function Lab(): ReactNode {
         />
       </Panel>
 
-      <Panel title="Simulated runs" description="Backtest and paper records this account holds.">
+      <Panel temp="simulated" title="Simulated runs" description="Backtest and paper records this account holds.">
         <ShadowOrPaper
           groups={groups.filter((group) =>
             (SIMULATED_MODES as readonly string[]).includes(group.mode) && group.mode !== "SHADOW",
@@ -168,7 +169,7 @@ export function Lab(): ReactNode {
         />
       </Panel>
 
-      <Panel title="Orders by mode" description="What each mode produced downstream.">
+      <Panel temp="simulated" title="Orders by mode" description="What each mode produced downstream.">
         <AsyncPanel
           query={orders}
           loadingLabel="Loading orders…"
@@ -203,14 +204,14 @@ export function Lab(): ReactNode {
         </AsyncPanel>
       </Panel>
 
-      <Panel title="Historical replay" description="Running a strategy against recorded history.">
+      <Panel temp="simulated" title="Historical replay" description="Running a strategy against recorded history.">
         <NoEndpoint
           what="v1 exposes no replay, backtest-run or point-in-time dataset endpoint."
           detail="A replay has to reconstruct exactly what was knowable at each instant, which is a server capability resting on point-in-time data the browser cannot see. Until the API exposes it, this app has nothing real to run and will not fake one."
         />
       </Panel>
 
-      <Panel title="Counterfactuals" description="What would have happened had the decision differed.">
+      <Panel temp="simulated" title="Counterfactuals" description="What would have happened had the decision differed.">
         <NoEndpoint
           what="v1 exposes no counterfactual endpoint."
           detail="A counterfactual is a claim about a world that did not happen; producing one in the browser from the rows on this page would be fabrication with a chart around it. When the backend can answer the question, this panel will ask it."

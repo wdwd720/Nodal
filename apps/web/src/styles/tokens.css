@@ -1,0 +1,247 @@
+/*
+ * NODAL — DESIGN TOKENS
+ *
+ * The single source of every colour, size, duration and texture in the
+ * application. Nothing below this file invents a value: a component that needs
+ * a colour reads a token, and a token that does not exist is a design decision
+ * that has not been made yet.
+ *
+ * Three rules govern this file and none of them are negotiable.
+ *
+ * 1. ONE SET, TWO THEMES. Every token is declared once, in `:root`, with its
+ *    light value. The dark block redeclares the *same* names with dark values.
+ *    A colour that exists only inside the dark block is a colour that renders
+ *    as nothing on the default theme, which is how a figure disappears.
+ *
+ * 2. CONTRAST IS A NUMBER, NOT AN OPINION. Every foreground token here was
+ *    measured against every surface it can land on. The dimmest text token,
+ *    `--ink-faint`, holds 5.10:1 on the worst surface in light and 5.41:1 in
+ *    dark, both above the 4.6:1 floor. There is no tier below it. Borders that
+ *    carry meaning — form controls, focus rings — use `--line-control` and
+ *    `--focus`, which hold 3:1.
+ *
+ * 3. COLOUR IS NEVER THE ONLY CARRIER. `--pos` and `--neg` exist to reinforce
+ *    a sign glyph that is already there, never to replace it. `--zero` is
+ *    deliberately the same ink as ordinary text: zero is not a direction.
+ *
+ * Read `docs/product/UI_UX_SYSTEM.md` for what each group is for and which
+ * parts of design/WEBSITE_MASTER_GOAL.md it implements.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ------------------------------------------------------------ surfaces -- *
+   * A slightly warm neutral. Warm because a pure-gray instrument panel reads
+   * as clinical and this product is read for hours; warm by a hair, because a
+   * beige fintech reads as a brochure.
+   */
+  --ground: #fbfaf9;
+  --surface: #ffffff;
+  --surface-sunken: #f4f2f0;
+  --surface-raised: #ffffff;
+  --scrim: rgba(26, 25, 23, 0.44);
+
+  /* --------------------------------------------------------------- lines -- */
+  --line: #e4e1dd;          /* hairline between rows and panels */
+  --line-strong: #cfcac3;   /* a division that has to be noticed */
+  --line-control: #8a847c;  /* form control edges: 3.3:1 minimum */
+
+  /* ----------------------------------------------------------------- ink -- */
+  --ink: #1a1917;
+  --ink-soft: #55514c;
+  --ink-faint: #6b665f;     /* the floor. Nothing readable is dimmer. */
+  --ink-inverse: #ffffff;
+
+  /* --------------------------------------------------------------- brand -- *
+   * One accent, used for exactly three things: the primary action, a link, and
+   * the focus ring. A second accent would make the first one mean less.
+   */
+  --accent: #0f766e;
+  --accent-hover: #0b5b55;
+  --accent-ink: #ffffff;
+  --accent-wash: #e4f1ef;
+  --accent-line: #7cb6b0;
+
+  /* ------------------------------------------------------------ semantic -- *
+   * Direction, not sentiment. Every use is paired with a sign glyph or a word.
+   */
+  --pos: #0f6b3f;
+  --pos-wash: #e3f2e8;
+  --pos-line: #74b593;
+  --neg: #a92620;
+  --neg-wash: #fbe8e7;
+  --neg-line: #d99490;
+  --warn: #8a5300;
+  --warn-wash: #fbf0d9;
+  --warn-line: #c9a44e;
+  --info: #1d4f9c;
+  --info-wash: #e7eefa;
+  --info-line: #8fadd8;
+  --zero: var(--ink-soft);
+
+  /* ---------------------------------------------------------------- type -- *
+   * Plex, self-hosted. The fallback stack is real rather than decorative:
+   * the fonts load with `font-display: swap`, so the first paint is set in it.
+   */
+  --font-text: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", "SFMono-Regular",
+    Menlo, Consolas, monospace;
+
+  --text-2xs: 11px;   /* column headers, chips, the as-of stamp */
+  --text-xs: 12px;    /* dense cells, identifiers, metadata */
+  --text-sm: 13px;    /* default table cell, secondary copy */
+  --text-md: 14px;    /* body */
+  --text-lg: 16px;    /* panel titles */
+  --text-xl: 22px;    /* page titles */
+  --text-2xl: 30px;   /* the one big figure on a page */
+  --text-3xl: 40px;   /* hero only */
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-body: 1.55;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --track-caps: 0.06em;    /* small uppercase labels */
+  --track-brand: 0.12em;   /* the wordmark, and nothing else */
+
+  /* --------------------------------------------------------------- space -- *
+   * A 4px base. Every margin, padding and gap in the application is one of
+   * these; a 13px gap is a typo with extra steps.
+   */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  --measure: 68ch;        /* the widest a paragraph is allowed to be */
+  --page-max: 1200px;
+  --sidebar-w: 232px;
+
+  /* --------------------------------------------------------------- radii -- *
+   * Two. Controls and panels. A third radius is a third opinion about how soft
+   * this product is, and it does not have three.
+   */
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  /* --------------------------------------------------------------- depth -- *
+   * Almost none. A hairline does the work of a shadow at a fraction of the
+   * visual noise; shadows are reserved for surfaces that genuinely float.
+   */
+  --shadow-raised: 0 1px 2px rgba(26, 25, 23, 0.06),
+    0 8px 24px rgba(26, 25, 23, 0.08);
+  --shadow-sticky: 0 1px 0 var(--line);
+
+  /* --------------------------------------------------------------- rows -- *
+   * 40px by default because money gets air. A market table may drop to 34px,
+   * and under a coarse pointer the row itself becomes a 44px target.
+   */
+  --row-h: 40px;
+  --row-h-dense: 34px;
+  --tap-min: 44px;
+
+  /* -------------------------------------------------------------- motion -- *
+   * Two durations and one exception. Anything that needs a third duration is
+   * doing something this design does not want done.
+   */
+  --dur-fast: 120ms;    /* hover, focus, a disclosure opening */
+  --dur-base: 200ms;    /* a panel or a route arriving */
+  --dur-flash: 600ms;   /* the exception: a value changed just now */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* --------------------------------------------------------------- focus -- */
+  --focus: var(--accent);
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* -------------------------------------------------------- temperatures -- *
+   * Defaults are the `economy` temperature; the `real` and `simulated`
+   * overrides live in base.css keyed off [data-temp]. The hatch is declared
+   * here because it is a token like any other: a texture with a value.
+   */
+  --temp-border: var(--line);
+  --temp-border-style: solid;
+  --temp-figure-filter: none;
+  --temp-row-h: var(--row-h);
+  --hatch-ink: rgba(26, 25, 23, 0.06);
+  --hatch: repeating-linear-gradient(
+    45deg,
+    var(--hatch-ink) 0,
+    var(--hatch-ink) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+  --hatch-sparse: repeating-linear-gradient(
+    45deg,
+    var(--hatch-ink) 0,
+    var(--hatch-ink) 1px,
+    transparent 1px,
+    transparent 14px
+  );
+
+  /* ---------------------------------------------------------- z-ordering -- */
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-overlay: 40;
+  --z-toast: 50;
+}
+
+/*
+ * The dark theme. Same names, re-derived rather than inverted: a dark surface
+ * needs a lighter accent and a *less* saturated positive green, because the
+ * same hue that reads as confident on white reads as neon on near-black.
+ *
+ * The accent is the brand mark's cyan. It is the one place the two themes are
+ * allowed to disagree about hue, because #0f766e on near-black fails contrast
+ * and a brand that fails contrast is not a brand, it is a defect.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0e1012;
+    --surface: #15181b;
+    --surface-sunken: #1b1f23;
+    --surface-raised: #1b1f23;
+    --scrim: rgba(0, 0, 0, 0.62);
+
+    --line: #282d33;
+    --line-strong: #394047;
+    --line-control: #6b7178;
+
+    --ink: #e9ebed;
+    --ink-soft: #aeb4bb;
+    --ink-faint: #8d949c;
+    --ink-inverse: #0e1012;
+
+    --accent: #4dd9c0;
+    --accent-hover: #6fe4cf;
+    --accent-ink: #062622;
+    --accent-wash: #0e2b27;
+    --accent-line: #2c6a60;
+
+    --pos: #5fd39a;
+    --pos-wash: #0f2a1e;
+    --pos-line: #2f6f51;
+    --neg: #ff8d8d;
+    --neg-wash: #2e1817;
+    --neg-line: #7d3b39;
+    --warn: #e6b452;
+    --warn-wash: #2b2210;
+    --warn-line: #6d5622;
+    --info: #8fb6f7;
+    --info-wash: #141f33;
+    --info-line: #35507d;
+
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+    --hatch-ink: rgba(233, 235, 237, 0.07);
+  }
+}
