@@ -241,6 +241,13 @@ services:
         value: env://NODAL_STRIPE_API_KEY
       - key: CP_PROVIDER_CREDIT_PURCHASE_WEBHOOK_SECRET_REF
         value: env://NODAL_STRIPE_WEBHOOK_SECRET
+      # The Stripe account these credentials must belong to. The adapter makes
+      # one read-only call at startup and refuses to sell Credits if the key
+      # answers for a different account -- a key rotated to the wrong account
+      # is otherwise silent, because charges succeed and webhooks arrive and
+      # every one of them belongs to somebody else's business.
+      - key: CP_PROVIDER_CREDIT_PURCHASE_ACCOUNT_REF
+        value: acct_1UDbrdAeDQ6sKD6H
 
       - key: CP_PROVIDER_PAYOUT_MODE
         value: sandbox
