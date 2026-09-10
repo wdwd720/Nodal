@@ -37,6 +37,7 @@ The set of ADRs is the one required by goal PART 210.
 | [0017](0017-single-primary-region-v1.md) | Single primary write region for V1; no active-active money writes | Accepted | 12, 13, 137–139, 141, 172, 205, 219 | EB-007, EB-008 |
 | [0018](0018-no-proprietary-stablecoin.md) | No proprietary stablecoin or platform-issued dollar token | Accepted | 4, 11, 13, 20, 26, 27, 32, 33, 94 | EB-002, EB-009, EB-010 |
 | [0019](0019-no-internal-crossing.md) | No internal order matching, crossing, or principal trading | Accepted | 3, 4, 10, 41, 46, 50, 163, 182 | EB-009, EB-011 |
+| [0020](0020-retention-against-append-only-tables.md) | Retention on an append-only table is partition detachment, never row deletion under a disabled trigger | Accepted | 122 | — |
 
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.

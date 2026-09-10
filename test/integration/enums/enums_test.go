@@ -44,7 +44,13 @@ import (
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
+	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/nativeasset"
+	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/prediction"
+	"github.com/nodal/controlplane/internal/reality"
+	"github.com/nodal/controlplane/internal/reconciliation"
 )
 
 var (
@@ -131,6 +137,26 @@ func registry() []pair {
 		{table: "tools", constraint: "tools_status_check", source: "agent.ToolStatuses()", values: str(agent.ToolStatuses())},
 		{table: "trade_intents", constraint: "trade_intents_action_check", source: "intent.Actions()", values: str(intent.Actions())},
 		{table: "trade_intents", constraint: "trade_intents_status_check", source: "intent.Statuses()", values: str(intent.Statuses())},
+
+		// Paired 2026-09-09 while working through the unpaired inventory. Each
+		// is a domain match, not a set match: the Go list named is the one that
+		// DECLARES the values the column holds.
+		//
+		// Three constraints were deliberately left unpaired in the same pass.
+		// data_sources, venues and venue_listings all hold ACTIVE/DEGRADED/
+		// DISABLED, which is exactly agent.ToolStatuses() -- and pairing them
+		// with it would be the "these two sets happen to be equal" mistake this
+		// registry exists to avoid. A tool's health and a venue's listing
+		// status are different facts that agree today by coincidence.
+		{table: "ledger_accounts", constraint: "ledger_accounts_code_check", source: "ledger.AllCodes()", values: str(ledger.AllCodes())},
+		{table: "native_assets", constraint: "native_assets_status_check", source: "nativeasset.AllStatuses()", values: str(nativeasset.AllStatuses())},
+		{table: "native_markets", constraint: "native_markets_status_check", source: "nativemarket.AllStatuses()", values: str(nativemarket.AllStatuses())},
+		{table: "payout_requests", constraint: "payout_requests_state_check", source: "payout.AllStates()", values: str(payout.AllStates())},
+		{table: "payout_destinations", constraint: "payout_destinations_kind_check", source: "payout.AllDestinationKinds()", values: str(payout.AllDestinationKinds())},
+		{table: "reconciliation_records", constraint: "reconciliation_records_kind_check", source: "reconciliation.AllKinds()", values: str(reconciliation.AllKinds())},
+		{table: "reconciliation_records", constraint: "reconciliation_records_status_check", source: "reconciliation.AllStatuses()", values: str(reconciliation.AllStatuses())},
+		{table: "data_sources", constraint: "data_sources_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
+		{table: "raw_archive_objects", constraint: "raw_archive_objects_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
@@ -348,7 +374,6 @@ var unpaired = []string{
 	"data_sources.data_sources_kind_check",
 	"data_sources.data_sources_persistence_capability_check",
 	"data_sources.data_sources_redistribution_policy_check",
-	"data_sources.data_sources_retention_class_check",
 	"data_sources.data_sources_status_check",
 	"deposits.deposits_fraud_state_check",
 	"economic_exposures.economic_exposures_kind_check",
@@ -375,7 +400,6 @@ var unpaired = []string{
 	"journal_transactions.journal_transactions_kind_check",
 	"kill_switch_transitions.kill_switch_transitions_actor_type_check",
 	"kill_switches.kill_switches_severity_check",
-	"ledger_accounts.ledger_accounts_code_check",
 	"ledger_accounts.ledger_accounts_normal_side_check",
 	"ledger_accounts.ledger_accounts_owner_type_check",
 	"ledger_accounts.ledger_accounts_status_check",
@@ -384,19 +408,15 @@ var unpaired = []string{
 	"model_calls.model_calls_parse_result_check",
 	"model_calls.model_calls_purpose_check",
 	"native_assets.native_assets_content_moderation_state_check",
-	"native_assets.native_assets_status_check",
 	"native_market_alerts.native_market_alerts_kind_check",
 	"native_market_alerts.native_market_alerts_severity_check",
 	"native_market_fills.native_market_fills_side_check",
 	"native_market_quotes.native_market_quotes_side_check",
-	"native_markets.native_markets_status_check",
 	"notifications.notifications_kind_check",
 	"notifications.notifications_severity_check",
 	"orders.orders_side_check",
-	"payout_destinations.payout_destinations_kind_check",
 	"payout_destinations.payout_destinations_status_check",
 	"payout_provider_events.payout_provider_events_direction_check",
-	"payout_requests.payout_requests_state_check",
 	"performance_snapshots.performance_snapshots_scope_kind_check",
 	"position_lots.position_lots_status_check",
 	"prediction_outcomes.prediction_outcomes_realized_direction_check",
@@ -405,10 +425,7 @@ var unpaired = []string{
 	"provider_health_samples.provider_health_samples_role_check",
 	"provider_health_samples.provider_health_samples_state_check",
 	"quotes.quotes_side_check",
-	"raw_archive_objects.raw_archive_objects_retention_class_check",
-	"reconciliation_records.reconciliation_records_kind_check",
 	"reconciliation_records.reconciliation_records_mode_check",
-	"reconciliation_records.reconciliation_records_status_check",
 	"risk_decisions.risk_decisions_decision_check",
 	"risk_decisions.risk_decisions_stage_check",
 	"risk_policies.risk_policies_created_by_actor_type_check",

@@ -1474,6 +1474,12 @@ transaction first; then the ceiling can be made authoritative.
 **Then §4 as it stood**, with its counts recomputed from source rather than
 assumed:
 
+**§4 items 1–3 are done in this batch.** 1 and 2 are fixed (F-94, F-95);
+3 produced the ADR it needed (ADR-0020) rather than a worker, because the tables
+involved refuse DELETE and the honest scheme is partition detachment. What
+follows is the recount as it stood when the work started, kept because it is the
+evidence for what was done.
+
 1. **Transition bindings: 16, not ten.** 17 destination-only
    `cp_require_transition` triggers were created; 00726 replaced one (`agents`).
    The F-78 exploit is **not** reachable on the other 16:

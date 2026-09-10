@@ -117,6 +117,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-91 | P1 | NEW | fixed | The launch-cohort ceiling was configured, logged as in force, and enforced nowhere |
 | F-92 | P2 | NEW | fixed | Two of the seven capacity tests the checkpoint cites as VERIFIED PASS pass only against a database that already contains rows |
 | F-93 | P1 | NEW | open | Inventory: what the six provider audits found, verified against the source, and what has not been fixed — with the reason for each |
+| F-94 | P2 | NEW | fixed | Nothing in the schema read a transition row's ORIGIN, so a row recording an origin the entity was never in licensed a change it did not describe |
+| F-95 | P3 | NEW | part | Nine more enum CHECKs are compared against the Go list that declares them; 121 remain, and three were deliberately left unpaired |
 
 ---
 
@@ -4305,6 +4307,110 @@ Another reported the archive-replay translation as untested; it is untested by
 `go test ./...`, and it *is* covered by `test/deployed`, which CI does not run
 — which is a different and more useful statement, and is recorded in the
 CI row above rather than as a missing test.
+
+## F-94 · A transition row's origin was never read · NEW · P2 · FIXED
+
+This is §4's first item, recomputed. The count was recorded as ten; it is
+**sixteen**, and the recount changed the finding rather than confirming it.
+
+**What F-78 established, and what it did not.** 00726 bound the EDGE for
+`agents` because the exploit was reachable there: both promotion CHECKs on
+`agent_lifecycle_transitions` open with `from_stage = to_stage OR ...`, so a row
+claiming the stage had not moved satisfied them and licensed moving it. The
+other bindings were left alone because the analogy was not a proof.
+
+The recount is the proof, and it says the exploit is **not** reachable on them:
+`agent_lifecycle_transitions` is the only transitions table in the schema with a
+`from_X = to_X OR ...` CHECK, and eleven of the sixteen have no CHECK constraints
+at all. Recording that plainly matters as much as the fix — it is the
+difference between a P1 and what this is.
+
+**What is present on all sixteen** is weaker and still worth closing: **nothing
+anywhere reads `from_status` or `from_state`.** Not a CHECK, not a trigger, not
+a function. `cp_app` holds INSERT on every transitions table and UPDATE on every
+entity, so a row recording an origin the entity was never in commits cleanly.
+Demonstrated against the pre-migration schema, as `cp_app`:
+
+```sql
+INSERT INTO account_status_transitions (from_status, to_status, ...)
+VALUES ('RESTRICTED', 'FROZEN', ...);          -- the account was never RESTRICTED
+UPDATE accounts SET status = 'FROZEN' WHERE id = ...;
+COMMIT;                                        -- committed; status is FROZEN
+```
+
+The trail now says the account passed through RESTRICTED. It did not. On a
+system whose stated principles include evidence and provenance, the recorded
+origin being unchecked is the finding.
+
+**A second widening, found in the same recount.** 00712 replaced
+`cp_require_transition` so the flag accumulates and the check is membership, with
+a header stating "Membership is exactly as strong as equality was". It is not.
+Under equality only the LAST flagged destination satisfied the check; under
+membership any of them does. So two rows written in one transaction — A->B
+and B->C, which is what submitting and launching a native asset in one call
+writes — licensed a single UPDATE straight from A to C. Demonstrated on the
+same schema: two honest-looking rows, one update, and the account arrives at
+FROZEN having never been RESTRICTED.
+
+That is not a privilege escalation, and the finding says so: a transaction that
+can insert two rows can insert one. It is a defect the binding used to catch and
+stopped catching, which the migration's own header claimed it had not.
+
+**Fix.** Migration 00731 converts fifteen bindings to the edge form. The flag
+records `<from>><to>` and accumulates; the check asks whether `OLD>NEW` is among
+the edges flagged. So a row claiming nothing moved licenses nothing, a row
+claiming a false origin licenses nothing, and A->B plus B->C license exactly
+A->B and B->C. Accumulating EDGES keeps 00712's multi-step flows working and
+gives nothing back, because an edge names both ends.
+
+`kill_switches` is deliberately not converted, with the reason in the migration:
+`kill_switch_transitions` has no `from_active` column and needs none, because for
+a two-valued column the destination determines the origin. The destination form
+is already edge-complete there.
+
+**Evidence.**
+`TestIntegration_ATransitionRowCannotDenyTheChangeItLicenses` drives all three
+refusals — a row saying nothing moved, a row with an invented origin, and
+two rows licensing a jump that skips the middle — plus one entity's row not
+licensing another's change. Its three controls are the point: an honest single
+step commits, an honest TWO-step transaction commits both steps, and the ladder
+walks. A binding one condition too strict would pass every refusal and refuse
+every real change.
+
+`TestIntegration_EveryAuditedEntityBindsTheEdge` reads `pg_trigger` rather than a
+list typed out in the test, so a table that gains a destination-only binding
+tomorrow fails rather than joining the set quietly, and carries a positive
+control that the edge form is actually in use.
+
+## F-95 · Nine more enum lists are compared against the schema · NEW · P3 · PART
+
+§4's second item. The inventory was recomputed after 00728–00730 and was
+found exactly current — 130 unpaired, no name missing and none stale.
+
+Every unpaired constraint was then matched against every exported Go enum list
+by value set. Twelve matched exactly; **nine are genuine domain matches and are
+now paired**: `ledger_accounts.code` (the most consequential enum in the system),
+the two native-economy status tables, both payout enums, both reconciliation
+enums, and the two `retention_class` columns.
+
+**Three matched and were deliberately left unpaired**, which is the more useful
+half. `data_sources`, `venues` and `venue_listings` all hold
+ACTIVE/DEGRADED/DISABLED, which is exactly `agent.ToolStatuses()`. Pairing them
+with it would be the "these two sets happen to be equal" mistake the registry
+exists to avoid: a tool's health and a venue's listing status are different facts
+that agree today by coincidence, and binding them would make a legitimate change
+to one break the other.
+
+**A positive result worth recording.** The same pass looked for constraints whose
+domain HAS a Go list that disagrees with it — live drift. There is none. The
+only near-match is `agents_check3`, which is the stage-to-mode mapping and
+already has a bespoke comparison.
+
+**121 remain unpaired**, and the honest reason is that most of them have no Go
+counterpart to compare against: they are schema-only enums that no Go code
+switches on. Manufacturing a hundred Go lists to pair with them would be
+inventing structure to satisfy a test. The ones that matter are the ones a
+switch statement depends on, and those are now covered.
 
 ## Findings deliberately NOT raised
 
