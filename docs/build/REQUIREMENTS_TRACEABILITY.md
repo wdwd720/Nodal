@@ -18,7 +18,7 @@ Rule: never mark VERIFIED without a passing test or operational evidence named i
 - Source: `ULTIMATE MASTER GOAL — Production Universal Financial Control Plane.md` (repo root; PART 1–249 plus STAGE 0–19). Every PART appears at least once below.
 - ID scheme: `R-<PART>-<n>` (PART zero-padded to 3 digits, e.g. `R-017-3` = third requirement of PART 17). Stage-derived rows use `R-S<stage>-<n>`. A PART is split into several rows whenever it contains separately testable requirements.
 - Requirement text is a compressed restatement that keeps numbers, state names, field lists and forbidden items. Where the goal lists many items, the list is kept verbatim (comma-separated) so the row is auditable without re-reading the goal.
-- Implementation path / Test proving it name locations in the single Go module `github.com/nodal/controlplane` (layout of PART 14). A path without a prefix exists on disk and was verified on the date in the change log; a `planned:` prefix marks a location that does not exist yet. Every path and every test name in this file was re-checked against the working tree on 2026-09-06: all 609 Go test-function references resolve to a `func Test`/`func Fuzz` that exists, and every unprefixed path exists on disk. Where something is absent the row says so in words, rather than leaving a stale `planned:` on a location that has since been built.
+- Implementation path / Test proving it name locations in the single Go module `github.com/nodal/controlplane` (layout of PART 14). A path without a prefix exists on disk and was verified on the date in the change log; a `planned:` prefix marks a location that does not exist yet. Every path and every test name in this file was re-checked against the working tree on 2026-09-06, and the test-name half is now checked continuously rather than on an afternoon: `TestDocs_EveryTestTheyNameExists` requires every `Test*`/`Fuzz*` name cited here to resolve to a declaration that exists. The count that used to stand here — "all 609 Go test-function references" — has been removed rather than updated: it was a hand-count whose counting rule was never written down, so nobody could reproduce it to say whether it had gone stale, and a number nobody can check is worth less than the property a test enforces (F-111). Every unprefixed path existed on disk on that date. Where something is absent the row says so in words, rather than leaving a stale `planned:` on a location that has since been built.
 - Operational evidence: `n/a` when the requirement is proven by tests alone; `planned: <what>` when runtime/operational evidence is also needed for VERIFIED.
 - Blocker column references `docs/build/BLOCKERS.md`, which is the authoritative definition of every ID below (BLOCKERS.md is where each blocker's current status lives; this table restates only what each id means). The table below is a summary only.
 - Initial state: every row is NOT_STARTED except PART 4 hard exclusions and PART 13 premature-technology items, which are DEFERRED_OUT_OF_SCOPE by definition (each such row names the interface kept open so a later implementation remains possible, per PART 4 "design interfaces so later implementations remain possible"). Stage 0 items already evidenced in MASTER_BUILD_STATE.md are the first candidates for state updates by the build owner.
@@ -58,12 +58,20 @@ Rule: never mark VERIFIED without a passing test or operational evidence named i
 | State | Count |
 |---|---|
 | NOT_STARTED | 14 |
-| IN_PROGRESS | 59 |
+| IN_PROGRESS | 60 |
 | IMPLEMENTED | 59 |
-| VERIFIED | 226 |
+| VERIFIED | 225 |
 | BLOCKED_EXTERNAL | 13 |
 | DEFERRED_OUT_OF_SCOPE | 18 |
 | **Total rows** | 389 |
+
+These are derived from the rows below by `TestDocs_TraceabilitySummaryMatchesItsRows`,
+which is new and exists because this table has now been wrong twice in the same
+way. The change log already records the first time; the second was IN_PROGRESS
+59 against 60 rows and VERIFIED 226 against 225, left behind when F-65 correctly
+lowered R-053-12 and the summary was not updated (F-111). A table that is
+recomputed by hand drifts from the thing it counts; this one is no longer
+recomputed by hand.
 
 ## Stage map
 

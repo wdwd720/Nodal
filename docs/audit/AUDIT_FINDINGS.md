@@ -132,6 +132,12 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-106 | P1 | NEW | fixed | Three money tables handed one account's record to another on a reused idempotency key, and discarded the caller's own request; four sibling tables already compared the account |
 | F-107 | P1 | NEW | fixed | The seller set the platform's own commission on their own sales, with a ceiling, no floor and a zero default; and a payout the provider may already have paid could be cancelled by its owner, releasing the reservation |
 | F-108 | P1 | NEW | fixed | Two failed RPCs were read as proof a transaction never happened, closing the record as MATCHED and terminal while the user's tokens were spent |
+| F-109 | P1 | NEW | fixed | The transition binding covers the state column and nothing else, so the application role could rewrite an amount, a destination or the definition of what counts as money, with no transition row |
+| F-110 | P2 | NEW | fixed | An automatic reconciliation closed a record of any size with no amount test, under a doc comment naming two amount conditions that were not in the function |
+| F-111 | P2 | NEW | fixed | The stopping criterion that certifies "documentation reflects reality" cited five invented numbers; the capability table listed ten of twenty; and the two documents a reviewer scores security posture from were checked by nothing |
+| F-112 | P1 | NEW | fixed | A supported configuration removes the `__Host-` prefix from the session and login-state cookies, re-opening the planted-callback takeover F-87 closed; the terraform PROD example set it and the test suite's own valid-production fixture set it |
+| F-113 | P1 | NEW | fixed | The amount a provider says it refunded was computed in two places and read in none, so a succeeded payment carrying a full refund minted Credits |
+| F-114 | P1 | NEW | fixed | A revoked agent could return to live capital with no approval and no evidence, because it keeps its stage and both promotion CHECKs short-circuit when the stage does not move |
 
 ---
 
@@ -5288,6 +5294,395 @@ asked what it does when one goes quiet.
 
 **Evidence.** REAL_DB_INTEGRATION, observed failing then passing, against a real
 database and the package's own chain simulator.
+
+## F-109 · The binding covers the state column and nothing else · NEW · P1 · FIXED
+
+**Found by** the money-out audit, enumerating what `cp_app` can actually do
+rather than what the migrations say they granted.
+
+Six findings in this register are about binding a state change to a transition
+row: F-42, F-78, F-94, F-101, and the migrations 00603, 00726, 00731, 00732 that
+implement it. All of them are about the STATE column, and **none of them says
+anything about the other columns.** The binding cannot: a constraint trigger
+declared `AFTER UPDATE OF status` fires only when `status` appears in the
+statement's SET list.
+
+So:
+
+```sql
+UPDATE withdrawals SET destination_address = '<attacker>' WHERE id = $1;
+```
+
+fires nothing at all — no transition row, no audit event, no refusal. And:
+
+```sql
+INSERT INTO withdrawal_transitions (...,'APPROVED','SUBMITTED',...);
+UPDATE withdrawals SET status = 'SUBMITTED',
+       destination_address = '<attacker>', quantity = quantity * 10
+ WHERE id = $1;
+```
+
+commits cleanly. AU001 is satisfied, the edge is legal, and the trail records a
+lawful state move while the payload was rewritten underneath it.
+
+Confirmed against the live catalogue: `cp_app` held **table-wide** UPDATE on all
+eighteen columns of `withdrawals`, twenty-three of `payout_requests`, seventeen
+of `assets` and fifteen of `instruments` — including `quantity`,
+`destination_address`, `approval_id`, `step_up_verified_at`,
+`destination_validated`, `requested_quantity`, `account_id`, `destination_id`,
+both idempotency keys, `mint_address`, `decimals` and `settlement_asset_id`.
+
+**`assets` is the sharpest.** `cp_app` could write:
+
+```sql
+UPDATE assets SET risk_class = 'SETTLEMENT', is_stablecoin = true,
+                  peg_currency = 'USD', decimals = 0 WHERE symbol = 'SOL';
+```
+
+and `internal/reconciliation` marks any `is_stablecoin AND peg_currency='USD'`
+asset at **face value**, scaled by that same mutable `decimals`, with no status
+and no risk-class check. That is the materiality test deciding whether a
+reconciliation break is worth waking a human for. `internal/valuation` does the
+same job correctly and is the model.
+
+**Fix.** Migration 00733 applies the treatment this schema already uses six
+times — 00604, 00701, 00719, 00720, 00723, 00730 — to the four tables where
+the columns are money, a destination, or the definition of what counts as money:
+`REVOKE UPDATE`, then `GRANT UPDATE (…)` on exactly the columns the application
+writes today, read from its own UPDATE statements one at a time.
+
+| table | granted |
+|---|---|
+| `withdrawals` | `status`, `step_up_verified_at` |
+| `assets` | `status` |
+| `instruments` | `status` |
+| `payout_requests` | the fourteen the service writes across nine statements |
+
+Everything else is written once at INSERT. If one ever legitimately needs to
+move, that is a migration and a decision — which is the point.
+
+**Observed, as `cp_app`, after the migration:**
+
+```
+a bare destination rewrite            ERROR: permission denied for table withdrawals
+a rewrite alongside a lawful move     ERROR: permission denied for table withdrawals
+any asset becomes settlement money    ERROR: permission denied for table assets
+a payout's requested quantity         ERROR: permission denied for table payout_requests
+the control: a lawful status move     permitted
+```
+
+**What this does and does not close of F-42.** F-42 is the standing finding
+that `cp.transition.*` is a session variable any role can set, so the AU001
+binding is satisfiable without a transition row, and its recorded remedy is the
+`capability_gates` treatment applied to the remaining tables. This applies it to
+four of them, chosen because their columns are money. F-42 stays OPEN: the other
+audited tables still hold table-wide UPDATE on their state column, and the GUC
+is still forgeable there.
+
+**Evidence.** REAL_DB_INTEGRATION. The grants were read from
+`information_schema.column_privileges` before and after, and each refusal was
+observed as the real application role.
+`TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach` asserts the column
+set per table from the catalogue, with a negative control so an empty query
+result cannot pass by comparing nothing — so a later migration widening one
+back to table-wide UPDATE fails there.
+
+## F-110 · An automatic resolution did not make the checks its contract names · NEW · P2 · FIXED
+
+**Found by** the money-out audit, comparing `ResolveAutomatic`'s doc comment
+against its body.
+
+The comment states two conditions:
+
+> - FEE_DUST needs a difference at or below the asset's dust threshold …
+> - OBSERVATION_CAUGHT_UP needs the recorded difference to be exactly zero.
+
+Neither was in the function. The dust test lived inside `dustRepair`, which is
+reached only when `policy.AutoPostDustAdjustment` is true — **false by default
+and not settable from configuration** — so on the path the deployment actually
+runs, FEE_DUST closed a record of any size with no amount test at all. The
+caught-up rule existed nowhere.
+
+The only gate was `!rec.Material`, a plain boolean on a table `cp_app` may
+update.
+
+Which direction it resolves in is what makes it matter: the repair writes a
+customer's ledger balance **down** when the chain holds less, by the SYSTEM
+actor, with no human.
+
+**Fix.** `autoCauseFits` enforces both conditions where the resolution is
+decided rather than inside the repair. A record with no difference recorded is
+refused for both amount-bearing causes rather than treated as zero — "nobody
+wrote down what the difference was" is not the same fact as "the difference was
+nothing", and only one of them justifies closing a record without a person.
+FINALITY_UPGRADE and DUPLICATE_PROVIDER_EVENT are untouched: they are statements
+about how an observation was made, and the contract claims no amount condition
+for them.
+
+**The fixture is the finding's other half.** The existing
+`TestIntegration_AutomaticResolutionIsNarrow` forces `AutoPostDustAdjustment =
+true`, so it exercises the one branch that did check. The new test leaves it at
+its default — the path the deployment runs, and the path nothing had ever
+taken.
+
+**Evidence.** REAL_DB_INTEGRATION, with a control: a genuine dust difference
+still resolves automatically, so the conditions are not one step too strict.
+
+## F-111 · The documents that certify reality · NEW · P2 · FIXED
+
+**Found by** a documentation-truthfulness audit over 92 Markdown files, run
+because §2 of the governing goal forbids overstated evidence and requires
+existing documents that overstate it to be corrected.
+
+### The worst one: fabricated evidence for "documentation reflects reality"
+
+`MASTER_BUILD_STATE.md`'s stopping-criterion 12 read **MET**, with this
+evidence:
+
+> traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71
+> IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references
+> resolving to declarations that exist
+
+All five figures are wrong, and they sum to **466** against a **389-row**
+document. Counted here: 225 VERIFIED, 60 IN_PROGRESS, 59 IMPLEMENTED, 18
+DEFERRED_OUT_OF_SCOPE, 14 NOT_STARTED, 13 BLOCKED_EXTERNAL. The string
+`264 VERIFIED` occurs nowhere else in the repository and matches no version of
+the file in its history, which has never been anything but 225 or 226.
+
+The phrase "re-derived from source" is the aggravating part: it names the method
+that would have produced the right answer.
+
+The *property* it asserts — that every cited test name resolves to a
+declaration — **is** machine-checked and does hold. Only the numbers were
+hand-written.
+
+### The summary table has now been wrong twice, the same way
+
+`REQUIREMENTS_TRACEABILITY.md` declared IN_PROGRESS 59 against 60 rows and
+VERIFIED 226 against 225 — left behind when F-65 correctly lowered R-053-12.
+The file's own change log records the first occurrence: *"the summary table
+previously said 103/138; the rows actually said 102/139"*.
+
+`TestDocs_TraceabilitySummaryMatchesItsRows` now derives the table from the
+rows. Verified non-vacuous: restoring the stale 226 makes it fail with *"the
+summary says 226 rows are VERIFIED; 225 are"*.
+
+### The capability table listed ten of twenty
+
+§10 omitted the entire internal economy — including `CREDIT_PURCHASE`, the
+capability this deployment exists to activate — while §3 of the same file said
+"capabilities: 20, of which 18 are high-risk" and that sentence is
+machine-checked and passing. The document contradicted its own verified number
+1,570 lines later, because only one of the two was derived. The row count is now
+derived from `gates.AllCapabilities()`.
+
+### Five rows of the test matrix asserted the opposite of the same file
+
+`integration 32/32` (51 packages exist, and §6 already said "the 50-package
+sweep"); `contract: helius/solanarpc/privy pending` (all three exist and pass,
+and §5 lists them); `load: unmeasured — no API binary yet` (contradicted three
+times elsewhere); `e2e/chaos: directories not yet created` (both exist and are
+CI jobs); `CI: authored; never executed` (§3b records the first green run).
+And §11 listed Redpanda, Temporal, S3 and ClickHouse as NOT_STARTED when all
+four are pinned, wired, containerised and exercised under
+`CP_TEST_REQUIRE_EXTERNAL_DEPS=1` — LOCAL_EXTERNAL_STACK is their honest class.
+
+### The highest-traffic wrong sentence
+
+The top of the file said `HTTP endpoints, frontend, cmd/api wiring | not
+started`, and "Exact next action" item 2 was *"Wire the adapters in `cmd/api`;
+expose the purchase endpoints; mount the webhook handler."* Two of those three
+were done. It is the first instruction a resuming session reads.
+
+### The two documents nobody checked
+
+`SECURITY.md` and `THREAT_MODEL.md` are what a reviewer would use to score
+security posture, and they were the only ones of their kind outside
+`references_test.go`'s scope. Empirically they were also the two that decayed
+furthest — both **understating** the system:
+
+- THREAT_MODEL listed "gate state can be flipped by a direct table write" as
+  residual risk #8. Migration 00701 closed it: `cp_app`'s only updatable column
+  on `capability_gates` is `version`, confirmed against the live catalogue, and
+  the sole writer of its transitions is a SECURITY DEFINER function requiring
+  three distinct actors. A paragraph beneath it asked for work that had been
+  done.
+- SECURITY.md, dated 2026-09-05, says `internal/signing` does not exist (it is
+  the most thoroughly built area of the system), `internal/admin` is absent,
+  `cmd/api` is absent, and `infra/` is empty (63 Terraform files).
+
+An understatement is the same defect as an overstatement when the document's
+purpose is to be accurate: a reviewer scoring this system from these two would
+mark down controls that hold.
+
+**Both are now in the checked set** — and on the first run that check found
+**six citations naming tests that do not exist**, two of which had never
+existed in any form. All six are corrected, either to the real test name or to
+words saying plainly that no such test exists.
+
+**Evidence.** STATIC_PROOF, with every count recomputed here rather than taken
+from the audit: the row states were tallied from the file, the capability list
+read from `gates.AllCapabilities()`, and the `capability_gates` grants read from
+`information_schema.column_privileges`. Three of the corrections are now
+machine-derived rather than hand-written, which is the only kind of fix that
+stops this recurring.
+
+## F-112 · A cookie Domain removes the binding F-87 depends on · NEW · P1 · FIXED
+
+**Found by** the identity/session audit, tracing what `CP_AUTH_COOKIE_DOMAIN`
+actually does.
+
+`httpmw.EffectiveCookieName` adds the `__Host-` prefix **only when the cookie is
+secure AND host-only**, and `SetSessionCookie` sets `c.Domain` only when the
+name is unprefixed. The login-state cookie is derived the same way. So naming a
+domain silently turns both into ordinary domain cookies — writable by any host
+that can set a cookie for a suffix of that domain.
+
+`internal/config` had **no rule for `Auth.CookieDomain` at all**.
+
+**Why it is a P1 and not a hardening note.** The `__Host-` prefix is the whole
+of the binding: `httpmw` has nothing else tying either cookie to one host. And
+the login-state cookie's value is `base64url(sha256(state))` with **no server
+secret**, so an attacker who begins their own sign-in knows the digest for their
+own state. Being able to write that cookie into the victim's browser is
+sufficient to plant a callback that signs the victim in as the attacker —
+which is exactly F-87, closed three commits earlier and re-opened by a
+configuration value. The session-cookie half is classic fixation.
+
+The victim normally has no login-state cookie at all, so the attack does not
+even need to win a collision.
+
+**It was shipped.** `infra/terraform/environments/prod/terraform.tfvars.pathb.example`
+set `cookie_domain = "api-nodal.actorvia.xyz"`. The live Render deployment does
+not set it, so the deployed service currently gets `__Host-`; the AWS path is
+where this was waiting.
+
+**And the suite agreed with it.** `prodEnv()` — the fixture that stands for "a
+valid production configuration" — set `CP_AUTH_COOKIE_DOMAIN=example.com`. So
+the test suite's own idea of a correct production deployment included the value
+that removes the control. That is the second time in this batch a fixture
+encoded the defect (F-103 was the first, with fourteen providers on live
+credentials in DEV), and it is worth naming as a pattern: **a suite's
+"known-good" fixture is a claim about what is safe, and nothing was checking
+it.**
+
+**Fix.** `RuleCookieHostOnly` refuses a non-empty `Auth.CookieDomain` in
+STAGING/PROD. The terraform example sets it empty with the reason. The fixture
+sets it empty. Below STAGING it is still permitted: a domain there is a
+developer convenience on a host serving nobody's money, and the prefix requires
+Secure in any case.
+
+**Evidence.** STATIC_PROOF for the exploit chain — it was traced through
+`EffectiveCookieName`, `SetSessionCookie`, `SetLoginState` and
+`GetAuthCallback`, not executed against a browser. The rule and its refusals are
+tested per environment, with the control that the production fixture still
+validates with the value unset.
+
+## F-113 · The refunded amount was computed twice and read never · NEW · P1 · FIXED
+
+**Found by** the provider/reconciliation audit, grepping for readers of a field
+it had just seen written.
+
+`PurchaseSnapshot.AmountRefundedMinor` is populated by the Stripe adapter in two
+places — from a charge's `amount_refunded` on the webhook path, and from a
+payment intent's charges on the lookup path. Outside the struct definition and
+one test assertion, **nothing read it.** Neither `Dispatch` nor `Reconcile`
+consulted it.
+
+**Why that mints money that was returned.** A PaymentIntent's `status` stays
+`succeeded` after a refund and its `amount` does not change. So:
+
+- the amount check (`snap.Amount` vs `f.PaidAmount`) passes,
+- `FundingStateFor(succeeded)` maps to CAPTURED,
+- and CAPTURED is the edge that mints.
+
+Two ways in. On the **webhook path**, an out-of-order `payment_intent.succeeded`
+whose embedded charge is already fully refunded. On the **reconciliation path**,
+a sweep looking up a funding whose refund webhook was lost — which is the path
+that applies less scrutiny by construction, because it never sees metadata or an
+event type, so the one thing it must not skip is whether the money is still
+there.
+
+**Fix.** `refundedReason` is consulted on both paths. A snapshot reporting any
+refund is not a capture to mint against, and a funding in that state is parked
+for a person rather than advanced — the same treatment an amount disagreement
+already gets, and for the same reason: the provider is authoritative about what
+it charged, and equally authoritative about what it returned. This binary was
+listening to half of that.
+
+Partial refunds park too. A partly-refunded payment is a question about how much
+value was actually bought, and this code has no answer for it that is not a
+person's.
+
+**One premise is BLOCKED_EXTERNAL and the fix does not rest on it.** That
+Stripe leaves `status` at `succeeded` and `amount` unchanged after a refund
+needs a live Stripe account to settle. But the code defect — a field computed
+in two places and read in none — is settled from source, and the safe
+behaviour is the same whichever way that premise falls: a provider reporting
+money returned is not a provider reporting money received.
+
+**Evidence.** REAL_DB_INTEGRATION for the webhook path, in both the full and
+partial forms, with the control that an unrefunded capture still mints — so
+the check is about the refunded amount and not about captures.
+
+## F-114 · A revoked agent could come back · NEW · P1 · FIXED
+
+**Found by** the state-machine audit, comparing what Go's transition table
+permits against what the schema permits.
+
+`State.IsTerminal` returns true for REVOKED and SUPERSEDED, and `CanTransition`
+gives both an empty destination list. In Go, a terminal state has no outgoing
+edge. **The schema said nothing about it**, and both promotion CHECKs on
+`agent_lifecycle_transitions` open with the same clause:
+
+```sql
+CHECK (from_stage = to_stage OR to_stage NOT IN (...) OR <evidence>)
+CHECK (from_stage = to_stage OR to_stage NOT IN (...) OR approval_id IS NOT NULL)
+```
+
+That short-circuit is correct for what it was written for: a pause, a resume or
+a revocation does not move the STAGE, and demanding promotion evidence for one
+would be demanding evidence for nothing happening.
+
+It is wrong for coming back. `Lifecycle.Revoke` goes through `sideTransition`,
+which sets `ToStage: a.Stage` — so a revoked LIVE agent keeps `stage='LIVE'`,
+`mode='LIVE'` and its envelope. A row saying
+
+```
+from_state='REVOKED', to_state='LIVE', from_stage='LIVE', to_stage='LIVE'
+```
+
+satisfies **both** CHECKs through that first clause, so it needs no
+`approval_id`, no `ir_hash`, no `risk_policy_hash` and no `evidence_hash`. The
+entity's own `state = stage` CHECK is satisfied; the stage binding short-circuits
+because the stage did not move; and the state binding sees the edge
+`REVOKED>LIVE`, which the row itself flagged. It commits, and an agent that was
+revoked is trading live capital again with nothing recorded about why.
+
+Reachable by `cp_app`, which holds INSERT on the transitions table and UPDATE on
+`agents`.
+
+**00726 closed the promotion form of that short-circuit. This is the
+resurrection form**, and it survived because returning from a side state does
+not move the stage either — the same shape as F-101 and F-94 before it: a
+control closed for the case it was written about, with a second case that
+reaches the same place by a different route.
+
+**Fix.** Migration 00734 states in the schema the rule Go already states: a
+transition row may not claim to leave a terminal state.
+
+Narrower than requiring evidence on every entry into an operating state, and
+deliberately so — that would also demand an approval to resume a paused agent,
+which is a different decision and not this finding's to make. On the transitions
+table rather than on `agents`, because the AU001 binding means no state change
+commits without a row: refusing the row refuses the change, with a message that
+says why.
+
+**Evidence.** REAL_DB_INTEGRATION. Both resurrection rows observed refused by
+the named constraint as `cp_app`, an ordinary pause observed passing it, and an
+integration test that revokes a real agent through the real lifecycle and then
+attempts the row directly — directly, because no Go path offers it, which is
+exactly why the schema has to be the one to refuse it.
 
 ## Findings deliberately NOT raised
 

@@ -55,6 +55,14 @@ var inScope = []string{
 	"docs/audit/INDEPENDENT_AUDIT.md",
 	"docs/build/MASTER_BUILD_STATE.md",
 	"docs/build/ADVERSARIAL_VALIDATION.md",
+	// The two a reviewer would use to score SECURITY posture, and the two that
+	// nothing checked. Empirically they were also the two that decayed furthest
+	// -- both understating the system, including a top-ten residual risk that
+	// migration 00701 had closed, and a whole section of DESIGNED tags naming
+	// packages that exist. An overstatement and an understatement are the same
+	// defect when the document's purpose is to be accurate (F-111).
+	"docs/security/SECURITY.md",
+	"docs/threat-model/THREAT_MODEL.md",
 }
 
 var (

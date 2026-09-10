@@ -186,3 +186,67 @@ func TestIntegration_CapabilityGateStateAuthority(t *testing.T) {
 	require.Error(t, err, "even the migration role may not create a gate already ACTIVE")
 	assert.Equal(t, "GT005", db.SQLState(err), "got %v", err)
 }
+
+// The application role holds column grants where the columns are money (F-109).
+//
+// Every audited entity binds its STATE change to a transition row. Nothing binds
+// the other columns, and the binding cannot: a constraint trigger declared
+// AFTER UPDATE OF status fires only when status is in the statement's SET list.
+// So a bare rewrite of an amount or a destination fired nothing at all, and one
+// smuggled alongside a lawful state move committed with AU001 satisfied and the
+// trail recording a move that did happen while the payload changed underneath.
+//
+// The remedy is privilege rather than detection, which is why it works, and it
+// is the treatment 00604, 00701, 00719, 00720, 00723 and 00730 already apply.
+// This asserts the four tables 00733 converted, by column, so that a later
+// migration widening one back to table-wide UPDATE fails here.
+func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	admin := connect(t, migrateURL)
+
+	granted := func(table string) []string {
+		var cols []string
+		rows, err := admin.Query(ctx,
+			`SELECT column_name FROM information_schema.column_privileges
+			  WHERE grantee = 'cp_app' AND privilege_type = 'UPDATE' AND table_name = $1
+			  ORDER BY column_name`, table)
+		require.NoError(t, err)
+		defer rows.Close()
+		for rows.Next() {
+			var c string
+			require.NoError(t, rows.Scan(&c))
+			cols = append(cols, c)
+		}
+		require.NoError(t, rows.Err())
+		return cols
+	}
+
+	for table, want := range map[string][]string{
+		// The amount, the destination and the approval are written once.
+		"withdrawals": {"status", "step_up_verified_at"},
+		// What an asset IS decides how reconciliation values it: a stablecoin
+		// pegged to USD is marked at face value, scaled by its own decimals,
+		// with no status or risk-class check. That is the materiality test.
+		"assets": {"status"},
+		// A live instrument's settlement asset is not repointable.
+		"instruments": {"status"},
+		// The account, the requested quantity, the destination and both
+		// idempotency keys are not the application's to change.
+		"payout_requests": {
+			"failure_reason", "policy_hash", "policy_version", "provider",
+			"provider_idempotency_key", "provider_reference", "provider_status",
+			"reserved_at", "reserved_quantity", "settled_at", "settled_quantity",
+			"state", "submitted_at", "verification_level",
+		},
+	} {
+		assert.Equal(t, want, granted(table),
+			"%s: cp_app's UPDATE grant is not the column set 00733 established; a table-wide "+
+				"grant here means an amount or a destination can be rewritten with no transition row", table)
+	}
+
+	// The negative control. If the query above stopped matching anything it
+	// would report an empty set for every table and pass by comparing nothing.
+	assert.NotEmpty(t, granted("payout_requests"), "the privilege query returned nothing; it is not looking at the catalogue")
+}

@@ -73,8 +73,12 @@ const (
 	// the permissive jurisdiction policy. cmd/api refuses to start on one, so
 	// without this the configuration check passes a deployment that cannot boot.
 	RuleLegalPolicyNotDevelopment Rule = "LEGAL_POLICY_NOT_DEVELOPMENT"
-	RulePublicProductName         Rule = "PUBLIC_PRODUCT_NAME"
-	RuleCapabilityStore           Rule = "CAPABILITY_STORE_CONFIGURED"
+	// RuleCookieHostOnly: a STAGING or PROD deployment sets no cookie Domain,
+	// because a Domain removes the __Host- prefix and the prefix is the only
+	// thing binding the session and login-state cookies to one host.
+	RuleCookieHostOnly    Rule = "COOKIE_HOST_ONLY"
+	RulePublicProductName Rule = "PUBLIC_PRODUCT_NAME"
+	RuleCapabilityStore   Rule = "CAPABILITY_STORE_CONFIGURED"
 	// RuleRateLimitStated rejects a transport budget that cannot be parsed,
 	// and one switched off where money is at stake.
 	RuleRateLimitStated Rule = "RATE_LIMIT_STATED"
@@ -561,6 +565,27 @@ func (c *Config) Validate() error {
 	}
 	if prodLike && c.Auth.DebugAuthEnabled {
 		add(RuleNoDebugAuth, "Auth.DebugAuthEnabled", "must be false in STAGING/PROD")
+	}
+	// A cookie Domain removes the __Host- prefix, and the prefix is the whole
+	// binding.
+	//
+	// httpmw.EffectiveCookieName adds __Host- only when the cookie is secure
+	// AND host-only, and SetSessionCookie sets c.Domain only when the name is
+	// unprefixed. So naming a domain silently turns both the session cookie and
+	// the login-state cookie into ordinary domain cookies -- writable by any
+	// host that can set a cookie for a suffix of that domain.
+	//
+	// That re-opens F-87. The login-state cookie is a SHA-256 of the state with
+	// no server secret, so an attacker who starts their own sign-in knows the
+	// digest, and being able to write the cookie lets them plant a callback
+	// that signs the victim's browser in as them -- the exact attack
+	// SetLoginState was written to stop. The session cookie half is classic
+	// fixation.
+	//
+	// Nothing refused it, and infra/terraform's PROD example sets it (F-112).
+	if prodLike && strings.TrimSpace(c.Auth.CookieDomain) != "" {
+		add(RuleCookieHostOnly, "Auth.CookieDomain",
+			"must be empty in STAGING/PROD: a Domain attribute removes the __Host- prefix, which is what binds the session and login-state cookies to one host")
 	}
 	if prodLike && !c.Auth.CookieSecure {
 		add(RuleCookieSecure, "Auth.CookieSecure", "must be true in STAGING/PROD")

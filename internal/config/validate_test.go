@@ -634,3 +634,46 @@ func TestValidate_TheLegalPolicyIsOneTheBinaryCanBuild(t *testing.T) {
 	c.API.LegalPolicy = "DEVELOPMENT"
 	assert.NoError(t, c.Validate(), "a development policy is what DEV is for")
 }
+
+// A cookie Domain removes the __Host- prefix, and the prefix is the whole
+// binding (F-112).
+//
+// httpmw.EffectiveCookieName adds __Host- only when the cookie is secure AND
+// host-only. So naming a domain silently turns both the session cookie and the
+// login-state cookie into ordinary domain cookies, writable by any host that
+// can set a cookie for a suffix of that domain.
+//
+// That re-opens F-87. The login-state cookie is a SHA-256 of the state with no
+// server secret, so an attacker who starts their own sign-in knows the digest;
+// being able to write the cookie lets them plant a callback that signs the
+// victim's browser in as them, which is the attack SetLoginState exists to
+// stop. The session half is classic fixation.
+//
+// Nothing refused it, infra/terraform's PROD example set it, and this suite's
+// own "valid production configuration" fixture set it too.
+func TestValidate_AProductionCookieIsHostOnly(t *testing.T) {
+	t.Parallel()
+	for _, env := range []Environment{EnvProd, EnvStaging} {
+		c := validProdConfig(t)
+		if env == EnvStaging {
+			c = asStaging(c)
+		}
+		c.Auth.CookieDomain = "api-nodal.actorvia.xyz"
+		err := c.Validate()
+		require.Error(t, err, "%s accepts a cookie Domain", env)
+		assert.True(t, HasViolation(err, RuleCookieHostOnly))
+	}
+
+	// Below STAGING a domain is a developer convenience on a host that is not
+	// serving anybody's money, and the prefix needs Secure anyway.
+	c := validProdConfig(t)
+	c.Env = EnvDev
+	demoteProviders(c, ProviderModeSandbox)
+	c.Auth.CookieDomain = "localhost"
+	assert.False(t, HasViolation(c.Validate(), RuleCookieHostOnly))
+
+	// The control: the production fixture, unset, still validates.
+	ok := validProdConfig(t)
+	assert.Empty(t, ok.Auth.CookieDomain)
+	assert.NoError(t, ok.Validate())
+}

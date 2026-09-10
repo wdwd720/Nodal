@@ -92,11 +92,16 @@ func prodEnv() map[string]string {
 		"CP_AUTH_CLIENT_SECRET_REF": "aws-sm://cp/prod/oidc-client-secret",
 		"CP_AUTH_REDIRECT_URL":      "https://api.example.com/v1/auth/callback",
 		"CP_AUTH_COOKIE_NAME":       "cp_session",
-		"CP_AUTH_COOKIE_DOMAIN":     "example.com",
-		"CP_AUTH_COOKIE_SECURE":     "true",
-		"CP_AUTH_SESSION_TTL":       "12h",
-		"CP_AUTH_STEP_UP_MAX_AGE":   "5m",
-		"CP_AUTH_DEBUG_ENABLED":     "false",
+		// Empty, and that is the point: a Domain removes the __Host- prefix,
+		// which is the only thing binding the session and login-state cookies
+		// to one host. This fixture set "example.com", so the suite's idea of
+		// a valid production configuration included the value that re-opens
+		// F-87 (F-112).
+		"CP_AUTH_COOKIE_DOMAIN":   "",
+		"CP_AUTH_COOKIE_SECURE":   "true",
+		"CP_AUTH_SESSION_TTL":     "12h",
+		"CP_AUTH_STEP_UP_MAX_AGE": "5m",
+		"CP_AUTH_DEBUG_ENABLED":   "false",
 
 		"CP_TELEMETRY_OTLP_ENDPOINT":      "otel-collector.example.internal:4317",
 		"CP_TELEMETRY_OTLP_INSECURE":      "false",

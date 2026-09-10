@@ -71,7 +71,8 @@ rediscovered from the code.
 | `internal/provider/stripepayout` — stablecoin payout adapter | **done**, and refuses to submit |
 | Config slots `CREDIT_PURCHASE` and `PAYOUT` | **done** |
 | PAY-001 … PAY-006 as integration tests | **done** |
-| HTTP endpoints, frontend, `cmd/api` wiring | **not started** |
+| HTTP endpoints, `cmd/api` wiring | **done** — `cmd/api/wire_credit.go` builds the adapter, `POST /payments` is declared and mounted, the webhook is mounted at `/v1/webhooks/stripe_credit`. This row read "not started" until 2026-09-10 (F-111) |
+| Customer-facing purchase UI | **not started** — `apps/web` has no purchase flow |
 | Connect connected accounts | **blocked** on B-11 |
 | Payout destination-change hold | **not built**, and blocks `PAYOUT_SETTLE` |
 
@@ -79,7 +80,10 @@ rediscovered from the code.
 
 1. The owner runs `stripe login` and decides Nodal's production webhook URL
    (`STRIPE_BROWSER_SETUP.md` §5 and §6).
-2. Wire the adapters in `cmd/api`; expose the purchase endpoints; mount the webhook handler.
+2. ~~Wire the adapters in `cmd/api`; expose the purchase endpoints; mount the webhook handler.~~
+   **Done.** All three exist and are mounted; what is missing is the customer-facing UI.
+   Corrected 2026-09-10: this was the first instruction a resuming session read, and it
+   named work that had already landed (F-111).
 3. Run Stage 2 of `STRIPE_PRODUCTION_CHECKLIST.md` against Stripe test mode.
 4. Nothing past Stage 2 without the owner: every remaining item is a business-model declaration, a
    legal attestation, or an application whose denial can affect Actorvia's live capabilities.
@@ -1415,7 +1419,7 @@ Not inherited from an earlier audit. Each row was re-checked against the reposit
 | 9 | CI/CD exists | **MET** | `ci.yml` green on `af28dd8` running all 40 integration packages, the financial core raced with the integration tag, and chaos with 0 skips. `release.yml` still unproven (tag-triggered, no tags) |
 | 10 | observability exists | **MET** | 11 files in `internal/observability`; metrics, tracing, structured logging with secret redaction incl. connection strings (D-041) |
 | 11 | operator tooling exists | **MET** | 20 runbooks, worker CLIs, admin console, `scripts/devrun`, `scripts/restoredrill` |
-| 12 | documentation reflects reality | **MET** | traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71 IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references resolving to declarations that exist |
+| 12 | documentation reflects reality | **NOT MET as stated; corrected 2026-09-10** | The evidence in this cell was invented. It read "traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71 IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references". All five figures were wrong and they summed to 466 against a 389-row document; `264 VERIFIED` appears nowhere else in this repository and matches no version of the file in its history, which has never been anything but 225 or 226. The phrase "re-derived from source" named the method that would have produced the right answer. Counted 2026-09-10: **389 rows** — 225 VERIFIED, 60 IN_PROGRESS, 59 IMPLEMENTED, 18 DEFERRED_OUT_OF_SCOPE, 14 NOT_STARTED, 13 BLOCKED_EXTERNAL — and **910** distinct Go test names cited, not 609. The property that every cited name resolves to a declaration that exists IS machine-checked, by `TestDocs_EveryTestTheyNameExists`; only the numbers were hand-written, and now `TestDocs_TraceabilitySummaryMatchesItsRows` derives them (F-111). |
 | 13 | readiness report states what is authorized for live capital | **MET** | `docs/PRODUCTION_READINESS_REPORT.md`, 693 lines, opening line `Platform status: NOT_READY. Capital authority: DISABLED.` |
 
 ### Condition 3, resolved to the level that is actually available
@@ -1434,7 +1438,43 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
-### RESUME HERE — checkpoint 2026-09-09, after reconciling the provider work AND clearing §4
+### RESUME HERE — checkpoint 2026-09-10, after fourteen findings from eleven parallel audits
+
+Eleven read-only audits ran in parallel over the financial kernel, the state
+machines, the provider path, configuration, agent authority, the launch tier,
+observability, the frontends, authorization, the test suite and the
+documentation. **Their claims were re-verified here before anything was
+changed**, and that mattered: two were overstated and one was wrong. The
+capacity negative-ceiling report concluded the money-at-risk ceiling could be
+silently disabled — it could not, only its test was passing for the wrong
+reason. That correction is recorded in F-104 rather than quietly dropped.
+
+F-100 to F-113 are in §9 with what each one cost. Eight are P1. Every fix was
+observed failing first.
+
+**What to do next, in order.**
+
+1. **F-105's remaining half.** `security_events` is bounded per minute now and
+   still unprunable, so any steady rate eventually fills a 500 MB database. The
+   complete fix is ADR-0020's: partition the table and detach, never delete
+   under a disabled trigger. `login_attempts` is the same class, with a purge
+   that lives in a worker this deployment does not run.
+2. ~~**The agent resurrection.**~~ Closed as F-114 by migration 00734: a
+   transition row may not claim to leave a terminal state.
+3. **Birth controls.** `capability_gates` is the only entity in the schema that
+   cannot be born in a privileged state. `agents` can be born LIVE,
+   `credit_fundings` SETTLED, `payout_requests` SETTLED, and `admin_actions`
+   APPROVED — which is F-42's forged dual control, and the sharpest of them.
+4. **F-42 and F-47**, unchanged. F-109 applied the privilege treatment to the
+   four tables whose columns are money; the rest of F-42's list stands.
+5. The remaining audit findings not yet actioned, listed in the reports: SSE
+   surviving session revocation, `payout.Submit` re-calling the provider on the
+   SUBMITTED path, and the reconciliation alerting that reaches nobody.
+
+`docs/audit/LAUNCH_GATE_MATRIX.md` remains the honest summary of what stands
+between this repository and real money. All five launch flags are still false.
+
+### The previous checkpoint — 2026-09-09, after reconciling the provider work AND clearing §4
 
 Three commits since `80edf58`'s successor. The audit ingested the provider
 workstream, re-verified it rather than adopting it, and then cleared the §4
@@ -1676,7 +1716,7 @@ binary).
 
 ## 7. Migrations applied
 
-00001 through **00731**, 63 files, all embedded in `migrations.FS` and
+00001 through **00734**, 66 files, all embedded in `migrations.FS` and
 checksum-verified by `internal/db/migrate`. An applied migration is never
 edited; a correction is a new file. `go run ./cmd/migrate status` is
 authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
@@ -1693,10 +1733,50 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: 99 findings, of which four are
-open (F-42, F-47, F-69, F-93), three are partial (F-65, F-84, F-95), and one
-(F-85) is open by decision — reordering middleware on the money path is not
-a change to make at the end of a batch.
+`docs/audit/AUDIT_FINDINGS.md` is the register: **114 findings**, of which four
+are open (F-42, F-47, F-69, F-93), four are partial (F-65, F-84, F-95, F-105)
+and the rest are fixed.
+
+F-100 through F-114 landed on 2026-09-10, from eleven parallel read-only audits
+whose claims were re-verified here before anything was changed. Eight are P1 and
+every one of them was observed failing before it was believed:
+
+- **F-100** a funding parked for a person was un-parked by the next webhook, and
+  a refund followed by a late success minted Credits for money that was returned
+- **F-101** one transition row licensed a second, unrelated edge, because the
+  edge encoding's delimiters are in band and a state name is unconstrained text
+- **F-102** two write routes scoped through the read-grade helper, so one ADMIN
+  session could cancel any customer's intent and move any seller's product
+- **F-103** five configuration rules permitted what the deployment cannot
+  survive, including live provider credentials in DEV
+- **F-105** an unauthenticated caller chose how many permanent, undeletable rows
+  the service wrote, on a deployment whose database ceiling halts every
+  financial action (PARTIAL: the table is still unprunable)
+- **F-106** three money tables handed one account's record to another on a
+  reused idempotency key
+- **F-107** the seller set the platform's own commission, and a payout the
+  provider may have paid could be cancelled by its owner
+- **F-108** two failed RPCs were read as proof a transaction never happened
+- **F-109** the transition binding covers the state column and nothing else, so
+  the application role could rewrite an amount, a destination, or the definition
+  of what counts as money
+- **F-112** a supported configuration removed the `__Host-` prefix, re-opening
+  the takeover F-87 closed
+- **F-113** the amount a provider says it refunded was computed twice and read
+  never
+- **F-114** a revoked agent could return to live capital with no approval and no
+  evidence, because it keeps its stage and both promotion CHECKs short-circuit
+  when the stage does not move
+
+Three recurring shapes are worth carrying forward. **A fixture is a claim**:
+three separate suites encoded the defect they were meant to catch — fourteen
+providers on live credentials in a "valid production" config, a cookie domain in
+the same fixture, and a seller-set platform fee in the HTTP journey. **A guard
+matched on a name**: F-102's write-scope check knew one helper of four, and the
+completeness test that replaced it found a fifth on its first run. **A test can
+pass because a different guard fired**: F-108's first test did exactly that and
+was only caught by re-running it against the unfixed code, which is why that
+step is not optional.
 
 | Finding | Priority | Why it is still open |
 |---|---|---|
@@ -1708,18 +1788,48 @@ Everything else is FIXED or PART, with the evidence named in the finding.
 
 ## 10. Production-capability state
 
-| Capability | State | Notes |
-|---|---|---|
-| LIVE_FUNDING | DISABLED | no provider approval, no gate DB yet |
-| LIVE_MANUAL_TRADING | DISABLED | |
-| LIVE_AGENT_TRADING | DISABLED | |
-| WITHDRAWALS | DISABLED | |
-| SOCIAL_DATA_PERSISTENCE | DISABLED | data-licensing unknown |
-| MARKETPLACE | DISABLED | out of V1 |
-| CROSS_CHAIN | DISABLED | out of V1 |
-| PREDICTION_MARKETS | DISABLED | out of V1 |
-| SECURITIES | DISABLED | out of V1 |
-| CEX_TRADING | DISABLED | out of V1 |
+This table listed **ten** capabilities. `gates.AllCapabilities()` declares
+**twenty**, and the ten it omitted are the entire internal economy — including
+`CREDIT_PURCHASE`, the capability this deployment exists to activate. Section 3
+of this same file says "capabilities: 20, of which 18 are high-risk", and that
+sentence is machine-checked and passing, so the document contradicted its own
+verified number 1,570 lines later. Two further rows were stale in their notes:
+`LIVE_FUNDING` said "no gate DB yet" (the table has existed since migration
+00150) and `MARKETPLACE` said "out of V1" (F-16 and F-43 moved it to high risk
+because it gates internal commerce). Corrected 2026-09-10, and
+`TestDocs_CountsMatchTheCode` now derives the row count from
+`gates.AllCapabilities()` so it cannot silently fall behind again (F-111).
+
+**This table lists 20 capabilities.**
+
+| Capability | Risk | State | Notes |
+|---|---|---|---|
+| LIVE_FUNDING | high | DISABLED | provider approval outstanding (EB-003) |
+| LIVE_MANUAL_TRADING | high | DISABLED | |
+| LIVE_AGENT_TRADING | high | DISABLED | |
+| WITHDRAWALS | high | DISABLED | the gate is the best-built control in the schema (00701) |
+| SOCIAL_DATA_PERSISTENCE | low | DISABLED | data-licensing unknown |
+| MARKETPLACE | high | DISABLED | gates internal commerce; reclassified by F-16/F-43 |
+| CROSS_CHAIN | high | DISABLED | out of V1 |
+| PREDICTION_MARKETS | high | DISABLED | out of V1 |
+| SECURITIES | high | DISABLED | out of V1 |
+| CEX_TRADING | high | DISABLED | out of V1 |
+| CREDIT_PURCHASE | high | DISABLED | the one this deployment exists to activate; see `docs/audit/LAUNCH_GATE_MATRIX.md` |
+| NATIVE_ASSET_CREATION | low | DISABLED | |
+| NATIVE_MARKET_TRADING | high | DISABLED | |
+| PAYOUT_RESERVE | high | DISABLED | |
+| PAYOUT_SETTLE | high | DISABLED | |
+| HOSTED_TRADING | high | DISABLED | |
+| HOSTED_FUNDING | high | DISABLED | |
+| AGENT_BOUNDED_DISCRETION | high | DISABLED | above `agentauthority.MaxSupportedLevel` |
+| AGENT_AUTONOMOUS_SELECTION | high | DISABLED | above `agentauthority.MaxSupportedLevel` |
+| AGENT_AUTONOMOUS_PORTFOLIO | high | DISABLED | above `agentauthority.MaxSupportedLevel` |
+
+Every row reads DISABLED for the same reason rather than twenty reasons:
+`cp_gate_born_disabled` (00701) refuses any gate born in another state, and no
+activation ceremony has been performed in any environment. The ceremony needs
+three distinct principals and evidence references, and what it is waiting on is
+in `LAUNCH_GATE_MATRIX.md`.
 
 Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 
@@ -1733,12 +1843,27 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 | Helius | SolanaDataProvider / ChainObserver | **CODE_COMPLETE + CONTRACT_TESTED → BLOCKED_EXTERNAL (EB-010)** | PARTIAL docs; Enhanced Transactions in maintenance mode, Parsed Events beta returns numbers (must parse exactly); webhooks retry 3× then drop → never truth, periodic reconciliation mandatory |
 | Fallback Solana RPC | ChainObserver (secondary) | **CODE_COMPLETE + CONTRACT_TESTED** (public RPC endpoints need no contract; production uses a paid fallback provider, config-driven) | verified; `maxSupportedTransactionVersion: 0` required for v0 txs; blockhash validity ~151 blocks; Token-2022 extension program ids enumerated |
 | Anthropic Claude | ModelProvider | NOT_STARTED | verified; use `claude-opus-5` with `output_config.format` JSON schema for the NL compiler (Fable 5.1 rejects forced `tool_choice`); no idempotency header; Go SDK v1.71.0 |
-| Redpanda | EventBus | NOT_STARTED |
-| Temporal | WorkflowEngine | NOT_STARTED |
-| S3 (+Object Lock) | ObjectArchive | NOT_STARTED |
-| ClickHouse | analytics store | NOT_STARTED |
+| Redpanda | EventBus | **LOCAL_STACK_VERIFIED**; no managed account (EB-014) | `internal/reality/redpandabus`, started by `docker-compose.yml`, exercised in the integration job with `CP_TEST_REQUIRE_EXTERNAL_DEPS=1` |
+| Temporal | WorkflowEngine | **LOCAL_STACK_VERIFIED**; no managed account (EB-014) | `internal/workflows` + `cmd/workflow-worker`; TLS is now applied rather than only validated (F-103) |
+| S3 (+Object Lock) | ObjectArchive | **LOCAL_STACK_VERIFIED** against MinIO; Object Lock itself is BLOCKED_EXTERNAL (EB-012) | `internal/archive`; the deployment runs `CP_ARCHIVE_BACKEND=postgres` (00730), so the Object Lock rule does not fire there |
+| ClickHouse | analytics store | **LOCAL_STACK_VERIFIED**; no managed account (EB-014) | `internal/reality/clickhouse` |
+
+The last four read NOT_STARTED until 2026-09-10 and had not been for a long
+time: all four are pinned in `go.mod`, started by `docker-compose.yml`, wired to
+named packages and exercised in CI's integration job with
+`CP_TEST_REQUIRE_EXTERNAL_DEPS=1`, which turns a skipped dependency into a
+failure. LOCAL_EXTERNAL_STACK is the honest class for them — a real broker, a
+real Temporal, a real object store and a real ClickHouse, none of them a managed
+account this project holds (F-111).
 
 ## 12. Test matrix (locally executable today)
+
+Five rows of this table asserted the opposite of what this same file establishes
+elsewhere, and had done for long enough that a reader could have taken any of
+them for current. They are corrected in place rather than deleted, with what was
+wrong named, because a table that quietly becomes right teaches nobody how it
+became wrong (F-111). Every "last recorded result" is a DATE and a claim about
+that date; none of them is a promise about now.
 
 | Tier | Command | Last recorded result |
 |---|---|---|
@@ -1746,16 +1871,16 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 | unit + race | `go test -count=1 -race ./...` | 2026-09-06 (later run, 61 packages): 58 green; `internal/settlement` failing while its agent finishes the executor; two Jupiter timeout tests load-sensitive (pass in isolation ×3; hardening requested) |
 | property | `make property` (rapid `TestProp_*` in money, ledger, capital, positions, buyingpower, event, risk, eligibility, killswitch, provider, fees, ratelimit, audit, intent, quote) | green with unit |
 | fuzz | `make fuzz` (`FuzzParseUSD`, `FuzzParseQuantity`, `FuzzQuantityFromDecimalString`, `FuzzParseUSDRound`, `FuzzScanQuantity`, `FuzzParse` (id), `FuzzParseSecretRef`, `FuzzEnvelopeJSON`, `FuzzCanonicalJSON`, `FuzzValidate` (intent), `FuzzRouteHash`) | 10–20 s per target clean (per-package reports) |
-| integration | isolated DB via `scripts/testdb`, `-tags=integration` over `./internal/... ./test/...` | 32/32 packages green on fresh DB (lint sweep); each wave-2 package re-verified individually on fresh DBs |
+| integration | `make integration` (`scripts/inttest`, one fresh database per package) | **51/51 packages green, 2026-09-10.** This row said 32/32 until then, from a sweep predating `scripts/inttest`; section 6 of this same file already said "the 50-package sweep" (F-111) |
 | migration | `test/integration/migrations` (clean apply, checksums, tamper, guarded rollback, role privileges, transition binding) | green |
 | concurrency torture (PART 23) | `internal/capital` `CP_TORTURE_ITERATIONS=25` | 20/80 every iteration, both isolation modes |
 | restore drill (PART 141/219) | `make restore-drill` | OK, `dist/restore-drill.json` |
 | lint | `make lint` (+ `golangci-lint --build-tags=integration ./...`) | 0 issues at last sweep |
-| contract | `make contract` (`test/contract/{stripe,jupiter}`; helius/solanarpc/privy pending) | green 2026-09-06 |
+| contract | `make contract` (`test/contract/{stripe,jupiter,helius,solanarpc,privy}` and the topic registry) | green. "helius/solanarpc/privy pending" was wrong on 2026-09-10: all three exist and pass, and section 5 of this file lists them (F-111) |
 | security | `make security` (`test/security`: authority-boundary import rules, closed agent permission set, PROD refuses fakes/seed/debug auth) | green 2026-09-06; API-level IDOR/CSRF/SSRF/webhook-forgery cases join once `cmd/api` exists |
-| load | `make load` (`test/load/*.js`, k6) | scripts valid (`k6 inspect`); **unmeasured** — no API binary yet |
-| e2e / chaos tiers | `make e2e`, `make chaos` | pending: directories not yet created (Stages 7, 14, 18) |
-| CI | `.github/workflows/ci.yml` | authored; never executed (no remote, SB-004) |
+| load | `make load` (`test/load/*.js`, k6) | scripts valid (`k6 inspect`); **unmeasured** — not for want of a binary. "no API binary yet" was wrong on 2026-09-10, and this file says so in three other places; what is missing is a run against a deployed target (F-111) |
+| e2e / chaos tiers | `make e2e`, `make chaos` | both directories exist and both are CI jobs. "directories not yet created" was wrong on 2026-09-10 (F-111) |
+| CI | `.github/workflows/ci.yml` | has run; SB-004 (no remote) is closed. "authored; never executed" was wrong on 2026-09-10, and section 3b of this file records the first green run (F-111). **Whether it is green TODAY is not asserted here**: nothing in this repository can check that, and a claim about a remote run's state is exactly the kind this file has been wrong about |
 
 ## 13. Session log
 

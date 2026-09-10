@@ -129,6 +129,11 @@ func newCommerceHarnessWith(
 	led := ledger.NewService(clk, "httpapi-commerce-itest")
 	credits := credit.NewService(led, clk)
 	svc := commerce.NewService(led, credits, audit.NewWriter(), clk)
+	// The platform's share is the deployment's, not the seller's: it moved out
+	// of the create request in F-107. The journeys below still exercise a 10%
+	// fee; they just no longer ask the counterparty who benefits from it being
+	// zero to choose it.
+	require.NoError(t, svc.SetPlatformFeeBPS(1000))
 	svc.SetCapabilityResolver(caps)
 
 	sellerUser, sellerAccount := seedAccount(t, d)
@@ -270,12 +275,11 @@ func TestIntegration_CommerceJourneyOverHTTP(t *testing.T) {
 	// 2. A product in DRAFT. The response already names the provenance a sale
 	//    will produce, because a seller is entitled to know that before listing.
 	res = h.asSeller().do(http.MethodPost, "/v1/internal-products", map[string]any{
-		"account_id":       h.sellerAccount.String(),
-		"kind":             "DATA",
-		"title":            "Order-book snapshots, 2026",
-		"description":      "one year of L2 snapshots",
-		"price":            "1000",
-		"platform_fee_bps": 1000,
+		"account_id":  h.sellerAccount.String(),
+		"kind":        "DATA",
+		"title":       "Order-book snapshots, 2026",
+		"description": "one year of L2 snapshots",
+		"price":       "1000",
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
 	product := res.raw()
@@ -622,6 +626,11 @@ func TestIntegration_JurisdictionTurningBlockedMidSessionStopsTheNextPurchase(t 
 	led := ledger.NewService(clk, "httpapi-commerce-itest")
 	credits := credit.NewService(led, clk)
 	svc := commerce.NewService(led, credits, audit.NewWriter(), clk)
+	// The platform's share is the deployment's, not the seller's: it moved out
+	// of the create request in F-107. The journeys below still exercise a 10%
+	// fee; they just no longer ask the counterparty who benefits from it being
+	// zero to choose it.
+	require.NoError(t, svc.SetPlatformFeeBPS(1000))
 	svc.SetCapabilityResolver(caps)
 
 	sellerUser, sellerAccount := seedAccount(t, d)
@@ -723,7 +732,7 @@ func TestIntegration_ADraftProductIsNotReadableByAStranger(t *testing.T) {
 	res = h.asSeller().do(http.MethodPost, "/v1/internal-products", map[string]any{
 		"account_id": h.sellerAccount.String(), "kind": "DATA",
 		"title": "Unlisted research", "description": "not published yet",
-		"price": "1000", "platform_fee_bps": 1000,
+		"price": "1000",
 	}, "Idempotency-Key", idemKey())
 	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
 	productID := productIDOf(t, res.raw())

@@ -786,3 +786,85 @@ func TestIntegration_ASilentObserverDoesNotProveAbsence(t *testing.T) {
 	assert.NotEqual(t, StatusMatched, out.Record.Status,
 		"a record nobody could observe was filed as agreeing")
 }
+
+// An automatic resolution makes the checks its own contract names (F-110).
+//
+// ResolveAutomatic's doc comment states two amount conditions: FEE_DUST needs a
+// difference at or below the asset's dust threshold, and OBSERVATION_CAUGHT_UP
+// needs the recorded difference to be exactly zero.
+//
+// Neither was in the function. The dust test lived inside dustRepair, reachable
+// only when AutoPostDustAdjustment is true -- false by default and unreachable
+// from configuration -- so on the default path FEE_DUST closed a record of any
+// size with no amount test. The caught-up rule existed nowhere. The only gate
+// was !rec.Material, a plain boolean on a table cp_app may update.
+//
+// The direction it resolves in is what makes it matter: the repair writes a
+// customer's ledger balance DOWN when the chain holds less, by the SYSTEM
+// actor, with no human.
+//
+// Note the fixture: AutoPostDustAdjustment is left at its default, which is the
+// path the deployment actually runs and the one the old test never took. The
+// existing TestIntegration_AutomaticResolutionIsNarrow forces it true.
+func TestIntegration_AnAutomaticResolutionHonoursItsOwnConditions(t *testing.T) {
+	d := openTestDB(t)
+	f := newFixture(t, d)
+	f.fund(f.usdc, money.QuantityFromInt64(fundedUSDC), 10_000)
+
+	policy := DefaultPolicy()
+	policy.DustQuantity[f.usdc.ID] = money.QuantityFromInt64(1_000)
+	policy.MaterialThresholdUSDMinor = 100_000_000 // nothing here is material
+	engine := f.newEngine(Config{Policy: policy})
+
+	// A difference far above the dust threshold, and far enough below the
+	// materiality threshold that the human gate does not fire.
+	f.sim.SetBalance(chain.BalanceObservation{
+		Owner: f.walletAddr, Mint: f.usdc.MintAddress, TokenAccount: "ata-usdc-" + f.suffix,
+		Amount: money.QuantityFromInt64(fundedUSDC - 250_000), Decimals: 6, DecimalsKnown: true,
+	})
+	recs, err := engine.RunFull(f.ctx, f.account)
+	require.NoError(t, err)
+	rec := findRecord(t, recs, KindWalletBalance)
+	require.Equal(t, StatusMismatch, rec.Status)
+	require.False(t, rec.Material, "the fixture must clear the human gate, or this proves nothing")
+
+	t.Run("FEE_DUST refuses a difference that is not dust", func(t *testing.T) {
+		err := d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, rerr := engine.ResolveAutomatic(ctx, tx, rec.ID, AutoCauseFeeDust)
+			return rerr
+		})
+		require.Error(t, err, "a 250,000-unit difference was closed as dust, unattended")
+		assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+	})
+
+	t.Run("OBSERVATION_CAUGHT_UP refuses a difference that is not zero", func(t *testing.T) {
+		err := d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, rerr := engine.ResolveAutomatic(ctx, tx, rec.ID, AutoCauseObservationCaughtUp)
+			return rerr
+		})
+		require.Error(t, err, "a record still disagreeing was closed as having caught up")
+		assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+	})
+
+	// The record is untouched by either refusal.
+	still, err := f.records.Get(f.ctx, d, rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusMismatch, still.Status)
+
+	// The control: a genuine dust difference still resolves, so the conditions
+	// are not one step too strict.
+	f.sim.SetBalance(chain.BalanceObservation{
+		Owner: f.walletAddr, Mint: f.usdc.MintAddress, TokenAccount: "ata-usdc-" + f.suffix,
+		Amount: money.QuantityFromInt64(fundedUSDC - 500), Decimals: 6, DecimalsKnown: true,
+	})
+	recs2, err := engine.RunFull(f.ctx, f.account)
+	require.NoError(t, err)
+	dust := findRecord(t, recs2, KindWalletBalance)
+	require.NoError(t, d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		_, rerr := engine.ResolveAutomatic(ctx, tx, dust.ID, AutoCauseFeeDust)
+		return rerr
+	}))
+	closed, err := f.records.Get(f.ctx, d, dust.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusResolvedAutomatic, closed.Status)
+}

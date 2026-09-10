@@ -796,3 +796,65 @@ func TestPromotingAPausedAgentIsRefused(t *testing.T) {
 	require.Error(t, err, "a paused agent is resumed before it is promoted")
 	assert.Equal(t, errs.CodeInvalidStateTransition, errs.CodeOf(err))
 }
+
+// A revoked agent stays revoked, and the database says so (F-114, 00734).
+//
+// `State.IsTerminal` returns true for REVOKED and SUPERSEDED and CanTransition
+// gives both an empty destination list, so in Go a terminal state has no
+// outgoing edge. The schema said nothing about it, and both promotion CHECKs on
+// agent_lifecycle_transitions open with `from_stage = to_stage OR ...`.
+//
+// That clause is right for what it was written for: a pause, a resume or a
+// revocation does not move the STAGE, and demanding promotion evidence for one
+// would demand evidence for nothing happening. It is wrong for coming BACK.
+// Revoke goes through sideTransition, which keeps the agent's stage -- so a
+// revoked LIVE agent still has stage='LIVE', and a row saying
+// REVOKED -> LIVE with from_stage = to_stage = 'LIVE' satisfies both CHECKs
+// through that first clause: no approval, no ir_hash, no risk_policy_hash, no
+// evidence_hash. It committed, and an agent that had been revoked was trading
+// live capital again with nothing recorded about why.
+//
+// 00726 closed the promotion form of that short-circuit. This is the
+// resurrection form, which survived because returning from a side state does
+// not move the stage either.
+func TestRevokedIsTerminalInTheDatabase(t *testing.T) {
+	f := newFixture(t)
+	a := f.walkTo(t, StageShadow)
+
+	require.NoError(t, inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := f.lifecycle.Revoke(ctx, tx, a.ID, "revoked for the test")
+		return err
+	}))
+
+	// The row that used to commit. Written directly, because no Go path offers
+	// it -- which is exactly why the schema has to refuse it.
+	err := inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
+		_, ierr := tx.Exec(ctx,
+			`INSERT INTO agent_lifecycle_transitions
+			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason)
+			 VALUES (gen_random_uuid(), $1, 'REVOKED', 'LIVE', $2, $2, 'SYSTEM', 'x', 'resurrect')`,
+			a.ID, string(a.Stage))
+		return ierr
+	})
+	require.Error(t, err, "a revoked agent was returned to an operating state with no approval and no evidence")
+	assert.Contains(t, err.Error(), "terminal_is_terminal")
+
+	// The other terminal state, so the rule is about terminality and not about
+	// one value.
+	err = inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
+		_, ierr := tx.Exec(ctx,
+			`INSERT INTO agent_lifecycle_transitions
+			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason)
+			 VALUES (gen_random_uuid(), $1, 'SUPERSEDED', 'SHADOW', $2, $2, 'SYSTEM', 'x', 'resurrect')`,
+			a.ID, string(a.Stage))
+		return ierr
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "terminal_is_terminal")
+
+	// The control: the agent is still revoked, and the constraint refused the
+	// rows rather than the transaction failing for some other reason.
+	after, err := f.store.Get(context.Background(), testDB, a.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StateRevoked, after.State)
+}

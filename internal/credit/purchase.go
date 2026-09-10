@@ -425,6 +425,14 @@ func (s *PurchaseService) Dispatch(ctx context.Context, tx pgx.Tx, ev PurchaseEv
 		return s.review(ctx, tx, f,
 			"provider status "+ev.Snapshot.RawStatus+" has no mapping in this binary", ev.Identity.EventID)
 	}
+	// Money the provider says it returned is not money to mint against. A
+	// succeeded PaymentIntent carrying an already-refunded charge maps to
+	// CAPTURED, and CAPTURED is the edge that mints (F-113).
+	if to == FundingCaptured {
+		if reason := refundedReason(ev.Snapshot); reason != "" {
+			return s.review(ctx, tx, f, reason+", so it is not a capture to mint against", ev.Identity.EventID)
+		}
+	}
 
 	// A state we are already in, or one behind where we are, is a re-delivery.
 	// Providers redeliver for days and do not order their deliveries.
@@ -531,6 +539,36 @@ func (s *PurchaseService) review(ctx context.Context, tx pgx.Tx, f Funding, reas
 		return "", err
 	}
 	return webhook.Applied, nil
+}
+
+// refundedReason describes a provider snapshot that reports money returned, or
+// "" when it reports none.
+//
+// AmountRefundedMinor is populated by the Stripe adapter in two places -- from
+// a charge's amount_refunded on the webhook path and from the payment intent's
+// charges on the lookup path -- and until F-113 it was read NOWHERE. Neither
+// Dispatch nor Reconcile consulted it.
+//
+// That matters because a PaymentIntent's status stays `succeeded` and its
+// amount is unchanged after a refund. So the amount check passes, the status
+// maps to CAPTURED, and Credits are minted for money that has been given back:
+// on the webhook path when a succeeded delivery arrives carrying an already
+// refunded charge, and on the reconciliation path when a sweep looks up a
+// funding whose refund webhook was lost.
+//
+// The provider is authoritative about what it charged. It is equally
+// authoritative about what it returned, and this binary was listening to only
+// half of that.
+func refundedReason(snap PurchaseSnapshot) string {
+	if snap.AmountRefundedMinor <= 0 {
+		return ""
+	}
+	if snap.Amount.Minor() > 0 && snap.AmountRefundedMinor >= snap.Amount.Minor() {
+		return fmt.Sprintf("the provider reports this payment fully refunded (%d of %d minor units)",
+			snap.AmountRefundedMinor, snap.Amount.Minor())
+	}
+	return fmt.Sprintf("the provider reports %d minor units of this payment refunded",
+		snap.AmountRefundedMinor)
 }
 
 // stateOrUnmapped names what an event would have set, for a log line that has
@@ -703,6 +741,16 @@ func (s *PurchaseService) Reconcile(ctx context.Context, tx pgx.Tx, id FundingID
 			snap.Amount, f.PaidAmount,
 		), "reconcile"); err != nil {
 			return Funding{}, err
+		}
+		return s.credits.Funding(ctx, tx, id)
+	}
+	// The sweep applies LESS scrutiny than the webhook path by construction --
+	// it never sees metadata or an event type -- so the one thing it must not
+	// skip is whether the money is still there. This is the path where a lost
+	// refund webhook turns into minted Credits fifteen minutes later (F-113).
+	if reason := refundedReason(snap); reason != "" {
+		if _, rerr := s.review(ctx, tx, f, reason, "reconcile"); rerr != nil {
+			return Funding{}, rerr
 		}
 		return s.credits.Funding(ctx, tx, id)
 	}

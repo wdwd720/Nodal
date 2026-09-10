@@ -180,3 +180,59 @@ func TestIntegration_AnOperatorResolutionIsTheWayOutOfReview(t *testing.T) {
 			"and SETTLED is not among them, so no resolution could be added for it by accident")
 	})
 }
+
+// Money the provider says it returned is not money to mint against (F-113).
+//
+// PurchaseSnapshot.AmountRefundedMinor is populated by the Stripe adapter in
+// two places -- from a charge's amount_refunded on the webhook path, and from
+// the payment intent's charges on the lookup path -- and was read NOWHERE.
+//
+// A PaymentIntent's status stays `succeeded` and its amount is unchanged after
+// a refund. So the amount check passed, the status mapped to CAPTURED, and
+// CAPTURED is the edge that mints. Two ways in: a succeeded delivery carrying
+// an already-refunded charge, and a reconciliation sweep looking up a funding
+// whose refund webhook was lost.
+func TestIntegration_ARefundedPaymentIsNotACaptureToMintAgainst(t *testing.T) {
+	f := newPurchaseFixture(t)
+
+	t.Run("a webhook", func(t *testing.T) {
+		p := f.start(t, "f113-webhook", 10000)
+		ref := p.Funding.ProviderReference
+		require.Equal(t, webhook.Applied, f.deliver(t, event(ref, PurchaseProcessing, "f113-w-a", 10000)))
+
+		// Succeeded, and the same object says the whole charge came back.
+		ev := event(ref, PurchaseSucceeded, "f113-w-b", 10000)
+		ev.Snapshot.AmountRefundedMinor = 10000
+		require.Equal(t, webhook.Applied, f.deliver(t, ev))
+
+		got := f.funding(t, p.Funding.ID)
+		assert.Equal(t, FundingManualReview, got.State, "a refunded payment was applied as a capture")
+		assert.Nil(t, got.LotID, "Credits were minted for money the provider says it returned")
+	})
+
+	t.Run("a partial refund is a person's question too", func(t *testing.T) {
+		p := f.start(t, "f113-partial", 10000)
+		ref := p.Funding.ProviderReference
+		require.Equal(t, webhook.Applied, f.deliver(t, event(ref, PurchaseProcessing, "f113-p-a", 10000)))
+
+		ev := event(ref, PurchaseSucceeded, "f113-p-b", 10000)
+		ev.Snapshot.AmountRefundedMinor = 2500
+		require.Equal(t, webhook.Applied, f.deliver(t, ev))
+
+		got := f.funding(t, p.Funding.ID)
+		assert.Equal(t, FundingManualReview, got.State)
+		assert.Nil(t, got.LotID)
+	})
+
+	// The control: an unrefunded capture still mints, so the check is about the
+	// refunded amount and not about captures.
+	t.Run("an unrefunded capture still mints", func(t *testing.T) {
+		p := f.start(t, "f113-control", 10000)
+		ref := p.Funding.ProviderReference
+		require.Equal(t, webhook.Applied, f.deliver(t, event(ref, PurchaseProcessing, "f113-c-a", 10000)))
+		require.Equal(t, webhook.Applied, f.deliver(t, event(ref, PurchaseSucceeded, "f113-c-b", 10000)))
+		got := f.funding(t, p.Funding.ID)
+		require.Equal(t, FundingReversible, got.State)
+		require.NotNil(t, got.LotID)
+	})
+}

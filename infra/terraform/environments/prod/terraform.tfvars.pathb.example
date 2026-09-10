@@ -65,7 +65,12 @@ auth = {
   client_id    = "HQzIAkpvR6XHUz06vqbC4RptqEHsq6Gl"
   redirect_url = "https://api-nodal.actorvia.xyz/v1/auth/callback"
   cookie_name  = "nodal_session"
-  cookie_domain = "api-nodal.actorvia.xyz"
+  # cookie_domain is deliberately UNSET. A Domain attribute removes the
+  # __Host- prefix from the session and login-state cookies, and that prefix
+  # is the only thing binding them to one host -- setting it re-opens the
+  # planted-callback takeover F-87 closed. internal/config now refuses a
+  # non-empty value in STAGING/PROD (F-112).
+  cookie_domain = ""
   session_ttl  = "12h"
 }
 
