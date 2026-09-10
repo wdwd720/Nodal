@@ -433,3 +433,25 @@ Every item it left undone is work, and each is named above or in
 `MASTER_BUILD_STATE.md` §4 with the reason it was left. `CP_DATABASE_OPS_URL`
 (D-045) is a new deployment input, not a blocker: it is a database role the
 repository already creates, and the local default is in `.env.example`.
+
+**Checkpoint 2026-09-10 (productization) — the provider boundary, sharpened by research.**
+Public provider documentation was read for the product goal (Tilia/Thunes, Stripe
+Connect, Stripe stablecoin payouts, Bridge, Persona, Veriff, Sumsub, Stripe
+Identity, Plaid IDV, Circle, Onfido, Alloy, Coinbase); the synthesis and the
+provider-abstract contract are in `docs/product/PROVIDER_BOUNDARY.md`. No account
+was created, no terms accepted, no sales team contacted, and no provider approval
+is claimed. What the research adds to the register above, all human actions:
+
+| Item | Sharpens | Why external |
+|---|---|---|
+| Read Stripe's restricted-business list in a browser and settle whether virtual credits are *restricted* (extra diligence) or *prohibited* (cannot launch on Stripe) | B-09 | Two automated reads of the page disagreed. Everything downstream depends on which it is. |
+| The Stripe platform profile must describe Nodal honestly, including withdrawal of earned value | B-11 | An attestation by a responsible human. |
+| Sign up for the identity-verification vendor (Veriff or Persona), accept terms, sign a DPA, decide retention | B-06 | Account creation and a contract; Persona Essential is an annual commitment unless its Startup Program is granted. Stripe Identity alone does no AML or sanctions screening. |
+| Open the Tilia/Thunes conversation: pricing, sandbox, a review of the closed-loop-until-withdrawal model | B-01, B-05 | Sales-led; its entity succession after the Thunes acquisition is UNVERIFIED and needs a human to confirm. |
+| Stripe stablecoin payouts: request the private preview and complete its due-diligence questionnaire; or obtain a Bridge developer account by email | B-10 | Attestations and gated sandboxes. California is supported by Stripe's preview; New York and Hawaii are not. |
+| Whether Nodal's own closed-loop Credit float is stored value requiring a licence, independent of any payout provider | B-02 | Counsel. Stripe Connect does not make Stripe the transmitter for value Nodal holds. |
+| 1099 filing election and thresholds; business KYB on Nodal by the Role C provider | B-11 | A tax adviser and the provider. |
+
+The contract Nodal builds against all of them has no primitive by which Nodal
+itself converts Credits to money; it instructs a licensed provider. That is a
+deliberate property of the architecture, not a gap.
