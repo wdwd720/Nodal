@@ -216,9 +216,10 @@ func (s *Service) SetStatus(ctx context.Context, tx pgx.Tx, assetID assets.Asset
 	if err := s.writeTransition(ctx, tx, assetID, a.Status, to, reason); err != nil {
 		return Asset{}, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE native_assets SET status = $2 WHERE asset_id = $1`, assetID, string(to)); err != nil {
-		return Asset{}, mapError(err)
-	}
+	// The transition row IS the status change since 00747: cp_app holds no
+	// UPDATE on native_assets except the two moderation columns, and the trigger
+	// on native_asset_transitions has already written the status.
+	a.Status = to
 	// Keep the shared registry status in step, so a halt is visible to every
 	// package that consults the registry rather than only to this one.
 	if err := s.syncRegistryStatus(ctx, tx, assetID, to); err != nil {
@@ -258,23 +259,24 @@ func (s *Service) Activate(ctx context.Context, tx pgx.Tx, assetID assets.AssetI
 	if err := s.writeTransition(ctx, tx, assetID, a.Status, StatusActive, reason); err != nil {
 		return Asset{}, err
 	}
-	now := s.clk.Now().UTC()
-	// economics_locked_at is set in the same statement as the status, so there
-	// is no instant in which the asset is live and still editable. It is only
-	// set the first time: re-activating after a halt must not move the lock.
-	if _, err := tx.Exec(ctx,
-		`UPDATE native_assets
-		    SET status = 'ACTIVE',
-		        activated_at = coalesce(activated_at, $2),
-		        economics_locked_at = coalesce(economics_locked_at, $2)
-		  WHERE asset_id = $1`, assetID, now); err != nil {
+	// economics_locked_at is stamped with the status by the trigger on
+	// native_asset_transitions (00747), so there is no instant in which the
+	// asset is live and still editable -- and that is now a property of the
+	// TABLE rather than of this statement, because reaching ACTIVE any other way
+	// is not possible. It is only set the first time: re-activating after a halt
+	// must not move the lock, and NM003 says so if it tries.
+	if err := tx.QueryRow(ctx,
+		`SELECT status, activated_at, economics_locked_at FROM native_assets WHERE asset_id = $1`, assetID).
+		Scan(&a.Status, &a.ActivatedAt, &a.EconomicsLockedAt); err != nil {
 		return Asset{}, mapError(err)
 	}
 	if err := s.syncRegistryStatus(ctx, tx, assetID, StatusActive); err != nil {
 		return Asset{}, err
 	}
-	a.Status = StatusActive
-	a.ActivatedAt, a.EconomicsLockedAt = &now, &now
+	// Already populated from the row the trigger wrote, above. Assigning them
+	// again from a local clock would be the same bug this whole change closes:
+	// the returned value would say what the caller intended rather than what the
+	// database recorded.
 	return a, nil
 }
 

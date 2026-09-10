@@ -148,7 +148,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-122 | P1 | NEW | fixed | An agent could be born LIVE, a funding born minted and a payout born settled, because every binding in the schema is about changes and a row inserted in a privileged state never changed |
 | F-123 | P3 | NEW | fixed | Six rapid property-failure seeds were committed by accident, and rapid replays them on every run, pinning the property tier to cases that no longer fail |
 | F-124 | P1 | NEW | fixed | The webhook path the published contract documents is not the one the service registers, so a delivery to it answers 404 and the provider eventually gives up |
-| F-125 | P3 | NEW | open | The race detector cannot link on this host, so every race claim in this repository rests on CI |
+| F-125 | P3 | NEW | fixed | The race detector cannot link on this host, so every race claim in this repository rests on CI |
 | F-126 | P2 | NEW | fixed | Five spellings of one archive key parse to the same object, so a dedup check, a retention sweep and an audit reconstruction each miss what the other wrote |
 | F-127 | P2 | NEW | fixed | The ADR deciding how an unprunable table must be pruned records that the table does not refuse DELETE; it does, and that was the fact the choice of remedy rested on |
 | F-128 | P1 | NEW | fixed | The application role could mint a transition flag by attaching the real setter to a temp table of its own, which F-42 does not record and which defeats any fix that only hardens the flag's value |
@@ -1678,12 +1678,15 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: **nine of the
-seventeen bound tables still grant `cp_app` blanket UPDATE.** Eight do not:
-`capability_gates` (00701), `withdrawals`, `assets`, `instruments` and
-`payout_requests` (00733, F-109, the four whose columns are money),
-`admin_actions`, and **`credit_fundings` (00743) and `accounts` (00744), the two
-done under this finding rather than another.**
+tracked on its own terms rather than as this finding's blocker: **five of the
+seventeen bound tables still grant `cp_app` blanket UPDATE** — `agents`,
+`deposits`, `kill_switches`, `reconciliation_records` and `trade_intents`.
+
+Twelve do not: `capability_gates` (00701), `withdrawals`, `assets`,
+`instruments` and `payout_requests` (00733, F-109, the four whose columns are
+money), `admin_actions`, and the six done under this finding —
+**`credit_fundings` (00743), `accounts` (00744), `wallets` (00745),
+`native_markets` (00746), `native_assets` (00747) and `orders` (00748).**
 
 ### 00743 — the first of the ten, and what it cost
 
@@ -1775,10 +1778,90 @@ it — and it remains the one place in this repository that would catch a wrong
 trigger NAME, because it forces the deferred check immediate, where the flag
 setters must have run first.
 
-**The counting rule has a limit worth knowing before trusting it.** `agents` is
-next by site count (one) and writes seven columns in that statement, including
-the promotion evidence. A site count is a lower bound on the work, not an
-estimate of it.
+**The counting rule has a limit worth knowing before trusting it.** `agents` has
+one site and writes eight columns in it, including the promotion evidence. A
+site count is a lower bound on the work, not an estimate of it.
+
+### 00745, 00746, 00747 — three more, and what each one taught
+
+A full read-only survey of the nine was done first and its recommended order
+followed. The order was by cost, and cost turned out to be a good proxy for
+risk: each of these three landed with one package to re-run and at most one
+assertion to strengthen.
+
+**`wallets` (00745).** The cheapest of the nine: the status update set exactly
+one column, and it was `to_status` verbatim. The grant-back is the four
+delegation columns, and `MarkDelegationVerified`'s own comment already drew the
+line this migration enforces — "It is not a status change and needs no
+transition row. An unverified status clears nothing: revocation is a status
+transition to REVOKED." **The first table where no column had to be granted
+purely for the row lock**, because the columns the application genuinely writes
+already supplied the privilege.
+
+**`native_markets` (00746).** The stamp must be coalesced or the fix reports a
+different bug. `cp_native_market_curve_frozen` raises NM003 if `activated_at`
+moves once set, so a trigger writing it unconditionally would make re-entering
+ACTIVE look like a bonding-curve violation — the one error on that table that
+means something else entirely. The Go code had the same guard for the same
+reason, and moving it into the trigger is what makes it unforgettable.
+
+Its grant is the one case so far that is **purely** for the lock, and the column
+was chosen so the grant buys nothing: `virtual_credit_reserve` is already
+refused by the frozen-curve trigger on any activated market.
+
+**`native_assets` (00747).** Two call sites collapsed into one trigger, and a
+comment got stronger than it was. `Activate` said "economics_locked_at is set in
+the same statement as the status, so there is no instant in which the asset is
+live and still editable." That was true of one statement written by one
+function. It is now true of the **table**, because reaching ACTIVE any other way
+is not possible and a second call site cannot forget.
+
+This table's primary key is `asset_id`, not `id` — the binding already knew
+(`cp_require_transition_edge('status','native_assets','asset_id')`) and a copy
+of this migration for another table must not carry the join over blindly.
+
+**One warning from the survey was checked and was wrong**, which is why it was
+checked. It flagged two nativemarket tests as likely to start passing for the
+wrong reason after the revoke. Both already ran on the migration role and both
+assert the specific error string (`NATIVE_MARKET_CURVE_FROZEN`,
+`native_markets_tradable_is_frozen`), so neither could. **A survey is a lead,
+not a finding.**
+
+### 00748 — the first that needed a decision, and it made two things stronger
+
+`orders` was the first of the nine where a written column had nowhere to come
+from. `transitionLocked` wrote `status`, `terminal_at` and **`rejection_code`**,
+and `order_transitions` carried `reason` (free text) and `evidence_ref` —
+neither of which is the code.
+
+Two ways to close that: grant `rejection_code` back to the application, or put
+it where it belongs. **It belongs on the transition** — it is why *this*
+transition happened, and the emitted event already carries it next to the
+transition id. Granting it back would have left the audit trail unable to answer
+"why was this order rejected" from its own rows. So the column moved, with a
+CHECK requiring it exactly when `to_status` is REJECTED: a Go-level validation
+in one function became a property of the table.
+
+**The compare-and-swap moved too, and got stronger.** The UPDATE carried
+`WHERE id = $1 AND status = $5`. All four callers already hold a row lock —
+checked — and nothing asserts its message, so it was belt-and-braces. It is now
+in the trigger, where it applies to every writer and doubles as a second,
+independent refusal of a transition row whose `from_status` does not describe
+where the order actually is: the property 00731's edge binding asserts, enforced
+when the row is written rather than at COMMIT.
+
+**The CHECK is NOT VALID, deliberately.** Rows written before the migration have
+no code because the column did not exist, and backfilling from
+`orders.rejection_code` would be a guess — an order's current code came from
+whichever transition set it last. NOT VALID enforces it on every future write
+and skips the scan of what is already there. Making an audit trail complete
+backwards is not something a migration can do truthfully.
+
+**Two lists were read from the code rather than guessed**, and the first draft
+had one of them wrong. `OrderStatus.Terminal()` is SETTLED, REJECTED, EXPIRED,
+CANCELLED, FAILED_FINAL — **FILLED is not terminal**, because settlement follows
+it, and the invented list in the first draft would have stamped `terminal_at` on
+an order that was still moving.
 
 #### What the test fallout was, and it is larger than 00743's
 
@@ -6483,7 +6566,7 @@ agree. Verified non-vacuous by putting `stripe` back and watching it fail.
 **Evidence.** LIVE_OBSERVED for the 404s, STATIC_PROOF for the divergence,
 BLOCKED_EXTERNAL for what Stripe is actually configured with.
 
-## F-125 · Every race claim rests on CI · NEW · P3 · OPEN
+## F-125 · Every race claim rests on CI · NEW · P3 · FIXED
 
 **Found by** trying to run the race detector, which the goal document names as
 available on this host.
@@ -6516,6 +6599,37 @@ one, which is why this is OPEN rather than fixed.
 **Evidence.** LIVE_OBSERVED on this host — the failure above is the actual
 output, reproduced for three packages and three workarounds. STATIC_PROOF that
 CI runs both race tiers (`ci.yml` lines 128 and 312-327).
+
+
+### Fixed 2026-09-10: a COPY works where a junction did not
+
+The rejected workarounds were rejected for the right reasons, and one of them
+was nearly right. A directory junction at a space-free path failed because a
+junction RESOLVES: GCC follows it back to its real location and the space
+returns. A plain file copy does not resolve.
+
+    robocopy "<WinGet packages>/.../mingw64" C:/toolchain/mingw64 /E     (0.89 GB)
+    CC=C:/toolchain/mingw64/bin/gcc.exe  CXX=.../g++.exe  go test -race
+
+An 8.3 short path was tried first and does NOT work, for the same reason the
+junction did not: the short-path gcc.exe runs, then reports its own location as
+`C:/Users/Mihir Modi/...` and splits the linker-script argument on the space
+exactly as before. The distinguishing property is not "a path without spaces"
+but **"a path GCC resolves to without spaces."**
+
+**Both race tiers now run on this host and both are clean.**
+
+    make race               7 packages, unit,             0 data races
+    make integration-race   12 packages, a database each, 7m27s, 0 data races
+
+So the sentence this finding existed to force into the open — "no race claim in
+this repository can be checked from this host" — is no longer true, and the race
+claims in the checkpoint are LIVE_OBSERVED here rather than resting on CI alone.
+
+Reproducing it needs one environment-variable pair pointing at a toolchain copy,
+recorded in `docs/operations/BACKUP_RESTORE.md` with the other host facts a
+fresh session needs. It is deliberately not wired into the Makefile: `CC` is
+host-specific and CI's Linux toolchain needs no such thing.
 
 ## F-126 · Five spellings of one archive key · NEW · P2 · FIXED
 

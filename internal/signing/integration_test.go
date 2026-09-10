@@ -515,13 +515,30 @@ func TestIntegration_WalletRepositoryAndTransitionBinding(t *testing.T) {
 	assert.Equal(t, wallet.StatusActive, w.Status)
 	assert.True(t, w.DelegationVerified())
 
-	// A bare status update is refused at COMMIT (migration 00615 binding).
+	// A bare status update is refused, and the refusal got stronger in 00745.
+	//
+	// It used to be AU001 at COMMIT: the application COULD write the column and
+	// was caught afterwards by the 00615 binding. It is now `permission denied`
+	// at the statement, because cp_app holds UPDATE on the four delegation
+	// columns and on nothing else. Detection became privilege.
+	//
+	// The binding itself has not gone anywhere -- it still guards the nine
+	// tables that have not had this treatment, and it still refuses the
+	// migration role on this one. What changed is that the application cannot
+	// reach the column to be refused by it.
 	err = testDB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE wallets SET status = 'SUSPENDED' WHERE id = $1`, wid)
 		return err
 	})
-	require.Error(t, err)
-	assert.Equal(t, "AU001", db.SQLState(err))
+	require.Error(t, err, "cp_app can still write wallets.status; 00745 did not take")
+	assert.Contains(t, err.Error(), "permission denied")
+
+	// And the split 00745 preserved: a delegation write is not a status change,
+	// so it stays in the application's hands.
+	require.NoError(t, testDB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE wallets SET delegation_ref = 'probe' WHERE id = $1`, wid)
+		return err
+	}), "cp_app must still record a delegation verification")
 
 	// Agent actors and empty reasons are refused before any SQL.
 	err = testDB.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {

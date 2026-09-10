@@ -163,9 +163,13 @@ func (r *Repository) Transition(ctx context.Context, tx pgx.Tx, walletID WalletI
 		id.New[id.Any](), walletID, string(cur.Status), string(ch.To), string(ch.ActorType), ch.ActorID, ch.Reason, ch.CorrelationID, now.UTC()); err != nil {
 		return Wallet{}, fmt.Errorf("wallet: record transition: %w", err)
 	}
-	updated, err := scanWallet(tx.QueryRow(ctx, `UPDATE wallets SET status = $2 WHERE id = $1 RETURNING `+walletColumns, walletID, string(ch.To)))
+	// The INSERT above IS the status change. 00745 revoked UPDATE on wallets
+	// from cp_app and granted back only the four delegation columns, so there is
+	// no statement this function could issue that writes `status` -- and the
+	// trigger on wallet_status_transitions has already written it from the row.
+	updated, err := scanWallet(tx.QueryRow(ctx, `SELECT `+walletColumns+` FROM wallets WHERE id = $1`, walletID))
 	if err != nil {
-		return Wallet{}, fmt.Errorf("wallet: update status: %w", err)
+		return Wallet{}, fmt.Errorf("wallet: read back status: %w", err)
 	}
 	return updated, nil
 }

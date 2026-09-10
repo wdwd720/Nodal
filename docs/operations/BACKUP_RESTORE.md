@@ -13,9 +13,29 @@ Status: local drill implemented and passing (2026-09-06); production procedure d
 5. reconciliation dry-run: recomputes every ledger balance from journal entries on the restored copy (expects zero drift), compares row counts of every table with the source, and compares a deterministic hash of all journal transactions and entries on both sides;
 6. writes `dist/restore-drill.json` and exits non-zero on any mismatch.
 
-Latest local run (2026-09-10): 134 tables, row counts identical, 0 accounts with balance drift, journal hashes equal, version 744 on both sides, 11.8 s, and one real audited state transition driven on the restored database.
+Latest local run (2026-09-10): 134 tables, row counts identical, 0 accounts with balance drift, journal hashes equal, version 748 on both sides, 15.2 s, and one real audited state transition driven on the restored database.
 
 That last step is new and exists because the three before it all compare data. None of them proves the restored database can still be USED — and since 00741 that is no longer implied, because every state change on seventeen tables is checked against a keyed tag computed from a single row in `cp_transition_key`. A restore that brought back every row but lost that one table would have passed every other assertion here and then refused every state change in the system (F-129). `CP_DRILL_BREAK=lose_the_transition_key` empties the table so the probe can be watched firing; a run with it set is expected to fail. The table count jumped from 119 because 00740 partitioned `security_events` into thirteen months and a default — a partition is a table, and the drill counts what it would have to restore. That it comes back with matching row counts is the point: the first partitioned table in this schema restores as a partitioned table, not as an empty parent. The fixture is a live internal economy driven through the real services, so the Domain A tables carry rows rather than comparing zero with zero — including the risk policy a trade was evaluated against and the decision it produced. `dist/restore-drill.json` holds the numbers from the last run.
+
+## Running the race detector on a Windows host
+
+`go test -race` needs an external linker, and it fails to LINK if the GCC
+toolchain's resolved path contains a space — the linker-script argument is split
+on it and `ld` reports the fragment as a script that "appears multiple times".
+The WinGet default install path contains one.
+
+Copy the toolchain somewhere without a space and point `CC` at the copy:
+
+    robocopy "<WinGet packages>\...\mingw64" C:	oolchain\mingw64 /E
+    CC=C:	oolchain\mingw64in\gcc.exe CXX=C:	oolchain\mingw64in\g++.exe make race
+
+A **copy**, not a junction and not an 8.3 short path. Both of those resolve back
+to the original location, and GCC reports its resolved path, so the space
+returns. The property that matters is not "a path without spaces" but "a path
+GCC resolves to without spaces" (F-125).
+
+This is not wired into the Makefile because `CC` is host-specific, and CI runs
+on Linux where none of this applies.
 
 This line said 89 tables and version 604 until F-54. That was a hundred and eleven migrations of schema ago: the drill it reported had never seen the ledger's chart-parity CHECK, the frozen-economics constraints, or a single Domain A table. A restore drill is evidence that the schema you would actually restore comes back — so a stale one is not a weaker claim, it is a claim about a different database. `TestDocs_CountsMatchTheCode` now holds the version cited here against the newest migration in the tree, and fails when migrations land without the drill being re-run.
 

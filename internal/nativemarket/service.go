@@ -222,14 +222,19 @@ func (s *Service) SetStatus(ctx context.Context, tx pgx.Tx, marketID MarketID, t
 		NewTransitionID(), marketID, string(m.Status), string(to), actorType, actorID, reason); err != nil {
 		return Market{}, mapError(err)
 	}
-	set := `status = $2`
-	if to == StatusActive && m.ActivatedAt == nil {
-		set += `, activated_at = now()`
-	}
-	if _, err := tx.Exec(ctx, `UPDATE native_markets SET `+set+` WHERE id = $1`, marketID, string(to)); err != nil {
-		return Market{}, mapError(err)
-	}
+	// The INSERT above IS the status change. 00746 revoked UPDATE on
+	// native_markets from cp_app, and the trigger on native_market_transitions
+	// has already written `status` and stamped `activated_at` from the row --
+	// coalescing the stamp, because cp_native_market_curve_frozen raises NM003
+	// if activated_at moves once set, which is exactly what the
+	// `m.ActivatedAt == nil` guard here used to prevent.
 	m.Status = to
+	if to == StatusActive && m.ActivatedAt == nil {
+		if err := tx.QueryRow(ctx, `SELECT activated_at FROM native_markets WHERE id = $1`, marketID).
+			Scan(&m.ActivatedAt); err != nil {
+			return Market{}, mapError(err)
+		}
+	}
 	// Keep the platform's instrument registry agreeing with the venue. See
 	// reality.go: two sources for "what may be traded" eventually disagree,
 	// and the disagreement is found by something moving that should not have.

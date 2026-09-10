@@ -1749,15 +1749,16 @@ Read it before this file if you want the state; read this file for how it got
 there.
 
 `docs/audit/AUDIT_FINDINGS.md` is the register: **130 findings**, of which three
-are open (F-47, F-69, F-93), one is open as a host limitation (F-125), four are
-partial (F-65, F-84, F-95, F-118) and the rest are fixed.
+are open (F-47, F-69, F-93) and four are partial (F-65, F-84, F-95, F-118); the
+rest are fixed. **F-125 closed on 2026-09-10** — the race detector links on this
+host now, so both race tiers run here and no race claim rests on CI alone.
 
 **No P1 is unfixed.** F-93 is the last P1 not marked fixed and it is an
 inventory row across six provider audits, whose constituent items are tracked
 individually. F-105 closed with 00740 and F-42 with 00741 — the latter after
 four sessions open and three fixes tried and rejected.
 
-F-100 through F-130 landed on 2026-09-10: **31 findings, 17 P1, 9 P2, 5 P3**,
+F-100 through F-130 landed on 2026-09-10: **31 findings, 17 P1, 9 P2, 5 P3**, and F-42’s stronger remedy has now taken five of its seventeen tables,
 from eleven parallel read-only audits whose claims were re-verified here before
 anything was changed, plus two the fuzz tier found on its own. Every P1 was
 observed failing before it was believed:
