@@ -27,8 +27,11 @@ The commits that end the session:
 | `d483b07` | `docs: the seventeen-item final checkpoint` — this file |
 | `6853caa` | `security_events: a trail that can be bounded without being rewritten` — F-105, F-127 |
 | `952b9fd` | `audit: the flag can only be set by inserting a transition row` — F-42, F-128 |
+| `057680b` | `docs: the checkpoint after two more findings closed` |
+| `2a27ee8` | `docs: the gate is green at 741, and one failure is recorded not dropped` |
+| `07d490e` | `audit: the other half of 00603's claim now has a test` |
 
-Nineteen commits since `05ec7f3`, the session's starting point.
+**Twenty-two commits since `05ec7f3`**, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
