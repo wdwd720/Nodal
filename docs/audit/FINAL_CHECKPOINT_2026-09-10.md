@@ -15,7 +15,7 @@ false for reasons no amount of engineering can clear.
 
 ## 1 · Final HEAD
 
-**`07d490e` — `audit: the other half of 00603's claim now has a test`.**
+**`02f8bdf` — `restore: prove the restored database works, not only that it matches`.**
 
 That is the exact hash of the last commit that changes code or schema. Every
 commit after it edits this document only, and a hash cannot be inside the object
@@ -34,8 +34,9 @@ The commits that end the session:
 | `057680b` | `docs: the checkpoint after two more findings closed` |
 | `2a27ee8` | `docs: the gate is green at 741, and one failure is recorded not dropped` |
 | `07d490e` | `audit: the other half of 00603's claim now has a test` |
+| `02f8bdf` | `restore: prove the restored database works, not only that it matches` — F-129 |
 
-**Twenty-two commits since `05ec7f3`**, the session's starting point.
+**Twenty-five commits since `05ec7f3`**, the session's starting point.
 
 **Evidence:** `LIVE_OBSERVED` (`git rev-parse HEAD`, `git log`).
 
@@ -43,15 +44,16 @@ The commits that end the session:
 
 ## 2 · Findings — opened, closed, remaining
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: **128 findings**, of which
-**120 are fixed, 4 are open and 4 are partial.**
+`docs/audit/AUDIT_FINDINGS.md` is the register: **129 findings**, of which
+**121 are fixed, 4 are open and 4 are partial.**
 
-Opened this session: **F-100 through F-128 — 29 findings, 17 P1, 8 P2, 4 P3.**
-Twenty-eight are fixed and one is open (F-125, a host limitation). Twenty-five
+Opened this session: **F-100 through F-129 — 30 findings, 17 P1, 9 P2, 4 P3.**
+Twenty-nine are fixed and one is open (F-125, a host limitation). Twenty-five
 came from eleven parallel read-only audits whose claims were re-verified before
-anything was changed; **two the fuzz tier found on its own** (F-123, F-126); and
+anything was changed; **two the fuzz tier found on its own** (F-123, F-126);
 **two were found by attacking this session's own fixes before writing them**
-(F-127, F-128).
+(F-127, F-128); and **one was caused by a fix in this session and found by the
+restore drill within the hour** (F-129).
 
 **No P1 in the register is unfixed.** The last one not marked fixed is F-93, an
 inventory row across six provider audits whose constituent items are tracked
@@ -119,10 +121,11 @@ The ones that would have cost real money or real authority:
   real setter to a temp table of its own, forging a state change on any of
   seventeen audited tables with no audit row.
 
-### The two found by attacking this session's own fixes
+### Three found by attacking this session's own fixes
 
-Both were found before the fix they concern was written, and neither would have
-been found by reading the code that was about to change.
+Two were found before the fix they concern was written. The third was caused by
+one of those fixes and found by the restore drill within the hour. None would
+have been found by reading the code.
 
 - **F-127** — ADR-0020 decides how an unprunable table must be pruned, and
   records that `security_events` does not refuse DELETE. It does. That was the
@@ -134,6 +137,13 @@ been found by reading the code that was about to change.
   *value* unforgeable; this route forges the value using the real setter, so
   that repair would have looked complete, passed every test written for F-42,
   and been bypassed in three lines.
+
+- **F-129** — closing F-42 made every state change on seventeen tables depend on
+  one row. A restore that brought back every row but lost that one table passed
+  the drill's row counts, ledger balances and journal hashes, and then refused
+  every state change with an error blaming the caller for not writing a
+  transition row it had written. Comparing data does not prove a database can be
+  used.
 
 **And one thing a test found that a migration had missed.** The transition key
 table arrived readable by two lower-privilege roles with no `GRANT` written
@@ -180,8 +190,8 @@ reproduced against a real PostgreSQL 16 before and after);
 
 | | |
 |---|---|
-| Migration head | **`00741_the_flag_can_only_be_set_by_inserting_a_transition_row.sql`** |
-| Migration files | **73** |
+| Migration head | **`00742_a_lost_key_says_so_instead_of_blaming_the_caller.sql`** |
+| Migration files | **74** |
 | Tables | **120**, plus **14 partitions** of `security_events` |
 | CHECK constraints | 462 declared on parents |
 
@@ -209,7 +219,7 @@ Every tier below was re-run at `952b9fd`, the last commit of the session.
 | `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 11m51s** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
 | `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
-| `go run ./scripts/restoredrill` | **OK, 11.8s, at version 741** |
+| `go run ./scripts/restoredrill` | **OK, 11.8s, at version 742, including a live state change on the restored database** |
 | `go run ./scripts/fmtcheck .` | ok |
 | `go run ./scripts/tool golangci-lint run` | 0 issues |
 | `go run ./scripts/lintfin` | 0 findings |
@@ -350,11 +360,20 @@ integration tier.
 Run at `952b9fd`:
 
 ```
-restoredrill: boot: version source=741 restored=741 verify=ok
+restoredrill: boot: version source=742 restored=742 verify=ok
 restoredrill: reconciliation dry-run: tables=134 rowcounts_match=true
               balance_drift_accounts=0 journal_hash_match=true
-restoredrill: OK (11.842s)
+restoredrill: state change on the restored database: ok
+restoredrill: OK (11.835s)
 ```
+
+**That last line is new and is the one worth reading.** The three above it
+compare data, and none of them proves the restored database can still be USED.
+A restore that lost `cp_transition_key` would pass all three and then refuse
+every state change in the system (F-129). The drill now drives one real audited
+transition on the restored database as the application role, and
+`CP_DRILL_BREAK=lose_the_transition_key` empties the table so the probe can be
+watched firing.
 
 A restored database reaches the same schema version, the same table count, the
 same row counts, **zero balance drift and identical journal hashes.** Report at
@@ -574,7 +593,23 @@ The next four pieces of software work, in the order they are worth doing:
    rather than unprovable. The design is settled — `capability_gates` (00701) is
    the worked example and `00733` did the four money tables. It is a change to
    every state machine's call sites, so it wants one table at a time with its
-   own tests.
+   own tests, and it wants a session that starts with it rather than one that
+   reaches it.
+
+   **Two candidates were scoped and the difference is large enough to record.**
+   `credit_fundings` is the clean one: exactly **one** state-change site
+   (`internal/credit/funding.go`, the `UPDATE ... SET state` after the transition
+   insert), and the only other columns the application writes are `lot_id` and
+   `provider_reference`, so the grant-back list is two columns. The transition
+   row is already written immediately before, so an AFTER INSERT trigger on
+   `credit_funding_transitions` can perform the state change and the stamp, and
+   the Go call site becomes a re-read.
+
+   `kill_switches` looks smaller and is not. `saveSwitch` writes `active`
+   together with six other columns under optimistic concurrency
+   (`WHERE version = $11 RETURNING version`), so moving `active` into a trigger
+   breaks the concurrency check and the return value at once. Start with
+   `credit_fundings`.
 2. **An alert destination and something on a timer** (F-118). Everything up to
    the destination is built.
 3. **Birth control for `wallets`, `assets` and `instruments`** (F-122 residual).

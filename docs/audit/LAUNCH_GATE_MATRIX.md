@@ -78,7 +78,7 @@ evidence in `docs/audit/AUDIT_FINDINGS.md`.
 | Item | Finding | Shape |
 |---|---|---|
 | **Nothing pages anyone about anything** | F-118 | The largest of these. Alerts now log and both roots build the real instruments; what remains is a destination and something on a timer. Half deployment decision. Before the Terraform is ever applied, its five application alarms set `treat_missing_data = "notBreaching"`, so a metric that never arrives reads OK |
-| A state column the application cannot write at all | F-42 | The audit binding can no longer be forged (00741), which is detection. This is privilege: revoke UPDATE on the state column and route changes through SECURITY DEFINER functions. Eleven of seventeen tables remain; 00733 did the four whose columns are money and 00701 is the worked example |
+| A state column the application cannot write at all | F-42 | The audit binding can no longer be forged (00741), which is detection. This is privilege: revoke UPDATE on the state column and route changes through SECURITY DEFINER functions. Eleven of seventeen tables remain; 00733 did the four whose columns are money and 00701 is the worked example. Start with `credit_fundings` — one state-change site, two columns to grant back — not `kill_switches`, whose single write is entangled with optimistic concurrency |
 | Choose a security-event retention period, or decide not to | ADR-0020 | `CP_RETENTION_SECURITY_EVENT_DAYS` is 0 and the machinery behind it is built and tested (00740). Not code; the question the ADR left open |
 | `login_attempts` has a purge that this deployment never runs | F-105 | A cron on the blueprint, or a ticker in `cmd/api` the way `runCreditSettlement` already is |
 | Request validation precedes authentication | F-84 | Authorising on the route pattern before the generated wrapper; wants its own design |
@@ -98,6 +98,12 @@ destination-only transition bindings (F-94), the forged dual control that made
 every other approval-bearing control conditional (F-121), the unprunable
 security trail (F-105, 00740) and the forgeable audit binding itself (F-42,
 00741, after four sessions open and three fixes tried and rejected).
+
+**And one this audit caused and then found.** 00741 made every state change
+depend on one row, and a restore that lost it would have passed every comparison
+the restore drill makes before refusing every state change in the system. The
+drill now drives a real transition on the restored database (F-129, 00742).
+Comparing data does not prove a database can be used.
 
 **None of these moved a launch flag**, which is the honest way to read the
 change: `SOFTWARE_COMPLETE` has a shorter list behind it and the same value.
