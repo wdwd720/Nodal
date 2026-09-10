@@ -2910,7 +2910,7 @@ export interface components {
             withdrawable: components["schemas"]["USD"];
         };
         /** @enum {string} */
-        Capability: "LIVE_FUNDING" | "LIVE_MANUAL_TRADING" | "LIVE_AGENT_TRADING" | "WITHDRAWALS" | "SOCIAL_DATA_PERSISTENCE" | "MARKETPLACE" | "CROSS_CHAIN" | "PREDICTION_MARKETS" | "SECURITIES" | "CEX_TRADING";
+        Capability: "LIVE_FUNDING" | "LIVE_MANUAL_TRADING" | "LIVE_AGENT_TRADING" | "WITHDRAWALS" | "SOCIAL_DATA_PERSISTENCE" | "MARKETPLACE" | "CROSS_CHAIN" | "PREDICTION_MARKETS" | "SECURITIES" | "CEX_TRADING" | "CREDIT_PURCHASE" | "NATIVE_ASSET_CREATION" | "NATIVE_MARKET_TRADING" | "PAYOUT_RESERVE" | "PAYOUT_SETTLE" | "HOSTED_TRADING" | "HOSTED_FUNDING" | "AGENT_BOUNDED_DISCRETION" | "AGENT_AUTONOMOUS_SELECTION" | "AGENT_AUTONOMOUS_PORTFOLIO";
         CapabilityGate: {
             /** @description Result of the five-condition activation check, not just the row state */
             active: boolean;

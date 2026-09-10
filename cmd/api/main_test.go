@@ -57,6 +57,7 @@ func TestRefuseFakeProviders(t *testing.T) {
 				&cfg2.Providers.Execution, &cfg2.Providers.MarketData, &cfg2.Providers.ChainObserver,
 				&cfg2.Providers.ChainObserverFallback, &cfg2.Providers.Model, &cfg2.Providers.EventBus,
 				&cfg2.Providers.Workflow, &cfg2.Providers.Archive, &cfg2.Providers.Notification,
+				&cfg2.Providers.CreditPurchase, &cfg2.Providers.Payout,
 			} {
 				p.Mode = config.ProviderModeSandbox
 			}

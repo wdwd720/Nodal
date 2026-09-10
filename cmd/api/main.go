@@ -334,6 +334,8 @@ func providerSlots(cfg *config.Config) map[string]config.ProviderConfig {
 		"workflow":                cfg.Providers.Workflow,
 		"archive":                 cfg.Providers.Archive,
 		"notification":            cfg.Providers.Notification,
+		"credit_purchase":         cfg.Providers.CreditPurchase,
+		"payout":                  cfg.Providers.Payout,
 	}
 }
 

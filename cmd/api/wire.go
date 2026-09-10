@@ -696,6 +696,13 @@ func providerCatalog(cfg *config.Config) []httpapi.ProviderDescriptor {
 		{"WorkflowEngine", cfg.Providers.Workflow},
 		{"ObjectArchive", cfg.Providers.Archive},
 		{"NotificationProvider", cfg.Providers.Notification},
+		// The two slots the product economy runs on. They were missing from
+		// this list, so the operator console could not see the Credit
+		// purchase adapter or the payout provider at all -- including the
+		// sandbox tier's sandbox_payout, which the console must render as
+		// sandbox and never as a live rail.
+		{"CreditPurchaseProvider", cfg.Providers.CreditPurchase},
+		{"PayoutProvider", cfg.Providers.Payout},
 	}
 	out := make([]httpapi.ProviderDescriptor, 0, len(slots))
 	for _, s := range slots {
