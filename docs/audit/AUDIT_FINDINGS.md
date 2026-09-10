@@ -146,6 +146,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-120 | P3 | NEW | fixed | A calibration snapshot folded in every outcome resolved since, so the evidence a promotion decision reads changed when you looked at it again |
 | F-121 | P1 | NEW | fixed | Every control on the dual-control table guarded UPDATE, so the application role could INSERT a row born APPROVED and forge two-person control outright |
 | F-122 | P1 | NEW | fixed | An agent could be born LIVE, a funding born minted and a payout born settled, because every binding in the schema is about changes and a row inserted in a privileged state never changed |
+| F-123 | P3 | NEW | fixed | Six rapid property-failure seeds were committed by accident, and rapid replays them on every run, pinning the property tier to cases that no longer fail |
 
 ---
 
@@ -6170,6 +6171,39 @@ The test also carries a **negative control naming what is still open**:
 `wallets`, `assets` and `instruments` have no birth control, and the assertion
 fails if one gains one — so closing the next of them forces this list to be
 updated rather than quietly diverging.
+
+## F-123 · Six seeds pinning the property tier to bugs that are fixed · NEW · P3 · FIXED
+
+**Found by** noticing an untracked `testdata/rapid/….fail` in this session's own
+working tree, and then asking how many others were tracked.
+
+`rapid` writes a `.fail` file recording the seed of a failing property run, and
+**replays it on every subsequent run of that property**. That is exactly right
+while a bug is open. Once it is fixed the file pins the suite to a degenerate
+case forever, and nobody can read a timestamped seed to tell which.
+
+Six were committed: one written this session by the over-broad birth control of
+F-122 (it records `AGENT_BORN_PROMOTED: an agent is created DRAFT/DRAFT`, a rule
+migration 00739 replaced, so it describes a refusal that no longer exists), and
+five from 2026-09-06 recording failures that have since been fixed — confirmed
+stale by the 51/51 integration pass, which runs every one of those properties.
+
+**This repository had already decided the question**, in F-30, in this same
+file:
+
+> The stale `testdata/rapid/…fail` file rapid wrote is deleted: left in place it
+> pins every future run to the degenerate case.
+
+The decision was recorded and then not applied to the other five, and nothing
+stopped a sixth arriving. All six are deleted and `**/testdata/rapid/**/*.fail`
+is now ignored, with the reasoning in `.gitignore` beside it.
+
+The rule the ignore states: **a property counterexample worth keeping is worth
+writing as a named test**, not left as a timestamped seed file nobody can read.
+
+**Evidence.** STATIC_PROOF for the mechanism, REAL_DB_INTEGRATION for the
+staleness — all five older properties are integration-tagged and all five ran
+and passed in this session's gate, so none of the seeds still reproduces.
 
 ## Findings deliberately NOT raised
 
