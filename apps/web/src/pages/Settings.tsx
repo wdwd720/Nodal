@@ -28,7 +28,7 @@ import {
   type SessionSummary,
 } from "../api/queries.ts";
 import { AsyncPanel, EmptyState, Explanation } from "../components/DataState.tsx";
-import { Button, LinkButton } from "../components/Button.tsx";
+import { Button } from "../components/Button.tsx";
 import { LOGIN_PATH } from "../api/client.ts";
 import {
   AsOf,
@@ -262,11 +262,6 @@ export function Settings(): ReactNode {
             </Table>
           )}
         </AsyncPanel>
-        <div className="form-actions">
-          <LinkButton to="/add-funds" variant="primary">
-            Add funds
-          </LinkButton>
-        </div>
         <Disclosure title="Settlement">
           <p>{PENDING_SETTLEMENT_NOTE}</p>
         </Disclosure>

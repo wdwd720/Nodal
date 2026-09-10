@@ -1,113 +1,119 @@
 /**
- * The frame every page sits in.
+ * The frame every signed-in page sits in.
  *
  * Two shapes, chosen in JavaScript rather than hidden with CSS, so that only
  * one navigation exists in the document at a time. A duplicate landmark that is
  * merely invisible is still a duplicate landmark to a screen reader, and a link
  * that is merely invisible is still a link to a keyboard.
  *
- *   768px and above — a left rail carrying every section, grouped so the three
- *   kinds of value stay apart, with the masthead holding the two actions a
- *   customer starts from.
+ *   768px and above — a left rail with the five destinations, and a masthead
+ *   holding the stream badge, the primary actions and the account menu.
  *
- *   below 768px — a bottom bar with the five destinations a thumb reaches for
- *   at 44px each, and the full section list one press away in a sheet.
+ *   below 768px — a bottom bar with the same five destinations at 44px each,
+ *   and the account menu in a sheet.
  *
- * Accessibility here is structural rather than decorative: a skip link ahead of
- * everything, one `<nav>` with `aria-current` on the active link, a single
- * `<main>` that can be focused, and a footer risk statement that is part of the
- * document rather than a dismissible banner.
+ * # The five destinations, and why the rail is no longer grouped
  *
- * The navigation is grouped so that Real Capital, the Nodal Economy and
- * Simulated Capital are adjacent but never merged into one "balance"
- * destination. A single entry point would be the first step toward a single
- * total, and a single total across those three is true of nothing.
+ * The previous shell grouped the rail into Real capital / Nodal Economy /
+ * Simulated capital, because the product then held three kinds of value that
+ * must never be summed and the grouping was the design doing the same work the
+ * disclosures do. D-077 removed the hosted rail: this product has one kind of
+ * value, Credits, and the simulation surfaces went with the pages that fed
+ * them. Keeping the group headings would now be a structure that describes a
+ * product that no longer exists — three labels over one pot — so the rail is
+ * five destinations and no headings. The temperatures still do their work on
+ * every panel; they simply have nothing left to keep apart in the navigation.
  *
- * WHAT IS DELIBERATELY NOT HERE: a search field and a notification bell. There
- * is no endpoint behind either one in this API, and a control that does nothing
- * is the same defect as a button that does nothing — the rule this codebase
- * enforces with a type. They belong in the shell the day they have something to
- * do.
+ * # Controls that are not here
+ *
+ * The rule this codebase enforces with a type is that a control which does
+ * nothing is a defect. So:
+ *
+ *   - **Search** is absent: the markets search does not exist yet.
+ *   - **Notifications** is absent: `GET /v1/me/notifications/unread-count` is
+ *     not in this build's client.
+ *   - **Buy Credits** and **Withdraw** are declared below and rendered only
+ *     when their pages exist. `USER_JOURNEY.md` §2 requires them to be always
+ *     visible — and they will be — but a primary action that navigates to a
+ *     404 is worse than one that has not arrived. Turning each on is one word:
+ *     `present: false` becomes `present: true` in `PRIMARY_ACTIONS`.
+ *
+ * The same is true of every entry in `DESTINATIONS` and `ACCOUNT_LINKS`.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
+import { useSignOut } from "../api/queries.ts";
 import { RISK_FOOTER } from "../lib/honesty.ts";
 import { useSession } from "../session.tsx";
 import { useVersion } from "../api/queries.ts";
 import { BrandLockup } from "./Brand.tsx";
-import { IconButton, LinkButton } from "./Button.tsx";
-import { Sheet } from "./Dialog.tsx";
+import { Button, IconButton, LinkButton } from "./Button.tsx";
+import { Dialog, Sheet } from "./Dialog.tsx";
+import { Field, FieldGrid } from "./Field.tsx";
 import { StreamBadge, useEventStream } from "./StreamStatus.tsx";
 import { ToastProvider } from "./Toast.tsx";
 
 export interface NavItem {
   readonly to: string;
   readonly label: string;
-}
-
-export interface NavGroup {
-  readonly label: string;
-  readonly items: readonly NavItem[];
+  /**
+   * Whether a page answers this route in this build.
+   *
+   * It is a property of the shell rather than a lookup against the router
+   * because the router is assembled from several branches: the shell has to be
+   * able to say "not yet" about a page it does not own without importing it.
+   */
+  readonly present: boolean;
 }
 
 /**
- * The sections, grouped by what kind of value they are about.
- *
- * The group names are the design doing the same work the disclosures do: a
- * customer reading down this rail is told, before they click anything, that
- * Credits and dollars and replays live in three different places.
+ * D-077's five destinations, in order. Every one of them has a page.
  */
-export const NAV_GROUPS: readonly NavGroup[] = [
-  {
-    label: "Overview",
-    items: [
-      { to: "/", label: "Home" },
-      { to: "/activity", label: "Activity" },
-    ],
-  },
-  {
-    label: "Real capital",
-    items: [
-      { to: "/add-funds", label: "Add funds" },
-      { to: "/trade", label: "Trade" },
-      { to: "/portfolio", label: "Portfolio" },
-    ],
-  },
-  {
-    label: "Nodal Economy",
-    items: [
-      { to: "/nodal-economy", label: "Nodal Economy" },
-      { to: "/marketplace", label: "Marketplace" },
-      { to: "/native-markets", label: "Native Markets" },
-      { to: "/create-asset", label: "Create asset" },
-      { to: "/payouts", label: "Payouts" },
-    ],
-  },
-  {
-    label: "Agents and simulation",
-    items: [
-      { to: "/strategy", label: "Strategy builder" },
-      { to: "/agents", label: "Agents" },
-      { to: "/lab", label: "Lab" },
-    ],
-  },
-  {
-    label: "Account",
-    items: [{ to: "/settings", label: "Settings and security" }],
-  },
+export const DESTINATIONS: readonly NavItem[] = [
+  { to: "/home", label: "Home", present: true },
+  { to: "/markets", label: "Markets", present: true },
+  { to: "/agents", label: "Agents", present: true },
+  { to: "/portfolio", label: "Portfolio", present: true },
+  { to: "/activity", label: "Activity", present: true },
 ];
 
-/** Every section, flattened. The 404 page lists these. */
-export const NAV_ITEMS: readonly NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
+/**
+ * The two actions a customer starts from.
+ *
+ * Both are owned by other branches. Flip `present` to true as each lands.
+ */
+export const PRIMARY_ACTIONS: readonly NavItem[] = [
+  { to: "/buy-credits", label: "Buy Credits", present: false },
+  { to: "/withdraw", label: "Withdraw", present: false },
+];
 
-/** The five a thumb reaches for. Every one is a real route. */
-const BOTTOM_ITEMS: readonly NavItem[] = [
-  { to: "/", label: "Home" },
-  { to: "/trade", label: "Trade" },
-  { to: "/portfolio", label: "Portfolio" },
-  { to: "/activity", label: "Activity" },
-  { to: "/settings", label: "Settings" },
+/** What the account menu offers. Sign out is a real action and is always there. */
+export const ACCOUNT_LINKS: readonly NavItem[] = [
+  { to: "/settings", label: "Settings", present: true },
+  { to: "/settings/security", label: "Security", present: false },
+  { to: "/notifications", label: "Notifications", present: false },
+];
+
+/** Sections reachable from the rail that are not one of the five. */
+export const SECONDARY_LINKS: readonly NavItem[] = [
+  { to: "/markets/products", label: "Products", present: true },
+  { to: "/create-asset", label: "Create asset", present: true },
+];
+
+function available(items: readonly NavItem[]): readonly NavItem[] {
+  return items.filter((item) => item.present);
+}
+
+/**
+ * Every section a customer can reach. The 404 page lists these, so it can only
+ * ever offer routes that exist.
+ */
+export const NAV_ITEMS: readonly NavItem[] = [
+  ...available(DESTINATIONS),
+  ...available(SECONDARY_LINKS),
+  ...available(PRIMARY_ACTIONS),
+  ...available(ACCOUNT_LINKS),
 ];
 
 const WIDE = "(min-width: 768px)";
@@ -136,33 +142,99 @@ function navClass({ isActive }: { isActive: boolean }): string {
 }
 
 function Sections(props: { readonly onNavigate?: () => void }): ReactNode {
+  const secondary = available(SECONDARY_LINKS);
   return (
     <nav className="nav" aria-label="Sections">
-      {NAV_GROUPS.map((group) => {
-        const headingId = `nav-group-${group.label.replace(/\s+/g, "-").toLowerCase()}`;
-        return (
-          <div className="nav-group" key={group.label}>
-            <p className="eyebrow" id={headingId}>
-              {group.label}
-            </p>
-            <ul aria-labelledby={headingId}>
-              {group.items.map((item) => (
-                <li key={item.to}>
-                  <NavLink
-                    to={item.to}
-                    end={item.to === "/"}
-                    className={navClass}
-                    {...(props.onNavigate === undefined ? {} : { onClick: props.onNavigate })}
-                  >
-                    {item.label}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
+      <ul>
+        {available(DESTINATIONS).map((item) => (
+          <li key={item.to}>
+            <NavLink
+              to={item.to}
+              end={item.to === "/markets"}
+              className={navClass}
+              {...(props.onNavigate === undefined ? {} : { onClick: props.onNavigate })}
+            >
+              {item.label}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+      {secondary.length > 0 && (
+        <div className="nav-group">
+          <p className="eyebrow" id="nav-group-more">
+            Also
+          </p>
+          <ul aria-labelledby="nav-group-more">
+            {secondary.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={navClass}
+                  {...(props.onNavigate === undefined ? {} : { onClick: props.onNavigate })}
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </nav>
+  );
+}
+
+/**
+ * The account menu.
+ *
+ * It is a `Dialog`, which becomes a bottom sheet under 768px, rather than a
+ * bespoke popover: the native `<dialog>` traps focus, closes on Escape, makes
+ * the rest of the document inert and restores focus on close, and none of those
+ * is worth reimplementing badly for a menu with three items.
+ */
+function AccountMenu(props: { readonly open: boolean; readonly onClose: () => void }): ReactNode {
+  const session = useSession();
+  const signOut = useSignOut();
+  const links = available(ACCOUNT_LINKS);
+
+  return (
+    <Dialog open={props.open} title="Account" onClose={props.onClose}>
+      {session.principal !== undefined && (
+        <FieldGrid columns={2}>
+          <Field label="Signed in as" note="The subject the identity provider asserted.">
+            <span className="mono-small">{session.principal.subject_id}</span>
+          </Field>
+          <Field label="Roles" note="Asserted by the operator directory, never by a token claim.">
+            <span className="mono-small">{session.principal.roles.join(", ")}</span>
+          </Field>
+        </FieldGrid>
+      )}
+      <ul className="link-list">
+        {links.map((item) => (
+          <li key={item.to}>
+            <LinkButton to={item.to}>{item.label}</LinkButton>
+          </li>
+        ))}
+      </ul>
+      <div className="form-actions">
+        <Button
+          variant="danger"
+          busy={signOut.isPending}
+          busyLabel="Signing out…"
+          onClick={() => {
+            signOut.mutate(undefined, {
+              // The backend revokes the session and clears the cookie; a full
+              // reload is what makes the app ask again from nothing, rather
+              // than keeping a cache that belongs to a session that is gone.
+              onSettled: () => {
+                window.location.assign("/");
+              },
+            });
+          }}
+        >
+          Sign out
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -172,6 +244,8 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
   const stream = useEventStream(session.signedIn);
   const wide = useMediaQuery(WIDE);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const actions = available(PRIMARY_ACTIONS);
 
   return (
     <ToastProvider>
@@ -214,10 +288,24 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
             )}
             <div className="masthead-meta">
               {!wide && <StreamBadge status={stream} />}
-              <LinkButton to="/add-funds" variant="primary">
-                Add funds
-              </LinkButton>
-              <LinkButton to="/payouts">Withdraw</LinkButton>
+              {actions.map((action, index) => (
+                <LinkButton
+                  key={action.to}
+                  to={action.to}
+                  variant={index === 0 ? "primary" : "secondary"}
+                >
+                  {action.label}
+                </LinkButton>
+              ))}
+              <IconButton
+                label="Open the account menu"
+                expanded={accountOpen}
+                onClick={() => {
+                  setAccountOpen(true);
+                }}
+              >
+                <span aria-hidden="true">Account</span>
+              </IconButton>
             </div>
           </header>
 
@@ -227,6 +315,10 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
 
           <footer className="footer">
             <p>{RISK_FOOTER}</p>
+            <p>
+              <Link to="/terms">Terms</Link> · <Link to="/privacy">Privacy</Link> ·{" "}
+              <Link to="/risk">Risk disclosure</Link>
+            </p>
             {session.principal !== undefined && (
               <p className="mono-small">
                 signed in as {session.principal.subject_id} · {session.principal.actor_type} ·{" "}
@@ -238,9 +330,9 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
           {!wide && (
             <nav className="bottom-nav" aria-label="Primary">
               <ul>
-                {BOTTOM_ITEMS.map((item) => (
+                {available(DESTINATIONS).map((item) => (
                   <li key={item.to}>
-                    <NavLink to={item.to} end={item.to === "/"}>
+                    <NavLink to={item.to} end={item.to === "/markets"}>
                       {item.label}
                     </NavLink>
                   </li>
@@ -265,6 +357,13 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
             />
           </Sheet>
         )}
+
+        <AccountMenu
+          open={accountOpen}
+          onClose={() => {
+            setAccountOpen(false);
+          }}
+        />
       </div>
     </ToastProvider>
   );

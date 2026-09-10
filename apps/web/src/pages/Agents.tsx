@@ -24,7 +24,6 @@ import {
   type TradeIntent,
 } from "../api/queries.ts";
 import { AsyncPanel, EmptyState } from "../components/DataState.tsx";
-import { LinkButton } from "../components/Button.tsx";
 import {
   AsOf,
   Disclosure,
@@ -104,7 +103,6 @@ export function Agents(): ReactNode {
     <Page
       title="Agents"
       lead="What autonomous activity on this account looks like from the v1 API, and what the v1 API cannot yet tell you."
-      actions={<LinkButton to="/strategy">Open the strategy builder</LinkButton>}
     >
       <Panel title="Agent status" description="Derived from the actor recorded on each trade intent.">
         <AsyncPanel

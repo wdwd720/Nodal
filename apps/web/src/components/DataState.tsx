@@ -9,7 +9,53 @@
 import type { ReactNode } from "react";
 
 import { explain } from "../api/problem.ts";
+import { SITUATION_BY_ID } from "../lib/errors.ts";
+import { beginSignIn } from "../session.tsx";
 import { Button } from "./Button.tsx";
+
+/**
+ * Where the customer is, for the round trip back.
+ *
+ * Read from `window.location` rather than from the router so that this
+ * component keeps working wherever it is rendered — including the boot screen,
+ * which runs before any page has decided what it is.
+ */
+function currentPath(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+/**
+ * The recovery for an error that is really a session problem.
+ *
+ * `explain()` has computed `needsSignIn` and `needsStepUp` since the API layer
+ * was written, and until now nothing consumed them: a 401 mid-action produced a
+ * sentence and no way out of it. `USER_JOURNEY.md` §10 requires the way out —
+ * the round trip keeps the return path, and `useSurvivesSignIn` keeps whatever
+ * the customer had typed, so coming back lands on the same page with the same
+ * form.
+ */
+function SessionRecovery(props: {
+  readonly needsSignIn: boolean;
+  readonly needsStepUp: boolean;
+}): ReactNode {
+  if (!props.needsSignIn && !props.needsStepUp) return null;
+  const situation = props.needsStepUp
+    ? SITUATION_BY_ID["step-up-required"]
+    : SITUATION_BY_ID["session-expired"];
+  return (
+    <>
+      <p className="explain-body">{situation.sentence}</p>
+      <Button
+        variant="primary"
+        onClick={() => {
+          beginSignIn({ returnTo: currentPath(), stepUp: props.needsStepUp });
+        }}
+      >
+        {situation.recovery.label}
+      </Button>
+    </>
+  );
+}
 
 export function Explanation(props: {
   readonly error: unknown;
@@ -38,6 +84,7 @@ export function Explanation(props: {
         {detail.status === undefined ? "" : ` · HTTP ${String(detail.status)}`}
         {detail.requestId === undefined ? "" : ` · request ${detail.requestId}`}
       </p>
+      <SessionRecovery needsSignIn={detail.needsSignIn} needsStepUp={detail.needsStepUp} />
       {detail.retryable && props.onRetry !== undefined && (
         <Button variant="secondary" onClick={props.onRetry}>
           {props.retryLabel ?? "Try again"}
