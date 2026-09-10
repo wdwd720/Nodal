@@ -316,9 +316,19 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	if tx == nil {
 		return ExecuteResult{}, errs.New(errs.CodeInternal, "nativemarket: Execute requires a transaction")
 	}
-	if existing, found, err := s.fillByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
+	if existing, owner, found, err := s.fillByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
 		return ExecuteResult{}, err
 	} else if found {
+		// Whose replay this is, for the reason recorded in internal/payout: the
+		// key is globally unique and the boundary's idempotency record is per
+		// actor, so another account's trade is what comes back otherwise --
+		// and a market moves on every fill, so it is a trade at a price this
+		// caller never saw (F-106).
+		if owner != r.AccountID {
+			return ExecuteResult{}, errs.New(errs.CodeInvalidIdempotencyReuse,
+				"nativemarket: idempotency key belongs to another account").
+				WithField("idempotency_key", r.IdempotencyKey)
+		}
 		return existing, nil
 	}
 

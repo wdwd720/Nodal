@@ -76,6 +76,21 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 	if existing, found, err := s.byIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
 		return Request{}, Decision{}, err
 	} else if found {
+		// The key is globally unique on this table, and the HTTP layer's own
+		// idempotency record is keyed by actor -- so a DIFFERENT caller reusing
+		// a key passes the boundary and arrives here. Returning the row without
+		// asking whose it is renders another account's payout to them: its
+		// account id, its requested, reserved and settled quantities, its
+		// destination and its failure reason. It also silently discards the
+		// caller's own request (F-106).
+		//
+		// The same comparison internal/credit, internal/funding,
+		// internal/withdrawal and internal/capital already make.
+		if existing.AccountID != r.AccountID {
+			return Request{}, Decision{}, errs.New(errs.CodeInvalidIdempotencyReuse,
+				"payout: idempotency key belongs to another account").
+				WithField("idempotency_key", r.IdempotencyKey)
+		}
 		return existing, Decision{}, nil
 	}
 

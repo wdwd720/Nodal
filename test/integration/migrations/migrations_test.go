@@ -376,3 +376,79 @@ func TestIntegration_Migrations(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// Every globally-unique idempotency key is claimed by something that checks
+// whose it is (F-106).
+//
+// A key that is UNIQUE across the whole table, rather than per account, means a
+// caller who guesses or reuses another account's key collides with their row.
+// The HTTP boundary's own idempotency record is keyed by (actor, endpoint,
+// key), so that collision is not caught there -- it passes the boundary and
+// arrives in the domain, which then decides whether to hand the row over.
+//
+// Four packages compared the account and refused with INVALID_IDEMPOTENCY_REUSE.
+// Three returned the row: a payout, a marketplace order and a market fill, each
+// rendered to a stranger along with the caller's own request being discarded.
+//
+// This is the list, and it exists because the defect was silent: nothing said
+// which tables were in this shape. A new table with a global key fails here
+// until somebody writes down how its owner is checked.
+func TestIntegration_EveryGlobalIdempotencyKeyIsScopedByItsOwner(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	app := connect(t, appURL)
+
+	// table -> where the account comparison lives.
+	declared := map[string]string{
+		"asset_reservations":       "internal/capital.replayReservation compares AccountID, AssetID, Quantity, USD and envelope",
+		"credit_fundings":          "internal/credit.OpenFunding compares AccountID and CreditQuantity",
+		"deposits":                 "internal/funding: Repository.Create and Service.Start both compare AccountID",
+		"internal_commerce_orders": "internal/commerce.Purchase compares BuyerAccountID (F-106)",
+		"native_market_fills":      "internal/nativemarket.Execute compares the fill's account_id (F-106)",
+		"payout_requests":          "internal/payout.Create compares AccountID (F-106)",
+		"withdrawals":              "internal/withdrawal.Create compares AccountID",
+		// Not account-scoped by design. The ledger's key is the caller's own
+		// namespaced string and a collision is refused by content hash, not by
+		// owner; a plan step's key is derived by the planner, never by a client.
+		"journal_transactions": "internal/ledger compares the content hash; the key is server-derived",
+		"execution_plan_steps": "server-derived by the planner; no client supplies it",
+	}
+
+	rows, err := app.Query(ctx, `
+		SELECT c.relname, array_to_string(array_agg(a.attname ORDER BY k.ord), ',')
+		  FROM pg_index x
+		  JOIN pg_class c ON c.oid = x.indrelid
+		  JOIN LATERAL unnest(x.indkey) WITH ORDINALITY AS k(attnum, ord) ON true
+		  JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+		 WHERE x.indisunique AND c.relnamespace = 'public'::regnamespace
+		 GROUP BY c.relname, x.indexrelid
+		HAVING array_to_string(array_agg(a.attname ORDER BY k.ord), ',') LIKE '%idempotency_key%'
+		 ORDER BY 1`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var undeclared, scoped []string
+	for rows.Next() {
+		var table, cols string
+		require.NoError(t, rows.Scan(&table, &cols))
+		if strings.Contains(cols, "account_id") {
+			// Scoped in the schema itself, which is the strongest form: the
+			// collision cannot happen at all. trade_intents does this.
+			scoped = append(scoped, table)
+			continue
+		}
+		if _, ok := declared[table]; !ok {
+			undeclared = append(undeclared, table+" ("+cols+")")
+		}
+	}
+	require.NoError(t, rows.Err())
+
+	assert.Empty(t, undeclared,
+		"these tables have a globally unique idempotency key and nothing here says how its owner is "+
+			"checked, so a caller reusing another account's key may be handed their row:\n  %s",
+		strings.Join(undeclared, "\n  "))
+	assert.NotEmpty(t, scoped,
+		"no table scopes its idempotency key by account in the schema; trade_intents did, and losing "+
+			"that would mean the strongest form of this control is gone")
+}

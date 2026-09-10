@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -933,4 +934,33 @@ func addStr(base string, n int64) string {
 		panic(err)
 	}
 	return v.Add(q(n)).String()
+}
+
+// An idempotency key belongs to one account (F-106).
+//
+// internal_commerce_orders.idempotency_key is globally UNIQUE and the HTTP
+// boundary's idempotency record is keyed by actor, so a different caller
+// reusing a key reached the domain -- which returned the order it found without
+// asking whose it was: buyer, seller, price, platform fee and proceeds, and the
+// caller's own purchase silently discarded.
+func TestIntegration_ACommerceKeyBelongsToOneAccount(t *testing.T) {
+	f := newFixture(t)
+	f.registerSeller(nil)
+	f.fund(f.buyer, valuedomain.OriginPurchased, valuedomain.FinalitySettled, 10_000)
+	p := f.list(commerce.KindCreatorProduct, 2_500, 400)
+
+	key := "shared-" + uuid.NewString()
+	first, err := f.purchase(p, f.buyer, q(2_500), key)
+	require.NoError(t, err)
+
+	stranger := newAccount(t)
+	f.fund(stranger, valuedomain.OriginPurchased, valuedomain.FinalitySettled, 10_000)
+	_, err = f.purchase(p, stranger, q(2_500), key)
+	require.Error(t, err, "another account's order was returned as this caller's replay")
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
+
+	// The control: the buyer's own retry is still a replay.
+	again, err := f.purchase(p, f.buyer, q(2_500), key)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, again.ID)
 }

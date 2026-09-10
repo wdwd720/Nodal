@@ -129,6 +129,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-103 | P1 | NEW | fixed | Five configuration rules permitted what the deployment cannot survive: live provider credentials outside PROD, a trusted-proxy list that trusts everyone, a retention class with no floor, a legal policy the binary refuses to boot on, and a TLS flag nothing read |
 | F-104 | P2 | NEW | fixed | Three controls reported something other than what they enforced: a secret redactor that never satisfied the interface it named, a step-up window three times the one applied, and a ceiling test that passed because a different guard fired |
 | F-105 | P1 | NEW | part | An unauthenticated caller chose how many permanent, undeletable rows the service wrote, and the deployment's database ceiling halts every financial action when it is reached |
+| F-106 | P1 | NEW | fixed | Three money tables handed one account's record to another on a reused idempotency key, and discarded the caller's own request; four sibling tables already compared the account |
 
 ---
 
@@ -5076,6 +5077,73 @@ REAL_DB_INTEGRATION for the fix: the webhook suite drives real deliveries
 against a real database and now observes one row where it observed two, the
 suppression count on the next window's row, and twenty further rejections still
 answered 400.
+
+## F-106 · An idempotency key was not one account's · NEW · P1 · FIXED
+
+**Found by** an independent audit of the financial kernel, tracing what each
+client-supplied value is allowed to decide.
+
+Seven tables carry a `idempotency_key` that is UNIQUE across the whole table
+rather than per account. That alone is not the defect — what matters is what
+the lookup does with the row it finds.
+
+The HTTP boundary's own idempotency record is keyed by `(actor, endpoint,
+key)`, which is correct and is also why this is reachable: a **different**
+caller reusing a key finds no record there, passes cleanly, and arrives in the
+domain. The domain is where it is decided whether to hand the row over.
+
+**Four asked whose it was** and refused with `INVALID_IDEMPOTENCY_REUSE`:
+`credit_fundings`, `deposits` (twice — repository and service),
+`withdrawals`, `asset_reservations`.
+
+**Three did not:**
+
+| table | call site | what came back |
+|---|---|---|
+| `payout_requests` | `payout.Create` | another account's payout: its account id, requested/reserved/settled quantities, destination and failure reason |
+| `internal_commerce_orders` | `commerce.Purchase` | another account's order: buyer, seller, price, platform fee, proceeds |
+| `native_market_fills` | `nativemarket.Execute` | another account's trade — and a market moves on every fill, so at a price this caller never saw |
+
+In every case the caller's own request was **silently discarded** and they were
+told a record existed that they had never created.
+
+`native_market_fills` is the sharpest instance: the lookup did not even
+**project** `account_id`, so no caller could have made the check. The comparison
+had to be added to the query before it could be added to the code.
+
+**And one table gets it right in the schema, which is the strongest form.**
+`trade_intents` is `UNIQUE (account_id, idempotency_key)`, with `ON CONFLICT
+(account_id, idempotency_key)` to match. There the collision cannot happen at
+all rather than being caught afterwards.
+
+**Reproduced.** Two accounts, one key, against a real database:
+
+```
+account A: POST payout, key "shared-key-0001"  -> created
+account B: POST payout, key "shared-key-0001"  -> A's payout, no error
+```
+
+After the fix, B is refused with `INVALID_IDEMPOTENCY_REUSE`, and A's own retry
+still returns A's row — which is the control that matters, because scoping a
+key must not stop it being a key.
+
+**Fix.** The three now make the comparison the other four already made. Plus a
+structural guard, because the defect was silent: nothing anywhere said which
+tables were in this shape.
+`TestIntegration_EveryGlobalIdempotencyKeyIsScopedByItsOwner` reads
+`pg_index` for every unique index over an idempotency key and requires each
+table either to scope it by `account_id` in the schema, or to be declared with
+the place the account comparison lives. A new table with a global key fails
+until somebody writes that down. Two are declared as deliberately not
+account-scoped, with the reason: `journal_transactions` compares a content hash
+and its key is server-derived, and `execution_plan_steps`' key is the planner's,
+never a client's.
+
+**Evidence.** REAL_DB_INTEGRATION. The payout case was observed succeeding
+before the fix — "An error is expected but got nil" — and refused after, with
+the owner's own retry still a replay. Commerce and native market carry the same
+pair of assertions. The structural guard reads the live catalogue rather than a
+list typed out beside it.
 
 ## Findings deliberately NOT raised
 

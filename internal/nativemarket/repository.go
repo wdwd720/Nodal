@@ -139,26 +139,32 @@ func (s *Service) creatorOf(ctx context.Context, q db.Querier, assetID assets.As
 // The market moves on every trade, so a retried order that was allowed through
 // a second time would execute at a different price and take the user's Credits
 // twice. This is the check that makes a retry safe.
-func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key string) (ExecuteResult, bool, error) {
+//
+// It returns the fill's account so the caller can ask whose replay this is.
+// The key is globally unique on this table and the projection did not include
+// account_id at all, so no caller COULD have asked -- and another account's
+// trade was what came back (F-106).
+func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key string) (ExecuteResult, accounts.AccountID, bool, error) {
 	var (
 		res                                        ExecuteResult
+		owner                                      accounts.AccountID
 		side                                       string
 		creditsIn, creditsOut, assetsIn, assetsOut string
 		toPool, platformFee, creatorFee            string
 		realAfter, assetAfter                      string
 	)
 	err := q.QueryRow(ctx,
-		`SELECT id, market_id, side, credits_in::text, credits_out::text, assets_in::text, assets_out::text,
+		`SELECT id, market_id, account_id, side, credits_in::text, credits_out::text, assets_in::text, assets_out::text,
 		        credits_to_pool::text, platform_fee::text, creator_fee::text,
 		        real_credit_reserve_after::text, asset_reserve_after::text
 		   FROM native_market_fills WHERE idempotency_key = $1`, key).
-		Scan(&res.FillID, &res.MarketID, &side, &creditsIn, &creditsOut, &assetsIn, &assetsOut,
+		Scan(&res.FillID, &res.MarketID, &owner, &side, &creditsIn, &creditsOut, &assetsIn, &assetsOut,
 			&toPool, &platformFee, &creatorFee, &realAfter, &assetAfter)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ExecuteResult{}, false, nil
+			return ExecuteResult{}, accounts.AccountID{}, false, nil
 		}
-		return ExecuteResult{}, false, mapError(err)
+		return ExecuteResult{}, accounts.AccountID{}, false, mapError(err)
 	}
 	parse := func(s string) money.Quantity {
 		v, perr := money.ParseQuantity(s)
@@ -182,7 +188,7 @@ func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key st
 			AssetReserve:      parse(assetAfter),
 		},
 	}
-	return res, true, nil
+	return res, owner, true, nil
 }
 
 // StoredQuote returns a recorded quote.

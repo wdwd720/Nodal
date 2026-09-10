@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -1012,4 +1013,59 @@ func (f *fixture) providerEvents(id payout.RequestID, rawStatus string) int {
 		  WHERE request_id = $1 AND provider_status = $2 AND direction = 'RESPONSE'`,
 		id, rawStatus).Scan(&n))
 	return n
+}
+
+// An idempotency key belongs to one account (F-106).
+//
+// payout_requests.idempotency_key is globally UNIQUE, and the HTTP boundary's
+// own idempotency record is keyed by (actor, endpoint, key) -- so a DIFFERENT
+// caller reusing a key passes the boundary and arrives in the domain. Create
+// returned the row it found without asking whose it was, which rendered another
+// account's payout to the caller: its account id, its requested, reserved and
+// settled quantities, its destination and its failure reason. It also silently
+// discarded the caller's own request, and told them a payout existed that they
+// had never made.
+//
+// internal/credit, internal/funding, internal/withdrawal and internal/capital
+// all make this comparison. Three tables did not.
+func TestIntegration_AnIdempotencyKeyBelongsToOneAccount(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 50_000)
+
+	const key = "shared-key-0001"
+	first, _, err := f.createWithKey(f.account, key, 10_000)
+	require.NoError(t, err)
+	require.False(t, first.ID.IsZero())
+
+	// A second account, same key.
+	other := newAccount(t)
+	_, _, err = f.createWithKey(other, key, 10_000)
+	require.Error(t, err, "another account's payout was returned as this caller's replay")
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
+
+	// The control: the owner's own retry is still idempotent, which is the
+	// whole point of the key and must not have been broken by scoping it.
+	again, _, err := f.createWithKey(f.account, key, 10_000)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, again.ID, "the owner's retry stopped being a replay")
+}
+
+func (f *fixture) createWithKey(account accounts.AccountID, key string, amount int64) (payout.Request, payout.Decision, error) {
+	var (
+		req payout.Request
+		dec payout.Decision
+	)
+	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var cerr error
+			dest := f.destination
+			in := f.input()
+			in.AccountID = account
+			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: account, DestinationID: &dest, Quantity: q(amount),
+				IdempotencyKey: key, EffectiveAt: f.clk.Now(),
+			}, in)
+			return cerr
+		})
+	return req, dec, err
 }

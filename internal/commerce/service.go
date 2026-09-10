@@ -310,6 +310,16 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 	if existing, found, err := s.orderByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
 		return Order{}, err
 	} else if found {
+		// Whose replay this is has to be asked, for the reason recorded in
+		// internal/payout: the key is globally unique and the boundary's own
+		// idempotency record is per actor, so another account's order is what
+		// comes back otherwise -- buyer, seller, price, platform fee and
+		// proceeds (F-106).
+		if existing.BuyerAccountID != r.BuyerAccountID {
+			return Order{}, errs.New(errs.CodeInvalidIdempotencyReuse,
+				"commerce: idempotency key belongs to another account").
+				WithField("idempotency_key", r.IdempotencyKey)
+		}
 		return existing, nil
 	}
 
