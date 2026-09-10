@@ -405,10 +405,14 @@ paths:
   /admin/gates/{capability}/{action}:
     post:
       tags: [admin]
-      summary: Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up)
+      summary: Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
+      description: >-
+        sandbox and unsandbox exist only on a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX,
+        never PROD). A SANDBOX gate carries no approval chain, cannot exist in PROD, and
+        is read as active only by a sandbox tier. Everywhere else the action is refused.
       parameters:
         - { in: path, name: capability, required: true, schema: { $ref: "#/components/schemas/Capability" } }
-        - { in: path, name: action, required: true, schema: { type: string, enum: [propose, approve, activate, suspend, resume, revoke] } }
+        - { in: path, name: action, required: true, schema: { type: string, enum: [propose, approve, activate, suspend, resume, revoke, sandbox, unsandbox] } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         content: { application/json: { schema: { $ref: "#/components/schemas/GateActionRequest" } } }
@@ -2025,8 +2029,9 @@ components:
       properties:
         capability: { $ref: "#/components/schemas/Capability" }
         environment: { type: string }
-        state: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED] }
+        state: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED, SANDBOX] }
         active: { type: boolean, description: "Result of the five-condition activation check, not just the row state" }
+        sandbox: { type: boolean, description: "True when active came from a SANDBOX row on a sandbox tier rather than from dual control. Show the word; an active sandbox gate is not an approval." }
         inactive_reason: { type: string }
         approval_version: { type: integer }
         legal_review_ref: { type: string }

@@ -14,6 +14,9 @@ type Checker struct {
 	env     string
 	enabled func(Capability) bool
 	clk     clock.Clock
+	// sandboxAllowed reads a SANDBOX row as active. Set only by WithSandbox,
+	// which cmd/api calls exactly when the deployment is a sandbox tier.
+	sandboxAllowed bool
 }
 
 // NewChecker builds a Checker. enabled is condition 1 of POLICY_AUTHORITY §1
@@ -46,13 +49,13 @@ func (c *Checker) IsActive(ctx context.Context, q db.Querier, cap Capability) (V
 		return Verdict{Reason: ReasonNoGateRow}, nil
 	}
 	if !c.enabled(cap) {
-		return Evaluate(nil, false, c.clk.Now()), nil
+		return EvaluateWith(nil, false, c.sandboxAllowed, c.clk.Now()), nil
 	}
 	g, err := loadGate(ctx, q, cap, c.env, false)
 	if err != nil {
 		return Verdict{}, err
 	}
-	return Evaluate(g, true, c.clk.Now()), nil
+	return EvaluateWith(g, true, c.sandboxAllowed, c.clk.Now()), nil
 }
 
 // ActiveSet answers for MANY capabilities in ONE query.
@@ -76,7 +79,7 @@ func (c *Checker) ActiveSet(ctx context.Context, q db.Querier, caps []Capability
 		case !cap.Valid():
 			out[cap] = Verdict{Reason: ReasonNoGateRow}
 		case !c.enabled(cap):
-			out[cap] = Evaluate(nil, false, c.clk.Now())
+			out[cap] = EvaluateWith(nil, false, c.sandboxAllowed, c.clk.Now())
 		default:
 			need = true
 		}
@@ -97,7 +100,7 @@ func (c *Checker) ActiveSet(ctx context.Context, q db.Querier, caps []Capability
 		if _, done := out[cap]; done {
 			continue
 		}
-		out[cap] = Evaluate(byCap[cap], true, now)
+		out[cap] = EvaluateWith(byCap[cap], true, c.sandboxAllowed, now)
 	}
 	return out, nil
 }

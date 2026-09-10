@@ -14,6 +14,7 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 
 	"github.com/nodal/controlplane/internal/config"
+	"github.com/nodal/controlplane/internal/provider/payoutsandbox"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/provider/stripepayout"
@@ -256,6 +257,18 @@ func TestRender_EveryProviderNameMatchesAnAdapter(t *testing.T) {
 		"CP_PROVIDER_CREDIT_PURCHASE_NAME": stripecredit.ProviderName,
 		"CP_PROVIDER_PAYOUT_NAME":          stripepayout.ProviderName,
 	}
+	// A sandbox tier (ADR-0023) constructs the sandbox payout provider in that
+	// slot instead, and nothing else may name it: config refuses the
+	// declaration in PROD and the adapter refuses to build there.
+	sandboxTier := false
+	for _, e := range svc.EnvVars {
+		if e.Key == "CP_API_LEGAL_POLICY" && e.Value != nil && strings.EqualFold(*e.Value, "SANDBOX") {
+			sandboxTier = true
+		}
+	}
+	if sandboxTier {
+		wantBySlot["CP_PROVIDER_PAYOUT_NAME"] = payoutsandbox.Name
+	}
 
 	got := map[string]string{}
 	for _, e := range svc.EnvVars {
@@ -281,6 +294,10 @@ func TestRender_EveryProviderNameMatchesAnAdapter(t *testing.T) {
 	for key, v := range got {
 		if strings.HasPrefix(v, "stripe") {
 			assert.True(t, real[v], "%s names %q, which no Stripe adapter answers to", key, v)
+		}
+		if v == payoutsandbox.Name {
+			assert.True(t, sandboxTier, "%s names the sandbox payout provider on a deployment that is not a sandbox tier; it would refuse to build", key)
+			assert.Equal(t, "CP_PROVIDER_PAYOUT_NAME", key, "the sandbox payout provider answers only the payout slot")
 		}
 	}
 }

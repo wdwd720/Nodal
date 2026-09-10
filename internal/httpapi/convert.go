@@ -872,6 +872,7 @@ func toAPIGate(v GateView) api.CapabilityGate {
 		Environment:         v.Gate.Environment,
 		State:               api.CapabilityGateState(v.Gate.State),
 		Active:              v.Verdict.Active,
+		Sandbox:             &v.Verdict.Sandbox,
 		InactiveReason:      strPtr(v.Verdict.Reason),
 		ApprovalVersion:     v.Gate.ApprovalVersion,
 		LegalReviewRef:      strPtr(v.Gate.LegalReviewRef),

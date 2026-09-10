@@ -294,6 +294,10 @@ const (
 	GateActionSuspend  GateAction = "suspend"
 	GateActionResume   GateAction = "resume"
 	GateActionRevoke   GateAction = "revoke"
+	// GateActionSandbox and GateActionUnsandbox move a gate into and out of
+	// SANDBOX. Refused unless the deployment is a sandbox tier (ADR-0023).
+	GateActionSandbox   GateAction = "sandbox"
+	GateActionUnsandbox GateAction = "unsandbox"
 )
 
 // GateView is a gate row plus the five-condition activation verdict, which is

@@ -127,7 +127,8 @@ func (s *Server) PostAdminGatesCapabilityAction(ctx context.Context, request api
 	action := GateAction(request.Action)
 	switch action {
 	case GateActionPropose, GateActionApprove, GateActionActivate,
-		GateActionSuspend, GateActionResume, GateActionRevoke:
+		GateActionSuspend, GateActionResume, GateActionRevoke,
+		GateActionSandbox, GateActionUnsandbox:
 	default:
 		return nil, validationError("action", "unknown gate action")
 	}

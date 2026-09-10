@@ -165,6 +165,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gate checker: %w", err)
 	}
+	// A sandbox tier reads SANDBOX rows as active; every other deployment
+	// reads them as inactive with a reason. The condition is the one config
+	// validated: the SANDBOX legal policy, never in PROD (ADR-0023).
+	gateChecker = gateChecker.WithSandbox(cfg.SandboxTier())
 	verificationResolver, err := identity.NewVerificationResolver(database)
 	if err != nil {
 		return nil, fmt.Errorf("verification resolver: %w", err)
@@ -172,6 +176,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	gateAdmin, err := gates.NewAdmin(string(cfg.Env), clk, auditAdapter.GateAudit())
 	if err != nil {
 		return nil, fmt.Errorf("gate admin: %w", err)
+	}
+	gateAdmin = gateAdmin.WithSandbox(cfg.SandboxTier())
+	if err := sandboxGatesAtBoot(ctx, database, cfg, clk, auditAdapter.GateAudit(), log); err != nil {
+		return nil, fmt.Errorf("sandbox gates: %w", err)
 	}
 
 	// --- valuation and buying power -------------------------------------
@@ -365,7 +373,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// PART LXV asks for: production cannot load a test double. Nothing is
 	// registered, so every payout answers "no provider configured" -- the
 	// honest state until a contract exists (BLOCKERS: B-PAYOUT-PROVIDER).
-	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest)
+	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest || cfg.SandboxTier())
+	if err := registerSandboxPayoutProvider(cfg, payoutRegistry, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox payout provider: %w", err)
+	}
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
 	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, audit.NewWriter(), clk)
@@ -439,10 +450,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			Payouts:         payoutSvc,
 			PayoutEngine:    payoutEngine,
 			Commerce:        commerceSvc,
-			// No payout policy is configured, so the fail-closed default
-			// applies and no origin is withdrawable. Activating one is a
-			// policy version with evidence, not a code change here.
-			PayoutPolicy: nil,
+			// The fail-closed default unless the deployment is a sandbox tier,
+			// whose rehearsal policy is a named, versioned policy too. A real
+			// policy is a persisted version with evidence, never a name here.
+			PayoutPolicy: payoutPolicyFor(cfg),
 			Capabilities: gateCapabilityResolver{checker: gateChecker, q: database},
 			// The verification level Nodal can establish BY ITSELF, and no
 			// level above it: NODAL_IDENTITY when the identity provider
@@ -923,12 +934,25 @@ func mergeExecutors(tables ...map[admin.Kind]admin.ExecFunc) map[admin.Kind]admi
 func legalRouterFor(env config.Environment, policy string) (*legalrouter.Router, error) {
 	name, ok := config.NormalizeLegalPolicy(policy)
 	if !ok {
-		return nil, fmt.Errorf("%s=%q: expected %s or %s", envLegalPolicy, policy,
-			config.LegalPolicyConservative, config.LegalPolicyDevelopment)
+		return nil, fmt.Errorf("%s=%q: expected %s, %s or %s", envLegalPolicy, policy,
+			config.LegalPolicyConservative, config.LegalPolicyDevelopment, config.LegalPolicySandbox)
 	}
 	switch name {
 	case config.LegalPolicyConservative:
 		return nil, nil
+	case config.LegalPolicySandbox:
+		// A sandbox tier: not PROD, and config.Validate already refused it
+		// there. Refused here again because this is the place the router is
+		// built, and a router built for the wrong deployment is the failure
+		// that matters.
+		if env == config.EnvProd {
+			return nil, fmt.Errorf("%s=%s: a sandbox tier cannot be PROD", envLegalPolicy, config.LegalPolicySandbox)
+		}
+		r, err := legalrouter.New(legalrouter.SandboxPolicy())
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", envLegalPolicy, err)
+		}
+		return r, nil
 	default:
 		if env.IsProductionLike() {
 			return nil, fmt.Errorf("%s=%s: a development legal policy may not be loaded in %s",

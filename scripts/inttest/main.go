@@ -153,6 +153,11 @@ func run() int {
 			return 130
 		}
 		name := dbName(pkg)
+		// Parallel checkouts (git worktrees) share one Postgres; a suffix keeps
+		// their databases apart when two of them test the same package.
+		if suffix := os.Getenv("CP_INTTEST_DB_SUFFIX"); suffix != "" {
+			name += "_" + dbNameUnsafe.ReplaceAllString(strings.ToLower(suffix), "_")
+		}
 		fmt.Printf("\n=== [%d/%d] %s (database controlplane_test_%s)\n", i+1, len(pkgs), pkg, name)
 
 		env, err := provision(ctx, root, name)

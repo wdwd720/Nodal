@@ -55,6 +55,8 @@ type Admin struct {
 	env   string
 	clk   clock.Clock
 	audit AuditAppender
+	// sandboxAllowed permits Sandbox and Unsandbox. Set only by WithSandbox.
+	sandboxAllowed bool
 }
 
 // NewAdmin builds an Admin. All three dependencies are required.

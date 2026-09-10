@@ -207,6 +207,13 @@ type APIConfig struct {
 	// policy in production is refused by the router itself; naming it here is
 	// what lets a configuration check see which one a deployment asked for.
 	LegalPolicy string
+	// PayoutPolicy selects the payout policy: CLOSED (the default, no origin
+	// withdrawable) or SANDBOX (a sandbox tier's rehearsal policy).
+	PayoutPolicy string
+	// SandboxGates are the capabilities the deployment sandbox-activates at
+	// boot. Non-empty only on a sandbox tier; each must be a declared
+	// capability and must also be in EnabledCapabilities.
+	SandboxGates string
 }
 
 // CapacityConfig is the deployment tier's hard ceilings on financial activity.
@@ -659,7 +666,46 @@ const (
 	// LegalPolicyDevelopment permits the internal economy without them, and is
 	// refused outside LOCAL/TEST/DEV.
 	LegalPolicyDevelopment = "DEVELOPMENT"
+	// LegalPolicySandbox declares a sandbox tier: a deployment that is not
+	// PROD, holds no live provider (refused anywhere else already), and may
+	// therefore exercise the gated product against providers that move
+	// nothing. It permits the internal economy AND a payout for a verified
+	// account, and it is refused in PROD. It is the condition every other
+	// sandbox affordance -- the SANDBOX gate state, the sandbox payout
+	// policy, the sandbox providers -- keys off (ADR-0023).
+	LegalPolicySandbox = "SANDBOX"
 )
+
+// Payout policy names, with the same reasoning as the legal policy names.
+const (
+	// PayoutPolicyClosed is the fail-closed default: no origin is withdrawable.
+	// The empty string means it.
+	PayoutPolicyClosed = "CLOSED"
+	// PayoutPolicySandbox is valuedomain.SandboxPolicy, refused in PROD and
+	// refused unless the legal policy is SANDBOX too.
+	PayoutPolicySandbox = "SANDBOX"
+)
+
+// NormalizePayoutPolicy upper-cases and trims a configured payout policy name
+// and reports whether it is one this binary knows.
+func NormalizePayoutPolicy(s string) (string, bool) {
+	switch name := strings.ToUpper(strings.TrimSpace(s)); name {
+	case "":
+		return PayoutPolicyClosed, true
+	case PayoutPolicyClosed, PayoutPolicySandbox:
+		return name, true
+	default:
+		return name, false
+	}
+}
+
+// SandboxTier reports whether this deployment declared itself a sandbox tier
+// and is somewhere one may exist. Validate refuses the declaration in PROD,
+// so the second half is belt and braces for a Config nobody validated.
+func (c *Config) SandboxTier() bool {
+	name, ok := NormalizeLegalPolicy(c.API.LegalPolicy)
+	return ok && name == LegalPolicySandbox && c.Env != EnvProd
+}
 
 // NormalizeLegalPolicy upper-cases and trims a configured policy name and
 // reports whether it is one this binary knows. The empty string is
@@ -668,7 +714,7 @@ func NormalizeLegalPolicy(s string) (string, bool) {
 	switch name := strings.ToUpper(strings.TrimSpace(s)); name {
 	case "":
 		return LegalPolicyConservative, true
-	case LegalPolicyConservative, LegalPolicyDevelopment:
+	case LegalPolicyConservative, LegalPolicyDevelopment, LegalPolicySandbox:
 		return name, true
 	default:
 		return name, false

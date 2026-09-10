@@ -305,10 +305,11 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// severity floor and a delivery timeout. The 1 after it is the keyring
 	// personal data is encrypted under (F-47). The 1 after the second 11 is
 	// CP_AUTH_POST_LOGIN_URL: the web app is hosted on its own origin now, and
-	// the API's root is a 404. Before it, Metrics.OnAlert had no production caller and
+	// the API's root is a 404. The trailing 2 is the sandbox tier's payout
+	// policy and sandbox gate list (ADR-0023). Before it, Metrics.OnAlert had no production caller and
 	// a ledger-integrity violation reached a counter that died with the process
 	// (F-118).
-	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+4+1+2+11+1+14*11+4+1+1+8, len(seen))
+	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+4+1+2+11+1+14*11+4+1+1+8+2, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

@@ -756,6 +756,10 @@ func (g gatesAdapter) Act(ctx context.Context, capability gates.Capability, acti
 			gate, aerr = g.adm.Resume(ctx, tx, capability, note)
 		case GateActionRevoke:
 			gate, aerr = g.adm.Revoke(ctx, tx, capability, note)
+		case GateActionSandbox:
+			gate, aerr = g.adm.Sandbox(ctx, tx, capability, note)
+		case GateActionUnsandbox:
+			gate, aerr = g.adm.Unsandbox(ctx, tx, capability, note)
 		default:
 			aerr = validationError("action", "unknown gate action")
 		}

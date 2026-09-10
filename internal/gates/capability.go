@@ -129,11 +129,15 @@ const (
 	StateSuspended       GateState = "SUSPENDED"
 	StateRevoked         GateState = "REVOKED"
 	StateExpired         GateState = "EXPIRED"
+	// StateSandbox is active on a sandbox tier and nowhere else. It carries no
+	// approval chain, cannot exist in PROD, and is not on the path to ACTIVE:
+	// the real ceremony starts from DISABLED. See sandbox.go.
+	StateSandbox GateState = "SANDBOX"
 )
 
 var allStates = []GateState{
 	StateDisabled, StatePendingApproval, StateApproved, StateActive,
-	StateSuspended, StateRevoked, StateExpired,
+	StateSuspended, StateRevoked, StateExpired, StateSandbox,
 }
 
 // AllStates returns every state in declaration order.
@@ -158,14 +162,17 @@ func (s GateState) Valid() bool {
 //	SUSPENDED                → APPROVED           (Resume: must be re-activated)
 //	APPROVED|ACTIVE          → EXPIRED            (ExpireDue: by time)
 //	any but REVOKED          → REVOKED            (Revoke: terminal for the version)
+//	DISABLED|REVOKED|EXPIRED → SANDBOX            (Sandbox: one operator, sandbox tier only)
+//	SANDBOX                  → DISABLED           (Unsandbox)
 var transitions = map[GateState][]GateState{
-	StateDisabled:        {StatePendingApproval, StateRevoked},
+	StateDisabled:        {StatePendingApproval, StateRevoked, StateSandbox},
 	StatePendingApproval: {StateApproved, StateRevoked},
 	StateApproved:        {StateActive, StateExpired, StateRevoked},
 	StateActive:          {StateSuspended, StateExpired, StateRevoked},
 	StateSuspended:       {StateApproved, StateRevoked},
-	StateRevoked:         {StatePendingApproval},
-	StateExpired:         {StatePendingApproval, StateRevoked},
+	StateRevoked:         {StatePendingApproval, StateSandbox},
+	StateExpired:         {StatePendingApproval, StateRevoked, StateSandbox},
+	StateSandbox:         {StateDisabled, StateRevoked},
 }
 
 // CanTransition reports whether from → to is a legal gate transition.

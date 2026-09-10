@@ -701,3 +701,82 @@ func TestValidate_PostLoginURL(t *testing.T) {
 	cfg.Auth.PostLoginURL = ""
 	require.NoError(t, cfg.Validate(), "empty keeps the same-origin default")
 }
+
+// The sandbox tier (ADR-0023) is one declaration, and PROD cannot make it: the
+// sandbox legal policy, the sandbox payout policy and a sandbox gate list are
+// each refused there, and the last two are refused anywhere the declaration is
+// absent, so a deployment is a sandbox tier or it is not.
+func TestValidate_TheSandboxTierCannotBeProd(t *testing.T) {
+	t.Parallel()
+
+	prod := validProdConfig(t)
+	prod.API.LegalPolicy = "SANDBOX"
+	err := prod.Validate()
+	require.Error(t, err, "PROD accepted the sandbox legal policy")
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+	assert.False(t, prod.SandboxTier(), "SandboxTier() must never be true in PROD, whatever the policy says")
+
+	staging := asStaging(validProdConfig(t))
+	staging.API.LegalPolicy = "sandbox"
+	require.NoError(t, staging.Validate(), "STAGING refused the sandbox legal policy")
+	assert.True(t, staging.SandboxTier())
+
+	// The payout policy: unknown names, PROD, and a sandbox policy without the tier.
+	c := asStaging(validProdConfig(t))
+	c.API.PayoutPolicy = "OPEN"
+	err = c.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a payout policy")
+
+	c = asStaging(validProdConfig(t))
+	c.API.PayoutPolicy = "SANDBOX"
+	err = c.Validate()
+	require.Error(t, err, "a sandbox payout policy under a conservative router was accepted")
+	assert.True(t, HasViolation(err, RuleField))
+	assert.Contains(t, err.Error(), "requires CP_API_LEGAL_POLICY=SANDBOX")
+
+	c = validProdConfig(t)
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.PayoutPolicy = "SANDBOX"
+	err = c.Validate()
+	require.Error(t, err)
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+
+	c = asStaging(validProdConfig(t))
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.PayoutPolicy = "sandbox"
+	assert.NoError(t, c.Validate(), "the whole sandbox tier, on STAGING, must validate")
+	for _, closed := range []string{"", "closed", "CLOSED"} {
+		c := asStaging(validProdConfig(t))
+		c.API.PayoutPolicy = closed
+		assert.NoError(t, c.Validate(), "%q is the closed default", closed)
+	}
+
+	// Sandbox gates: only on the tier, and only for enabled capabilities.
+	c = asStaging(validProdConfig(t))
+	c.API.SandboxGates = "CREDIT_PURCHASE"
+	err = c.Validate()
+	require.Error(t, err, "sandbox gates were accepted without the tier")
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+
+	c = validProdConfig(t)
+	c.API.SandboxGates = "CREDIT_PURCHASE"
+	err = c.Validate()
+	require.Error(t, err)
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+
+	c = asStaging(validProdConfig(t))
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.EnabledCapabilities = "CREDIT_PURCHASE"
+	c.API.SandboxGates = "CREDIT_PURCHASE, NATIVE_MARKET_TRADING"
+	err = c.Validate()
+	require.Error(t, err, "a sandbox gate for a capability configuration does not enable was accepted")
+	assert.True(t, HasViolation(err, RuleField))
+	assert.Contains(t, err.Error(), "NATIVE_MARKET_TRADING is sandbox-activated but not in CP_API_ENABLED_CAPABILITIES")
+
+	c = asStaging(validProdConfig(t))
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.EnabledCapabilities = "CREDIT_PURCHASE,NATIVE_MARKET_TRADING"
+	c.API.SandboxGates = "credit_purchase, NATIVE_MARKET_TRADING"
+	assert.NoError(t, c.Validate(), "enabled capabilities may be sandbox-activated, in any case")
+}

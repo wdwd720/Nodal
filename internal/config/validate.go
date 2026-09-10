@@ -55,6 +55,9 @@ const SecurityEventRetentionFloorDays = 90
 const (
 	// RuleAlertDestination requires somewhere for a raised alert to go.
 	RuleAlertDestination Rule = "ALERT_DESTINATION"
+	// RuleSandboxTierNotInProd refuses every sandbox-tier affordance in PROD:
+	// the SANDBOX legal policy, the SANDBOX payout policy and sandbox gates.
+	RuleSandboxTierNotInProd Rule = "SANDBOX_TIER_NOT_IN_PROD"
 	// RulePIIKeyring requires the key personal data is encrypted under.
 	RulePIIKeyring        Rule = "PII_KEYRING"
 	RuleNoDebugAuth       Rule = "NO_DEBUG_AUTH"
@@ -262,13 +265,55 @@ func (c *Config) Validate() error {
 	// deployment passes every configuration check and then will not boot,
 	// which is the failure test/infra records for the settlement asset,
 	// reproduced by a variable that is in the table and has no rule (F-103).
-	if policy, ok := NormalizeLegalPolicy(c.API.LegalPolicy); !ok {
+	legalPolicy, legalOK := NormalizeLegalPolicy(c.API.LegalPolicy)
+	switch {
+	case !legalOK:
 		add(RuleField, "API.LegalPolicy",
-			fmt.Sprintf("%q is not a legal policy; expected %s or %s", c.API.LegalPolicy,
-				LegalPolicyConservative, LegalPolicyDevelopment))
-	} else if prodLike && policy == LegalPolicyDevelopment {
+			fmt.Sprintf("%q is not a legal policy; expected %s, %s or %s", c.API.LegalPolicy,
+				LegalPolicyConservative, LegalPolicyDevelopment, LegalPolicySandbox))
+	case prodLike && legalPolicy == LegalPolicyDevelopment:
 		add(RuleLegalPolicyNotDevelopment, "API.LegalPolicy",
 			"a development legal policy may not be loaded in STAGING/PROD: it permits the internal economy without the jurisdiction questions the conservative policy asks")
+	case env == EnvProd && legalPolicy == LegalPolicySandbox:
+		add(RuleSandboxTierNotInProd, "API.LegalPolicy",
+			"a sandbox tier cannot be PROD: the sandbox legal policy permits the product against providers that move nothing, and PROD holds the ones that do")
+	}
+	sandboxTier := legalOK && legalPolicy == LegalPolicySandbox && env != EnvProd
+
+	// The payout policy follows the same shape, and additionally must agree
+	// with the legal policy: a sandbox payout policy under a conservative
+	// router would be a rule nothing can reach, and the reverse would be a
+	// router permitting a payout the policy then refuses -- coherent, but a
+	// deployment that says two different things about itself.
+	if payoutPolicy, ok := NormalizePayoutPolicy(c.API.PayoutPolicy); !ok {
+		add(RuleField, "API.PayoutPolicy",
+			fmt.Sprintf("%q is not a payout policy; expected %s or %s", c.API.PayoutPolicy, PayoutPolicyClosed, PayoutPolicySandbox))
+	} else if payoutPolicy == PayoutPolicySandbox {
+		if env == EnvProd {
+			add(RuleSandboxTierNotInProd, "API.PayoutPolicy", "the sandbox payout policy cannot be loaded in PROD")
+		} else if !sandboxTier {
+			add(RuleField, "API.PayoutPolicy", "the sandbox payout policy requires CP_API_LEGAL_POLICY=SANDBOX; a deployment is a sandbox tier or it is not")
+		}
+	}
+	if strings.TrimSpace(c.API.SandboxGates) != "" {
+		if !sandboxTier {
+			add(RuleSandboxTierNotInProd, "API.SandboxGates",
+				"sandbox gates may only be declared by a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX, never PROD)")
+		}
+		enabled := map[string]bool{}
+		for _, name := range strings.Split(c.API.EnabledCapabilities, ",") {
+			enabled[strings.ToUpper(strings.TrimSpace(name))] = true
+		}
+		for _, name := range strings.Split(c.API.SandboxGates, ",") {
+			name = strings.ToUpper(strings.TrimSpace(name))
+			if name == "" {
+				continue
+			}
+			if !enabled[name] {
+				add(RuleField, "API.SandboxGates",
+					fmt.Sprintf("%s is sandbox-activated but not in CP_API_ENABLED_CAPABILITIES; configuration is condition 1 and a sandbox gate does not replace it", name))
+			}
+		}
 	}
 
 	if c.Credit.SettlementWindow <= 0 {

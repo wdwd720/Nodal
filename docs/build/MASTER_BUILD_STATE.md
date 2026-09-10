@@ -1447,6 +1447,37 @@ deployed, verified in a browser, adversarially audited and reconciled with the
 architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
 identity source of truth) is the first productization decision.
 
+**State at the last update (2026-09-10, ~23:15 local).**
+
+- **Done on `productization`:** deploy enablement for the web app (`df48cb4`:
+  Render static site `nodal-web`, `CP_AUTH_POST_LOGIN_URL`, same-site cookie
+  topology); `SOFTWARE_COMPLETE=false` recorded (`d3ecf3b`); the provider
+  boundary (`097e581`, `docs/product/PROVIDER_BOUNDARY.md`); the **sandbox
+  tier** (ADR-0023, D-052, migration 00755): STAGING can now exercise Credits,
+  native markets and a sandbox payout without a fabricated approval, and PROD
+  refuses every part of it.
+- **Waiting on a person:** `docs/build/HUMAN_ACTIONS_QUEUE.md` — the two Render
+  secrets, the push of `main` (`9906c9f`), and later the `app-nodal` CNAME.
+  §2's live verification happens the moment those are done; nothing else
+  waits for it.
+- **In flight:** the design-system foundation in `apps/web` (tokens, fonts,
+  primitives — uncommitted until its agent reports), then backend domain
+  work in parallel git worktrees: profile/account lifecycle (P), verification
+  and withdrawal (V), native positions/P&L/candles/activity/demo data (M),
+  notifications + SSE producer (N), agents (A2). Each lands on its own
+  `wt/*` branch and is merged here, followed by one `make restore-drill` and
+  the docs count test.
+- **Then:** frontend pages (public site, onboarding, shell, dashboard, markets,
+  trade, portfolio, activity, buy Credits, withdraw, verification, settings,
+  notifications, agents), terms/policy routes, admin console, E2E scenarios
+  A–J, `docs/product/*.md`, the §54 adversarial audit, §55 test matrix, §56
+  live verification in Chrome, and only then `SOFTWARE_COMPLETE=true`.
+- **If resuming cold:** `git log --oneline -8 productization`, `git worktree
+  list` (agent branches), read `HUMAN_ACTIONS_QUEUE.md`, then continue the
+  list above from the first unfinished item. Integration tests: `go run
+  ./scripts/inttest -pkg <regex>`; parallel checkouts set
+  `CP_INTTEST_DB_SUFFIX` so their databases do not collide.
+
 ### The previous checkpoint — 2026-09-10 (later), SOFTWARE_COMPLETE was true at 024c691
 
 The two items `SOFTWARE_COMPLETE` was waiting on closed in the session's last

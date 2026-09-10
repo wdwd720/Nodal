@@ -84,6 +84,8 @@
 //
 //	CP_API_REQUEST_TIMEOUT          per-request deadline; empty takes the write timeout
 //	CP_API_SHUTDOWN_TIMEOUT         bound on draining in-flight requests
+//	CP_API_PAYOUT_POLICY            CLOSED | SANDBOX (sandbox tier only, never PROD)
+//	CP_API_SANDBOX_GATES            capabilities sandbox-activated at boot (sandbox tier only)
 //	CP_API_ENABLED_CAPABILITIES     comma-separated; empty disables every capability
 //	CP_API_FUNDING_NETWORK          chain the funding endpoints quote on
 //	CP_API_FUNDING_CURRENCY         currency the funding endpoints quote in

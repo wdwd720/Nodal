@@ -534,7 +534,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up) */
+        /**
+         * Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
+         * @description sandbox and unsandbox exist only on a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX, never PROD). A SANDBOX gate carries no approval chain, cannot exist in PROD, and is read as active only by a sandbox tier. Everywhere else the action is refused.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -543,7 +546,7 @@ export interface paths {
                     "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 };
                 path: {
-                    action: "propose" | "approve" | "activate" | "suspend" | "resume" | "revoke";
+                    action: "propose" | "approve" | "activate" | "suspend" | "resume" | "revoke" | "sandbox" | "unsandbox";
                     capability: components["schemas"]["Capability"];
                 };
                 cookie?: never;
@@ -2923,9 +2926,11 @@ export interface components {
             legal_review_ref?: string;
             provider_contract_ref?: string;
             risk_approval_ref?: string;
+            /** @description True when active came from a SANDBOX row on a sandbox tier rather than from dual control. Show the word; an active sandbox gate is not an approval. */
+            sandbox?: boolean;
             security_approval_ref?: string;
             /** @enum {string} */
-            state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+            state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
         };
         /** @description Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write. */
         CreateCreditPurchaseRequest: {
