@@ -43,6 +43,12 @@ type FinancialMetrics struct {
 	NegativeDeficitAccounts    metric.Int64Gauge
 	RiskRejections             metric.Int64Counter
 	CapabilityGateRejections   metric.Int64Counter
+	// VerificationPasses is the heartbeat: one per completed internal
+	// verification pass. Every counter above is silent when nothing is wrong
+	// AND silent when it was never constructed, and an alarm over a counter
+	// cannot tell those apart. This one is meant to arrive every pass, so an
+	// alarm that treats its absence as breaching can (F-118).
+	VerificationPasses metric.Int64Counter
 }
 
 // NewFinancialMetrics creates the PART 132 instruments on meter.
@@ -62,6 +68,7 @@ func NewFinancialMetrics(meter metric.Meter) (*FinancialMetrics, error) {
 		NegativeDeficitAccounts:    b.gauge("negative_deficit_accounts", "Accounts currently in deficit.", UnitCount),
 		RiskRejections:             b.counter("risk_rejections", "Intents rejected by risk policy."),
 		CapabilityGateRejections:   b.counter("capability_gate_rejections", "Actions rejected by a capability gate."),
+		VerificationPasses:         b.counter("verification_passes", "Completed internal verification passes; the alerting heartbeat."),
 	}
 	return m, b.err()
 }

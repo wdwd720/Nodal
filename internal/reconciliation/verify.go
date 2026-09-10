@@ -60,6 +60,10 @@ func (e *Engine) VerifyInternal(ctx context.Context) ([]Record, error) {
 		}
 		out = append(out, rec)
 	}
+	// Only a pass that ran every check to the end counts as a heartbeat; a
+	// pass that failed halfway is exactly the silence the heartbeat exists
+	// to expose.
+	e.metrics.verificationPass(ctx)
 	return out, nil
 }
 

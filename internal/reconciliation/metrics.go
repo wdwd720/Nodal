@@ -202,6 +202,16 @@ func (m *Metrics) unknownSubmission(ctx context.Context, attemptID string) {
 	})
 }
 
+// verificationPass records one completed VerifyInternal pass: the heartbeat
+// the alerting stack needs to tell "nothing is wrong" from "nothing is
+// measuring" (F-118).
+func (m *Metrics) verificationPass(ctx context.Context) {
+	if m == nil || m.financial == nil || m.financial.VerificationPasses == nil {
+		return
+	}
+	m.financial.VerificationPasses.Add(ctx, 1)
+}
+
 // oldestUnresolved reports the age in seconds of the oldest unresolved
 // material mismatch (PART 132 oldest_unresolved_mismatch).
 func (m *Metrics) oldestUnresolved(ctx context.Context, seconds int64) {

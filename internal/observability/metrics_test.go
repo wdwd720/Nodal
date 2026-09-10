@@ -70,12 +70,14 @@ func TestFinancialMetrics_InstrumentNames(t *testing.T) {
 	fm.NegativeDeficitAccounts.Record(ctx, 3)
 	fm.RiskRejections.Add(ctx, 1)
 	fm.CapabilityGateRejections.Add(ctx, 1)
+	fm.VerificationPasses.Add(ctx, 1)
 
 	got := collect(t, reader)
 	assert.Equal(t, []string{
 		"capability_gate_rejections", "duplicate_command_rejections", "ledger_posting_errors",
 		"negative_deficit_accounts", "oldest_unresolved_mismatch", "provider_duplicate_events",
 		"reconciliation_mismatches", "reservation_conflicts", "risk_rejections", "unknown_submissions",
+		"verification_passes",
 	}, sortedKeys(got))
 	assert.Equal(t, UnitSeconds, got["oldest_unresolved_mismatch"].Unit)
 	g, ok := got["oldest_unresolved_mismatch"].Data.(metricdata.Gauge[int64])

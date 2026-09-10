@@ -408,6 +408,33 @@ resource "aws_cloudwatch_metric_alarm" "oldest_mismatch_sev1" {
   tags                = var.tags
 }
 
+# The heartbeat. Every counter alarm above sets treat_missing_data =
+# "notBreaching", and correctly: a mismatch counter that never arrives is a
+# system with no mismatches. But it is also a system whose instruments were
+# never constructed, and for a year that was the case -- both composition
+# roots passed NoopMetrics(), so applying this file would have shown a wall of
+# green alarms over a system emitting nothing (F-118). This alarm is the one
+# that cannot be fooled that way: verification_passes is emitted once per
+# completed VerifyInternal pass, every five minutes, so a period with no
+# sample at all means nothing is verifying -- the pass is broken, the exporter
+# is down, or the instruments are not built -- and every SEV1 above is blind.
+resource "aws_cloudwatch_metric_alarm" "verification_heartbeat" {
+  alarm_name          = "${var.name_prefix}-verification-heartbeat-missing"
+  alarm_description   = "SEV2: no internal verification pass has reported in 15 minutes. Every counter-based SEV1 alarm is blind while this fires: nothing is checking the ledger against its own entries."
+  namespace           = var.custom_metric_namespace
+  metric_name         = "verification_passes"
+  dimensions          = var.custom_metric_dimensions
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching" # no sample at all IS the condition
+  alarm_actions       = local.sev2
+  ok_actions          = local.sev2
+  tags                = var.tags
+}
+
 # ---------------------------------------------------------------------------
 # Dashboard skeleton
 # ---------------------------------------------------------------------------
