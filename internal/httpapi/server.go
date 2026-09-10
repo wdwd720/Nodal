@@ -63,8 +63,14 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-	Health        HealthPort
-	Idempotency   IdempotencyPort
+	// Market discovery, charts, the portfolio and the activity timeline
+	// (product goal SS12-16, 35, 47). Nil answers UNSUPPORTED like every
+	// other port here.
+	MarketData   MarketDataPort
+	Portfolio    PortfolioPort
+	ActivityFeed ActivityFeedPort
+	Health       HealthPort
+	Idempotency  IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because

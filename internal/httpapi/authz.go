@@ -169,6 +169,25 @@ var operationPolicies = map[string]operationPolicy{
 	"GetPayouts":                      {AnyOf: perms(security.PermPayoutRead)},
 	"GetPayoutsPayoutId":              {AnyOf: perms(security.PermPayoutRead)},
 
+	// --- markets, charts, portfolio and activity (product goal SS12-16, 35) -
+	//
+	// Discovery, the chart and the tape are the same authority as reading a
+	// native asset: they are public market data about assets anyone with
+	// native_asset:read may already list, and none of them names an account.
+	// The tape deliberately carries no account id, so it cannot become a way
+	// to watch a particular trader.
+	"GetNativeMarkets":                {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdSummary": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdCandles": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdTrades":  {AnyOf: perms(security.PermNativeAssetRead)},
+	// The portfolio returns a Credit balance, so it needs the permission that
+	// reads one. Which account is a per-request tenant check (accountScope),
+	// as everywhere else.
+	"GetMePortfolio": {AnyOf: perms(security.PermCreditRead)},
+	// The timeline is the account's own history, so it is the same authority
+	// as GET /accounts/{id}/activity.
+	"GetMeActivity": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+
 	// --- internal commerce (gola.md PART XVII) ----------------------------
 	//
 	// Buying and selling are separate permissions because they are different

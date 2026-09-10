@@ -177,6 +177,13 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
 		"/v1/payouts":          "account_id=" + testAccountID.String(),
 		"/v1/internal-orders":  "account_id=" + testAccountID.String(),
+		"/v1/me/portfolio":     "account_id=" + testAccountID.String(),
+		"/v1/me/activity":      "account_id=" + testAccountID.String(),
+		// The candle window is bounded, so from/to are required and there is
+		// no default worth guessing: a chart that asks for "everything" on a
+		// market with a year of prints is a table scan a client can request by
+		// typing a date.
+		"/v1/native-markets/{marketId}/candles": "interval=1m&from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z",
 	}
 
 	var out []routeProbe

@@ -94,6 +94,60 @@ func (e AccountStatusChangeTo) Valid() bool {
 	}
 }
 
+// Defines values for ActivityAmountUnit.
+const (
+	ASSETUNITS ActivityAmountUnit = "ASSET_UNITS"
+	CREDITS    ActivityAmountUnit = "CREDITS"
+	MONEYMINOR ActivityAmountUnit = "MONEY_MINOR"
+)
+
+// Valid indicates whether the value is a known member of the ActivityAmountUnit enum.
+func (e ActivityAmountUnit) Valid() bool {
+	switch e {
+	case ASSETUNITS:
+		return true
+	case CREDITS:
+		return true
+	case MONEYMINOR:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ActivityFeedKind.
+const (
+	ActivityFeedKindADMINADJUSTMENT    ActivityFeedKind = "ADMIN_ADJUSTMENT"
+	ActivityFeedKindCREDITPURCHASE     ActivityFeedKind = "CREDIT_PURCHASE"
+	ActivityFeedKindCREDITREVERSAL     ActivityFeedKind = "CREDIT_REVERSAL"
+	ActivityFeedKindNATIVEASSETCREATED ActivityFeedKind = "NATIVE_ASSET_CREATED"
+	ActivityFeedKindNATIVETRADE        ActivityFeedKind = "NATIVE_TRADE"
+	ActivityFeedKindPAYOUTREQUESTED    ActivityFeedKind = "PAYOUT_REQUESTED"
+	ActivityFeedKindPAYOUTSTATECHANGED ActivityFeedKind = "PAYOUT_STATE_CHANGED"
+)
+
+// Valid indicates whether the value is a known member of the ActivityFeedKind enum.
+func (e ActivityFeedKind) Valid() bool {
+	switch e {
+	case ActivityFeedKindADMINADJUSTMENT:
+		return true
+	case ActivityFeedKindCREDITPURCHASE:
+		return true
+	case ActivityFeedKindCREDITREVERSAL:
+		return true
+	case ActivityFeedKindNATIVEASSETCREATED:
+		return true
+	case ActivityFeedKindNATIVETRADE:
+		return true
+	case ActivityFeedKindPAYOUTREQUESTED:
+		return true
+	case ActivityFeedKindPAYOUTSTATECHANGED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ActivityItemKind.
 const (
 	ActivityItemKindDATAEVENT      ActivityItemKind = "DATA_EVENT"
@@ -354,43 +408,43 @@ func (e CapabilityGateState) Valid() bool {
 
 // Defines values for CreditOrigin.
 const (
-	ADMINADJUSTMENT       CreditOrigin = "ADMIN_ADJUSTMENT"
-	AGENTSERVICEEARNING   CreditOrigin = "AGENT_SERVICE_EARNING"
-	COMPETITIONREWARD     CreditOrigin = "COMPETITION_REWARD"
-	CREATOREARNING        CreditOrigin = "CREATOR_EARNING"
-	DATASALEEARNING       CreditOrigin = "DATA_SALE_EARNING"
-	MARKETCREATOREARNING  CreditOrigin = "MARKET_CREATOR_EARNING"
-	MARKETTRADINGPROCEEDS CreditOrigin = "MARKET_TRADING_PROCEEDS"
-	PROMOTIONAL           CreditOrigin = "PROMOTIONAL"
-	PROVIDERSETTLEMENT    CreditOrigin = "PROVIDER_SETTLEMENT"
-	PURCHASED             CreditOrigin = "PURCHASED"
-	REFUND                CreditOrigin = "REFUND"
+	CreditOriginADMINADJUSTMENT       CreditOrigin = "ADMIN_ADJUSTMENT"
+	CreditOriginAGENTSERVICEEARNING   CreditOrigin = "AGENT_SERVICE_EARNING"
+	CreditOriginCOMPETITIONREWARD     CreditOrigin = "COMPETITION_REWARD"
+	CreditOriginCREATOREARNING        CreditOrigin = "CREATOR_EARNING"
+	CreditOriginDATASALEEARNING       CreditOrigin = "DATA_SALE_EARNING"
+	CreditOriginMARKETCREATOREARNING  CreditOrigin = "MARKET_CREATOR_EARNING"
+	CreditOriginMARKETTRADINGPROCEEDS CreditOrigin = "MARKET_TRADING_PROCEEDS"
+	CreditOriginPROMOTIONAL           CreditOrigin = "PROMOTIONAL"
+	CreditOriginPROVIDERSETTLEMENT    CreditOrigin = "PROVIDER_SETTLEMENT"
+	CreditOriginPURCHASED             CreditOrigin = "PURCHASED"
+	CreditOriginREFUND                CreditOrigin = "REFUND"
 )
 
 // Valid indicates whether the value is a known member of the CreditOrigin enum.
 func (e CreditOrigin) Valid() bool {
 	switch e {
-	case ADMINADJUSTMENT:
+	case CreditOriginADMINADJUSTMENT:
 		return true
-	case AGENTSERVICEEARNING:
+	case CreditOriginAGENTSERVICEEARNING:
 		return true
-	case COMPETITIONREWARD:
+	case CreditOriginCOMPETITIONREWARD:
 		return true
-	case CREATOREARNING:
+	case CreditOriginCREATOREARNING:
 		return true
-	case DATASALEEARNING:
+	case CreditOriginDATASALEEARNING:
 		return true
-	case MARKETCREATOREARNING:
+	case CreditOriginMARKETCREATOREARNING:
 		return true
-	case MARKETTRADINGPROCEEDS:
+	case CreditOriginMARKETTRADINGPROCEEDS:
 		return true
-	case PROMOTIONAL:
+	case CreditOriginPROMOTIONAL:
 		return true
-	case PROVIDERSETTLEMENT:
+	case CreditOriginPROVIDERSETTLEMENT:
 		return true
-	case PURCHASED:
+	case CreditOriginPURCHASED:
 		return true
-	case REFUND:
+	case CreditOriginREFUND:
 		return true
 	default:
 		return false
@@ -931,6 +985,33 @@ func (e NativeAssetStatus) Valid() bool {
 	}
 }
 
+// Defines values for NativeCandlePageInterval.
+const (
+	NativeCandlePageIntervalN15m NativeCandlePageInterval = "15m"
+	NativeCandlePageIntervalN1d  NativeCandlePageInterval = "1d"
+	NativeCandlePageIntervalN1h  NativeCandlePageInterval = "1h"
+	NativeCandlePageIntervalN1m  NativeCandlePageInterval = "1m"
+	NativeCandlePageIntervalN5m  NativeCandlePageInterval = "5m"
+)
+
+// Valid indicates whether the value is a known member of the NativeCandlePageInterval enum.
+func (e NativeCandlePageInterval) Valid() bool {
+	switch e {
+	case NativeCandlePageIntervalN15m:
+		return true
+	case NativeCandlePageIntervalN1d:
+		return true
+	case NativeCandlePageIntervalN1h:
+		return true
+	case NativeCandlePageIntervalN1m:
+		return true
+	case NativeCandlePageIntervalN5m:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NativeFillAlertsSeverity.
 const (
 	CRITICAL NativeFillAlertsSeverity = "CRITICAL"
@@ -1000,6 +1081,120 @@ func (e NativeMarketStatus) Valid() bool {
 	}
 }
 
+// Defines values for NativeMarketPageSort.
+const (
+	NativeMarketPageSortCHANGE24H NativeMarketPageSort = "CHANGE_24H"
+	NativeMarketPageSortLIQUIDITY NativeMarketPageSort = "LIQUIDITY"
+	NativeMarketPageSortNEWEST    NativeMarketPageSort = "NEWEST"
+	NativeMarketPageSortPRICE     NativeMarketPageSort = "PRICE"
+	NativeMarketPageSortVOLUME24H NativeMarketPageSort = "VOLUME_24H"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketPageSort enum.
+func (e NativeMarketPageSort) Valid() bool {
+	switch e {
+	case NativeMarketPageSortCHANGE24H:
+		return true
+	case NativeMarketPageSortLIQUIDITY:
+		return true
+	case NativeMarketPageSortNEWEST:
+		return true
+	case NativeMarketPageSortPRICE:
+		return true
+	case NativeMarketPageSortVOLUME24H:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketSummaryAssetStatus.
+const (
+	NativeMarketSummaryAssetStatusACTIVE        NativeMarketSummaryAssetStatus = "ACTIVE"
+	NativeMarketSummaryAssetStatusCLOSEONLY     NativeMarketSummaryAssetStatus = "CLOSE_ONLY"
+	NativeMarketSummaryAssetStatusDELISTED      NativeMarketSummaryAssetStatus = "DELISTED"
+	NativeMarketSummaryAssetStatusDRAFT         NativeMarketSummaryAssetStatus = "DRAFT"
+	NativeMarketSummaryAssetStatusHALTED        NativeMarketSummaryAssetStatus = "HALTED"
+	NativeMarketSummaryAssetStatusPENDINGREVIEW NativeMarketSummaryAssetStatus = "PENDING_REVIEW"
+	NativeMarketSummaryAssetStatusREJECTED      NativeMarketSummaryAssetStatus = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketSummaryAssetStatus enum.
+func (e NativeMarketSummaryAssetStatus) Valid() bool {
+	switch e {
+	case NativeMarketSummaryAssetStatusACTIVE:
+		return true
+	case NativeMarketSummaryAssetStatusCLOSEONLY:
+		return true
+	case NativeMarketSummaryAssetStatusDELISTED:
+		return true
+	case NativeMarketSummaryAssetStatusDRAFT:
+		return true
+	case NativeMarketSummaryAssetStatusHALTED:
+		return true
+	case NativeMarketSummaryAssetStatusPENDINGREVIEW:
+		return true
+	case NativeMarketSummaryAssetStatusREJECTED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketSummaryMarketStatus.
+const (
+	NativeMarketSummaryMarketStatusACTIVE    NativeMarketSummaryMarketStatus = "ACTIVE"
+	NativeMarketSummaryMarketStatusCLOSEONLY NativeMarketSummaryMarketStatus = "CLOSE_ONLY"
+	NativeMarketSummaryMarketStatusDELISTED  NativeMarketSummaryMarketStatus = "DELISTED"
+	NativeMarketSummaryMarketStatusFROZEN    NativeMarketSummaryMarketStatus = "FROZEN"
+	NativeMarketSummaryMarketStatusHALTED    NativeMarketSummaryMarketStatus = "HALTED"
+	NativeMarketSummaryMarketStatusPENDING   NativeMarketSummaryMarketStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketSummaryMarketStatus enum.
+func (e NativeMarketSummaryMarketStatus) Valid() bool {
+	switch e {
+	case NativeMarketSummaryMarketStatusACTIVE:
+		return true
+	case NativeMarketSummaryMarketStatusCLOSEONLY:
+		return true
+	case NativeMarketSummaryMarketStatusDELISTED:
+		return true
+	case NativeMarketSummaryMarketStatusFROZEN:
+		return true
+	case NativeMarketSummaryMarketStatusHALTED:
+		return true
+	case NativeMarketSummaryMarketStatusPENDING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketSummaryModerationState.
+const (
+	NativeMarketSummaryModerationStateAPPROVED NativeMarketSummaryModerationState = "APPROVED"
+	NativeMarketSummaryModerationStateFLAGGED  NativeMarketSummaryModerationState = "FLAGGED"
+	NativeMarketSummaryModerationStatePENDING  NativeMarketSummaryModerationState = "PENDING"
+	NativeMarketSummaryModerationStateREJECTED NativeMarketSummaryModerationState = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketSummaryModerationState enum.
+func (e NativeMarketSummaryModerationState) Valid() bool {
+	switch e {
+	case NativeMarketSummaryModerationStateAPPROVED:
+		return true
+	case NativeMarketSummaryModerationStateFLAGGED:
+		return true
+	case NativeMarketSummaryModerationStatePENDING:
+		return true
+	case NativeMarketSummaryModerationStateREJECTED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NativeOrderRequestSide.
 const (
 	NativeOrderRequestSideBUY  NativeOrderRequestSide = "BUY"
@@ -1048,6 +1243,24 @@ func (e NativeQuoteRequestSide) Valid() bool {
 	case NativeQuoteRequestSideBUY:
 		return true
 	case NativeQuoteRequestSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeTradePrintSide.
+const (
+	NativeTradePrintSideBUY  NativeTradePrintSide = "BUY"
+	NativeTradePrintSideSELL NativeTradePrintSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the NativeTradePrintSide enum.
+func (e NativeTradePrintSide) Valid() bool {
+	switch e {
+	case NativeTradePrintSideBUY:
+		return true
+	case NativeTradePrintSideSELL:
 		return true
 	default:
 		return false
@@ -1267,6 +1480,36 @@ func (e PayoutRequestState) Valid() bool {
 	case PayoutRequestStateVERIFICATIONREQUIRED:
 		return true
 	case PayoutRequestStateVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PortfolioPositionMarketStatus.
+const (
+	PortfolioPositionMarketStatusACTIVE    PortfolioPositionMarketStatus = "ACTIVE"
+	PortfolioPositionMarketStatusCLOSEONLY PortfolioPositionMarketStatus = "CLOSE_ONLY"
+	PortfolioPositionMarketStatusDELISTED  PortfolioPositionMarketStatus = "DELISTED"
+	PortfolioPositionMarketStatusFROZEN    PortfolioPositionMarketStatus = "FROZEN"
+	PortfolioPositionMarketStatusHALTED    PortfolioPositionMarketStatus = "HALTED"
+	PortfolioPositionMarketStatusPENDING   PortfolioPositionMarketStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the PortfolioPositionMarketStatus enum.
+func (e PortfolioPositionMarketStatus) Valid() bool {
+	switch e {
+	case PortfolioPositionMarketStatusACTIVE:
+		return true
+	case PortfolioPositionMarketStatusCLOSEONLY:
+		return true
+	case PortfolioPositionMarketStatusDELISTED:
+		return true
+	case PortfolioPositionMarketStatusFROZEN:
+		return true
+	case PortfolioPositionMarketStatusHALTED:
+		return true
+	case PortfolioPositionMarketStatusPENDING:
 		return true
 	default:
 		return false
@@ -1699,6 +1942,27 @@ func (e TradeIntentDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for ValueTemperature.
+const (
+	ECONOMY   ValueTemperature = "ECONOMY"
+	REAL      ValueTemperature = "REAL"
+	SIMULATED ValueTemperature = "SIMULATED"
+)
+
+// Valid indicates whether the value is a known member of the ValueTemperature enum.
+func (e ValueTemperature) Valid() bool {
+	switch e {
+	case ECONOMY:
+		return true
+	case REAL:
+		return true
+	case SIMULATED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VenueListingStatus.
 const (
 	VenueListingStatusACTIVE   VenueListingStatus = "ACTIVE"
@@ -1855,6 +2119,90 @@ func (e GetInternalOrdersParamsRole) Valid() bool {
 	}
 }
 
+// Defines values for GetNativeMarketsParamsStatus.
+const (
+	GetNativeMarketsParamsStatusACTIVE    GetNativeMarketsParamsStatus = "ACTIVE"
+	GetNativeMarketsParamsStatusCLOSEONLY GetNativeMarketsParamsStatus = "CLOSE_ONLY"
+	GetNativeMarketsParamsStatusDELISTED  GetNativeMarketsParamsStatus = "DELISTED"
+	GetNativeMarketsParamsStatusFROZEN    GetNativeMarketsParamsStatus = "FROZEN"
+	GetNativeMarketsParamsStatusHALTED    GetNativeMarketsParamsStatus = "HALTED"
+	GetNativeMarketsParamsStatusPENDING   GetNativeMarketsParamsStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the GetNativeMarketsParamsStatus enum.
+func (e GetNativeMarketsParamsStatus) Valid() bool {
+	switch e {
+	case GetNativeMarketsParamsStatusACTIVE:
+		return true
+	case GetNativeMarketsParamsStatusCLOSEONLY:
+		return true
+	case GetNativeMarketsParamsStatusDELISTED:
+		return true
+	case GetNativeMarketsParamsStatusFROZEN:
+		return true
+	case GetNativeMarketsParamsStatusHALTED:
+		return true
+	case GetNativeMarketsParamsStatusPENDING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetNativeMarketsParamsSort.
+const (
+	GetNativeMarketsParamsSortCHANGE24H GetNativeMarketsParamsSort = "CHANGE_24H"
+	GetNativeMarketsParamsSortLIQUIDITY GetNativeMarketsParamsSort = "LIQUIDITY"
+	GetNativeMarketsParamsSortNEWEST    GetNativeMarketsParamsSort = "NEWEST"
+	GetNativeMarketsParamsSortPRICE     GetNativeMarketsParamsSort = "PRICE"
+	GetNativeMarketsParamsSortVOLUME24H GetNativeMarketsParamsSort = "VOLUME_24H"
+)
+
+// Valid indicates whether the value is a known member of the GetNativeMarketsParamsSort enum.
+func (e GetNativeMarketsParamsSort) Valid() bool {
+	switch e {
+	case GetNativeMarketsParamsSortCHANGE24H:
+		return true
+	case GetNativeMarketsParamsSortLIQUIDITY:
+		return true
+	case GetNativeMarketsParamsSortNEWEST:
+		return true
+	case GetNativeMarketsParamsSortPRICE:
+		return true
+	case GetNativeMarketsParamsSortVOLUME24H:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetNativeMarketsMarketIdCandlesParamsInterval.
+const (
+	GetNativeMarketsMarketIdCandlesParamsIntervalN15m GetNativeMarketsMarketIdCandlesParamsInterval = "15m"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN1d  GetNativeMarketsMarketIdCandlesParamsInterval = "1d"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN1h  GetNativeMarketsMarketIdCandlesParamsInterval = "1h"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN1m  GetNativeMarketsMarketIdCandlesParamsInterval = "1m"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN5m  GetNativeMarketsMarketIdCandlesParamsInterval = "5m"
+)
+
+// Valid indicates whether the value is a known member of the GetNativeMarketsMarketIdCandlesParamsInterval enum.
+func (e GetNativeMarketsMarketIdCandlesParamsInterval) Valid() bool {
+	switch e {
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN15m:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN1d:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN1h:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN1m:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN5m:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PostWebhooksProviderParamsProvider.
 const (
 	StripeCredit PostWebhooksProviderParamsProvider = "stripe_credit"
@@ -1901,6 +2249,55 @@ type AccountStatusChange struct {
 
 // AccountStatusChangeTo defines model for AccountStatusChange.To.
 type AccountStatusChangeTo string
+
+// ActivityAmount defines model for ActivityAmount.
+type ActivityAmount struct {
+	Currency *string `json:"currency,omitempty"`
+
+	// Origin Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+	Origin *CreditOrigin `json:"origin,omitempty"`
+	Symbol *string       `json:"symbol,omitempty"`
+
+	// Temperature What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+	Temperature ValueTemperature `json:"temperature"`
+
+	// Unit How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor units of `currency`, ASSET_UNITS is base units of `symbol`.
+	Unit ActivityAmountUnit `json:"unit"`
+
+	// Value An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	Value SignedQuantity `json:"value"`
+}
+
+// ActivityAmountUnit How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor units of `currency`, ASSET_UNITS is base units of `symbol`.
+type ActivityAmountUnit string
+
+// ActivityFeedItem defines model for ActivityFeedItem.
+type ActivityFeedItem struct {
+	Amounts []ActivityAmount `json:"amounts"`
+	Id      string           `json:"id"`
+
+	// Kind The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
+	Kind       ActivityFeedKind `json:"kind"`
+	OccurredAt Timestamp        `json:"occurred_at"`
+	Reference  struct {
+		Id   string `json:"id"`
+		Type string `json:"type"`
+	} `json:"reference"`
+	Simulated bool    `json:"simulated"`
+	Status    *string `json:"status,omitempty"`
+
+	// Summary Built on the server from a fixed template per kind, never from user text.
+	Summary string `json:"summary"`
+}
+
+// ActivityFeedKind The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
+type ActivityFeedKind string
+
+// ActivityFeedPage defines model for ActivityFeedPage.
+type ActivityFeedPage struct {
+	Items      []ActivityFeedItem        `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
 
 // ActivityItem defines model for ActivityItem.
 type ActivityItem struct {
@@ -2723,6 +3120,32 @@ type KillSwitchRequest struct {
 // KillSwitchRequestAction defines model for KillSwitchRequest.Action.
 type KillSwitchRequestAction string
 
+// MarketSafetyLimits The limits in force on this market right now (product goal section 47), from two documents: the market-safety policy, which is about the venue, and the risk kernel's GLOBAL policy, which is about an account.
+type MarketSafetyLimits struct {
+	CircuitBreakerMoveBps       *int64 `json:"circuit_breaker_move_bps,omitempty"`
+	CircuitBreakerWindowSeconds *int   `json:"circuit_breaker_window_seconds,omitempty"`
+	CreatorMayBuyOwnAsset       *bool  `json:"creator_may_buy_own_asset,omitempty"`
+
+	// MaxCreatorConcentrationBps Basis points; 10000 == 100%
+	MaxCreatorConcentrationBps *BPS `json:"max_creator_concentration_bps,omitempty"`
+
+	// MaxNativeMarketConcentrationBps Basis points; 10000 == 100%
+	MaxNativeMarketConcentrationBps *BPS `json:"max_native_market_concentration_bps,omitempty"`
+
+	// MaxPriceImpactBps Basis points; 10000 == 100%
+	MaxPriceImpactBps *BPS `json:"max_price_impact_bps,omitempty"`
+
+	// MaxSlippageBps Basis points; 10000 == 100%
+	MaxSlippageBps *BPS `json:"max_slippage_bps,omitempty"`
+
+	// MinOpeningLiquidityCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MinOpeningLiquidityCredits *Quantity `json:"min_opening_liquidity_credits,omitempty"`
+	RiskPolicyVersion          *string   `json:"risk_policy_version,omitempty"`
+	SafetyPolicyVersion        string    `json:"safety_policy_version"`
+}
+
 // NativeAsset defines model for NativeAsset.
 type NativeAsset struct {
 	ActivatedAt *Timestamp `json:"activated_at,omitempty"`
@@ -2769,6 +3192,59 @@ type NativeAssetPolicy struct {
 	MinimumAge             int     `json:"minimum_age"`
 	Transferable           bool    `json:"transferable"`
 }
+
+// NativeCandle defines model for NativeCandle.
+type NativeCandle struct {
+	// AssetVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetVolume Quantity `json:"asset_volume"`
+
+	// Close Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Close Quantity `json:"close"`
+
+	// CreditVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditVolume Quantity `json:"credit_volume"`
+
+	// High Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	High Quantity `json:"high"`
+
+	// Low Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Low Quantity `json:"low"`
+
+	// Open Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Open     Quantity  `json:"open"`
+	OpenTime Timestamp `json:"open_time"`
+	Trades   int64     `json:"trades"`
+}
+
+// NativeCandlePage defines model for NativeCandlePage.
+type NativeCandlePage struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// Candles Oldest first. A bucket with no trades is absent, never filled forward.
+	Candles  []NativeCandle           `json:"candles"`
+	From     Timestamp                `json:"from"`
+	Interval NativeCandlePageInterval `json:"interval"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId   UUID      `json:"market_id"`
+	PriceScale int       `json:"price_scale"`
+	To         Timestamp `json:"to"`
+}
+
+// NativeCandlePageInterval defines model for NativeCandlePage.Interval.
+type NativeCandlePageInterval string
 
 // NativeFill defines model for NativeFill.
 type NativeFill struct {
@@ -2913,6 +3389,138 @@ type NativeMarket struct {
 // NativeMarketStatus defines model for NativeMarket.Status.
 type NativeMarketStatus string
 
+// NativeMarketDetail defines model for NativeMarketDetail.
+type NativeMarketDetail struct {
+	// LimitsInForce The limits in force on this market right now (product goal section 47), from two documents: the market-safety policy, which is about the venue, and the risk kernel's GLOBAL policy, which is about an account.
+	LimitsInForce MarketSafetyLimits `json:"limits_in_force"`
+
+	// Market One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string.
+	Market NativeMarketSummary `json:"market"`
+
+	// TopHolders Holder concentration, which is the number a buyer most needs to see
+	TopHolders *[]struct {
+		// AccountId UUIDv7 in canonical form
+		AccountId UUID `json:"account_id"`
+
+		// Quantity Exact asset base units as an integer string
+		//
+		// Examples: 1500000000
+		Quantity Quantity `json:"quantity"`
+	} `json:"top_holders,omitempty"`
+}
+
+// NativeMarketPage defines model for NativeMarketPage.
+type NativeMarketPage struct {
+	Markets    []NativeMarketSummary     `json:"markets"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+	Sort       NativeMarketPageSort      `json:"sort"`
+
+	// Stable Whether paging this ordering sees every market exactly once. Only NEWEST does; the others rank by figures that move when somebody trades.
+	Stable bool `json:"stable"`
+}
+
+// NativeMarketPageSort defines model for NativeMarketPage.Sort.
+type NativeMarketPageSort string
+
+// NativeMarketSummary One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string.
+type NativeMarketSummary struct {
+	ActivatedAt   *Timestamp `json:"activated_at,omitempty"`
+	AssetDecimals int        `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// AssetReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetReserve Quantity                       `json:"asset_reserve"`
+	AssetStatus  NativeMarketSummaryAssetStatus `json:"asset_status"`
+
+	// Change24hBps Signed move over the last 24 hours. Meaningless unless has_24h_change.
+	Change24hBps *int64 `json:"change_24h_bps,omitempty"`
+
+	// CirculatingSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CirculatingSupply Quantity  `json:"circulating_supply"`
+	CreatedAt         Timestamp `json:"created_at"`
+
+	// CreatorAccountId The creator's account id, which is the handle placeholder. A display name belongs to the profile domain and is joined later; inventing one here would be a second source for it.
+	CreatorAccountId UUID `json:"creator_account_id"`
+
+	// CreatorFeeBps Basis points; 10000 == 100%
+	CreatorFeeBps BPS `json:"creator_fee_bps"`
+
+	// CreditAssetId UUIDv7 in canonical form
+	CreditAssetId UUID `json:"credit_asset_id"`
+
+	// CreditVolume24h Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditVolume24h Quantity `json:"credit_volume_24h"`
+
+	// Demo This object was created by the sandbox demo seeder. It exists only on a sandbox tier and represents nothing.
+	Demo        bool    `json:"demo"`
+	Description *string `json:"description,omitempty"`
+
+	// Has24hChange False when the market has not traded in the window, which is a different fact from having moved nothing.
+	Has24hChange *bool   `json:"has_24h_change,omitempty"`
+	ImageUrl     *string `json:"image_url,omitempty"`
+
+	// InitialAssetReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialAssetReserve Quantity `json:"initial_asset_reserve"`
+
+	// LastPrice The MARGINAL price -- what the next base unit costs -- at price_scale.
+	LastPrice Quantity `json:"last_price"`
+
+	// LiquidityCredits V + R, the depth the curve prices against.
+	LiquidityCredits Quantity `json:"liquidity_credits"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId     UUID                            `json:"market_id"`
+	MarketStatus NativeMarketSummaryMarketStatus `json:"market_status"`
+
+	// MaxSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaxSupply       Quantity                            `json:"max_supply"`
+	ModerationState *NativeMarketSummaryModerationState `json:"moderation_state,omitempty"`
+	Name            string                              `json:"name"`
+
+	// PlatformFeeBps Basis points; 10000 == 100%
+	PlatformFeeBps BPS `json:"platform_fee_bps"`
+
+	// PriceScale Decimal places every price here carries
+	PriceScale int `json:"price_scale"`
+
+	// RealCreditReserve R -- the only Credits in this pool that could ever be paid out.
+	RealCreditReserve Quantity `json:"real_credit_reserve"`
+
+	// ReferencePrice24h Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ReferencePrice24h *Quantity `json:"reference_price_24h,omitempty"`
+	StateVersion      *int64    `json:"state_version,omitempty"`
+	Symbol            string    `json:"symbol"`
+	Trades24h         int64     `json:"trades_24h"`
+
+	// VirtualCreditReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	VirtualCreditReserve Quantity `json:"virtual_credit_reserve"`
+}
+
+// NativeMarketSummaryAssetStatus defines model for NativeMarketSummary.AssetStatus.
+type NativeMarketSummaryAssetStatus string
+
+// NativeMarketSummaryMarketStatus defines model for NativeMarketSummary.MarketStatus.
+type NativeMarketSummaryMarketStatus string
+
+// NativeMarketSummaryModerationState defines model for NativeMarketSummary.ModerationState.
+type NativeMarketSummaryModerationState string
+
 // NativeOrderRequest defines model for NativeOrderRequest.
 type NativeOrderRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -3021,6 +3629,50 @@ type NativeSupply struct {
 	// Examples: 1500000000
 	TreasuryAllocation Quantity `json:"treasury_allocation"`
 }
+
+// NativeTradePage defines model for NativeTradePage.
+type NativeTradePage struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId   UUID               `json:"market_id"`
+	PriceScale int                `json:"price_scale"`
+	Trades     []NativeTradePrint `json:"trades"`
+}
+
+// NativeTradePrint One public print. It carries no account identity, by design.
+type NativeTradePrint struct {
+	// AssetVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetVolume Quantity `json:"asset_volume"`
+
+	// CreditVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditVolume Quantity `json:"credit_volume"`
+
+	// EffectivePrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EffectivePrice Quantity             `json:"effective_price"`
+	PrintedAt      Timestamp            `json:"printed_at"`
+	Seq            int64                `json:"seq"`
+	Side           NativeTradePrintSide `json:"side"`
+
+	// SpotPriceAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPriceAfter Quantity `json:"spot_price_after"`
+
+	// SpotPriceBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPriceBefore *Quantity `json:"spot_price_before,omitempty"`
+}
+
+// NativeTradePrintSide defines model for NativeTradePrint.Side.
+type NativeTradePrintSide string
 
 // Order defines model for Order.
 type Order struct {
@@ -3199,6 +3851,126 @@ type PayoutRequestState string
 // PayoutRequestPage defines model for PayoutRequestPage.
 type PayoutRequestPage struct {
 	Items []PayoutRequest `json:"items"`
+}
+
+// Portfolio defines model for Portfolio.
+type Portfolio struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AsOf The instant every mark-to-market figure here was computed at. A number on a screen that does not say when it was true is a number nobody can act on.
+	AsOf Timestamp `json:"as_of"`
+
+	// Credits The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
+	Credits   CreditBalance       `json:"credits"`
+	Positions []PortfolioPosition `json:"positions"`
+
+	// Temperature The temperature of this deployment's Credits as a whole.
+	Temperature ValueTemperature `json:"temperature"`
+	Totals      PortfolioTotals  `json:"totals"`
+}
+
+// PortfolioPosition One native position. quantity, cost_basis_credits, realized_pnl_credits and fees_paid_credits are the read model migration 00772 maintains from the fills; market_value_credits and unrealized_pnl_credits are computed at as_of from the market's marginal price.
+type PortfolioPosition struct {
+	// AllocationUnits Units granted to the creator at the mint, at zero cost.
+	AllocationUnits *Quantity `json:"allocation_units,omitempty"`
+	AssetDecimals   int       `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// AverageCostCredits Cost of one base unit at price_scale. Absent on a closed position.
+	AverageCostCredits *Quantity `json:"average_cost_credits,omitempty"`
+
+	// CostBasisCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CostBasisCredits Quantity `json:"cost_basis_credits"`
+	Demo             *bool    `json:"demo,omitempty"`
+
+	// FeesPaidCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FeesPaidCredits Quantity   `json:"fees_paid_credits"`
+	FillCount       *int64     `json:"fill_count,omitempty"`
+	FirstAcquiredAt *Timestamp `json:"first_acquired_at,omitempty"`
+	LastTradeAt     *Timestamp `json:"last_trade_at,omitempty"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId     *UUID                          `json:"market_id,omitempty"`
+	MarketStatus *PortfolioPositionMarketStatus `json:"market_status,omitempty"`
+
+	// MarketValueCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValueCredits Quantity `json:"market_value_credits"`
+	Name               *string  `json:"name,omitempty"`
+	PriceScale         int      `json:"price_scale"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// RealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	RealizedPnlCredits SignedQuantity `json:"realized_pnl_credits"`
+
+	// SpotPrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPrice *Quantity `json:"spot_price,omitempty"`
+	Symbol    string    `json:"symbol"`
+
+	// Temperature What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+	Temperature ValueTemperature `json:"temperature"`
+
+	// TotalPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	TotalPnlCredits SignedQuantity `json:"total_pnl_credits"`
+
+	// UnitsBoughtTotal Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnitsBoughtTotal *Quantity `json:"units_bought_total,omitempty"`
+
+	// UnitsSoldTotal Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnitsSoldTotal *Quantity `json:"units_sold_total,omitempty"`
+
+	// UnrealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	UnrealizedPnlCredits SignedQuantity `json:"unrealized_pnl_credits"`
+}
+
+// PortfolioPositionMarketStatus defines model for PortfolioPosition.MarketStatus.
+type PortfolioPositionMarketStatus string
+
+// PortfolioTotals defines model for PortfolioTotals.
+type PortfolioTotals struct {
+	// CostBasisCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CostBasisCredits Quantity `json:"cost_basis_credits"`
+
+	// FeesPaidCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FeesPaidCredits Quantity `json:"fees_paid_credits"`
+
+	// MarketValueCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValueCredits Quantity `json:"market_value_credits"`
+	OpenPositionCount  int      `json:"open_position_count"`
+	PositionCount      int      `json:"position_count"`
+
+	// RealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	RealizedPnlCredits SignedQuantity `json:"realized_pnl_credits"`
+
+	// TotalPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	TotalPnlCredits SignedQuantity `json:"total_pnl_credits"`
+
+	// UnrealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	UnrealizedPnlCredits SignedQuantity `json:"unrealized_pnl_credits"`
 }
 
 // Principal defines model for Principal.
@@ -3460,6 +4232,9 @@ type SetInternalProductStatusRequest struct {
 	Status InternalProductStatus `json:"status"`
 }
 
+// SignedQuantity An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+type SignedQuantity = string
+
 // StartDepositRequest defines model for StartDepositRequest.
 type StartDepositRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -3656,6 +4431,9 @@ type USD = string
 
 // UUID UUIDv7 in canonical form
 type UUID = openapi_types.UUID
+
+// ValueTemperature What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+type ValueTemperature string
 
 // VenueListing defines model for VenueListing.
 type VenueListing struct {
@@ -3968,6 +4746,21 @@ type PostInternalSellersParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetMeActivityParams defines parameters for GetMeActivity.
+type GetMeActivityParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Kind Repeat to include several kinds. Absent means every kind.
+	Kind *[]ActivityFeedKind `form:"kind,omitempty" json:"kind,omitempty"`
+}
+
+// GetMePortfolioParams defines parameters for GetMePortfolio.
+type GetMePortfolioParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
 // GetNativeAssetsParams defines parameters for GetNativeAssets.
 type GetNativeAssetsParams struct {
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
@@ -3991,6 +4784,34 @@ type PostNativeAssetsAssetIdSubmitParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetNativeMarketsParams defines parameters for GetNativeMarkets.
+type GetNativeMarketsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Status Repeat to include several statuses. Absent means every status.
+	Status           *[]GetNativeMarketsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	CreatorAccountId *UUID                           `form:"creator_account_id,omitempty" json:"creator_account_id,omitempty"`
+	Q                *string                         `form:"q,omitempty" json:"q,omitempty"`
+	Sort             *GetNativeMarketsParamsSort     `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// GetNativeMarketsParamsStatus defines parameters for GetNativeMarkets.
+type GetNativeMarketsParamsStatus string
+
+// GetNativeMarketsParamsSort defines parameters for GetNativeMarkets.
+type GetNativeMarketsParamsSort string
+
+// GetNativeMarketsMarketIdCandlesParams defines parameters for GetNativeMarketsMarketIdCandles.
+type GetNativeMarketsMarketIdCandlesParams struct {
+	Interval GetNativeMarketsMarketIdCandlesParamsInterval `form:"interval" json:"interval"`
+	From     Timestamp                                     `form:"from" json:"from"`
+	To       Timestamp                                     `form:"to" json:"to"`
+}
+
+// GetNativeMarketsMarketIdCandlesParamsInterval defines parameters for GetNativeMarketsMarketIdCandles.
+type GetNativeMarketsMarketIdCandlesParamsInterval string
+
 // PostNativeMarketsMarketIdOrdersParams defines parameters for PostNativeMarketsMarketIdOrders.
 type PostNativeMarketsMarketIdOrdersParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
@@ -4001,6 +4822,11 @@ type PostNativeMarketsMarketIdOrdersParams struct {
 type PostNativeMarketsMarketIdQuotesParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetNativeMarketsMarketIdTradesParams defines parameters for GetNativeMarketsMarketIdTrades.
+type GetNativeMarketsMarketIdTradesParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetOrdersParams defines parameters for GetOrders.
@@ -4259,6 +5085,12 @@ type ServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetMeActivity The unified activity timeline (§16)
+	// (GET /me/activity)
+	GetMeActivity(w http.ResponseWriter, r *http.Request, params GetMeActivityParams)
+	// GetMePortfolio Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+	// (GET /me/portfolio)
+	GetMePortfolio(w http.ResponseWriter, r *http.Request, params GetMePortfolioParams)
 	// GetNativeAssets Native assets that currently accept at least sells
 	// (GET /native-assets)
 	GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams)
@@ -4271,15 +5103,27 @@ type ServerInterface interface {
 	// PostNativeAssetsAssetIdSubmit Submit your own DRAFT asset for moderation review (PART XIII)
 	// (POST /native-assets/{assetId}/submit)
 	PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r *http.Request, assetId AssetId, params PostNativeAssetsAssetIdSubmitParams)
+	// GetNativeMarkets Discover internal markets (product goal §12, §35)
+	// (GET /native-markets)
+	GetNativeMarkets(w http.ResponseWriter, r *http.Request, params GetNativeMarketsParams)
 	// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
 	// (GET /native-markets/{marketId})
 	GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// GetNativeMarketsMarketIdCandles OHLCV over a bounded window, computed from the market's own prints (§14)
+	// (GET /native-markets/{marketId}/candles)
+	GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdCandlesParams)
 	// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
 	// (POST /native-markets/{marketId}/orders)
 	PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdOrdersParams)
 	// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
 	// (POST /native-markets/{marketId}/quotes)
 	PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams)
+	// GetNativeMarketsMarketIdSummary Everything the asset detail / trading screen needs (product goal §13)
+	// (GET /native-markets/{marketId}/summary)
+	GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// GetNativeMarketsMarketIdTrades The public tape — recent prints, newest first (§13)
+	// (GET /native-markets/{marketId}/trades)
+	GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdTradesParams)
 
 	// (GET /orders)
 	GetOrders(w http.ResponseWriter, r *http.Request, params GetOrdersParams)
@@ -4592,6 +5436,18 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetMeActivity The unified activity timeline (§16)
+// (GET /me/activity)
+func (_ Unimplemented) GetMeActivity(w http.ResponseWriter, r *http.Request, params GetMeActivityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMePortfolio Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+// (GET /me/portfolio)
+func (_ Unimplemented) GetMePortfolio(w http.ResponseWriter, r *http.Request, params GetMePortfolioParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetNativeAssets Native assets that currently accept at least sells
 // (GET /native-assets)
 func (_ Unimplemented) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
@@ -4615,9 +5471,21 @@ func (_ Unimplemented) PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetNativeMarkets Discover internal markets (product goal §12, §35)
+// (GET /native-markets)
+func (_ Unimplemented) GetNativeMarkets(w http.ResponseWriter, r *http.Request, params GetNativeMarketsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
 // (GET /native-markets/{marketId})
 func (_ Unimplemented) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketIdCandles OHLCV over a bounded window, computed from the market's own prints (§14)
+// (GET /native-markets/{marketId}/candles)
+func (_ Unimplemented) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdCandlesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4630,6 +5498,18 @@ func (_ Unimplemented) PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r 
 // PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
 // (POST /native-markets/{marketId}/quotes)
 func (_ Unimplemented) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketIdSummary Everything the asset detail / trading screen needs (product goal §13)
+// (GET /native-markets/{marketId}/summary)
+func (_ Unimplemented) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketIdTrades The public tape — recent prints, newest first (§13)
+// (GET /native-markets/{marketId}/trades)
+func (_ Unimplemented) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdTradesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6530,6 +7410,111 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetMeActivity operation middleware
+func (siw *ServerInterfaceWrapper) GetMeActivity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeActivityParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeActivity(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMePortfolio operation middleware
+func (siw *ServerInterfaceWrapper) GetMePortfolio(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMePortfolioParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMePortfolio(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNativeAssets operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeAssets(w http.ResponseWriter, r *http.Request) {
 
@@ -6688,6 +7673,104 @@ func (siw *ServerInterfaceWrapper) PostNativeAssetsAssetIdSubmit(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
+// GetNativeMarkets operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarkets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "creator_account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "creator_account_id", r.URL.Query(), &params.CreatorAccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "creator_account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "creator_account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarkets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNativeMarketsMarketId operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request) {
 
@@ -6705,6 +7788,74 @@ func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetNativeMarketsMarketId(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketIdCandles operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsMarketIdCandlesParams
+
+	// ------------- Required query parameter "interval" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "interval", r.URL.Query(), &params.Interval, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "interval"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "interval", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketIdCandles(w, r, marketId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6813,6 +7964,74 @@ func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdQuotes(w http.Respon
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostNativeMarketsMarketIdQuotes(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketIdSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketIdSummary(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketIdTrades operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsMarketIdTradesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketIdTrades(w, r, marketId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7615,6 +8834,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/version", wrapper.GetVersion)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets", wrapper.GetNativeMarkets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}/summary", wrapper.GetNativeMarketsMarketIdSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}/candles", wrapper.GetNativeMarketsMarketIdCandles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}/trades", wrapper.GetNativeMarketsMarketIdTrades)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/portfolio", wrapper.GetMePortfolio)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/activity", wrapper.GetMeActivity)
 	})
 
 	return r
@@ -9288,6 +10525,110 @@ func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w 
 	return err
 }
 
+type GetMeActivityRequestObject struct {
+	Params GetMeActivityParams
+}
+
+type GetMeActivityResponseObject interface {
+	VisitGetMeActivityResponse(w http.ResponseWriter) error
+}
+
+type GetMeActivity200JSONResponse ActivityFeedPage
+
+func (response GetMeActivity200JSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeActivity403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeActivity403ApplicationProblemPlusJSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeActivity422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMeActivity422ApplicationProblemPlusJSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePortfolioRequestObject struct {
+	Params GetMePortfolioParams
+}
+
+type GetMePortfolioResponseObject interface {
+	VisitGetMePortfolioResponse(w http.ResponseWriter) error
+}
+
+type GetMePortfolio200JSONResponse Portfolio
+
+func (response GetMePortfolio200JSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePortfolio403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMePortfolio403ApplicationProblemPlusJSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePortfolio404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMePortfolio404ApplicationProblemPlusJSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetNativeAssetsRequestObject struct {
 	Params GetNativeAssetsParams
 }
@@ -9483,6 +10824,44 @@ func (response PostNativeAssetsAssetIdSubmit409ApplicationProblemPlusJSONRespons
 	return err
 }
 
+type GetNativeMarketsRequestObject struct {
+	Params GetNativeMarketsParams
+}
+
+type GetNativeMarketsResponseObject interface {
+	VisitGetNativeMarketsResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarkets200JSONResponse NativeMarketPage
+
+func (response GetNativeMarkets200JSONResponse) VisitGetNativeMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarkets422ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarkets422ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetNativeMarketsMarketIdRequestObject struct {
 	MarketId MarketId `json:"marketId"`
 }
@@ -9517,6 +10896,59 @@ func (response GetNativeMarketsMarketId404ApplicationProblemPlusJSONResponse) Vi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdCandlesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetNativeMarketsMarketIdCandlesParams
+}
+
+type GetNativeMarketsMarketIdCandlesResponseObject interface {
+	VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketIdCandles200JSONResponse NativeCandlePage
+
+func (response GetNativeMarketsMarketIdCandles200JSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdCandles422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetNativeMarketsMarketIdCandles422ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9625,6 +11057,83 @@ func (response PostNativeMarketsMarketIdQuotes422ApplicationProblemPlusJSONRespo
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdSummaryRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+}
+
+type GetNativeMarketsMarketIdSummaryResponseObject interface {
+	VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketIdSummary200JSONResponse NativeMarketDetail
+
+func (response GetNativeMarketsMarketIdSummary200JSONResponse) VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdSummary404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketIdSummary404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdTradesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetNativeMarketsMarketIdTradesParams
+}
+
+type GetNativeMarketsMarketIdTradesResponseObject interface {
+	VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketIdTrades200JSONResponse NativeTradePage
+
+func (response GetNativeMarketsMarketIdTrades200JSONResponse) VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdTrades404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketIdTrades404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10343,6 +11852,12 @@ type StrictServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetMeActivity The unified activity timeline (§16)
+	// (GET /me/activity)
+	GetMeActivity(ctx context.Context, request GetMeActivityRequestObject) (GetMeActivityResponseObject, error)
+	// GetMePortfolio Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+	// (GET /me/portfolio)
+	GetMePortfolio(ctx context.Context, request GetMePortfolioRequestObject) (GetMePortfolioResponseObject, error)
 	// GetNativeAssets Native assets that currently accept at least sells
 	// (GET /native-assets)
 	GetNativeAssets(ctx context.Context, request GetNativeAssetsRequestObject) (GetNativeAssetsResponseObject, error)
@@ -10355,15 +11870,27 @@ type StrictServerInterface interface {
 	// PostNativeAssetsAssetIdSubmit Submit your own DRAFT asset for moderation review (PART XIII)
 	// (POST /native-assets/{assetId}/submit)
 	PostNativeAssetsAssetIdSubmit(ctx context.Context, request PostNativeAssetsAssetIdSubmitRequestObject) (PostNativeAssetsAssetIdSubmitResponseObject, error)
+	// GetNativeMarkets Discover internal markets (product goal §12, §35)
+	// (GET /native-markets)
+	GetNativeMarkets(ctx context.Context, request GetNativeMarketsRequestObject) (GetNativeMarketsResponseObject, error)
 	// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
 	// (GET /native-markets/{marketId})
 	GetNativeMarketsMarketId(ctx context.Context, request GetNativeMarketsMarketIdRequestObject) (GetNativeMarketsMarketIdResponseObject, error)
+	// GetNativeMarketsMarketIdCandles OHLCV over a bounded window, computed from the market's own prints (§14)
+	// (GET /native-markets/{marketId}/candles)
+	GetNativeMarketsMarketIdCandles(ctx context.Context, request GetNativeMarketsMarketIdCandlesRequestObject) (GetNativeMarketsMarketIdCandlesResponseObject, error)
 	// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
 	// (POST /native-markets/{marketId}/orders)
 	PostNativeMarketsMarketIdOrders(ctx context.Context, request PostNativeMarketsMarketIdOrdersRequestObject) (PostNativeMarketsMarketIdOrdersResponseObject, error)
 	// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
 	// (POST /native-markets/{marketId}/quotes)
 	PostNativeMarketsMarketIdQuotes(ctx context.Context, request PostNativeMarketsMarketIdQuotesRequestObject) (PostNativeMarketsMarketIdQuotesResponseObject, error)
+	// GetNativeMarketsMarketIdSummary Everything the asset detail / trading screen needs (product goal §13)
+	// (GET /native-markets/{marketId}/summary)
+	GetNativeMarketsMarketIdSummary(ctx context.Context, request GetNativeMarketsMarketIdSummaryRequestObject) (GetNativeMarketsMarketIdSummaryResponseObject, error)
+	// GetNativeMarketsMarketIdTrades The public tape — recent prints, newest first (§13)
+	// (GET /native-markets/{marketId}/trades)
+	GetNativeMarketsMarketIdTrades(ctx context.Context, request GetNativeMarketsMarketIdTradesRequestObject) (GetNativeMarketsMarketIdTradesResponseObject, error)
 
 	// (GET /orders)
 	GetOrders(ctx context.Context, request GetOrdersRequestObject) (GetOrdersResponseObject, error)
@@ -11711,6 +13238,58 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetMeActivity operation middleware
+func (sh *strictHandler) GetMeActivity(w http.ResponseWriter, r *http.Request, params GetMeActivityParams) {
+	var request GetMeActivityRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeActivity(ctx, request.(GetMeActivityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeActivity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeActivityResponseObject); ok {
+		if err := validResponse.VisitGetMeActivityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMePortfolio operation middleware
+func (sh *strictHandler) GetMePortfolio(w http.ResponseWriter, r *http.Request, params GetMePortfolioParams) {
+	var request GetMePortfolioRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMePortfolio(ctx, request.(GetMePortfolioRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMePortfolio")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMePortfolioResponseObject); ok {
+		if err := validResponse.VisitGetMePortfolioResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetNativeAssets operation middleware
 func (sh *strictHandler) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
 	var request GetNativeAssetsRequestObject
@@ -11830,6 +13409,32 @@ func (sh *strictHandler) PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r 
 	}
 }
 
+// GetNativeMarkets operation middleware
+func (sh *strictHandler) GetNativeMarkets(w http.ResponseWriter, r *http.Request, params GetNativeMarketsParams) {
+	var request GetNativeMarketsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarkets(ctx, request.(GetNativeMarketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarkets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetNativeMarketsMarketId operation middleware
 func (sh *strictHandler) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
 	var request GetNativeMarketsMarketIdRequestObject
@@ -11849,6 +13454,33 @@ func (sh *strictHandler) GetNativeMarketsMarketId(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetNativeMarketsMarketIdResponseObject); ok {
 		if err := validResponse.VisitGetNativeMarketsMarketIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketIdCandles operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdCandlesParams) {
+	var request GetNativeMarketsMarketIdCandlesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketIdCandles(ctx, request.(GetNativeMarketsMarketIdCandlesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketIdCandles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdCandlesResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdCandlesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -11917,6 +13549,59 @@ func (sh *strictHandler) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PostNativeMarketsMarketIdQuotesResponseObject); ok {
 		if err := validResponse.VisitPostNativeMarketsMarketIdQuotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketIdSummary operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	var request GetNativeMarketsMarketIdSummaryRequestObject
+
+	request.MarketId = marketId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketIdSummary(ctx, request.(GetNativeMarketsMarketIdSummaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketIdSummary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdSummaryResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdSummaryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketIdTrades operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdTradesParams) {
+	var request GetNativeMarketsMarketIdTradesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketIdTrades(ctx, request.(GetNativeMarketsMarketIdTradesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketIdTrades")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdTradesResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdTradesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -12354,273 +14039,335 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"7L3rktu4si74KgjNnmh7lupit3td7NgxIatkW8vlklpS2e29ug+NIqES2hShJsAqa3U4Yv86EfP3xHmA",
+	"+TX7PfajrCeZyEyAN5ESKZXLXvuc/tFW8QKAQCKRly8zf+/4arlSkYiM7jz9vbPiMV8KI2L8q+f7KonM",
+	"MIA/ZNR52llxs+h0OxFfis7TDk/vdzux+C2RsQg6T02ciG5H+wux5PDiv8Ri3nna+T9Osq5O6K4+ubwc",
+	"nnU+f+52elqLLR3Zuwd3009ireK0l98SEa+zbny6m2/VrFdwR5tYRtfYxJlYKS3rxxqk9w8e7TAQy5Uy",
+	"IvLXr8UaXguE9mO5MlJBx1O+FOyjWLM/MA0/r1SwZrFYhXytmVkIpmJ5LSMesljoJDTPmM7eCOR8LmIR",
+	"GXrtH//9f7Anp39hw4u3vfPhmTc8G7wZj2aDi/57bzK4nA6O2WxB70rN1Ir/lghmFHajRXwjYnaVGOar",
+	"SJuYy0gEcJdHLIn48kpeJyrRzF/wWAvzlEnDroSvlkKzFY8NU3PG2SqWSx6voY8udCL8hRIBkxEMf6Ui",
+	"LXSX8SiAe7exNEZE0EeorjVe5kkgDYuFr+JAd5lWMBoTqxD75T6QNT74W6KMjK7ZUhievxULFot5okXA",
+	"uMEvE8G1YDE3CxEzs+ARE9rnKxEwX8Wx8E24hifFjYjXTEUCvsMslBZMy+ijZnMVw71jNsAnQnEtjVxy",
+	"Q/PIw1jwYM00N1LPpYA1k5r949//J4vEbXHxHzxksTBJHGnGGRDIcadL1LcQPBBxRn+5946AarZR4ZJ/",
+	"OhfRtVl0nj56/OduZykj9/efu0DXRsTQx3/7W+/o3/jR30+P/nLsPT365Q//0ulWbI0hrH2yFFtYhsw/",
+	"cvgGicz2zswddXQul9LUsY0Qb+bbDMScJ6HpPP3htAuTLJfJsvP08ekpTjH99SidQRjmtYixozc8/riF",
+	"ES7d7YO/aBQHIq7tR9m7B3cz5uut9LBK799FVyrZ2pNK7qajWAWJv6Wn9P7BXU2F1lJFtV3p9P6BXX3u",
+	"dlImC6+MY3UViiX8BCYqIqR+vlqF0udw/Jys6Ik//KrhLPq9YXeuXeyxdJqZOPFNEouAiThWtB/sezlp",
+	"BH6uYrUSsZE0Vj8W3IjA42ZX7zO5FNrw5arzuduRQbO56XY+ygifFRFs3L91+pfT2ejNYNLpdvq9i97k",
+	"fafbGZ/3Zi9GkzedXzY4Y7ejDTeJzjfR68+GbwedbmcymM4mw/5scNbpdl5MRv82uIBmz0fTwdmWtrxY",
+	"cDvxm3w4o4S/wVfaD0iH0c3PWNaFuvpV+Aa6sDM95tcCVz0MR/PO07/tWFl4+nO3vDjSiGXxx7ZG3Bp/",
+	"TkfF45ivN78KG9sc+y/Z6Kf4sf0Fj+grisPKpq945m1Mt1F3sWyl4RvV6bohVC+AkTfSrHvLGopP4hgO",
+	"+Irl73ZI6Ns10/1YBNKM6Fkgq/XySoWVDRqxXImYw9bc1epbHiZilnv+c7eTRHR0Fnf7K3ULwhtIQOzD",
+	"Dbz24Zj1J4Oz4WwKAh6Nj11xLRi0oLvszehi8N57M7wYTeCJpYxUTPdA7vrgJuVDl/Wm08HMu7ywbWWN",
+	"4IP0qR9Agkp3NHXc6XZynXS6nVxDlZsRB75rUqbyOhLBjwmPjDSbtIzz45oqzvY22nghRDA0YrlJHRyp",
+	"ps2mK1Dbxt5zrHLj6x1fbNI4DPc1PA8U6uNatebYsUCNxa/YzzUjpAu7eCTexa+smnAtl0kI7DLX0JVS",
+	"oeBRkbdv9K6TJSg0m8T/PJGhYSrKa0/zWC0ZZ3P5CVQnsVxBn2wlYgbT3GWRSJ9KNKgj4pM57nRbsP/8",
+	"tGeDy09rN6Wd/GfvosLXlgyK3wjaoh8qUKa0IA3PvoMfpI9ZjwVqyWXEflUyIoV1LkTArtaMBwEoaJxN",
+	"VRL7gtQ7ZoeczY6MmIyMiCMenrjWnzEtBChrhq24/5Ffi+80C5R/fK1AH8NuxCcjIhCc2ErJyGxyAm98",
+	"Oem/6k2B1dsrk8HbwWTaO+90Oxc9OAW82aR3Nsj+JF7Rnwx6dCqMe+9Hl/Dej5eDaeHSdNabDbz+q97F",
+	"S7zcO3szvPB6Z3+9nM7eDC5mlawmP+Nf5WQusZ3DjmhqrJp/oW4dopTp1ezrQBgu8bQCSoEneTjONUIS",
+	"8AbV7uBjjgbOerOeN3gLK9HtjGH5+7PhCA744cWMrg7Ohy+Hz4fnwxkIf5Ph9DXJgPDQ4KdB/9K+8GJ4",
+	"fo7iQn900R+eD3v2+vng7CUKkC8uL86GFy873c500L+cQHtVq38wy9T1k1XLN/NMMGNlhzKcbezkKxL2",
+	"4UQdLGXU84n9bZzJq1WsbtqvX/re1bqptiI+CT/ZQx8Sn1YyFvrLq1Eb1IZWZ916N9Nr3oLrRXWzsVrB",
+	"+dP2i9L3ms95rTaWko/2goSHu0QIx4HGk9EYVYlupzceT0Zv8edk8NeBVTmIx5D20Rue22vj4QR/9XsX",
+	"/cH5eY0GaXh8LUwda7V3m0lO+d2efzHfSU7vLM5FcaaL61Ugx0qOke22r8E0st7vimeM8euJRIpDu+t9",
+	"01z3vTtC2Ukj27RhrUWVErzgMqqRDny55GH+aEttrG0YltSeNvwqFL6SUfXWLYsOJAvCaT4+92aj14OL",
+	"/G/v8enjxygV9KqFvKWMjMeDIBa6+mAmu1/FjZW49raaBWKpP3p+yGsa3mKiQquGN7o4f182fLzqndOP",
+	"s8H5cDojOYZ+11mvtpgZ1EcRealoXtyMdRJKzZYDiiL6KM1pZgujgdgZzdFMedkLM5fOUxWdPh9PK1Q9",
+	"rqUmNUM/Y49OT09P2b/+K/z4Pzs53wDeyHkHTrsVlPs8WcvoeqxuRVwhYWhPzdvJFjdchvCdXqRud+6J",
+	"KW6JKxyCt3JjaPDKgsvYT0r2iPLY7Q5vsivn3Dcq9q5WO7k0LMi2w7lENTSKQgdb+VLZSrISEWitDadl",
+	"pULpr70bEWtZIzqsVGzmKpTKa2Rncg0nMRyjBYVmOB2f92D7Op313XD26mzSe4f6bO/l4GLmnQ3G56Nq",
+	"7SMWaKQIGo4gFvAqnmp3tupXofI/2tndZMO+CsQORXHjlvbVShQZXn90eTHbmB3Q63fbdHEIaYeu+dzA",
+	"m5BQEgUiDnGLXfGQO73tLiZw+6G4iqUvPGymYqp+c7bLHX1lNs7tdrH6QyDRQQtir9nAKW/PMfX0E/J9",
+	"5L97K2svr9OtNIsg5rfAPfcZaXlnlxhrmTfndmDGZkqjqCaeHPst7csNDtS1R0jGQapmos9X/EqGlhjc",
+	"1jkHA1hmysA/3/QuLnvnaCXLXSVek13MthpY36ej/rB37qEBZjyYTEGQuOgDw3rTm7wezMbnvT7Z5EbT",
+	"KVjQhhcFE41Hj00zc8pwAH/0Bz+lfVYxuOyrXnJTYV5G46LYPN0niKsh2Idgc3kjjnwVkSxO9k40YzF/",
+	"IfyPXRYpw35NNGFLYnXLgOREp1vB0Ujx52HFAZHbtvSUiItcopU2UCZtv7DAW11I2ZOfux0xnwucpdZ2",
+	"h+hGxipaWh/zxtrsa5eIaNG8Lbp5KK556MXiRorbWuYHMywDEXuIJuK+qX0SBcV04eqe0jwKrtSnCot5",
+	"nAh2uxCWcgTzAa1l/QLT3sXZ89FPSDVAW8w2w4wUcQGihC+Agu3gT8dsugBv20KwWxUHzxhPe3CNXKM1",
+	"XSOBwl37DceVpKmFn8TSrBt8qrG7KSeI9J6TtWI8QG7hkX2DTtrM1JEqH9PLKTxp7R9vR69Lpg47Lw3O",
+	"54xaizTnhlmx57pu41dyQnSik59ynMT+gmsxEb8lQle4Oy+UEbgC/EqLyBeEeKOXmTubwCXih1JEhvwX",
+	"vkrCgHgEosvyf0cyEmwpw1CqiFBx0LqKwjWgyKJrdiXMrRARtRTTuKwfJQRYW8yk1gmcEuwW270SjLMb",
+	"HsqAeJZWS2ERhUuxvBIxQfoAeSeOrbkmzyHR6+41167J1eShG3dzwt4tLATPT7RRSxGzWxmGbMUBGxiV",
+	"nb/wIBzl8OFOCz5GIxJfrkKR6ldzFS+5IR76xyedKiUrr0Snr3fgEO/m8XLfF9By3++ivtz0lL68nrSG",
+	"1rVl8UY52jp06gtTXYAB/oDTtJentzRc5+xFCau5eS4TIX8pjbMzjDZRAcfsBTpMybMnNbNblykg7FVy",
+	"FUq9EMExnnTShKL0vQ6Tl8IgWy2ks2phw+5T6xf0ggMzQXPWHS4mgnlU7PEwVITNaiOm59WCzBrx512m",
+	"iHoKelxNQXLJr4WXxGGZ4B49rnh6yT95OlmtwlYqhzOO5Zr/45PC8j7eapLKw2FPd7y3jSysSSlVQ3Jf",
+	"U08cBF+8Q7rgKXioOS1oI6O847URSHEHn6v75kCa56SmVIMHrmLBPwbqNmLj3mTGfvqJ2Y70MbuOldaI",
+	"EUdgdSyWXEbA/IEpPGOE9fREKK/lVYiSza07T2BxAka6T8otViJewlFiFByDTq+KWCyvF4ZF6hbR72uE",
+	"iGfA+ShZXjlMOZ1AyPnYEkR8wmvoBcprKNfFAnDvS8Et2EGBzHYXJ+nV2psDzN/K7HVe3qZksLFYV2sv",
+	"A5XdeevzWP1dtOJZuPptXpCRI4X93rI6hK4SU9a4ltmzlhgDETOfRyBQ5ymq021s0+52SmTcZuxWt6/3",
+	"je62PmLoghZBm241GCd4q7FuYyC00PlmU3LZnJ3CMm98YT0TGqWkXV5a2LEcWQrImPS0zrQy4AkSuRBQ",
+	"QCCBeaJxhVSthQqF5USMx/5CGoHwZhYLDVJr9JQJHkeEcwq44VoYpnlIaKdVrOYSo1RIAcyQToyCAEq8",
+	"yMKfpIuR4Y7FERLK8jfgRMSdFHLDWFyt7c0cS2JDA19F6C1qjriZjOYiBj3AjmltVY2E3hY3qepCrFAQ",
+	"XyRJLQeycugq1AMnozcjsN30CCgDViRCXfVmo4k36E0urF8JjELT3vkgd42sSdPB5O2wn79OZiBvsxF7",
+	"w9qCvPFk1B8MztBENHozHsyGaEWaDN71JpXILBzv2+HZYOJNB7PZ+aAWr2UVQ1JKqk84S5vZcWS1vuhG",
+	"xEazpYog2ioyytHecXpgSW0DnUQA5gA6BldWC8XYJ57+yZY8gEUAlgQEEFtlXxvQqMQnxPQD5+JzI2Jm",
+	"bhVbqliwBb8RFE4GCynN5lHl07C8lYi9Jf9VxZ4D++YVr/tUu/Bhr6xaFtXAhiNaymhrQ40ayTHY7Kto",
+	"2o6swnp082gnjDMzSKTz1K2b/YqRV8xKPT90toy7k0Gz+WtCCGgA8bTwY2Gq942zyDF6iLZNEMsbQazY",
+	"BhWxy+Exm2DUHMSUfOIYrweKYRf2DOpNUkWO3RGLW8FMayNSxG2orq+LXDB2TaIdjuItmYrxNw8qMLnd",
+	"UohKOgsBN+LIyKWoeSeQxtvH97IVCDDnMkzirXZRS5nbnZN2EapvWhpqQSokbqC0xU3laUznqnsOTXns",
+	"VkYBSNgrEYmAQlS1MCYUSAD2LgQLCK6T9OSCgw/WqdlCUIPtFi+1fG5S7zxB/w0L5Vz4az8UZNE7Zv3e",
+	"eHY5GZw5QywdMGdIeYQ+Hj4/H7i7JFkcOYnnmRVC5hbvCY9x5vM4AMlklRjhZoMOGR6xOInQbrJUkVno",
+	"Egjagph7l7NXo8nw3xC36lmbbe66hZvhwHO33aeQ0daOHJ0y+Enp5cFZeubjT3BUl2FtBGbDn9alNBm8",
+	"HQ7e7Tb55qmwW5Qsncm3vMlKLKvAb8u7IrcHqrjpmfClrgSDBrk7m+4O8Ah+2Xi2RsI/MAcPnNoHA3HS",
+	"z61wORb6KX189aRidP2dnE2pi7XlROddtQXlrAKXkD/MnJukyBLG7jCjZ92ZloYqLK9EEIjgZKHgVGIq",
+	"ivlyxS6H3fw5BCESJj3Rdp9AbUDBwsf32mAN0rf2ObzmkhsvM15tnl9wf+sJ15wG1BW51fca6PYT0N70",
+	"bIhuHYoyd+wlkZHhrgEUVmcTtJdx7ulgOgWenV1xYater2+1nB8vrRctVWpQIZpOiYunV/ujixfDyZvB",
+	"WcrCQe3xRs9B8xqc5QIc8I/e297wvEccfys6uXQMAFfPRlUJXf7kaXkdpbGIGw+kkIhw686sYlOF8yFd",
+	"2xx6ubQX6hhB9SB2Bt1aznaWRbY08pfY1yoQzb+qBMwFnol5pLnfyqrb7eBbcheEC6SpynXYP16lVig1",
+	"quJyaSFxPPhocQi7MT2fK/HZdna/AsI8W9f90eUvZFgBJweELRLGXIZhHVvK25Mdb8lt9zxDeDG86J2j",
+	"JFi1Y1ugraNVsp+6cxilR8LcqvijNxdir97TM6QlqavE7PvBEP0IesjeY9ahMtWIop0c9kZEyZY7ew6p",
+	"iiFTT91Ngt2glc3JzFFwcYWqOAFgvigIo9b9tj+6CY6RyBdoim8nS+8NfWoEa4qUEYfinZoGkjQERjXE",
+	"FZVoZQtC+5UKQdXWE5va5C5Q8wvb5l3hcuvDWHyljXfFtdReoptir7fDfPMIgaIagjCbYM3cE10mjq+P",
+	"U/WD3fIwBKdDGkfRPnbl7jHGseCh/LsIvFUUtpijbfjjaM82AVQMjpkvjFvGLjZIo3LcudVuJP7kR5QS",
+	"uQMFV7WQpfuqA8x6Tj5sHpNC77VXhQAS1E5J9XmkIunz0KsNqmouREBKuZb97wrISs2Y7Zq9p0AuupB1",
+	"Mh2PZt64N5yAqvcWtcPLWX/0ZrDbTIcnOj6ysSgV01Adj9UtUNx2am2rYmVvVkj1V9ZTsq0BCmAE9os+",
+	"4uvmWsBbEIHO6a0qAQHJrmH3pVnHgbsWckOrViUo014W3Z7RFmrr3kXehXt22S9cIbobj6ZDm/1g1pu8",
+	"HMy8wU/j0fRyMqgkMOqx7/JJmqpzNgzVrQg8FBRbi1bCT1BTCAQPQhmJVuwG/Gkg6TaPQoM36ASUyxVI",
+	"Ve1e1aFcrQBC1+I1GXmx8IWNXGh6qBIrm8dCLyKhtUcTmuUtPD2tzFxYseFIbMdMg5uLd5WsReztCXfc",
+	"w5BJUIs9OnRv7pdX6zDdFPMwtng+rxi2M2VKv+ULCHVrMzT7xtZ4Fi3CcC+qsC+uYuULEei9Fc90wguf",
+	"uDn67ib9Vo3ezWxpZTbHu0Fmv+zaUc4mdYiRqdDg3qambqcE/b6zFI0llPGmr2xjazY70Yub9JduhZcW",
+	"46oiDI/ghMrCMAOI5aaPtP8KTeE1ESQ05onGx3FxEZ4aITYcAyc+RuqW3S6kv2A+N+JaxQgdlDG6tKNE",
+	"sJBHgYbohisxVzHGi6wZHMw27THCFEA3CChLFviHAILOeKgicXwoUH9f3pF7r8XpdB8sx8H/29Ld/bOh",
+	"vNzeYu0oySW8bkS81F6Gpa0ILSuGRDzDgBnRZXNBiEOkJMAFRJBTO4IIIR+zZ1ZHgaXRFBV2wFoOX3bQ",
+	"51lsFfesDLDIesg7Z5qzzzzdV8cdQc5IARgNrcKgCPME7Ymh+dFlP89xCufpRgCezIEoSwF6QmD6vqeM",
+	"06xHCgOtFjzb3maRgkcNME/Es6h5ht68EshnwIGdh24ASrIMjLToxssZ/JrOJr3Z4OV7bzZ4A0lrbTbT",
+	"QW/SfwUvjoderw8+wBImcnAxw0S3DlM5nozOLvuzWtk9N9N3eVTZJu/usJpu6Mtnk96LWT4Gcdy7JBel",
+	"C1a+2PrVUyTkOwvt2ePYlBowafV2DQud3oO/1RsX8oGa29IXJwjmFkHjDMYFhlD4tK0h+38lwXuWyd1V",
+	"mQZRyayHye8UQPYPejax3J7cwX52bWqLVlahvZxE4rcaKV0GxajewfPhLM2UWbnsB+V1gIF0ixPSzYym",
+	"MhB5O2mT9A13kbMO4Tj7ubfr1/TrZLglDAoPG7hCKoO+8kd19gWl3ZGfsoz+u8U92GwjfwV3/OYgDvLM",
+	"v5ZhOL2Vxl/UmM73YftZkordecpeno+e9869CwDcDKevvdeUp9SmwPFeTAaDfxukcgQegHnZASGdowvP",
+	"xvN3up23g4vLQe7v4cV0NrlEmFDB7Jy7DkZn4BqQxcO9iSMifNI0j0Cqvm0zjuS6zaUTyV19MzobnKd/",
+	"V2c42pLAMRR8jzSSmACoDl+hYcuV8BXTWe/ijOJOpgCLamA6t5su7SolglwPVXsqo78tAadlW68jzE46",
+	"J5VTmXpv74DLNvYw5yc7rb7S+b86DSfQfuzWdF9UmmXK58KssR6MrsZ3YzkYVOPnKvYFpfkGCDq+n4WU",
+	"sgfOknCteMi0wDGwJ3962CWUOgTiBMpHz4N+ihoBtXGkcRA2aqhrjQoA+L5SNhQLDQpZXghwmbCPIo5E",
+	"+J1mtPnrXsfsIHjUVgT8yNhPpPEwNlfE3lLdpDp/k9iO0uuESPe08FUU1LisXXj7kq+9q2Ttqdsoc4ht",
+	"MjqwlbtXfNB4IxNTRHM7e3uEsfoeTfhBLd2/0V+tBOrCofwtkQEgKmyoUCvfOnjZGiDFiRZ3P1mW6Spf",
+	"q9p3uawJd3lYQntfXhVzpHhwjo5N1cNXkVpKX3uQYK79yAoJGTZaX6pAWGqPlBF610MbmX5yoSKVCYxf",
+	"nPdevqzREev1VqSWXZ+ZI5gxvVCpuTo1347URZV0a/zlJRd58XuqNd0m+StosFN6dhs2pQozQkd+BY1t",
+	"5qBIDWV2WOlkVizjjl14F+acXHMHmHI2V7ryRMavgiBbAjSnJzLOIXtg00v8NHz70FXqm0sRBhRCldn0",
+	"KPqPMytfPGU/d26FvWrNdj938MjFG/YSixRcLQRrz7lv6tJGKIwAnmN9C7MQy4pDmOtFOS9AReiJpQpn",
+	"GN3+tAsu9yCDVPUjvyax1AGlD/SynVgRgItHprOB7+iYnoYBlrOGVgHMwAXtWfKrwK7GPNJzEfOGqP/C",
+	"N5de725Oc3EE9fTY51EQihpYoHejwmTZyvGBJuRWL1BQW/ueFvJ60eb5UN22eRzkkrbPexhh2eZgMzEP",
+	"RDOJtOz8TfuzY7UzQh/qFqI8v93iwqYD2EUg1WyU2tozK5OPDVfoJaMwENqwuYy1gSxzV4kPuggEqoC7",
+	"h0ZMKoAWkUmrDckwpORatzzGyOYWzN1ugwrzW2tUIO7UGx7mj+9Hy0638wP87xH9H9bpUVCdVp1YUhuw",
+	"Asjs2udhHatRLT6gRGbZaHJf1i3EruT775ZpIlvnehKrDv3goYir1NZpEt8IGWIyJjaXGJ9sq9EiabCY",
+	"S23jq9eWNjCvsc0KUWPCbqDWNzKMDC9ejMC205tgkT3I6trvnVdbR3bafjc3WGku/NTZL6yEYG3LUmiM",
+	"HGdHR3ZnpPEGlHIFW7aZej1MpnGcZo15MBdCd5m9q7vkfdUPUTKAQ19FdjJb7PeKHtvwV3xdezLa4yWV",
+	"mJZHEkojLbEFLsWFjPZ5q+UYM3N1a2xCLpSqCXtpz48OwXVt42Ox4KG1DuxPR2V/0PPL92jDPD+vVoza",
+	"WzVQgndWgmyAbQ/4LIAoz4OtB6mqj3oGS9bAJud3DXuhlD2YXD5NAJuyl8LG7jIZSSN56JUuozkt5Cg9",
+	"k1qHfEhwf8GMWjFA8Yv4O51LMEupTjhqIDlzITbctcUHc5HkeeDRxWiGz9ocnEhUgGDIZ6zlWidLQXmm",
+	"pLa2TkxKe7uQkGGIWUbAFny1EhFm3PMXikqmf2Ju3tiDF0dPnjzcix0231WF6WzFYDYmfk9e2GILVNJA",
+	"m24PYjptgV0Zz6khf71ShvhsEV+Dl4i4ui5LGZHnd/q4023GwtqlrHMDaYvWEnlrZwPrd0WZr8xItt3m",
+	"lFYY3h6ToVYe7XldVXA3xCwTeUt2zvYP00z5LBlniG1lS4VpLEWAu1QLUS/ptTdv7hUiulO4u5GxSQ4g",
+	"hy2Ses7glqtnttlXma2UaaViX22yhF3nThbCUlwH8j15MvLQ97TrwytcWimjaKbk2RZsacf/FWiwFprU",
+	"AoFSSWYYhFNcvl1kcCdACOq9rel2c+FLW1Gr2BQqow3eDaYzQAqMzi/fDLzHT16R8//ipfvjfPjj5fCM",
+	"SqqOJwBcrCmAf1V1tLxbCMRYrvg1QDdRe0U4P/ylhXDJgq0fNp8P7piNQEahIbJACf0sS4epWcyjj4C3",
+	"nsvrJMYcc9wwcH1StYY0UT6ZUargspULrjt2ltJvqgaLVE34poUnct5hxnXOV6xhPkRqayZ1XvuxgIEL",
+	"ATqntXnTyQvSYUSTw+zZxTCfZ3qoY1s0lancWiiy/gzObUwMSjmPUd4MFafyA+4eXrZwPkarW5UL+SD3",
+	"3p5mtHuTI+nF+3dNEa7be/xk4eS6kpSGFeuJxKG8DJJOyLVhj5+whUpifczeCA5+hVBozZII/1lwjW1m",
+	"sPGmmIDDZOm7css2Y6O06pVBI7bZ77RDUDAZlM63BZruGCZVpXMSC6HbfRDxpWBXAuD3Oocvn4PuZIul",
+	"o0KmsWa6CBi4ieJnTEY3IoIpRM0Lt12uqAfhK5imWuqQWQwsTXtrIlbg2cODnlnNgU7apaZfqirnHvB4",
+	"ZJXslmtmqcHFxrjqNvAyMLvA5jYWnyRlYEb2X66lAxMcixVs58hox6+qgyB2OemLO2LzA17wUNtTJGPZ",
+	"GAeAqg8w64BJuklgmTxcp+RRtLkt+Q3QAezdYPvgtyMADtY3gV94d1f9A/bXm97kJWQbsmfV0VEurb/4",
+	"lKsLwnwFK3x0VDq7kOorYTEHj+8t+wObdHEsgViZBf7ywbBOA9CMX3MZadp5rZVx+8IX1yH3q7xx/0iQ",
+	"L2CbOCNpgXizkxaJ0pCj+jy2mOXGRoiDqWoCNJxWdnLOBGkBDCulwnypKHLMQOCQDJhKiNRSRLZForXk",
+	"vHtZOrZU+UUZ2Q2iQVv3o9KXz7SqIi75DViS3WpAODkWuNOnV/OddYy4qfFhk9lVilyFjV91VhdWrpEN",
+	"wx7aOxMfknqDIchftfoNIicxjdidnVekbWGu/nkCYYByDsZ0Es0ofStDyRnjAmFLp7UXoGCkCNyZARpU",
+	"LPQiXDMYRQJCDjgzyETqHoLD0GKUMIkD0xzkTxeYbHJmVmtmgZ8+x2hl7gP5gQvhOhYYsXycZYNoPu+t",
+	"fEHbzCnWK2PXsbA89VT0o8uHsqdTBmUrnEI1pyhPm4mWlF6XAJTGAXMJAjk07qqRjUCcfH753haFsU85",
+	"vp2W6UvfT63bz0gShYliMr2FBgh2y9csVkkUHLMXQmhbH4RkilgwHt7yddpJd0PkaeVD2dNRe4DvtDSr",
+	"LV/drzRotrD35kG5U7ftF92V+3loUzeKR9kLvqyMUeIc6XxUenYL671JcJsW+hxd7eA1X+TEOvjscfxm",
+	"jlUpnl++71oulRnp7D0kgS/Htutnb5rqGBWZQvauZrif9gJi9B6vmRiLSqz3GuuGWFqUvspzUN1bcej1",
+	"kz0DOeQL4A2/AK4uBW+28EXQ58UyaupqyaXmqRfId8I4c91WmuMx1YYPZ3FkUK6zCiQgLjP7IKaIWXfB",
+	"ZhUILa+jCiv4vsDhfXHAB5zm+LX7ZFz5ralu2fIoy86l9rim/c+0ygh2yxvLs1sxyJ0Y49w0VxFoTc61",
+	"e8tAYeGR+6f0tg0ckCO7beLxVukU9v8wmSaT9NqM0LR7IVOW9hrksi4/gW2z1VzF4lcKba1Pe9B2T28p",
+	"e/G2dz48s7/7vfFwhvWC0sT14/PexQX+ml4+fzOc2VSn9g9bev71xejd+eDsJb3Rm8yGvfPz996LoS1a",
+	"kf7AWhi2hVxlo9S0Wa55gcUtBtPZRhkM7J/qdVxeQPcXuZoaw165XAcV1fAw837lDBkRLyWEtrTat1Vp",
+	"HTLSK1XIKBJyytyWKhB5iEx+c9XnbXf3q+i2jpvUMomdFifkjm2zwLoceRs81RixXJmtqVzoES9SNSHO",
+	"KprLeLmnG3Mf7pwVd6ip/PD3L1l/Ktu/FUGTV0tp9vimHXULqkg7tyw5gt1BOxuxLDIMm8urGJbRsPZI",
+	"IcvjPaY6OSwZJIy8WtMADx3UbdIqVzHpb26Fup0oCcPOL+V+8m9Vrcedl03fP1Vl69rp3Q7FFmIpw3yN",
+	"6RZpjF2F6vwxf7D94JW6ZcvEX7gwmJimF3/bUrVUNBjrZFpXeb6mZtM6k7h4XuvKdYeVtcZv2bPmlyNN",
+	"6ELOZab1V/RzQGkxV3Jyr3fLDliHJhqcD18Onw/Ph7P3Xv/VoP8a0/ZMhi+G/Q0Jo3A98+DS5bz8VCof",
+	"lj457r0fXc686aw3u5zmhJpMTkorg+UEplw5sF21Hrud/BJ46FPxdDKfW4W1IgFmirMg5MeVNhzKb0qd",
+	"quEs32YWLZErsx3pWxET0uLnDoV2V4Vxuz0hEY6H2Vl3ogKz3VBTrLKCdKvorFHt8wLfvIuI/kKDB8T0",
+	"j1Vs5iqU6k5sqq68SzOWmOPolf48GWnDI5MDkh4ZdWRRO4QOteArrjNHHceQW+txI7wR4S+pbrEShPbR",
+	"fE0UKgnMZIBkkfzsqzZLqI8JeoDdHueC3ZrlJX/OMcaTWGVVebetK+xWZmxfrTqQQKQScSqGNZv3t5AZ",
+	"cJZ7s3r6c22n2ZgDsQoVlnv+Ludng1nDAvw4RUYZa9ts9HkzenyrmZsIq/i52VrkZzftfiuxp1NaaUmk",
+	"ZERpAovjFHjbZblKML5zABZKwfg53+NcCO0BOCS7Smmm4RXAewYiZEt5TVAednr6pz89ZksuI8NlpInr",
+	"wdMo9D6zcDXK61jop1SNJt9ZblcwnMSsVWruO8yUdQ1aCLkxK+yhqQUcK57fDX7rElpi1zGPDOXrNhmg",
+	"k1mQ2VJGBv2rfxexwqk/vn+w8Y2IwTWHC3+XALa+0phhWEUiB6QrOZNZ78rJetzlNk7JslS0ao+kUw7m",
+	"uQlW3CDd1uG5vnOvNTAyY6IEj/tW2Gtbf41r46H7oO2b3zAscHOrt1mBeiDfblf3gXXBGo6WMO93EBm4",
+	"BftWPBvbnYj2HDnsk5BdelcquV4YD9tr82n0NuRE3+fdu1iU+iRYKU4vbwbc5EU1tFHFX2qIvvZTqhZo",
+	"t5Mxt8RbBYRZKsOUU1gfwm8P4qqH8gRMt+MOj4w9b7KAJs/czZa/ky32BQi9kpLbkmcLqq3aDaVVqF6/",
+	"ShqOZeTLFQ+3aXTN1RB39G0kdvGNir1yXbrL6WDS6XZG48EEyhZUZ6xdxu2sbjwxi/aJqWIVtq1Spo1Y",
+	"eckK1lgG+xSIT3AVGgsUZbd19nphft23dAsLmJ8XmtRqalBXoVhWcbKgKmEARkayJfcXMhJHoKfgBXia",
+	"PRheTC9fvBj2h5BP+vnlewiWG4/eDSZdlqWyBvmmS5k2vKzqYZdRyurLi7RcfZf9eDmaDTzrtusyTI39",
+	"pvdTWrvOXjrrDc/fe+ej6bTL8la1v15OhtOzYZ8e7ffGPXvjYjTzXPRDl+W8fWAfGzjzWJfVuPy6LLWw",
+	"FYY7nfXOB96b3uT1YOZB5Y8uG16gB9Qbng3ejEezwUX/vTcZXE4HXQY5vr3pu+Gs/8ojobDLLkYePQ+O",
+	"0S77x7//fw+rarsGqbOswl8kQtq9PAiQFWBpjXRhTZyICjIgU4ovttloa5Nnl/1HeQBRbVmaVpnyqZm8",
+	"Wwios4aesVxyVkekSNaB1ECw28zgIo5V7MXcpIDLze9aCB6aRZ6zvRr0zmev3qPk/nLSo8oblxe5y5Tv",
+	"vFqgRx1FJ74vdGv8rIMHuJHM+UecK4qiw6CDG9EynucvP3jLmk8HXlNXaKhgg0/RAKOzgQe1a84HMyp+",
+	"czGb9Pozb+Z879Pexdnz0U9ezp7d7130Ju/zV86Hbwf5v5+fj/qvB2fe4KfZYHLRa4CMtDEk+AHpEpbG",
+	"XUlTSewvuBalUjV36OVKMbB3F6D3zoXiUeYGMGFqKIyGWePYyn7SZjREVm5qyY2/EBqrJ3GmDYDybV1S",
+	"MoTiizzMUrHqJF7FUguoVBVDyPFWo13po6tm/sectln8vAGGxG/AaDnGy7tI+dSZKT7x5QqP+791Hv1w",
+	"av+DLlfcwKJ2nnb+29H//bfTo7/88od/qWK5CC8+kxqMLFZhrCtJn65hccRWzbCD6tqYkBWEiFHt140+",
+	"7x+KD8FCDZx29wrRclle209CJMytij9iCFSrweZfFNrIJTetjA774LK+Rr2/9mnwV/Z4rakZ3y4MwlbD",
+	"bV+2RyVGFCT3VrLOhlTfPryClDRHGgFZf5tXp8dyEDVnaJSItiSQvtSG4upDNtI1dgNtCxvbjOgo7eEK",
+	"8istQ34mavbjRhHXiiDI2nUqEl+BXzr6qj6PlBHjWNxIcXuXsSZ+k2iFQtFvwqnli3HvfjVfvXtf7Guk",
+	"aJ+1oPa7zetUBjrauatarYnwVeTLUKJoB3/FwZ0sV0sfEebm1V4kbj0o41GTIF4tVyLSFAZ8WJlqh4/w",
+	"RWve6LZu6xfbVxdy6sHgp0H/0laif9c7Px/MvOe9c0DjZiWlQPwHBPDEG15Yab/bcVYAj25V43arvSdG",
+	"xJKH1QtRVqcGb8GacTYZvkW/zHgwGY7Ohn0cXA0iWl0RCKT1LKqViPY4D4VWIVXPF8C5Ix/023kdDso9",
+	"u7XIllbhzV0X2cKbNXp/FYx8NMYZf9Ob9V8RCGk4xT+wcNnbwXQ2fNmzkPHJYDo6fzs483qXs9Gb3mzY",
+	"z18k9FKn2xlM+73zXrVbbUsZPQejzr6gUOUrNUuklLW56fOL25RZfQW4adUwDkKflht05FfBiNtXKsuY",
+	"ZhVWY4IEfgS2ooDl+Sv4yOHfZ6nmekVIHAbW9Q2Awz9FddC2RUBrztg7KOe5vapmVd7QBlyrUeG50jfZ",
+	"t0rtV2++a6mNiKlW8B1KduXav0v+yQ3/0ePTbv5zHnUbVgY+KC/aOwTE2So0NmGBMbG8AhTQMRstpcFY",
+	"ZEzYJcIQdksaHWm0COelDGoqDmTEYwDC6V0Wn8JsVK3DVGgtVZRLq1gRjrxHYEYSxyKqKVEXiBvQRUJ+",
+	"JapN6vumNWgeT7aq7JdswkJE7eWBG7VHCbJEixhq6USmYjhVh2NuNUqj3RmzPxWmsvB37dY7qB5/afBb",
+	"ylSXHL8bR0rPJeMEm90RQbIoIwllIeVrSPgUiWuECALQNFRaO3MpDyHXiK+WAo2q45+T09PHfzyH2xo7",
+	"BsRpLHLnkUQw6nGnuaFyanhszgQ6gu+Qkc0lz+foyI2GxvLzz8f44/fHnyuHhe/TPvTXRY9wtUdknmDd",
+	"E4/SJO7rMi2wn/w3lEdUSQxIJ/00WWBxDhsFNzSsl2rU7i1n1PaCqFOM1SJN/5/eNhEIHoQyaufR38ug",
+	"saz0c7/hUcJDV4kJTslxbzyYMPT5M3RF2YiI2aQHGirs1BTal6L+4B3ruqp2wN2HNaW9YdaA98Z44tMK",
+	"nR2NR7eH3cYuQBVBZ2ubR4kG3IgjC2rYmE/MAUEE9fVofyvyBSt470TAXLej4UN3m6/iWIT5aLkKyME+",
+	"G7JFSP0BWzeNU+/1X88oq7nbedNXvbPRu9SfjHvxzXCWOpTvaldiZvN2qaiiL5oa/wDvyu4EAVnkU8u2",
+	"N208k0F/MKRkABsBcXgVET65P6uSB1gTIhqCHNBgR+x/KeitALypJIp9eeJdRv8XY17yALCUm5bZbGaa",
+	"IsW+sHRlL0iJD1Qy5YzDtg3Zz71aYabKxd7umqUzWwM23XiNY6hh27U2ylJIX2pjaveutfc3/Rw0+FcE",
+	"ghXnylVs3DQ8+yjQ7rHna03BTUTTfK3E/BAald6osBnmKOUrmECLdLq/5RO2/4ZgeTk9o3i4IhyEan+6",
+	"IhjmVrF5THuaBfKaEL8FEMvj758c//DHGgTLLmUMj5XNoV0Oz27+BDk0fR6pSPo8BFPQMl84IElkUNXi",
+	"RoBERT0Qbtjr4cUZBDUhSBqQOlZ5lpo9cAG71wpmhY4g9uSPUAS6P7oYvXkPT1GM01Go1IpdqICHhWSe",
+	"NjCPaiI+Y5NBD3XrpYrEGiPc2IpjcCJzPu5nbDp8c4keAVLSC7nnFdWXXiqb1b5r9XNXNAOyukPPa7xM",
+	"yCqziIWgMpJoW9brSEXrJQ0wuxyLKBCxCGw8sg0qPc4pD/ar8RhD30U60srz6a2IEnFO8KxNjgHmCm8p",
+	"K007Xbq7ih0fqoT9tQmC+uSlItRvLgVsm7y/+79tkQJb4Cm1k0C3d8zCpgCTKn052OdWqOcu8MfBXVRJ",
+	"Dg7IUegiJx24edughc15qVyiKk7/TppFEPPb7ZEGX8rpfgeJQ3gQxEJXhwZ8Wdm9NiXPbqkwi8H6LQPo",
+	"VH1V8yQ72ULepV2p5Xo2XZi7RZs0n87NiYN1FH4SS7OeQqc0U5pcHH2lPkoCsUWdpx2f/nSQ7I7nvVLa",
+	"HPkrzz6fHbp8JV8LGDaqzfOKOixvySQpAgbxFaw3HrIHkDeNPTr988Nj1lfLJY8Ca9YaTWckfPCIfRgG",
+	"YrlSBiyiR6/F+gNbCB6I2L7+/R8fPvs5+i0RmDYT3n45sC9TSiAq9mWzdQziWMX02Ae+WoUWYX2yooiT",
+	"P/yqVfTBds2o4tbP0UZgyQdQQj+4AfzpoSuPRWc6RjswWSFPyYiBqPXgw89OVvq58+EhnujRz1HZhl8E",
+	"DFMy3lKtaSijxf46HV3Yo1pj/lAYQsQjX/KQhBp9/HOUMhT6+smLPvv+++//wi5n/WM2ETw0cilYsgJT",
+	"Fj0SCMDogziA9Z2m00FJXIBQHhVLgwLOz5Fbzr88fGoLviKMWxh/kRPecPVhkwuGeSxxnmPBl+yar45/",
+	"jtLAiqedF+lX9FVkYhWyccgjAbRDCHk6EjuPjk+PT494uFpwh1fhK9l52vn++NHxKbkpFkjnJ3Yf4R/X",
+	"5PxWK1uWZBh0nnZeCtNzz6CWtVKRpk3y+PS0gzFIqSkvT0G/Wl2FtnJjud52ViHTl0sHddJxfcaoLeuN",
+	"TC8zdRtldY0oYz9MJr/WOQ6iKX1WOhEnv9tfw+Bzk0npuadxWmO+FEbEulYHyh45yd78/MuBM9toQmsn",
+	"EOb6yen3dQ2lIztxYWj4/JMWz39uNe0nWMHOng6N57/nXjpgHbo7H+4jC23yJNYG/dJLS59MCvXm+sJ1",
+	"UOTcfDLageXtYm8CvwPjMXsgbkD7+sd//x9sBXobKXnwJyW2xJ85SxD+DTYUuvFJ+En6BmSRoPsFhNHD",
+	"wka0C7eFIq6StYyuj1bqVsStqOI5vjjG9w4jjLKiDOiKWMBZhPNDRwTiyRCz5OpewlXKlGU1dVcjKYlX",
+	"ShNsu/O0A+f1OpMssrsZJaSgoeF0fN4DlRO8WqBxvBvOXp1Neu+qw6u+JAXmp7eCAOk2o2VrzWUKZJpv",
+	"KkuIE6lbx+CvuP9RRIEVQh7/8NDhxnzuL0iFN3FiFgXK282LwJQcm1Y0N6BXDiO3KqqwBp48UQRizpPQ",
+	"dJ52frUoKkslvr7pdOlilfJZ0wGZCLPmmzj06hozqn1Th9LqpnBvxCdzApNR9Vza7wbl0hqyQPlopi8R",
+	"o71rAeAsBwC3OaMg1xNQXH/6FqRZlEgtYZ4+bsv8oOQl4MBaEeEr99I3Kpa48U1sB1WLkH5DcfbdZVJL",
+	"MKSwi3oEJHfoMkz5UEqplaJ4Wu7+UATXIj7JL3CrVTjH92f51//XEU/+Stsj9/W7BJWqDVVa/L9W7TmH",
+	"hbQrxx7w1UpEwRHmrFxIbVS8fthlkbgVGpIOxtpsIYRgKaNmihE8mdOOSgtbxRR/63S3sKF/OvkTP71u",
+	"VTP97KCTfyp47C/c2mr2gNZBxQwTahS4KSxI5TIWdnVmuFspXbG0Y6WLa5vuwakzxn3BPZwz76AJ6ZfU",
+	"H/xcBeu7XrwCfO5z0cxm4kR8/jqq6SXaXQK36vupqH/Zl+RexEL8XbCTVMDHn66wOrrEHKchpyxzk/aM",
+	"8SSQBn5EqhCwANIrFVHeRbG7jxmizZrzpIrtZL6E/zK8J5uDev5TdYCMBUJWbclqX0SG+WRNC4HeoFmp",
+	"TWydlOkklxesu5t37Hfe39f2z81frFZK87DZ9n/0JYZQKRTgsERQXj+6zHhh2bCVit2ojVgdJatGW+7k",
+	"d/oBR8TvgfWkfW50TOD7Pfv2WeaEq9qaYHzNdqbrslOe+W7DWXSI6srWg2wo9a07lZFCuwh/hPpTt0PG",
+	"HFGjQt4fJZeqIlh/886gpc+fN+n39L7ol+5Yoz6VOM8gRPd4mPVoWUEPpXVlnK3s3ko3jl37mP3j//l/",
+	"3d244fa55kbsPq9e4lP34ULo8xUnyyT02cSTQGPb4DNBQrPjpw0y/Farb0jNRHQjYxWhiWDnFJ38njX0",
+	"2TGbAn8pjsqhXEiVdX+hDGGz8UdlLMyD/tjrjYfe+eBl79wbj86H/ff/ahM3uQxA48no7CEEvdjr+E2F",
+	"Ons2xJP5Cy6jLvN5FCljO5YRNtDFUWFeIo62NRSObJWAq3VpXNYfSLgcEWphtTWc3Sy50XGnWyKelMXi",
+	"CmUL23NIyt0MNpvzvVls1m8to02hnbvZrN1dnW6O4TrRsgMUqEF3pZ1ChesoVKyQLSylh6/OmrdNHKwa",
+	"LVVa4+DLsuTy1q/e6jmenEE575krOzHmxG43/OUUjBNmqYBUkGRJughQAeO0Xx8EEPpiRaCMUXeBzbut",
+	"d5JjG9JssoutLCvDKOuT37M/WunPw6yNYa6FPbXofBPfkCL9NTXobEqqaL1wN098NFiWrSqjJWUPCMXG",
+	"TliW+JydsCwDKDthlAWdnTBKfg5hVe734Gy7pPBRhuGRvpWYsm6nxPBahuHUPXwfgkPWYTP4AamIcA5G",
+	"9vhLv63g8m6qMpY++JvUG7Mx5lj6fZJ8fpE2F4XuMKr+c5jdsee48YM516bLtIyuQ8Gc9fEhCdSh4Fqw",
+	"B5b/PmNTqMY0YJEQAWY5tNzdWhaszPOQcQZ7wdLL1j3jQNC798s4ffI+Nksph2uDDZONb+MoxOuMkn3i",
+	"jsqn+2QY9a+3zlIRXoB/xsHuKatKpHKnJrWqN4t1qloq+f9MNrrabDkVxFF8lrkF/Py5/aqf/E4/QFSx",
+	"OZIayCqVpDCxDU1sM00UDtf5HVh0vg2WX5sc6J45f3XWo2pSigMr5Me54e4h4D9+vO/xYUmGcbaUGrP0",
+	"pubJPzCX6+YZc8mocgPVzn5Ze348YxgE6NPTQNiMF3MnVXhSa0UzDMTZyirpiXuBf0JXjaQvGlN5zilD",
+	"EEwX3re4Z7JjUCUqV0gEjxnN58KsWcrL3fxQmYjUI5yYxQkASAFjtHWiErPou+canSJ+FvBZzSganin5",
+	"cofNGioz/u9PH1cl5wok0Jmr7ZVbYdpOpy315Uctt5OF5nee/u2X/EKPhmd95lbkGROITJd6ITA6TMQ3",
+	"Ij7SMhDMAvNZCt1Pd0BiFvnlDdW1jHat7Tk+tLGw5Tmjwq/axAr8TIlZEPyPLK1vXvROVlzrj2L9kDDs",
+	"TAu0QaT+phpQoC1sUSVyZOUx91rWtJSnEzZhsX44/f5uFuu5uJYRwyXDWWYPLFD+7zglmPqN/YGNX/cH",
+	"D5+x2I5N1w9u6yoqSj+95bSnhVSJ2eRoTyqKaVgKsvmaNjgOXMVx2vxVLBcLsjlKWxrmxHqGcwRX7PXC",
+	"xh+aJI6Qpkn5sAGIrJfPPXQdK627DA1GEI7RZfNY/V1EyOEoOdmRq3ncJY5oyxdqOD7o95LLCGRwymXU",
+	"ZVfC54kW7OfOoz93n/xw6kI4f+5k1TdtYdefOwtX+xhSKw3ZrQ1F+rmzadF9KYxtydXVbMQnCzLzQWLV",
+	"lxR4SwVDN08teiBdvKtY8I+Bur1v2WRjGOqjiBgMBGz3ty5JFtAP/AtrfSXSZY0slPGnn/IihaXsEp2v",
+	"YunbWNdKOh8gIoKKF9hkUhCfJLBiK5RCIPLkhrpXiWGBiOUNPCexRqwWvgITDERdL0VkiM26Uqc8lmax",
+	"FEb64LlAnHCsbjXUWoDixwyh7gkPwzULpObXsRDZDqGDpJtWK6a/05x6kaB8YlJrCCnaQupjOwtfnPRc",
+	"RxWkhwUl6LarRy4jOIB8UaKOmZtxbmwWQYrjukrWabnYbFKuVBIFmsGcR1nJilrCwAnXJxTitO28HeCD",
+	"U3pu55GLNnKKb3tGhu5rvsovmhYwSs4+xEKvI/8DrXz6FRSfRXWoXYxWFpnlDmQKtMu40jnX5ggHejQ8",
+	"67SRtjaXHoHKOKijbHJaIJY33oc98AEH98FGxmv24IMMPnTZB3wOfgTc8A/sXwmh/IFmm955uAHDI6lK",
+	"UC3nyJAb1PIQDY6HQMQaBGxMa2dj6a+ddVmwB3hm5GPktiChLTM4ca1tI5UX9OyZe/SeT5R/MquMnaZd",
+	"WNx04vMmGLsqO4zZO9fjm3HcbCRhvGeThu290nnjJgEYEiRkhTP/8enj++jb3mI25JxORCd+pwLuYTII",
+	"zj6c+pIbqAh/OT3rpyKA7YI9cNoAs2W3XEyPzSdCB9M//v1/Moq1/WMhuCKj1iqOcvK7/bUj0rNEzWfu",
+	"pdZknb15H/vbJn7asrok56QOcAeUPyi8szjlZND/+7bZfWUfqZ6QDQcC0gDIdVgubVPrdOPQa23E0g4j",
+	"58reNpSct/pebF159+xug1d+dCV5LbZh+LnvZA/ePmJ6pQxbcRnrh7TYO+xc9S7/htNW8NAf5t7/5V68",
+	"5vWbJHuGpg5zsrjKavqgPVKedLObMI2I/rdc0zwj2C7Zxs15cR/ZaSajXArxrw0bMjFvIAvVrt03IgNV",
+	"5CO+ZxmokMmtgRwEC8jZCuo7qUSHa1gosQIxRabp4O5STto1PryTDQKNbnRQ2WQ37a3kXxKFdpjQhuTC",
+	"OIPTKqDMy3ba2YNllo4Zg10iA3HuSkbmGYln3//wsHL/5Njgye/0Y+eZY+i8MfueNeYezpnNNJz19IOH",
+	"DIi0DiWuu2wV8sjq1VlY8UFHz645P/F55FOFhZ0szc1hn17Zfwn2dHQXFu3etjt9behQCjZP64FgUOcy",
+	"8vONP6AcuFjQGmvwPiN0tfhE5ROYr6K5jJf09BpLSrM0b26mFD1+/Kft2w4aOyLrza49B4+OYosxum9h",
+	"pJyBQ2nB0MmHxl5hN4pRKKUdszNKjYB+pOeX7weT4xq/mi01vInUxrcgpyPM6GQ/pPU9CD6Fhdkl+th1",
+	"LtIfLWk+rvFKJdcLg2BiFQZ5a65aLkXsizL92MSgjSho7J5tREO2ule7ubBdvIZ3v7FlskNrlLRHsHRe",
+	"K6NTtPM6hmsUWzUPRfVidWuCTHosiPncWL9f2sgxG8LOEfFSszlFw6qIrZIr9/FYGwVdLKk7JLSnfeY3",
+	"wAKiXTYXBJOFlSTHjgHw4xWWoI6u6wI/dpPLtyFD99FKVlN3/J5jKkujqIFhwq3UuCcjdjbpvZjdvw8S",
+	"fUyOwrNxNGc2J7/bXw3ExTwljd1brUkqe/M+ecWWZTxIHGwzvyeZhFDNSWZpGXt09xBXQA4Av9bsVsTC",
+	"VbfvpTd4RTF7yhX55PQvrng9i7lZYMQOjyoq2LNednABeyEb8VWyBiDEMq2IRpZkiJuDlmI44aAxrCbH",
+	"blGcqCm5hsmlQI6QphmrSsmkTlhqTmbfDAx0bF27hzC6LyT0tLEb2K9gPIwFD9ZsyQNBJoNH9zc4N5fB",
+	"Afp+zUjzmVtbLG7KHWqBA+lp3WU23U7KuXVuD6diyGHHw/NknTsbUDu20IM9z4eKqLXymiCEEFPLosSj",
+	"K+UXiv3lhtl8q8fMpd+7QFHI1hF5mhs9Pg6MyVdLSlQHT457l9PBWQakgHoCS8Ej5ipDw4vIjIxi3LJW",
+	"oFkYoVkIGWfEbF03LZnTnnF43yJz2lWq8CtxpwZimIzQ7BOJW+ee+eLpWA/amHabdNmKJ1p0XXyqilN8",
+	"WEb5DbYqHb9btuXU1jelwg8CSMsgUJYOd5scr6C7WuiiRM4EGDJ7rKMLW0QON7mEQQTHjFDjtGngukxP",
+	"ju37aWqH/o2qJdXlcr/SRqBBVEbs4R0b8HPvMRo0RWmG6HwhXa4z6dACHt8Ohw/raXoptukgb8SXhP+N",
+	"Yxn5csXDalaT3twHg5+pbBbhvHLtpWdXmpxNWuSob1gdBHopGiV4fiPqMzr/0/k9u5uIxZXgiL+XkR8m",
+	"GKlwI2IeopChj1nvCpF2S8EjbVMGw506G+aGkaxhsnWa4RdCBGQq28Ah3Ef+aui+aQ7re+YQIPwmkZxL",
+	"EaRDyGXK/s//ePTHPEeg2kZHwleRWq4zgl+p2MxVKFUtEBo6qkOHo9yo6bxDTkXPAbJVQgwZXENID4aD",
+	"wcPZszK64bHkkTnyF8L/KALK2LJUgQhtOWR5bc++09M//ekxW3IZGS6jXIfoeDpml5RPVefyqeI5CniG",
+	"gHHDBMcYAIA3fIfXr0EUttoDN+wD156af8gVJ0dTQVDQ7wHJLatsgsgUxulM/heKG8g+qmoHZDfvIU9/",
+	"XZBA19XtygiNRxkddNPyJOITzIKE8/NIzXGL/NBl//kfT3ZvFHtxd0DiBT6YhiW2E7/uwdSfG98uvlao",
+	"hlZagYv8PatFpuZ+AhzArgoF1wYlFb1threhVA6a0Hs1s+dG+pVE2twIWuB2H91X/3ijxri/F07kvuxM",
+	"E0oCBhFItkum/VgI0NwseyE5aC4JJAwsPqjzKmDdwaP87krnomtDwzd6cWL+sCjm7+ZVJ7/jvzu8EPlN",
+	"1qPn22cStu/dF/uqp7AUsKKT1Spcd11Q0SpWcxmSwQykDCtb5DKy7OmsaLMMJxqBSvVWhRF4K60shbmk",
+	"QWuhl8gip+wDMoY6QkQ4x4zwT8baIzBQztkKoTHs/jvNaIzSJywhINXE7VM4HNPU1RhoZOPqELtrFAt5",
+	"EvngkrAeWaPT0UltfaY2k7D1vqbD/w4T8KXqmOvmO3JkfMSDYsXjGoNGBWHSh+5Pnl8xO2jbKnf1leUq",
+	"qsV9SydNj7iaZuPBxdnw4qU3GbwdDt7di/1wf6yThRCuVZLbWZZDw27J8QzaOHtwZYewrlO2RpGgKFOL",
+	"HLLPW+DQB61i84H5C6W03djo+8S6PsgXLgbvIDaQ9BfYvQnGTmNhvessdpqOK4WqzUexJhMmBC7Y6kBW",
+	"/8L6tLcLETGtluJKBWsCVuaCLN2kMs3X2mlPht1yfcw+/PaBacyRX+JCcD52mV4vrxRZanKTgHk8lTbX",
+	"sZj+eI5gMYPZOcmXk2LMZBSITzQOnml2aUi+dAE5HMJn0csGvVbqbkTNb+zStOUsX9LkQnZ3UW11oZvH",
+	"tTkZNrJApZYXByOz27PTzWrEZtn1Ot0OJdSDQveT0b8NLrCELGXTq65xXyp1XZNYhA4G76BkU7srWCz5",
+	"p3MRXZtF5+mjx39uXBtIU4GkqjpGtLdylYzSC29H55dvBt7jJ69gBl/1Ll66P86HP14Oz4YzmM3xZNgf",
+	"3HcdrDxt79L4aBcx4ohS6AMtVGdS+5i52blUUm5WLNb9n//x6DHo4UUQdgMuevI7/Wgk3drt/ca+0Xqb",
+	"py/e23JVLZW7c5D95I1dZ8ON6ILifkOuZDKcgN+KdBBfRM75RCfd+fDt/kt04vMoCEX92fc88T+mmZEi",
+	"ZY8alBN7z6eDi1nBGAeWP4FO71seB0+Bip4wrj+mUTILFQltmFiubB4l4U6LecjNkX2fBgXGSJg6xqlX",
+	"Ov8CGaAkvMCiPcfsA5gdP2AjH4z6QHX1lFmkWf3TU/FWRoG6hUMIkxCIAJj7ox9OT9kVfeTuc8jRW9/O",
+	"2v70WsPpcFfe8LBRauhHy0638wP87xH9fwH/C9pXcNvP0pmrsb21qNvhrX/5zU0LWseL6a7uMtiFaWzX",
+	"/TrSR6/O+2+plDBPCZhIuptVOExt8KnwBULzKpYY5Anb8QBesQnpq1MOS9tlT1hbYbd8G1ZF+jz8nq9q",
+	"T3whw7AFjA3rqjoIm63SEXwZS2PdyF4ga/9KgDQrRC0xNeKKa5Mr8vwdQjvkMlkylZhVYg7cqAOa3vTU",
+	"4tdcRrbHktC1/1b8LVFGFLZiGaePT5AOSWAJoAQ0QWXsgWku0RPHM3jaMAX3Iy5nKbV4mqvSG4sj9M/p",
+	"9LvSRGbZaV6Y3FWsjEhrNyxl5NE0MxVlyvI2S1OJmfxIn/5fhpng93xVZoIjqNo6eINEv3kShimyUYdy",
+	"hQaRQGo/VDqJD8VvjsnnyxbrlTILQeWPi/unQGeplecQ2TftfouTXfOlsMrXmsU2wRgYfly2PYi7TMiS",
+	"YtODhmBR0Gm6rHRHVMnwbr/lsGrocMdz/OVgxuqH72y6NEvklUj7so+T2UoveEwJyFax+tXuRU7BNbDR",
+	"01Rm/EoltO9hNTDZ5I0KkyYWGre9pnZOv31Nrj7Glu6zwD5wkFqHlWwQmJsZ22zL7CQNfrarR2ngNxTx",
+	"7w+gcdLX6hNHqhTAllrpQLHisWYLEUOwBDN8lVoSi8dHIINnEAoBPyx+MrVJilCL73Tq/29OQTMa8Zfk",
+	"7/fm08dv2ZLD3MHjjD6QzBB1j+F2tFxgoY3z7RfzUrAHjchqd5TvV4vu/WdKNdI20rY69poeOPkd/91h",
+	"XaNlGdGTrbeSe+/LT0o9D8bbFiVkjFiujP4iSQ1WfJ1meqoPVItdkma+Jog4pq99M7oYvLfJfLVRSxxw",
+	"GEISXTzX7fGq+Zre4dHaRaWgX0HrRGTun7xDRUPzc4jRf4rt/5bw1IOCCU1FUMhbnar9CHIoJ+5MZftZ",
+	"3jfkSrjxLFWbTWuphR8LqODGKf4N8VwqIu8xBvPCSpAnByUJJjfUzqMjlGkw2arLoVrlxbbxABvHBi0L",
+	"SFDLat1g7Bbum8Yf2TyrNvDmK0n5xUE0MhscswtlycGz5CC1FXnv3nKwe4DuHtOGx1gvGZoJhREEZ7Xk",
+	"kubiTUk60bARCl9yz5hgl7nQjRGt2PnkuKku02Wr6zmbukINPxz9qT5jsm0NYtboV/FEKFsDCsmSVyoM",
+	"NUXj5433Jk4wXRlaDCj6lUJv7VS6i8QFC2zP5zZSrYv726RyIiZcBEZzUwPRddt47L6ifXxZ+uY9JOtu",
+	"SqP7lJM6WADEflGWiFJ0+M4My5TxfauQN7aPfHNS3j3IbvTtlnHvkuFoLp20UBTm3DzX59YYYNJ9Gabn",
+	"vC/Bxr8CLhZJgx2kEWm00eCeRVyXTncbVI8a2y1PW+ta7IlNuFGQD+hYB80B0SVplg51pQ33Q2GD3UgQ",
+	"IQgIN8XSW5QlXSfzufRF7bldTUzf0rFdWPX7Pq4rOr9nzPDOEYwLhO7gw8+YFo4LEYCIcpOh8xcpkZy2",
+	"mkXikzk4GI/65m7XqTlzZSvYDQ8TayOcYhze8Oinnwp4sGw75pggHqYq2YVdsCQ8ts/uc2LRi/fHuXYv",
+	"4kE61a7ZrEgUV7aFUOkSi14D1SbI60pwHfURFiqDj61J6ADNJ6tSIuNC0G5kOMkwjlANEaFmV0JEbHr5",
+	"/M1wBtVJraZ2JVxONRE8TYMTrdtswW8EvbfiMsgcHcgjLa7hFhxuRIu21gMrFp3byhMdXeyZIi8jq38i",
+	"OG23Q4VlSuiwH05Pu52ljNzf31dAGupwuGmTXxuQu3MH2ltAJpPBXwdYMTeH4QQkSFbzPFO99oTf3pfD",
+	"tWc3DOHj8VywdRVhS12tS1sC81ALvhGagZsgA/4WZSt2JeYqxgbT7Zz2V8vmyWt6siKk8HYgA7kZx/bR",
+	"LyNsYB+2i68kbOAQznJuvDov4CGuvn2qg2VhbSo6urIxPOTUtutXckxmA4TSIVb1RLQ0yMr5/VSf3xIJ",
+	"d2sC+gk90ST/PD6a+/iy58Wgq2+9tRgatpHJ4wE3/IprQRyB+ws0o6ErT0WIEqctdcNDGZBIFtnSYCsV",
+	"G50p84Arj4TWjGubJUZo3anJiG/rK2xVEqfumfvIhW87c87GBvnw0+EVietclrEg7lvZg0BAvLRL4v6w",
+	"Oj2Be/zkd/vLyo6BCIURmzN1htfdaKbundaHffZmhRD5pIoYbT26g6wM1AraF9S8et6qp8mqmNsI6K19",
+	"5ED6KYojV4kMAy/X+wY+njaOt+B6UXlfRDcyVtHSdr5dCil2V2y82FS1bFJcMzcjW6slQo9Ogye7vIqO",
+	"rMm2yBRgFNbW+Pjx44d1m/1WXC2U+kjZsJBZfN5+Ur6zL4yzgou7yx7nqjPuBrrCbK+ER4arWrD+fufz",
+	"vhJiubr/x0jdhiK4FgF7QBEjcGAFCfUt9MNcbvcSa5LXETdwbqnYKvSOgaPyzGUogq1E4Gae2bVjMroW",
+	"mjDi2rV+RJYasAGtgFw0ZiokMSrLQN/N+3LSpNDfn9aTi03jxMMdyNB3uQe/UeNPNsRW0tjjLzCAKn6Q",
+	"3S2nEv/+W47U7vfGvefD8+HsvXcxmnm98Xgyejs4AxtkSO6ba05QxUBqfpUSe4WpJyM29sCuimbaiNVR",
+	"sqLEJi67Xu98yny+4pk99Ww47T2HVOcyYm8fZbT9lwIkOk/Ov3wubbrfO/aU61N94Kd/+wVIkTyxRMhJ",
+	"HHaedk5uHiGR2lZ/T43jcCJ+7mZ/20RI+WsuGjF3yQmpuUuuclLuUn7ohT7SVDjZNSzonbtgt/TnXz7/",
+	"/wMA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
