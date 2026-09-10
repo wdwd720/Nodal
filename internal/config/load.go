@@ -384,9 +384,30 @@ func specs() []varSpec {
 		secretVar(req("CP_DATABASE_APP_URL", secDatabase, "SecretRef to the application-role Postgres URL (cp_app). Plain value only in LOCAL/TEST.",
 			"postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable",
 			setSecret(func(c *Config) *SecretRef { return &c.Database.AppURL }))),
-		secretVar(req("CP_DATABASE_MIGRATE_URL", secDatabase, "SecretRef to the migration-role Postgres URL (cp_migrate).",
+		// Required of TOOLING only, and the change is a security one (F-93).
+		//
+		// This was declared unconditionally required, so every binary that loads configuration --
+		// including the internet-facing one -- had to be given the SCHEMA OWNER
+		// credential. The owner can `ALTER TABLE ... DISABLE TRIGGER`, and since
+		// 00743-00753 every state machine in this system is enforced by triggers:
+		// the transition bindings, forbid_mutation on fifty-three append-only
+		// tables, and the eleven triggers that now write state columns the
+		// application cannot. Handing that credential to the process exposed to
+		// the internet undercuts all of them.
+		//
+		// Nothing that loads configuration reads it. `Database.MigrateURL` has no
+		// reader anywhere in the tree, and `cmd/migrate` -- the only binary that
+		// migrates -- resolves the variable from the environment itself, with its
+		// own LOCAL default and its own refusal outside LOCAL/TEST. So requiring
+		// it bought nothing and cost the credential.
+		//
+		// It stays declared and keeps its LOCAL default, so `.env.example` and
+		// `configcheck` still describe it and a developer's local tooling still
+		// works without being told about it. What changed is which binaries are
+		// made to hold it.
+		only(ServiceTooling, secretVar(req("CP_DATABASE_MIGRATE_URL", secDatabase, "SecretRef to the migration-role Postgres URL (cp_migrate). Required only of tooling; cmd/migrate reads it from the environment itself, and the internet-facing binary must not be given it.",
 			"postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane?sslmode=disable",
-			setSecret(func(c *Config) *SecretRef { return &c.Database.MigrateURL }))),
+			setSecret(func(c *Config) *SecretRef { return &c.Database.MigrateURL })))),
 		secretVar(opt("CP_DATABASE_READONLY_URL", secDatabase, "SecretRef to the read-only Postgres URL (cp_readonly). Optional; readers fall back to the app URL.", "",
 			setSecret(func(c *Config) *SecretRef { return &c.Database.ReadOnlyURL }))),
 		secretVar(opt("CP_DATABASE_OPS_URL", secDatabase, "SecretRef to the operations-role Postgres URL (cp_ops). Optional; the retention passes need it, because cp_app holds no DELETE on the rows they remove.",

@@ -279,9 +279,17 @@ func (c *Config) Validate() error {
 	if c.Database.AppURL.IsZero() {
 		add(RuleField, "Database.AppURL", "must not be empty")
 	}
-	if c.Database.MigrateURL.IsZero() {
-		add(RuleField, "Database.MigrateURL", "must not be empty")
-	}
+	// Database.MigrateURL is deliberately NOT required (F-93).
+	//
+	// It is the schema-owner credential, and the owner can DISABLE TRIGGER --
+	// which is what every state machine in this system now rests on. Requiring
+	// it here meant the internet-facing binary had to hold it, and nothing that
+	// loads configuration reads it: cmd/migrate takes it from the environment
+	// itself. A rule demanding a credential nobody uses is a rule that hands out
+	// a credential.
+	//
+	// It is still parsed when supplied, so a malformed value fails closed for
+	// whoever supplies it.
 	if c.Database.MaxConns < 1 {
 		add(RuleField, "Database.MaxConns", "must be >= 1")
 	}

@@ -189,8 +189,18 @@ services:
       # 100 CU-hour monthly allowance on nothing.
       - key: CP_DATABASE_APP_URL
         value: env://NODAL_DB_APP_URL
-      - key: CP_DATABASE_MIGRATE_URL
-        value: env://NODAL_DB_MIGRATE_URL
+      # CP_DATABASE_MIGRATE_URL is deliberately ABSENT from this service.
+      #
+      # It is the schema-owner credential, and the owner can ALTER TABLE ...
+      # DISABLE TRIGGER. Every state machine in this system is enforced by
+      # triggers -- the transition bindings, forbid_mutation on fifty-three
+      # append-only tables, and the eleven that write state columns the
+      # application cannot -- so giving it to the internet-facing process
+      # undercuts all of them (F-93).
+      #
+      # cmd/api never reads it: nothing that loads configuration does, and
+      # cmd/migrate resolves it from its own environment when an operator runs
+      # a migration.
       - key: CP_DATABASE_OPS_URL
         value: env://NODAL_DB_OPS_URL
       - key: CP_DATABASE_REQUIRE_TLS

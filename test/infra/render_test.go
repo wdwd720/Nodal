@@ -294,6 +294,47 @@ func TestRender_EveryProviderNameMatchesAnAdapter(t *testing.T) {
 //
 // Two strings that have to agree, in two languages, is the defect class this
 // register keeps recording. This is the test that makes them agree.
+// TestTheWebServiceIsNotGivenTheSchemaOwner: the credential that can turn off
+// every trigger in this system must not be in the internet-facing process.
+//
+// Since 00743-00753 the state machines are enforced by triggers rather than by
+// convention: the transition bindings, forbid_mutation on fifty-three
+// append-only tables, and the eleven that write state columns the application
+// cannot. `cp_migrate` owns those tables and an owner can
+// `ALTER TABLE ... DISABLE TRIGGER`, so a compromise of the web process holding
+// that credential would undo all of it in one statement.
+//
+// F-93 recorded that CP_DATABASE_MIGRATE_URL was declared unconditionally
+// required, which forced the blueprint to supply it. Nothing that loads
+// configuration reads it -- cmd/migrate takes it from the environment itself --
+// so the requirement bought nothing and cost the credential.
+//
+// This asserts both halves: the blueprint does not hand it over, and the
+// configuration does not ask cmd/api for it. Either alone would let the other
+// drift back.
+func TestTheWebServiceIsNotGivenTheSchemaOwner(t *testing.T) {
+	t.Parallel()
+	bp := loadBlueprint(t)
+	for _, e := range bp.Services[0].EnvVars {
+		assert.NotEqualf(t, "CP_DATABASE_MIGRATE_URL", e.Key,
+			"render.yaml gives the web service the schema-owner credential; an owner can DISABLE TRIGGER, and every state machine in this system is a trigger")
+	}
+
+	// And the configuration does not ask cmd/api for it, so the blueprint is not
+	// the only thing standing between the web process and the owner credential.
+	var found bool
+	for _, v := range config.Vars() {
+		if v.Name != "CP_DATABASE_MIGRATE_URL" {
+			continue
+		}
+		found = true
+		assert.Equalf(t, config.ServiceTooling, v.Svc,
+			"CP_DATABASE_MIGRATE_URL is required of %q; it is the schema owner and only tooling may be asked for it", v.Svc)
+		assert.True(t, v.Required, "it should still be required OF tooling; an operator running a migration needs it")
+	}
+	require.True(t, found, "CP_DATABASE_MIGRATE_URL is no longer declared at all; if it was deleted this test should be too")
+}
+
 func TestWebhookPathIsTheOneTheContractPublishes(t *testing.T) {
 	t.Parallel()
 	spec, err := os.ReadFile(filepath.Join("..", "..", "openapi", "openapi.yaml"))
