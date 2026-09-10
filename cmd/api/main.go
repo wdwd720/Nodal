@@ -184,7 +184,10 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 		return exitFailure
 	}
 
-	requestTimeout := durationEnv(lookup, envRequestTimeout, cfg.HTTP.WriteTimeout)
+	requestTimeout := cfg.API.RequestTimeout
+	if requestTimeout <= 0 {
+		requestTimeout = cfg.HTTP.WriteTimeout
+	}
 	handler := withRequestTimeout(server, requestTimeout)
 
 	httpServer := &http.Server{
@@ -233,11 +236,15 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	// handlers to return, so a transaction either commits or its own
 	// context ends and PostgreSQL rolls it back; there is no path that
 	// leaves a half-applied financial change.
-	log.Info("api draining", "timeout", durationEnv(lookup, envShutdownTimeout, defaultShutdownTimeout).String())
+	shutdownTimeout := cfg.API.ShutdownTimeout
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = defaultShutdownTimeout
+	}
+	log.Info("api draining", "timeout", shutdownTimeout.String())
 	server.StopStreams()
 
 	drainCtx, cancel := context.WithTimeout(context.Background(),
-		durationEnv(lookup, envShutdownTimeout, defaultShutdownTimeout))
+		shutdownTimeout)
 	defer cancel()
 	if err := httpServer.Shutdown(drainCtx); err != nil {
 		// The drain window expired with requests still running. Closing the

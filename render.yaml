@@ -245,6 +245,17 @@ services:
       # A name that no adapter answers to is not inert: the adapter refuses to
       # build and the capability is disabled with a WARN nobody reads. These
       # match the ProviderName constants exactly, and test/infra checks it.
+      # Condition 1 of the policy authority: a capability absent from this list
+      # is inactive whatever its gate row says, and an empty list -- the
+      # default -- disables every one of them. Naming CREDIT_PURCHASE here does
+      # NOT activate it. The capability_gates row still has to be proposed,
+      # approved and activated by three distinct principals, each with a recent
+      # step-up, against four external approval references. That is the control
+      # that decides whether this deployment may sell Credits; this line only
+      # says which capability the deployment is for.
+      - key: CP_API_ENABLED_CAPABILITIES
+        value: CREDIT_PURCHASE
+
       - key: CP_PROVIDER_CREDIT_PURCHASE_MODE
         value: sandbox
       - key: CP_PROVIDER_CREDIT_PURCHASE_NAME

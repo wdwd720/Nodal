@@ -124,7 +124,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	killChecker := killswitch.NewChecker(killswitch.Policy{})
 
-	enabledCaps := parseCapabilities(stringEnv(in.lookup, envEnabledCapabilities, ""))
+	// From the configuration, not the environment: this list is condition 1 of
+	// the policy authority, and it belongs in the hash that proves which
+	// configuration a running binary loaded.
+	enabledCaps := parseCapabilities(in.cfg.API.EnabledCapabilities)
 	gateChecker, err := gates.NewChecker(string(cfg.Env), func(c gates.Capability) bool {
 		_, ok := enabledCaps[c]
 		return ok
@@ -305,7 +308,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	hub := stream.NewHub(1024, log)
 	sse := stream.NewHandler(hub, 15*time.Second)
 
-	legalPolicy, err := legalRouterFor(cfg.Env, in.lookup)
+	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -497,8 +500,8 @@ func resolveSettlementAsset(ctx context.Context, in buildInput, repo *assets.Rep
 	chain := strings.TrimSpace(in.cfg.API.SettlementChain)
 	mint := strings.TrimSpace(in.cfg.API.SettlementMint)
 	out := httpapi.FundingSettlement{
-		Network:  stringEnv(in.lookup, envFundingNetwork, defaultFundingNetwork),
-		Currency: stringEnv(in.lookup, envFundingCurrency, defaultFundingCurrency),
+		Network:  in.cfg.API.FundingNetwork,
+		Currency: in.cfg.API.FundingCurrency,
 	}
 	if chain == "" || mint == "" {
 		if in.cfg.Env.IsProductionLike() {
@@ -814,9 +817,8 @@ func mergeExecutors(tables ...map[admin.Kind]admin.ExecFunc) map[admin.Kind]admi
 // development policy in production has misconfigured something, and starting
 // anyway with different behaviour than they asked for is how that goes
 // unnoticed.
-func legalRouterFor(env config.Environment, lookup func(string) (string, bool)) (*legalrouter.Router, error) {
-	raw, _ := lookup(envLegalPolicy)
-	name := strings.ToUpper(strings.TrimSpace(raw))
+func legalRouterFor(env config.Environment, policy string) (*legalrouter.Router, error) {
+	name := strings.ToUpper(strings.TrimSpace(policy))
 	switch name {
 	case "", "CONSERVATIVE":
 		return nil, nil

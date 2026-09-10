@@ -80,6 +80,12 @@
 //
 // API (cmd/api only; both required in STAGING/PROD):
 //
+//	CP_API_REQUEST_TIMEOUT          per-request deadline; empty takes the write timeout
+//	CP_API_SHUTDOWN_TIMEOUT         bound on draining in-flight requests
+//	CP_API_ENABLED_CAPABILITIES     comma-separated; empty disables every capability
+//	CP_API_FUNDING_NETWORK          chain the funding endpoints quote on
+//	CP_API_FUNDING_CURRENCY         currency the funding endpoints quote in
+//	CP_API_LEGAL_POLICY             CONSERVATIVE | DEVELOPMENT (refused in STAGING/PROD)
 //	CP_API_SETTLEMENT_CHAIN            chain of the USD-pegged settlement asset
 //	CP_API_SETTLEMENT_MINT             its mint address
 //

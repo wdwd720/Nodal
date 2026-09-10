@@ -293,16 +293,14 @@ func TestRateLimitsCannotBeDisabledInProduction(t *testing.T) {
 // economy can be exercised locally, and the one thing that must never happen
 // is it being loaded where real money is.
 func TestLegalRouterFor_RefusesADevelopmentPolicyInProduction(t *testing.T) {
-	dev := config.LookupFromMap(map[string]string{envLegalPolicy: "DEVELOPMENT"})
-
 	for _, env := range []config.Environment{config.EnvStaging, config.EnvProd} {
-		_, err := legalRouterFor(env, dev)
+		_, err := legalRouterFor(env, "DEVELOPMENT")
 		require.Error(t, err, "%s must refuse a development legal policy", env)
 		require.Contains(t, err.Error(), "may not be loaded")
 	}
 
 	for _, env := range []config.Environment{config.EnvLocal, config.EnvDev, config.EnvTest} {
-		r, err := legalRouterFor(env, dev)
+		r, err := legalRouterFor(env, "DEVELOPMENT")
 		require.NoError(t, err, "%s", env)
 		require.NotNil(t, r)
 		require.Equal(t, "legal-router-v1-local-development", r.Policy().Version)
@@ -314,11 +312,11 @@ func TestLegalRouterFor_RefusesADevelopmentPolicyInProduction(t *testing.T) {
 // the fail-closed conservative policy.
 func TestLegalRouterFor_DefaultsToNoDetermination(t *testing.T) {
 	for _, value := range []string{"", "CONSERVATIVE", "conservative"} {
-		r, err := legalRouterFor(config.EnvProd, config.LookupFromMap(map[string]string{envLegalPolicy: value}))
+		r, err := legalRouterFor(config.EnvProd, value)
 		require.NoError(t, err, "%q", value)
 		require.Nil(t, r, "%q must leave the policy unset so the fail-closed default applies", value)
 	}
 
-	_, err := legalRouterFor(config.EnvLocal, config.LookupFromMap(map[string]string{envLegalPolicy: "PERMISSIVE"}))
+	_, err := legalRouterFor(config.EnvLocal, "PERMISSIVE")
 	require.Error(t, err, "an unknown policy name must refuse rather than default to something")
 }

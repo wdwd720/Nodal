@@ -167,6 +167,38 @@ type APIConfig struct {
 	// stays in wire.go, because it needs the database and this does not.
 	SettlementChain string
 	SettlementMint  string
+
+	// EnabledCapabilities is the comma-separated list of capability names this
+	// deployment is permitted to run at all.
+	//
+	// It is condition 1 of the policy authority: a capability absent from it
+	// is inactive without any gate row being consulted, so this list is a
+	// control in its own right and an empty one disables everything. It was
+	// read straight from the environment, which left the single most
+	// consequential list in the deployment outside the configuration hash --
+	// it could be widened in a platform dashboard and /v1/version would report
+	// the same hash as before.
+	//
+	// Enabling a capability here does not activate it. The gate row still has
+	// to be proposed, approved and activated by three distinct principals.
+	EnabledCapabilities string
+
+	// FundingNetwork and FundingCurrency describe the onramp the funding
+	// endpoints quote in.
+	FundingNetwork  string
+	FundingCurrency string
+
+	// RequestTimeout is the per-request deadline for non-streaming routes.
+	// Zero means HTTP.WriteTimeout, which is what cmd/api defaulted to.
+	RequestTimeout time.Duration
+
+	// ShutdownTimeout bounds draining in-flight requests.
+	ShutdownTimeout time.Duration
+
+	// LegalPolicy selects the jurisdiction routing policy. A development
+	// policy in production is refused by the router itself; naming it here is
+	// what lets a configuration check see which one a deployment asked for.
+	LegalPolicy string
 }
 
 // CapacityConfig is the deployment tier's hard ceilings on financial activity.

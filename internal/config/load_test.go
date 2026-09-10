@@ -292,8 +292,12 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// rate-limit section: the backend, the replica count and the four
 	// transport budgets, which cmd/api used to read straight from the
 	// environment. The 4 is the capacity ceilings, and the 2 before it the API
-	// settlement asset.
-	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+5+7, len(seen))
+	// settlement asset -- which is now 8, because the capability list, the two
+	// funding-quote variables, the legal policy and the two API timeouts all
+	// joined it. Each of those was read straight from the environment by
+	// cmd/api, which is the one route into production that this table's whole
+	// purpose is to close; test/infra now fails if another appears.
+	assert.Equal(t, 3+8+9+2+2+4+2+5+5+4+10+2+11+14*11+4+5+7+6, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {
