@@ -270,13 +270,25 @@ func stateChangeWorks(ctx context.Context, appDSN string) error {
 		 VALUES (gen_random_uuid(), $1, 'ACTIVE', 'FROZEN', 'restore drill', 'SYSTEM', 'restoredrill')`, acct); err != nil {
 		return fmt.Errorf("write the transition row: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct); err != nil {
-		return fmt.Errorf("change the state: %w", err)
-	}
+	// No UPDATE. Since 00744 the application holds no UPDATE on accounts at all,
+	// and the transition row IS the status change: a trigger writes status,
+	// status_reason and frozen_at from the row it was given.
+	//
 	// SET CONSTRAINTS forces the DEFERRED audit trigger to run here rather than
-	// at a COMMIT this function deliberately never reaches.
+	// at a COMMIT this function deliberately never reaches. It is also the one
+	// place in this repository where the AFTER-trigger firing ORDER on the
+	// transitions table matters: the flag setters must run before the trigger
+	// that writes the status, and they do because PostgreSQL fires them in name
+	// order and "flag" sorts before "writes_the_status".
 	if _, err := tx.Exec(ctx, `SET CONSTRAINTS ALL IMMEDIATE`); err != nil {
 		return fmt.Errorf("the audit binding refused a legitimate transition: %w", err)
+	}
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM accounts WHERE id = $1`, acct).Scan(&status); err != nil {
+		return fmt.Errorf("read the status back: %w", err)
+	}
+	if status != "FROZEN" {
+		return fmt.Errorf("the transition row was written and the status is still %q", status)
 	}
 	return nil
 }

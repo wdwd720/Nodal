@@ -1677,12 +1677,12 @@ salt inside one transaction and never leaves it. And no ordering or timestamp is
 involved, so the fake clocks that sank the other two attempts cannot reach it.
 
 **What is left of this finding is the privilege work**, which is real and is now
-tracked on its own terms rather than as this finding's blocker: **ten of the
-seventeen bound tables still grant `cp_app` blanket UPDATE.** Seven do not:
+tracked on its own terms rather than as this finding's blocker: **nine of the
+seventeen bound tables still grant `cp_app` blanket UPDATE.** Eight do not:
 `capability_gates` (00701), `withdrawals`, `assets`, `instruments` and
 `payout_requests` (00733, F-109, the four whose columns are money),
-`admin_actions`, and **`credit_fundings` (00743, the first done under this
-finding rather than another).**
+`admin_actions`, and **`credit_fundings` (00743) and `accounts` (00744), the two
+done under this finding rather than another.**
 
 ### 00743 — the first of the ten, and what it cost
 
@@ -1720,7 +1720,85 @@ found by closing the control rather than by reading the fixture.
 **And one test was asserting the weaker refusal.** It required
 `AUDIT_TRANSITION_REQUIRED`; the answer is now `permission denied`. A test still
 expecting the old error would have been the thing telling us the stronger
-control had not landed. That work makes a bare state update
+control had not landed.
+
+### 00744 — the second, and the strongest form the treatment takes
+
+`accounts`, because freezing an account is the control that stops a compromised
+or abusive one, and because the rule 00743 established picked it: **count the
+state-change sites first, not the table's importance.** `accounts` has one.
+
+All three columns the update wrote — `status`, `status_reason`, `frozen_at` —
+were already carried by the transition row, so **nothing had to be derived, only
+moved**. A status change and the reason for it can no longer disagree, because
+they now come from the same row.
+
+#### The row-lock rule, which will recur on all nine remaining tables
+
+The plain REVOKE was written first, on the reasoning that
+`cost_basis_method` is never updated anywhere so nothing needed granting back.
+It broke four integration packages with:
+
+```
+accounts: lock: ERROR: permission denied for table accounts (SQLSTATE 42501)
+```
+
+**`SELECT ... FOR UPDATE` requires UPDATE privilege.** So do `FOR NO KEY
+UPDATE`, `FOR SHARE` and `FOR KEY SHARE` — all four were probed and all four are
+refused with no UPDATE grant at all. `accounts.Transition` locks the row before
+checking the transition is legal, and that lock is what turns two concurrent
+transitions into a clean CONFLICT rather than an audit row recording a
+`from_status` that was already superseded.
+
+A **column-level** grant is enough for the lock and still refuses the write,
+which was probed rather than assumed:
+
+```
+GRANT UPDATE (cost_basis_method)  ->  SELECT ... FOR UPDATE   succeeds
+                                  ->  UPDATE ... SET status   still refused
+```
+
+So the grant is there to permit a lock, not a write, and the migration says so
+in both the header and beside the statement — because a reader finding it later
+would otherwise conclude the application is meant to set that column.
+
+**00743 got this right by accident.** Its two grant-back columns happened to
+supply the same privilege, which is why `credit_fundings` passed its gate and
+`accounts` did not. Budget a column grant per table for the remaining nine, and
+say what it is for.
+
+**The drill caught the change, which is what it is for.** Its probe issued an
+`UPDATE accounts SET status` after writing the transition row, and that is now
+`permission denied`. The probe asserts the status changed rather than changing
+it — and it remains the one place in this repository that would catch a wrong
+trigger NAME, because it forces the deferred check immediate, where the flag
+setters must have run first.
+
+**The counting rule has a limit worth knowing before trusting it.** `agents` is
+next by site count (one) and writes seven columns in that statement, including
+the promotion evidence. A site count is a lower bound on the work, not an
+estimate of it.
+
+#### What the test fallout was, and it is larger than 00743's
+
+Twenty sites in the migrations suite drove a bare `UPDATE accounts SET status`
+to prove AU001 fires. cp_app can no longer issue one, so they were answered
+`permission denied` and stopped measuring the binding. **They now run as the
+migration role**, which retains table-level UPDATE and is still refused by the
+deferred trigger — verified before rewiring them. That is not a weakening: the
+owner is the only role left that CAN write the column, which makes it the only
+one on which the binding is still what is being measured. That `cp_app` is
+refused outright is asserted separately, because a single test passing for
+either reason would not say which.
+
+**And one subtest's premise stopped existing.** "Two rows do not license a jump
+that skips the middle" wrote two transition rows and then a single UPDATE to the
+final state. Since the trigger applies each row as it is inserted, writing both
+rows walks both steps and there is no separate act of moving the entity left for
+a caller to aim elsewhere. The jump is not refused, it is **inexpressible**. The
+subtest now asserts that both steps were walked and that the trail describes
+exactly them, in order — because asserting the old AU001 would have been
+asserting that a weaker control was still in place. That work makes a bare state update
 impossible rather than unforgeable, which is strictly stronger — but the claim
 this finding was raised about is now true.
 

@@ -191,8 +191,8 @@ reproduced against a real PostgreSQL 16 before and after);
 
 | | |
 |---|---|
-| Migration head | **`00743_a_funding_state_is_not_the_applications_to_write.sql`** |
-| Migration files | **75** |
+| Migration head | **`00744_an_account_status_is_not_the_applications_to_write.sql`** |
+| Migration files | **76** |
 | Tables | **120**, plus **14 partitions** of `security_events` |
 | CHECK constraints | 462 declared on parents |
 
@@ -220,7 +220,7 @@ Every tier below was re-run at `54ed595`, the last commit that changes code or s
 | `go run ./scripts/inttest` | **51 packages, one fresh database each, all passed, 11m22s** |
 | `go run ./scripts/fuzzall -fuzztime=10s` | **29 targets, 0 failed** |
 | `go test ./internal/archive/ -fuzz FuzzParseKey -fuzztime=45s` | pass, 68,139 execs, no new failures |
-| `go run ./scripts/restoredrill` | **OK, at version 743, including a live state change on the restored database** |
+| `go run ./scripts/restoredrill` | **OK, at version 744, including a live state change on the restored database** |
 | `go run ./scripts/fmtcheck .` | ok |
 | `go run ./scripts/tool golangci-lint run` | 0 issues |
 | `go run ./scripts/lintfin` | 0 findings |
@@ -348,7 +348,7 @@ name cannot forge a transition edge (F-101).
 | Race detector | Cannot link on this host. Rests entirely on CI. | See F-125 |
 | The audit binding cannot be forged | Fixed (F-42, F-128). The transition flag is a keyed tag over a secret no role but the owner can read, salted with the top-level transaction id, and EXECUTE on every function that touches it is revoked from PUBLIC. Seventeen audited tables. | `REAL_DB_INTEGRATION` |
 | `security_events` retention | Fixed (F-105). Partitioned by month; retention is partition detachment, never row deletion, and the immutability trigger is unchanged for every role including the owner. | `REAL_DB_INTEGRATION` |
-| A state column the application cannot write at all | **Done for seven of seventeen tables, ten remain.** F-42's stronger remedy: privilege beats detection. `credit_fundings` was done first (00743) because its forgery costs money — the refusal there moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied` at the statement, and the money stamps moved into the transition with it. | `REAL_DB_INTEGRATION` for the seven; open for the ten |
+| A state column the application cannot write at all | **Done for eight of seventeen tables, nine remain.** F-42's stronger remedy: privilege beats detection. `credit_fundings` (00743) because its forgery costs money, then `accounts` (00744) because freezing is the control that stops an abusive one. The refusal moved from `AUDIT_TRANSITION_REQUIRED` at COMMIT to `permission denied` at the statement, and on `accounts` the only grant left exists to permit a row lock rather than a write. | `REAL_DB_INTEGRATION` for the eight; open for the nine |
 
 Eighteen files under `test/security/` cover authority boundaries, dual control,
 idempotency abuse and break scanning, and run as part of the 51-package
@@ -361,7 +361,7 @@ integration tier.
 Run at `54ed595`:
 
 ```
-restoredrill: boot: version source=743 restored=743 verify=ok
+restoredrill: boot: version source=744 restored=744 verify=ok
 restoredrill: reconciliation dry-run: tables=134 rowcounts_match=true
               balance_drift_accounts=0 journal_hash_match=true
 restoredrill: state change on the restored database: ok
@@ -597,7 +597,8 @@ The next four pieces of software work, in the order they are worth doing:
    own tests, and it wants a session that starts with it rather than one that
    reaches it.
 
-   **`credit_fundings` is done (00743) and is the worked example to copy.** The
+   **Two are done and are the worked examples to copy: `credit_fundings`
+   (00743) and `accounts` (00744).** The
    AFTER INSERT trigger on the transitions table performs the state change as
    SECURITY DEFINER; the application keeps UPDATE on `lot_id` and
    `provider_reference` and nothing else; the money stamps moved into the
@@ -606,12 +607,31 @@ The next four pieces of software work, in the order they are worth doing:
    assertion had to move, and the pattern of what breaks is in the register
    under F-42.
 
-   **`kill_switches` is deliberately not next.** It looks smaller and is not:
+   **Two rules were paid for and should not be rediscovered.**
+
+   *The row-lock rule.* `SELECT ... FOR UPDATE` requires UPDATE privilege, and
+   so do all three other row-lock modes. Every one of these transitions locks
+   the row before checking legality, so a plain REVOKE breaks the lock — it broke
+   four integration packages on `accounts`. A **column-level** grant restores the
+   lock and still refuses the write. Budget one column grant per table, and say
+   in the migration that it is for the lock, or a later reader will think the
+   application is meant to write it. 00743 got this right by accident, because
+   its two grant-back columns happened to supply the privilege.
+
+   *The test-fallout rule.* Tests that prove the audit binding by driving a bare
+   update must move to the migration role, which can still write the column and
+   is still refused by the trigger. Tests that prove a legitimate transition
+   should drop their UPDATE entirely, because the transition row is now the
+   change. And watch for a subtest whose premise stops existing rather than
+   failing.
+
+   **Pick the next table by counting its state-change sites, and treat that as a
+   lower bound rather than an estimate.** `kill_switches` has one and is a trap:
    `saveSwitch` writes `active` together with six other columns under optimistic
    concurrency (`WHERE version = $11 RETURNING version`), so moving one column
-   into a trigger breaks the version check and the returned row at once. Pick
-   the next table by counting its state-change sites first — that number, not
-   the table's importance, is what the work costs.
+   into a trigger breaks the version check and the returned row at once.
+   `agents` also has one, writing seven columns including the promotion
+   evidence.
 2. **An alert destination and something on a timer** (F-118). Everything up to
    the destination is built.
 3. **Birth control for `wallets`, `assets` and `instruments`** (F-122 residual).

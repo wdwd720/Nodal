@@ -260,16 +260,18 @@ func (r *Repository) Transition(ctx context.Context, tx pgx.Tx, accountID Accoun
 		id.New[id.Any](), accountID, cur.Status, ch.To, ch.ActorType, ch.ActorID, ch.Reason, ch.CorrelationID, now.UTC()); err != nil {
 		return Account{}, fmt.Errorf("accounts: record transition: %w", err)
 	}
-	var frozenAt *time.Time
-	if ch.To == StatusFrozen {
-		t := now.UTC()
-		frozenAt = &t
-	}
+	// The INSERT above IS the status change. 00744 revoked UPDATE on accounts
+	// from cp_app entirely -- there is no column it may write -- and the trigger
+	// on account_status_transitions has already written status, status_reason
+	// and frozen_at from the row by the time control returns here.
+	//
+	// All three were already carried by the transition row, so nothing was
+	// derived, only moved. What that buys is that a status change and the reason
+	// for it can no longer disagree: they come from the same row.
 	updated, err := scanAccount(tx.QueryRow(ctx,
-		`UPDATE accounts SET status = $2, status_reason = $3, frozen_at = CASE WHEN $2 = 'FROZEN' THEN $4 ELSE frozen_at END WHERE id = $1 RETURNING `+accountColumns,
-		accountID, ch.To, ch.Reason, frozenAt))
+		`SELECT `+accountColumns+` FROM accounts WHERE id = $1`, accountID))
 	if err != nil {
-		return Account{}, fmt.Errorf("accounts: update status: %w", err)
+		return Account{}, fmt.Errorf("accounts: read back status: %w", err)
 	}
 	return updated, nil
 }

@@ -50,8 +50,12 @@ func TestIntegration_ATransitionRowCannotDenyTheChangeItLicenses(t *testing.T) {
 		require.NoError(t, err)
 		return accountID
 	}
+	// See the note above: the bare update runs as the owner, the only role that
+	// can still write accounts.status and therefore the only one on which the
+	// audit binding is still what is being measured.
+	owner := connect(t, migrateURL)
 	inTx := func(fn func(tx pgx.Tx) error) error {
-		tx, err := app.Begin(ctx)
+		tx, err := owner.Begin(ctx)
 		require.NoError(t, err)
 		if err := fn(tx); err != nil {
 			_ = tx.Rollback(ctx)
@@ -106,24 +110,44 @@ func TestIntegration_ATransitionRowCannotDenyTheChangeItLicenses(t *testing.T) {
 		assert.Equal(t, "ACTIVE", statusOf(acct))
 	})
 
-	t.Run("two rows do not license a jump that skips the middle", func(t *testing.T) {
+	t.Run("two rows walk both steps and cannot be made into a jump", func(t *testing.T) {
+		// This subtest changed shape in 00744 and the change is the point.
+		//
+		// It used to write two transition rows and then a single UPDATE to the
+		// final state, which under 00712's membership-over-DESTINATIONS was
+		// allowed: 'FROZEN' was flagged, so a jump the trail did not describe
+		// committed. 00731's edge form refused it, and this asserted the AU001.
+		//
+		// Since 00744 the jump is not refused, it is INEXPRESSIBLE. The trigger
+		// applies each row as it is inserted, so writing both rows walks both
+		// steps; there is no separate act of "moving the entity" left for a
+		// caller to aim somewhere else. A property that cannot be violated is
+		// stronger than one that is caught, and asserting the old error here
+		// would now be asserting that a weaker control is still in place.
 		acct := newAccount()
-		err := inTx(func(tx pgx.Tx) error {
-			// This is 00712's widening: under membership over DESTINATIONS,
-			// 'FROZEN' is flagged and the single update to FROZEN was allowed,
-			// while the trail claims two steps the entity never took.
+		require.NoError(t, inTx(func(tx pgx.Tx) error {
 			if err := transition(tx, acct, "ACTIVE", "RESTRICTED", "step one"); err != nil {
 				return err
 			}
-			if err := transition(tx, acct, "RESTRICTED", "FROZEN", "step two"); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct)
-			return err
-		})
-		require.Error(t, err, "two rows licensed a jump neither of them describes")
-		assert.Equal(t, "AU001", db.SQLState(err), "got %v", err)
-		assert.Equal(t, "ACTIVE", statusOf(acct))
+			return transition(tx, acct, "RESTRICTED", "FROZEN", "step two")
+		}), "two honest steps must commit")
+		assert.Equal(t, "FROZEN", statusOf(acct), "the entity did not walk both steps")
+
+		// And every step it took is on the record, in order.
+		var steps []string
+		rows, err := owner.Query(ctx,
+			`SELECT from_status || '>' || to_status FROM account_status_transitions
+			  WHERE account_id = $1 ORDER BY occurred_at, id`, acct)
+		require.NoError(t, err)
+		for rows.Next() {
+			var e string
+			require.NoError(t, rows.Scan(&e))
+			steps = append(steps, e)
+		}
+		rows.Close()
+		require.NoError(t, rows.Err())
+		assert.Equal(t, []string{"ACTIVE>RESTRICTED", "RESTRICTED>FROZEN"}, steps,
+			"the trail must describe exactly the steps the entity took")
 	})
 
 	// F-101. The two above are forgeries the edge CHECK refuses. These two are

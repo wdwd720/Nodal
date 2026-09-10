@@ -57,7 +57,14 @@ func TestIntegration_TheTransitionFlagCannotBeSetByHand(t *testing.T) {
 	app := connect(t, appURL)
 	acct := seedAccount(ctx, t, app)
 
-	tx, err := app.Begin(ctx)
+	// The forgery is driven as the OWNER since 00744, because cp_app can no
+	// longer write accounts.status at all and would be refused by privilege
+	// before the flag was ever consulted. The owner is the strongest role that
+	// can still write the column, so it is the one on which "the flag cannot be
+	// set by hand" is still the thing being measured. That cp_app is refused
+	// outright is asserted separately, below.
+	owner := connect(t, migrateURL)
+	tx, err := owner.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -80,6 +87,13 @@ func TestIntegration_TheTransitionFlagCannotBeSetByHand(t *testing.T) {
 	var status string
 	require.NoError(t, app.QueryRow(ctx, `SELECT status FROM accounts WHERE id = $1`, acct).Scan(&status))
 	assert.Equal(t, "ACTIVE", status)
+
+	// And the application cannot even get as far as the flag: 00744 took the
+	// column away from it. Detection and privilege, asserted separately, because
+	// a single test that passed for either reason would not say which.
+	_, err = app.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct)
+	require.Error(t, err, "cp_app can still write accounts.status")
+	assert.Contains(t, err.Error(), "permission denied")
 }
 
 // Forgery two, which F-42 does not record and which is the reason a fix that
@@ -191,12 +205,15 @@ func TestIntegration_ATransitionFlagDoesNotOutliveItsTransaction(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, migrate.Up(ctx, migrateURL))
 	app := connect(t, appURL)
+	owner := connect(t, migrateURL)
 	acct := seedAccount(ctx, t, app)
 	setting := settingName("cp.edge.", "accounts", acct)
 
 	// T1: go ACTIVE -> FROZEN legitimately, keeping the flag it produced.
+	// Driven as the owner throughout: the replay in T3 is a bare update, which
+	// cp_app cannot issue at all since 00744.
 	var captured string
-	tx, err := app.Begin(ctx)
+	tx, err := owner.Begin(ctx)
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `INSERT INTO account_status_transitions (id, account_id, from_status, to_status, reason, actor_type, actor_id)
 		VALUES ($1, $2, 'ACTIVE', 'FROZEN', 'legit', 'SYSTEM', 'p')`, id.New[id.Any](), acct)
@@ -208,7 +225,7 @@ func TestIntegration_ATransitionFlagDoesNotOutliveItsTransaction(t *testing.T) {
 	require.NotEmpty(t, captured, "the setter wrote nothing to capture")
 
 	// T2: back to ACTIVE legitimately, so the same edge is available again.
-	tx, err = app.Begin(ctx)
+	tx, err = owner.Begin(ctx)
 	require.NoError(t, err)
 	_, err = tx.Exec(ctx, `INSERT INTO account_status_transitions (id, account_id, from_status, to_status, reason, actor_type, actor_id)
 		VALUES ($1, $2, 'FROZEN', 'ACTIVE', 'legit', 'SYSTEM', 'p')`, id.New[id.Any](), acct)
@@ -218,7 +235,7 @@ func TestIntegration_ATransitionFlagDoesNotOutliveItsTransaction(t *testing.T) {
 	require.NoError(t, tx.Commit(ctx))
 
 	// T3: replay T1's flag for exactly the edge it described, with no row.
-	tx, err = app.Begin(ctx)
+	tx, err = owner.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = tx.Exec(ctx, `SELECT set_config($1, $2, true)`, setting, captured)
@@ -266,8 +283,9 @@ func TestIntegration_ALegitimateTransitionSurvivesSavepoints(t *testing.T) {
 				_, err = tx.Exec(ctx, `SAVEPOINT b`)
 				require.NoError(t, err)
 			}
-			_, err = tx.Exec(ctx, `UPDATE accounts SET status = 'FROZEN' WHERE id = $1`, acct)
-			require.NoError(t, err)
+			// No UPDATE. Since 00744 the transition row IS the status change,
+			// so what this test now proves is that the tag survives a
+			// subtransaction on the path the application actually takes.
 			_, err = tx.Exec(ctx, `RELEASE SAVEPOINT `+map[bool]string{true: "b", false: "a"}[tc.split])
 			require.NoError(t, err)
 
