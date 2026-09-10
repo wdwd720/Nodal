@@ -1740,6 +1740,14 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
+`docs/audit/FINAL_CHECKPOINT_2026-09-10.md` is the seventeen-item final output
+for this session: HEAD, findings, schema, every test tier with its result, live
+staging evidence, provider evidence classified, the financial invariants, the
+restore drill, the $0 tier's ceilings, AWS readiness, the capability gate, the
+external blockers, the five launch flags, the human actions and where to resume.
+Read it before this file if you want the state; read this file for how it got
+there.
+
 `docs/audit/AUDIT_FINDINGS.md` is the register: **126 findings**, of which four
 are open (F-42, F-47, F-69, F-93), one is open as a host limitation (F-125),
 five are partial (F-65, F-84, F-95, F-105, F-118) and the rest are fixed.
