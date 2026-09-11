@@ -197,7 +197,14 @@ net amount and the destination from the recorded quote, and the sanctions
 screen, restrictions and jurisdiction block inside the reserving transaction.
 Earned Credits now settle when what paid for them settles (F-230, D-124,
 00809), so the conversion request is reachable for the origins the sandbox
-policy permits. Round two of the area's audit is running.
+policy permits. **Round two of the area's audit did not flatten:** eleven
+findings, four P1 again, six of them in round one's remediation — above all
+that a derived lot inherited finality but not origin, so a promotional grant
+could be traded into withdrawable proceeds (§23's forbidden pattern), and
+that the pool's FIFO draw-down handed a reversible purchase an earlier
+contributor's settled provenance. `fix/withdrawal-2` (an origin floor
+inherited with finality, D-131; the pool drawn down worst-first, D-132) is
+in progress and a third audit round follows it *(pending)*.
 
 ## 13 · Conversion
 
@@ -261,9 +268,11 @@ that had not written the area. Wave B: withdrawal-verification 11 (4 P1) →
 6 (1 P1, the same defect as the withdrawal audit's F-wv-3, and 5 P3) → two
 fixed on `productization` (F-251, F-252), one to each fix branch (F-250,
 F-253), one duplicate, one closed by the auditor's own test landing. Both
-wave-B fix branches are merged (F-224–F-250, F-253); the withdrawal area's
-second audit round is running *(pending)*; the agents gap (F-255–F-258) is
-being built. Current open: the wave-B findings until their branches merge
+wave-B fix branches are merged (F-224–F-250, F-253); the agents gap is closed
+(F-255–F-257, F-258 a residual). The withdrawal area's second round found 11
+(4 P1, 4 P2, 3 P3; `F-wv2-n`, register numbers F-259–F-269 on
+`fix/withdrawal-2`) and did **not** flatten; the third round is next
+*(pending)*. Current open: the wave-B findings until their branches merge
 *(pending)*. The register: `docs/audit/AUDIT_FINDINGS.md`; the P0/P1 list:
 `docs/audit/LAUNCH_GATE_MATRIX.md` "What the productization wave changed".
 
