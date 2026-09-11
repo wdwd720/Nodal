@@ -372,9 +372,19 @@ and `data.changed` (D-071).
 |---|---|
 | `00781_a_notification_is_a_fact_of_the_transaction_that_caused_it.sql` | `notifications`: kind CHECK widened to 21 values (13 product + 8 inherited from 00640), `sandbox boolean` added, `notifications_user_kind_idx`, the immutability guard widened to `severity`, `sandbox`, `resource_type`, `resource_id` |
 | `00782_a_user_may_decline_a_kind_of_notification.sql` | `notification_preferences (user_id, kind, channel, enabled, updated_at)`, PK `(user_id, kind, channel)`, `channel` CHECK admits `IN_APP` and nothing else |
-| `00783_a_follower_remembers_where_it_stopped.sql` | `notification_follower_cursors (source, last_at, last_id, pending_at, emitted, updated_at)` — the in-process follower's position per source |
+| `00783_a_follower_remembers_where_it_stopped.sql` | `notification_follower_cursors (source, last_at, last_id, pending_at, emitted, updated_at)` — the in-process follower's position per source; `pending_at` dropped again by 00803 |
 
 Schema is at migration **783** after this batch.
+
+### The audit fixes on top of it (2026-09-10)
+
+| Migration | Change |
+|---|---|
+| `00801_a_notification_carries_the_instant_it_became_visible.sql` | `notifications.inserted_at timestamptz NOT NULL DEFAULT clock_timestamp()` (backfilled from `created_at`), `notifications_user_inserted_idx (user_id, inserted_at, id)`, the immutability guard widened to the new column. `Last-Event-ID` resume filters on it: `created_at` is the occurrence and was skipping every row the lap wrote (F-186, D-104) |
+| `00802_an_agent_names_a_version_of_the_strategy_it_names.sql` | `strategy_versions` UNIQUE `(strategy_id, id)`; `agents` composite FK `(strategy_id, strategy_version_id)` → `strategy_versions (strategy_id, id)`, MATCH SIMPLE so a DRAFT agent with no version stays legal (F-187, D-105) |
+| `00803_two_capabilities_the_grants_claimed_and_the_table_refuses.sql` | REVOKE SELECT and DELETE on `notifications` from `cp_readonly` and `cp_ops` (ADR-0021 §4; the DELETE was refused by the table's own guard anyway); `notification_follower_cursors.pending_at` dropped — written and cleared in one transaction, so no session could ever observe it (F-188, F-191, D-106) |
+
+Schema is at migration **803** after the fixes.
 
 ### Packages
 

@@ -159,6 +159,14 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
+| F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
+| F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
+| F-188 | P2 | PRODUCTIZATION | fixed | A sign-in's IP address and User-Agent were copied into the one table nothing can purge, readable by both analytics roles |
+| F-189 | P3 | PRODUCTIZATION | fixed | A compiler backend's answer was written verbatim, including whose strategy it was under and whether anybody had accepted it |
+| F-190 | P3 | PRODUCTIZATION | fixed | Every data.changed signal in the lap was republished on every pass, a broadcast one to every connected client |
+| F-191 | P3 | PRODUCTIZATION | fixed | Two documented mechanisms the code does not implement: an in-flight marker nothing can observe, and a comment outlived by its subject |
+| F-192 | P3 | PRODUCTIZATION | fixed | The market-pause fan-out was bounded only by a capacity variable that may be zero |
 
 ---
 
@@ -7456,3 +7464,307 @@ transaction. No product behaviour was wrong.
 before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
+
+## F-185 · Any authenticated person could end the API process by closing a stream · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the agents-notifications adversarial audit (goal §54), reproduced
+on `audit/agents-notifications` @ `8a69aaa`.
+
+`Hub.Publish` snapshots its subscribers under `h.mu`, releases the lock, and
+then sends on each `Subscriber.ch`. `Hub.Unsubscribe` — which every SSE request
+runs on its way out (`defer h.hub.Unsubscribe(sub)`) — closed that same channel
+under the lock. A send on a closed channel panics, and the panic lands in the
+**publishing** goroutine, which in `cmd/api` is the notification follower's
+ticker. Nothing recovers it: one free instance, one process, gone.
+
+The window is not exotic. It is open for the whole 50ms grace whenever a
+subscriber's buffer is full, and for the length of one channel send otherwise,
+on every publish to every departing client. A person with a browser tab and a
+reload key needs no privilege beyond having an account.
+
+**Fix.** The channel a publisher sends on is never closed, by anybody. A
+`Subscriber` gains `done`, closed exactly once by `Unsubscribe` **after** the
+subscriber has left the hub's map, so a publish that started earlier is released
+and one that starts later cannot see it at all. `Publish` selects on the send,
+on `done`, and on a single timer reset per subscriber — replacing a `time.After`
+per subscriber per publish, each of which held a runtime timer for the full
+grace even when the send succeeded. The slow-consumer drop, which used to be
+signalled by closing the channel, is now an explicit flag the SSE loop reads to
+decide whether the client is told to resync. Commit 3a5f99f.
+
+**Evidence.** TEST_UNIT: `TestAuditAgnot_PublishSurvivesASubscriberDisconnectingMidSend`
+(the auditor's reproduction, inverted — Publish must return, having delivered
+nothing, and must not panic), `TestAuditAgnot_PublishRacesAnOrdinaryDisconnect`
+(2,000 connect/disconnect cycles against a live publisher),
+`TestHub_SlowSubscriberDropped` (the property is unchanged: one stalled client
+cannot back-pressure the publisher). RACE_DETECTOR: `go test -race
+./internal/stream/` passes on this host with `CC=C:/toolchain/mingw64/bin/gcc.exe`,
+a GCC whose path has no space — F-125 records why the default one cannot link,
+and this is the first race claim in this repository checked from this desk.
+
+## F-186 · Three clocks for one notification, and the resume compared two of them · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit.
+
+A notification had three instants and the resume path treated them as one:
+
+- `notifications.created_at` is the **occurrence** — `Producer.Emit` binds it to
+  `Notification.OccurredAt`, which the follower copies from the source row. A
+  capture from five minutes ago that the follower writes now is stamped five
+  minutes ago.
+- the id a **live** event carries is assigned by `Hub.Publish` from the hub's
+  clock: the instant the pass published it.
+- `notifications.Since` — the durable half of `Last-Event-ID` — answered with
+  `created_at > since`, comparing the second against the first.
+
+So a client whose last live event was published at P asked for everything after
+P, and every notification whose occurrence sat at or before P but which was
+**written** after it was never returned. That is every row the two-minute lap
+picks up and every row from the tick the client was away for. `sse.go` then
+skipped the buffer's copies of the same notifications because the hook had
+"succeeded", so the in-memory replay did not cover it either. The person is
+never told, and nothing anywhere reports a failure.
+
+**Fix (D-104).** Migration 00801 adds `notifications.inserted_at` — when the row
+became a fact, from `clock_timestamp()`, immutable under the guard, indexed as
+`(user_id, inserted_at, id)` — and `Since` filters and orders on it. A replayed
+event's id encodes the same instant, so a client that disconnects mid-replay
+resumes from where it got to instead of being sent backwards to an occurrence
+five minutes old. The buffer's notifications are replayed alongside the table's
+rather than suppressed: the live id is a third clock that always sits at or
+after the insert, and the overlap between them is exactly the gap a person falls
+into. A notification delivered twice costs the client one query invalidation.
+Commit 18657cf.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestAuditAgnot_LastEventIDSkipsNotificationsWrittenBehindThePublishInstant`
+(the auditor's reproduction, unchanged),
+`TestIntegration_NotificationResumeReadsTheTableNotTheBuffer` and
+`TestIntegration_SinceIsOldestFirstAndReportsTruncation`, both of which now
+resume from an insert instant and assert that a cursor past every occurrence
+still misses nothing.
+
+## F-187 · An agent was granted authority over a strategy version its owner never owned, named or accepted · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit.
+
+`agents.Service.Create` validated that `StrategyID` and `StrategyVersionID` were
+non-empty, and nothing else. Three consequences, each proven separately:
+
+1. **Somebody else's strategy.** A stranger could create an agent on their own
+   account bound to the owner's private compiled version. The `agent_grants` row
+   — the document an audit of "what did this person agree to" reads — recorded
+   authority over IR the grantor cannot read. Goal SS18 requires the compiled
+   strategy to be the thing the owner READ and APPROVED before anything is
+   activated; ADR-0029 says an agent "is created only from" a compiled version.
+2. **A version of a different strategy.** `agents` carries two independent
+   foreign keys and had no consistency check between them, so `strategy_id` and
+   `strategy_version_id` could name two different strategies and every read that
+   joined through either key answered a different story.
+3. **A version nobody accepted.** `strategy_versions.accepted_by_user_id` /
+   `accepted_at` is the schema's only record of the approval step, and `Create`
+   read neither column.
+
+**Fix (D-105).** `Create` loads the version with its strategy inside the
+transaction that writes the agent and the grant, `FOR SHARE` on both rows, and
+refuses unless the strategy's owner is the requesting account, the version
+belongs to the named strategy, and the version is ACCEPTED with a non-null
+acceptance. The first two answer NOT_FOUND, identically, so the refusal is not
+an oracle about somebody else's strategy; the third answers
+INVALID_STATE_TRANSITION, because the version is the caller's own and what is
+missing is the approval. Migration 00802 adds `UNIQUE (strategy_id, id)` on
+`strategy_versions` and a composite foreign key from `agents (strategy_id,
+strategy_version_id)`, so a writer that is not this service cannot record the
+mismatch either; MATCH SIMPLE keeps a DRAFT agent with no version legal.
+
+The audit's note about the ownership helpers is fixed with it:
+`agents.ownerActor`, `requireOwnership` and the strategy equivalents used
+`security.RequireAccount`, which admits `account:read_any` — a READ capability —
+and now use `RequireAccountOwner`. `Act`, `Get` and reading somebody else's
+strategy answer NOT_FOUND rather than FORBIDDEN, so a stranger cannot tell a
+real id from a guessed one. Commit ef38244.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestAuditAgnot_AnAgentCannotBindToAnotherAccountsStrategyVersion`,
+`TestAuditAgnot_TheStrategyVersionMustBelongToTheStrategy` (which also drives
+the composite foreign key directly, as the application role, and reads back
+SQLSTATE 23503), `TestAuditAgnot_AnAgentIsRefusedFromANeverAcceptedVersion`
+(refused, then accepted, then allowed — so the refusal is about the approval and
+nothing else), `TestIntegration_OnlyTheOwnerActsOnTheirAgent`,
+`TestIntegration_AStrangerCannotReadOrCompileSomebodyElsesStrategy`.
+
+## F-188 · A sign-in's IP address and User-Agent were copied into the one table nothing can purge · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit.
+
+The follower copied `security_events.ip` and `user_agent` verbatim into
+`notifications.data`. The two tables have opposite retention properties, and
+that is the whole finding:
+
+- `security_events` is partitioned by month **so that a month can be DROPped**
+  (00740), and `cmd/api`'s retention pass drops them.
+- `notifications` refuses DELETE from every role including the table's owner
+  (`notifications_guard`, SQLSTATE LG003), and no retention pass anywhere names
+  it. `cp_readonly` and `cp_ops` both held SELECT on it.
+
+So a person's address and a fingerprintable header were copied out of the place
+built to forget them into the place that cannot, where two analytics roles could
+read them forever. And `privileges_test.go` listed `notifications` under
+`opsHousekeeping` — "the only tables the operations role may DELETE from:
+transient records whose retention is an operational policy" — asserting a
+retention capability the table's own trigger refuses. A grant nobody can
+exercise, asserted by a test, is the shape of a control that reports success
+having done nothing.
+
+**Fix (D-106).** The notification carries a /24 (or /48 for IPv6) locality,
+masked **in SQL** so the exact address never enters the process, a two-word
+device summary parsed from the User-Agent (browser and platform; no version, no
+build, no device model), and `exact_address_at: /v1/me/audit` — the caller's own
+security trail, which serves the exact address and can be dropped. Nothing is
+lost; it is read from the copy that has a retention policy. Migration 00803
+revokes SELECT from `cp_readonly` and `cp_ops` under ADR-0021 §4 ("a new table
+holding personal data joins that list and gets its own REVOKE"), and revokes the
+unusable DELETE with it; `opsHousekeeping` no longer claims it. Commit b55fd7c.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestAuditAgnot_ALoginsIPAddressDoesNotLandInATableNothingCanPurge` (the
+auditor's reproduction, inverted — no `ip`, no `user_agent`, a /24 prefix, the
+exact address still in `security_events`, neither role holding SELECT or DELETE,
+and the guard still refusing the owner's DELETE, which is why the content is
+bounded), `TestIntegration_ANewSessionTellsThePersonWhoSignedIn`,
+`TestIntegration_ApplicationRolePrivileges`. TEST_UNIT:
+`TestDeviceSummary_NamesTheBrowserAndThePlatformAndNothingElse`,
+`TestNewSessionBody_AlwaysSaysWhereTheExactAddressIs`.
+
+## F-189 · A compiler backend's answer was written verbatim, including whose strategy it was under · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+`StrategyService.persist` wrote whatever the `CompilerBackend` returned.
+`CompilerBackend` is a declared seam — ADR-0029 names it, `*strategy.Compiler`
+satisfies it today, and whatever a later deployment wires satisfies it tomorrow
+— so the backend could return a version naming a **different account's**
+strategy, at a version number nobody reserved, already `ACCEPTED`, with an
+`ir_hash` that describes no document, and this service would insert it and point
+the victim's strategy at it. Attempts were unchecked in the same way.
+
+P3 rather than P2 because today's only backend is `*strategy.Compiler`, which
+does not lie. The finding is about what the seam admits, and a seam is a
+contract with whoever arrives next.
+
+**Fix.** `checkVersion` refuses a version whose `StrategyID` is not the strategy
+that was compiled, whose `Version` is not the number `nextVersionNumber`
+reserved, whose `Status` is not `COMPILED` (ACCEPTED is the record of a **person**
+approving, and a backend that could set it would be approving on the user's
+behalf), or whose `IRHash` is not `ir.SemanticHash` of the IR it came with.
+`checkAttempt` refuses an attempt at another strategy or numbered outside
+1..`HardMaxAttempts`. Both run before the transaction opens. What a backend is
+trusted for is the IR; every identifier around it is this service's. Commit
+ef38244.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestAuditAgnot_ACompilerBackendCannotWriteAVersionUnderSomebodyElsesStrategy`,
+which drives a lying backend through all four refusals one at a time, asserts
+nothing was written and the victim's `current_version_id` is untouched, and then
+proves the control is not blanket by compiling the honest version successfully.
+
+## F-190 · Every data.changed signal in the lap was republished on every pass · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+`runSource` appended `c.Signal` unconditionally while the notifications it
+travelled with were deduplicated by the unique index. The follower re-reads a
+two-minute lap on every pass, so one fill's invalidation signals were broadcast
+once per pass for the whole lap — eight times at the fifteen-second tick — and a
+market pause's signal, which is `Broadcast`, went to **every connected client**
+eight times rather than once.
+
+**Fix.** A change's signals are collected only when at least one of its
+notifications was created: the `Created` branch is already the branch that
+decides whether anybody is told at all, which is the same question a "this is
+now stale" signal answers. One `if`, kept deliberately small because
+`fix/platform` is changing the cursor logic in the same function. Commit
+84ccd7d.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestAuditAgnot_TheLapRepublishesTheSameSignalsEveryPass` (the auditor's
+reproduction, whose assertions were already written in the fixed direction),
+`TestIntegration_TheFollowerNotifiesOnceForACapturedPurchase`.
+
+## F-191 · Two documented mechanisms the code does not implement · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+**(a) An in-flight marker nothing can observe.** Migration 00783 gave
+`notification_follower_cursors` a `pending_at` column and said it "is written
+BEFORE the notifications of a pass are committed and cleared after, so a crash
+between reading and emitting leaves the earlier position on record". Both
+sentences are true of the code and the mechanism they describe does not exist:
+`markPending` and `saveCursor` run in the **same transaction** as the emits, so
+no other session can ever observe a non-NULL `pending_at`, and a crash rolls the
+write back with everything else. The recovery it claims is really provided by
+the transaction and by the dedup key, which is what 00783's own closing argument
+says. The only reader of the column was a test asserting it is NULL.
+
+**(b) A comment that outlived its subject by forty lines.** `cmd/api/wire.go`
+still said "No producer is attached: the event bus adapter lives in a package
+this binary does not yet depend on, so the stream carries heartbeats only until
+it is wired" — immediately above the block that attaches the producer, in the
+file that does the attaching. ADR-0028 quotes that sentence as evidence for the
+state of the system.
+
+**Fix.** 00803 drops the column and the write goes with it; the follower's own
+tests assert the property that is actually true (a re-read pass leaves the
+cursor no further back than it found it) rather than that a fixture column is
+NULL. The wire comment says what the code does. Commits b55fd7c, 87f5c4d.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestIntegration_ACrashBetweenReadingAndEmittingDuplicatesNothing`,
+`TestIntegration_EverySourceQueryRunsAgainstTheRealSchema`,
+`TestIntegration_Migrations`. STATIC_PROOF: the comment and the wiring are forty
+lines apart in one file.
+
+## F-192 · The market-pause fan-out was bounded by a variable that may be zero · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+`readMarketPauses` notifies everyone who has ever traded the market, and said
+so: "the fan-out is bounded by the launch tier's own account ceiling
+(`CP_CAPACITY_MAX_ACCOUNTS`), so it is not capped here". That variable may be
+zero — `capacity.Budget` documents zero as "no ceiling of this kind", which is
+how a paid tier turns the infrastructure ceilings off — and config validation
+requires it to be stated only in STAGING and PROD. On any other tier the bound
+was nothing at all, and one pause on a popular market was one transaction
+holding a pool connection while it wrote a notification per holder. The failure
+mode is not slowness: a pass that cannot finish inside the statement timeout
+fails, and the next pass fails the same way, so the source stops.
+
+**Fix (D-107).** `MaxPauseFanOut` caps one pass at five hundred, and the
+participant query skips whoever already has this pause's notification and
+whoever switched the kind off — the two exclusions that make the cap safe to
+page, so consecutive passes drain the remainder while the transition row is
+still inside the lap and the dedup key makes the re-read free. Compiled in
+rather than configured, for D-086's reason. Commit 84ccd7d.
+
+**Evidence.** REAL_DB_INTEGRATION:
+`TestIntegration_ABreakerTripTellsTheMarketsTraders`,
+`TestIntegration_EverySourceQueryRunsAgainstTheRealSchema`.
+
+**What this entry does not claim.** The paging is proven at one holder, not at
+five hundred and one: a fixture with that many holders needs that many balanced
+journal transactions, which is not affordable in this suite. What is proven is
+the query the cap uses and both exclusions in it; the arithmetic above the cap
+is the same code path. The residual is stated rather than hidden.
+
+**The renamed reproductions.** Six of the auditor's tests asserted the defect
+and could only pass while it existed. Each keeps its narrative, its controls and
+its `TestAuditAgnot_` prefix, and asserts the fixed behaviour under a name that
+says so, so the six originals —
+`TestAuditAgnot_PublishPanicsWhenASubscriberDisconnectsMidSend`,
+`TestAuditAgnot_AnAgentBindsToAnotherAccountsStrategyVersion`,
+`TestAuditAgnot_TheStrategyVersionNeedNotBelongToTheStrategy`,
+`TestAuditAgnot_AnAgentIsCreatedFromANeverAcceptedVersion`,
+`TestAuditAgnot_ACompilerBackendWritesAVersionUnderSomebodyElsesStrategy` and
+`TestAuditAgnot_ALoginsIPAddressLandsInATableNothingCanPurge` — do not exist
+under those names any more. The names cited in the eight entries above are the
+same tests.
