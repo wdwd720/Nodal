@@ -51,9 +51,36 @@ async function visibleText(page: Page): Promise<string> {
   // actually rendered. Waiting for the single <h1> is that signal; without it
   // this reads "Checking this session with the backend…" and proves nothing.
   await expect(page.locator("h1")).toHaveCount(1);
-  // Includes the text of disabled-control explanations and disclosures, which
-  // is exactly the copy most likely to drift.
-  return page.evaluate(() => document.body.innerText);
+  //
+  // The served legal documents are subtracted, and that is a deliberate limit
+  // on this scan rather than a convenience.
+  //
+  // The vocabulary below is a rule about the product's OWN copy: it exists so
+  // that a marketing page cannot call a stablecoin "cash" or promise an
+  // outcome. A legal document has the opposite job — the withdrawal disclosure
+  // says "none of them is guaranteed to complete", which is the sentence a
+  // customer most needs and which a ban on the word would delete. Those bytes
+  // are authored in `internal/terms`, hashed into every acceptance record, and
+  // rendered verbatim; policing them with a rule written for marketing copy
+  // would be a category error, and "fixing" a hit would mean editing a document
+  // this repository does not own. Everything the web app itself writes is still
+  // scanned, which is the whole surface this rule was ever about.
+  //
+  // The rest includes disabled-control explanations and disclosures, which is
+  // exactly the copy most likely to drift.
+  return page.evaluate(() => {
+    const body = document.body.innerText;
+    const documents = Array.from(document.querySelectorAll("pre.doc-source")).map(
+      (node) => (node as HTMLElement).innerText,
+    );
+    return documents.reduce((text, served) => text.split(served).join(" "), body);
+  });
+}
+
+/** The served document itself, for the checks that are about its contents. */
+async function documentText(page: Page): Promise<string> {
+  await expect(page.locator("pre.doc-source")).toBeVisible();
+  return page.locator("pre.doc-source").innerText();
 }
 
 async function signedOutPage(browser: Browser): Promise<Page> {
@@ -106,49 +133,118 @@ test("the landing page says what the product is not", async ({ browser }) => {
   await page.context().close();
 });
 
-test("every policy document says it is a draft and names its version", async ({ browser }) => {
+test("every legal document is served by Nodal and says whether counsel has read it", async ({
+  browser,
+}) => {
+  // The page renders `GET /v1/terms`, so the assertion is that the SERVER'S
+  // answer reached the screen: the version it reports, the document id it
+  // reports, and the draft notice that follows from its own
+  // `counsel_review_required` flag rather than from a constant in this
+  // repository.
   const page = await signedOutPage(browser);
-  for (const [path, version] of [
-    ["/terms", "terms-v1"],
-    ["/privacy", "privacy-v1"],
-    ["/risk", "risk-v1"],
-  ] as const) {
-    await page.goto(path);
+  const response = await page.request.get("/v1/terms");
+  expect(response.ok()).toBeTruthy();
+  const documents = (await response.json()) as Array<{
+    document_id: string;
+    version: string;
+    title: string;
+    counsel_review_required: boolean;
+    body: string;
+  }>;
+  expect(documents.length, "the registry serves documents").toBeGreaterThan(0);
+
+  const paths: Readonly<Record<string, string>> = {
+    TERMS_OF_SERVICE: "/terms",
+    PRIVACY_POLICY: "/privacy",
+    RISK_DISCLOSURE: "/risk",
+    CREDITS_TERMS: "/credits-terms",
+    WITHDRAWAL_DISCLOSURE: "/withdrawal-disclosure",
+  };
+
+  for (const doc of documents) {
+    const path = paths[doc.document_id];
+    expect(path, `${doc.document_id} has a page`).toBeTruthy();
+    await page.goto(path as string);
     const text = await visibleText(page);
-    expect(text, `${path} names its version`).toContain(version);
-    expect(text, `${path} says it is a draft`).toContain("Draft pending legal review");
-    expect(text, `${path} does not claim counsel approved it`).toContain(
-      "no counsel has approved them",
-    );
+    expect(text, `${path} names the document`).toContain(doc.document_id);
+    expect(text, `${path} names the version the server serves`).toContain(`version ${doc.version}`);
+    if (doc.counsel_review_required) {
+      expect(text, `${path} says counsel has not read it`).toContain(
+        "This document has not been reviewed by a lawyer.",
+      );
+    }
+    // And the document's own words are on the page, not a summary of them.
+    const heading = (doc.body.split("\n").find((line) => line.trim() !== "") ?? "")
+      .replace(/^#+\s*/, "")
+      .trim();
+    expect(heading.length, `${doc.document_id} has a body`).toBeGreaterThan(0);
+    expect(await documentText(page), `${path} renders the served text`).toContain(heading);
   }
-  // The architecture is never self-certified as lawful, and the terms say
-  // so in the document rather than only in a comment.
-  //
-  // This is a POSITIVE assertion on purpose. The first version banned the
-  // phrase "approved by a regulator", which the terms contain — inside the
-  // sentence "nothing in the product has been approved by a regulator". A
-  // substring cannot tell a claim from its denial, and a test that bans the
-  // words is a test that pushes the denial off the page.
-  await page.goto("/terms");
-  const terms = await visibleText(page);
-  expect(terms).toContain("is not regulated as any of those");
-  expect(terms).toContain("nothing in the product has been approved by a regulator");
-  expect(terms).toContain("The architecture described here is not certified as lawful anywhere.");
   await page.context().close();
 });
 
-test("example data on the public site is labelled as an example", async ({ browser }) => {
+test("the served terms state what Nodal is not", async ({ browser }) => {
+  // Goal section 5's forbidden claims, as the document itself denies them. This
+  // is a POSITIVE assertion on purpose: an earlier version of this test banned
+  // the phrase "approved by a regulator", which appears inside the sentence
+  // that denies it, and a test that bans the words is a test that pushes the
+  // denial off the page.
+  const page = await signedOutPage(browser);
+  await page.goto("/terms");
+  expect(await documentText(page)).toContain(
+    "Nodal is not a bank, a broker-dealer, a money transmitter, an exchange",
+  );
+  await page.context().close();
+});
+
+test("a simulated surface on the public site says it is an example", async ({ browser }) => {
+  // The rule is about the SURFACE, not about the page. `/product/markets` shows
+  // the live discovery list when there is one and the example composition when
+  // there is not, so demanding the example sentence on every page would demand
+  // that live data carry an example label, which would be its own lie.
+  //
+  // What must hold is the pairing: a surface wearing the design system's
+  // SIMULATED chip carries the sentence that says what it is.
   const page = await signedOutPage(browser);
   for (const path of ["/", "/product", "/product/markets", "/product/agents"]) {
     await page.goto(path);
     const text = await visibleText(page);
     await page.waitForLoadState("networkidle");
-    // Gated on a rendered Credit FIGURE rather than on the word: every page
-    // here names Credits in prose, and the rule is about figures.
-    if ((await page.locator(CREDIT_FIGURE).count()) === 0) continue;
-    expect(text, `${path} labels its example figures`).toContain("Example data, not a live account");
-    // The chip the design system renders on any simulated surface, which takes
-    // no prop to suppress it.
+    if ((await page.locator(".badge-simulated").count()) === 0) continue;
+    expect(text, `${path} labels its simulated surfaces`).toContain(
+      "Example data, not a live account",
+    );
+  }
+  await page.context().close();
+});
+
+test("the public market list is live data or a labelled example, never a blend", async ({
+  browser,
+}) => {
+  const page = await signedOutPage(browser);
+  await page.goto("/product/markets");
+  await expect(page.locator("h1")).toHaveCount(1);
+  await page.waitForLoadState("networkidle");
+
+  const response = await page.request.get("/v1/native-markets?limit=6&sort=NEWEST");
+  expect(response.ok(), "the discovery list answers without a session").toBeTruthy();
+  const listed = (await response.json()) as { markets: Array<{ name: string; demo: boolean }> };
+
+  if (listed.markets.length > 0) {
+    // Live: the markets the API returned are on the page, the only action is to
+    // sign in, and no example label is attached to any of it.
+    for (const market of listed.markets) {
+      await expect(page.getByText(market.name).first()).toBeVisible();
+    }
+    await expect(page.getByRole("link", { name: "Sign in to trade" })).toBeVisible();
+    if (listed.markets.some((market) => market.demo)) {
+      await expect(page.getByText("DEMO").first()).toBeVisible();
+    }
+  } else {
+    // Empty: the example, saying so, with the chip the design system renders on
+    // any simulated surface.
+    const text = await visibleText(page);
+    expect(text).toContain("Example data, not a live account");
     await expect(page.locator(".badge-simulated").first()).toBeVisible();
   }
   await page.context().close();

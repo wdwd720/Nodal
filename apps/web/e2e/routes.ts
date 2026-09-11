@@ -31,9 +31,14 @@ export const PUBLIC_ROUTES: readonly RouteUnderTest[] = [
   { path: "/learn", heading: "Learn", nav: "Learn" },
   { path: "/get-started", heading: "Get started" },
   { path: "/sign-in", heading: "Sign in" },
-  { path: "/terms", heading: "Product terms" },
-  { path: "/privacy", heading: "Privacy" },
-  { path: "/risk", heading: "Risk disclosure" },
+  // The five legal documents, served by `GET /v1/terms` (D-080). The heading is
+  // the page's own, so the address and the title agree before the fetch lands;
+  // the document's title comes from the registry.
+  { path: "/terms", heading: "Terms of Service" },
+  { path: "/privacy", heading: "Privacy Notice" },
+  { path: "/risk", heading: "Risk Disclosure" },
+  { path: "/credits-terms", heading: "Credits Terms" },
+  { path: "/withdrawal-disclosure", heading: "Withdrawal and Verification Disclosure" },
 ];
 
 /**
