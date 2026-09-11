@@ -538,6 +538,35 @@ function RequestDetail(props: {
               </>
             )}
 
+            {/*
+              * A reserved payout the backend has refused to send, and why.
+              *
+              * It is deliberately NOT a failure and NOT a state: the request
+              * still reads VERIFIED and its Credits are still reserved, because
+              * failing it would give the reservation back on the strength of a
+              * fact the person can undo. What was missing was any way for them
+              * to find out: the request read "reserved, on its way" while the
+              * sweep refused it every fifteen seconds, and the only mention was
+              * a field on the response that removed the destination (F-277).
+              *
+              * It sits immediately above the cancel control because cancelling
+              * is the only thing that resolves it. There is no re-point: a
+              * different destination is a different request, with its own
+              * quote and its own fee.
+              */}
+            {data.blocked_reason !== undefined && data.blocked_reason !== "" && (
+              <div className="notice">
+                <p>
+                  <strong>This withdrawal cannot be sent.</strong> {data.blocked_reason}
+                </p>
+                <p className="note">
+                  Its Credits are still reserved and still yours. Cancelling is what releases
+                  them; there is no way to point this request at a different destination, because
+                  the fee and the amount were quoted against the one it names.
+                </p>
+              </div>
+            )}
+
             {cancel.isError && <CommandRefused what="This request was not cancelled." error={cancel.error} />}
 
             {isCancellable(data.state) ? (

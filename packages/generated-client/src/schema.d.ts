@@ -5327,6 +5327,12 @@ export interface components {
             venue: string;
             venue_fee_quantity?: components["schemas"]["Quantity"];
         };
+        /**
+         * @description How certain it is that value credited to an account cannot be taken back by whoever supplied it (PART XI). UNFUNDED is value nothing external funded; REVERSIBLE is a card payment inside its dispute window; DISPUTED and REVERSED are a dispute in progress and one that succeeded.
+         *     Only SETTLED and UNFUNDED may ever be paid out, which is a strictly smaller set than the one that may be SPENT: reversible value buys things and does not leave.
+         * @enum {string}
+         */
+        FundingFinality: "UNFUNDED" | "REVERSIBLE" | "SETTLED" | "DISPUTED" | "REVERSED";
         GateActionRequest: {
             effective_at?: components["schemas"]["Timestamp"];
             evidence_hashes?: string[];
@@ -5929,10 +5935,13 @@ export interface components {
          * @enum {string}
          */
         PayoutDestinationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED" | "DISABLED";
-        /** @description One origin's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first. */
+        /** @description One provenance's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first.
+         *     A provenance is an origin AND an origin floor. Two slices can carry the same `origin` and different `origin_floor` values -- trading proceeds out of a settled purchase and trading proceeds out of a promotional grant are one origin and are not one kind of money -- and they are reported separately rather than summed (D-136). */
         PayoutProvenanceSlice: {
             consumption_rank: number;
             origin: components["schemas"]["CreditOrigin"];
+            /** @description What these units ultimately came from: the most restricted origin anywhere in their provenance. Equal to `origin` for value nothing else funded. */
+            origin_floor?: components["schemas"]["CreditOrigin"];
             quantity: components["schemas"]["Quantity"];
             /** @description True for a slice a cancellation gave back to the exact lots it came from. */
             returned?: boolean;
@@ -5970,6 +5979,11 @@ export interface components {
         };
         PayoutRequest: {
             account_id: components["schemas"]["UUID"];
+            /** Format: date-time */
+            blocked_at?: string;
+            /** @description Why this reserved payout cannot be sent, in words its holder can read, absent when nothing is blocking it. It is NOT a failure and NOT a state: the request is still VERIFIED and its Credits are still reserved, and cancelling it is what releases them.
+             *     The case it exists for is a destination the holder removed after asking. The payout stays reserved deliberately -- failing it would return the reservation on the strength of a fact the person can undo -- and until F-277 the request simply read VERIFIED, which reads as "on its way". A client showing this must show the cancel control beside it. There is no route that re-points a payout at a different destination; a new destination is a new request. */
+            blocked_reason?: string;
             created_at?: components["schemas"]["Timestamp"];
             destination_id?: components["schemas"]["UUID"];
             eligibility_reasons?: string[];
@@ -6642,9 +6656,13 @@ export interface components {
             verification_would_suffice?: boolean;
             withdrawable_now: components["schemas"]["Quantity"];
         };
+        /** @description One PROVENANCE an account holds, and what may leave it: an origin, an origin floor, a root set and a funding finality. Those four are what the payout policy reads about the value itself, so every unit in a bucket gets one answer and `withdrawable_now` is the sum of the buckets.
+         *     More than one bucket may therefore carry the same `origin`. Until D-136 there was exactly one per origin, folded to the least final finality and the most restricted floor in it -- so one refused lot zeroed every other lot of its origin and `withdrawable_now` contradicted `payout_eligible` in the same payload. A client that keys on `origin` alone must key on (origin, origin_floor, finality, root_origins) instead. */
         WithdrawalOriginBucket: {
             /** @description Where this origin sits in the consumption order. Lower leaves first. */
             consumption_rank: number;
+            /** @description The funding finality of every unit in this bucket. */
+            finality?: components["schemas"]["FundingFinality"];
             min_hold_days?: number;
             origin: components["schemas"]["CreditOrigin"];
             /** @description What this value ultimately came from: the most restricted origin anywhere in its provenance. It equals `origin` for value nothing else funded. It is here because ORIGIN_NOT_PAYOUT_ELIGIBLE on a bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on -- what a person needs to read is that the value came from a promotional grant, not a word about the trade that moved it. */
@@ -6652,8 +6670,12 @@ export interface components {
             payout_allowed: boolean;
             quantity: components["schemas"]["Quantity"];
             reasons: components["schemas"]["WithdrawalReason"][];
+            /** @description The first of `root_origins` this policy will not release, absent when it releases them all. It is the origin a person needs to read about when the reason is ORIGIN_NOT_WITHDRAWABLE, and it is not always `origin_floor`: the floor is ranked by the policies this build ships, and a policy persisted later can refuse a different one (D-138). */
+            refused_root?: components["schemas"]["CreditOrigin"];
             required_capability?: string;
             required_verification?: components["schemas"]["VerificationLevel"];
+            /** @description Every origin the units in this bucket ultimately came from. The payout policy must release the bucket's own origin and all of these. */
+            root_origins?: components["schemas"]["CreditOrigin"][];
             verification_would_suffice?: boolean;
             withdrawable: components["schemas"]["Quantity"];
         };

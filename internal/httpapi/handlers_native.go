@@ -479,6 +479,15 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 	if r.FailureReason != "" {
 		out.FailureReason = ptr(r.FailureReason)
 	}
+	// Why a RESERVED payout cannot be sent, which is not a failure and not a
+	// state: the value is still reserved and cancelling is what releases it
+	// (F-277). The Withdraw page renders it beside the Cancel control.
+	if r.BlockedReason != "" {
+		out.BlockedReason = ptr(r.BlockedReason)
+		if r.BlockedAt != nil {
+			out.BlockedAt = ptr(r.BlockedAt.UTC())
+		}
+	}
 	reasons := append([]string(nil), r.EligibilityReasons...)
 	if len(d.Reasons) > 0 {
 		reasons = d.ReasonStrings()

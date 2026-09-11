@@ -2300,6 +2300,22 @@ components:
         policy_version: { type: string }
         policy_hash: { type: string }
         failure_reason: { type: string }
+        blocked_reason:
+          type: string
+          description: >-
+            Why this reserved payout cannot be sent, in words its holder can
+            read, absent when nothing is blocking it. It is NOT a failure and
+            NOT a state: the request is still VERIFIED and its Credits are
+            still reserved, and cancelling it is what releases them.
+
+            The case it exists for is a destination the holder removed after
+            asking. The payout stays reserved deliberately -- failing it would
+            return the reservation on the strength of a fact the person can
+            undo -- and until F-277 the request simply read VERIFIED, which
+            reads as "on its way". A client showing this must show the cancel
+            control beside it. There is no route that re-points a payout at a
+            different destination; a new destination is a new request.
+        blocked_at: { type: string, format: date-time }
         quote_id:
           allOf: [{ $ref: "#/components/schemas/UUID" }]
           description: The pre-commitment quote this payout was created against.

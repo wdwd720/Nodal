@@ -327,9 +327,28 @@ type Request struct {
 	SubmittedAt   *time.Time
 	SettledAt     *time.Time
 	FailureReason string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+
+	// BlockedReason is why a RESERVED payout cannot be submitted, in words its
+	// holder can read, and BlockedAt is when that was recorded. Empty when
+	// nothing is blocking it.
+	//
+	// It is not a state and it is not a failure. A payout whose destination the
+	// holder removed stays VERIFIED with its Credits reserved -- moving it to
+	// FAILED would return the reservation on the strength of a fact the person
+	// can undo by registering a new destination -- and until F-277 the only
+	// customer-facing mention of the refusal was a field on the DELETE response
+	// that caused it. The request read VERIFIED, which reads as "on its way",
+	// while the sweep refused it every fifteen seconds for ever.
+	BlockedReason string
+	BlockedAt     *time.Time
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
+
+// Blocked reports whether something the holder has to act on is stopping this
+// request. It is a convenience for a renderer: the reason is the answer.
+func (r Request) Blocked() bool { return r.BlockedReason != "" }
 
 // Allocation is one lot slice a payout reserved.
 type Allocation struct {
