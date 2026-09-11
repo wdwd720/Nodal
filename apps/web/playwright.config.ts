@@ -13,7 +13,16 @@ import { defineConfig, devices } from "@playwright/test";
  * and running against a real browser is closer to what a customer uses than
  * running against nothing.
  */
-const WEB_PORT = 5273;
+/**
+ * The port the app under test is served on.
+ *
+ * `CP_WEB_PORT` exists so that two checkouts can run this suite at the same
+ * time: `vite.config.ts` reads the same variable, so the preview server and the
+ * base URL cannot disagree about where the app is. Without it, a second agent
+ * running the suite finds the first one's preview already on 5273, reuses it,
+ * and tests a build that proxies to somebody else's API.
+ */
+const WEB_PORT = process.env["CP_WEB_PORT"] ?? "5273";
 const API_URL = process.env["CP_WEB_API_TARGET"] ?? "http://127.0.0.1:18099";
 
 export default defineConfig({
@@ -26,7 +35,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {
-    baseURL: `http://127.0.0.1:${String(WEB_PORT)}`,
+    baseURL: `http://127.0.0.1:${WEB_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     channel: "chrome",
@@ -49,7 +58,7 @@ export default defineConfig({
     },
     {
       command: "pnpm run build && pnpm run preview",
-      url: `http://127.0.0.1:${String(WEB_PORT)}/`,
+      url: `http://127.0.0.1:${WEB_PORT}/`,
       reuseExistingServer: !process.env["CI"],
       timeout: 180_000,
       stdout: "pipe",

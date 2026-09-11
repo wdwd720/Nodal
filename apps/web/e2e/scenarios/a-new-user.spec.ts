@@ -33,11 +33,18 @@ async function signedOutPage(browser: Browser): Promise<Page> {
  * The development provider renders a picker; choosing an identity is a real
  * navigation that ends at the OIDC callback, which sets the session cookie and
  * redirects back into the application.
+ *
+ * `mfa` chooses the picker's second link, which asserts a strong `amr`. It is
+ * required for a step-up: the backend refuses the callback of a `step_up=true`
+ * flow with `STEP_UP_REQUIRED` unless the provider actually asserted strong
+ * authentication. That check lives in `internal/identity/login.go` rather than
+ * being taken on trust from the request, which is the whole point of one.
  */
-async function chooseIdentity(page: Page): Promise<void> {
+async function chooseIdentity(page: Page, options?: { readonly mfa?: boolean }): Promise<void> {
   await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
   const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${IDENTITY}$`) }) });
-  await row.getByRole("link", { name: "sign in", exact: true }).first().click();
+  const label = options?.mfa === true ? "sign in with MFA" : "sign in";
+  await row.getByRole("link", { name: label, exact: true }).first().click();
 }
 
 test("a visitor reaches the dashboard from the landing page", async ({ browser }) => {
@@ -115,7 +122,7 @@ test("a step-up round trip brings back what was typed", async ({ page }) => {
   await page.goto("/sign-in?step=up&return=%2Fcreate-asset");
   await expect(page.getByRole("heading", { level: 1, name: "Confirm it's you" })).toBeVisible();
   await page.getByRole("button", { name: "Confirm it's you" }).click();
-  await chooseIdentity(page);
+  await chooseIdentity(page, { mfa: true });
 
   await expect(page.getByRole("heading", { level: 1, name: "Create asset" })).toBeVisible();
   await expect(page).toHaveURL(/\/create-asset$/);

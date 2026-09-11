@@ -42,6 +42,9 @@ const FILLER: readonly RegExp[] = [
   /\bcutting-edge\b/i,
 ];
 
+/** A rendered Credit figure: `Qty` writes `.num`, `Figure` writes `.figure-symbol`. */
+const CREDIT_FIGURE = '.num:has-text("Credits"), .figure-symbol:has-text("Credits")';
+
 async function visibleText(page: Page): Promise<string> {
   // The application gates itself behind a boot screen until the backend has
   // answered who is signed in, so the text must not be read until a page has
@@ -117,9 +120,20 @@ test("every policy document says it is a draft and names its version", async ({ 
     expect(text, `${path} does not claim counsel approved it`).toContain(
       "no counsel has approved them",
     );
-    // §60: the architecture is never self-certified as lawful.
-    expect(/\bapproved by (a )?regulator\b/i.test(text), `${path} claims no approval`).toBe(false);
   }
+  // The architecture is never self-certified as lawful, and the terms say
+  // so in the document rather than only in a comment.
+  //
+  // This is a POSITIVE assertion on purpose. The first version banned the
+  // phrase "approved by a regulator", which the terms contain — inside the
+  // sentence "nothing in the product has been approved by a regulator". A
+  // substring cannot tell a claim from its denial, and a test that bans the
+  // words is a test that pushes the denial off the page.
+  await page.goto("/terms");
+  const terms = await visibleText(page);
+  expect(terms).toContain("is not regulated as any of those");
+  expect(terms).toContain("nothing in the product has been approved by a regulator");
+  expect(terms).toContain("The architecture described here is not certified as lawful anywhere.");
   await page.context().close();
 });
 
@@ -128,7 +142,10 @@ test("example data on the public site is labelled as an example", async ({ brows
   for (const path of ["/", "/product", "/product/markets", "/product/agents"]) {
     await page.goto(path);
     const text = await visibleText(page);
-    if (!text.includes("Credits")) continue;
+    await page.waitForLoadState("networkidle");
+    // Gated on a rendered Credit FIGURE rather than on the word: every page
+    // here names Credits in prose, and the rule is about figures.
+    if ((await page.locator(CREDIT_FIGURE).count()) === 0) continue;
     expect(text, `${path} labels its example figures`).toContain("Example data, not a live account");
     // The chip the design system renders on any simulated surface, which takes
     // no prop to suppress it.
@@ -150,7 +167,12 @@ test("a page showing Credits says what a Credit is", async ({ page }) => {
   for (const path of ["/markets", "/markets/products"]) {
     await page.goto(path);
     const text = await visibleText(page);
-    if (!text.includes("Credits")) continue;
+    await page.waitForLoadState("networkidle");
+    // The gate is a rendered Credit FIGURE, not the word. A page can name
+    // Credits in prose — "a shared pool of Credits" — while showing no figure
+    // at all, which is what `/markets` does on a deployment with no assets
+    // yet, and demanding the disclosure there would demand it beside nothing.
+    if ((await page.locator(CREDIT_FIGURE).count()) === 0) continue;
     expect(text.toLowerCase(), `${path} says what Credits are`).toMatch(
       /not money|quoted in credits|internal platform value/,
     );
