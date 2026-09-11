@@ -66,6 +66,32 @@ func DestinationTransitionsFrom(s DestinationStatus) []DestinationStatus {
 	return append([]DestinationStatus(nil), destinationTransitions[s]...)
 }
 
+// DestinationStateEdges returns every legal edge as a flat from,to sequence, in
+// lifecycle order.
+//
+// Migration 00814 populates `payout_destination_status_edges` from it and
+// cp_destination_apply_status_transition consults it, so an edge this table
+// does not have cannot be written by inserting a transition row that claims it.
+// `test/integration/enums` holds the two identical, exactly as it does for the
+// three edge tables 00806 and 00807 created (D-121).
+//
+// It is the fourth and last state machine in the withdrawal area to get the
+// treatment. Until 00814 this one had no edge table at all, and 00731's binding
+// asks only whether a transition row names the status the destination is really
+// in -- so one INSERT as cp_app moved a destination the holder had disabled
+// back to VERIFIED, with a verified_at, and the row that says where somebody's
+// money goes came back from a terminal state (F-259).
+func DestinationStateEdges() []string {
+	statuses := AllDestinationStatuses()
+	out := make([]string, 0, 2*len(statuses))
+	for _, from := range statuses {
+		for _, to := range destinationTransitions[from] {
+			out = append(out, string(from), string(to))
+		}
+	}
+	return out
+}
+
 // DestinationChange describes who moved a destination's status and why.
 type DestinationChange struct {
 	ActorType     security.ActorType

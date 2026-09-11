@@ -334,6 +334,17 @@ func edgeTables() []edgeTable {
 			table: "payout_request_state_edges", fromCol: "from_state", toCol: "to_state",
 			source: "payout.StateEdges()", edges: payout.StateEdges(),
 		},
+		// The fourth. 00763 gave payout_destinations.status the rest of the
+		// F-42 treatment and no edge table, so its apply function consulted
+		// nothing and one INSERT moved a destination the holder had disabled
+		// back to VERIFIED (F-259). 00814 is the table; this is the pairing
+		// that keeps it honest, and it is what makes D-121's "held identical by
+		// the enum suite" true of every edge set in this area rather than of
+		// three of the four.
+		{
+			table: "payout_destination_status_edges", fromCol: "from_status", toCol: "to_status",
+			source: "payout.DestinationStateEdges()", edges: payout.DestinationStateEdges(),
+		},
 	}
 }
 
