@@ -40,6 +40,10 @@ func quotableProvider(f *fixture) {
 		SupportsLookup:     true,
 		SupportsWebhooks:   true,
 		Currencies:         []string{"USD"},
+		// The provider is asked about the whole recipient now, not just the
+		// kind and the currency (D-122), so it has to publish what it pays.
+		SupportedCountries: []string{"US"},
+		RecipientKinds:     []string{"individual"},
 		Availability:       payout.AvailabilitySandbox,
 		FeeModelPublished:  true,
 		FeeFlat:            money.USDFromMinor(25),
@@ -76,6 +80,7 @@ func (f *fixture) createWithQuote(amount int64, quoteID payout.QuoteID, in payou
 			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, QuoteID: &quoteID, Quantity: q(amount),
 				ProviderTerms:      f.terms(),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
 			}, in)

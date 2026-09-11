@@ -43,6 +43,7 @@ const requestColumns = `id, account_id, destination_id, credit_asset_id, state,
 	coalesce(provider_status,''), idempotency_key, quote_id,
 	coalesce(quote_gross_amount_minor,0), coalesce(quote_fee_amount_minor,0),
 	coalesce(quote_net_amount_minor,0), coalesce(quote_currency,''),
+	coalesce(sandbox,true), coalesce(environment,''),
 	reserved_at, submitted_at, settled_at, coalesce(failure_reason,''), created_at, updated_at`
 
 func scanRequest(row pgx.Row) (Request, error) {
@@ -57,6 +58,7 @@ func scanRequest(row pgx.Row) (Request, error) {
 		&r.PolicyVersion, &r.PolicyHash, &reasons, &verification,
 		&r.Provider, &r.ProviderIdempotencyKey, &r.ProviderReference, &r.ProviderStatus, &r.IdempotencyKey, &r.QuoteID,
 		&r.QuoteGrossAmountMinor, &r.QuoteFeeAmountMinor, &r.QuoteNetAmountMinor, &r.QuoteCurrency,
+		&r.Sandbox, &r.Environment,
 		&r.ReservedAt, &r.SubmittedAt, &r.SettledAt, &r.FailureReason,
 		&r.CreatedAt, &r.UpdatedAt); err != nil {
 		return Request{}, err
@@ -182,7 +184,7 @@ func (s *Service) Allocations(ctx context.Context, q db.Querier, id RequestID) (
 }
 
 const destinationColumns = `id, account_id, kind, provider, provider_reference, display_label,
-	coalesce(currency,''), status, coalesce(country,''), masked_display, sandbox,
+	coalesce(currency,''), status, coalesce(country,''), coalesce(region,''), masked_display, sandbox,
 	verified_at, created_at, updated_at`
 
 func scanDestination(row pgx.Row) (Destination, error) {
@@ -191,7 +193,7 @@ func scanDestination(row pgx.Row) (Destination, error) {
 		kind, state string
 	)
 	if err := row.Scan(&d.ID, &d.AccountID, &kind, &d.Provider, &d.ProviderReference, &d.DisplayLabel,
-		&d.Currency, &state, &d.Country, &d.MaskedDisplay, &d.Sandbox,
+		&d.Currency, &state, &d.Country, &d.Region, &d.MaskedDisplay, &d.Sandbox,
 		&d.VerifiedAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return Destination{}, err
 	}
@@ -221,9 +223,20 @@ func (s *Service) CreateDestination(ctx context.Context, tx pgx.Tx, d Destinatio
 	if err := ValidateMaskedDisplay(d.MaskedDisplay); err != nil {
 		return Destination{}, err
 	}
-	if d.Country != "" && !countryCode.MatchString(d.Country) {
+	if !countryCode.MatchString(d.Country) {
+		// Required since D-122: `CanPayRecipient` is asked unconditionally, and
+		// `RecipientProfile.Validate` has always refused an empty country with
+		// RECIPIENT_PROFILE_INCOMPLETE. The adapter simply never asked it, so a
+		// destination the provider had said it could not pay was accepted and
+		// marked VERIFIED whenever the client omitted the field (F-228).
 		return Destination{}, errs.Newf(errs.CodeValidationFailed,
-			"country code %q must be ISO 3166-1 alpha-2 upper case", d.Country)
+			"country code %q must be ISO 3166-1 alpha-2 upper case", d.Country).
+			WithField("field", "country")
+	}
+	if d.Region != "" && !regionCode.MatchString(d.Region) {
+		return Destination{}, errs.Newf(errs.CodeValidationFailed,
+			"region code %q must be the subdivision code without its country prefix", d.Region).
+			WithField("field", "region")
 	}
 	if d.ID.IsZero() {
 		d.ID = NewDestinationID()
@@ -239,11 +252,11 @@ func (s *Service) CreateDestination(ctx context.Context, tx pgx.Tx, d Destinatio
 	out, err := scanDestination(tx.QueryRow(ctx,
 		`INSERT INTO payout_destinations
 		   (id, account_id, kind, provider, provider_reference, display_label, currency, status,
-		    country, masked_display, sandbox)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,'UNVERIFIED',NULLIF($8,''),$9,$10)
+		    country, region, masked_display, sandbox)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,'UNVERIFIED',NULLIF($8,''),NULLIF($9,''),$10,$11)
 		 RETURNING `+destinationColumns,
 		d.ID, d.AccountID, string(d.Kind), d.Provider, strings.TrimSpace(d.ProviderReference),
-		d.DisplayLabel, currency, d.Country, d.MaskedDisplay, d.Sandbox))
+		d.DisplayLabel, currency, d.Country, d.Region, d.MaskedDisplay, d.Sandbox))
 	if err != nil {
 		if db.IsUniqueViolation(err) {
 			return Destination{}, errs.New(errs.CodeConflict, "this destination is already registered")
@@ -329,6 +342,11 @@ func (s *Service) DestinationsByAccount(ctx context.Context, q db.Querier, accou
 }
 
 var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)
+
+// regionCode is the subdivision code without its country prefix: "CA", not
+// "US-CA". It is the same shape compliance_profiles.jurisdiction_region and
+// verification_sessions.jurisdiction_region already hold.
+var regionCode = regexp.MustCompile(`^[A-Z0-9]{1,6}$`)
 
 // VerifyReservations checks the invariant that ties this package to the ledger:
 // the Credits sitting in every account's PAYOUT_RESERVED must equal the sum of

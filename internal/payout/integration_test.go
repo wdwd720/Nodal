@@ -173,7 +173,7 @@ func newFixture(t *testing.T) *fixture {
 			d, err := f.svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: f.account, Kind: payout.DestinationBank,
 				Provider: "sandbox", ProviderReference: "dest-" + uuid.NewString(),
-				DisplayLabel: "Test bank", Currency: "USD",
+				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if err != nil {
 				return err
@@ -279,6 +279,7 @@ func (f *fixture) create(amount int64, in payout.EligibilityInput) (payout.Reque
 			req, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(amount),
 				ProviderTerms: f.terms(),
+				Environment:   "TEST",
 				// The withdrawal disclosure, accepted. The tests that are about
 				// the disclosure itself set it false; every other test in this
 				// file is about eligibility and provenance, and an unsigned
@@ -702,6 +703,7 @@ func TestIntegration_CreateIsIdempotent(t *testing.T) {
 				r, _, err := f.svc.Create(ctx, tx, payout.CreateRequest{
 					AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(250),
 					ProviderTerms:      f.terms(),
+					Environment:        "TEST",
 					DisclosureAccepted: true,
 					IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 				}, f.input())
@@ -1142,6 +1144,7 @@ func (f *fixture) createWithKey(account accounts.AccountID, key string, amount i
 			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(amount),
 				ProviderTerms:      f.terms(),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 			}, in)

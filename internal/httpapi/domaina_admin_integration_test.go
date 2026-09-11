@@ -139,12 +139,14 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	// published fee model.
 	payoutProvider := payouttest.NewSandbox("sandbox").WithCapabilities(payout.Capabilities{
 		SupportsBankPayout: true, SupportsLookup: true,
-		Currencies:        []string{"USD"},
-		Availability:      payout.AvailabilitySandbox,
-		FeeModelPublished: true,
-		FeeFlat:           money.USDFromMinor(25),
-		FeeBasisPoints:    money.BPS(25),
-		FeeModelVersion:   "ITEST-PLACEHOLDER-NOT-A-PRICE",
+		Currencies:         []string{"USD"},
+		SupportedCountries: []string{"US"},
+		RecipientKinds:     []string{"individual"},
+		Availability:       payout.AvailabilitySandbox,
+		FeeModelPublished:  true,
+		FeeFlat:            money.USDFromMinor(25),
+		FeeBasisPoints:     money.BPS(25),
+		FeeModelVersion:    "ITEST-PLACEHOLDER-NOT-A-PRICE",
 	})
 	payoutRegistry := payout.NewRegistry(true)
 	require.NoError(t, payoutRegistry.Register(payoutProvider))

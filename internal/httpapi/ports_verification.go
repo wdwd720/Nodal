@@ -80,13 +80,16 @@ type ConversionPort interface {
 // name a destination is with the provider's token for it, which is the same
 // shape of protection that keeps a Credit quantity off the purchase command.
 type AddPayoutDestination struct {
-	AccountID      accounts.AccountID
-	Kind           payout.DestinationKind
-	ProviderToken  string
-	DisplayLabel   string
-	MaskedDisplay  string
-	Currency       string
-	Country        string
+	AccountID     accounts.AccountID
+	Kind          payout.DestinationKind
+	ProviderToken string
+	DisplayLabel  string
+	MaskedDisplay string
+	Currency      string
+	Country       string
+	// Region is the subdivision within Country, required wherever the provider
+	// publishes exclusions for that country (D-122).
+	Region         string
 	IdempotencyKey string
 	CorrelationID  string
 }

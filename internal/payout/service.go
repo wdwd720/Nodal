@@ -260,6 +260,10 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 		RequestedQuantity: r.Quantity, PolicyVersion: decision.PolicyVersion,
 		PolicyHash: decision.PolicyHash, EligibilityReasons: decision.ReasonStrings(),
 		VerificationLevel: in.Verified, IdempotencyKey: r.IdempotencyKey,
+		// A rehearsal is a rehearsal because of the deployment it was made on
+		// and the provider it names, both recorded here rather than asked of
+		// today's configuration when somebody reads the row (F-232).
+		Sandbox: r.Sandbox || quote.Sandbox, Environment: r.Environment,
 	}
 	req.QuoteID = &quote.ID
 	req.QuoteGrossAmountMinor = quote.GrossAmountMinor
@@ -270,13 +274,15 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 		`INSERT INTO payout_requests
 		   (id, account_id, destination_id, credit_asset_id, state, requested_quantity,
 		    policy_version, policy_hash, eligibility_reasons, verification_level, idempotency_key, quote_id,
-		    quote_gross_amount_minor, quote_fee_amount_minor, quote_net_amount_minor, quote_currency)
-		 VALUES ($1,$2,$3,$4,'ELIGIBILITY_CHECK',$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		    quote_gross_amount_minor, quote_fee_amount_minor, quote_net_amount_minor, quote_currency,
+		    sandbox, environment)
+		 VALUES ($1,$2,$3,$4,'ELIGIBILITY_CHECK',$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		 RETURNING created_at, updated_at`,
 		req.ID, req.AccountID, *r.DestinationID, req.CreditAssetID, req.RequestedQuantity.String(),
 		req.PolicyVersion, req.PolicyHash, reasons, string(req.VerificationLevel),
 		req.IdempotencyKey, quote.ID,
-		quote.GrossAmountMinor, quote.FeeAmountMinor, quote.NetAmountMinor, quote.Currency).
+		quote.GrossAmountMinor, quote.FeeAmountMinor, quote.NetAmountMinor, quote.Currency,
+		req.Sandbox, req.Environment).
 		Scan(&req.CreatedAt, &req.UpdatedAt)
 	if err != nil {
 		return Request{}, Decision{}, mapError(err)

@@ -50,7 +50,7 @@ func TestIntegration_APayoutIsRefusedUntilTheDisclosureIsAccepted(t *testing.T) 
 			dest := f.destination
 			_, _, err = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, Quantity: q(400),
-				QuoteID: &quote.ID, ProviderTerms: f.terms(),
+				QuoteID: &quote.ID, ProviderTerms: f.terms(), Environment: "TEST",
 				// Not accepted. This is the state of everybody who has never
 				// withdrawn: §48 puts the document at the moment value leaves
 				// and deliberately not at signup.
@@ -70,6 +70,7 @@ func TestIntegration_APayoutIsRefusedUntilTheDisclosureIsAccepted(t *testing.T) 
 			_, _, err = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, Quantity: q(400),
 				ProviderTerms:      f.terms(),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
 			}, f.input())

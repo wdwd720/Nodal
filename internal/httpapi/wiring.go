@@ -1021,7 +1021,7 @@ func (i idempotencyAdapter) Run(ctx context.Context, cmd IdempotentCommand, fn f
 	}
 	if err := i.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		return i.store.Complete(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key,
-			res.Status, res.ResourceType, res.ResourceID, res.Body)
+			res.Status, res.ResourceType, res.ResourceID, res.stored())
 	}); err != nil {
 		return CommandResult{}, err
 	}
@@ -1030,7 +1030,7 @@ func (i idempotencyAdapter) Run(ctx context.Context, cmd IdempotentCommand, fn f
 
 func (i idempotencyAdapter) record(ctx context.Context, cmd IdempotentCommand, res CommandResult) {
 	_ = i.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-		return i.store.Complete(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, res.Status, "", "", res.Body)
+		return i.store.Complete(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, res.Status, "", "", res.stored())
 	})
 }
 
@@ -1040,7 +1040,7 @@ func (i idempotencyAdapter) fail(ctx context.Context, cmd IdempotentCommand, res
 		status = 500
 	}
 	_ = i.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-		return i.store.Fail(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, status, res.Body)
+		return i.store.Fail(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, status, res.stored())
 	})
 }
 

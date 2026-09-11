@@ -204,7 +204,7 @@ func (h *domainAHarness) stuckPayout(t *testing.T) payout.Request {
 			dest, err = h.payouts.CreateDestination(ctx, tx, payout.Destination{
 				ID: payout.NewDestinationID(), AccountID: h.creator, Kind: payout.DestinationBank,
 				Provider: "sandbox", ProviderReference: "dest-" + uuid.NewString(),
-				DisplayLabel: "Test bank", Currency: "USD",
+				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if err != nil {
 				return err
@@ -249,6 +249,7 @@ func (h *domainAHarness) stuckPayout(t *testing.T) payout.Request {
 			req, decision, err = h.payouts.Create(ctx, tx, payout.CreateRequest{
 				AccountID: h.creator, DestinationID: &dest.ID, QuoteID: &quote.ID, Quantity: qq("400"),
 				ProviderTerms:      payout.TermsFrom(h.payoutProv.Capabilities()),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: h.clk.Now(),
 			}, payout.EligibilityInput{

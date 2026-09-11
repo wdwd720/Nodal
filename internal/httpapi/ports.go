@@ -452,6 +452,24 @@ type CommandResult struct {
 	ResourceType string
 	ResourceID   string
 	Body         []byte
+	// StoredBody is what the idempotency record may keep, when that is not the
+	// whole body. Nil means "store Body".
+	//
+	// The two are different exactly where a response carries something the
+	// product documents as never stored: the hosted verification link is a
+	// single-use credential handed to one browser, and it was being written to
+	// idempotency_keys.response_body for the whole TTL in a row two read-only
+	// roles may SELECT (F-231, D-125). The caller still gets Body; the record
+	// gets this.
+	StoredBody []byte
 	// Replayed is set by the port when the result came from the store.
 	Replayed bool
+}
+
+// stored is what the idempotency record keeps for this result.
+func (r CommandResult) stored() []byte {
+	if r.StoredBody != nil {
+		return r.StoredBody
+	}
+	return r.Body
 }

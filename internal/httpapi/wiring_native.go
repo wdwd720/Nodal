@@ -596,6 +596,8 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 			QuoteID:            r.QuoteID,
 			Quantity:           r.Amount,
 			ProviderTerms:      terms,
+			Sandbox:            a.sandbox(),
+			Environment:        a.withdrawal.Environment,
 			DisclosureAccepted: accepted,
 			IdempotencyKey:     r.IdempotencyKey,
 			EffectiveAt:        a.clk.Now(),
@@ -604,6 +606,24 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 		return cerr
 	})
 	return req, decision, err
+}
+
+// sandbox is whether a conversion request created now is a rehearsal: either
+// the provider is one, or the deployment is (ADR-0023). It is recorded on the
+// request rather than asked when somebody reads it (F-232).
+func (a payoutsAdapter) sandbox() bool {
+	if a.withdrawal.SandboxTier {
+		return true
+	}
+	names := a.deps.Payouts.ProviderNames()
+	if len(names) != 1 {
+		return false
+	}
+	p, err := a.deps.Payouts.Provider(names[0])
+	if err != nil {
+		return false
+	}
+	return p.Capabilities().Availability == payout.AvailabilitySandbox
 }
 
 // deploymentTerms are the published terms of the one payout provider this
@@ -629,6 +649,14 @@ func (a payoutsAdapter) deploymentTerms() (payout.ProviderTerms, error) {
 // providerSupports asks the configured provider whether it can actually pay
 // this destination. PART LXXVI: never infer a capability from marketing copy,
 // and never from the fact that a destination row exists.
+//
+// It asks the SAME question the destination was registered against, from the
+// values the destination stored, rather than re-deriving a weaker one. It used
+// to check the kind and the currency and stop there -- so a destination in a
+// country the provider had since stopped paying, or one in an excluded
+// subdivision, was still "supported" at the moment value would leave (F-228,
+// D-122). The provider's own answer is the only one worth having, and it is
+// free to ask.
 func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
 	p, err := a.deps.Payouts.Provider(d.Provider)
 	if err != nil {
@@ -641,7 +669,10 @@ func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
 	if d.Currency != "" && !caps.SupportsCurrency(d.Currency) {
 		return false
 	}
-	return true
+	ok, _ := caps.CanPayRecipient(payout.RecipientProfile{
+		Kind: "individual", Country: d.Country, Region: d.Region,
+	})
+	return ok
 }
 
 // Cancel withdraws the account's own pending request.

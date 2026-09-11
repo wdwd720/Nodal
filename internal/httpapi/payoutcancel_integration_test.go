@@ -56,12 +56,14 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 	// published fee model.
 	provider := payouttest.NewSandbox("sandbox").WithCapabilities(payout.Capabilities{
 		SupportsBankPayout: true, SupportsLookup: true,
-		Currencies:        []string{"USD"},
-		Availability:      payout.AvailabilitySandbox,
-		FeeModelPublished: true,
-		FeeFlat:           money.USDFromMinor(25),
-		FeeBasisPoints:    money.BPS(25),
-		FeeModelVersion:   "ITEST-PLACEHOLDER-NOT-A-PRICE",
+		Currencies:         []string{"USD"},
+		SupportedCountries: []string{"US"},
+		RecipientKinds:     []string{"individual"},
+		Availability:       payout.AvailabilitySandbox,
+		FeeModelPublished:  true,
+		FeeFlat:            money.USDFromMinor(25),
+		FeeBasisPoints:     money.BPS(25),
+		FeeModelVersion:    "ITEST-PLACEHOLDER-NOT-A-PRICE",
 	})
 	registry := payout.NewRegistry(true)
 	require.NoError(t, registry.Register(provider))
@@ -91,7 +93,7 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 			d, derr := svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: owner, Kind: payout.DestinationBank, Provider: "sandbox",
 				ProviderReference: "dest-" + id.New[id.Any]().String(),
-				DisplayLabel:      "Test bank", Currency: "USD",
+				DisplayLabel:      "Test bank", Currency: "USD", Country: "US",
 			})
 			if derr != nil {
 				return derr
@@ -121,6 +123,7 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 				AccountID: owner, DestinationID: &d.ID, QuoteID: &quote.ID,
 				Quantity:           money.QuantityFromInt64(400),
 				ProviderTerms:      payout.TermsFrom(provider.Capabilities()),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     "cancel-itest-" + id.New[id.Any]().String(),
 				EffectiveAt:        clk.Now(),

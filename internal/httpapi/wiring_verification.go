@@ -493,14 +493,38 @@ func (a conversionAdapter) AddDestination(ctx context.Context, r AddPayoutDestin
 		return payout.Destination{}, errs.Newf(errs.CodeProviderUnavailable,
 			"the payout provider %q does not pay in %s", provider.Name(), r.Currency)
 	}
-	if r.Country != "" && len(caps.SupportedCountries) > 0 {
-		if ok, refusals := caps.CanPayRecipient(payout.RecipientProfile{
-			Kind: "individual", Country: r.Country,
-		}); !ok {
-			return payout.Destination{}, errs.Newf(errs.CodeProviderUnavailable,
-				"the payout provider %q does not pay recipients in %s", provider.Name(), r.Country).
-				WithField("refusals", refusalCodes(refusals))
+	// Asked unconditionally, and about the whole profile.
+	//
+	// It used to be `if r.Country != "" && len(caps.SupportedCountries) > 0`,
+	// so a client that simply omitted `country` skipped the question entirely
+	// and the destination was accepted and marked VERIFIED -- the same body with
+	// `"country":"FR"` was refused 503 RECIPIENT_COUNTRY_UNSUPPORTED. And
+	// nothing ever set a region, so RECIPIENT_REGION_EXCLUDED and
+	// RECIPIENT_REGION_UNKNOWN could not fire at all and a provider that pays
+	// the United States but not New York had no way to say so (F-228, D-122).
+	//
+	// `country` is required by the schema and by the domain now, so the profile
+	// is answerable; the region is required exactly where the provider
+	// publishes exclusions for that country, because "we do not know which
+	// state" is not "any state".
+	if ok, refusals := caps.CanPayRecipient(payout.RecipientProfile{
+		Kind: "individual", Country: r.Country, Region: r.Region,
+	}); !ok {
+		code := errs.CodeProviderUnavailable
+		detail := "the payout provider " + provider.Name() + " does not pay recipients in " + r.Country
+		for _, refusal := range refusals {
+			switch refusal {
+			case payout.RefusalProfileIncomplete, payout.RefusalRegionUnknown:
+				// Not the provider's fault and not a refusal of this person:
+				// something the caller can supply is missing.
+				code = errs.CodeValidationFailed
+				detail = "this payout provider excludes some subdivisions of " + r.Country +
+					", so a destination there has to say which one it pays into"
+			}
 		}
+		return payout.Destination{}, errs.New(code, detail).
+			WithField("refusals", refusalCodes(refusals)).
+			WithField("provider", provider.Name())
 	}
 
 	var out payout.Destination
@@ -515,6 +539,7 @@ func (a conversionAdapter) AddDestination(ctx context.Context, r AddPayoutDestin
 			MaskedDisplay:     r.MaskedDisplay,
 			Currency:          r.Currency,
 			Country:           r.Country,
+			Region:            r.Region,
 			Sandbox:           caps.Availability == payout.AvailabilitySandbox || a.withdrawal.SandboxTier,
 		})
 		if cerr != nil {

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/nodal/controlplane/internal/gen/api"
@@ -46,6 +47,9 @@ func toAPIDestination(d payout.Destination) api.PayoutDestination {
 	if d.Country != "" {
 		out.Country = ptr(d.Country)
 	}
+	if d.Region != "" {
+		out.Region = ptr(d.Region)
+	}
 	if d.VerifiedAt != nil {
 		out.VerifiedAt = ptr(d.VerifiedAt.UTC())
 	}
@@ -71,6 +75,10 @@ func toAPIProvenance(slices []payout.ProvenanceSlice) []api.PayoutProvenanceSlic
 	}
 	return out
 }
+
+// countryAlpha2 is the shape a country code has to have before the provider
+// can be asked anything about it.
+var countryAlpha2 = regexp.MustCompile(`^[A-Z]{2}$`)
 
 // GetMePayoutDestinations lists where an account has asked value to be sent.
 func (s *Server) GetMePayoutDestinations(ctx context.Context, request api.GetMePayoutDestinationsRequestObject) (api.GetMePayoutDestinationsResponseObject, error) {
@@ -138,8 +146,18 @@ func (s *Server) PostMePayoutDestinations(ctx context.Context, request api.PostM
 	if request.Body.Currency != nil {
 		cmd.Currency = strings.ToUpper(strings.TrimSpace(*request.Body.Currency))
 	}
-	if request.Body.Country != nil {
-		cmd.Country = strings.ToUpper(strings.TrimSpace(*request.Body.Country))
+	// Required (D-122). `CanPayRecipient` is asked unconditionally now, and it
+	// cannot be answered about a recipient whose country nobody stated: the
+	// version of this route that let the field be omitted accepted -- and
+	// marked VERIFIED -- destinations the provider had already said in as many
+	// words it could not pay (F-228).
+	cmd.Country = strings.ToUpper(strings.TrimSpace(request.Body.Country))
+	if !countryAlpha2.MatchString(cmd.Country) {
+		return nil, validationError("country",
+			"country must be an ISO 3166-1 alpha-2 code; the provider is asked whether it can pay a recipient there")
+	}
+	if request.Body.Region != nil {
+		cmd.Region = strings.ToUpper(strings.TrimSpace(*request.Body.Region))
 	}
 
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,

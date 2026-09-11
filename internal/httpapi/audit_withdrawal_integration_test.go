@@ -86,9 +86,33 @@ func TestAuditWV_TheHostedVerificationURLIsWrittenDownNowhere(t *testing.T) {
 		`SELECT coalesce(response_body::text, '') FROM idempotency_keys
 		  WHERE endpoint = 'PostMeVerificationSessions' AND key = $1`, key).Scan(&stored))
 
-	t.Logf("F-wv-5: idempotency_keys.response_body = %s", stored)
 	assert.False(t, strings.Contains(stored, hosted),
-		"F-wv-5: the single-use hosted verification link was written to idempotency_keys.response_body, "+
+		"F-231: the single-use hosted verification link was written to idempotency_keys.response_body, "+
 			"which cp_readonly and cp_ops may SELECT and which cp_app may not DELETE; ADR-0025 §3 says it "+
 			"is written down nowhere")
+	for _, field := range neverStoredFields() {
+		assert.NotContains(t, stored, `"`+field+`"`,
+			"a field the product documents as never stored reached the idempotency record")
+	}
+	assert.NotEmpty(t, stored, "the record itself is still there; it is the credential that is not")
+	assert.Contains(t, stored, `"session"`,
+		"what a replay CAN answer -- the session -- is still recorded")
+
+	// And the replay says what to do about it, rather than answering with a
+	// field the client is waiting for and will never get.
+	replay := h.do(http.MethodPost, "/v1/me/verification/sessions", map[string]any{
+		"account_id":           testAccountID.String(),
+		"jurisdiction_country": "US",
+		"jurisdiction_region":  "CA",
+		"purpose":              "PAYOUT_KYC",
+	}, "Idempotency-Key", key, "Origin", "https://app.test")
+	require.Equal(t, http.StatusOK, replay.Code, "body=%s", replay.Body.String())
+	var replayed api.StartedVerification
+	replay.json(&replayed)
+	assert.Nil(t, replayed.HostedUrl,
+		"F-231: a replay handed the credential out a second time from a row two roles can read")
+	require.NotNil(t, replayed.Resume)
+	assert.Contains(t, *replayed.Resume, "start a new session")
+	assert.Equal(t, started.Session.SessionId, replayed.Session.SessionId,
+		"the replay is still the same session; it is the link that cannot come back")
 }

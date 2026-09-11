@@ -512,6 +512,15 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 		out.QuotedNetAmountMinor = ptr(r.QuoteNetAmountMinor)
 		out.QuotedCurrency = ptr(r.QuoteCurrency)
 	}
+	// The tier this request was MADE on, read off the row. It used to be
+	// answered only by the by-id read, from today's provider mode, so the same
+	// payout was a rehearsal on one screen and unlabelled on two others
+	// (F-232). A row with no recorded fact reads as a rehearsal, because an
+	// unrecorded mode cannot be asserted to be real.
+	out.Sandbox = ptr(r.Sandbox)
+	if r.Provider != "" {
+		out.Provider = ptr(r.Provider)
+	}
 	return out
 }
 
@@ -524,7 +533,11 @@ func (s *Server) withProvenance(ctx context.Context, out api.PayoutRequest, id p
 	if err == nil && len(slices) > 0 {
 		out.Provenance = ptr(toAPIProvenance(slices))
 	}
-	out.Sandbox = ptr(s.opts.Ports.Payouts.SandboxProvider())
+	// The sandbox label is NOT set here any more. It used to be
+	// `s.opts.Ports.Payouts.SandboxProvider()` -- what the provider is now --
+	// which made this route the only one that answered it and made the answer a
+	// property of today's configuration rather than of the payout (F-232).
+	// toAPIPayout reads the column.
 	return out
 }
 

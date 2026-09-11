@@ -602,13 +602,14 @@ func TestIntegration_NoEnumCheckAppearsUnnoticed(t *testing.T) {
 // The rule is asserted from the outside instead, by
 // internal/intent's own tests driving a rejection code onto a non-terminal
 // transition and watching it refused (00749).
-// The four environment CHECKs (capability_gates, payout_quotes,
-// verification_sessions, verification_checks) repeat the deployment
-// environment list. They are unpaired for the reason the first one already was:
-// config.Environment has no exported all-values list, and adding one purely so
-// a test could read it would be a Go change made by a test rather than by a
-// need. The property they enforce -- a sandbox row cannot exist in PROD -- is
-// asserted directly in internal/verification's integration suite.
+// The five environment CHECKs (capability_gates, payout_quotes,
+// payout_requests, verification_sessions, verification_checks) repeat the
+// deployment environment list. They are unpaired for the reason the first one
+// already was: config.Environment has no exported all-values list, and adding
+// one purely so a test could read it would be a Go change made by a test rather
+// than by a need. The property they enforce -- a sandbox row cannot exist in
+// PROD -- is asserted directly in internal/verification's integration suite and,
+// for the conversion request, in internal/payout's (00810, F-232).
 var unpaired = []string{
 	"accounts.accounts_kind_check",
 	"accounts.accounts_status_check",
@@ -694,6 +695,7 @@ var unpaired = []string{
 	"payout_destination_transitions.payout_destination_transitions_actor_type_check",
 	"payout_provider_events.payout_provider_events_direction_check",
 	"payout_quotes.payout_quotes_environment_check",
+	"payout_requests.payout_requests_environment_check",
 	"performance_snapshots.performance_snapshots_scope_kind_check",
 	"position_lots.position_lots_status_check",
 	"prediction_outcomes.prediction_outcomes_realized_direction_check",

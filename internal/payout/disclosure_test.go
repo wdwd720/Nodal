@@ -68,6 +68,7 @@ func TestCreateRequest_ValidateSaysNothingAboutTheDisclosure(t *testing.T) {
 		Quantity:       money.QuantityFromInt64(100),
 		QuoteID:        &quoteID,
 		ProviderTerms:  ProviderTerms{FeeModelPublished: true},
+		Environment:    "TEST",
 		IdempotencyKey: "k",
 		EffectiveAt:    time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 	}

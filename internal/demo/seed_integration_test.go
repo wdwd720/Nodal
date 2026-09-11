@@ -347,15 +347,38 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	// sold and MARKET_CREATOR_EARNING to the creator of every seeded asset, and
 	// SandboxPolicy -- the policy a sandbox tier actually runs -- marks BOTH of
 	// those origins withdrawable, because rehearsing a payout of earned value is
-	// what a sandbox is for. What holds them is the finality floor beneath every
-	// origin policy: Execute issues them REVERSIBLE, and only SETTLED and
-	// UNFUNDED value is payout-eligible at all.
+	// what a sandbox is for.
 	//
-	// So the assertion is the disjunction that is actually load-bearing: for
-	// every lot, either its origin is refused or its finality is not eligible.
-	// A change that made one of them withdrawable by BOTH tests would fail here
-	// -- which is the only way demo money could ever leave.
+	// This test used to hold those two by their FINALITY: every earning was
+	// minted REVERSIBLE and only SETTLED and UNFUNDED value is payout-eligible,
+	// so the disjunction "refused by origin OR refused by finality" covered
+	// them. That floor was not a control, it was F-230: nothing could promote an
+	// earning out of REVERSIBLE on any deployment, so five of the six origins
+	// SandboxPolicy marks withdrawable could never be withdrawn and the
+	// eligibility page reported FUNDING_NOT_SETTLED on value whose finality
+	// nothing could move. D-124 fixed that -- an earning is as final as what
+	// paid for it -- and a seeded earning, funded by an UNFUNDED grant, is now
+	// UNFUNDED and payout-eligible by finality. On a sandbox tier, through a
+	// provider that moves nothing. That is what a rehearsal IS.
+	//
+	// So this asserts what is actually load-bearing, and it is two claims
+	// rather than one:
+	//
+	//  1. The GRANT never leaves, by ORIGIN, on every policy in this build.
+	//     That is the sentence this test is named for and it is unchanged.
+	//  2. Every other demo lot is DERIVED from that grant and from nothing
+	//     else: its parent chain bottoms out in PROMOTIONAL seeded value, so no
+	//     demo earning ever rests on money a person actually paid.
+	//
+	// The residual, stated rather than hidden: a sandbox tier configured with a
+	// LIVE payout adapter in its provider slot could pay a seeded earning out
+	// for real. No such adapter exists (BLOCKERS B-01, B-06) and payoutPolicyFor
+	// returns SandboxPolicy only on a sandbox tier, so the combination is
+	// unreachable today; what would close it is cmd/api refusing to boot with
+	// CP_API_DEMO_DATA set and a payout slot that is not the rehearsal one
+	// (D-124).
 	type lot struct {
+		id       string
 		account  string
 		origin   valuedomain.CreditOrigin
 		finality valuedomain.FundingFinality
@@ -364,7 +387,7 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	// credit_lot_state.finality, not credit_lots.initial_finality: what a payout
 	// would consult is where the lot is NOW.
 	lotRows, err := testDB.Query(ctx,
-		`SELECT l.account_id::text, l.origin, st.finality
+		`SELECT l.id::text, l.account_id::text, l.origin, st.finality
 		   FROM credit_lots l
 		   JOIN credit_lot_state st ON st.lot_id = l.id
 		   JOIN demo_seed_rows ds ON ds.kind = 'ACCOUNT' AND ds.ref_id = l.account_id`)
@@ -372,7 +395,7 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	defer lotRows.Close()
 	for lotRows.Next() {
 		var l lot
-		require.NoError(t, lotRows.Scan(&l.account, &l.origin, &l.finality))
+		require.NoError(t, lotRows.Scan(&l.id, &l.account, &l.origin, &l.finality))
 		lots = append(lots, l)
 	}
 	require.NoError(t, lotRows.Err())
@@ -383,15 +406,62 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 		if l.origin == valuedomain.OriginMarketCreatorEarning {
 			seenEarning = true
 		}
-		sandbox := valuedomain.SandboxPolicy().Rule(l.origin)
-		assert.False(t, sandbox.PayoutAllowed && l.finality.PayoutEligible(),
-			"a demo lot in %s at origin %s and finality %s could be withdrawn on a sandbox tier; "+
-				"demo money must be held by its origin or by its finality",
-			l.account, l.origin, l.finality)
+		if l.origin == valuedomain.OriginPromotional {
+			// 1. The grant itself, held by its origin, on every policy this
+			// build has.
+			assert.Falsef(t, valuedomain.SandboxPolicy().Rule(l.origin).PayoutAllowed,
+				"the seeder's grant in %s became withdrawable; demo Credits are given away and never leave",
+				l.account)
+			assert.False(t, valuedomain.DefaultPolicy().Rule(l.origin).PayoutAllowed)
+			continue
+		}
+		// 2. Everything else is derived, and derived from the grant.
+		roots := lotRootsOf(t, l.id)
+		require.NotEmptyf(t, roots,
+			"a demo lot in %s at origin %s names nothing that funded it; an earning with no parents "+
+				"is one nothing can ever promote or freeze (F-230)", l.account, l.origin)
+		for _, root := range roots {
+			assert.Equalf(t, valuedomain.OriginPromotional, root,
+				"a demo lot in %s at origin %s is funded by %s, which the seeder did not issue; "+
+					"no demo earning may rest on money somebody actually paid",
+				l.account, l.origin, root)
+		}
 	}
 	assert.True(t, seenEarning,
 		"the seeder's trades pay a creator fee, so MARKET_CREATOR_EARNING must be among the lots "+
 			"this assertion covered; if it is not, the assertion has stopped testing what it names")
+}
+
+// lotRootsOf walks credit_lot_parents to the lots nothing funded and returns
+// their origins.
+//
+// It is the question "where did this value ultimately come from", asked of the
+// table D-124 added. A lot that names no parents at all returns nothing, which
+// the caller reports separately: a derived lot with no parents is exactly the
+// hole F-230 left.
+func lotRootsOf(t *testing.T, lotID string) []valuedomain.CreditOrigin {
+	t.Helper()
+	rows, err := testDB.Query(context.Background(),
+		`WITH RECURSIVE chain(node) AS (
+		     SELECT $1::uuid
+		     UNION
+		     SELECT p.parent_lot_id FROM credit_lot_parents p JOIN chain c ON p.lot_id = c.node
+		 )
+		 SELECT DISTINCT l.origin
+		   FROM chain c
+		   JOIN credit_lots l ON l.id = c.node
+		  WHERE c.node <> $1::uuid
+		    AND NOT EXISTS (SELECT 1 FROM credit_lot_parents p WHERE p.lot_id = c.node)`, lotID)
+	require.NoError(t, err)
+	defer rows.Close()
+	var out []valuedomain.CreditOrigin
+	for rows.Next() {
+		var o valuedomain.CreditOrigin
+		require.NoError(t, rows.Scan(&o))
+		out = append(out, o)
+	}
+	require.NoError(t, rows.Err())
+	return out
 }
 
 // TestIntegration_TheActivityFeedSeesWhatTheSeederDid drives internal/activity

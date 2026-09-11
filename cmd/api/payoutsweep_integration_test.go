@@ -108,7 +108,7 @@ func newPayoutSweepFixture(t *testing.T) *payoutSweepFixture {
 			dest, derr := svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: acct.ID, Kind: payout.DestinationBank,
 				Provider: payoutsandbox.Name, ProviderReference: "dest-" + id.New[id.Any]().String(),
-				DisplayLabel: "Test bank", Currency: "USD",
+				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if derr != nil {
 				return derr
@@ -190,6 +190,7 @@ func (f *payoutSweepFixture) reserve(t *testing.T, amount int64) payout.Request 
 				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
 				Quantity:           money.QuantityFromInt64(amount),
 				ProviderTerms:      payout.TermsFrom(f.provider.Capabilities()),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + id.New[id.Any]().String(),
 				EffectiveAt:        f.clk.Now(),

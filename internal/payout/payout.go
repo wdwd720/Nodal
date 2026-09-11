@@ -256,6 +256,16 @@ type Destination struct {
 	// into. `Capabilities` carries SupportedCountries and ExcludedRegions and
 	// nothing could feed them until the destination knew (00763).
 	Country string
+	// Region is the subdivision within Country, without its country prefix.
+	//
+	// 00763 fed half the question. `CanPayRecipient` has answered
+	// RECIPIENT_REGION_EXCLUDED and RECIPIENT_REGION_UNKNOWN since it was
+	// written and nothing ever set a region, so a provider that pays the United
+	// States but not New York had no way to refuse a New York recipient
+	// (F-228, D-122). It is required whenever the provider publishes excluded
+	// regions for the country, because "we do not know which state" is not
+	// "any state".
+	Region string
 	// MaskedDisplay is what a person recognises without Nodal holding the
 	// number: "••••4242". It is validated to be a mask rather than a number.
 	MaskedDisplay string
@@ -301,6 +311,12 @@ type Request struct {
 	QuoteFeeAmountMinor   int64
 	QuoteNetAmountMinor   int64
 	QuoteCurrency         string
+
+	// Sandbox is whether this was a rehearsal, as recorded at creation. A row
+	// written before 00810 has no recorded fact and reads as a rehearsal,
+	// because an unrecorded mode cannot be asserted to be real.
+	Sandbox     bool
+	Environment string
 
 	ReservedAt    *time.Time
 	SubmittedAt   *time.Time
@@ -387,6 +403,20 @@ type CreateRequest struct {
 	// commit refuses rather than sending something the provider will bounce.
 	ProviderTerms ProviderTerms
 
+	// Sandbox and Environment are the deployment facts this request was made
+	// under, recorded at creation rather than read from today's provider mode.
+	//
+	// The by-id read used to answer `"sandbox": true` by asking the port what
+	// the provider is NOW, and the list and the create response did not answer
+	// it at all -- so one payout was a rehearsal on one screen, unlabelled on
+	// two others, and would silently become a real payout in the record the day
+	// a deployment swapped its provider (F-232). Environment has no default:
+	// Validate refuses a request without one, because a row that cannot say
+	// where it was made cannot be checked against the rule that a rehearsal
+	// never exists in PROD.
+	Sandbox     bool
+	Environment string
+
 	// DisclosureAccepted says whether the person has accepted the current
 	// WITHDRAWAL_DISCLOSURE. It is an input rather than a lookup, like every
 	// other fact this package decides on: the caller already knows it, a second
@@ -421,6 +451,16 @@ func (r CreateRequest) Validate() error {
 		return errs.New(errs.CodeValidationFailed,
 			"a payout names the quote the customer was shown").
 			WithField("field", "quote_id")
+	}
+	if strings.TrimSpace(r.Environment) == "" {
+		return errs.New(errs.CodeValidationFailed,
+			"a payout records the environment it was created in").
+			WithField("field", "environment")
+	}
+	if r.Sandbox && r.Environment == "PROD" {
+		return errs.New(errs.CodeForbidden,
+			"a rehearsal payout cannot exist in PROD").
+			WithField("environment", r.Environment)
 	}
 	if !r.ProviderTerms.FeeModelPublished {
 		// Not a fee of zero. A caller that has not read a fee schedule out of a
