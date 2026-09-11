@@ -146,6 +146,17 @@ const (
 	// CodeWithdrawalVelocityLimit: the request exceeds the per-request or
 	// rolling-window withdrawal limits of the account's policy.
 	CodeWithdrawalVelocityLimit Code = "WITHDRAWAL_VELOCITY_LIMIT"
+	// CodeTermsAcceptanceRequired: a legal document this action requires has
+	// not been accepted at the version and bytes now served. Fields names the
+	// documents in `documents`, so a client can present exactly those and
+	// retry; nothing about the request itself is wrong. HTTP 422.
+	//
+	// Deliberately not VERIFICATION_REQUIRED, which would send a person into
+	// an identity flow they may have already completed, and deliberately not
+	// FORBIDDEN, which says the account may not do this at all. What is
+	// missing is a signature on a document, and the difference is the whole
+	// point of having a code (goal SS48).
+	CodeTermsAcceptanceRequired Code = "TERMS_ACCEPTANCE_REQUIRED"
 )
 
 // Signing boundary and wallet codes (internal/signing, internal/wallet,
@@ -287,6 +298,7 @@ var registry = map[Code]codeInfo{
 
 	CodeWebhookSignatureInvalid: {http.StatusBadRequest, "Webhook signature invalid"},
 	CodeWithdrawalVelocityLimit: {http.StatusUnprocessableEntity, "Withdrawal velocity limit exceeded"},
+	CodeTermsAcceptanceRequired: {http.StatusUnprocessableEntity, "A required legal document has not been accepted"},
 
 	CodeSigningRejected:       {http.StatusUnprocessableEntity, "Transaction signing rejected"},
 	CodeDelegationNotVerified: {http.StatusUnprocessableEntity, "Wallet delegation not verified"},
@@ -349,6 +361,7 @@ var allCodes = []Code{
 	CodeVenueUnavailable,
 	CodeWebhookSignatureInvalid,
 	CodeWithdrawalVelocityLimit,
+	CodeTermsAcceptanceRequired,
 	CodeSigningRejected,
 	CodeDelegationNotVerified,
 	CodeWalletInactive,

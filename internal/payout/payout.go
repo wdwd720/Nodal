@@ -308,6 +308,17 @@ type CreateRequest struct {
 	// a quote can fund exactly one payout.
 	QuoteID *QuoteID
 
+	// DisclosureAccepted says whether the person has accepted the current
+	// WITHDRAWAL_DISCLOSURE. It is an input rather than a lookup, like every
+	// other fact this package decides on: the caller already knows it, a second
+	// lookup could disagree with the first, and a decision made in March has to
+	// be replayable in June against the inputs it was made with.
+	//
+	// The field has no "unknown" value on purpose. false is refused, so a
+	// caller that forgets to supply it refuses a payout rather than permitting
+	// one -- which is the direction a mistake here has to fall.
+	DisclosureAccepted bool
+
 	IdempotencyKey string
 	EffectiveAt    time.Time
 	CorrelationID  string

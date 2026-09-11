@@ -230,7 +230,8 @@ func (h *domainAHarness) stuckPayout(t *testing.T) payout.Request {
 			var err error
 			req, decision, err = h.payouts.Create(ctx, tx, payout.CreateRequest{
 				AccountID: h.creator, DestinationID: &dest.ID, Quantity: qq("400"),
-				IdempotencyKey: "payout-" + uuid.NewString(), EffectiveAt: h.clk.Now(),
+				DisclosureAccepted: true,
+				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: h.clk.Now(),
 			}, payout.EligibilityInput{
 				Policy: policy, Verified: valuedomain.VerificationPayoutKYC,
 				ActiveCaps:          map[valuedomain.CapabilityKey]bool{payoutCreatorEarnings: true},

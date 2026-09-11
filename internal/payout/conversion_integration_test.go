@@ -71,7 +71,8 @@ func (f *fixture) createWithQuote(amount int64, quoteID payout.QuoteID, in payou
 			dest := f.destination
 			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, QuoteID: &quoteID, Quantity: q(amount),
-				IdempotencyKey: "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
+				DisclosureAccepted: true,
+				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
 			}, in)
 			return cerr
 		})
@@ -90,6 +91,7 @@ func quoteRequest(f *fixture, amount int64, key string) payout.QuoteRequest {
 		PolicyVersion:          "payout-policy-itest",
 		Currency:               "USD",
 		Environment:            "TEST",
+		DisclosureAccepted:     true,
 		IdempotencyKey:         key,
 		Now:                    f.clk.Now(),
 	}

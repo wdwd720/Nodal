@@ -39,6 +39,7 @@ func baseInput(policy valuedomain.Policy, level valuedomain.VerificationLevel, h
 		ProviderAvailable:     true,
 		ProviderName:          "sandbox_payout",
 		DestinationConfigured: true,
+		DisclosureAccepted:    true,
 	}
 }
 
@@ -299,4 +300,41 @@ func TestWithdrawalReasonCodes_AreClosedAndUnique(t *testing.T) {
 	} {
 		assert.True(t, seen[want], "%s is missing from the declared reasons", want)
 	}
+}
+
+// TestExplainWithdrawal_TheDisclosureIsAStepAndNotARefusal (D-083).
+//
+// §48 puts the withdrawal disclosure at the moment somebody asks to take value
+// out, deliberately not at signup, so an unsigned disclosure is the normal state
+// of everybody who has never withdrawn. Reporting zero withdrawable for all of
+// them would tell a person their money is stuck when a document they have not
+// been shown yet is the whole of it.
+func TestExplainWithdrawal_TheDisclosureIsAStepAndNotARefusal(t *testing.T) {
+	t.Parallel()
+	policy := valuedomain.SandboxPolicy()
+	in := baseInput(policy, valuedomain.VerificationPayoutKYC, holding(valuedomain.OriginPurchased, 1_000_000))
+	in.DisclosureAccepted = false
+	e := ExplainWithdrawal(in)
+
+	assert.False(t, e.Eligible, "nothing may leave until the disclosure is accepted")
+	assert.Contains(t, reasonStrings(e.Reasons), string(WithdrawalTermsNotAccepted))
+	assert.Equal(t, "1000000", e.WithdrawableNow.String(),
+		"the value is eligible; what is missing is a signature, and the figure has to say so")
+	assert.Equal(t, "1000000", bucketOf(e, valuedomain.OriginPurchased).Withdrawable.String())
+	assert.NotContains(t, reasonsOf(bucketOf(e, valuedomain.OriginPurchased)), string(WithdrawalTermsNotAccepted),
+		"it is a fact about the person, not about any origin, so no bucket carries it")
+
+	// Accepted, and the verdict is the one the buckets already supported.
+	in.DisclosureAccepted = true
+	accepted := ExplainWithdrawal(in)
+	assert.True(t, accepted.Eligible)
+	assert.NotContains(t, reasonStrings(accepted.Reasons), string(WithdrawalTermsNotAccepted))
+}
+
+func reasonStrings(rs []WithdrawalReason) []string {
+	out := make([]string, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, string(r))
+	}
+	return out
 }

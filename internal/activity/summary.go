@@ -55,11 +55,122 @@ func summaryFor(k Kind, status, side, symbol string) string {
 		return "Payout " + strings.ToLower(strings.ReplaceAll(status, "_", " "))
 	case KindAdminAdjustment:
 		return "An operator adjusted your Credit balance"
+	case KindVerificationUpdated:
+		return verificationSummary(status)
+	case KindPayoutDestinationAdded:
+		return "Added a payout destination" + statusSuffix(status)
+	case KindPayoutDestinationDisabled:
+		if status == "REJECTED" {
+			return "A payout destination was rejected by the provider"
+		}
+		return "A payout destination was disabled"
+	case KindTermsAccepted:
+		return "Accepted the " + documentName(status)
+	case KindAccountClosureRequested:
+		return "Requested to close this account"
+	case KindAccountClosureDecided:
+		return closureSummary(status)
+	case KindAgentCreated:
+		return "Created an agent"
+	case KindAgentPaused:
+		if status == "OWNER_REQUEST" {
+			return "Paused an agent"
+		}
+		return "An agent was paused" + statusSuffix(status)
+	case KindAgentResumed:
+		return "An agent was resumed"
+	case KindAgentDisabled:
+		return "Disabled an agent; its authority is revoked"
+	case KindNativeMarketPaused:
+		return marketPauseSummary(status, orSomething(symbol))
 	}
 	// Unreachable: TestEveryKindHasASummaryTemplate proves the switch is total.
 	// Returning the kind rather than an empty string keeps an unknown item
 	// legible if one ever arrives from a newer writer.
 	return string(k)
+}
+
+// verificationSummary renders one move of the financial verification state.
+//
+// Two of the ten states get a sentence rather than a state name, because a
+// state name is what the product must NOT show for them: EXPIRED is not a
+// rejection and must never read as one (D-057, D-061), and REQUIRED is a next
+// step rather than a refusal.
+func verificationSummary(status string) string {
+	switch status {
+	case "VERIFIED":
+		return "Your identity verification completed"
+	case "EXPIRED":
+		return "Your identity verification expired and can be renewed"
+	case "REQUIRED":
+		return "Identity verification was requested"
+	case "REJECTED":
+		return "Your identity verification was not approved"
+	case "NEEDS_INFORMATION":
+		return "Your identity verification needs more information"
+	case "RESTRICTED":
+		return "Your identity verification carries a restriction"
+	case "SUSPENDED":
+		return "Your identity verification is suspended pending review"
+	default:
+		return "Your identity verification moved to" + strings.ToLower(" "+strings.ReplaceAll(status, "_", " "))
+	}
+}
+
+// closureSummary renders what happened to a closure request. "Cancelled" says
+// who cancelled it only where the schema knows: the transition's actor is not
+// on the item, so the sentence stays about the request.
+func closureSummary(status string) string {
+	switch status {
+	case "CANCELLED":
+		return "The request to close this account was cancelled"
+	case "REFUSED":
+		return "The request to close this account was refused"
+	case "EFFECTED":
+		return "This account was closed"
+	default:
+		return "The request to close this account moved to" + strings.ToLower(" "+strings.ReplaceAll(status, "_", " "))
+	}
+}
+
+// marketPauseSummary is the same four statuses internal/notifications names,
+// said once here for the timeline. A holding is never described as lost: a
+// paused market stops trading and changes nobody's balance.
+func marketPauseSummary(status, symbol string) string {
+	switch status {
+	case "CLOSE_ONLY":
+		return symbol + " stopped accepting buys; you can still sell what you hold"
+	case "DELISTED":
+		return symbol + " was delisted; your holding is unchanged"
+	case "FROZEN":
+		return symbol + " is frozen; your holding is unchanged"
+	default: // HALTED
+		return symbol + " is halted; your holding is unchanged"
+	}
+}
+
+// documentName turns a terms document id into the words on the document.
+//
+// The map is here rather than read from internal/terms deliberately: this
+// package would otherwise carry a dependency on the legal registry to render a
+// noun, and the ids are a database CHECK's closed set. An id with no entry
+// falls back to its own lowercased words, which stays legible if the registry
+// gains a document before this switch does.
+func documentName(documentID string) string {
+	switch documentID {
+	case "TERMS_OF_SERVICE":
+		return "Terms of Service"
+	case "PRIVACY_POLICY":
+		return "Privacy Notice"
+	case "RISK_DISCLOSURE":
+		return "Risk Disclosure"
+	case "CREDITS_TERMS":
+		return "Credits Terms"
+	case "WITHDRAWAL_DISCLOSURE":
+		return "Withdrawal and Verification Disclosure"
+	default:
+		return strings.ToLower(strings.ReplaceAll(documentID, "_", " "))
+	}
 }
 
 func statusSuffix(status string) string {

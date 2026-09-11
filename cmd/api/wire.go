@@ -405,7 +405,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// runCreditSettlement for why this is acceptable in the API process and
 	// what it deliberately does not become responsible for.
 	if creditPurchases.Service != nil {
-		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg.Credit.SettlementWindow, log)
+		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg, log)
 	}
 	// The same answer for the same reason: this deployment has one process, so
 	// the periodic work belongs in it. Two passes, both needing cp_ops:
@@ -446,6 +446,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+	// Submit and Reconcile had no caller anywhere in cmd/, so a reserved payout
+	// sat in VERIFIED forever with the customer's Credits held in
+	// PAYOUT_RESERVED and the provider never told. See runPayoutSweeps for why
+	// these run here, why fifteen seconds, and why neither pass owns any of the
+	// crash-safety (D-085).
+	go runPayoutSweeps(ctx, database, payoutSvc, clk, log)
 
 	// ---- verification (goal PARTS 19-25) ---------------------------------
 	//
@@ -476,6 +482,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("verification service: %w", err)
 	}
+	// The other half of D-061. The resolver below already reports the base
+	// level for a profile whose validity window has elapsed, so nothing an
+	// expired verification permits can leave; what was missing was anything
+	// that moved the STATE, which left a profile reading VERIFIED while every
+	// surface treated the person as unverified, and made §20's EXPIRED -- whose
+	// next step is REVERIFY -- a state no deployment could ever reach.
+	go runVerificationExpiry(ctx, database, verificationSvc, clk, log)
 	// The composite resolver replaces the cap that internal/identity documents:
 	// NODAL_IDENTITY is what Nodal establishes by itself, and PAYOUT_KYC and
 	// ENHANCED come from a provider decision PLUS the sub-checks that justify
@@ -486,6 +499,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	compositeVerification, err := verification.NewResolver(verificationResolver, verificationRepo, database, clk)
 	if err != nil {
 		return nil, fmt.Errorf("verification resolver: %w", err)
+	}
+	// THE Credit asset, on a sandbox tier that has none. Everything below reads
+	// it -- the quote's scale, credit.Service.AssetID, the demo seeder -- and
+	// `scripts/seedeconomy`, the only thing that ever wrote one, refuses to run
+	// anywhere but LOCAL, DEV and TEST, which are exactly the environments that
+	// are not the sandbox tier. See creditAssetAtBoot for why PROD is refused.
+	if err := creditAssetAtBoot(ctx, database, cfg, assetRepo, log); err != nil {
+		return nil, err
 	}
 	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
 	if err != nil {
@@ -632,8 +653,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			Accounts:         accountRepo,
 			Pricing:          creditPurchases.Service,
 			CreditDecimals:   creditDecimals,
-			Environment:      string(cfg.Env),
-			SandboxTier:      cfg.SandboxTier(),
+			// The legal registry, read at the moment somebody asks to take
+			// value out. §48 puts the withdrawal disclosure there and
+			// deliberately not at signup, so the quote and the payout ask for
+			// it and onboarding does not (D-083).
+			Terms:       profileSvc,
+			Environment: string(cfg.Env),
+			SandboxTier: cfg.SandboxTier(),
 		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.
@@ -719,11 +745,21 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Logger:       log,
 		BuildVersion: config.BuildVersion,
 		StepUpMaxAge: cfg.Auth.StepUpMaxAge,
-		// No publisher. Activity and notifications are wired by the composition
-		// root when those surfaces exist; internal/agents deliberately imports
-		// neither, so what a user is told about an agent stays those packages'
-		// decision rather than a property of the lifecycle.
-		Events: nil,
+		// The publisher, which is an adapter in THIS package and not an import
+		// in internal/agents (D-073, D-082). It emits one notification, for one
+		// case: an agent somebody other than its owner stopped. It writes in a
+		// transaction of its own after the agent transaction committed, and
+		// keys on the agent_pauses row through the same exported helpers the
+		// notification follower uses, so the follower's next pass finds the row
+		// already there and tells nobody twice.
+		//
+		// The timeline needs no publisher at all: internal/activity owns no
+		// table and reads agents, agent_pauses and agent_lifecycle_transitions
+		// directly, so an agent action is on somebody's timeline because it
+		// happened rather than because a hook fired.
+		Events: agentNotifier{
+			db: database, producer: notificationProducer, hub: hubPublisher{hub: hub}, log: log,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agents: %w", err)

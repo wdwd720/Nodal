@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 )
@@ -19,6 +20,60 @@ const (
 	settleBatch       = 100
 	defaultSettleWait = 30 * 24 * time.Hour
 )
+
+// The sandbox tier's settlement window (D-086).
+//
+// # The problem it solves
+//
+// CP_CREDIT_SETTLEMENT_WINDOW is 720 hours on STAGING, which is right: it is
+// the card chargeback window, and a captured payment IS reversible for that
+// long. Only SETTLED value is payout-eligible under any policy in this build --
+// including the sandbox one -- so on the tier whose entire purpose is to
+// rehearse the product, nothing anybody bought could ever be withdrawn. The
+// withdrawal journey ADR-0023 exists to let a sandbox tier exercise was
+// unreachable past its first step, not by a refusal anybody could see but by a
+// clock that had not run yet.
+//
+// # Why two minutes, and why not configuration
+//
+// Two minutes is long enough to observe REVERSIBLE -- the state matters and a
+// rehearsal that skipped it would rehearse the wrong thing -- and short enough
+// that a person testing the product does not go and do something else.
+//
+// It is compiled in and keyed off cfg.SandboxTier() rather than being a second
+// environment variable, for the reason the config table already gives for the
+// real window: a risk determination read straight from the environment is
+// outside scripts/configcheck and outside the configuration hash. A sandbox
+// window is not a risk determination at all -- no card was charged and nothing
+// can be charged back -- so it is a property of the tier, stated once here,
+// where it is refused in PROD by construction.
+//
+// # Why the sweep also ticks faster there
+//
+// A two-minute window swept every fifteen minutes is a fifteen-minute window.
+const (
+	sandboxSettleWait     = 2 * time.Minute
+	sandboxSettleInterval = 20 * time.Second
+)
+
+// creditSettlement returns the window and the cadence this deployment sweeps
+// with.
+//
+// PROD never reaches the sandbox branch: cfg.SandboxTier() is false there by
+// construction (config.Validate refuses the declaration in PROD, and
+// SandboxTier checks the environment again on its own account). The second
+// condition is belt and braces for a Config nobody validated, and it is the
+// same pair every other sandbox affordance in this binary is guarded by.
+func creditSettlement(cfg *config.Config) (window, interval time.Duration) {
+	if cfg != nil && cfg.SandboxTier() && cfg.Env != config.EnvProd {
+		return sandboxSettleWait, sandboxSettleInterval
+	}
+	window = defaultSettleWait
+	if cfg != nil && cfg.Credit.SettlementWindow > 0 {
+		window = cfg.Credit.SettlementWindow
+	}
+	return window, settleInterval
+}
 
 // runCreditSettlement promotes fundings whose reversibility window has closed,
 // on a ticker, for as long as this process is up.
@@ -57,15 +112,18 @@ const (
 // only reason a number is correct -- it is not: the ceiling refuses when it
 // cannot measure, and the settlement window is a risk decision recorded in
 // configuration, not an artefact of how often this fires.
-func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.PurchaseService, window time.Duration, log *slog.Logger) {
+func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.PurchaseService, cfg *config.Config, log *slog.Logger) {
 	if svc == nil || database == nil {
 		return
 	}
-	if window <= 0 {
-		window = defaultSettleWait
+	window, interval := creditSettlement(cfg)
+	if cfg != nil && cfg.SandboxTier() {
+		log.Warn("SANDBOX settlement window: a captured payment settles in minutes, not in a chargeback window",
+			"window", window, "interval", interval, "environment", string(cfg.Env),
+			"consequence", "only SETTLED value is payout-eligible, so this is what makes a rehearsal withdrawal reachable; PROD keeps its real window")
 	}
-	log.Info("credit settlement sweep started", "interval", settleInterval, "window", window)
-	t := time.NewTicker(settleInterval)
+	log.Info("credit settlement sweep started", "interval", interval, "window", window)
+	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
 		// Once at start as well as on the tick: a process that wakes, serves a

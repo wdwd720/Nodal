@@ -13,6 +13,7 @@ import (
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/provider/payoutsandbox"
@@ -159,3 +160,77 @@ func sandboxGatesAtBoot(ctx context.Context, database *db.DB, cfg *config.Config
 	}
 	return nil
 }
+
+// creditAssetAtBoot registers THE Credit asset on a sandbox tier that has none.
+//
+// # Why this exists
+//
+// Every part of the internal economy is keyed on one `assets` row with kind
+// CREDIT: `credit.Service.AssetID` looks it up, the quote's scale comes from its
+// decimals, and `demo.NewSeeder` refuses to run without it. Nothing in any
+// deployment wrote one. `scripts/seedeconomy` does, and it refuses to run
+// anywhere but LOCAL, DEV and TEST -- which are exactly the environments that
+// are NOT the sandbox tier.
+//
+// So STAGING, the deployment whose whole purpose is to rehearse the product,
+// booted with no Credit asset: `demoDataAtBoot` logged "this deployment has no
+// Credit asset" and returned, the markets page stayed empty, and nobody could
+// buy a Credit. The seeder D-068 built was a permanent no-op on the one tier it
+// was built for.
+//
+// # The same shape as the risk policy at boot (D-067)
+//
+// Through the domain service -- `assets.Repository.Create`, which validates the
+// definition and is the same call `scripts/seedeconomy` makes -- never SQL.
+// Idempotent, because migration 00711 permits exactly one Credit asset per
+// deployment, so this is a lookup first and a race resolves as a CONFLICT that
+// is treated as success.
+//
+// # Why PROD is refused
+//
+// The scale is a decision. Six decimals is chosen here because a bonding-curve
+// market has to price units far below one Credit and a coarser scale makes
+// rounding to zero a usable exploit -- but it is still a decision, and a
+// production deployment's unit of account should be created by a person who
+// knows they are creating it. A PROD deployment with no Credit asset refuses
+// every purchase, which is the correct failure, and `scripts/seedeconomy` is
+// not the tool for it.
+func creditAssetAtBoot(ctx context.Context, database *db.DB, cfg *config.Config, repo *assets.Repository, log *slog.Logger) error {
+	if !cfg.SandboxTier() || cfg.Env == config.EnvProd {
+		return nil
+	}
+	var existing assets.AssetID
+	err := database.QueryRow(ctx, `SELECT id FROM assets WHERE kind = 'CREDIT'`).Scan(&existing)
+	switch {
+	case err == nil:
+		return nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("credit asset at boot: %w", err)
+	}
+	created, err := repo.Create(ctx, database, assets.Asset{
+		Chain: assets.InternalChain, Kind: assets.KindCredit,
+		ValueDomain: valuedomain.InternalCredit,
+		Symbol:      "CREDIT", Name: "Nodal Credit",
+		Decimals:  creditAssetDecimalsAtBoot,
+		RiskClass: assets.RiskUnsupported, Status: assets.StatusActive,
+	})
+	if err != nil {
+		if errs.CodeOf(err) == errs.CodeConflict {
+			// Another instance registered it first. That is the intended
+			// outcome of a race, not a failure.
+			return nil
+		}
+		return fmt.Errorf("credit asset at boot: %w", err)
+	}
+	log.Warn("registered the Credit asset at boot: this is a sandbox tier and its Credits are a rehearsal",
+		"asset_id", created.ID.String(), "decimals", created.Decimals, "environment", string(cfg.Env),
+		"consequence", "the internal economy can be exercised here; PROD registers its own unit of account by hand")
+	return nil
+}
+
+// creditAssetDecimalsAtBoot is the scale the sandbox tier's Credit carries.
+//
+// Six, matching scripts/seedeconomy, for the reason recorded there: a
+// bonding-curve market prices units far below one Credit, and a coarser scale
+// would make rounding to zero a usable exploit.
+const creditAssetDecimalsAtBoot = 6

@@ -181,3 +181,94 @@ func TestSummary_NeverCarriesACharacterSomebodyChose(t *testing.T) {
 	assert.Equal(t, "A Credit purchase is disputed", summaryFor(KindCreditReversal, "DISPUTED", "", ""))
 	assert.Equal(t, "Payout provider pending", summaryFor(KindPayoutStateChanged, "PROVIDER_PENDING", "", ""))
 }
+
+// TestSummary_TheProductKindsSayWhatHappened (D-081).
+//
+// Every one of these is a sentence somebody reads on their own timeline, and
+// three of them are sentences the product must be careful about: an expired
+// verification is not a rejection, a paused market has not taken anybody's
+// holding, and an agent paused by an operator is not an agent its owner
+// stopped.
+func TestSummary_TheProductKindsSayWhatHappened(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "Your identity verification completed", summaryFor(KindVerificationUpdated, "VERIFIED", "", ""))
+	expired := summaryFor(KindVerificationUpdated, "EXPIRED", "", "")
+	assert.Equal(t, "Your identity verification expired and can be renewed", expired)
+	assert.NotContains(t, strings.ToLower(expired), "reject",
+		"an expired verification is not a rejection and must never read as one")
+	assert.Equal(t, "Identity verification was requested", summaryFor(KindVerificationUpdated, "REQUIRED", "", ""))
+
+	assert.Equal(t, "Added a payout destination (bank)", summaryFor(KindPayoutDestinationAdded, "BANK", "", ""))
+	assert.Equal(t, "A payout destination was rejected by the provider",
+		summaryFor(KindPayoutDestinationDisabled, "REJECTED", "", ""))
+	assert.Equal(t, "A payout destination was disabled",
+		summaryFor(KindPayoutDestinationDisabled, "DISABLED", "", ""))
+
+	assert.Equal(t, "Accepted the Withdrawal and Verification Disclosure",
+		summaryFor(KindTermsAccepted, "WITHDRAWAL_DISCLOSURE", "", ""))
+	assert.Equal(t, "Accepted the Terms of Service", summaryFor(KindTermsAccepted, "TERMS_OF_SERVICE", "", ""))
+
+	assert.Equal(t, "Requested to close this account", summaryFor(KindAccountClosureRequested, "PENDING", "", ""))
+	assert.Equal(t, "This account was closed", summaryFor(KindAccountClosureDecided, "EFFECTED", "", ""))
+	assert.Equal(t, "The request to close this account was cancelled",
+		summaryFor(KindAccountClosureDecided, "CANCELLED", "", ""))
+
+	assert.Equal(t, "Created an agent", summaryFor(KindAgentCreated, "DRAFT", "", ""))
+	assert.Equal(t, "Paused an agent", summaryFor(KindAgentPaused, "OWNER_REQUEST", "", ""))
+	assert.Equal(t, "An agent was paused (operator)", summaryFor(KindAgentPaused, "OPERATOR", "", ""),
+		"an owner reading their own history must see that somebody else stopped it")
+	assert.Equal(t, "An agent was resumed", summaryFor(KindAgentResumed, "OPERATOR", "", ""))
+	assert.Equal(t, "Disabled an agent; its authority is revoked", summaryFor(KindAgentDisabled, "REVOKED", "", ""))
+
+	for _, status := range []string{"CLOSE_ONLY", "HALTED", "FROZEN", "DELISTED"} {
+		got := summaryFor(KindNativeMarketPaused, status, "", "ORB")
+		assert.Contains(t, got, "ORB")
+		// Every one of them says what the person still has. A pause stops
+		// trading; it takes nothing away, and the sentence has to say so.
+		assert.True(t, strings.Contains(got, "unchanged") || strings.Contains(got, "still sell what you hold"),
+			"%s: a paused market must never read as value taken away, got %q", status, got)
+	}
+	assert.Equal(t, "an asset is halted; your holding is unchanged",
+		summaryFor(KindNativeMarketPaused, "HALTED", "", ""))
+
+	// The agent branches carry no agent name: it is owner-supplied text that
+	// has passed through no screen, and a sentence is displayed.
+	for _, k := range []Kind{KindAgentCreated, KindAgentPaused, KindAgentResumed, KindAgentDisabled} {
+		assert.NotContains(t, summaryFor(k, "OWNER_REQUEST", "", "<script>"), "script",
+			"kind %s must not interpolate anything a person chose", k)
+	}
+}
+
+// TestSources_TheProductKindsScopeToTheAccountInTheParameter.
+//
+// Six of the new branches read tables keyed on a USER. Each one has to pin
+// itself to the account in $1 through the owner join, or a person with two
+// accounts sees one verification decision twice.
+func TestSources_TheProductKindsScopeToTheAccountInTheParameter(t *testing.T) {
+	t.Parallel()
+	userScoped := map[Kind]string{
+		KindVerificationUpdated:     "compliance_profile_transitions",
+		KindTermsAccepted:           "terms_acceptances",
+		KindAccountClosureRequested: "account_closure_requests",
+		KindAccountClosureDecided:   "account_closure_request_transitions",
+	}
+	for _, s := range Sources() {
+		table, ok := userScoped[s.Kind]
+		if !ok {
+			continue
+		}
+		assert.Contains(t, s.SQL, table, "source %s reads %s", s.Kind, table)
+		assert.Contains(t, s.SQL, "JOIN accounts acc ON acc.owner_user_id",
+			"source %s reads a user-keyed table and must join the account that owns it", s.Kind)
+		assert.Contains(t, s.SQL, "acc.id = $1",
+			"source %s must pin to ONE account, not filter by owner", s.Kind)
+	}
+	// And the account-keyed ones scope directly.
+	for _, s := range Sources() {
+		if _, ok := userScoped[s.Kind]; ok {
+			continue
+		}
+		assert.Contains(t, s.SQL, "$1", "source %s does not scope to an account", s.Kind)
+	}
+}

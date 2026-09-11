@@ -28,11 +28,18 @@
 // `TestEveryKindHasASummaryTemplate` make a Kind without an implementation a
 // test failure rather than an empty feed.
 //
-// Kinds this package does NOT yet declare, because the domains that would raise
-// them are being built alongside it: verification state changes, profile and
-// security events, and agent actions. Each is a Source and a template when its
-// domain lands; the orchestrator adds them here rather than in that domain, so
-// the feed stays one query.
+// The verification, profile and agent kinds this package originally left for
+// the domains that would raise them have landed (D-081): a verification state
+// change, a payout destination added or disabled, a legal document accepted, a
+// closure request and its outcome, an agent created, paused, resumed or
+// disabled, and a native market that stopped trading. Each is a Source and a
+// template HERE rather than in that domain, so the feed stays one query and no
+// domain acquires a reason to know what a timeline looks like.
+//
+// Security events are still absent, and deliberately: internal/notifications
+// already tells a person about a new sign-in, and a security page that reads
+// security_events directly is a different surface with a different retention
+// policy from a timeline of what happened to an account's value.
 //
 // # Temperature
 //

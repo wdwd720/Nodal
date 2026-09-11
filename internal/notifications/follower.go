@@ -22,6 +22,15 @@ const (
 	ScopeMarket   = "market"
 	ScopePayout   = "payout"
 	ScopeAccount  = "account"
+	// ScopeVerification and ScopeEligibility are the two reads a verification
+	// decision invalidates. They are separate because they are separate
+	// resources: the profile says what Nodal holds, and the eligibility
+	// explanation composes it with the payout policy, the gates and the
+	// provider, and changes when any of those do.
+	ScopeVerification = "verification"
+	ScopeEligibility  = "eligibility"
+	// ScopeAgent is one agent's view.
+	ScopeAgent = "agent"
 )
 
 // Signal tells a client that something it may be displaying is now stale.
@@ -109,6 +118,8 @@ func NewFollower(producer *Producer) *Follower {
 			{name: "native_market_transitions", read: readMarketPauses},
 			{name: "account_status_transitions", read: readAccountStatus},
 			{name: "security_events_login", read: readNewSessions},
+			{name: "compliance_profile_transitions", read: readVerificationUpdates},
+			{name: "agent_pauses", read: readAgentPauses},
 		},
 	}
 }

@@ -69,8 +69,9 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 		func(ctx context.Context, tx pgx.Tx) error {
 			r, _, cerr := svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: owner, Quantity: money.QuantityFromInt64(400),
-				IdempotencyKey: "cancel-itest-" + id.New[id.Any]().String(),
-				EffectiveAt:    clk.Now(),
+				DisclosureAccepted: true,
+				IdempotencyKey:     "cancel-itest-" + id.New[id.Any]().String(),
+				EffectiveAt:        clk.Now(),
 			}, payoutInputAllowing(clk))
 			request = r
 			return cerr

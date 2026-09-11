@@ -224,7 +224,12 @@ func (f *fixture) create(amount int64, in payout.EligibilityInput) (payout.Reque
 			dest := f.destination
 			req, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, Quantity: q(amount),
-				IdempotencyKey: "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
+				// The withdrawal disclosure, accepted. The tests that are about
+				// the disclosure itself set it false; every other test in this
+				// file is about eligibility and provenance, and an unsigned
+				// document would refuse before either was reached.
+				DisclosureAccepted: true,
+				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
 			}, in)
 			return err
 		})
@@ -633,7 +638,8 @@ func TestIntegration_CreateIsIdempotent(t *testing.T) {
 				dest := f.destination
 				r, _, err := f.svc.Create(ctx, tx, payout.CreateRequest{
 					AccountID: f.account, DestinationID: &dest, Quantity: q(250),
-					IdempotencyKey: key, EffectiveAt: f.clk.Now(),
+					DisclosureAccepted: true,
+					IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 				}, f.input())
 				req = r
 				return err
@@ -1063,7 +1069,8 @@ func (f *fixture) createWithKey(account accounts.AccountID, key string, amount i
 			in.AccountID = account
 			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: account, DestinationID: &dest, Quantity: q(amount),
-				IdempotencyKey: key, EffectiveAt: f.clk.Now(),
+				DisclosureAccepted: true,
+				IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 			}, in)
 			return cerr
 		})

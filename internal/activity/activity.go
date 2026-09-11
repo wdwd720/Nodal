@@ -33,11 +33,58 @@ const (
 	// It is its own kind rather than a purchase because its provenance is
 	// ADMIN_ADJUSTMENT, which no payout policy in this build permits to leave.
 	KindAdminAdjustment Kind = "ADMIN_ADJUSTMENT"
+
+	// The kinds the product domains raise. doc.go left these for the domains
+	// that would write them; each one is now a row some other package writes
+	// inside the transaction that made it true, read here and nowhere else.
+
+	// KindVerificationUpdated is a move of the person's financial verification
+	// state. It is a state name and a moment; no evidence, no document and no
+	// provider payload reaches the feed (PROVIDER_BOUNDARY SS1 role B).
+	KindVerificationUpdated Kind = "VERIFICATION_UPDATED"
+	// KindPayoutDestinationAdded is a payout destination this account
+	// registered. It carries the provider's masked display and never the
+	// reference behind it.
+	KindPayoutDestinationAdded Kind = "PAYOUT_DESTINATION_ADDED"
+	// KindPayoutDestinationDisabled is a destination that stopped being usable
+	// -- disabled by its owner or rejected by the provider. D-060: a
+	// destination never comes back, so this is a terminal fact about it.
+	KindPayoutDestinationDisabled Kind = "PAYOUT_DESTINATION_DISABLED"
+	// KindTermsAccepted is one legal document accepted at one version. The
+	// version is the status; the bytes are identified by the acceptance row
+	// the item references.
+	KindTermsAccepted Kind = "TERMS_ACCEPTED"
+	// KindAccountClosureRequested is the account holder asking to close.
+	KindAccountClosureRequested Kind = "ACCOUNT_CLOSURE_REQUESTED"
+	// KindAccountClosureDecided is what happened to that request: cancelled by
+	// the person, refused by an operator, or effected. It is a separate kind
+	// rather than a status on the request, because an activity item is a fact
+	// that happened at a moment and a status that changes underneath a past
+	// item is not one.
+	KindAccountClosureDecided Kind = "ACCOUNT_CLOSURE_DECIDED"
+	// KindAgentCreated is an agent this account created, with the authority
+	// its owner granted it. Creating one starts nothing.
+	KindAgentCreated Kind = "AGENT_CREATED"
+	// KindAgentPaused is an open pause. The status is the pause's reason code,
+	// so the owner's own history says plainly whether they stopped it or
+	// somebody else did (D-075).
+	KindAgentPaused Kind = "AGENT_PAUSED"
+	// KindAgentResumed is that pause being closed by a person.
+	KindAgentResumed Kind = "AGENT_RESUMED"
+	// KindAgentDisabled is authority revoked. Terminal (D-075).
+	KindAgentDisabled Kind = "AGENT_DISABLED"
+	// KindNativeMarketPaused is a market this account has traded, or whose
+	// asset it created, ceasing to accept one or both sides.
+	KindNativeMarketPaused Kind = "NATIVE_MARKET_PAUSED"
 )
 
 var allKinds = []Kind{
 	KindCreditPurchase, KindCreditReversal, KindNativeTrade, KindNativeAssetCreated,
 	KindPayoutRequested, KindPayoutStateChanged, KindAdminAdjustment,
+	KindVerificationUpdated, KindPayoutDestinationAdded, KindPayoutDestinationDisabled,
+	KindTermsAccepted, KindAccountClosureRequested, KindAccountClosureDecided,
+	KindAgentCreated, KindAgentPaused, KindAgentResumed, KindAgentDisabled,
+	KindNativeMarketPaused,
 }
 
 // AllKinds returns every declared kind in declaration order (a copy).
