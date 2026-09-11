@@ -365,6 +365,26 @@ func lockLot(ctx context.Context, tx pgx.Tx, lotID LotID) error {
 	return advisoryLock(ctx, tx, "credit_lot:"+lotID.String())
 }
 
+// tryLockLot is lockLot without the wait: it reports whether the lock was
+// taken, so a sweep can skip a lot another pass is already holding.
+//
+// It is the SKIP LOCKED of this table. `credit_lot_state` is a projection
+// cp_app may only SELECT, and `SELECT ... FOR UPDATE` needs UPDATE privilege,
+// so a row lock is not available to the application at all -- which is correct
+// (the projection is trigger-written) and means a sweep has to serialise on
+// the same advisory key SetFinality already takes. The lock is re-entrant
+// within a transaction, so the SetFinality that follows does not block on it.
+func tryLockLot(ctx context.Context, tx pgx.Tx, lotID LotID) (bool, error) {
+	var got bool
+	err := tx.QueryRow(ctx,
+		`SELECT pg_try_advisory_xact_lock((('x' || substr(md5($1), 1, 16))::bit(64))::bigint)`,
+		"credit_lot:"+lotID.String()).Scan(&got)
+	if err != nil {
+		return false, mapError(err)
+	}
+	return got, nil
+}
+
 // advisoryLock hashes key to a bigint and takes pg_advisory_xact_lock on it.
 //
 // md5 is used purely to spread keys across the lock space; it carries no

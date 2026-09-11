@@ -440,7 +440,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// runCreditSettlement for why this is acceptable in the API process and
 	// what it deliberately does not become responsible for.
 	if creditPurchases.Service != nil {
-		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg, log)
+		go runCreditSettlement(ctx, database, creditPurchases.Service, creditSvc, cfg, log)
 	}
 	// The same answer for the same reason: this deployment has one process, so
 	// the periodic work belongs in it. Two passes, both needing cp_ops:

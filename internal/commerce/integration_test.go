@@ -324,8 +324,22 @@ func TestIntegration_ASaleMovesCreditsAndRecordsCreatorProvenance(t *testing.T) 
 	require.Equal(t, valuedomain.OriginDataSaleEarning, sellerLots[0].Origin)
 	require.Equal(t, "900", sellerLots[0].Quantity.String())
 	require.Equal(t, "900", sellerLots[0].Remaining.String())
-	require.Equal(t, valuedomain.FinalityReversible, sellerLots[0].Finality,
-		"an earning cannot be more final than the money behind it")
+	// An earning is exactly as final as the money behind it. The buyer paid
+	// with SETTLED Credits, so the seller's proceeds are SETTLED and
+	// payout-eligible at birth; a REVERSIBLE purchase produces a REVERSIBLE
+	// earning that SettleDerived promotes when the purchase settles, which
+	// TestIntegration_AnEarningFollowsTheFinalityOfWhatPaidForIt drives. Before
+	// D-124 this was REVERSIBLE unconditionally and nothing could ever move it
+	// (F-230).
+	require.Equal(t, valuedomain.FinalitySettled, sellerLots[0].Finality,
+		"an earning is as final as the money behind it, and this one was paid for with settled Credits")
+	require.True(t, sellerLots[0].Finality.PayoutEligible())
+	parents, perr := f.credits.ParentsOf(f.ctx, testDB, sellerLots[0].ID)
+	require.NoError(t, perr)
+	require.NotEmpty(t, parents, "an earning names the lots that funded it")
+	for _, parent := range parents {
+		require.Equal(t, valuedomain.FinalitySettled, parent.Finality)
+	}
 	require.NotNil(t, sellerLots[0].FundingReference)
 	require.Equal(t, "internal_product", sellerLots[0].FundingReference.Type)
 	require.Equal(t, p.ID.String(), sellerLots[0].FundingReference.ID)

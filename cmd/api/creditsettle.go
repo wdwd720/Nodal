@@ -140,7 +140,7 @@ func creditSettlement(cfg *config.Config) (window, interval time.Duration) {
 // provider call inside a transaction, so a worker tier added later runs them
 // alongside this with no coordination -- the same property that makes the
 // settlement sweep safe here.
-func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.PurchaseService, cfg *config.Config, log *slog.Logger) {
+func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.PurchaseService, credits *credit.Service, cfg *config.Config, log *slog.Logger) {
 	if svc == nil || database == nil {
 		return
 	}
@@ -157,6 +157,7 @@ func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.Purch
 		// Once at start as well as on the tick: a process that wakes, serves a
 		// purchase and spins down again would otherwise never sweep at all.
 		settleOnce(ctx, database, svc, window, log)
+		settleDerivedOnce(ctx, database, credits, log)
 		reconcileOnce(ctx, database, svc, log)
 		expireOnce(ctx, database, svc, log)
 		select {
@@ -200,6 +201,40 @@ func expireOnce(ctx context.Context, database *db.DB, svc *credit.PurchaseServic
 	case n > 0:
 		log.InfoContext(ctx, "credit purchase expiry complete", "expired", n,
 			"lifetime", credit.DefaultInFlightLifetime)
+	}
+}
+
+// settleDerivedOnce moves the lots that were minted out of other lots: trading
+// proceeds, creator earnings, marketplace proceeds and the fees on them.
+//
+// It runs immediately after settleOnce and in the same ticker, because it reads
+// what that pass just wrote: SettleDue promotes a funding's own lot to SETTLED,
+// and this promotes everything that was derived from it once EVERY parent has
+// reached a payout-eligible finality. Running it first would make every earning
+// one sweep late for no reason.
+//
+// Before D-124 there was nothing to run. An earning has no `credit_fundings`
+// row, SettleFunding is keyed on one, and PayoutEligible admits only SETTLED and
+// UNFUNDED -- so five of the six origins the sandbox payout policy marks
+// withdrawable could never be withdrawn on any deployment (F-230).
+func settleDerivedOnce(ctx context.Context, database *db.DB, credits *credit.Service, log *slog.Logger) {
+	if credits == nil || database == nil {
+		return
+	}
+	var res credit.SettleDerivedResult
+	err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		var serr error
+		res, serr = credits.SettleDerived(ctx, tx, settleBatch)
+		return serr
+	})
+	switch {
+	case err != nil && ctx.Err() != nil:
+		// Shutdown, not a failure.
+	case err != nil:
+		log.ErrorContext(ctx, "derived credit settlement sweep failed", "error", err.Error())
+	case res.Promoted > 0 || res.Frozen > 0:
+		log.InfoContext(ctx, "derived credit settlement sweep complete",
+			"promoted", res.Promoted, "frozen", res.Frozen)
 	}
 }
 

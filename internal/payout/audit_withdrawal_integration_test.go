@@ -210,6 +210,39 @@ func (f *auditFixture) quote(qty int64) (payout.Quote, error) {
 	return out, err
 }
 
+// derive mints a lot the way a sale does: naming the lots that funded it. The
+// finality asked for is deliberately REVERSIBLE in every call, because it is
+// not the caller's to state -- credit.RecordLot takes the least final parent
+// (D-124).
+func (f *auditFixture) derive(origin valuedomain.CreditOrigin, qty int64, parents []credit.LotParent) credit.Lot {
+	f.t.Helper()
+	var lot credit.Lot
+	require.NoError(f.t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			lot, err = f.credits.Issue(ctx, tx, credit.IssueRequest{
+				AccountID: f.account, Quantity: money.QuantityFromInt64(qty), Origin: origin,
+				Finality:       valuedomain.FinalityReversible,
+				Parents:        parents,
+				Reference:      credit.Reference{Type: "audit_derived", ID: uuid.NewString()},
+				IdempotencyKey: "audit-derived-" + uuid.NewString(),
+				Reason:         "withdrawal audit fixture: an earning", EffectiveAt: f.clk.Now(),
+			})
+			return err
+		}))
+	return lot
+}
+
+// finalityOf reads a lot's current funding finality from the projection the
+// engine reads.
+func (f *auditFixture) finalityOf(id credit.LotID) valuedomain.FundingFinality {
+	f.t.Helper()
+	var out valuedomain.FundingFinality
+	require.NoError(f.t, testDB.QueryRow(f.ctx,
+		`SELECT finality FROM credit_lot_state WHERE lot_id = $1`, id).Scan(&out))
+	return out
+}
+
 // terms are what the recording provider publishes: a 25c + 25bp fee and a
 // $1.00 minimum.
 func (f *auditFixture) terms() payout.ProviderTerms {
@@ -415,20 +448,34 @@ func TestAuditWV_TheProviderIsToldTheAmountAndTheDestination(t *testing.T) {
 
 func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 	f := newAuditFixture(t)
-	// Exactly what internal/nativemarket.moveCredits and
-	// internal/commerce.Service mint for a sale: an earning, REVERSIBLE.
-	lot := f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalityReversible, 1_000_000_000)
 
-	// Nothing funds it, so nothing can ever settle it.
-	var fundings int
-	require.NoError(t, testDB.QueryRow(f.ctx,
-		`SELECT count(*) FROM credit_fundings WHERE lot_id = $1`, lot.ID).Scan(&fundings))
-	assert.NotZero(t, fundings,
-		"F-wv-3: an earned lot has no credit_fundings row, and SettleFunding is the only writer that "+
-			"promotes a lot to SETTLED, so this value can never become payout-eligible")
+	// The money behind the earning: a promotional grant, UNFUNDED, which is
+	// what every Credit on a seeded sandbox deployment is. UNFUNDED is terminal
+	// -- nothing external backs it, so nothing external can take it back -- and
+	// it is payout-eligible.
+	grant := f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 2_000_000_000)
 
-	// The payout engine refuses it, under the policy that says the origin is
-	// withdrawable.
+	// The earning, minted the way internal/commerce and internal/nativemarket
+	// now mint one: naming the lots that funded it. Its finality is NOT the
+	// caller's to state -- REVERSIBLE is asked for below and the least final
+	// parent wins (D-124).
+	earned := f.derive(valuedomain.OriginCreatorEarning, 1_000_000_000,
+		[]credit.LotParent{{
+			LotID: grant.ID, Quantity: money.QuantityFromInt64(1_000_000_000),
+			Finality: valuedomain.FinalityUnfunded,
+		}})
+
+	parents, err := f.credits.ParentsOf(f.ctx, testDB, earned.ID)
+	require.NoError(t, err)
+	require.Len(t, parents, 1,
+		"F-230: an earned lot recorded nothing about what funded it, so nothing could ever "+
+			"promote it: SettleFunding keys on credit_fundings.lot_id and an earning has no funding row")
+	assert.Equal(t, grant.ID, parents[0].LotID)
+	assert.Equal(t, valuedomain.FinalityUnfunded, f.finalityOf(earned.ID),
+		"proceeds are as final as what paid for them")
+	assert.True(t, f.finalityOf(earned.ID).PayoutEligible())
+
+	// The payout engine, under the policy that says the origin is withdrawable.
 	policy := valuedomain.SandboxPolicy()
 	require.True(t, policy.Rule(valuedomain.OriginCreatorEarning).PayoutAllowed,
 		"fixture check: the sandbox policy says this origin may be withdrawn")
@@ -441,8 +488,8 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 	require.NoError(t, qerr)
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var err error
-			_, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
+			var cerr error
+			_, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
 				Quantity:           money.QuantityFromInt64(500_000_000),
 				ProviderTerms:      f.terms(),
@@ -450,14 +497,18 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 				IdempotencyKey:     "audit-earning-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
 			}, f.sandboxInput())
-			return err
+			return cerr
 		}))
 	assert.True(t, dec.Sufficient(),
-		"F-wv-3: a fully verified account holding an origin the policy permits cannot withdraw it, "+
-			"because the finality it was minted with has no path to SETTLED: %v", dec.Reasons)
+		"F-230: a fully verified account holding an origin the policy permits could not withdraw it, "+
+			"because the finality it was minted with had no path to SETTLED: %v", dec.Reasons)
+	for _, lot := range dec.Lots {
+		assert.NotEqual(t, valuedomain.OriginPromotional, lot.Origin,
+			"the grant itself still never leaves; it is the PROCEEDS that do")
+	}
 
-	// And the explanation tells the person to wait for something that will
-	// never happen.
+	// And the explanation no longer tells the person to wait for something that
+	// cannot happen.
 	exp := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
 		Policy:      policy,
 		Verified:    valuedomain.VerificationPayoutKYC,
@@ -466,7 +517,7 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 		Holdings: []eligibility.OriginHolding{{
 			Origin:   valuedomain.OriginCreatorEarning,
 			Quantity: money.QuantityFromInt64(1_000_000_000),
-			Finality: valuedomain.FinalityReversible,
+			Finality: f.finalityOf(earned.ID),
 			HeldDays: 365,
 		}},
 		Gross:                 money.QuantityFromInt64(1_000_000_000),
@@ -477,162 +528,78 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 		DisclosureAccepted:    true,
 	})
 	assert.NotContains(t, exp.Reasons, eligibility.WithdrawalFundingNotSettled,
-		"F-wv-3: the eligibility explanation reports FUNDING_NOT_SETTLED, which it documents as a "+
-			"reason waiting fixes, on value whose finality nothing can ever move")
+		"F-230: the eligibility explanation reported FUNDING_NOT_SETTLED, which it documents as a "+
+			"reason waiting fixes, on value whose finality nothing could ever move")
 }
 
-// ---------------------------------------------------------------------------
-// F-wv-4 — the compliance facts GET /v1/me/eligibility refuses on are read by
-// nothing on the conversion path.
-//
-// ADR-0025 names "verified, and sanctions is under review" as the state a real
-// screening produces most often after clear, and
-// VERIFICATION_AND_WITHDRAWAL.md §3 lists ACCOUNT_RESTRICTED ("a freeze, a
-// compliance hold, a sanctions review") among the seven decisions between
-// Credits and money. payout.EligibilityInput has no field for any of them and
-// payout.Service.Create reads none of those columns.
-// ---------------------------------------------------------------------------
-
-func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
+// TestAuditWV_AProceedsLotSettlesWhenItsFundingDoesAndNotBefore is the other
+// half of D-124: an earning funded by a REVERSIBLE purchase is REVERSIBLE, and
+// it moves when -- and only when -- that purchase settles.
+func TestAuditWV_AProceedsLotSettlesWhenItsFundingDoesAndNotBefore(t *testing.T) {
 	f := newAuditFixture(t)
-	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1_000_000_000)
 
-	// A provider answer of the shape ADR-0025 describes: the document, the age
-	// and the jurisdiction pass, the sanctions screen is clear, and the
-	// political-exposure screen is a hit. sanctionsStateFrom maps that to
-	// REVIEW; EvidenceSatisfies(PAYOUT_KYC) is satisfied because PEP is not one
-	// of the four, so the profile reaches VERIFIED.
-	svc, repo := newAuditVerificationService(t, f.clk)
-	session := newAuditSession(t, repo, f.user)
-	ingested, err := svc.Ingest(f.ctx, testDB, session, verification.Result{
-		ProviderRef: session.ProviderRef,
-		Status:      verification.SessionApproved,
-		RawStatus:   "audit_approved",
-		Sandbox:     true,
-		AgeAtLeast:  verifysandbox.AttestsAgeAtLeast,
-		Jurisdiction: rules.Jurisdiction{
-			Country: session.JurisdictionCountry, Region: session.JurisdictionRegion,
-		},
-		Checks: []verification.CheckResult{
-			{Kind: verification.CheckIdentityDocument, Outcome: verification.OutcomePass, Detail: "AUDIT"},
-			{Kind: verification.CheckAge, Outcome: verification.OutcomePass, Detail: "AUDIT"},
-			{Kind: verification.CheckJurisdiction, Outcome: verification.OutcomePass, Detail: "AUDIT"},
-			{Kind: verification.CheckSanctions, Outcome: verification.OutcomePass, Detail: "AUDIT"},
-			{Kind: verification.CheckPEP, Outcome: verification.OutcomeFail, Detail: "AUDIT_PEP_HIT"},
-		},
-	}, "audit fixture: a provider decision with a political-exposure hit", "audit")
-	require.NoError(t, err)
-	require.Equal(t, verification.SessionApproved, ingested.Status)
+	// A purchase inside its dispute window, and an earning derived from it.
+	purchased := f.issue(valuedomain.OriginPurchased, valuedomain.FinalityReversible, 1_000_000_000)
+	earned := f.derive(valuedomain.OriginCreatorEarning, 400_000_000,
+		[]credit.LotParent{{
+			LotID: purchased.ID, Quantity: money.QuantityFromInt64(400_000_000),
+			Finality: valuedomain.FinalityReversible,
+		}})
+	require.Equal(t, valuedomain.FinalityReversible, f.finalityOf(earned.ID),
+		"an earning cannot be more final than the money behind it")
+	require.False(t, f.finalityOf(earned.ID).PayoutEligible())
 
-	profile, err := compliance.NewRepository(audit.NewWriter()).Get(f.ctx, testDB, f.user)
-	require.NoError(t, err)
-	require.Equal(t, compliance.SanctionsReview, profile.SanctionsState,
-		"fixture check: the screen is under review")
-	state, _, _, err := repo.ProfileState(f.ctx, testDB, f.user)
-	require.NoError(t, err)
-	require.Equal(t, verification.StateVerified, state,
-		"fixture check: the identity state is VERIFIED, which is the point")
-
-	// The level the payout path resolves, from the same resolver cmd/api wires.
-	resolver, err := verification.NewResolver(
-		verification.StaticBase(valuedomain.VerificationNodalIdentity), repo, testDB, f.clk,
-	)
-	require.NoError(t, err)
-	level, err := resolver.Level(f.ctx, f.account)
-	require.NoError(t, err)
-	require.Equal(t, valuedomain.VerificationPayoutKYC, level,
-		"fixture check: the resolver reports PAYOUT_KYC, because PEP is not required for it")
-
-	// What the person is told.
-	exp := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
-		Policy:      valuedomain.SandboxPolicy(),
-		Verified:    level,
-		ActiveCaps:  map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
-		PolicyValid: true,
-		Holdings: []eligibility.OriginHolding{{
-			Origin:   valuedomain.OriginPurchased,
-			Quantity: money.QuantityFromInt64(1_000_000_000),
-			Finality: valuedomain.FinalitySettled,
-		}},
-		Gross:                 money.QuantityFromInt64(1_000_000_000),
-		Spendable:             money.QuantityFromInt64(1_000_000_000),
-		JurisdictionSupported: true,
-		ProviderAvailable:     true,
-		DestinationConfigured: true,
-		DisclosureAccepted:    true,
-		// Exactly what httpapi.eligibilityAdapter.applyAccountFacts appends.
-		AccountRestrictions: []string{"SANCTIONS_" + string(profile.SanctionsState)},
-	})
-	require.Contains(t, exp.Reasons, eligibility.WithdrawalAccountRestricted)
-	require.False(t, exp.Eligible)
-	require.Equal(t, "0", exp.WithdrawableNow.String(),
-		"fixture check: the eligibility page says nothing may leave")
-
-	// What the conversion request does, with the same facts the eligibility
-	// page answered from -- read from the same compliance profile, in the
-	// transaction that would reserve the value (D-120).
-	quote, err := f.quote(1_000_000_000)
-	require.NoError(t, err)
-
-	var (
-		req payout.Request
-		dec payout.Decision
-	)
-	in := f.sandboxInput()
-	in.Verified = level
-	in.SanctionsState = profile.SanctionsState
-	in.AccountRestrictions = append([]string(nil), profile.Restrictions...)
-	dest := f.destination
+	// The sweep, before the funding settles: nothing moves. One parent short is
+	// no parents at all.
+	var res credit.SettleDerivedResult
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var cerr error
-			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
-				Quantity:           money.QuantityFromInt64(1_000_000_000),
-				ProviderTerms:      f.terms(),
-				DisclosureAccepted: true,
-				IdempotencyKey:     "audit-sanctions-" + uuid.NewString(),
-				EffectiveAt:        f.clk.Now(),
-			}, in)
-			return cerr
+			var serr error
+			res, serr = f.credits.SettleDerived(ctx, tx, 100)
+			return serr
 		}))
-	assert.NotEqual(t, payout.StateVerified, req.State,
-		"F-226: an account under an open sanctions review reserved %s Credits for payout, "+
-			"while GET /v1/me/eligibility reported ACCOUNT_RESTRICTED and 0 withdrawable",
-		req.ReservedQuantity.String())
-	assert.Equal(t, "0", req.ReservedQuantity.String())
-	assert.Contains(t, dec.ReasonStrings(), string(payout.ReasonAccountRestricted),
-		"the conversion path gives the reason the eligibility page gives")
+	assert.Zero(t, res.Promoted, "a derived lot was promoted while its funding could still be clawed back")
+	assert.Equal(t, valuedomain.FinalityReversible, f.finalityOf(earned.ID))
 
-	// And the two other facts on the same input, each on its own, because §21
-	// says they must be able to refuse independently.
-	for _, tc := range []struct {
-		name   string
-		mutate func(*payout.EligibilityInput)
-		reason valuedomain.PermitReason
-	}{
-		{"an unsupported jurisdiction", func(i *payout.EligibilityInput) {
-			i.JurisdictionSupported = false
-		}, payout.ReasonJurisdictionRestricted},
-		{"a restriction recorded against the account", func(i *payout.EligibilityInput) {
-			i.AccountRestrictions = []string{"OPERATOR_HOLD"}
-		}, payout.ReasonAccountRestricted},
-		{"a screen nobody has answered", func(i *payout.EligibilityInput) {
-			i.SanctionsState = ""
-		}, payout.ReasonAccountRestricted},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			probe := f.sandboxInput()
-			probe.Verified = level
-			probe.AccountID = f.account
-			probe.Requested = money.QuantityFromInt64(1_000_000)
-			tc.mutate(&probe)
-			d, eerr := payout.NewEngine(f.credits).Evaluate(f.ctx, testDB, probe)
-			require.NoError(t, eerr)
-			assert.False(t, d.Sufficient())
-			assert.Contains(t, d.ReasonStrings(), string(tc.reason))
-		})
-	}
+	// The purchase settles.
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			return f.credits.SetFinality(ctx, tx, purchased.ID, valuedomain.FinalitySettled,
+				credit.Reference{Type: "audit_fixture", ID: uuid.NewString()},
+				"the chargeback window closed")
+		}))
+
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var serr error
+			res, serr = f.credits.SettleDerived(ctx, tx, 100)
+			return serr
+		}))
+	assert.Equal(t, 1, res.Promoted)
+	assert.Equal(t, valuedomain.FinalitySettled, f.finalityOf(earned.ID),
+		"F-230: an earning had no path out of REVERSIBLE at all")
+	assert.True(t, f.finalityOf(earned.ID).PayoutEligible())
+
+	// And the direction the ledger CAN follow when a parent goes the other way:
+	// a disputed purchase freezes what was derived from it. What it cannot do
+	// is take back value the earner has already spent or withdrawn, which D-124
+	// records as the residual rather than inventing a posting for.
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			return f.credits.SetFinality(ctx, tx, purchased.ID, valuedomain.FinalityDisputed,
+				credit.Reference{Type: "audit_fixture", ID: uuid.NewString()},
+				"the cardholder disputed the payment")
+		}))
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var serr error
+			res, serr = f.credits.SettleDerived(ctx, tx, 100)
+			return serr
+		}))
+	assert.Equal(t, 1, res.Frozen)
+	assert.Equal(t, valuedomain.FinalityDisputed, f.finalityOf(earned.ID))
+	assert.False(t, f.finalityOf(earned.ID).Spendable(),
+		"value whose funding is under dispute is frozen while the dispute runs")
 }
 
 // newAuditVerificationService builds the verification service a sandbox tier

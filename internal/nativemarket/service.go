@@ -544,35 +544,81 @@ func (s *Service) postTrade(ctx context.Context, tx pgx.Tx, m Market, r ExecuteR
 // policy forbids withdrawing. The creator's fee is issued with origin
 // MARKET_CREATOR_EARNING — deliberately distinct from ordinary creator revenue
 // because its source is speculative trading (PART LXXX).
+//
+// # Where a new lot's finality comes from (D-124, F-230)
+//
+// It used to be `const derived = valuedomain.FinalityReversible`, with a comment
+// saying value leaving the pool is reversible "until something establishes
+// otherwise". Nothing could establish otherwise: the only writer that promotes a
+// lot out of REVERSIBLE reads `credit_fundings.lot_id`, and an earning has no
+// funding row and never gets one. So every MARKET_TRADING_PROCEEDS and every
+// MARKET_CREATOR_EARNING this system has ever minted was permanently
+// un-withdrawable, and the eligibility page said FUNDING_NOT_SETTLED — a reason
+// it documents as one that WAITING fixes.
+//
+// Now a new lot names its parents. On a buy they are the trader's own consumed
+// lots; on a sell they are the pooled contributions the sale drew down
+// (poolprovenance.go), and `credit.RecordLot` mints at the least final finality
+// among them. REVERSIBLE is still what a sale funded by a reversible purchase
+// produces, and it is now a state something can move.
 func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r ExecuteRequest, fill Fill, creatorID accounts.AccountID, journalTx ledger.TransactionID) error {
 	ref := credit.Reference{Type: "native_market_fill", ID: r.IdempotencyKey}
 
-	// The finality new Credits inherit. Proceeds and fees are funded by
-	// whatever buyers paid in, and some of that may still be reversible, so
-	// value leaving the pool is REVERSIBLE until something establishes
-	// otherwise. It is spendable — which is what the product needs — and not
-	// payout-eligible, which is the conservative half.
-	const derived = valuedomain.FinalityReversible
+	// The parents of whatever this trade mints, and the finality a caller falls
+	// back to when the record cannot cover it. REVERSIBLE is that fallback
+	// everywhere below: "we do not know what funded this" is not "it was
+	// settled", and RecordLot takes the LESS final of the two.
+	var feeParents []credit.LotParent
 
 	switch r.Side {
 	case Buy:
-		if _, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
+		spent, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
 			AccountID:                r.AccountID,
 			Quantity:                 fill.CreditsIn,
 			JournalTxID:              journalTx,
 			Reference:                ref,
 			Reason:                   "native market buy",
 			RequireSpendableFinality: true,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
+		// What reached the pool is what the pool may later pay out, so that is
+		// what is recorded against it. The fees came out of the same movement
+		// and are their own derived lots below.
+		if err := s.recordPoolSources(ctx, tx, m.ID, spent, fill.CreditsToPool); err != nil {
+			return err
+		}
+		fp, perr := credit.ParentsOfAllocations(spent, fill.CreatorFee)
+		if perr != nil {
+			return perr
+		}
+		feeParents = fp
 	case Sell:
+		// Credits leave the pool: the seller's proceeds and both fees come out
+		// of one movement, so one draw-down funds all of them.
+		drawn, covered, derr := s.drawPoolSources(ctx, tx, m.ID, fill.CreditsToPool)
+		if derr != nil {
+			return derr
+		}
+		if covered.Cmp(fill.CreditsToPool) < 0 {
+			// The record does not account for all of it. Nothing is minted
+			// against parents that do not exist: the shortfall stays
+			// REVERSIBLE, which is what the fallback below already says, and
+			// the parents that WERE found still constrain it downwards.
+			drawn = nil
+		}
 		if fill.CreditsOut.IsPositive() {
+			parents, perr := sharesOf(drawn, fill.CreditsOut)
+			if perr != nil {
+				return perr
+			}
 			if _, err := s.credits.RecordLot(ctx, tx, credit.RecordLotRequest{
 				AccountID:        r.AccountID,
 				Quantity:         fill.CreditsOut,
 				Origin:           valuedomain.OriginMarketTradingProceeds,
-				Finality:         derived,
+				Finality:         valuedomain.FinalityReversible,
+				Parents:          parents,
 				Reference:        ref,
 				FundingReference: &credit.Reference{Type: "native_market", ID: m.ID.String()},
 				JournalTxID:      journalTx,
@@ -581,6 +627,11 @@ func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r Execut
 				return err
 			}
 		}
+		fp, perr := sharesOf(drawn, fill.CreatorFee)
+		if perr != nil {
+			return perr
+		}
+		feeParents = fp
 	}
 
 	if fill.CreatorFee.IsPositive() {
@@ -588,7 +639,8 @@ func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r Execut
 			AccountID:        creatorID,
 			Quantity:         fill.CreatorFee,
 			Origin:           valuedomain.OriginMarketCreatorEarning,
-			Finality:         derived,
+			Finality:         valuedomain.FinalityReversible,
+			Parents:          feeParents,
 			Reference:        ref,
 			FundingReference: &credit.Reference{Type: "native_market", ID: m.ID.String()},
 			JournalTxID:      journalTx,

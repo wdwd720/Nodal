@@ -154,6 +154,11 @@ type IssueRequest struct {
 	AccountID accounts.AccountID
 	Quantity  money.Quantity
 	Origin    valuedomain.CreditOrigin
+	// Parents are the lots this issuance was derived from, if any. They are
+	// passed through to RecordLot, which mints at the least final finality
+	// among them (D-124). Empty for an ordinary issuance, which is funded from
+	// outside or from nothing at all.
+	Parents []LotParent
 	// Finality is the funding finality the lot starts at. Promotional grants
 	// and admin adjustments are UNFUNDED; a card purchase is REVERSIBLE until
 	// the dispute window closes; an internal earning inherits the finality of
@@ -229,6 +234,17 @@ type RecordLotRequest struct {
 	// lot whose transaction did not touch this account and asset.
 	JournalTxID ledger.TransactionID
 	Reason      string
+
+	// Parents are the lots consumed to fund this one, for a DERIVED lot:
+	// trading proceeds, a creator earning, marketplace proceeds and the fee on
+	// them. When they are given, RecordLot mints the lot at the LEAST FINAL
+	// finality among them and refuses a Finality more final than that -- a
+	// caller cannot declare proceeds settled that the money behind them is not
+	// (D-124, F-230).
+	//
+	// Empty means the caller states the finality itself, which is what a funded
+	// mint and a grant do.
+	Parents []LotParent
 }
 
 // Validate checks the request without touching the database.
