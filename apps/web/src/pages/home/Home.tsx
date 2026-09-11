@@ -61,7 +61,7 @@ import { SegmentedBar } from "../../components/SegmentedBar.tsx";
 import { Skeleton, SkeletonField } from "../../components/Skeleton.tsx";
 import { StatusBadge } from "../../components/StatusBadge.tsx";
 import { Temp, temperatureOf } from "../../components/Temperature.tsx";
-import { CREDIT_DECIMALS } from "../../lib/credits.ts";
+import { CREDIT_DECIMALS, creditScale, hasCredits } from "../../lib/credits.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
 import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, PROVENANCE_NOTE } from "../../lib/honesty.ts";
 import { formatInstant } from "../../lib/time.ts";
@@ -258,6 +258,10 @@ function PortfolioModules(props: {
   if (data === undefined || data.positions.length === 0) return null;
 
   const totals = data.totals as PortfolioTotals;
+  // The scale comes from the Credit balance in this same response, which is
+  // the only thing here that states one. Every figure below is base units of
+  // the same CREDIT asset (F-151).
+  const scale = creditScale((data.credits as CreditBalance).credit_decimals);
   const top = [...data.positions]
     .filter((position) => /[1-9]/.test(position.quantity))
     .slice(0, TOP_HOLDINGS);
@@ -279,7 +283,7 @@ function PortfolioModules(props: {
           <Field label="Market value" note="Marked at each market's marginal price." emphasis>
             <Figure
               kind="units"
-              value={{ base: totals.market_value_credits, scale: CREDIT_DECIMALS }}
+              value={{ base: totals.market_value_credits, scale }}
               symbol="Credits"
               big
             />
@@ -290,7 +294,7 @@ function PortfolioModules(props: {
           >
             <Figure
               kind="units"
-              value={{ base: totals.unrealized_pnl_credits, scale: CREDIT_DECIMALS }}
+              value={{ base: totals.unrealized_pnl_credits, scale }}
               symbol="Credits"
               signed
             />
@@ -298,7 +302,7 @@ function PortfolioModules(props: {
           <Field label="Realised" note="Locked in by trades that have already happened.">
             <Figure
               kind="units"
-              value={{ base: totals.realized_pnl_credits, scale: CREDIT_DECIMALS }}
+              value={{ base: totals.realized_pnl_credits, scale }}
               symbol="Credits"
               signed
             />
@@ -349,7 +353,7 @@ function PortfolioModules(props: {
                 <Temp value={row.temperature}>
                   <Figure
                     kind="units"
-                    value={{ base: row.market_value_credits, scale: CREDIT_DECIMALS }}
+                    value={{ base: row.market_value_credits, scale }}
                     symbol="Credits"
                   />
                 </Temp>
@@ -364,7 +368,7 @@ function PortfolioModules(props: {
                 <Temp value={row.temperature}>
                   <Figure
                     kind="units"
-                    value={{ base: row.unrealized_pnl_credits, scale: CREDIT_DECIMALS }}
+                    value={{ base: row.unrealized_pnl_credits, scale }}
                     symbol="Credits"
                     signed
                   />
@@ -505,9 +509,13 @@ function Recent(props: { readonly page: ActivityFeed }): ReactNode {
 
 function Credits(props: { readonly balance: CreditBalance }): ReactNode {
   const { balance } = props;
+  // The scale the response states, not one this page assumes. Every Credit
+  // figure below is base units of the CREDIT asset, and a page that guessed
+  // that scale could render a balance a million times wrong (F-151).
+  const scale = creditScale(balance.credit_decimals);
   const value = (base: string): { readonly base: string; readonly scale: number } => ({
     base,
-    scale: CREDIT_DECIMALS,
+    scale,
   });
 
   return (
@@ -525,11 +533,23 @@ function Credits(props: { readonly balance: CreditBalance }): ReactNode {
         >
           <Figure kind="units" value={value(balance.frozen)} symbol="Credits" />
         </Field>
+        {/* The fourth bucket. It should be zero and stay zero -- a clawback
+            empties the lot it reverses -- so it is shown only when it is not,
+            because a figure the API returns and no page renders is a figure
+            that can be wrong forever (F-156). */}
+        {hasCredits(balance.reversed) && (
+          <Field
+            label="Removed"
+            note="Removed after a payment was reversed. Not spendable and not withdrawable."
+          >
+            <Figure kind="units" value={value(balance.reversed)} symbol="Credits" />
+          </Field>
+        )}
       </FieldGrid>
 
       <SegmentedBar
         caption="How this balance is held"
-        scale={CREDIT_DECIMALS}
+        scale={scale}
         symbol="Credits"
         total={balance.gross}
         segments={[
@@ -546,6 +566,13 @@ function Credits(props: { readonly balance: CreditBalance }): ReactNode {
             baseUnits: balance.frozen,
             explanation: "Held by a restriction or an open dispute.",
             texture: "hatch",
+          },
+          {
+            key: "reversed",
+            label: "Removed",
+            baseUnits: balance.reversed,
+            explanation: "Removed after a payment was reversed. Not spendable and not withdrawable.",
+            texture: "sparse",
           },
         ]}
       />
@@ -589,6 +616,7 @@ function Credits(props: { readonly balance: CreditBalance }): ReactNode {
 
 /** Where the Credits came from. Origin is what decides eligibility, not the total. */
 function Origins(props: { readonly balance: CreditBalance }): ReactNode {
+  const scale = creditScale(props.balance.credit_decimals);
   const byOrigin = props.balance.by_origin;
   if (byOrigin === undefined) return null;
   const rows = Object.entries(byOrigin);
@@ -608,11 +636,7 @@ function Origins(props: { readonly balance: CreditBalance }): ReactNode {
             header: "Credits",
             numeric: true,
             cell: (row) => (
-              <Figure
-                kind="units"
-                value={{ base: row[1], scale: CREDIT_DECIMALS }}
-                symbol="Credits"
-              />
+              <Figure kind="units" value={{ base: row[1], scale }} symbol="Credits" />
             ),
           },
         ]}

@@ -443,14 +443,23 @@ export function pageSpec(item: Spec): Spec {
 export const creditBalanceSpec: Spec = {
   required: {
     account_id: "uuid",
+    // The scale the quantities below are expressed in. Required, because a
+    // response without it leaves the browser to assume one -- and the browser
+    // assumed six, in four separate files, while the server issued Credits at
+    // a scale nothing had ever compared against the asset (F-151).
+    credit_decimals: "integer",
     gross: "quantity",
     spendable: "quantity",
     frozen: "quantity",
+    // Removed after a payment was reversed. Required, because a bucket the API
+    // returns and no page renders is a number that can be wrong forever
+    // (F-156).
+    reversed: "quantity",
     payout_eligible: "quantity",
     ineligible: "quantity",
     policy_version: "string",
   },
-  optional: { reversed: "quantity", policy_hash: "string", by_origin: "object", by_finality: "object" },
+  optional: { policy_hash: "string", by_origin: "object", by_finality: "object" },
 };
 
 export const nativeAssetSpec: Spec = {
@@ -705,6 +714,15 @@ export const creditPricingSpec: Spec = {
     version: "string",
     currency: "string",
     credits_per_major_unit: "integer",
+    // The rest of the conversion. A page holding only the rate cannot compute
+    // what a customer is about to be charged for: the quantity the server
+    // issues is amount_minor * credits_per_major_unit * 10^decimals /
+    // minor_units_per_major_unit. The Buy Credits page rendered "100 Credits
+    // per 1 USD" from the rate alone and then rendered the result at a scale it
+    // had hardcoded, and the two were a factor of a million apart (F-151).
+    minor_units_per_major_unit: "integer",
+    decimals: "integer",
+    rounding: "string",
     min_amount_minor: "integer",
     max_amount_minor: "integer",
   },
@@ -723,6 +741,9 @@ export const creditPurchaseSpec: Spec = {
   },
   optional: {
     sandbox: "boolean",
+    // The mode that opened THIS payment. Absent for a purchase made before the
+    // mode was recorded, which the API renders as sandbox (F-158).
+    provider_mode: "string",
     client_secret: "string",
     reversible_at: "timestamp",
     settled_at: "timestamp",

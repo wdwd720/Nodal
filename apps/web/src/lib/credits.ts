@@ -15,13 +15,24 @@
  *      representable as an integer, so nothing is lost and nothing is rounded.
  *      The numeric-coercion guard is what makes this the only honest route.
  *
- *   2. THE SCALE OF A CREDIT, which the API does not state anywhere. The
- *      `CreditBalance`, `NativeMarket` and `InternalProduct` responses all
- *      carry Credit figures as exact base units and none of them carries the
- *      asset's decimals. The seeded CREDIT asset declares six, and the pages
- *      that shipped before this one hardcoded six, so this is six — named once
- *      here rather than a fourth time in a page, and flagged as a gap the
- *      backend should close by returning the scale with the figure.
+ *   2. THE SCALE OF A CREDIT, which the API now states and which this file
+ *      reads rather than assumes. `GET /v1/credits/pricing` carries `decimals`
+ *      and `GET /v1/credits/balance` carries `credit_decimals`, both added
+ *      after the server was found issuing Credits at a scale nothing had ever
+ *      compared against the registered asset: the page rendered "100 Credits
+ *      per 1 USD" and then "0.001000 Credits" for the result, and the two
+ *      halves of that sentence were a factor of a million apart. A hardcoded
+ *      six could not have told the difference, which is exactly why it is no
+ *      longer the source.
+ *
+
+ *   3. EXACT INTEGER ARITHMETIC OVER BASE-UNIT STRINGS, for the two questions
+ *      an interface has to ask about a quantity without rendering it: does it
+ *      hold anything, and does a set of parts reach its whole. Both are BigInt
+ *      comparisons rather than numeric parses -- a balance can exceed what a
+ *      JavaScript number represents exactly -- and both live here for the same
+ *      reason as everything above: a component is not where money arithmetic
+ *      belongs, and `source-scan.test.ts` is why.
  *
  * What is deliberately NOT here: any function that turns an amount of money
  * into a number of Credits. The server owns that (`internal/credit/pricing.go`
@@ -31,13 +42,87 @@
 import { MoneyFormatError, QUANTITY_PATTERN, USD_PATTERN } from "./money.ts";
 
 /**
- * How many decimal places a Credit has.
+ * The scale to render a Credit figure at when the response carrying it does
+ * not state one.
  *
- * See the note above: the API does not say, and this is the value the rest of
- * the application already assumes. Every Credit figure in the product is
- * rendered at this scale, so a balance reads the same on every page.
+ * It is a FALLBACK, not the source. Every response that carries a Credit
+ * figure this application renders on its own pages now carries the scale with
+ * it, and `creditScale` prefers what the server said. This exists because some
+ * responses (a market summary, a product price) still do not, and rendering a
+ * base-unit string with no scale at all is not an option — it would show a
+ * balance of 300 Credits as 300,000,000.
+ *
+ * Six is what the CREDIT asset is registered with everywhere in the repository
+ * (`scripts/seedeconomy`, `cmd/api`'s sandbox-tier registration,
+ * `docs/product/CREDIT_ECONOMY.md`). A deployment that registered another scale
+ * would render those remaining figures wrong, which is why the ones that
+ * matter — a balance, a purchase — no longer come through here.
  */
 export const CREDIT_DECIMALS = 6;
+
+/**
+ * The scale the API stated, or the fallback when it stated none.
+ *
+ * `stated` is a `credit_decimals` or `decimals` field off a validated response.
+ * A value that is not a usable scale is treated as absent rather than trusted:
+ * a negative or fractional decimals count would make `formatQuantity` throw
+ * inside a render, and a page that cannot render its balance is worse than one
+ * that renders it at the documented scale.
+ */
+export function creditScale(stated: number | undefined): number {
+  if (stated === undefined) return CREDIT_DECIMALS;
+  if (!Number.isInteger(stated) || stated < 0 || stated > 36) return CREDIT_DECIMALS;
+  return stated;
+}
+
+/**
+ * Whether an exact base-unit string holds anything at all.
+ *
+ * Used to decide whether a bucket that should always be zero -- the Credits a
+ * reversal removed -- is worth a field on the page. It is a comparison against
+ * zero and never a rendered figure, and it is BigInt rather than a numeric
+ * parse because a balance can exceed what a JavaScript number represents
+ * exactly. An unreadable string is treated as empty: a page must not decide to
+ * show a figure it cannot read.
+ */
+export function hasCredits(baseUnits: string): boolean {
+  try {
+    return BigInt(baseUnits) > 0n;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The part of `total` that `parts` does not cover, as an exact base-unit
+ * string, or undefined when there is nothing left over.
+ *
+ * SegmentedBar draws it. A bar whose segments do not reach its own total used
+ * to draw short and say nothing, so a bucket the API returned and the caller
+ * forgot to pass simply vanished from the picture -- which is what happened to
+ * the `reversed` balance: returned by `GET /v1/credits/balance`, rendered by no
+ * page, and therefore able to be wrong forever without anybody seeing it
+ * (F-156).
+ *
+ * A NEGATIVE difference -- parts that overshoot their whole -- returns
+ * undefined rather than a signed string. That is a caller mixing parts from one
+ * response with a whole from another, and drawing it would turn a bug into a
+ * picture. An unreadable input returns undefined for the same reason.
+ */
+export function unaccountedBaseUnits(
+  parts: readonly string[],
+  total: string | undefined,
+): string | undefined {
+  if (total === undefined) return undefined;
+  try {
+    let sum = 0n;
+    for (const part of parts) sum += BigInt(part);
+    const rest = BigInt(total) - sum;
+    return rest > 0n ? String(rest) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** The digits, used as a lookup so a character can become a value without a numeric parse. */
 const DIGITS = "0123456789";

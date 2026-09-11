@@ -5,9 +5,12 @@ import { MoneyFormatError } from "./money.ts";
 import {
   CREDIT_DECIMALS,
   PRESET_AMOUNTS_MINOR,
+  creditScale,
+  hasCredits,
   minorStringToUsd,
   minorToUsd,
   outOfBounds,
+  unaccountedBaseUnits,
   usdToMinor,
 } from "./credits.ts";
 
@@ -111,4 +114,60 @@ test("anything that is not an exact integer of minor units is refused", () => {
   for (const bad of ["", "25.00", "1e3", "1,000", " 100", "abc", "+100"]) {
     assert.throws(() => minorStringToUsd(bad), MoneyFormatError, bad);
   }
+});
+
+/* ---------------------------------------------------------------------------
+ * The scale of a Credit, and the arithmetic a segmented bar needs.
+ * ------------------------------------------------------------------------ */
+
+test("the scale comes from the response, and the constant is only a fallback", () => {
+  // What the API states wins, including a scale nothing in this repository
+  // registers: the point of reading it is that a deployment could.
+  assert.equal(creditScale(6), 6);
+  assert.equal(creditScale(0), 0, "an indivisible Credit is a legitimate scale");
+  assert.equal(creditScale(8), 8);
+
+  // Absent, or not a scale anything could render at, falls back to the
+  // documented one rather than throwing inside a render.
+  assert.equal(creditScale(undefined), CREDIT_DECIMALS);
+  assert.equal(creditScale(-1), CREDIT_DECIMALS);
+  assert.equal(creditScale(1.5), CREDIT_DECIMALS);
+  assert.equal(creditScale(Number.NaN), CREDIT_DECIMALS);
+  assert.equal(creditScale(1000), CREDIT_DECIMALS);
+});
+
+test("a balance holds something, or it does not, at any size", () => {
+  assert.equal(hasCredits("0"), false);
+  assert.equal(hasCredits("000"), false);
+  assert.equal(hasCredits("1"), true);
+  assert.equal(hasCredits("300000000"), true);
+  assert.equal(hasCredits("99999999999999999999999999999999"), true, "past Number.MAX_SAFE_INTEGER");
+  assert.equal(hasCredits("-5"), false, "a negative balance is not a balance to show");
+  assert.equal(hasCredits("not a number"), false);
+  assert.equal(hasCredits(""), false);
+});
+
+test("a segmented bar's parts either reach its whole or the difference is visible", () => {
+  // The case F-156 was: gross 300, spendable 0, frozen 0, and a `reversed`
+  // bucket the page never passed. The bar drew nothing and said nothing.
+  assert.equal(unaccountedBaseUnits(["0", "0"], "300"), "300");
+
+  // Every bucket passed: nothing left over, nothing drawn.
+  assert.equal(unaccountedBaseUnits(["0", "0", "300"], "300"), undefined);
+  assert.equal(unaccountedBaseUnits(["100", "200"], "300"), undefined);
+
+  // Exact at any size: no float, no rounding.
+  assert.equal(
+    unaccountedBaseUnits(["1"], "100000000000000000000000000000001"),
+    "100000000000000000000000000000000",
+  );
+
+  // Parts that overshoot their own whole are a caller mixing two responses.
+  // The bar refuses to draw it rather than rendering a negative width.
+  assert.equal(unaccountedBaseUnits(["400"], "300"), undefined);
+
+  // No whole to measure against, and unreadable input, are both undefined.
+  assert.equal(unaccountedBaseUnits(["100"], undefined), undefined);
+  assert.equal(unaccountedBaseUnits(["oops"], "300"), undefined);
+  assert.equal(unaccountedBaseUnits([], "300"), "300");
 });

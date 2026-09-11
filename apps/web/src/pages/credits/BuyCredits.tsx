@@ -66,7 +66,7 @@ import { Refused } from "../../components/Refused.tsx";
 import { Skeleton } from "../../components/Skeleton.tsx";
 import { StatusBadge } from "../../components/StatusBadge.tsx";
 import {
-  CREDIT_DECIMALS,
+  creditScale,
   PRESET_AMOUNTS_MINOR,
   minorToUsd,
   outOfBounds,
@@ -318,6 +318,7 @@ export function BuyCredits(): ReactNode {
         ) : (
           <TakePayment
             purchase={current}
+            creditDecimals={(pricing.data as CreditPricing).decimals}
             clientSecret={purchase?.client_secret}
             publishableKey={publishableKey}
             outcome={outcome}
@@ -471,6 +472,15 @@ function ChooseAmount(props: {
 function TakePayment(props: {
   readonly purchase: CreditPurchase;
   /**
+   * The scale of a Credit, as `GET /v1/credits/pricing` states it. It is
+   * passed rather than assumed because the quantity beside it is base units of
+   * the CREDIT asset: this page rendered "100 Credits per 1 USD" and then the
+   * result at a scale it had hardcoded, and the server's arithmetic omitted
+   * that scale entirely, so the two halves of the sentence were a factor of a
+   * million apart (F-151).
+   */
+  readonly creditDecimals: number;
+  /**
    * The provider secret, handed back exactly once on creation. It lives in the
    * mutation result and in nothing else — never in a query cache, because a
    * cached secret is a second browser resuming somebody else's payment.
@@ -512,7 +522,7 @@ function TakePayment(props: {
         >
           <Figure
             kind="units"
-            value={{ base: purchase.credit_quantity, scale: CREDIT_DECIMALS }}
+            value={{ base: purchase.credit_quantity, scale: creditScale(props.creditDecimals) }}
             symbol="Credits"
           />
         </Field>
