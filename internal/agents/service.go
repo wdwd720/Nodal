@@ -16,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/strategy"
 )
 
 // StepUpMaxAge is how recent a strong authentication must be to GRANT an agent
@@ -189,6 +190,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (View, error) {
 
 	var view View
 	err = s.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		// Inside the transaction that writes the agent and the grant, under a
+		// share lock on both rows: the strategy cannot be handed to another
+		// account, and the version cannot be superseded or revoked, between the
+		// check and the row that records the authority.
+		if err := requireGrantableVersion(ctx, tx, req.AccountID, req.StrategyID, req.StrategyVersionID); err != nil {
+			return err
+		}
 		if err := s.store.InsertAgent(ctx, tx, a); err != nil {
 			return err
 		}
@@ -222,6 +230,73 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (View, error) {
 	return view, nil
 }
 
+// requireGrantableVersion refuses an agent bound to a strategy version its
+// owner does not own, did not name, or never accepted.
+//
+// Create used to check that the two ids were non-empty and nothing else, so a
+// stranger could create an agent on their OWN account bound to somebody else's
+// private compiled version: the grant recorded authority over IR the grantor
+// could not read, which is the opposite of what goal SS18 and ADR-0029 require
+// (the compiled strategy is the thing the owner READ and APPROVED before
+// anything is activated). F-187.
+//
+// Three refusals, and the codes are deliberate:
+//
+//   - a version that does not exist, or does not belong to the named strategy,
+//     or whose strategy belongs to another account, is NOT_FOUND. All three
+//     answer identically, because the alternative tells a stranger which of
+//     their guesses about somebody else's strategy was right.
+//   - a version that exists and is the owner's, but which nobody accepted, is
+//     INVALID_STATE_TRANSITION: the caller is not being told about a thing they
+//     may not see, they are being told the thing is not ready. ACCEPTED plus a
+//     non-null acceptance is the schema's only record of the approval step, and
+//     00500's own CHECK already pairs the two.
+func requireGrantableVersion(ctx context.Context, tx pgx.Tx, accountID, strategyID, versionID string) error {
+	notFound := errs.New(errs.CodeNotFound, "agents: no such strategy version for this account").
+		WithField("strategy_version_id", "must be an accepted version of a strategy this account owns")
+
+	var ownerAccount, status string
+	var acceptedBy *string
+	var acceptedAt *time.Time
+	err := tx.QueryRow(ctx, `
+		SELECT s.owner_account_id::text, v.status, v.accepted_by_user_id::text, v.accepted_at
+		  FROM strategy_versions v JOIN strategies s ON s.id = v.strategy_id
+		 WHERE v.id = $1::uuid AND v.strategy_id = $2::uuid
+		 FOR SHARE OF v, s`, versionID, strategyID).Scan(&ownerAccount, &status, &acceptedBy, &acceptedAt)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return notFound
+	case err != nil:
+		return errs.Wrap(err, errs.CodeInternal, "agents: read the strategy version")
+	}
+	if ownerAccount != accountID {
+		return notFound
+	}
+	if status != strategy.StatusAccepted || acceptedBy == nil || acceptedAt == nil {
+		return errs.Newf(errs.CodeInvalidStateTransition,
+			"agents: this strategy version is %s; read the compiled strategy and accept it before you create an agent from it",
+			strings.ToLower(status)).
+			WithField("strategy_version_id", "must be accepted before an agent can be created from it")
+	}
+	return nil
+}
+
+// notYours turns a cross-tenant refusal into NOT_FOUND.
+//
+// FORBIDDEN on an agent somebody else owns is an oracle: it tells a stranger
+// that the id they guessed names a real agent, and 404 on the next one tells
+// them it does not. To a principal who does not own it, an agent does not
+// exist -- which is also what the notification centre and the payout surface
+// already answer. Everything else (unauthenticated, step-up, an actor type that
+// may not act at all) keeps its own code, because those describe the CALLER and
+// disclose nothing about the resource.
+func notYours(err error) error {
+	if errors.Is(err, security.ErrCrossTenant) {
+		return errs.New(errs.CodeNotFound, "agents: no such agent").WithField("agent_id", "not found")
+	}
+	return err
+}
+
 // Get returns one agent the caller owns.
 func (s *Service) Get(ctx context.Context, agentID agent.AgentID) (View, error) {
 	v, err := s.store.Get(ctx, s.db, agentID)
@@ -229,7 +304,7 @@ func (s *Service) Get(ctx context.Context, agentID agent.AgentID) (View, error) 
 		return View{}, err
 	}
 	if err := s.requireOwnership(ctx, v.Agent.AccountID); err != nil {
-		return View{}, err
+		return View{}, notYours(err)
 	}
 	return s.withPause(ctx, s.withRuntime(v))
 }
@@ -326,7 +401,7 @@ func (s *Service) Act(ctx context.Context, req ActRequest) (View, error) {
 	}
 	p, err := s.ownerActor(ctx, v.Agent.AccountID)
 	if err != nil {
-		return View{}, err
+		return View{}, notYours(err)
 	}
 	reason := strings.TrimSpace(req.Reason)
 	if reason == "" {
@@ -684,7 +759,11 @@ func (s *Service) ownerActor(ctx context.Context, accountID string) (security.Pr
 	if err := security.RequireAt(ctx, security.PermStrategyWrite, s.clk.Now); err != nil {
 		return security.Principal{}, authError(err)
 	}
-	if err := security.RequireAccount(ctx, accountID); err != nil {
+	// RequireAccountOwner, not RequireAccount: the latter admits anybody
+	// holding account:read_any, which is a READ capability and has no business
+	// granting an agent authority over somebody's money. There is no operator
+	// override on this path and AdminPause is the operator's whole surface.
+	if err := security.RequireAccountOwner(ctx, accountID); err != nil {
 		return security.Principal{}, authError(err)
 	}
 	return p, nil
@@ -706,7 +785,11 @@ func (s *Service) requireOwnership(ctx context.Context, accountID string) error 
 	if err := security.RequireAt(ctx, security.PermStrategyRead, s.clk.Now); err != nil {
 		return authError(err)
 	}
-	if err := security.RequireAccount(ctx, accountID); err != nil {
+	// The operator case is answered above, under account:read_any. What is left
+	// is a customer, and a customer reads their own account's agents: the
+	// owner-only twin, so a read_any grant that ever reached a customer
+	// principal does not silently open every other account's agents here.
+	if err := security.RequireAccountOwner(ctx, accountID); err != nil {
 		return authError(err)
 	}
 	return nil

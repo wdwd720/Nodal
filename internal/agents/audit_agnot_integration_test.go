@@ -12,27 +12,31 @@ import (
 
 	"github.com/nodal/controlplane/internal/agentauthority"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/strategy"
+	"github.com/nodal/controlplane/internal/strategy/ir"
 )
 
-// F-agnot: Create never checks that the strategy version it binds an agent to
-// belongs to the account making the grant.
+// F-187 (was TestAuditAgnot_AnAgentBindsToAnotherAccountsStrategyVersion on
+// audit/agents-notifications @ 8a69aaa, which asserted the create succeeded).
 //
-// Goal SS18 requires the compiled strategy to be the thing the owner READ and
-// APPROVED before anything is activated, and ADR-0029 states an agent "is
-// created only from" a compiled version. Here a stranger creates an agent on
-// their OWN account bound to somebody else's private strategy version: the
-// grant records authority over IR the grantor never saw and may not read.
-func TestAuditAgnot_AnAgentBindsToAnotherAccountsStrategyVersion(t *testing.T) {
+// Create checked that the two ids were non-empty and nothing else. Goal SS18
+// requires the compiled strategy to be the thing the owner READ and APPROVED
+// before anything is activated, and ADR-0029 states an agent "is created only
+// from" a compiled version. A stranger could create an agent on their OWN
+// account bound to somebody else's private strategy version, and the grant --
+// the document an audit of "what did this person agree to" reads -- recorded
+// authority over IR the grantor never saw and may not read.
+func TestAuditAgnot_AnAgentCannotBindToAnotherAccountsStrategyVersion(t *testing.T) {
 	f := newFixture(t)
 
 	// The owner's strategy is not readable by the stranger...
 	_, err := f.strategies.Get(f.stranger(), f.strategyID)
 	require.Error(t, err, "the stranger must not be able to read the owner's strategy")
 
-	// ...and yet the stranger may bind an agent on their own account to it.
-	v, err := f.svc.Create(f.stranger(), CreateRequest{
+	// ...and they cannot bind an agent on their own account to it either.
+	_, err = f.svc.Create(f.stranger(), CreateRequest{
 		AccountID:         f.otherAcct,
 		StrategyID:        f.strategyID, // the OWNER's strategy
 		StrategyVersionID: f.versionID,  // the OWNER's compiled version
@@ -40,24 +44,31 @@ func TestAuditAgnot_AnAgentBindsToAnotherAccountsStrategyVersion(t *testing.T) {
 		Level:             agentauthority.LevelRecommendation,
 		Limits:            fixtureLimits(t, f.assetID),
 	})
-	require.NoError(t, err, "expected a refusal; the create succeeded")
-	assert.Equal(t, f.otherAcct, v.Agent.AccountID)
-	assert.Equal(t, f.strategyID, v.Agent.StrategyID)
-	assert.Equal(t, f.versionID, v.Grant.StrategyVersionID,
-		"the grant records authority over a strategy version its grantor cannot read")
+	require.Error(t, err, "a stranger created an agent from somebody else's strategy version")
+	e, ok := errs.As(err)
+	require.True(t, ok)
+	assert.Equal(t, errs.CodeNotFound, e.Code,
+		"NOT_FOUND and not FORBIDDEN: the refusal must not confirm that the version exists")
+
+	// Nothing was written: no agent, and no grant recording an authority.
+	assert.Zero(t, countRows(t, `SELECT count(*) FROM agents WHERE account_id = $1`, f.otherAcct))
+	assert.Zero(t, countRows(t, `SELECT count(*) FROM agent_grants WHERE strategy_version_id = $1 AND account_id = $2`,
+		f.versionID, f.otherAcct))
 
 	var ownerAccount string
 	require.NoError(t, testDB.QueryRow(context.Background(),
 		`SELECT owner_account_id::text FROM strategies WHERE id = $1`, f.strategyID).Scan(&ownerAccount))
-	assert.Equal(t, f.accountID, ownerAccount)
-	t.Fatalf("an agent on account %s was created from account %s's strategy version %s",
-		f.otherAcct, ownerAccount, f.versionID)
+	assert.Equal(t, f.accountID, ownerAccount, "the strategy still belongs to the account that owns it")
 }
 
-// F-agnot: nor that the version belongs to the strategy it names. agents
-// carries two independent foreign keys and no consistency check between them,
-// so strategy_id and strategy_version_id can describe two different strategies.
-func TestAuditAgnot_TheStrategyVersionNeedNotBelongToTheStrategy(t *testing.T) {
+// F-187, second face. The version must belong to the strategy it names.
+// `agents` carried two independent foreign keys and no consistency check
+// between them, so strategy_id and strategy_version_id could describe two
+// different strategies and every read that joined through either key answered a
+// different story. 00802 makes the pair one composite foreign key; the service
+// refuses it before the insert, with the same answer as a version that does not
+// exist. (Was TestAuditAgnot_TheStrategyVersionNeedNotBelongToTheStrategy.)
+func TestAuditAgnot_TheStrategyVersionMustBelongToTheStrategy(t *testing.T) {
 	f := newFixture(t)
 	ctx := f.owner()
 
@@ -69,7 +80,7 @@ func TestAuditAgnot_TheStrategyVersionNeedNotBelongToTheStrategy(t *testing.T) {
 		other, f.accountID, f.userID, "unrelated-"+other[:8])
 	require.NoError(t, err)
 
-	v, err := f.svc.Create(ctx, CreateRequest{
+	_, err = f.svc.Create(ctx, CreateRequest{
 		AccountID:         f.accountID,
 		StrategyID:        other,       // a strategy with no compiled version
 		StrategyVersionID: f.versionID, // a version belonging to a DIFFERENT strategy
@@ -77,13 +88,24 @@ func TestAuditAgnot_TheStrategyVersionNeedNotBelongToTheStrategy(t *testing.T) {
 		Level:             agentauthority.LevelRecommendation,
 		Limits:            fixtureLimits(t, f.assetID),
 	})
-	require.NoError(t, err, "expected a refusal")
+	require.Error(t, err, "an agent was created naming one strategy and another strategy's version")
+	e, ok := errs.As(err)
+	require.True(t, ok)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
+	assert.Zero(t, countRows(t, `SELECT count(*) FROM agents WHERE strategy_id = $1`, other))
+
+	// And the schema refuses the pair too, so a writer that is not this service
+	// cannot record it either.
 	var versionStrategy string
 	require.NoError(t, testDB.QueryRow(ctx,
 		`SELECT strategy_id::text FROM strategy_versions WHERE id = $1`, f.versionID).Scan(&versionStrategy))
-	assert.NotEqual(t, v.Agent.StrategyID, versionStrategy)
-	t.Fatalf("agent %s names strategy %s but version %s belongs to strategy %s",
-		v.Agent.ID, v.Agent.StrategyID, f.versionID, versionStrategy)
+	require.NotEqual(t, other, versionStrategy)
+	_, derr := testDB.Exec(ctx, `INSERT INTO agents (id, account_id, strategy_id, strategy_version_id, name, stage,
+	        state, version, created_by_actor_type, created_by_actor_id)
+	      VALUES ($1::uuid, $2, $3, $4, 'forced mismatch', 'DRAFT', 'DRAFT', 1, 'USER', $5)`,
+		newUUID(), f.accountID, other, f.versionID, f.userID)
+	require.Error(t, derr, "the composite foreign key admitted a version of another strategy")
+	assert.Equal(t, "23503", db.SQLState(derr), "got %v", derr)
 }
 
 // Control: a stranger cannot act on the owner's agent. (Expected to pass.)
@@ -140,15 +162,18 @@ func (emptyRefs) Refs(context.Context, db.Querier, time.Time) (strategy.Validati
 	return strategy.ValidationRefs{}, nil
 }
 
-// F-agnot: StrategyService.persist writes whatever the CompilerBackend returns.
-// It never checks that the Version's StrategyID is the strategy that was
-// compiled, that the version number is the one it just reserved, that the
-// status is COMPILED, or that IRHash matches the IR. A backend (the seam
-// ADR-0029 declares, satisfied by *strategy.Compiler today and by whatever a
-// later deployment wires) can therefore write a strategy_versions row under a
-// DIFFERENT account's strategy, with a hash that does not describe the
-// document.
-func TestAuditAgnot_ACompilerBackendWritesAVersionUnderSomebodyElsesStrategy(t *testing.T) {
+// F-189 (was TestAuditAgnot_ACompilerBackendWritesAVersionUnderSomebodyElses\
+// Strategy, which asserted the row was written).
+//
+// StrategyService.persist wrote whatever the CompilerBackend returned. It never
+// checked that the Version's StrategyID was the strategy that was compiled,
+// that the version number was the one it had just reserved, that the status was
+// COMPILED, or that IRHash matched the IR. A backend -- the seam ADR-0029
+// declares, satisfied by *strategy.Compiler today and by whatever a later
+// deployment wires -- could therefore write a strategy_versions row under a
+// DIFFERENT account's strategy, with a hash that describes no document, and
+// point that account's strategy at it.
+func TestAuditAgnot_ACompilerBackendCannotWriteAVersionUnderSomebodyElsesStrategy(t *testing.T) {
 	f := newFixture(t)
 	ctx := f.stranger()
 
@@ -176,27 +201,82 @@ func TestAuditAgnot_ACompilerBackendWritesAVersionUnderSomebodyElsesStrategy(t *
 	})
 	require.NoError(t, err)
 
+	_, err = svc.Compile(ctx, mine, "", "")
+	require.Error(t, err, "the forged version was accepted from the backend")
+	e, ok := errs.As(err)
+	require.True(t, ok)
+	assert.Equal(t, errs.CodeInternal, e.Code,
+		"the caller asked for a compile and did nothing wrong; what failed is the thing this deployment wired")
+
+	// Nothing was written, and the victim's strategy still points where it did.
+	assert.Zero(t, countRows(t, `SELECT count(*) FROM strategy_versions WHERE id = $1`, forged.ID.String()),
+		"a version was written under strategy %s from a compile of strategy %s", f.strategyID, mine)
+	var current *string
+	require.NoError(t, testDB.QueryRow(ctx,
+		`SELECT current_version_id::text FROM strategies WHERE id = $1`, f.strategyID).Scan(&current))
+	assert.Nil(t, current, "the victim's strategy was pointed at the forged version")
+
+	// The other three faces of the same check, one at a time, so a fix that
+	// closed only the strategy id does not pass.
+	base := func() *strategy.Version {
+		v := *forged
+		v.ID = strategy.NewVersionID()
+		v.StrategyID = mustStrategyID(t, mine)
+		v.IR = &ir.IR{SchemaVersion: ir.SchemaVersion}
+		h, herr := ir.SemanticHash(v.IR)
+		require.NoError(t, herr)
+		v.IRHash = h
+		v.Version = 1
+		return &v
+	}
+	for _, tc := range []struct {
+		name  string
+		spoil func(v *strategy.Version)
+	}{
+		{"a version number nobody reserved", func(v *strategy.Version) { v.Version = 77 }},
+		{"a status only a person may set", func(v *strategy.Version) { v.Status = strategy.StatusAccepted }},
+		{"a hash that describes no document", func(v *strategy.Version) { v.IRHash = bytes32("not the hash") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := base()
+			tc.spoil(v)
+			svc, serr := NewStrategyService(StrategyDeps{
+				DB: testDB, Clock: f.clk, Compiler: lyingBackend{v: v}, Refs: emptyRefs{}, CompilerVersion: "itest",
+			})
+			require.NoError(t, serr)
+			_, cerr := svc.Compile(ctx, mine, "", "")
+			require.Error(t, cerr)
+			assert.Zero(t, countRows(t, `SELECT count(*) FROM strategy_versions WHERE id = $1`, v.ID.String()))
+		})
+	}
+
+	// And the control: a backend that answers with the version it was asked for
+	// is written.
+	good := base()
+	svc, err = NewStrategyService(StrategyDeps{
+		DB: testDB, Clock: f.clk, Compiler: lyingBackend{v: good}, Refs: emptyRefs{}, CompilerVersion: "itest",
+	})
+	require.NoError(t, err)
 	out, err := svc.Compile(ctx, mine, "", "")
 	require.NoError(t, err)
 	require.True(t, out.Succeeded())
-
-	var ownerAccount, status string
-	require.NoError(t, testDB.QueryRow(ctx,
-		`SELECT s.owner_account_id::text, v.status FROM strategy_versions v
-		   JOIN strategies s ON s.id = v.strategy_id WHERE v.id = $1`, forged.ID).Scan(&ownerAccount, &status))
-	assert.Equal(t, f.otherAcct, ownerAccount,
-		"a compile of the stranger's strategy wrote a version under account %s's strategy, status %s",
-		ownerAccount, status)
-	t.Fatalf("version %s written under strategy %s (account %s) with status %s and an unverified ir_hash, "+
-		"from a compile of strategy %s", forged.ID, f.strategyID, ownerAccount, status, mine)
+	assert.Equal(t, good.ID.String(), out.Version.ID)
 }
 
-// F-agnot (same defect, third face): nothing requires the strategy version an
-// agent is created from to have been ACCEPTED by anybody. Goal SS18 requires
-// the user to read and approve the compiled strategy BEFORE anything is
-// activated, and strategy_versions.accepted_by_user_id / accepted_at is the
-// only record of that act in the schema. Create never reads either column.
-func TestAuditAgnot_AnAgentIsCreatedFromANeverAcceptedVersion(t *testing.T) {
+func mustStrategyID(t *testing.T, s string) strategy.StrategyID {
+	t.Helper()
+	id, err := strategy.ParseStrategyID(s)
+	require.NoError(t, err)
+	return id
+}
+
+// F-187, third face. Nothing required the strategy version an agent is created
+// from to have been ACCEPTED by anybody. Goal SS18 requires the user to read
+// and approve the compiled strategy BEFORE anything is activated, and
+// strategy_versions.accepted_by_user_id / accepted_at is the only record of
+// that act in the schema; Create read neither column. (Was
+// TestAuditAgnot_AnAgentIsCreatedFromANeverAcceptedVersion.)
+func TestAuditAgnot_AnAgentIsRefusedFromANeverAcceptedVersion(t *testing.T) {
 	f := newFixture(t)
 	ctx := f.owner()
 
@@ -211,17 +291,33 @@ func TestAuditAgnot_AnAgentIsCreatedFromANeverAcceptedVersion(t *testing.T) {
 		unaccepted, f.strategyID, bytes32("ir2"), bytes32("src2"), bytes32("risk2"))
 	require.NoError(t, err)
 
-	v, err := f.svc.Create(ctx, CreateRequest{
+	_, err = f.svc.Create(ctx, CreateRequest{
 		AccountID: f.accountID, StrategyID: f.strategyID, StrategyVersionID: unaccepted,
 		Name: "from an unapproved version", Level: agentauthority.LevelUserApprovedRule,
 		Limits: fixtureLimits(t, f.assetID),
 	})
-	require.NoError(t, err, "expected a refusal")
+	require.Error(t, err, "an agent was granted authority over a version nobody ever accepted")
+	e, ok := errs.As(err)
+	require.True(t, ok)
+	assert.Equal(t, errs.CodeInvalidStateTransition, e.Code,
+		"the owner may see this one: the version is theirs, and what is missing is the approval step")
+	assert.Zero(t, countRows(t, `SELECT count(*) FROM agent_grants WHERE strategy_version_id = $1`, unaccepted))
 
 	var acceptedBy *string
 	require.NoError(t, testDB.QueryRow(ctx,
 		`SELECT accepted_by_user_id::text FROM strategy_versions WHERE id = $1`, unaccepted).Scan(&acceptedBy))
-	assert.NotNil(t, acceptedBy,
-		"agent %s at authority level %d was granted over strategy version %s, which nobody ever accepted",
-		v.Agent.ID, int(v.Grant.Level), unaccepted)
+	require.Nil(t, acceptedBy, "the fixture's version is the unaccepted one")
+
+	// Accepted, and the same request is allowed: the refusal is about the
+	// approval and nothing else.
+	_, err = testDB.Exec(ctx, `UPDATE strategy_versions SET status = 'ACCEPTED', accepted_by_user_id = $2::uuid,
+	        accepted_at = now() WHERE id = $1`, unaccepted, f.userID)
+	require.NoError(t, err)
+	v, err := f.svc.Create(ctx, CreateRequest{
+		AccountID: f.accountID, StrategyID: f.strategyID, StrategyVersionID: unaccepted,
+		Name: "from an approved version", Level: agentauthority.LevelUserApprovedRule,
+		Limits: fixtureLimits(t, f.assetID),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, unaccepted, v.Grant.StrategyVersionID)
 }

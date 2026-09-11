@@ -231,6 +231,16 @@ func (f *fixture) create(ctx context.Context, level agentauthority.Level, name s
 	})
 }
 
+// missingAgentError is the error an id that names nothing produces, so the test
+// above can assert that a stranger gets the identical answer rather than
+// merely a 404 of its own.
+func (f *fixture) missingAgentError(t *testing.T) error {
+	t.Helper()
+	_, err := f.svc.Get(f.stranger(), agent.NewAgentID())
+	require.Error(t, err)
+	return err
+}
+
 func fixtureLimits(t *testing.T, assetID string) Limits {
 	t.Helper()
 	a, err := assets.ParseAssetID(assetID)
@@ -481,15 +491,20 @@ func TestIntegration_OnlyTheOwnerActsOnTheirAgent(t *testing.T) {
 	v, err := f.create(f.owner(), agentauthority.LevelRecommendation, "mine")
 	require.NoError(t, err)
 
+	// NOT_FOUND rather than FORBIDDEN: to a principal who does not own it, this
+	// agent does not exist. FORBIDDEN told a stranger that the id they guessed
+	// names a real agent, and 404 on the next one told them it does not.
 	_, err = f.svc.Act(f.stranger(), ActRequest{AgentID: v.Agent.ID, Action: ActionEnable})
 	require.Error(t, err)
 	e, _ := errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
 
 	_, err = f.svc.Get(f.stranger(), v.Agent.ID)
 	require.Error(t, err)
 	e, _ = errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
+	assert.Equal(t, errs.CodeOf(f.missingAgentError(t)), e.Code,
+		"a stranger's answer is the same as the answer for an id that does not exist")
 
 	// An operator cannot enable somebody's agent either, whatever they hold.
 	_, err = f.svc.Act(f.operator(), ActRequest{AgentID: v.Agent.ID, Action: ActionEnable})
@@ -700,15 +715,17 @@ func TestIntegration_AStrangerCannotReadOrCompileSomebodyElsesStrategy(t *testin
 	})
 	require.NoError(t, err)
 
+	// Not yours is not found: the id itself is a fact about somebody else's
+	// account, and Compile answers the same way because it reads first.
 	_, err = f.strategies.Get(f.stranger(), st.ID)
 	require.Error(t, err)
 	e, _ := errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
 
 	_, err = f.strategies.Compile(f.stranger(), st.ID, "req-"+newUUID(), "")
 	require.Error(t, err)
 	e, _ = errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
 }
 
 // ---------------------------------------------------------------- helpers --
