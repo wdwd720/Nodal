@@ -136,6 +136,10 @@ func registry() []pair {
 		{table: "capability_gates", constraint: "capability_gates_capability_check", source: "gates.AllCapabilities()", values: str(gates.AllCapabilities())},
 		{table: "capability_gates", constraint: "capability_gates_state_check", source: "gates.AllStates()", values: str(gates.AllStates())},
 		{table: "credit_fundings", constraint: "credit_fundings_state_check", source: "credit.AllFundingStates()", values: str(credit.AllFundingStates())},
+		// The mode that opened a payment (00793, D-096). credit declares the
+		// list because credit_fundings.provider_mode is its column, and builds
+		// it from internal/config's constants so the two cannot drift.
+		{table: "credit_fundings", constraint: "credit_fundings_provider_mode_check", source: "credit.AllProviderModes()", values: credit.AllProviderModes()},
 		{table: "deposits", constraint: "deposits_status_check", source: "funding.AllStatuses()", values: str(funding.AllStatuses())},
 		{table: "execution_attempts", constraint: "execution_attempts_finality_check", source: "execution.AllFinalityLevels()", values: str(execution.AllFinalityLevels())},
 		{table: "execution_attempts", constraint: "execution_attempts_status_check", source: "execution.AllAttemptStatuses()", values: str(execution.AllAttemptStatuses())},

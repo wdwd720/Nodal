@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,10 @@ type PurchaseService struct {
 	capacity CapacityGuard
 	clk      clock.Clock
 	env      string
+	// mode is the provider's operating mode, stamped onto every funding this
+	// service opens so that the sandbox label on a purchase is a fact about the
+	// payment rather than about today's configuration (D-096).
+	mode string
 }
 
 // GateChecker is the capability-gate guard. *gates.Checker satisfies it.
@@ -75,6 +80,10 @@ type PurchaseServiceConfig struct {
 	// Environment is stamped onto every provider object and compared against
 	// every inbound event.
 	Environment string
+	// ProviderMode is the mode the provider runs in -- fake, sandbox or live.
+	// It is recorded on every funding this service opens, and cross-checked
+	// against the provider's own livemode on the first event that names one.
+	ProviderMode string
 }
 
 // NewPurchaseService validates the configuration against the deployment it is
@@ -114,6 +123,11 @@ func NewPurchaseService(ctx context.Context, q db.Querier, cfg PurchaseServiceCo
 	if strings.TrimSpace(cfg.Environment) == "" {
 		return nil, errs.New(errs.CodeValidationFailed, "credit: a purchase service needs an environment")
 	}
+	if !slices.Contains(AllProviderModes(), cfg.ProviderMode) {
+		return nil, errs.Newf(errs.CodeValidationFailed,
+			"credit: %q is not a provider mode; a purchase service records the mode that opened each payment",
+			cfg.ProviderMode)
+	}
 	decimals, err := cfg.Credits.AssetDecimals(ctx, q)
 	if err != nil {
 		return nil, err
@@ -133,8 +147,12 @@ func NewPurchaseService(ctx context.Context, q db.Querier, cfg PurchaseServiceCo
 	return &PurchaseService{
 		credits: cfg.Credits, provider: cfg.Provider, pricing: cfg.Pricing,
 		gates: cfg.Gates, capacity: cfg.Capacity, clk: clk, env: cfg.Environment,
+		mode: cfg.ProviderMode,
 	}, nil
 }
+
+// ProviderMode is the mode this service opens payments in.
+func (s *PurchaseService) ProviderMode() string { return s.mode }
 
 // scaleGap describes the size of a scale disagreement in the direction that
 // matters: how much of what it charged for a purchase would actually issue.
@@ -344,6 +362,7 @@ func (s *PurchaseService) openFunding(
 	out, err := s.credits.CreateFunding(ctx, tx, CreateFundingRequest{
 		AccountID:      r.AccountID,
 		Provider:       s.provider.Name(),
+		ProviderMode:   s.mode,
 		CreditQuantity: q,
 		PaidAmount:     r.Amount,
 		PaidCurrency:   currency,
@@ -458,6 +477,19 @@ func (s *PurchaseService) Dispatch(ctx context.Context, tx pgx.Tx, ev PurchaseEv
 			"provider reports %s for this payment and the funding records %s",
 			ev.Snapshot.Amount, f.PaidAmount,
 		), ev.Identity.EventID)
+	}
+
+	// The provider's own statement about which world this object belongs to,
+	// against the mode that opened the payment.
+	//
+	// The adapter already refuses an event whose livemode disagrees with the
+	// ADAPTER's mode, which catches a test event arriving at a live endpoint.
+	// This catches the other one: a deployment whose provider mode changed
+	// between opening a payment and hearing about it. Without the recorded mode
+	// there was nothing to compare against, because the flag was recomputed
+	// from the configuration on every read (F-158).
+	if reason := providerModeMismatch(f, ev.Snapshot); reason != "" {
+		return s.review(ctx, tx, f, reason, ev.Identity.EventID)
 	}
 
 	to, ok := FundingStateFor(ev.Snapshot.Status)
@@ -620,6 +652,33 @@ func refundedReason(snap PurchaseSnapshot) string {
 	}
 	return fmt.Sprintf("the provider reports %d minor units of this payment refunded",
 		snap.AmountRefundedMinor)
+}
+
+// providerModeMismatch describes a provider object whose world is not the world
+// the funding was opened in, or "" when they agree.
+//
+// A funding with no recorded mode predates migration 00793 and has nothing to
+// compare; it is not a mismatch, and saying it was would park every legacy
+// funding for a person.
+func providerModeMismatch(f Funding, snap PurchaseSnapshot) string {
+	if f.ProviderMode == "" {
+		return ""
+	}
+	live := !SandboxMode(f.ProviderMode)
+	if live == snap.Livemode {
+		return ""
+	}
+	world := func(b bool) string {
+		if b {
+			return "live"
+		}
+		return "test"
+	}
+	return fmt.Sprintf(
+		"this payment was opened in %s mode and the provider object says it is a %s one; "+
+			"a mode that changed under a payment in flight is not something to resolve by preferring one of them",
+		f.ProviderMode, world(snap.Livemode),
+	)
 }
 
 // stateOrUnmapped names what an event would have set, for a log line that has

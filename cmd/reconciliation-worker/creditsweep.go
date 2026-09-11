@@ -85,6 +85,7 @@ func newCreditSweeper(ctx context.Context, cfg *config.Config, database *db.DB,
 	svc, err := credit.NewPurchaseService(ctx, database, credit.PurchaseServiceConfig{
 		Credits: credits, Provider: prov, Pricing: credit.DefaultPricingPolicy(),
 		Gates: checker, Clock: clk, Environment: string(cfg.Env),
+		ProviderMode: string(slot.Mode),
 	})
 	if err != nil {
 		log.WarnContext(ctx, "credit purchase service could not be built; the Credit settlement sweep is disabled",

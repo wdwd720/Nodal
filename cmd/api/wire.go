@@ -841,26 +841,29 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		BuildVersion: config.BuildVersion,
 		ConfigHash:   cfg.Hash(),
 		SandboxTier:  cfg.SandboxTier(),
-		// Anything but live is a rehearsal: test cards, sandbox Credits.
-		CreditPurchaseSandbox: cfg.Providers.CreditPurchase.Mode != config.ProviderModeLive,
-		PublicBaseURL:         cfg.HTTP.PublicBaseURL,
-		CORSOrigins:           cfg.HTTP.CORSOrigins,
-		TrustedProxyCIDRs:     cfg.HTTP.TrustedProxyCIDRs,
-		MaxBodyBytes:          cfg.HTTP.MaxBodyBytes,
-		CookieName:            cookieName,
-		CookieDomain:          cfg.Auth.CookieDomain,
-		CookieSecure:          cfg.Auth.CookieSecure,
-		PostLoginURL:          cfg.Auth.PostLoginURL,
-		SessionTTL:            cfg.Auth.SessionTTL,
-		StepUpMaxAge:          cfg.Auth.StepUpMaxAge,
-		IdempotencyTTL:        httpapi.DefaultIdempotencyTTL,
-		Clock:                 clk,
-		Logger:                log,
-		Meter:                 meter,
-		Limits:                limits,
-		Authenticator:         httpmw.Session(sessionMgr, database, cookieName),
-		NonSpecRoutes:         nonSpecRoutes,
-		Ports:                 ports,
+		// There is no CreditPurchaseSandbox here any more. Whether a purchase
+		// was a rehearsal is a fact about that purchase, recorded on its row
+		// when it was opened (D-096); computing it from the mode this process
+		// booted with re-labelled every purchase a deployment had ever made on
+		// the day it changed mode.
+		PublicBaseURL:     cfg.HTTP.PublicBaseURL,
+		CORSOrigins:       cfg.HTTP.CORSOrigins,
+		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
+		MaxBodyBytes:      cfg.HTTP.MaxBodyBytes,
+		CookieName:        cookieName,
+		CookieDomain:      cfg.Auth.CookieDomain,
+		CookieSecure:      cfg.Auth.CookieSecure,
+		PostLoginURL:      cfg.Auth.PostLoginURL,
+		SessionTTL:        cfg.Auth.SessionTTL,
+		StepUpMaxAge:      cfg.Auth.StepUpMaxAge,
+		IdempotencyTTL:    httpapi.DefaultIdempotencyTTL,
+		Clock:             clk,
+		Logger:            log,
+		Meter:             meter,
+		Limits:            limits,
+		Authenticator:     httpmw.Session(sessionMgr, database, cookieName),
+		NonSpecRoutes:     nonSpecRoutes,
+		Ports:             ports,
 	})
 }
 

@@ -370,6 +370,11 @@ func (r RestoreRequest) Validate() error {
 // so that a user is never told "18,500 Credits = $185 withdrawable" unless
 // policy actually says so.
 type Balances struct {
+	// CreditDecimals is the scale of the CREDIT asset every quantity below is
+	// expressed in. It travels WITH the figures because a consumer that has to
+	// assume the scale is a consumer that can render a balance a million times
+	// wrong, which is what the browser did (F-151).
+	CreditDecimals uint8
 	// Gross is every remaining unit the account holds, regardless of state.
 	Gross money.Quantity
 	// Spendable is what can fund new internal activity now.

@@ -54,11 +54,14 @@ func toAPICreditBalance(accountID string, b credit.Balances) api.CreditBalance {
 
 	id := uuid.MustParse(accountID)
 	return api.CreditBalance{
-		AccountId:         id,
+		AccountId: id,
+		// The scale travels with the figures. Every consumer that assumed six
+		// was a consumer that could be a million times wrong (F-151).
+		CreditDecimals:    int(b.CreditDecimals),
 		Gross:             qtyString(b.Gross),
 		Spendable:         qtyString(b.Spendable),
 		Frozen:            qtyString(b.Frozen),
-		Reversed:          ptr(qtyString(b.Reversed)),
+		Reversed:          qtyString(b.Reversed),
 		PayoutEligible:    qtyString(b.PayoutEligible),
 		Ineligible:        qtyString(b.Ineligible),
 		ByOrigin:          &byOrigin,

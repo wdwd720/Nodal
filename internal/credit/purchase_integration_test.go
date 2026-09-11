@@ -187,7 +187,7 @@ func newPurchaseFixture(t *testing.T) *purchaseFixture {
 	gate := &fakeGate{active: true}
 	svcP, err := NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
 		Credits: f.svc, Provider: prov, Pricing: DefaultPricingPolicy(),
-		Gates: gate, Clock: f.clk, Environment: "TEST",
+		Gates: gate, Clock: f.clk, Environment: "TEST", ProviderMode: "fake",
 	})
 	require.NoError(t, err)
 	return &purchaseFixture{fixture: f, svcP: svcP, prov: prov, gate: gate, keyPrefix: uuid.NewString()}
@@ -205,7 +205,7 @@ func newPurchaseFixtureWithCeiling(t *testing.T, maxAtRiskMinor int64) *purchase
 	require.NoError(t, err)
 	svcP, err := NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
 		Credits: f.svc, Provider: prov, Pricing: DefaultPricingPolicy(),
-		Gates: gate, Clock: f.clk, Environment: "TEST", Capacity: guard,
+		Gates: gate, Clock: f.clk, Environment: "TEST", Capacity: guard, ProviderMode: "fake",
 	})
 	require.NoError(t, err)
 	return &purchaseFixture{fixture: f, svcP: svcP, prov: prov, gate: gate, keyPrefix: uuid.NewString()}
@@ -233,7 +233,7 @@ func TestIntegration_APurchaseServiceRefusesAPolicyAtTheWrongScale(t *testing.T)
 
 	_, err = NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
 		Credits: f.svc, Provider: newFakeProvider(), Pricing: wrong,
-		Gates: &fakeGate{active: true}, Clock: f.clk, Environment: "TEST",
+		Gates: &fakeGate{active: true}, Clock: f.clk, Environment: "TEST", ProviderMode: "fake",
 	})
 	require.Error(t, err)
 	require.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
@@ -242,7 +242,7 @@ func TestIntegration_APurchaseServiceRefusesAPolicyAtTheWrongScale(t *testing.T)
 	// And the shipped policy, which prices the registered scale, builds.
 	_, err = NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
 		Credits: f.svc, Provider: newFakeProvider(), Pricing: DefaultPricingPolicy(),
-		Gates: &fakeGate{active: true}, Clock: f.clk, Environment: "TEST",
+		Gates: &fakeGate{active: true}, Clock: f.clk, Environment: "TEST", ProviderMode: "fake",
 	})
 	require.NoError(t, err)
 }

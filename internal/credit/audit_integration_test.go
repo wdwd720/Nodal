@@ -451,7 +451,7 @@ func (f *fixture) mintedFunding(t *testing.T, qty int64) FundingID {
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
-				AccountID: f.account, Provider: "audit-provider",
+				AccountID: f.account, Provider: "audit-provider", ProviderMode: "fake",
 				CreditQuantity: q(qty), PaidAmount: money.USDFromMinor(qty),
 				IdempotencyKey: "audit-funding-" + randomKey(),
 			})
@@ -560,7 +560,7 @@ func TestAudit_ASwallowedSucceededEventIsRecoveredByTheInProcessPass(t *testing.
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
-				AccountID: f.account, Provider: f.prov.Name(),
+				AccountID: f.account, Provider: f.prov.Name(), ProviderMode: "fake",
 				CreditQuantity: q(10_000), PaidAmount: money.USDFromMinor(10_000),
 				IdempotencyKey: f.keyPrefix + ":swallowed",
 			})

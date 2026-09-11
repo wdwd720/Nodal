@@ -3,6 +3,7 @@ package credit
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -198,19 +200,47 @@ func LotFinalityFor(s FundingState) (valuedomain.FundingFinality, bool) {
 	return "", false
 }
 
+// AllProviderModes returns every provider mode a funding may record.
+//
+// It is this package's list because credit_fundings.provider_mode is this
+// package's column, and it is built from internal/config's constants rather
+// than spelled out, so the two cannot drift. test/integration/enums holds it
+// against the CHECK in migration 00793.
+func AllProviderModes() []string {
+	return []string{
+		string(config.ProviderModeFake),
+		string(config.ProviderModeSandbox),
+		string(config.ProviderModeLive),
+	}
+}
+
+// SandboxMode reports whether a recorded provider mode means simulated value.
+//
+// An empty mode -- a funding written before 00793 recorded one -- is SANDBOX.
+// An unrecorded mode cannot be asserted to be live, and over-labelling value as
+// simulated is the safe direction of that mistake (D-096).
+func SandboxMode(mode string) bool { return mode != string(config.ProviderModeLive) }
+
 // Funding is a credit_fundings row.
 type Funding struct {
 	ID                FundingID
 	AccountID         accounts.AccountID
 	Provider          string
 	ProviderReference string
-	State             FundingState
-	CreditQuantity    money.Quantity
-	PaidAmount        money.USD
-	PaidCurrency      string
-	FeeAmount         money.USD
-	IdempotencyKey    string
-	LotID             *LotID
+	// ProviderMode is the mode of the provider that opened this payment, as it
+	// was at that moment. It is not the deployment's current mode: rendering
+	// the sandbox flag from today's configuration re-labelled every sandbox
+	// purchase a deployment had ever made the day it went live (F-158).
+	//
+	// Empty means a funding written before migration 00793.
+	ProviderMode   string
+	State          FundingState
+	CreditQuantity money.Quantity
+	PaidAmount     money.USD
+	PaidCurrency   string
+	FeeAmount      money.USD
+	IdempotencyKey string
+	LotID          *LotID
 	// ReversibleAt is when the Credits were minted and the reversibility
 	// window began. It is what the settlement sweep measures from, and what a
 	// funding page needs in order to answer "when does this settle".
@@ -222,7 +252,8 @@ type Funding struct {
 	UpdatedAt     time.Time
 }
 
-const fundingColumns = `id, account_id, provider, coalesce(provider_reference,''), state, credit_quantity::text,
+const fundingColumns = `id, account_id, provider, coalesce(provider_reference,''), coalesce(provider_mode,''),
+	state, credit_quantity::text,
 	paid_amount_minor, paid_currency, fee_amount_minor, idempotency_key, lot_id,
 	reversible_at, settled_at, reversed_at, coalesce(failure_reason,''), created_at, updated_at`
 
@@ -234,7 +265,7 @@ func scanFunding(row pgx.Row) (Funding, error) {
 		fee   int64
 		state string
 	)
-	if err := row.Scan(&f.ID, &f.AccountID, &f.Provider, &f.ProviderReference, &state, &qty,
+	if err := row.Scan(&f.ID, &f.AccountID, &f.Provider, &f.ProviderReference, &f.ProviderMode, &state, &qty,
 		&paid, &f.PaidCurrency, &fee, &f.IdempotencyKey, &f.LotID,
 		&f.ReversibleAt, &f.SettledAt, &f.ReversedAt, &f.FailureReason, &f.CreatedAt, &f.UpdatedAt); err != nil {
 		return Funding{}, err
@@ -255,11 +286,16 @@ type CreateFundingRequest struct {
 	AccountID         accounts.AccountID
 	Provider          string
 	ProviderReference string
-	CreditQuantity    money.Quantity
-	PaidAmount        money.USD
-	PaidCurrency      string
-	FeeAmount         money.USD
-	IdempotencyKey    string
+	// ProviderMode is the mode of the provider opening this payment. It is
+	// required, and it is recorded on the row rather than recomputed later:
+	// the sandbox label on a purchase is a fact about the payment, not about
+	// the configuration the deployment happens to be running today (D-096).
+	ProviderMode   string
+	CreditQuantity money.Quantity
+	PaidAmount     money.USD
+	PaidCurrency   string
+	FeeAmount      money.USD
+	IdempotencyKey string
 }
 
 // Validate checks the request without touching the database.
@@ -269,6 +305,10 @@ func (r CreateFundingRequest) Validate() error {
 	}
 	if strings.TrimSpace(r.Provider) == "" {
 		return errs.New(errs.CodeValidationFailed, "credit: funding requires a provider")
+	}
+	if !slices.Contains(AllProviderModes(), r.ProviderMode) {
+		return errs.Newf(errs.CodeValidationFailed,
+			"credit: %q is not a provider mode; a funding records the mode that opened its payment", r.ProviderMode)
 	}
 	if r.CreditQuantity.Sign() <= 0 {
 		return errs.New(errs.CodeValidationFailed, "credit: funding must buy a positive number of Credits")
@@ -297,12 +337,12 @@ func (s *Service) CreateFunding(ctx context.Context, tx pgx.Tx, r CreateFundingR
 	}
 	f, err := scanFunding(tx.QueryRow(ctx,
 		`INSERT INTO credit_fundings
-		   (id, account_id, provider, provider_reference, state, credit_quantity,
+		   (id, account_id, provider, provider_reference, provider_mode, state, credit_quantity,
 		    paid_amount_minor, paid_currency, fee_amount_minor, idempotency_key)
-		 VALUES ($1,$2,$3,$4,'CREATED',$5::numeric,$6,$7,$8,$9)
+		 VALUES ($1,$2,$3,$4,$5,'CREATED',$6::numeric,$7,$8,$9,$10)
 		 ON CONFLICT (idempotency_key) DO NOTHING
 		 RETURNING `+fundingColumns,
-		NewFundingID(), r.AccountID, r.Provider, providerRef, r.CreditQuantity.String(),
+		NewFundingID(), r.AccountID, r.Provider, providerRef, r.ProviderMode, r.CreditQuantity.String(),
 		r.PaidAmount.Minor(), currency, r.FeeAmount.Minor(), r.IdempotencyKey))
 	if err == nil {
 		return f, nil

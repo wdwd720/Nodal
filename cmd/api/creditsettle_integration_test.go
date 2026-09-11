@@ -111,6 +111,7 @@ func TestIntegration_ASandboxTierSettlesInMinutesAndAChargebackWindowDoesNot(t *
 		// would be one that could sell Credits without one.
 		Provider: settleTestProvider{}, Gates: settleTestGate{},
 		Pricing: credit.DefaultPricingPolicy(), Clock: clk, Environment: "TEST",
+		ProviderMode: "fake",
 	})
 	require.NoError(t, err)
 

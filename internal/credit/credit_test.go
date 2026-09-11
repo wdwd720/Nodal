@@ -324,6 +324,7 @@ func TestCreateFundingRequest_Validate(t *testing.T) {
 	base := CreateFundingRequest{
 		AccountID:      anAccount(),
 		Provider:       "stripe",
+		ProviderMode:   "sandbox",
 		CreditQuantity: money.QuantityFromInt64(1000),
 		PaidAmount:     money.USDFromMinor(1000),
 		IdempotencyKey: "k",
@@ -333,6 +334,19 @@ func TestCreateFundingRequest_Validate(t *testing.T) {
 	t.Run("no provider", func(t *testing.T) {
 		r := base
 		r.Provider = "  "
+		require.Error(t, r.Validate())
+	})
+	t.Run("no provider mode", func(t *testing.T) {
+		// The sandbox label on a purchase is a fact about the payment, so it
+		// has to be recorded when the payment is opened and cannot be left for
+		// a later read to recompute from the configuration (D-096).
+		r := base
+		r.ProviderMode = ""
+		require.Error(t, r.Validate())
+	})
+	t.Run("an invented provider mode", func(t *testing.T) {
+		r := base
+		r.ProviderMode = "production"
 		require.Error(t, r.Validate())
 	})
 	t.Run("no idempotency key", func(t *testing.T) {
