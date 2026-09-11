@@ -2219,7 +2219,6 @@ export interface MarketQuery {
   readonly q: string;
   readonly sort: MarketSort;
   readonly status: readonly MarketStatus[];
-  readonly creatorAccountId?: string;
   readonly cursor?: string;
   readonly limit?: number;
 }
@@ -2243,7 +2242,6 @@ export const marketKeys = {
       query.q,
       query.sort,
       [...query.status].join(","),
-      query.creatorAccountId ?? "",
       query.cursor ?? "",
     ] as const,
   summary: (marketId: string) => ["native-market", marketId, "summary"] as const,
@@ -2266,9 +2264,6 @@ export function useNativeMarkets(query: MarketQuery): UseQueryResult<MarketsPage
             limit: query.limit ?? 50,
             ...(query.q === "" ? {} : { q: query.q }),
             ...(query.status.length === 0 ? {} : { status: [...query.status] }),
-            ...(query.creatorAccountId === undefined
-              ? {}
-              : { creator_account_id: query.creatorAccountId }),
             ...(query.cursor === undefined || query.cursor === "" ? {} : { cursor: query.cursor }),
           },
         },
@@ -2291,6 +2286,11 @@ export function useNativeMarkets(query: MarketQuery): UseQueryResult<MarketsPage
 export interface MarketDetail {
   readonly market: NativeMarketSummary;
   readonly limits: MarketSafetyLimits;
+  /**
+   * The creator's account, which only this gated read carries: the summary the
+   * public markets list serves has no identity on it at all (D-110).
+   */
+  readonly creatorAccountId: string | undefined;
   readonly topHolders: NonNullable<NativeMarketDetail["top_holders"]>;
 }
 
@@ -2333,6 +2333,7 @@ export function useNativeMarketDetail(marketId: string | undefined): UseQueryRes
           marketSafetyLimitsSpec,
           "/native-markets/{id}/summary.limits_in_force",
         ),
+        creatorAccountId: detail.creator_account_id,
         topHolders: detail.top_holders ?? [],
       };
     },

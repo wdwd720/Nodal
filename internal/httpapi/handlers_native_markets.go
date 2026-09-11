@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/nativemarket"
 )
@@ -32,13 +31,10 @@ func (s *Server) GetNativeMarkets(ctx context.Context, request api.GetNativeMark
 			r.Statuses = append(r.Statuses, nativemarket.Status(st))
 		}
 	}
-	if request.Params.CreatorAccountId != nil {
-		creator, err := accounts.ParseAccountID(request.Params.CreatorAccountId.String())
-		if err != nil {
-			return nil, validationError("creator_account_id", "creator_account_id must be a canonical UUID")
-		}
-		r.Creator = creator
-	}
+	// No creator filter. This route is unauthenticated (D-080) and an
+	// identifier on it is both readable and enumerable, so the list carries no
+	// identity and answers no question about one (D-110). The creator is on the
+	// summary read, which is behind a session.
 	if request.Params.Q != nil {
 		r.Query = *request.Params.Q
 	}
@@ -88,11 +84,19 @@ func (s *Server) GetNativeMarketsMarketIdSummary(ctx context.Context, request ap
 			Quantity  api.Quantity `json:"quantity"`
 		}{AccountId: uuid.MustParse(h.AccountID.String()), Quantity: h.Quantity.String()})
 	}
-	return api.GetNativeMarketsMarketIdSummary200JSONResponse(api.NativeMarketDetail{
+	out := api.NativeMarketDetail{
 		Market:        toAPIMarketSummary(view.Summary),
 		LimitsInForce: toAPIMarketLimits(view.Limits),
 		TopHolders:    &holders,
-	}), nil
+	}
+	// The creator, on the gated read and not on the summary the public list
+	// serves (D-110). A market whose creator this projection did not carry
+	// renders no field at all rather than the nil UUID, which would read as an
+	// account that exists.
+	if !view.Summary.CreatorAccountID.IsZero() {
+		out.CreatorAccountId = ptr(uuid.MustParse(view.Summary.CreatorAccountID.String()))
+	}
+	return api.GetNativeMarketsMarketIdSummary200JSONResponse(out), nil
 }
 
 // GetNativeMarketsMarketIdCandles returns OHLCV over a bounded window.
@@ -186,7 +190,6 @@ func toAPIMarketSummary(m nativemarket.MarketSummary) api.NativeMarketSummary {
 		Symbol:               m.Symbol,
 		MarketStatus:         api.NativeMarketSummaryMarketStatus(m.MarketStatus),
 		AssetStatus:          api.NativeMarketSummaryAssetStatus(m.AssetStatus),
-		CreatorAccountId:     uuid.MustParse(m.CreatorAccountID.String()),
 		LastPrice:            m.LastPrice.String(),
 		PriceScale:           m.PriceScale,
 		CreditVolume24h:      m.CreditVolume24h.String(),

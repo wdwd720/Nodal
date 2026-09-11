@@ -1421,6 +1421,15 @@ paths:
         when somebody trades, and the response says which it was. `q` searches the
         asset's name, symbol and description in PostgreSQL — there is no external
         index, and a market's identity is never a display name.
+
+
+        This route is unauthenticated, so it carries no account identity and
+        answers no question about one: there is no creator field and no creator
+        filter, and content a moderation verdict REJECTED is not published here.
+        A DELISTED market is off the default page and returned when `status`
+        asks for it. The creator of a market is on
+        `GET /native-markets/{marketId}/summary`, which is behind a session
+        (D-080, D-110).
       parameters:
         - { $ref: "#/components/parameters/Cursor" }
         - { $ref: "#/components/parameters/Limit" }
@@ -1430,7 +1439,6 @@ paths:
           schema:
             type: array
             items: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
-        - { in: query, name: creator_account_id, schema: { $ref: "#/components/schemas/UUID" } }
         - { in: query, name: q, schema: { type: string, maxLength: 128 } }
         - in: query
           name: sort
@@ -3588,9 +3596,15 @@ components:
         One market as the markets page and the trade screen see it. Every price is
         an exact integer at price_scale and every quantity is base units; nothing
         here is a float and nothing is a display string.
+
+
+        It carries no account identity, because the markets list that returns it
+        is unauthenticated: an identifier on a public page is both readable and
+        enumerable by anybody. The creator is a field of NativeMarketDetail,
+        which only a signed-in caller can reach (D-110).
       required:
         [market_id, asset_id, credit_asset_id, name, symbol, market_status, asset_status,
-         creator_account_id, last_price, price_scale, asset_decimals, virtual_credit_reserve,
+         last_price, price_scale, asset_decimals, virtual_credit_reserve,
          initial_asset_reserve, real_credit_reserve, asset_reserve, liquidity_credits,
          circulating_supply, max_supply, credit_volume_24h, trades_24h,
          platform_fee_bps, creator_fee_bps, demo, created_at]
@@ -3605,12 +3619,6 @@ components:
         market_status: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
         asset_status: { type: string, enum: [DRAFT, PENDING_REVIEW, ACTIVE, CLOSE_ONLY, HALTED, DELISTED, REJECTED] }
         moderation_state: { type: string, enum: [PENDING, APPROVED, REJECTED, FLAGGED] }
-        creator_account_id:
-          allOf: [{ $ref: "#/components/schemas/UUID" }]
-          description: >-
-            The creator's account id, which is the handle placeholder. A display
-            name belongs to the profile domain and is joined later; inventing one
-            here would be a second source for it.
         last_price:
           allOf: [{ $ref: "#/components/schemas/Quantity" }]
           description: The MARGINAL price -- what the next base unit costs -- at price_scale.
@@ -3690,6 +3698,14 @@ components:
       properties:
         market: { $ref: "#/components/schemas/NativeMarketSummary" }
         limits_in_force: { $ref: "#/components/schemas/MarketSafetyLimits" }
+        creator_account_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            The creator's account id, which is the handle placeholder. A display
+            name belongs to the profile domain and is joined later; inventing one
+            here would be a second source for it. It is on the DETAIL response
+            rather than on the summary because the summary is served
+            unauthenticated by the markets list (D-110).
         top_holders:
           type: array
           description: Holder concentration, which is the number a buyer most needs to see

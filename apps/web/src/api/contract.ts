@@ -910,7 +910,6 @@ export const nativeMarketSummarySpec: Spec = {
     market_id: "uuid",
     asset_id: "uuid",
     credit_asset_id: "uuid",
-    creator_account_id: "uuid",
     symbol: "string",
     name: "string",
     market_status: "string",

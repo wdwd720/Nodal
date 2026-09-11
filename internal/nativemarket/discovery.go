@@ -34,6 +34,16 @@ import (
 // reserve, which is the entire amount that could ever be paid out -- and leaves
 // the multiplication undone.
 //
+// Identity is not here either, on the PUBLIC list. D-080 made
+// GET /v1/native-markets unauthenticated on the stated premise that the list
+// carries product data only -- "no balance, position, holder or identity" --
+// and every row carried the creator's account id and the route accepted it as a
+// filter, so an anonymous caller could both read the identifier and enumerate
+// one account's creations by it. The projection blanks it and the filter it
+// answers matches nothing, under one flag, so the two cannot come apart
+// (D-110). The gated detail read carries it: a creator on a page behind a
+// session is a fact about a market somebody is about to trade.
+//
 // A creator "handle" is a user id. Profiles are another domain's, and inventing
 // a display name here would be a second source for it.
 
@@ -82,9 +92,19 @@ const MaxListLimit = 100
 
 // ListRequest is one page of the markets page.
 type ListRequest struct {
-	// Statuses filters by market status. Empty means every status.
+	// Statuses filters by market status. Empty means every status, except
+	// DELISTED: a delisted market is off the default page and reachable by
+	// asking for it, because it is a market nobody may enter and a holder may
+	// still need to reach (F-198).
 	Statuses []Status
 	// Creator filters to one creator's markets. Zero means every creator.
+	//
+	// It is only answerable on a projection that carries identity, which the
+	// public discovery list deliberately does not (D-110). ListMarkets returns
+	// an EMPTY page for a creator filter rather than ignoring it: ignoring a
+	// filter means answering a different question and calling it the answer,
+	// and the predicate that produces the empty page is the same one that
+	// produces the blank column, so the two can never come apart.
 	Creator accounts.AccountID
 	// Query is a free-text search over the asset's name, symbol and
 	// description. Empty means no text filter.
@@ -109,8 +129,11 @@ type MarketSummary struct {
 	MarketStatus Status
 	AssetStatus  nativeasset.Status
 	Moderation   nativeasset.ModerationState
-	// CreatorAccountID is the creator's account. It is the handle placeholder:
-	// a display name belongs to the profile domain and is joined later.
+	// CreatorAccountID is the creator's account, and it is ZERO on any
+	// projection built for a caller that may not see identity -- which is every
+	// caller of ListMarkets, because that list is unauthenticated (D-080,
+	// D-110). It is the handle placeholder: a display name belongs to the
+	// profile domain and is joined later.
 	CreatorAccountID accounts.AccountID
 
 	Curve Curve
@@ -231,14 +254,36 @@ func escapeLike(s string) string {
 // Window24h is how far back the "24h" figures look.
 const Window24h = 24 * time.Hour
 
-// ListMarkets returns one page of the markets page.
-func (s *Service) ListMarkets(ctx context.Context, q db.Querier, r ListRequest) (MarketPage, error) {
-	return s.listMarkets(ctx, q, r, MarketID{}, assets.AssetID{})
+// listScope is what the projection is permitted to show the caller it is being
+// built for. It is not part of ListRequest on purpose: a request is what the
+// CALLER asked for, and a scope is what the SURFACE may answer, and the
+// unauthenticated discovery route must not be able to widen its own answer by
+// filling in a field (D-110).
+type listScope struct {
+	// market and asset narrow the projection to one row, for the detail reads.
+	market MarketID
+	asset  assets.AssetID
+	// identity permits the creator's account id in the projection, and is what
+	// makes the Creator filter answerable at all.
+	identity bool
+	// discovery says this is a LIST of markets somebody is browsing rather than
+	// a reference read of one named market. Content a moderation verdict
+	// REJECTED is off every discovery list and still reachable by id, so a
+	// holder of a rejected asset can still open it and sell (F-198).
+	discovery bool
 }
 
-// listMarkets is ListMarkets with two optional identity filters, so the detail
-// row and the list row come out of the same projection and can never disagree
-// about a figure.
+// ListMarkets returns one page of the PUBLIC markets list.
+//
+// The scope is the narrowest one: no identity, and no content a moderation
+// verdict rejected. GET /v1/native-markets is unauthenticated (D-080), and the
+// premise recorded there is that the list carries product data only.
+func (s *Service) ListMarkets(ctx context.Context, q db.Querier, r ListRequest) (MarketPage, error) {
+	return s.listMarkets(ctx, q, r, listScope{discovery: true})
+}
+
+// listMarkets is ListMarkets with a scope, so the detail row and the list row
+// come out of the same projection and can never disagree about a figure.
 //
 // # Why every filter is a bound parameter rather than an assembled WHERE
 //
@@ -249,7 +294,7 @@ func (s *Service) ListMarkets(ctx context.Context, q db.Querier, r ListRequest) 
 // the statement is one constant with every filter present and each one disabled
 // by a NULL parameter, and the only part that varies is the sort key, which is
 // selected from a closed compiled-in map and never built from caller text.
-func (s *Service) listMarkets(ctx context.Context, q db.Querier, r ListRequest, marketFilter MarketID, assetFilter assets.AssetID) (MarketPage, error) {
+func (s *Service) listMarkets(ctx context.Context, q db.Querier, r ListRequest, scope listScope) (MarketPage, error) {
 	if r.Sort == "" {
 		r.Sort = SortNewest
 	}
@@ -283,11 +328,28 @@ func (s *Service) listMarkets(ctx context.Context, q db.Querier, r ListRequest, 
 	if !r.Creator.IsZero() {
 		creator = r.Creator
 	}
-	if !marketFilter.IsZero() {
-		market = marketFilter
+	if !scope.market.IsZero() {
+		market = scope.market
 	}
-	if !assetFilter.IsZero() {
-		asset = assetFilter
+	if !scope.asset.IsZero() {
+		asset = scope.asset
+	}
+	// The two always-present, NULL-disabled exclusions (F-198). Both are a
+	// value to exclude rather than a boolean, so the statement reads as what it
+	// does and a third exclusion is a third parameter rather than a new branch.
+	var excludeModeration, excludeStatus any
+	if scope.discovery {
+		// FLAGGED stays visible: D-065 made flagging a signal for a person to
+		// look, not a verdict, and hiding on a signal would make the flag a
+		// silent delisting anybody could trigger by reporting an asset.
+		excludeModeration = string(nativeasset.ModerationRejected)
+		// Off the DEFAULT page and reachable by asking for it. A delisted
+		// market is one nobody may enter again, so it is not discovery; a
+		// holder of one still has to be able to open it, which is why the
+		// exclusion is on the page and never on a read of one named market.
+		if len(statuses) == 0 {
+			excludeStatus = string(StatusDelisted)
+		}
 	}
 	var plain, like, cursorKey any
 	if term := strings.TrimSpace(r.Query); term != "" {
@@ -303,7 +365,8 @@ func (s *Service) listMarkets(ctx context.Context, q db.Querier, r ListRequest, 
 	now := s.clk.Now().UTC()
 	sql := listQueryHead + sortKeyExpressions[r.Sort] + listQueryTail
 	rows, err := q.Query(ctx, sql,
-		now.Add(-Window24h), statuses, creator, plain, like, market, asset, cursorKey, cursorID, limit+1)
+		now.Add(-Window24h), statuses, creator, plain, like, market, asset, cursorKey, cursorID, limit+1,
+		excludeModeration, excludeStatus, scope.identity)
 	if err != nil {
 		return MarketPage{}, mapError(err)
 	}
@@ -413,7 +476,10 @@ const summaryColumns = `m.id AS market_id, m.asset_id, m.credit_asset_id, m.stat
 	m.platform_fee_bps, m.creator_fee_bps,
 	st.real_credit_reserve::text AS real_reserve, st.asset_reserve::text AS asset_reserve, st.version,
 	a.name, a.symbol, a.description, a.image_url, a.status AS asset_status,
-	a.content_moderation_state, a.creator_account_id, a.max_supply::text AS max_supply,
+	a.content_moderation_state,
+	CASE WHEN $13::boolean THEN a.creator_account_id
+	     ELSE '00000000-0000-0000-0000-000000000000'::uuid END AS creator_account_id,
+	a.max_supply::text AS max_supply,
 	reg.decimals,
 	(ds.seed_key IS NOT NULL) AS is_demo,
 	coalesce(v24.credit_volume, 0)::text AS volume_24h, coalesce(v24.trades, 0) AS trades_24h,
@@ -441,6 +507,9 @@ const summaryOut = `r.market_id, r.asset_id, r.credit_asset_id, r.market_status,
 //	$8  the cursor's sort key, NULL for the first page
 //	$9  the cursor's market id
 //	$10 the page size
+//	$11 a moderation state to exclude, NULL to exclude none
+//	$12 a market status to exclude, NULL to exclude none
+//	$13 whether the caller may see the creator's account id
 const listQueryHead = `WITH r AS (
   SELECT `
 
@@ -463,9 +532,11 @@ const listQueryTail = ` AS sort_key, ` + summaryColumns + `
        LIMIT 1
     ) p24 ON true
    WHERE ($2::text[] IS NULL OR m.status = ANY($2))
-     AND ($3::uuid IS NULL OR a.creator_account_id = $3)
+     AND ($3::uuid IS NULL OR ($13::boolean AND a.creator_account_id = $3))
      AND ($6::uuid IS NULL OR m.id = $6)
      AND ($7::uuid IS NULL OR m.asset_id = $7)
+     AND ($11::text IS NULL OR a.content_moderation_state <> $11)
+     AND ($12::text IS NULL OR m.status <> $12)
      AND ($4::text IS NULL OR (
             to_tsvector('simple', a.name || ' ' || a.symbol || ' ' || a.description)
               @@ plainto_tsquery('simple', $4)
@@ -481,8 +552,14 @@ SELECT r.sort_key::text, ` + summaryOut + `
 
 // MarketSummaryByID returns one market's summary row, for the asset detail
 // screen (§13).
+//
+// It is a REFERENCE read of one named market behind a session, not discovery,
+// so its scope is wider in both directions: it carries the creator's account id
+// (D-110) and it returns a market whose content a moderation verdict rejected,
+// because a holder of that asset still has to be able to open it and sell.
 func (s *Service) MarketSummaryByID(ctx context.Context, q db.Querier, marketID MarketID) (MarketSummary, error) {
-	page, err := s.listMarkets(ctx, q, ListRequest{Sort: SortNewest, Limit: 1}, marketID, assets.AssetID{})
+	page, err := s.listMarkets(ctx, q, ListRequest{Sort: SortNewest, Limit: 1},
+		listScope{market: marketID, identity: true})
 	if err != nil {
 		return MarketSummary{}, err
 	}
@@ -495,7 +572,8 @@ func (s *Service) MarketSummaryByID(ctx context.Context, q db.Querier, marketID 
 
 // MarketSummaryByAsset is MarketSummaryByID for an asset id.
 func (s *Service) MarketSummaryByAsset(ctx context.Context, q db.Querier, assetID assets.AssetID) (MarketSummary, error) {
-	page, err := s.listMarkets(ctx, q, ListRequest{Sort: SortNewest, Limit: 1}, MarketID{}, assetID)
+	page, err := s.listMarkets(ctx, q, ListRequest{Sort: SortNewest, Limit: 1},
+		listScope{asset: assetID, identity: true})
 	if err != nil {
 		return MarketSummary{}, err
 	}

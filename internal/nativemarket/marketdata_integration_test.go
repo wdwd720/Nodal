@@ -296,7 +296,8 @@ func TestIntegration_MarketDiscoveryFiltersSortsAndSearches(t *testing.T) {
 
 	assert.Equal(t, f.asset.Symbol, mine.Symbol)
 	assert.Equal(t, f.asset.Name, mine.Name)
-	assert.Equal(t, f.creator, mine.CreatorAccountID)
+	assert.True(t, mine.CreatorAccountID.IsZero(),
+		"the public list is unauthenticated and carries no account identity (D-110)")
 	assert.Equal(t, StatusActive, mine.MarketStatus)
 	assert.Equal(t, int64(1), mine.Trades24h)
 	assert.Equal(t, "2000000000", mine.CreditVolume24h.String())
@@ -309,14 +310,18 @@ func TestIntegration_MarketDiscoveryFiltersSortsAndSearches(t *testing.T) {
 	assert.False(t, mine.Demo, "a fixture market is not demo data")
 	assert.Equal(t, uint8(6), mine.AssetDecimals)
 
-	// The detail read and the list row are the same projection.
+	// The detail read and the list row are the same projection, and differ in
+	// exactly one thing: the detail read is behind a session and carries the
+	// creator (D-110).
 	detail, err := f.svc.MarketSummaryByID(f.ctx, testDB, f.market.ID)
 	require.NoError(t, err)
 	assert.Equal(t, mine.LastPrice.String(), detail.LastPrice.String())
 	assert.Equal(t, mine.CreditVolume24h.String(), detail.CreditVolume24h.String())
+	assert.Equal(t, f.creator, detail.CreatorAccountID)
 	byAsset, err := f.svc.MarketSummaryByAsset(f.ctx, testDB, f.asset.AssetID)
 	require.NoError(t, err)
 	assert.Equal(t, f.market.ID, byAsset.MarketID)
+	assert.Equal(t, f.creator, byAsset.CreatorAccountID)
 
 	// Search finds it by symbol, by a word in its name and by a word in its
 	// description, and does not find it by something it is not.
@@ -334,16 +339,13 @@ func TestIntegration_MarketDiscoveryFiltersSortsAndSearches(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, wild.Markets, "a LIKE metacharacter must not match every market")
 
-	// Filtering by creator narrows to that creator.
+	// The public list is not an enumeration index over one account's creations.
+	// The projection that blanks the column is the one that answers the filter,
+	// so a creator question on this surface matches nothing at all (D-110).
 	byCreator, err := f.svc.ListMarkets(f.ctx, testDB, ListRequest{Creator: f.creator, Limit: 50})
 	require.NoError(t, err)
-	findMarket(t, byCreator.Markets, f.market.ID)
-	for _, m := range byCreator.Markets {
-		assert.Equal(t, f.creator, m.CreatorAccountID)
-	}
-	other, err := f.svc.ListMarkets(f.ctx, testDB, ListRequest{Creator: f.trader, Limit: 50})
-	require.NoError(t, err)
-	assert.Empty(t, other.Markets)
+	assert.Empty(t, byCreator.Markets,
+		"an unauthenticated caller must not be able to enumerate one account's markets")
 
 	// A status nobody's market is in returns nothing rather than everything.
 	delisted, err := f.svc.ListMarkets(f.ctx, testDB, ListRequest{Statuses: []Status{StatusDelisted}, Limit: 50})
@@ -361,6 +363,63 @@ func TestIntegration_MarketDiscoveryFiltersSortsAndSearches(t *testing.T) {
 	_, err = f.svc.ListMarkets(f.ctx, testDB, ListRequest{Sort: "BY_VIBES"})
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}
+
+// TestIntegration_TheDefaultPageIsWhatIsStillTradable.
+//
+// A DELISTED market is one nobody may enter again, and it sat on the default
+// page beside the live ones because the statement had no default status filter
+// at all (F-198). It is off the default page and reachable by asking for it,
+// because a holder of a delisted asset still has to be able to open it -- and
+// it is reachable BY ID whatever its status, which is the read the portfolio
+// links to.
+func TestIntegration_TheDefaultPageIsWhatIsStillTradable(t *testing.T) {
+	f := newFixture(t)
+
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			if _, err := f.svc.SetStatus(ctx, tx, f.market.ID, StatusHalted, "test: withdrawn from sale"); err != nil {
+				return err
+			}
+			_, err := f.svc.SetStatus(ctx, tx, f.market.ID, StatusDelisted, "test: withdrawn from sale")
+			return err
+		}))
+
+	page, err := f.svc.ListMarkets(f.ctx, testDB, ListRequest{Limit: 100})
+	require.NoError(t, err)
+	for _, m := range page.Markets {
+		assert.NotEqual(t, f.market.ID, m.MarketID, "a delisted market is not on the default page")
+	}
+
+	asked, err := f.svc.ListMarkets(f.ctx, testDB, ListRequest{Statuses: []Status{StatusDelisted}, Limit: 100})
+	require.NoError(t, err)
+	findMarket(t, asked.Markets, f.market.ID)
+
+	byID, err := f.svc.MarketSummaryByID(f.ctx, testDB, f.market.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusDelisted, byID.MarketStatus,
+		"a holder must still be able to open the market they hold")
+}
+
+// TestIntegration_AFlaggedAssetStaysOnTheList.
+//
+// D-065 made FLAGGED a signal for a person to look rather than a verdict, so
+// the exclusion F-198 added is on REJECTED alone. Hiding on a flag would turn
+// reporting an asset into a delisting anybody could trigger.
+func TestIntegration_AFlaggedAssetStaysOnTheList(t *testing.T) {
+	f := newFixture(t)
+
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, err := f.assetSv.SetModeration(ctx, tx, f.asset.AssetID,
+				nativeasset.ModerationFlagged, "test: somebody reported it")
+			return err
+		}))
+
+	page, err := f.svc.ListMarkets(f.ctx, testDB, ListRequest{Limit: 100})
+	require.NoError(t, err)
+	flagged := findMarket(t, page.Markets, f.market.ID)
+	assert.Equal(t, nativeasset.ModerationFlagged, flagged.Moderation)
 }
 
 // TestIntegration_PagingNewestSeesEveryMarketExactlyOnce.

@@ -162,7 +162,11 @@ func TestGetNativeMarkets_PassesEveryFilterThroughAndSaysWhetherPagingIsStable(t
 
 	got := h.ports.marketData.lastList
 	assert.Equal(t, []nativemarket.Status{nativemarket.StatusActive, nativemarket.StatusCloseOnly}, got.Statuses)
-	assert.Equal(t, testAccountID, got.Creator)
+	// The creator filter is gone from this route: it is unauthenticated, and an
+	// account id on it is both readable and enumerable (D-110). A caller that
+	// sends one anyway gets the unfiltered list, because an unknown query
+	// parameter is not a request this API answers differently.
+	assert.True(t, got.Creator.IsZero(), "the public list must not take a creator filter")
 	assert.Equal(t, "dog", got.Query)
 	assert.Equal(t, nativemarket.SortVolume24h, got.Sort)
 	assert.Equal(t, 7, got.Limit)
@@ -173,6 +177,10 @@ func TestGetNativeMarkets_PassesEveryFilterThroughAndSaysWhetherPagingIsStable(t
 	require.Len(t, page.Markets, 1)
 	m := page.Markets[0]
 	assert.Equal(t, "DG", m.Symbol)
+	// The summary schema has no creator_account_id at all, so there is no
+	// field here to assert against; the raw body is what proves it.
+	assert.NotContains(t, res.Body.String(), "creator_account_id",
+		"the public markets list must carry no account identity (D-110)")
 	assert.Equal(t, "36363636363636", m.LastPrice)
 	assert.Equal(t, nativemarket.PriceScale, m.PriceScale)
 	assert.Equal(t, 6, m.AssetDecimals, "the asset's scale, not the Credit's (F-44)")
@@ -223,6 +231,9 @@ func TestGetNativeMarketsMarketIdSummary_ReportsTheLimitsInForce(t *testing.T) {
 	assert.Equal(t, 2000, *detail.LimitsInForce.MaxNativeMarketConcentrationBps)
 	require.NotNil(t, detail.TopHolders)
 	require.Len(t, *detail.TopHolders, 1)
+	// The creator is on the gated detail read and nowhere else (D-110).
+	require.NotNil(t, detail.CreatorAccountId)
+	assert.Equal(t, testAccountID.String(), detail.CreatorAccountId.String())
 
 	// A deployment with no risk policy reports its absence rather than a zero
 	// limit, which would say the opposite.

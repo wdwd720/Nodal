@@ -28,7 +28,7 @@ import (
 // freshAppConn takes a connection out of the pool for good, so a temp relation
 // created on it cannot outlive the test on a pooled connection, and so the
 // session's plpgsql plan cache starts empty.
-func freshAppConn(t *testing.T, ctx context.Context) *pgx.Conn {
+func freshAppConn(ctx context.Context, t *testing.T) *pgx.Conn {
 	t.Helper()
 	pooled, err := testDB.Pool().Acquire(ctx)
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestAudit_APositionCannotBeForgedThroughAnUnpinnedSearchPath(t *testing.T) 
 			return nil
 		}))
 
-	conn := freshAppConn(t, ctx)
+	conn := freshAppConn(ctx, t)
 
 	// The stated control: cp_app cannot write the table directly. This holds.
 	_, err := conn.Exec(ctx,
@@ -175,11 +175,11 @@ func TestAudit_TheNM001PrintCheckReadsOnlyTablesTheCallerCannotControl(t *testin
 	}
 
 	// CONTROL, on its own session: with no shadow the check refuses with NM001.
-	require.Equal(t, "NM001", db.SQLState(insertPrint(freshAppConn(t, ctx))),
+	require.Equal(t, "NM001", db.SQLState(insertPrint(freshAppConn(ctx, t))),
 		"the NM001 control refuses a print whose fill does not exist")
 
 	// ATTACK, on a session whose plan cache has never resolved the name.
-	conn := freshAppConn(t, ctx)
+	conn := freshAppConn(ctx, t)
 	_, err = conn.Exec(ctx, `CREATE TEMP TABLE native_market_fills (LIKE public.native_market_fills INCLUDING DEFAULTS)`)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `GRANT SELECT ON pg_temp.native_market_fills TO cp_migrate`)

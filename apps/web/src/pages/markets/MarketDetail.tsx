@@ -192,6 +192,7 @@ export function MarketDetail(): ReactNode {
               <div className="stack">
                 <Overview
                   market={data.market}
+                  creatorAccountId={data.creatorAccountId}
                   simulated={simulated}
                   asOf={readAt(detail.dataUpdatedAt)}
                 />
@@ -265,6 +266,13 @@ export function MarketDetail(): ReactNode {
 
 function Overview(props: {
   readonly market: NativeMarketSummary;
+  /**
+   * The creator, which is a field of the DETAIL response and not of the summary
+   * the public markets list serves: an account id on an unauthenticated page is
+   * both readable and enumerable (D-110). Absent renders no row rather than a
+   * blank one, because "we are not saying" and "nobody" are different facts.
+   */
+  readonly creatorAccountId: string | undefined;
   readonly simulated: boolean;
   readonly asOf: string | undefined;
 }): ReactNode {
@@ -340,12 +348,14 @@ function Overview(props: {
             <Pill tone={moderation.tone}>{market.moderation_state}</Pill>
           </Field>
         )}
-        <Field
-          label="Created by"
-          note="The creator's account. A display name belongs to the profile domain and is not joined here."
-        >
-          <IdentifierShort value={market.creator_account_id} what="creator account id" />
-        </Field>
+        {props.creatorAccountId !== undefined && (
+          <Field
+            label="Created by"
+            note="The creator's account. A display name belongs to the profile domain and is not joined here."
+          >
+            <IdentifierShort value={props.creatorAccountId} what="creator account id" />
+          </Field>
+        )}
         <Field label="Created">{formatInstant(market.created_at)}</Field>
         {market.activated_at !== undefined && (
           <Field label="Opened for trading">{formatInstant(market.activated_at)}</Field>

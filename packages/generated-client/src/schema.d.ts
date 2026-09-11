@@ -3398,11 +3398,12 @@ export interface paths {
         /**
          * Discover internal markets (product goal §12, §35)
          * @description One page of the markets list. `sort` chooses the ordering; only NEWEST is stable under paging, because every other key is a live figure that moves when somebody trades, and the response says which it was. `q` searches the asset's name, symbol and description in PostgreSQL — there is no external index, and a market's identity is never a display name.
+         *
+         *     This route is unauthenticated, so it carries no account identity and answers no question about one: there is no creator field and no creator filter, and content a moderation verdict REJECTED is not published here. A DELISTED market is off the default page and returned when `status` asks for it. The creator of a market is on `GET /native-markets/{marketId}/summary`, which is behind a session (D-080, D-110).
          */
         get: {
             parameters: {
                 query?: {
-                    creator_account_id?: components["schemas"]["UUID"];
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
                     q?: string;
@@ -5533,6 +5534,8 @@ export interface components {
             virtual_credit_reserve?: components["schemas"]["Quantity"];
         };
         NativeMarketDetail: {
+            /** @description The creator's account id, which is the handle placeholder. A display name belongs to the profile domain and is joined later; inventing one here would be a second source for it. It is on the DETAIL response rather than on the summary because the summary is served unauthenticated by the markets list (D-110). */
+            creator_account_id?: components["schemas"]["UUID"];
             limits_in_force: components["schemas"]["MarketSafetyLimits"];
             market: components["schemas"]["NativeMarketSummary"];
             /** @description Holder concentration, which is the number a buyer most needs to see */
@@ -5548,7 +5551,9 @@ export interface components {
             /** @description Whether paging this ordering sees every market exactly once. Only NEWEST does; the others rank by figures that move when somebody trades. */
             stable: boolean;
         };
-        /** @description One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string. */
+        /** @description One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string.
+         *
+         *     It carries no account identity, because the markets list that returns it is unauthenticated: an identifier on a public page is both readable and enumerable by anybody. The creator is a field of NativeMarketDetail, which only a signed-in caller can reach (D-110). */
         NativeMarketSummary: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_decimals: number;
@@ -5563,8 +5568,6 @@ export interface components {
             change_24h_bps?: number;
             circulating_supply: components["schemas"]["Quantity"];
             created_at: components["schemas"]["Timestamp"];
-            /** @description The creator's account id, which is the handle placeholder. A display name belongs to the profile domain and is joined later; inventing one here would be a second source for it. */
-            creator_account_id: components["schemas"]["UUID"];
             creator_fee_bps: components["schemas"]["BPS"];
             credit_asset_id: components["schemas"]["UUID"];
             credit_volume_24h: components["schemas"]["Quantity"];

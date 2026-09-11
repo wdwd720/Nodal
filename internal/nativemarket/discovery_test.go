@@ -104,10 +104,10 @@ func TestSortKeyExpressions_AreCompiledInAndNeverBuiltFromCallerText(t *testing.
 	// Every parameter the statement binds appears in it, and none is skipped:
 	// a gap would mean an argument silently landing in the wrong slot.
 	full := listQueryHead + sortKeyExpressions[SortNewest] + listQueryTail
-	for i := 1; i <= 10; i++ {
+	for i := 1; i <= 13; i++ {
 		assert.Contains(t, full, dollar(i), "the list statement does not bind $%d", i)
 	}
-	assert.NotContains(t, full, "$11")
+	assert.NotContains(t, full, "$14")
 }
 
 func dollar(n int) string {
