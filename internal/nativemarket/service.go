@@ -2,6 +2,7 @@ package nativemarket
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -537,6 +538,54 @@ func (s *Service) postTrade(ctx context.Context, tx pgx.Tx, m Market, r ExecuteR
 	})
 }
 
+// recordPoolShortfall records that a market's pooled-credit record could not
+// account for everything a sale drew out of it.
+//
+// It is an audit row rather than a log line because it is a statement about
+// somebody's money that an operator has to be able to find afterwards: the
+// proceeds it describes carry the provenance of SOME of what funded them, and a
+// reader asking why a lot's floor looks better than the pool's history deserves
+// the row that says the record was short. It is written in the trade's own
+// transaction, so it cannot be lost while the trade lands.
+//
+// On a fresh deployment this cannot happen. `recordPoolSources` records every
+// Credit that reaches a pool, in the same transaction as the buy that sent it,
+// and `drawPoolSources` draws only against those rows -- so the record and the
+// reserve move together. What it exists for is data from before the record
+// existed: a market that traded under an earlier migration has a pool whose
+// history nobody wrote down, and this branch is the only thing between that and
+// a sale with no provenance at all.
+func (s *Service) recordPoolShortfall(
+	ctx context.Context, tx pgx.Tx, marketID MarketID, r ExecuteRequest,
+	wanted, covered money.Quantity, drawn []credit.LotParent,
+) error {
+	payload, err := json.Marshal(map[string]any{
+		"market_id":       marketID.String(),
+		"credits_to_pool": wanted.String(),
+		"covered":         covered.String(),
+		"shortfall":       wanted.Sub(covered).String(),
+		"parents_kept":    len(drawn),
+		"idempotency_key": r.IdempotencyKey,
+	})
+	if err != nil {
+		return errs.Wrap(err, errs.CodeInternal, "nativemarket: encode pool shortfall payload")
+	}
+	actorType, actorID := actorFrom(ctx)
+	_, err = s.auditor.Append(ctx, tx, audit.Event{
+		Stream:       audit.AccountStream(r.AccountID.String()),
+		ActorType:    actorType,
+		ActorID:      actorID,
+		Action:       "native_market.pool_provenance_shortfall",
+		ResourceType: "native_market",
+		ResourceID:   marketID.String(),
+		Reason: "the pooled-credit record could not account for everything this sale drew; " +
+			"the proceeds name the parents that were found and their provenance is incomplete",
+		Payload:    payload,
+		OccurredAt: s.clk.Now().UTC(),
+	})
+	return err
+}
+
 // moveCredits keeps Credit provenance in step with the journal.
 //
 // On a buy the trader's lots are consumed; on a sell the proceeds are issued
@@ -602,11 +651,28 @@ func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r Execut
 			return derr
 		}
 		if covered.Cmp(fill.CreditsToPool) < 0 {
-			// The record does not account for all of it. Nothing is minted
-			// against parents that do not exist: the shortfall stays
-			// REVERSIBLE, which is what the fallback below already says, and
-			// the parents that WERE found still constrain it downwards.
-			drawn = nil
+			// The record does not account for all of it.
+			//
+			// The parents that WERE found are KEPT. The line here used to be
+			// `drawn = nil`, one line under a comment saying the found parents
+			// still constrain the mint downwards -- and dropping them is what
+			// made that false. A parentless derived lot is minted REVERSIBLE
+			// and is then outside every direction of SettleDerived, whose
+			// candidate predicate requires a parent row: it is stranded
+			// REVERSIBLE for ever, which is F-230's outcome restored on the one
+			// path the fix did not cover (F-276).
+			//
+			// Keeping them is conservative in the only direction that matters.
+			// RecordLot mints at the LEAST FINAL parent, so naming the parents
+			// the record does know about can only make the proceeds less
+			// withdrawable than the REVERSIBLE fallback, never more -- and the
+			// origin floor is computed from their roots, so provenance is
+			// narrowed rather than invented. What is NOT claimed is that the
+			// parents are complete; the shortfall says so, durably, beside the
+			// market it happened in.
+			if err := s.recordPoolShortfall(ctx, tx, m.ID, r, fill.CreditsToPool, covered, drawn); err != nil {
+				return err
+			}
 		}
 		if fill.CreditsOut.IsPositive() {
 			parents, perr := sharesOf(drawn, fill.CreditsOut)
