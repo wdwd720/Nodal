@@ -75,7 +75,7 @@ and it is refused on three independent grounds:
    offering it. Until migration 00799 that promise was made about the bootstrap
    path alone while `cp_app` held blanket UPDATE on the directory, so a
    revocation could be undone by one statement and a `SUPPORT_READ_ONLY` row
-   could become `ADMIN` in place with its provenance columns unchanged (F-178).
+   could become `ADMIN` in place with its provenance columns unchanged (F-175).
    The directory is now bound the way `accounts`, `users` and
    `account_closure_requests` are: the application holds no UPDATE on it,
    `operator_role_transitions` records every movement of a grant with an actor
@@ -89,7 +89,7 @@ and it is refused on three independent grounds:
    nothing about, so a row naming it produces a session whose `ActorType` is
    OPERATOR carrying only customer permissions — and that person's own terms
    acceptance is then written with `actor_type = 'OPERATOR'`, which 00759
-   documents as an acceptance recorded on somebody's behalf (F-179).
+   documents as an acceptance recorded on somebody's behalf (F-181).
 5. **STAGING and PROD accept nothing but an empty declaration or exactly one
    ADMIN**, enforced by `config.Validate` (`RuleBootstrapOperators`). The
    variable exists to make a *first* operator possible; every grant after that is

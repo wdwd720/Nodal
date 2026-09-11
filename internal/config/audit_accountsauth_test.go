@@ -1,7 +1,7 @@
 package config
 
 // Adversarial audit (goal §54), area accounts-auth. These two demonstrated
-// defects; they are now the regressions for the fixes (F-180, F-179).
+// defects; they are now the regressions for the fixes (F-180, F-181).
 
 import (
 	"testing"
@@ -46,7 +46,7 @@ func TestAudit_StagingAcceptsAnUnboundedBootstrapDeclaration(t *testing.T) {
 		"a STAGING deployment can still name its first operator")
 }
 
-// F-179. operatorroles.Directory() was derived as "every role except
+// F-181. operatorroles.Directory() was derived as "every role except
 // BREAK_GLASS", which included CUSTOMER -- a role that is not an operator role
 // at all. Declaring it produced a session whose ActorType is OPERATOR carrying
 // only customer permissions, so that person's own terms acceptance was written

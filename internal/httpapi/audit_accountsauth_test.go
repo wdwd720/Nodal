@@ -65,7 +65,7 @@ func TestAudit_TheCallbackWillRedirectOffSiteOnABackslashReturnTo(t *testing.T) 
 		"and the session cookie is set on the way out, so the victim is signed in when they land there")
 }
 
-// F-183. handlers_profile.go stated the invariant as "Every `/me/...` route is
+// F-178. handlers_profile.go stated the invariant as "Every `/me/...` route is
 // self-scoped by construction: there is no identifier in the path, and the
 // subject comes from the request principal, so a caller cannot name somebody
 // else's record. Cross-tenant access is not prevented by a check that could be
@@ -168,7 +168,7 @@ func TestAudit_MeRoutesNameAnAccountInTheQueryStringWhereTheInvariantTestCannotS
 		"a state-changing /me GET was reachable for an account the caller does not own; body=%s", res.Body.String())
 }
 
-// F-184. The allowlist in handlers_profile_test.go annotated
+// F-178. The allowlist in handlers_profile_test.go annotated
 // /v1/me/verification/sessions/{sessionId} as "internal/verification: a session
 // is loaded under the caller's profile; another person's id is not found". The
 // first half was true and the second was not: the account the session was
@@ -246,7 +246,7 @@ func newProfileHarnessForCSRF(t *testing.T) *harness {
 	return h
 }
 
-// F-181. EFFECT is the one irreversible operator action on the support surface:
+// F-179. EFFECT is the one irreversible operator action on the support surface:
 // it writes users.status = CLOSED, closes every account the person owns and
 // revokes every session, after which identity.Complete refuses the login, so
 // nothing the account still holds is reachable by its owner again.
@@ -349,7 +349,7 @@ func TestAudit_ASecondLoginInvalidatesTheFirstTabsFlow(t *testing.T) {
 	assert.Contains(t, body, "start again")
 }
 
-// F-182 (boundary half). auth.Manager.Rotate had no caller anywhere in the
+// F-177 (boundary half). auth.Manager.Rotate had no caller anywhere in the
 // repository because identity.Complete was never told which session the browser
 // already held. The callback reads it from the session middleware and hands it
 // over; internal/identity decides whether to rotate.

@@ -23,7 +23,7 @@
 --      between the application host and the database and nothing else: it is
 --      not a window inside which a stamp may be chosen. A row stamped in the
 --      future is a claim about something that has not happened, and one stamped
---      in the distant past is a claim about when somebody decided (F-175).
+--      in the distant past is a claim about when somebody decided (F-174).
 --
 -- ## The edge sets, which existed only in Go
 --
@@ -34,7 +34,7 @@
 -- binding); it never asked whether the change was legal. So the application role
 -- could walk a terminal EFFECTED request back to CANCELLED, keeping the reason
 -- given for the decision it no longer recorded, and could reopen a CLOSED user
--- that 00757 says has no edge out of it "here or in Go" (F-176, F-177).
+-- that 00757 says has no edge out of it "here or in Go" (F-176).
 --
 -- The edge sets are written as CHECK constraints on the transition tables, and
 -- deliberately not as an `IF` inside the apply functions. Three reasons:
@@ -123,11 +123,11 @@ ALTER TABLE user_status_transitions
 COMMENT ON FUNCTION cp_closure_request_apply_transition() IS
     'Writes account_closure_requests.state, decided_at and decided_reason from the transition row, and refuses an EFFECTED transition before the cooling-off period has passed -- measured against statement_timestamp(), never against the caller-supplied occurred_at (00798, F-174).';
 COMMENT ON FUNCTION cp_transition_stamp_is_honest() IS
-    'Bounds a transition row occurred_at to two minutes either side of the database clock. The bound is clock skew between the application host and the database, not a window in which an audit stamp may be chosen (00798, F-175).';
+    'Bounds a transition row occurred_at to two minutes either side of the database clock. The bound is clock skew between the application host and the database, not a window in which an audit stamp may be chosen (00798, F-174).';
 COMMENT ON CONSTRAINT account_closure_request_transitions_edge_check ON account_closure_request_transitions IS
     'The closure edge set: PENDING is the only origin and every other state is terminal. profile.ClosureEdges() is the same list in Go, and test/integration/enums holds the two together (00798, F-176).';
 COMMENT ON CONSTRAINT user_status_transitions_edge_check ON user_status_transitions IS
-    'The user-status edge set 00757 describes in words. CLOSED is terminal: there is no edge out of it, here or in Go. profile.UserStatusEdges() is the same list, held against this by test/integration/enums (00798, F-177).';
+    'The user-status edge set 00757 describes in words. CLOSED is terminal: there is no edge out of it, here or in Go. profile.UserStatusEdges() is the same list, held against this by test/integration/enums (00798, F-176).';
 
 -- +goose Down
 SELECT 1; -- protected: reverting would measure a cooling-off period against a timestamp its caller chooses, and would return both edge sets to Go alone

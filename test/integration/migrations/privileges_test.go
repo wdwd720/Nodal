@@ -340,7 +340,7 @@ func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
 // treatment 00744 gave `accounts`, 00757 gave `users` and 00758 gave
 // `account_closure_requests`. With it, a revocation did not stay revoked and a
 // role could be rewritten in place while `granted_by`, `granted_at` and `reason`
-// went on describing the grant somebody actually made (F-178).
+// went on describing the grant somebody actually made (F-175).
 //
 // A later migration that re-granted UPDATE on the directory, or INSERT on
 // nothing at all, would put that back, and fails here.

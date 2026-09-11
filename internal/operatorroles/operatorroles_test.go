@@ -22,7 +22,7 @@ func TestDirectory_IsEveryRoleExceptBreakGlassAndCustomer(t *testing.T) {
 	for _, r := range got {
 		assert.NotEqual(t, security.RoleBreakGlass, r)
 		assert.NotEqual(t, security.RoleCustomer, r,
-			"CUSTOMER is what a principal this directory says nothing about already is; naming it issues an OPERATOR session with no operator permissions (F-179)")
+			"CUSTOMER is what a principal this directory says nothing about already is; naming it issues an OPERATOR session with no operator permissions (F-181)")
 		assert.True(t, r.Valid(), "%s is not a declared role", r)
 	}
 	for i := 1; i < len(got); i++ {

@@ -103,7 +103,7 @@ const AuditAction = "operator_role.bootstrapped"
 // -- it is what internal/identity gives a principal the directory says nothing
 // about -- and naming it here produces a session whose ActorType is OPERATOR
 // carrying only customer permissions, so that person's own terms acceptance is
-// recorded as one an operator made on their behalf (00759, F-179).
+// recorded as one an operator made on their behalf (00759, F-181).
 func Directory() []security.Role {
 	all := security.AllRoles()
 	out := make([]security.Role, 0, len(all))

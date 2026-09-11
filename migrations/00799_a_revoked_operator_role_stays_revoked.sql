@@ -7,7 +7,7 @@
 -- It is also the one authority-bearing table that never got the treatment 00744
 -- gave `accounts`, 00757 gave `users` and 00758 gave `account_closure_requests`:
 -- 00010's blanket `GRANT SELECT, INSERT, UPDATE` was still in force, so the
--- application role held UPDATE on every column of the directory (F-178).
+-- application role held UPDATE on every column of the directory (F-175).
 --
 -- Nothing in Go has ever updated it, so the grant served nothing and cost this:
 --
@@ -176,7 +176,7 @@ GRANT SELECT, INSERT ON operator_role_transitions TO cp_app;
 GRANT SELECT ON operator_role_transitions TO cp_readonly, cp_ops;
 
 COMMENT ON TABLE operator_role_transitions IS
-    'Every movement of an operator grant after it was made: its revocation, and any expiry set on it, with the actor and the reason. Append-only. cp_operator_role_apply_transition writes the directory from these rows, so the record and the change cannot come apart (00799, F-178).';
+    'Every movement of an operator grant after it was made: its revocation, and any expiry set on it, with the actor and the reason. Append-only. cp_operator_role_apply_transition writes the directory from these rows, so the record and the change cannot come apart (00799, F-175).';
 COMMENT ON FUNCTION cp_operator_role_apply_transition() IS
     'Writes operator_roles.revoked_at and expires_at from the transition row. The application holds no UPDATE on the directory, so inserting a row here is the only way a grant moves (00799, F-42).';
 COMMENT ON FUNCTION cp_operator_role_provenance_is_immutable() IS

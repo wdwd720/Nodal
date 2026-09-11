@@ -3,7 +3,7 @@
 package profile_test
 
 // Adversarial audit (goal §54), area accounts-auth. These demonstrated defects;
-// they are the regressions for the fixes now (F-174, F-176, F-177, F-178, F-181).
+// they are the regressions for the fixes now (F-174, F-176, F-175, F-179).
 
 import (
 	"context"
@@ -227,7 +227,7 @@ func TestAudit_TheClosureStateMachineHasNoEdgeSetInTheDatabase(t *testing.T) {
 		"and the row still says EFFECTED for the reason the EFFECT was given")
 }
 
-// F-177. Migration 00757: "CLOSED is terminal: there is no edge out of it, here
+// F-176. Migration 00757: "CLOSED is terminal: there is no edge out of it, here
 // or in Go. ... Nothing in the product needs it today, so the schema does not
 // quietly permit it." The schema permitted it: cp_user_apply_status_transition
 // wrote whatever to_status the row named, and the edge binding only required the
@@ -262,7 +262,7 @@ func TestAudit_AClosedUserCanBeReopenedByTheApplicationRole(t *testing.T) {
 	assert.False(t, profile.CanUserStatusTransition("CLOSED", "ACTIVE"), "and Go says the same thing")
 }
 
-// F-181 (service half). Decide(EFFECT) closed the account without consulting
+// F-179 (service half). Decide(EFFECT) closed the account without consulting
 // anything financial. The nearest thing to a check was the cooling-off period;
 // the three conditions 00758 and closure.go name as the reason REFUSED exists --
 // an unsettled payout, an open dispute, a balance to deal with first -- were
@@ -329,7 +329,7 @@ func TestAudit_EffectingAClosureChecksNothingFinancial(t *testing.T) {
 	assert.Equal(t, profile.ClosureRefused, refused.Closure.State)
 }
 
-// F-181, blocker two: a Credit balance.
+// F-179, blocker two: a Credit balance.
 func TestAudit_EffectingAClosureIsRefusedWhileCreditsRemain(t *testing.T) {
 	f := newEffectableFixture(t)
 	ctx := context.Background()
@@ -354,7 +354,7 @@ func TestAudit_EffectingAClosureIsRefusedWhileCreditsRemain(t *testing.T) {
 	assert.Contains(t, err.Error(), "1200 Credits")
 }
 
-// F-181, blocker three: an open native position.
+// F-179, blocker three: an open native position.
 func TestAudit_EffectingAClosureIsRefusedWhileAPositionIsOpen(t *testing.T) {
 	f := newEffectableFixture(t)
 	ctx := context.Background()
@@ -387,7 +387,7 @@ func TestAudit_EffectingAClosureIsRefusedWhileAPositionIsOpen(t *testing.T) {
 	assert.Contains(t, err.Error(), "native position")
 }
 
-// F-178. operator_roles is the only source of operator authority in the system
+// F-175. operator_roles is the only source of operator authority in the system
 // (ADR-0022, ADR-0024) and cp_app held blanket UPDATE on it from 00010 -- the
 // one authority-bearing table that never got the treatment 00744 gave accounts,
 // 00757 gave users and 00758 gave account_closure_requests. Nothing in Go ever

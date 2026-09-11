@@ -603,7 +603,7 @@ function closurePanel(ctx: ViewContext, view: AdminUserView): HTMLElement {
  * is refused, so whatever is left is out of their reach. Migration 00758 and
  * `internal/profile` both say REFUSED exists for "an unsettled payout, an open
  * dispute, or a balance to deal with first", and the operator used to be shown
- * none of those three facts (F-181).
+ * none of those three facts (F-179).
  */
 function closureBlockerFields(view: AdminUserView): HTMLElement {
   const b = view.closure_blockers;

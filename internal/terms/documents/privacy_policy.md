@@ -35,8 +35,10 @@ for it cannot read it, and this is enforced by grants rather than by policy.
 ## Retention
 
 Financial and audit records are append-only and are retained; they are not
-deleted when an account is closed. Transient records — sessions, login attempts,
-security events — are removed on a schedule.
+deleted when an account is closed. Sessions and login attempts are removed on a
+schedule. Security events — the record of sign-ins and session revocations — are
+retained until a retention period has been chosen for them, and none has been
+chosen yet, so nothing removes them today.
 
 ## What this draft does not yet say
 

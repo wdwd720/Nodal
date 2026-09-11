@@ -182,7 +182,7 @@ func ValidateClosureReason(in string) (string, error) {
 // still holds is then unreachable by the person who owns it.
 //
 // Migration 00758 and this file both say REFUSED exists for "an unsettled
-// payout, an open dispute, or a balance to deal with first", and until F-181 the
+// payout, an open dispute, or a balance to deal with first", and until F-179 the
 // operator was given none of those three facts and nothing consulted them. These
 // are the three, read together so that the surface the operator decides from and
 // the check that refuses the decision cannot disagree.

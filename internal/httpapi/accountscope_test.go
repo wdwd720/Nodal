@@ -44,7 +44,7 @@ var (
 // browser comes back from a provider-hosted flow, and scoping it as a read let
 // any account:read_any holder drive another person's verification forward: the
 // F-102 shape on a route the /me walk could not see, because its identifier is
-// a query parameter rather than a path one (F-183).
+// a query parameter rather than a path one (F-178).
 //
 // Adding a name here is admitting a GET that changes something, which needs the
 // argument written down beside it.

@@ -228,7 +228,7 @@ func (s *Server) PostMeVerificationSessions(ctx context.Context, request api.Pos
 // at somebody else's account and MOVE something -- an operator holding
 // account:read_any drove another person's verification forward, which is the
 // F-102 shape on a route the /me walk could not see because its identifier is a
-// query parameter (F-183). An operator who needs to know where a customer's
+// query parameter (F-178). An operator who needs to know where a customer's
 // verification stands reads the admin plane, which does not poll.
 func (s *Server) GetMeVerificationSessionsSessionId(ctx context.Context, request api.GetMeVerificationSessionsSessionIdRequestObject) (api.GetMeVerificationSessionsSessionIdResponseObject, error) {
 	if s.opts.Ports.Verification == nil {

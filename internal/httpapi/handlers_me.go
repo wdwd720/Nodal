@@ -221,7 +221,7 @@ func toAPIAdminUser(v profile.AdminUserView, now time.Time) api.AdminUserView {
 	}
 	// The three facts the closure decision needs, carried whether or not there
 	// is a request to decide: an operator looking at a person before a request
-	// exists is looking at the same account (F-181).
+	// exists is looking at the same account (F-179).
 	out.ClosureBlockers.Clear = v.Blockers.Clear()
 	out.ClosureBlockers.CreditBalance = v.Blockers.CreditBalance
 	out.ClosureBlockers.OpenPayoutRequests = v.Blockers.OpenPayoutRequests

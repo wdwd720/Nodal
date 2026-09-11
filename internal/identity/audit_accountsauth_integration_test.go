@@ -5,7 +5,7 @@ package identity_test
 // Adversarial audit (goal §54), area accounts-auth. These demonstrated defects.
 // The return_to one still does: it is fixed on another branch and is left as the
 // auditor wrote it, so it fails here and passes once both branches merge. The
-// step-up one is inverted and is the regression for F-182.
+// step-up one is inverted and is the regression for F-177.
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func TestAudit_BeginAcceptsABackslashReturnToThatBrowsersResolveOffSite(t *testi
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 }
 
-// F-182. PART 192 requires session rotation on privilege change and
+// F-177. PART 192 requires session rotation on privilege change and
 // auth.Manager.Rotate is the mechanism for it -- with no caller anywhere in the
 // repository. A step-up login (`/v1/auth/login?step_up=true`) is a privilege
 // change: it raises the session's AuthTime and AMR, and it is the thing a user

@@ -85,7 +85,14 @@ type Document struct {
 // five independently drifting version strings -- buys nothing here and makes
 // "which set of documents did this person accept" a five-part question. The
 // format is date.revision and the database CHECK pins it.
-const Version = "2026-09-10.1"
+//
+// 2026-09-10.2 corrects the privacy notice's retention paragraph, which said
+// security events are "removed on a schedule" when CP_RETENTION_SECURITY_EVENT_
+// DAYS is 0 by default and nothing purges them (F-183). Bumping the version
+// changes every document's content hash and re-asks every user to accept, which
+// is the mechanism working rather than a cost of using it: a notice that
+// describes the system differently is a different notice.
+const Version = "2026-09-10.2"
 
 type source struct {
 	id          DocumentID

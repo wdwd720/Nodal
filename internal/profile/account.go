@@ -303,7 +303,7 @@ func (s *Service) Decide(ctx context.Context, op Actor, targetUserID string, d C
 			}
 			// The three facts 00758 and this package both name as the reason
 			// REFUSED exists. Effecting past one of them puts value out of
-			// reach of the person it belongs to, permanently, and until F-181
+			// reach of the person it belongs to, permanently, and until F-179
 			// nothing here consulted any of them.
 			//
 			// The refusal names the blocker rather than saying "not now": the
@@ -426,7 +426,7 @@ type AdminUserView struct {
 	// payout request that has not reached a terminal state, an open native
 	// position. Decide refuses EFFECT while any of them stands, and this is the
 	// same read, so the surface the operator decides from cannot disagree with
-	// the check that refuses the decision (F-181).
+	// the check that refuses the decision (F-179).
 	Blockers    ClosureBlockers
 	Acceptances []Acceptance
 	// ActiveSessions is how many live sessions the user holds right now.

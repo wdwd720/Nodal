@@ -86,7 +86,7 @@ func (s *Server) GetAuthCallback(ctx context.Context, request api.GetAuthCallbac
 	// way, and telling somebody their sign-in "did not start in this browser"
 	// describes an attack when what happened is two tabs. The control does not
 	// change: this still refuses, and one slot is what makes the digest
-	// unguessable-from-outside rather than merely present.
+	// unguessable-from-outside rather than merely present (F-182).
 	if !httpmw.LoginStateMatches(r, request.Params.State, s.opts.CookieDomain, s.opts.CookieSecure) {
 		return nil, errs.New(errs.CodeUnauthenticated,
 			"this sign-in did not start in this browser, or a newer sign-in replaced it; start again")
@@ -95,7 +95,7 @@ func (s *Server) GetAuthCallback(ctx context.Context, request api.GetAuthCallbac
 	// begun from inside the product arrives here with it, and internal/identity
 	// rotates that session rather than issuing a second one beside it: a
 	// step-up is a privilege change, and leaving the weaker session live means
-	// the credential the step-up defends against still works (PART 192, F-182).
+	// the credential the step-up defends against still works (PART 192, F-177).
 	// A cold sign-in carries none and is issued a new session.
 	complete := identity.CompleteRequest{
 		Code:      request.Params.Code,

@@ -355,7 +355,7 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 // pre-step-up session stayed live, kept its own full absolute lifetime, and was
 // still a usable credential carrying the WEAKER authentication. A stolen cookie
 // survived the step-up the product asked for to defend against it, and the
-// user's own security page counted one browser as two devices (F-182).
+// user's own security page counted one browser as two devices (F-177).
 //
 // Rotate is chosen only when the replacement really is the same login moving
 // forward: the same subject, the same actor type, and a session the store still

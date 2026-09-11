@@ -137,7 +137,7 @@ func newKeyed() string { return "prof-" + testSessionID }
 // a pattern walk cannot see it, and one of them -- a GET that polls a provider
 // and records the outcome -- resolved it with the read-grade helper, so any
 // holder of account:read_any could drive another person's verification forward
-// (F-183).
+// (F-178).
 //
 // So the invariant is proved twice now, from the contract rather than the
 // router: TestProfile_NoSelfServiceRouteTakesAnIdentifier for the path, and
@@ -160,7 +160,7 @@ var meRoutesNamingTheCallersOwnObject = map[string]bool{
 	// profile" means the caller's, and another person's session id is not
 	// found. It said "loaded under the caller's profile" while the account came
 	// from the read-grade helper, which made the second half of the sentence
-	// true only for a caller with no account:read_any (F-184).
+	// true only for a caller with no account:read_any (F-178).
 	"/v1/me/verification/sessions/{sessionId}": true,
 }
 
@@ -198,7 +198,7 @@ func TestProfile_NoSelfServiceRouteTakesAnIdentifier(t *testing.T) {
 // was granted with a reason in a directory, and nothing behind it moves.
 //
 // Nothing may be here with the read-grade helper and a side effect. That
-// combination is what F-183 was.
+// combination is what F-178 was.
 var meOperationsNamingAnAccount = map[string]string{
 	// accountScopeWrite -- ownership only, no operator override.
 	"DeleteMePayoutDestinationsDestinationId": "accountScopeWrite: disabling a destination is a write",
@@ -274,7 +274,7 @@ func TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor(t *testing.T) {
 
 	// The source-level half: every entry claiming accountScopeWrite uses it,
 	// and every entry claiming accountScope uses that. A comment that describes
-	// a helper the handler does not call is what F-184 was.
+	// a helper the handler does not call is what F-178 was.
 	helper := map[string]string{}
 	forEachHandlerSource(t, func(_, fn, line string, _ int) {
 		switch {
