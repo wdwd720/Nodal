@@ -24,7 +24,12 @@ import { idempotent, newIdempotencyKey } from "@controlplane/generated-client";
 import { api } from "./client.ts";
 import { isUnauthenticated } from "./problem.ts";
 import {
+  ContractViolation,
   accountSpec,
+  legalDocumentSpec,
+  termsStateSpec,
+  unreadCountSpec,
+  userProfileSpec,
   activityItemSpec,
   assetSpec,
   buyingPowerSpec,
@@ -325,6 +330,19 @@ export interface VersionInfo {
   readonly build_version: string;
   readonly config_hash: string;
   readonly environment: string;
+  /**
+   * True when this deployment is a sandbox tier (ADR-0023).
+   *
+   * It is the API's own answer rather than something the client infers from
+   * the environment name, which is the point: a build that guessed would label
+   * the wrong deployment, and the one thing worse than an unlabelled rehearsal
+   * is a real deployment labelled as one.
+   *
+   * Absent on a deployment that predates the field, and absence is NOT
+   * "sandbox". A missing flag means the API did not say, and inventing a
+   * sandbox label for a tier that never claimed one would be its own lie.
+   */
+  readonly sandbox_tier?: boolean;
 }
 
 export function useVersion(): UseQueryResult<VersionInfo> {
@@ -335,7 +353,10 @@ export function useVersion(): UseQueryResult<VersionInfo> {
       const { data } = await api.GET("/version", {});
       return validated<VersionInfo>(
         data,
-        { required: { build_version: "string", config_hash: "string", environment: "string" } },
+        {
+          required: { build_version: "string", config_hash: "string", environment: "string" },
+          optional: { sandbox_tier: "boolean" },
+        },
         "/version",
       );
     },
@@ -824,6 +845,148 @@ export function useCreatePayout(): UseMutationResult<PayoutRequest, unknown, Cre
     },
   });
 }
+
+/* --------------------------------------------------------------------------
+ * Profile, onboarding, legal documents and notifications (D-077 phase two)
+ *
+ * Note what is NOT here: no hook returns a notification's figures, because a
+ * notification carries identifiers and state names and never a balance. The
+ * canonical figure is always the REST read, which is the rule the stream and
+ * the notification centre are both built on.
+ * ------------------------------------------------------------------------ */
+
+export type UserProfile = Schemas["UserProfile"];
+export type Onboarding = Schemas["Onboarding"];
+export type LegalDocument = Schemas["LegalDocument"];
+export type TermsState = Schemas["TermsState"];
+export type TermsDocumentId = NonNullable<Schemas["TermsAcceptanceRequest"]["document_ids"]>[number];
+
+export const meKeys = {
+  terms: ["me", "terms"] as const,
+  unread: ["me", "notifications", "unread"] as const,
+  notifications: ["me", "notifications"] as const,
+};
+
+/**
+ * The legal documents, their versions, and which of them this caller has
+ * accepted at the bytes currently served.
+ *
+ * `outstanding` is the server's answer, not a client-side comparison: whether a
+ * document counts as accepted depends on the sha256 of the bytes it was
+ * accepted at, which only the server knows. A client that recomputed it from
+ * version strings would call a re-issued document accepted.
+ */
+export function useTermsState(enabled = true): UseQueryResult<TermsState> {
+  return useQuery({
+    queryKey: meKeys.terms,
+    enabled,
+    // Which documents are outstanding changes the moment one is accepted, and
+    // an acceptance gate reading a stale answer would either re-ask or let
+    // somebody past. It is never served from cache.
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/terms-acceptances", {});
+      const state = validated<TermsState>(data, termsStateSpec, "/me/terms-acceptances");
+      if (!Array.isArray(state.outstanding)) {
+        throw new ContractViolation("/me/terms-acceptances.outstanding", "expected an array");
+      }
+      for (const id of state.outstanding) {
+        if (typeof id !== "string") {
+          throw new ContractViolation("/me/terms-acceptances.outstanding[]", "expected a string");
+        }
+      }
+      return state;
+    },
+  });
+}
+
+export interface AcceptTermsInput {
+  readonly documentIds: readonly TermsDocumentId[];
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Records an acceptance of the documents by id.
+ *
+ * The server records the version and the sha256 of the bytes it served, so the
+ * screen that calls this must have rendered those same bytes. The key is minted
+ * at the moment of confirmation, so a retry after a re-authentication records
+ * one acceptance and not two.
+ */
+export function useAcceptTerms(): UseMutationResult<TermsState, unknown, AcceptTermsInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AcceptTermsInput) => {
+      const { data } = await api.POST("/me/terms-acceptances", {
+        ...idempotent(input.idempotencyKey),
+        body: { document_ids: [...input.documentIds] },
+      });
+      return validated<TermsState>(data, termsStateSpec, "/me/terms-acceptances");
+    },
+    onSuccess: () => {
+      // `/me` carries the onboarding timestamps, and accepting the last
+      // outstanding document is what completes that step.
+      void qc.invalidateQueries({ queryKey: keys.me });
+      void qc.invalidateQueries({ queryKey: meKeys.terms });
+    },
+  });
+}
+
+export interface ProfileUpdateInput {
+  readonly displayName?: string;
+  readonly handle?: string;
+  readonly locale?: string;
+  readonly timeZone?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Creates or updates the caller's own profile. Only the fields present change;
+ * an empty handle clears it, which is why `handle: ""` is sent rather than
+ * omitted when somebody removes theirs.
+ */
+export function useUpdateProfile(): UseMutationResult<UserProfile, unknown, ProfileUpdateInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ProfileUpdateInput) => {
+      const { data } = await api.POST("/me/profile", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          ...(input.displayName === undefined ? {} : { display_name: input.displayName }),
+          ...(input.handle === undefined ? {} : { handle: input.handle }),
+          ...(input.locale === undefined ? {} : { locale: input.locale }),
+          ...(input.timeZone === undefined ? {} : { time_zone: input.timeZone }),
+        },
+      });
+      return validated<UserProfile>(data, userProfileSpec, "/me/profile");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.me });
+    },
+  });
+}
+
+/**
+ * How many notifications the caller has not read.
+ *
+ * A count, never a figure. The bell is allowed to be a number because a count
+ * of messages is not money; everything the notifications themselves describe is
+ * refetched from its own resource before it is shown as a balance.
+ */
+export function useUnreadCount(enabled: boolean): UseQueryResult<number> {
+  return useQuery({
+    queryKey: meKeys.unread,
+    enabled,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/notifications/unread-count", {});
+      const parsed = validated<{ count: number }>(data, unreadCountSpec, "/me/notifications/unread-count");
+      return parsed.count;
+    },
+  });
+}
+
+/** Re-exported so a page can validate a document it received on its own. */
+export { legalDocumentSpec };
 
 /* --------------------------------------------------------------------------
  * Agents and strategies (goal §17, §18)

@@ -131,6 +131,9 @@ p { margin: 0 0 8px; }
  * scanning the column without reading the words.
  */
 .pill[data-state="sandbox"] { color: var(--sandbox); border-color: var(--sandbox); border-style: dashed; }
+/* Two pills in one cell must not read as one word: "SANDBOX" followed by
+ * "not an approval" is two statements and has to look like two. */
+.pill + .pill { margin-left: 4px; }
 .table tr.sandboxed > td:first-child { box-shadow: inset 3px 0 0 var(--sandbox); }
 
 /* --- controls ------------------------------------------------------------ */

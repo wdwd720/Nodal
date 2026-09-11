@@ -384,6 +384,14 @@ type fakeGates struct {
 	stubErr
 	items      []GateView
 	lastAction GateAction
+	history    []gates.Transition
+}
+
+func (f *fakeGates) History(_ context.Context, _ gates.Capability) ([]gates.Transition, error) {
+	if err := f.fail(); err != nil {
+		return nil, err
+	}
+	return f.history, nil
 }
 
 func (f *fakeGates) List(context.Context) ([]GateView, error) {

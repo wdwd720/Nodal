@@ -169,6 +169,25 @@ var operationPolicies = map[string]operationPolicy{
 	"GetPayouts":                      {AnyOf: perms(security.PermPayoutRead)},
 	"GetPayoutsPayoutId":              {AnyOf: perms(security.PermPayoutRead)},
 
+	// --- markets, charts, portfolio and activity (product goal SS12-16, 35) -
+	//
+	// Discovery, the chart and the tape are the same authority as reading a
+	// native asset: they are public market data about assets anyone with
+	// native_asset:read may already list, and none of them names an account.
+	// The tape deliberately carries no account id, so it cannot become a way
+	// to watch a particular trader.
+	"GetNativeMarkets":                {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdSummary": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdCandles": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdTrades":  {AnyOf: perms(security.PermNativeAssetRead)},
+	// The portfolio returns a Credit balance, so it needs the permission that
+	// reads one. Which account is a per-request tenant check (accountScope),
+	// as everywhere else.
+	"GetMePortfolio": {AnyOf: perms(security.PermCreditRead)},
+	// The timeline is the account's own history, so it is the same authority
+	// as GET /accounts/{id}/activity.
+	"GetMeActivity": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+
 	// --- internal commerce (gola.md PART XVII) ----------------------------
 	//
 	// Buying and selling are separate permissions because they are different
@@ -210,6 +229,7 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdminAccounts":                 {AnyOf: perms(security.PermAccountReadAny)},
 	"PostAdminAccountsAccountIdStatus": {AnyOf: perms(security.PermAccountFreeze), StepUp: true, Mutating: true},
 	"GetAdminGates":                    {AnyOf: perms(security.PermGateRead)},
+	"GetAdminGatesCapabilityHistory":   {AnyOf: perms(security.PermGateRead)},
 	"PostAdminGatesCapabilityAction": {
 		AnyOf: perms(security.PermGatePropose, security.PermGateApprove), StepUp: true, Mutating: true,
 	},
@@ -234,6 +254,52 @@ var operationPolicies = map[string]operationPolicy{
 		AnyOf: perms(security.PermReconciliationResolve), StepUp: true, Mutating: true,
 	},
 
+	// --- the withdrawal journey (goal PARTS 19-25) ------------------------
+	//
+	// No new permissions. The customer role already holds payout:create and
+	// payout:read, and verification exists to enable a payout: a role that may
+	// ask for one is exactly the role that may start the identity check that
+	// gates it. Inventing verification:* permissions would widen the
+	// permission set without widening what anybody can do.
+	//
+	// Reading one's own verification profile is account:read, because it is a
+	// property of the person rather than of a payout, and a customer who may
+	// not read payouts should still be able to see whether they are verified.
+	"GetMeVerification": {AnyOf: perms(security.PermAccountRead)},
+	// Starting a verification is a command with an idempotency key. It needs
+	// no step-up: the person is about to prove who they are to a provider, and
+	// demanding a second factor first would gate the remedy behind the thing
+	// it remedies.
+	"PostMeVerificationSessions": {
+		AnyOf: perms(security.PermPayoutCreate, security.PermWithdrawalCreate), Mutating: true,
+	},
+	// The poll is a GET that ingests a provider result. It is not marked
+	// mutating: it carries no Idempotency-Key because it is idempotent by
+	// construction -- a status that has not moved records nothing -- and the
+	// authority for what it writes is the provider's answer, not the caller's
+	// request.
+	"GetMeVerificationSessionsSessionId": {AnyOf: perms(security.PermAccountRead)},
+	// SANDBOX TIER ONLY, refused three times over: here by the handler, again
+	// by the service on cfg.SandboxTier(), and finally by a CHECK that will
+	// not let a sandbox row exist in PROD.
+	"PostMeVerificationSandboxOutcome": {
+		AnyOf: perms(security.PermPayoutCreate, security.PermWithdrawalCreate), Mutating: true,
+	},
+	"GetMeEligibility": {AnyOf: perms(security.PermPayoutRead, security.PermCreditRead)},
+
+	"GetMePayoutDestinations": {AnyOf: perms(security.PermPayoutRead)},
+	// PART 25: "Address changes are high-risk operations. Require recent
+	// strong auth." Both the registration and the removal do, because an
+	// attacker who can only remove a destination can still deny a person their
+	// money at the moment they need it.
+	"PostMePayoutDestinations": {AnyOf: perms(security.PermPayoutCreate), StepUp: true, Mutating: true},
+	"DeleteMePayoutDestinationsDestinationId": {
+		AnyOf: perms(security.PermPayoutCreate), StepUp: true, Mutating: true,
+	},
+	// A quote reserves nothing and moves nothing, so it needs no step-up. It
+	// is still a command: it writes what the customer was shown, which is the
+	// whole reason it exists.
+	"PostPayoutsQuote": {AnyOf: perms(security.PermPayoutCreate), Mutating: true},
 	// --- profile, terms and account lifecycle ------------------------------
 	//
 	// A /me route names no resource but the caller: there is no id in the path,

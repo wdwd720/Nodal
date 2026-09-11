@@ -6,26 +6,21 @@
  * cookie. The app never handles a credential and never holds a token: there is
  * nothing on this page for a script on another origin to steal.
  *
- * # Why the return path is held in the browser
+ * # The return path goes to the API, not into this tab
  *
- * `?return=/withdraw` says where the customer was going. The obvious thing
- * would be to hand it to the API and let the callback redirect there — the
- * backend's login attempt has a `return_to` column and `internal/identity`
- * validates it as a local path — but `GET /v1/auth/login` in `openapi.yaml`
- * takes only `step_up`, so there is no parameter to put it in. Changing the API
- * is not this branch's to make.
+ * `?return=/withdraw` says where the customer was going. It is validated here
+ * as a local path and then handed to `GET /v1/auth/login` as `return_to`: the
+ * backend stores it with the login attempt, never echoes it from the request,
+ * refuses anything that is not a local path, and appends it to the app origin
+ * the deployment configures.
  *
- * So the path is remembered in the tab (`survives-sign-in.ts`), the callback
- * lands on the configured post-login URL, and the app forwards from there. The
- * remembered value is validated as a local path on the way in and on the way
- * out, because a return path that could name another origin is an open redirect
- * with a friendly name.
- *
- * The gap is recorded for the API: a `return_to` parameter on the login
- * endpoint would let the backend do this, which is one fewer place a redirect
- * target can be tampered with.
+ * An earlier version of this page held the path in `sessionStorage` and
+ * forwarded from `/` on the way back, because the login endpoint took no such
+ * parameter. It does now, and a redirect target the server holds is one fewer
+ * place a redirect target can be tampered with. The tab still keeps what the
+ * customer TYPED, which is a different thing and nobody else's business.
  */
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { LOGIN_PATH } from "../../api/client.ts";
@@ -34,7 +29,7 @@ import { Panel } from "../../components/Panel.tsx";
 import { StatusBadge } from "../../components/StatusBadge.tsx";
 import { SITUATION_BY_ID } from "../../lib/errors.ts";
 import { RISK_FOOTER } from "../../lib/honesty.ts";
-import { isLocalPath, rememberReturnPath } from "../../lib/survives-sign-in.ts";
+import { isLocalPath } from "../../lib/survives-sign-in.ts";
 import { beginSignIn, useSession } from "../../session.tsx";
 import { SitePageHead, SiteSection } from "./SiteChrome.tsx";
 
@@ -48,13 +43,6 @@ export function SignIn(): ReactNode {
   const requested = params.get("return");
   const stepUp = params.get("step") === "up";
   const returnTo = requested !== null && isLocalPath(requested) ? requested : DEFAULT_RETURN;
-
-  // Remember it as soon as the page renders rather than at the click, so a
-  // customer who signs in from another tab, or whose click lands after a
-  // reload, still comes back to where they were going.
-  useEffect(() => {
-    rememberReturnPath(returnTo);
-  }, [returnTo]);
 
   // Already signed in: this page has nothing to offer, so it forwards rather
   // than showing a sign-in button that would start a second flow.

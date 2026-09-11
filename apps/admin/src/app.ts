@@ -58,7 +58,7 @@ export const ROUTES: readonly Route[] = [
     title: "Accounts",
     surface: "accounts",
     description:
-      "Search, and read one account whole: status, restrictions, Credit balance, open reconciliation, the actions that named it, the capabilities it may use, and its audit trail. The only write is the status machine.",
+      "Search, and read one account whole: its owner, status, restrictions, Credit balance, open reconciliation, the actions that named it, the capabilities it may use, its agents and its audit trail. The writes are the status machine, a closure request the customer opened, and pausing one agent.",
     render: renderAccounts,
   },
   {

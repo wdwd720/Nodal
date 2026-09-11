@@ -1,27 +1,42 @@
 /**
- * The policy documents this deployment shows, keyed by the version id an
- * acceptance records.
+ * The plain-language explainers the public site serves, and the binding
+ * documents they explain.
  *
- * The onboarding acceptance step (`POST /v1/me/terms-acceptances`) sends these
- * ids, and the policy pages render these documents, so the words a customer
- * accepted and the words the ledger says they accepted are the same object. A
- * new version is a new id and a new entry — never an edit to an existing one,
- * because an edited document with an unchanged id makes every recorded
- * acceptance a claim about words nobody agreed to.
+ * The acceptance step does NOT read this module. `POST /v1/me/terms-acceptances`
+ * names a document in the server's own registry and records the sha256 of the
+ * bytes the server served, so the only honest place to ask for an acceptance is
+ * the screen that renders those bytes — `/welcome/terms`. What lives here is
+ * the explanation a visitor can read before they have a session at all, because
+ * the legal registry has no public route.
  */
 import { PRIVACY_V1 } from "./privacy.ts";
 import { RISK_V1 } from "./risk.ts";
 import { TERMS_V1 } from "./terms.ts";
-import type { PolicyDocument, PolicyId, PolicySlug } from "./types.ts";
+import type { PolicyDocument, PolicyId, PolicySlug, ServerDocumentId } from "./types.ts";
 
-export type { PolicyDocument, PolicyId, PolicySection, PolicySlug } from "./types.ts";
-export { CONTACT_NOTE, DRAFT_NOTICE } from "./types.ts";
+export type { PolicyDocument, PolicyId, PolicySection, PolicySlug, ServerDocumentId } from "./types.ts";
+export { CONTACT_NOTE, DRAFT_NOTICE, SERVER_DOCUMENT_NOTE } from "./types.ts";
 
 /** Every document, in the order the onboarding step presents them. */
 export const POLICIES: readonly PolicyDocument[] = [TERMS_V1, PRIVACY_V1, RISK_V1];
 
-/** The version ids the current build shows. What onboarding asks a user to accept. */
-export const CURRENT_POLICY_IDS: readonly PolicyId[] = POLICIES.map((doc) => doc.id);
+/**
+ * The revisions of the explainers this build serves.
+ *
+ * Exported for a page that wants to stamp what a reader saw. It is deliberately
+ * NOT named after acceptance and is never sent anywhere: the ids an acceptance
+ * records are `ServerDocumentId`s, and the authority on which of those are
+ * outstanding is `GET /v1/me/terms-acceptances`.
+ */
+export const EXPLAINER_REVISIONS: readonly PolicyId[] = POLICIES.map((doc) => doc.id);
+
+/**
+ * Which binding document each public page explains, so the two can be shown
+ * side by side rather than left to look like alternatives.
+ */
+export const EXPLAINED_DOCUMENTS: Readonly<Record<PolicySlug, ServerDocumentId>> = Object.fromEntries(
+  POLICIES.map((doc) => [doc.slug, doc.explains]),
+) as Readonly<Record<PolicySlug, ServerDocumentId>>;
 
 /** The document at a URL segment, or undefined for a segment that is not one. */
 export function policyBySlug(slug: string): PolicyDocument | undefined {

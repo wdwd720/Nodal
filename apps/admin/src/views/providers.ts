@@ -41,16 +41,14 @@ import { problemNotice } from "../problem.ts";
 const CANNOT_BE_LIVE: readonly string[] = ["sandbox_payout"];
 
 /**
- * Provider roles `cmd/api`'s catalogue does not describe, so no row for them
- * can appear above however they are configured. The payout slot is real
- * configuration — `CP_PROVIDER_PAYOUT_NAME` / `CP_PROVIDER_PAYOUT_MODE`, and
- * STAGING sets both — but `providerCatalog` in cmd/api/wire.go lists twelve
- * slots and not this one. An operator looking for the payout rail here would
- * otherwise conclude none is configured.
+ * The two slots the product economy runs on, which `cmd/api`'s catalogue now
+ * describes. They were absent from it, so the console could not see the Credit
+ * purchase adapter or the payout provider at all — including the sandbox
+ * tier's `sandbox_payout`, which is the one this view most needs to label
+ * correctly. Named here so the view can say plainly when one is unconfigured
+ * rather than leaving an operator to notice an absence.
  */
-const UNCATALOGUED_SLOTS: ReadonlyArray<{ role: string; config: string }> = [
-  { role: "PayoutProvider", config: "CP_PROVIDER_PAYOUT_NAME / CP_PROVIDER_PAYOUT_MODE" },
-];
+const ECONOMY_ROLES: readonly string[] = ["CreditPurchaseProvider", "PayoutProvider"];
 
 export async function renderProviders(ctx: ViewContext, root: HTMLElement): Promise<void> {
   clear(root);
@@ -96,7 +94,7 @@ export async function renderProviders(ctx: ViewContext, root: HTMLElement): Prom
         { class: "muted" },
         "A DISABLED provider in fake mode is the default for an unconfigured slot. It is not an incident.",
       ),
-      uncataloguedNotice(),
+      economyNotice(providers),
     ),
   );
 }
@@ -171,20 +169,40 @@ function contradictionNotice(p: ProviderStatus): HTMLElement {
   );
 }
 
-/** Slots that are configurable but that the API's catalogue never describes. */
-function uncataloguedNotice(): HTMLElement {
+/**
+ * The two slots that decide whether money can enter or leave, called out by
+ * name so "no row for it" is never how an operator learns one is missing.
+ */
+function economyNotice(providers: readonly ProviderStatus[]): HTMLElement {
+  const present = new Set(providers.map((p) => p.role));
+  const absent = ECONOMY_ROLES.filter((role) => !present.has(role));
+  if (absent.length === 0) {
+    const rows = providers.filter((p) => ECONOMY_ROLES.includes(p.role));
+    return notice(
+      "info",
+      el("strong", {}, "Both economy slots are described above."),
+      el(
+        "p",
+        {},
+        rows
+          .map((p) => `${p.role}: ${p.name} in ${effectiveMode(p)} mode, ${p.health.toLowerCase()}`)
+          .join("; "),
+      ),
+      el(
+        "p",
+        { class: "muted" },
+        "Credit purchase is how value enters; payout is how it leaves. A fake or sandbox adapter in either slot means nothing real moves through it, whatever the health says.",
+      ),
+    );
+  }
   return notice(
-    "info",
-    el("strong", {}, "Not every configured provider slot appears above."),
-    el(
-      "ul",
-      { class: "reasons" },
-      ...UNCATALOGUED_SLOTS.map((s) => el("li", {}, `${s.role} — configured by ${s.config}, absent from cmd/api's provider catalogue.`)),
-    ),
+    "warn",
+    el("strong", {}, "A slot the product economy runs on is not described here."),
+    el("ul", { class: "reasons" }, ...absent.map((role) => el("li", {}, role))),
     el(
       "p",
       { class: "muted" },
-      "The absence of a row here is not evidence that a slot is unconfigured. Adding the slot to providerCatalog in cmd/api/wire.go is what would make it visible.",
+      "This is a gap in cmd/api's provider catalogue, not evidence that the slot is unconfigured. An absence in this table is never proof of an absence in the deployment.",
     ),
   );
 }

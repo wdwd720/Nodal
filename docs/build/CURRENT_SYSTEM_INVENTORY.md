@@ -184,7 +184,101 @@ capital) only.
 | `InternalCommerce` / creator economy | 0 |
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
+## 9. Productization additions: verification and the conversion request (2026-09-10)
 
+Appended rather than folded into §5 and §6 above, because those sections are a
+frozen baseline measurement and this is what was added after it. Architecture:
+ADR-0025, ADR-0026, `docs/product/VERIFICATION_AND_WITHDRAWAL.md`.
+
+### Tables and migrations
+
+| Migration | Table | What it holds | State machine |
+|---|---|---|---|
+| 00761 | `compliance_profile_transitions` | every change of a person's verification state, with actor, reason, provider, provider reference and the session it came from | writes `compliance_profiles.identity_state`, `verified_at`, `expires_at`; `cp_app` holds UPDATE on the attribute columns only |
+| 00761 | `compliance_profiles` (altered) | the state list grows to §20's ten; born UNVERIFIED | F-42 + edge binding + birth control |
+| 00762 | `verification_sessions` | one attempt: purpose, provider, provider reference, status, jurisdiction, rule version, environment, sandbox flag, expiry. **No hosted URL** | 9 statuses, F-42 + edge binding + birth control; one open session per person (partial unique index) |
+| 00762 | `verification_session_transitions` | the edges of the above | immutable |
+| 00762 | `verification_checks` | the evidence: one append-only row per sub-check (IDENTITY_DOCUMENT, AGE, JURISDICTION, SANCTIONS, PEP) with outcome, provider, reference, rule version, environment and sandbox flag | append-only; `CHECK (NOT sandbox OR environment <> 'PROD')` |
+| 00763 | `payout_destination_transitions` | the edges of a destination's usability | writes `payout_destinations.status` and `verified_at` |
+| 00763 | `payout_destinations` (altered) | gains `country`, `masked_display`, `sandbox`; born UNVERIFIED | F-42 + edge binding + birth control; REJECTED and DISABLED terminal |
+| 00764 | `payout_quotes` | the pre-commitment quote: gross/fee/net on both the Credit side and the money side, three rule versions, `minimum_ok` net of fees, expiry, consumed-once | no state column by design; immutable but for `consumed_at`; unique on `(account_id, idempotency_key)` |
+| 00764 | `payout_requests` (altered) | gains `quote_id` | unchanged |
+
+Custom SQLSTATE added: `PQ001` (quote immutability). `AD001` is reused for the
+three birth controls.
+
+### Routes
+
+| Method | Path | Permission | Step-up | Notes |
+|---|---|---|---|---|
+| GET | `/v1/me/verification` | `account:read` | — | the §24 profile area: state, level, evidence, what is missing and the action for each. No PII. |
+| POST | `/v1/me/verification/sessions` | `payout:create` or `withdrawal:create` | — | opens a provider-hosted session; the jurisdiction is supplied and never inferred |
+| GET | `/v1/me/verification/sessions/{sessionId}` | `account:read` | — | polls the provider and ingests the decision; idempotent |
+| POST | `/v1/me/verification/sandbox-outcome` | `payout:create` or `withdrawal:create` | — | **SANDBOX TIER ONLY**, refused three times over |
+| GET | `/v1/me/eligibility` | `payout:read` or `credit:read` | — | withdrawal eligibility per origin bucket, with reasons |
+| GET | `/v1/me/payout-destinations` | `payout:read` | — | includes disabled and rejected ones |
+| POST | `/v1/me/payout-destinations` | `payout:create` | yes | takes a PROVIDER TOKEN; refuses anything that looks like an account number |
+| DELETE | `/v1/me/payout-destinations/{destinationId}` | `payout:create` | yes | disables; never deletes |
+| POST | `/v1/payouts/quote` | `payout:create` | — | gross, fee, net, expiry, and the provenance that would leave |
+
+`POST /v1/payouts` gains an optional `quote_id`; `GET /v1/payouts/{id}` gains
+`provenance` and `sandbox`. No new permission and no new capability were
+declared: the customer role already holds `payout:create` and `payout:read`, and
+verification exists to enable a payout.
+## Addendum — 2026-09-10: the Nodal-native market's product surface (M)
+
+This section is an addendum rather than an edit: §§1–8 above are a dated
+snapshot of a baseline audit and stay as they were written. What follows is what
+the productization wave added for goal §§11–16, §35, §46, §47 and §51.
+
+### Migrations added (schema is now at 775)
+
+| Migration | Table / function | Who may write it | Why it exists |
+|---|---|---|---|
+| `00771` | `native_market_prints` | `cp_app` INSERT + SELECT; a BEFORE INSERT trigger recomputes every price from the fill and refuses a disagreement (NM001); `forbid_mutation` on UPDATE/DELETE | the price series a chart reads: one print per fill with both spot prices, the effective price and both volumes |
+| `00772` | `native_positions` | **nobody but the triggers**: `cp_app` has SELECT only | per (account, asset) quantity, average cost basis, realised P&L and fees, maintained from the fills and the creator allocation. A table CHECK states `quantity = allocation + bought - sold` |
+| `00772` | `cp_native_positions_unreconciled()` | read-only function, EXECUTE to `cp_app`/`cp_readonly`/`cp_ops` | compares every position to `ledger_balances`, the source the triggers do not write. It reports; it never repairs |
+| `00773` | `native_market_safety_policies` | `cp_app` INSERT + SELECT; immutable | the versioned, hashed market-safety document (§47) |
+| `00773` | `native_market_breaker_events` | `cp_app` INSERT + SELECT; immutable | the evidence behind a circuit-breaker pause: policy, window, both prices, the move |
+| `00774` | `demo_seed_rows` | `cp_app` INSERT + SELECT; immutable; a CHECK refuses `environment = 'PROD'` | the idempotence key and the label for sandbox demo data |
+| `00775` | indexes | — | discovery: a `simple` tsvector GIN over name+symbol+description, a `text_pattern_ops` btree on `upper(symbol)`, and `native_markets (created_at DESC, id DESC)` |
+
+No table above holds a fact that is not derivable from a table that already
+existed, which is why every one of them is either database-maintained or
+database-validated.
+
+### Routes added
+
+| Method + path | Permission | Notes |
+|---|---|---|
+| `GET /v1/native-markets` | `native_asset:read` | the markets page: cursor pagination, status/creator/`q` filters, five sorts. The response says which orderings are stable under paging (only `NEWEST` is) |
+| `GET /v1/native-markets/{marketId}/summary` | `native_asset:read` | the asset detail / trading screen: the same summary row the list returns, the **limits in force** (both the market-safety policy and the risk kernel's GLOBAL concentration limits), and holder concentration |
+| `GET /v1/native-markets/{marketId}/candles` | `native_asset:read` | OHLCV over a bounded window (`1m`, `5m`, `15m`, `1h`, `1d`; ≤ 1,500 buckets). Empty buckets are absent, never filled forward |
+| `GET /v1/native-markets/{marketId}/trades` | `native_asset:read` | the public tape. It carries **no account identity**, asserted over the type |
+| `GET /v1/me/portfolio` | `credit:read` (+ per-request tenant scope) | the Credit balance breakdown from `internal/credit` unchanged, the native positions, the totals, an explicit `as_of` and a value temperature |
+| `GET /v1/me/activity` | `account:read` / `account:read_any` (+ tenant scope) | the §16 timeline: seven kinds, each amount with its unit, origin and temperature, a reference and a server-built summary |
+
+`GET /v1/accounts/{accountId}/activity` is unchanged and remains the hosted
+rail's operational timeline (D-066).
+
+### Packages added
+
+- `internal/activity` — the unified timeline. Owns no table; the union is one
+  compiled-in constant and the kind filter is a bound parameter.
+- `internal/demo` — the sandbox demo seeder. Drives the domain services; refuses
+  PROD in Go, in `cmd/api` and in SQL.
+- `scripts/demodata` — the same seeder as a command.
+- `scripts/marketsafety` — records a market-safety policy, and prints the
+  compiled-in one.
+
+### State machines
+
+No new state column. The circuit breaker moves a market through the status
+machine migration 00712 already enforces — `ACTIVE → CLOSE_ONLY` (and
+`CLOSE_ONLY → ACTIVE` when an operator resumes) — by writing a
+`native_market_transitions` row as the SYSTEM actor `market:circuit-breaker`,
+so a pause is a recorded transition like any other and a second state column
+cannot disagree with the first.
 ## 9. Product surfaces added during productization — profile, terms and account lifecycle
 
 > Appended 2026-09-10. Sections 1–8 above are a snapshot taken at migration 731
@@ -286,6 +380,20 @@ Schema is at migration **783** after this batch.
 
 | Package | What it is |
 |---|---|
+| `internal/verification` | the financial verification state machine, the session and evidence model, the provider contract and registry, the composite resolver, the §24 snapshot, the sandbox control |
+| `internal/verification/rules` | the versioned age, country and sanctions rule tables (`verification-rules-v1-us-only`) |
+| `internal/provider/verifysandbox` | the rehearsal identity provider: refuses PROD, decides nothing on its own, has no default outcome |
+| `internal/eligibility/withdrawal.go` | the pure per-origin withdrawal explanation composing policy, gates, verification, jurisdiction and provider |
+| `internal/payout/destination.go`, `quote.go`, `provenance.go` | the destination lifecycle and token validation, the pre-commitment quote, the provenance read model |
+| `internal/httpapi/handlers_verification.go`, `handlers_eligibility.go`, `handlers_payout_destinations.go`, `ports_verification.go`, `wiring_verification.go` | the HTTP surface and its adapters |
+
+### What did NOT change
+
+The value-domain isolation, the payout state machine's thirteen states, the
+ledger paths, the fail-closed `valuedomain.DefaultPolicy`, the capability gates,
+and the rule that no approval reference is fabricated. `internal/verification`
+imports neither `internal/credit` nor `internal/ledger`, and a test counts the
+Credit tables across a full verification to keep it that way.
 | `internal/notifications` (new) | the product notification centre: `Producer.Emit` (in the caller's transaction, idempotent on user/kind/ref/occurrence), the read side, preferences, and the six-source `Follower` |
 | `internal/stream` (extended) | `notification.created` and `data.changed`, per-user addressing, a Broadcast flag, time-encoded event ids, durable resume, a per-user stream cap |
 | `internal/notification` (unchanged) | the 2026-09 package. Still has no production caller; kept because deleting it deletes its tests (D-070) |
@@ -352,8 +460,8 @@ cookie and the Fetch Metadata CSRF guard require. It is not a deployment.
 | Action queue | `#actions` | `GET /v1/admin/actions` | propose, approve, reject, execute (`cancel` has no HTTP route and says so) |
 | Reconciliation | `#reconciliation` | `GET /v1/admin/reconciliation/records` | resolve (material resolutions demand the approved action id); no `compensation` form, deliberately |
 | Kill switches | `#kill-switches` | `GET /v1/admin/kill-switches` | activate (one operator, no step-up), release (step-up; SEVERE needs an approved action) |
-| Capability gates | `#gates` | `GET /v1/admin/gates` | propose, approve, activate, suspend, resume, revoke, **sandbox, unsandbox** |
-| Accounts | `#accounts` | `GET /v1/admin/accounts`, `/v1/accounts/{id}`, `/v1/accounts/{id}/activity`, `/v1/credits/balance`, plus the reconciliation, action, gate and kill-switch lists for one account | account status only |
+| Capability gates | `#gates` | `GET /v1/admin/gates`, `/v1/admin/gates/{capability}/history` | propose, approve, activate, suspend, resume, revoke, **sandbox, unsandbox** |
+| Accounts | `#accounts` | `GET /v1/admin/accounts`, `/v1/admin/users/{userId}`, `/v1/admin/agents`, `/v1/accounts/{id}`, `/v1/accounts/{id}/activity`, `/v1/credits/balance`, plus the reconciliation, action, gate and kill-switch lists for one account | account status; decide a closure request the customer opened; pause one agent |
 | Withdrawals, envelopes, agent promotion | `#withdrawals` `#envelopes` `#agent-promotion` | `GET /v1/admin/actions`, filtered by the surface's action kinds | none — each links into the one queue |
 | Break-glass | `#break-glass` | `GET /v1/admin/actions` | propose `BREAK_GLASS_GRANT` |
 | Providers | `#providers` | `GET /v1/admin/providers` | none |
@@ -361,9 +469,11 @@ cookie and the Fetch Metadata CSRF guard require. It is not a deployment.
 What the console will not do, each for a reason on screen: fabricate an approval
 reference (a high-risk proposal still requires all four); render a `SANDBOX` gate
 as an approval (ADR-0023 — its own hue, a dashed pill, and the words "sandbox —
-not an approval"); show a balance-editing control (none exists: account-scoped
-writes go through `RequireAccountOwner`, which has no operator override); or
-leave a marker instead of a decision (`src/scan.test.ts`).
+not an approval", in the verdict column and in the transition history alike);
+show a balance-editing control (none exists: account-scoped writes go through
+`RequireAccountOwner`, which has no operator override); originate a closure
+request (no route closes an account nobody asked to close, so no control here
+could); or leave a marker instead of a decision (`src/scan.test.ts`).
 
 Two generated documents are its authority and neither is hand-written:
 `src/generated/authority.json` (permissions, roles, action kinds, surfaces,
@@ -375,11 +485,22 @@ at runtime from `dist/`, so `build.mjs` verifies its own copy and
 `TestConsoleBuiltArtifactsMatchTheirSource` compares `dist/` to `src/` whenever
 `dist/` exists.
 
-Known gaps, stated in the views rather than worked around: no `/v1/admin` route
-exposes `capability_gate_transitions`, so a SANDBOX row's actor (an operator, or
-the SYSTEM actor `config:CP_API_SANDBOX_GATES`) cannot be named for a specific
-row; `Account` carries no owner, so `GET /v1/admin/users/{userId}` has nothing to
-be called with; no route lists an account's agents; `cmd/api`'s
-`providerCatalog` omits the payout slot, so `sandbox_payout` never appears in
-the providers view; and `openapi/openapi.yaml`'s `Capability` enum lists ten of
-the twenty capabilities Go declares (D-079).
+**Closed, 2026-09-10 (later).** Every gap this section recorded has since been
+closed by the backend, and the console uses each one rather than describing it:
+`GET /v1/admin/gates/{capability}/history` names the operator or the SYSTEM actor
+`config:CP_API_SANDBOX_GATES` that moved a gate, and every gate with a row now
+shows its whole recorded history; `Account` carries `owner_user_id`, so
+`GET /v1/admin/users/{userId}` renders the support view and
+`POST /v1/admin/users/{userId}/closure` decides a closure request the customer
+opened; `GET /v1/admin/agents` and `POST /v1/admin/agents/{agentId}/pause` fill
+the agents panel; `providerCatalog` describes the Credit purchase and payout
+slots, so `sandbox_payout` renders as sandbox; and the `Capability` enum names
+all twenty, which retires the drift notice D-079 introduced — `scan.test.ts`
+holds the enum and the authority document equal instead, so a future divergence
+fails CI rather than reaching an operator.
+
+What remains, stated in the views rather than worked around: the action queue has
+no account filter, so one account's controlled actions are filtered client-side
+over the newest page and the view says so; and `internal/adminplane` does not
+export `gate.sandbox` / `gate.unsandbox` writes, so those two steps are gated on
+`gate.propose` — the permission `gates.Admin.sandboxOp` actually requires.

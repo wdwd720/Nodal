@@ -307,6 +307,9 @@ type ExecuteResult struct {
 	// Alerts are surveillance findings raised by this trade. They never block
 	// it; they are recorded and surfaced to operators.
 	Alerts []Alert
+	// Breaker is set when THIS trade tripped the market's circuit breaker.
+	// The trade stands; the market is paused for the next one (safety.go).
+	Breaker *BreakerTrip
 	// Existing is true when the idempotency key had already been used and this
 	// is the original trade rather than a new one.
 	Existing bool

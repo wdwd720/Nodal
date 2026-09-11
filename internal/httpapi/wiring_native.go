@@ -541,6 +541,7 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 		req, decision, cerr = a.deps.Payouts.Create(ctx, tx, payout.CreateRequest{
 			AccountID:      r.AccountID,
 			DestinationID:  r.DestinationID,
+			QuoteID:        r.QuoteID,
 			Quantity:       r.Amount,
 			IdempotencyKey: r.IdempotencyKey,
 			EffectiveAt:    a.clk.Now(),
@@ -597,6 +598,27 @@ func (a payoutsAdapter) Get(ctx context.Context, id payout.RequestID) (payout.Re
 
 func (a payoutsAdapter) ListByAccount(ctx context.Context, accountID accounts.AccountID, limit int) ([]payout.Request, error) {
 	return a.deps.Payouts.ListByAccount(ctx, a.db, accountID, limit)
+}
+
+// Provenance is what value a payout draws on, in the order it leaves (PART 23).
+func (a payoutsAdapter) Provenance(ctx context.Context, id payout.RequestID) ([]payout.ProvenanceSlice, error) {
+	return a.deps.Payouts.Provenance(ctx, a.db, id)
+}
+
+// SandboxProvider reports whether this deployment pays through a rehearsal
+// provider. A deployment runs one payout slot, so "the provider" is
+// unambiguous; with none configured the answer is false, because a payout that
+// cannot happen is not a rehearsal of anything.
+func (a payoutsAdapter) SandboxProvider() bool {
+	names := a.deps.Payouts.ProviderNames()
+	if len(names) != 1 {
+		return false
+	}
+	p, err := a.deps.Payouts.Provider(names[0])
+	if err != nil {
+		return false
+	}
+	return p.Capabilities().Availability == payout.AvailabilitySandbox
 }
 
 // wireNativeEconomy attaches the internal-economy ports that have services

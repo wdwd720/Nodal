@@ -30,12 +30,20 @@
  * towards "not an approval" and says the flag was missing, because the only
  * mistake worth preventing here is showing a rehearsal as an authorisation.
  *
+ * Every gate with a row also shows its recorded transitions
+ * (`GET /v1/admin/gates/{capability}/history`), which is how the console names
+ * the operator or the SYSTEM actor `config:CP_API_SANDBOX_GATES` that moved it
+ * rather than describing the two possibilities. The rows are written by
+ * `cp_gate_transition` and `cp_gate_sandbox` in the same statement as the state
+ * change, so a history that disagrees with the row, or a SANDBOX row with no
+ * transition recording it, is an integrity finding and is reported as one.
+ *
  * All live capability gates default DISABLED. An empty list is not an error
  * and not a failure to load: it means no gate row exists yet, which is the
  * safest possible state and is labelled as such.
  */
-import { actOnGate, contractCapabilities, inApiContract, listGates, SANDBOX_GATE_ACTIONS } from "../api.ts";
-import type { CapabilityGate, GateActionName } from "../api.ts";
+import { actOnGate, isCapability, listGates, listGateTransitions, SANDBOX_GATE_ACTIONS } from "../api.ts";
+import type { Capability, CapabilityGate, CapabilityGateTransition, GateActionName } from "../api.ts";
 import type { ViewContext } from "../context.ts";
 import { allowedWrites } from "../decide.ts";
 import { actionButton, append, clear, el, emptyState, field, fields, notice, panel, pill, table } from "../dom.ts";
@@ -81,6 +89,7 @@ export async function renderGates(ctx: ViewContext, root: HTMLElement): Promise<
   const known = new Map<string, CapabilityGate>(gates.map((g) => [g.capability, g] as const));
   const declared = ctx.authority.doc.capabilities;
   const sandboxed = gates.filter((g) => g.state === "SANDBOX");
+  const history = await loadHistories(gates);
 
   append(
     root,
@@ -92,14 +101,42 @@ export async function renderGates(ctx: ViewContext, root: HTMLElement): Promise<
         `${gates.length} of ${declared.length} declared capabilities have a stored gate row. A capability with no row is DISABLED, which is the default and the safe state.`,
       ),
       sandboxed.length > 0 ? sandboxBanner(sandboxed) : null,
-      contractDriftNotice(declared),
       table(
         ["Capability", "Row state", "Active now", "Why not", "Approval version", "Window", ""],
-        declared.flatMap((capability) => gateRows(ctx, capability, known.get(capability))),
+        declared.flatMap((capability) => gateRows(ctx, capability, known.get(capability), history.get(capability))),
       ),
     ),
   );
 }
+
+/**
+ * The recorded transitions of every gate that has a row, fetched once per
+ * render.
+ *
+ * Only a gate with a row can have transitions, so this is bounded by the number
+ * of stored gates rather than by the twenty declared capabilities. Each is
+ * settled independently: a history that fails to load leaves that one gate
+ * reporting why, and does not cost the other nineteen their state.
+ */
+async function loadHistories(gates: readonly CapabilityGate[]): Promise<Map<string, History>> {
+  const addressable = gates.map((g) => g.capability).filter(isCapability);
+  const settled = await Promise.allSettled(addressable.map((c) => listGateTransitions(c)));
+  const out = new Map<string, History>();
+  settled.forEach((result, i) => {
+    const capability = addressable[i];
+    if (capability === undefined) return;
+    out.set(
+      capability,
+      result.status === "fulfilled"
+        ? { transitions: result.value }
+        : { error: describeProblem(result.reason) },
+    );
+  });
+  return out;
+}
+
+/** One gate's history, or why it could not be read. Never a silent empty list. */
+type History = { transitions: CapabilityGateTransition[]; error?: undefined } | { transitions?: undefined; error: string };
 
 /**
  * Says, once and at the top, that this deployment is exercising capabilities it
@@ -127,30 +164,12 @@ function sandboxBanner(sandboxed: readonly CapabilityGate[]): HTMLElement {
   );
 }
 
-/**
- * The console addresses every capability the authority document declares, and
- * the authority document is generated from the same Go tables the server
- * validates against. The OpenAPI contract restates that list by hand and has
- * fallen behind it; where the two disagree the operator is told, because a
- * name this console can drive but the published contract does not list is a
- * fact about the repository, not about the gate.
- */
-function contractDriftNotice(declared: readonly string[]): HTMLElement | null {
-  const missing = declared.filter((c) => !inApiContract(c));
-  if (missing.length === 0) return null;
-  return notice(
-    "info",
-    el("strong", {}, `${missing.length} declared capabilities are absent from the API contract's Capability enum.`),
-    el("p", {}, missing.join(", ")),
-    el(
-      "p",
-      { class: "muted" },
-      `The server validates this path segment against internal/gates.AllCapabilities (${String(declared.length)} names), not against the contract (${String(contractCapabilities().length)}), so these gates are addressable and are offered here. Regenerating openapi/openapi.yaml's Capability enum from Go closes the gap.`,
-    ),
-  );
-}
-
-function gateRows(ctx: ViewContext, capability: string, gate: CapabilityGate | undefined): HTMLElement[] {
+function gateRows(
+  ctx: ViewContext,
+  capability: string,
+  gate: CapabilityGate | undefined,
+  history: History | undefined,
+): HTMLElement[] {
   if (!gate) {
     return [
       el(
@@ -194,7 +213,8 @@ function gateRows(ctx: ViewContext, capability: string, gate: CapabilityGate | u
       field("Security approval", evidenceValue(gate, gate.security_approval_ref)),
       field("Approvers", approversValue(gate)),
     ),
-    gate.state === "SANDBOX" ? sandboxProvenance(gate) : null,
+    gate.state === "SANDBOX" ? sandboxProvenance(gate, history) : null,
+    historyPanel(history),
   );
   append(detail, cell);
   return [row, detail];
@@ -256,44 +276,136 @@ function approversValue(gate: CapabilityGate): HTMLElement | string {
 }
 
 /**
- * Where a SANDBOX row came from, as far as the API will say.
+ * Who moved this gate into SANDBOX, from the recorded transition.
  *
- * `cp_gate_sandbox` writes a row into `capability_gate_transitions` naming the
- * actor: either the operator who ran the step, or the SYSTEM actor
- * `config:CP_API_SANDBOX_GATES` when the capability was listed in the
- * deployment blueprint and activated at boot. **No `/v1/admin` route exposes
- * that table** — `GET /v1/admin/gates` returns the row and the verdict, and the
- * `approvers` array is the approval chain, which a sandbox transition
- * deliberately does not write to. So this console can name the two legal
- * sources and cannot say which of them moved this particular row, and it says
- * exactly that rather than picking one.
+ * `cp_gate_sandbox` writes a `capability_gate_transitions` row naming the actor
+ * in the same statement as the state change, and `GET /v1/admin/gates/
+ * {capability}/history` returns it. So the two legal sources — an operator
+ * holding `gate:propose` with a step-up, or the SYSTEM actor
+ * `config:CP_API_SANDBOX_GATES` when the capability is listed in the
+ * deployment's blueprint and activated at boot — are no longer alternatives the
+ * console has to describe. It names the one that happened.
+ *
+ * What does not change with the history in hand: the entry is rendered as an
+ * entry into SANDBOX, never as an approval. It carries no approval id and no
+ * approver, `sandbox` is true on it, and the words say so.
  */
-function sandboxProvenance(gate: CapabilityGate): HTMLElement {
+function sandboxProvenance(gate: CapabilityGate, history: History | undefined): HTMLElement {
+  const entry = history?.transitions?.filter((t) => t.to === "SANDBOX").at(-1);
+  if (!entry) {
+    return panel(
+      "How this gate reached SANDBOX",
+      history?.error === undefined
+        ? "No transition into SANDBOX is recorded for this gate, which contradicts its state."
+        : "The transition history could not be read.",
+      history?.error === undefined
+        ? notice(
+            "error",
+            el("strong", {}, "The row says SANDBOX and no transition recorded it."),
+            el(
+              "p",
+              {},
+              `Every sandbox transition is written by cp_gate_sandbox in the same statement as the state change, so a ${gate.capability} row in SANDBOX with no such entry means something wrote the state outside that function. Treat it as an integrity finding.`,
+            ),
+          )
+        : notice("warn", `The history for ${gate.capability} could not be read: ${history.error}`),
+    );
+  }
+  const bootstrap = entry.actor_id === BOOTSTRAP_ACTOR;
   return panel(
     "How this gate reached SANDBOX",
-    "The transition history is recorded; this console cannot read it.",
+    "From the recorded transition, not from inference.",
     fields(
       field(
-        "Legal sources",
-        `One operator holding gate:propose with a recent multi-factor sign-in, or the SYSTEM actor ${BOOTSTRAP_ACTOR} when ${gate.capability} is listed in the deployment's CP_API_SANDBOX_GATES and was activated at boot.`,
-      ),
-      field(
-        "Actor on record",
+        "Moved by",
         el(
           "span",
           {},
-          "recorded in capability_gate_transitions and in the audit stream, both of which the admin API does not expose. ",
-          el("code", {}, BOOTSTRAP_ACTOR),
-          " is the actor id for a boot-time activation; an operator-run step names that operator's users.id.",
+          pill(entry.actor_type, entry.actor_type === "SYSTEM" ? "single" : "role"),
+          " ",
+          el("code", {}, entry.actor_id),
+          bootstrap
+            ? " — the deployment's own blueprint line, activated at boot. There is no person here: the authority is CP_API_SANDBOX_GATES, reviewed like every other line in it."
+            : " — one operator holding gate:propose, with a recent multi-factor sign-in.",
         ),
       ),
+      field("From", `${entry.from} → SANDBOX`),
+      field("When", formatInstant(entry.occurred_at)),
+      field("Reason on record", entry.reason),
       field(
-        "Reason on record",
-        "A boot-time activation records: “sandbox tier: activated from deployment configuration (CP_API_SANDBOX_GATES); carries no approval”. An operator-run step records the reason they typed.",
+        "Evidence hash",
+        entry.evidence_hash ? el("code", {}, entry.evidence_hash) : "none — a sandbox transition records no evidence",
       ),
+      field("Transition", el("code", {}, entry.transition_id)),
       field(
         "What it is not",
         "Not an approval, not a proposal, and not a step towards ACTIVE. The approval chain, the evidence references and the validity window are untouched by this transition, and the row is refused outright in PROD by both the function and a table CHECK.",
+      ),
+    ),
+  );
+}
+
+/**
+ * Every recorded transition of this gate, oldest first: what the register
+ * actually says about how it got where it is.
+ *
+ * An entry into SANDBOX is marked as one and never shares the styling an
+ * approval gets — the same rule the verdict column follows, applied to the
+ * history so that scrolling a gate's past cannot leave a different impression
+ * from reading its present.
+ */
+function historyPanel(history: History | undefined): HTMLElement | null {
+  if (!history) return null;
+  if (history.error !== undefined) {
+    return panel(
+      "Transition history",
+      "Could not be read.",
+      notice(
+        "warn",
+        `The recorded transitions are not available: ${history.error}. This is not an empty history — it is an unread one.`,
+      ),
+    );
+  }
+  if (history.transitions.length === 0) {
+    return panel(
+      "Transition history",
+      "Nothing has moved this gate.",
+      emptyState("The row exists and no transition is recorded against it, which is what a freshly bootstrapped DISABLED gate looks like."),
+    );
+  }
+  return panel(
+    "Transition history",
+    `${history.transitions.length} recorded transition(s), oldest first. Each was written in the same statement as the state change it records.`,
+    table(
+      ["When", "From → To", "Actor", "Reason", "Evidence"],
+      history.transitions.map((t) =>
+        el(
+          "tr",
+          { class: t.sandbox ? "sandboxed" : "" },
+          el("td", { class: "muted" }, formatInstant(t.occurred_at)),
+          el(
+            "td",
+            {},
+            `${t.from} → `,
+            t.to === "SANDBOX"
+              ? pill("SANDBOX", "sandbox", "An entry into SANDBOX. It carries no approval.")
+              : el("span", {}, t.to),
+            t.sandbox ? pill("not an approval", "sandbox") : null,
+          ),
+          el(
+            "td",
+            {},
+            pill(t.actor_type, t.actor_type === "SYSTEM" ? "single" : "role"),
+            el("br"),
+            el("code", { class: "muted" }, t.actor_id),
+          ),
+          el("td", {}, t.reason),
+          el(
+            "td",
+            { class: "muted" },
+            t.evidence_hash ? el("code", {}, t.evidence_hash.slice(0, 16)) : "none",
+          ),
+        ),
       ),
     ),
   );
@@ -303,14 +415,22 @@ function controls(ctx: ViewContext, capability: string, gate: CapabilityGate | u
   const now = ctx.now();
   const permitted = new Set(allowedWrites(ctx.session.principal, "gates", now, ctx.authority));
   const box = el("div", { class: "controls" });
+  // The authority document and the OpenAPI contract are generated from the same
+  // Go source, and `scan.test.ts` holds their capability lists equal, so this
+  // normally passes for every declared name. If it ever does not, the honest
+  // answer is a refused control naming the drift, not a request assembled
+  // against a path this console cannot type.
+  const routable = isCapability(capability);
   for (const action of ACTIONS) {
     const spec = gateWrite(ctx.authority, action);
-    const allowed = permitted.has(spec.writeId) && transitionOffered(action, gate);
-    const refusal = !permitted.has(spec.writeId)
-      ? `${reasonText("MISSING_PERMISSION")} This step needs ${spec.permission}${
-          spec.elevationOnly ? ", which only a live break-glass elevation carries" : ""
-        }.`
-      : transitionRefusal(action, gate);
+    const allowed = routable && permitted.has(spec.writeId) && transitionOffered(action, gate);
+    const refusal = !routable
+      ? `This console's API contract does not list ${capability} as a gated capability, so it cannot address this gate. The console and the API are out of step; regenerate the client.`
+      : !permitted.has(spec.writeId)
+        ? `${reasonText("MISSING_PERMISSION")} This step needs ${spec.permission}${
+            spec.elevationOnly ? ", which only a live break-glass elevation carries" : ""
+          }.`
+        : transitionRefusal(action, gate);
     append(
       box,
       actionButton({
@@ -318,7 +438,9 @@ function controls(ctx: ViewContext, capability: string, gate: CapabilityGate | u
         variant: buttonVariant(action),
         allowed,
         ...(allowed ? {} : { reason: refusal }),
-        onClick: () => openGateForm(ctx, capability, action, gate),
+        onClick: () => {
+          if (routable) openGateForm(ctx, capability, action, gate);
+        },
       }),
     );
   }
@@ -412,7 +534,7 @@ function transitionRefusal(action: GateActionName, gate: CapabilityGate | undefi
 
 function openGateForm(
   ctx: ViewContext,
-  capability: string,
+  capability: Capability,
   action: GateActionName,
   gate: CapabilityGate | undefined,
 ): void {
