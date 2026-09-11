@@ -63,8 +63,42 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-	Health        HealthPort
-	Idempotency   IdempotencyPort
+	// The withdrawal journey (goal PARTS 19-25). A nil port answers
+	// UNSUPPORTED: a deployment with no identity vendor and no conversion
+	// contract says so, and does not report that somebody failed a check.
+	Verification VerificationPort
+	Eligibility  EligibilityPort
+	Conversion   ConversionPort
+	Health       HealthPort
+	Idempotency  IdempotencyPort
+	// Market discovery, charts, the portfolio and the activity timeline
+	// (product goal SS12-16, 35, 47). Nil answers UNSUPPORTED like every
+	// other port here.
+	MarketData   MarketDataPort
+	Portfolio    PortfolioPort
+	ActivityFeed ActivityFeedPort
+	// ---- profile, terms and account lifecycle ----
+	// A nil port answers UNSUPPORTED on the /me/profile, /me/terms-acceptances,
+	// /me/account and /admin/users routes, and leaves GET /v1/me answering
+	// exactly what it answered before the product surfaces existed.
+	Profile ProfilePort
+	// ---- notifications, realtime and the customer's own audit trail ----
+	//
+	// Notifications is the customer's notification centre; MeAudit is their own
+	// security and account history. Both are scoped to the caller and to nobody
+	// else -- neither has an account:read_any mode -- so neither takes an
+	// account id from a path.
+	Notifications NotificationsPort
+	MeAudit       MeAuditPort
+	// ---- agents ----
+	//
+	// The agent product surface. Both are management only: nothing here runs an
+	// agent, evaluates a strategy or emits an intent, and the runtime they
+	// describe has no production caller in this build (F-65). A nil port
+	// answers UNSUPPORTED rather than an empty list.
+	Agents     AgentsPort
+	Strategies StrategiesPort
+
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because
@@ -87,9 +121,19 @@ type Ports struct {
 // Options configures the server. Everything here comes from internal/config in
 // the composition root; nothing is read from the environment by this package.
 type Options struct {
-	Env               config.Environment
-	BuildVersion      string
-	ConfigHash        string
+	Env          config.Environment
+	BuildVersion string
+	ConfigHash   string
+	// SandboxTier says whether this deployment is a sandbox tier (ADR-0023).
+	// It is published so the UI labels temperatures from what the API says
+	// rather than from where it was loaded.
+	//
+	// There is deliberately no deployment-wide Credit-purchase sandbox flag
+	// beside it any more. One existed, and it was the answer to "what mode is
+	// this deployment in now" stamped onto every purchase the API returned,
+	// including ones opened months earlier under another mode (F-158). A
+	// purchase carries the mode that opened it, on its own row.
+	SandboxTier       bool
 	PublicBaseURL     string
 	CORSOrigins       []string
 	TrustedProxyCIDRs []string
@@ -97,8 +141,18 @@ type Options struct {
 	CookieName        string
 	CookieDomain      string
 	CookieSecure      bool
-	SessionTTL        time.Duration
-	IdempotencyTTL    time.Duration
+	// PostLoginURL is where the OIDC callback sends the browser once the
+	// session cookie is set. Empty means the API's own root. When the web app
+	// lives on another origin this is its origin; a local return-to path,
+	// when one is ever recorded, is resolved beneath it rather than beneath
+	// the API's root.
+	PostLoginURL string
+	SessionTTL   time.Duration
+	// StepUpMaxAge is CP_AUTH_STEP_UP_MAX_AGE. It tightens every step-up
+	// window the boundary enforces and can never widen one (F-89). Zero
+	// leaves the package constant in force.
+	StepUpMaxAge   time.Duration
+	IdempotencyTTL time.Duration
 
 	Clock  clock.Clock
 	Logger *slog.Logger
@@ -221,7 +275,14 @@ func (s *Server) buildRouter() http.Handler {
 	//   - the session load before access logging and before the body is
 	//     captured, so the log line, the rate-limit key and the request the
 	//     SSE handler receives all carry the principal;
-	//   - CSRF and rate limiting last, where the principal is known.
+	//   - CSRF and rate limiting after the session load, where the principal is
+	//     known -- and BEFORE the body is captured, because capturing it means
+	//     reading it into memory, and a request the limiter is going to refuse
+	//     should not cost an allocation the caller chose the size of (F-85).
+	//     Neither CSRF nor the limiter reads the body: CSRF decides on
+	//     Sec-Fetch-Site, Origin and Referer, and the limiter on the principal
+	//     or the caller's address.
+	//   - the body last, bounded per route by bodyLimitFor.
 	r.Use(observability.HTTPMiddleware("controlplane-api"))
 	r.Use(httpmw.SecureHeaders(httpmw.SecureHeadersOptions{Secure: s.opts.CookieSecure}))
 	r.Use(corsPolicy(s.opts.CORSOrigins))
@@ -230,9 +291,9 @@ func (s *Server) buildRouter() http.Handler {
 		r.Use(s.opts.Authenticator)
 	}
 	r.Use(observe(s.log, s.clk, s.metrics))
-	r.Use(captureBody(s.opts.MaxBodyBytes))
 	r.Use(s.csrf())
-	r.Use(rateLimit(s.opts.Limits))
+	r.Use(rateLimit(s.opts.Limits, s.trusted))
+	r.Use(captureBody(s.opts.MaxBodyBytes))
 	r.Use(canonicalPathIdentifiers())
 
 	// Routes outside the /v1 contract are mounted before the generated ones
@@ -292,7 +353,7 @@ func (s *Server) csrf() func(http.Handler) http.Handler {
 func (s *Server) authorizeMiddleware() api.StrictMiddlewareFunc {
 	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
-			if err := authorize(ctx, operationID, s.clk.Now); err != nil {
+			if err := authorize(ctx, operationID, s.clk.Now, effectiveStepUpMaxAge(s.opts.StepUpMaxAge)); err != nil {
 				return nil, err
 			}
 			return f(withOperation(ctx, operationID), w, r, request)

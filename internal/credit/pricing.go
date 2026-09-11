@@ -55,6 +55,26 @@ type PricingPolicy struct {
 	// Credits is resolved. It is part of the hash because changing it changes
 	// what a user receives.
 	Rounding money.RoundingMode `json:"rounding"`
+
+	// Decimals is the scale of the CREDIT asset this policy prices, and it is
+	// the field whose absence made every purchase issue a millionth of what it
+	// promised (F-151).
+	//
+	// A CreditQuantity is asset BASE UNITS everywhere it appears --
+	// money.Quantity documents it, the OpenAPI Quantity schema documents it,
+	// credit_fundings.credit_quantity stores it and the ledger entry moves it
+	// -- while CreditsPerMajorUnit is a count of whole CREDITS per dollar.
+	// Converting between the two needs 10^decimals, and the policy had no
+	// decimals to multiply by: it wrote a count of Credits into a field that
+	// means base units, so $10.00 at 100 Credits per dollar bought 1,000 base
+	// units, which is 0.001 Credits.
+	//
+	// It is hashed like every other field, because changing the scale changes
+	// what a payment buys and a funding recorded under the old scale must
+	// still be explicable. NewPurchaseService refuses to build when this
+	// disagrees with the CREDIT asset the deployment actually registered, so
+	// the two cannot drift.
+	Decimals uint8 `json:"decimals"`
 }
 
 // DefaultPricingVersion identifies the shipped policy.
@@ -82,8 +102,25 @@ func DefaultPricingPolicy() PricingPolicy {
 		MinAmountMinor:         100,
 		MaxAmountMinor:         1_000_000,
 		Rounding:               money.RoundDown,
+		Decimals:               DefaultCreditDecimals,
 	}
 }
+
+// DefaultCreditDecimals is the scale the CREDIT asset is registered with
+// everywhere in this repository: scripts/seedeconomy, cmd/api's sandbox-tier
+// registration, internal/demo's fixture and docs/product/CREDIT_ECONOMY.md all
+// say six, and a bonding-curve market needs to price units far below one
+// Credit.
+//
+// It is a default and not an assumption. NewPurchaseService reads the scale of
+// the asset the deployment actually registered and refuses to build a service
+// whose policy prices a different one.
+const DefaultCreditDecimals uint8 = 6
+
+// MaxCreditDecimals bounds the scale a policy may declare. It is the widest
+// scale internal/assets permits, and it keeps the arithmetic below to a size
+// numeric(38,0) can hold for any amount the policy admits.
+const MaxCreditDecimals uint8 = 18
 
 // Validate checks the policy's internal consistency.
 //
@@ -112,6 +149,11 @@ func (p PricingPolicy) Validate() error {
 	}
 	if !p.Rounding.Valid() {
 		return errs.Newf(errs.CodeValidationFailed, "credit: unknown rounding mode %v", p.Rounding)
+	}
+	if p.Decimals > MaxCreditDecimals {
+		return errs.Newf(errs.CodeValidationFailed,
+			"credit: a pricing policy may not price a %d-decimal asset; the widest supported scale is %d",
+			p.Decimals, MaxCreditDecimals)
 	}
 	q, err := p.creditsFor(p.MinAmountMinor)
 	if err != nil {
@@ -151,13 +193,21 @@ func (p PricingPolicy) CreditsFor(amount money.USD) (money.Quantity, error) {
 // creditsFor is the arithmetic without the bounds checks, so Validate can use
 // it on the minimum without recursing through Validate again.
 func (p PricingPolicy) creditsFor(minor int64) (money.Quantity, error) {
-	// Credits = minor * creditsPerMajorUnit / minorUnitsPerMajorUnit, done in
-	// big.Int. The intermediate product overflows int64 at around ninety
-	// billion cents times a hundred, which MaxAmountMinor makes unreachable --
-	// but MulDiv is exact regardless, so the bound is a product decision here
-	// and not a correctness one.
+	// BASE UNITS = minor * creditsPerMajorUnit * 10^decimals / minorUnitsPerMajorUnit.
+	//
+	// The 10^decimals is the whole of F-151. Without it the expression yields a
+	// count of whole Credits and is written into a column, an API field and a
+	// ledger entry that all mean base units, so $10.00 at 100 Credits per
+	// dollar issued 1,000 base units -- 0.001 Credits -- while the Buy Credits
+	// page told the customer they were getting 1,000 Credits. internal/payout
+	// already scaled both directions (creditsToMoney / moneyToCredits); this is
+	// the same conversion, in the direction that issues.
+	//
+	// Done in big.Int throughout: the intermediate product of a ten-thousand
+	// dollar purchase at six decimals is 10^14, which fits an int64 and would
+	// not at a wider scale, and MulDiv is exact at any size.
 	return money.QuantityFromInt64(minor).MulDiv(
-		money.QuantityFromInt64(p.CreditsPerMajorUnit),
+		money.QuantityFromInt64(p.CreditsPerMajorUnit).ScaleUp(p.Decimals),
 		money.QuantityFromInt64(p.MinorUnitsPerMajorUnit),
 		p.Rounding,
 	)
@@ -174,6 +224,7 @@ type canonicalPricing struct {
 	MinAmountMinor         int64  `json:"min_amount_minor"`
 	MaxAmountMinor         int64  `json:"max_amount_minor"`
 	Rounding               string `json:"rounding"`
+	Decimals               uint8  `json:"decimals"`
 }
 
 // Canonical returns the deterministic serialised form.
@@ -186,6 +237,7 @@ func (p PricingPolicy) Canonical() ([]byte, error) {
 		MinAmountMinor:         p.MinAmountMinor,
 		MaxAmountMinor:         p.MaxAmountMinor,
 		Rounding:               p.Rounding.String(),
+		Decimals:               p.Decimals,
 	})
 	if err != nil {
 		return nil, errs.Newf(errs.CodeInternal, "credit: canonicalise pricing policy: %v", err)

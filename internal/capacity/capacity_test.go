@@ -48,6 +48,7 @@ func (r stubRow) Scan(dest ...any) error {
 // names, rather than by call order. Order-based stubs pass when the guard
 // silently stops asking a question, which is the failure most worth catching.
 type stubQuerier struct {
+	locks                                int
 	accounts, purchases, atRisk, dbBytes int64
 	failOn                               string // substring of the query to fail
 	asked                                []string
@@ -71,8 +72,16 @@ func (q *stubQuerier) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row 
 	return stubRow{err: errors.New("stub: unexpected query: " + sql)}
 }
 
-func (q *stubQuerier) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errors.New("stub: Exec not expected")
+// Exec answers the advisory lock Admit takes before it measures, and nothing
+// else. The lock is what makes the measure-then-act window atomic (F-96), so a
+// stub that refused it would make every ceiling test fail for the wrong reason
+// -- and one that accepted ANY Exec would hide a guard that had started writing.
+func (q *stubQuerier) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	if strings.Contains(sql, "pg_advisory_xact_lock") {
+		q.locks++
+		return pgconn.CommandTag{}, nil
+	}
+	return pgconn.CommandTag{}, errors.New("stub: Exec not expected: " + sql)
 }
 
 func (q *stubQuerier) Query(context.Context, string, ...any) (pgx.Rows, error) {
@@ -87,8 +96,29 @@ func TestBudgetWithNoCeilingIsRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "guards nothing")
 
-	_, err = NewGuard(Budget{MaxAccounts: -1}, at("2026-09-09T12:00:00Z"))
-	require.Error(t, err, "a negative ceiling is a typo, not a policy")
+	// A negative ceiling is a typo, not a policy -- and this used to be
+	// asserted with Budget{MaxAccounts: -1}, where every other ceiling is zero.
+	// That budget fails the no-ceiling rule ABOVE, which returns first, so the
+	// loop this line names had never run in any test: a test passing because a
+	// different guard fired has not seen the guard it names (F-104).
+	//
+	// Every field, each with a positive sibling so the no-ceiling rule cannot
+	// answer first, and each checked by message so the right guard is the one
+	// that spoke.
+	for _, tc := range []struct {
+		name   string
+		budget Budget
+	}{
+		{"MaxAccounts", Budget{MaxAccounts: -1, MaxPurchasesPerDay: 10}},
+		{"MaxPurchasesPerDay", Budget{MaxAccounts: 10, MaxPurchasesPerDay: -1}},
+		{"MaxAtRiskMinor", Budget{MaxAccounts: 10, MaxAtRiskMinor: -1}},
+		{"MaxDatabaseBytes", Budget{MaxAccounts: 10, MaxDatabaseBytes: -1}},
+	} {
+		_, err = NewGuard(tc.budget, at("2026-09-09T12:00:00Z"))
+		require.Error(t, err, "a negative %s was accepted", tc.name)
+		assert.Contains(t, err.Error(), "capacity: "+tc.name+" is negative",
+			"%s was refused by a different rule than the one being tested", tc.name)
+	}
 
 	_, err = NewGuard(LaunchTier(), nil)
 	require.Error(t, err, "no clock")

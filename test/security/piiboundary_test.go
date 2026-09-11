@@ -12,45 +12,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Nothing writes personal data until it is decided who may read it (F-47).
+// Personal data is written by the encrypting store and by nothing else (F-47).
 //
 // `identity_pii` holds `email_encrypted`, `legal_name_encrypted`, `dob_encrypted`
-// and `key_version`. Migration 00010 deliberately withholds it from `cp_readonly`
-// and `cp_ops`; the role bootstrap's blanket
-// `ALTER DEFAULT PRIVILEGES ... GRANT SELECT ON TABLES` grants it to them
-// anyway, and silently wins. Two deliberate statements in this repository
-// disagree, and `test/integration/migrations/privileges_test.go` asserts the
-// second one, so the first has never had any effect.
+// and `key_version`. For a year nothing in the repository wrote those columns
+// -- the encryption was DESIGNED -- so this test was a fuse: it failed the
+// moment anything did, because writing personal data before deciding who may
+// read it would have been a standing exposure.
 //
-// That contradiction is recorded as F-47 and is not resolved here: who may read
-// encrypted personal data is a deployment policy question, it has an
-// operational constraint attached (`cp_ops` performs session retention
-// cleanup), and it probably has different answers for the two roles.
-//
-// What IS decidable is when it stops being safe to leave open. Today the table
-// has no reader and no writer in any Go file: the encryption is, in
-// SECURITY.md's own word, DESIGNED, and R-121-1 records that "the column
-// encryption is schema-shaped but has no Go implementation". An unresolved grant
-// on an empty table costs nothing. The same grant on a populated one is a
-// standing exposure of every customer's name and date of birth to two roles that
-// were meant not to have it.
-//
-// So this test holds the two facts together: while nothing writes the table, the
-// question may stay open; the moment something does, this fails and says what
-// has to be decided first. It is the fuse on a recorded finding rather than a
-// substitute for deciding it.
+// internal/pii is the encryption now, and migration 00754 is the decision. What
+// this test holds from here on is the invariant that makes the decision sound:
+// every statement that writes `identity_pii` lives in `internal/pii/store.go`,
+// where the value has already been sealed. A writer anywhere else is a path by
+// which plaintext could reach the column, and this fails naming the file.
 
-// piiTables are the tables whose readability by cp_readonly and cp_ops is the
-// open question in F-47. `sessions` is deliberately absent: cp_ops genuinely
-// needs it, that need is written down in privileges_test.go's
-// `opsHousekeeping`, and it is written to constantly. Its half of F-47 is a
-// question about column-level grants, not about whether to write the table.
+// piiTables are the tables only the encrypting store may write. `sessions` is
+// deliberately absent: it is written by the session store, holds no encrypted
+// column, and its half of F-47 was about who may READ it, which 00754 settled
+// and test/integration/migrations asserts.
 var piiTables = []string{"identity_pii"}
+
+// piiWriters are the only files allowed to write those tables.
+var piiWriters = map[string]bool{"internal/pii/store.go": true}
 
 // writeRe finds a statement that puts data into a table.
 var writeRe = regexp.MustCompile(`(?i)\b(INSERT\s+INTO|UPDATE|COPY)\s+([a-z_]+)`)
 
-func TestPII_NothingWritesPersonalDataWhileTheGrantIsUnresolved(t *testing.T) {
+func TestPII_OnlyTheEncryptingStoreWritesPersonalData(t *testing.T) {
 	root := repoRoot(t)
 	writers := map[string][]string{}
 
@@ -81,13 +69,22 @@ func TestPII_NothingWritesPersonalDataWhileTheGrantIsUnresolved(t *testing.T) {
 
 	for _, tbl := range piiTables {
 		sort.Strings(writers[tbl])
-		assert.Emptyf(t, writers[tbl],
-			"%s now has a writer (%s), so it will hold real personal data.\n"+
-				"F-47 must be resolved before this lands: cp_readonly and cp_ops can SELECT this\n"+
-				"table through the role bootstrap's blanket default, while migration 00010's grant\n"+
-				"list deliberately withholds it. Decide which statement is right, make the schema\n"+
-				"say it, and update privileges_test.go's contract to match.",
-			tbl, strings.Join(writers[tbl], ", "))
+		var outside []string
+		for _, w := range writers[tbl] {
+			if !piiWriters[w] {
+				outside = append(outside, w)
+			}
+		}
+		assert.Emptyf(t, outside,
+			"%s is written outside the encrypting store (%s).\n"+
+				"Every write to this table must go through internal/pii, where the value is sealed\n"+
+				"under the keyring before it reaches the column. A writer anywhere else is a path\n"+
+				"for plaintext personal data into the database (F-47).",
+			tbl, strings.Join(outside, ", "))
+		// And the store really is a writer, or the allowlist above is guarding
+		// a table nothing populates and the assertion means nothing.
+		assert.Containsf(t, writers[tbl], "internal/pii/store.go",
+			"%s has no writer in internal/pii/store.go; the encrypting store stopped writing it", tbl)
 	}
 }
 

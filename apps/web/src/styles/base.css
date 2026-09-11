@@ -1,0 +1,503 @@
+/*
+ * NODAL — BASE LAYER
+ *
+ * The reset, the typographic defaults, the focus ring, the three temperatures,
+ * and the handful of utilities that earn their place. Everything here is
+ * element-level or a single-purpose class; anything that is a *component* lives
+ * in components.css.
+ *
+ * The order below is deliberate: elements first, then the rules that make a
+ * figure a figure, then the temperature layer that sits on top of everything,
+ * then the two environments — reduced motion and forced colours — where the
+ * design has to survive without its own decisions.
+ */
+
+/* ------------------------------------------------------------------ reset -- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* The skip link and every in-page anchor land under the sticky header
+     without this; it is a correctness detail, not a nicety. */
+  scroll-padding-top: var(--space-12);
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  font-synthesis-weight: none;
+  /*
+   * There is deliberately no `overflow-x: hidden` here. It would clamp
+   * `scrollWidth` to `clientWidth` and make the end-to-end test that proves the
+   * layout reflows at 390px pass without the layout reflowing. No element is
+   * allowed to widen the document, and that is enforced where it is caused:
+   * definite grid tracks, `min-width: 0` on every flex and grid child that can
+   * hold a long value, and a table that scrolls inside its own container.
+   */
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+svg {
+  display: block;
+}
+
+/* ------------------------------------------------------------- typography -- */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 var(--space-2);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.011em;
+  color: var(--ink);
+}
+
+h1 {
+  font-size: var(--text-xl);
+}
+
+h2 {
+  font-size: var(--text-lg);
+}
+
+h3 {
+  font-size: var(--text-md);
+}
+
+h4 {
+  font-size: var(--text-sm);
+}
+
+p {
+  margin: 0 0 var(--space-2);
+  max-width: var(--measure);
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+small {
+  font-size: var(--text-xs);
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: var(--space-5) 0;
+}
+
+/* ------------------------------------------------------------- the figure -- *
+ * `.num` is the class every figure in the application already carries, and it
+ * is what makes a wrong order of magnitude visible in a column: monospaced,
+ * tabular, slashed zero so a `0` in a mint address cannot be read as an `O`.
+ *
+ * This is a correctness feature, not a typographic preference. It is also the
+ * one detail this product's whole category gets wrong.
+ */
+
+.num,
+.figure,
+.mono-small,
+code,
+kbd,
+samp,
+pre,
+time,
+input[inputmode="numeric"],
+.input {
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.num,
+.figure {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-medium);
+  /*
+   * A figure never breaks INSIDE itself. There are no break opportunities
+   * within "18,450.000000", and `overflow-wrap: normal` keeps it that way even
+   * when an ancestor has asked for `anywhere` to cope with long identifiers —
+   * a balance split across two lines is a balance somebody misreads.
+   *
+   * It may break BEFORE its unit, though, which is the difference between a
+   * narrow column that wraps and a narrow column that spills into the one next
+   * to it.
+   */
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* In a table the figure and its unit stay on one line: the column is already
+   as wide as it needs to be, and a wrapped cell breaks the scan down a column
+   that dense rows exist to support. */
+td .num,
+td .figure,
+th .num,
+th .figure {
+  white-space: nowrap;
+}
+
+/* The small digit in subscript-zero notation. It sits on the NORMAL baseline —
+   `<sub>` would shift it, and a shifted digit breaks the column alignment that
+   tabular figures exist to protect. */
+.figure-run {
+  font-size: 0.8em;
+  vertical-align: baseline;
+  padding: 0 0.05em;
+}
+
+.figure-symbol {
+  color: var(--ink-soft);
+  font-weight: var(--weight-regular);
+}
+
+/* The one big figure on a screen. If two figures are competing to be the
+   largest thing, the screen has not decided what it is for. */
+.figure-big {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.015em;
+  font-weight: var(--weight-semibold);
+}
+
+.copy-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.figure-up {
+  color: var(--pos);
+}
+
+.figure-down {
+  color: var(--neg);
+}
+
+/* Zero is not a direction. It gets the same ink as any other fact. */
+.figure-flat {
+  color: var(--zero);
+}
+
+.figure-faint {
+  color: var(--ink-faint);
+}
+
+/* An absence is stated, never drawn as a zero. */
+.absent {
+  color: var(--ink-faint);
+  font-style: normal;
+}
+
+.malformed {
+  color: var(--neg);
+  font-weight: var(--weight-semibold);
+}
+
+.malformed-detail {
+  font-weight: var(--weight-regular);
+  font-size: var(--text-xs);
+}
+
+.mono-small {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.gain {
+  color: var(--pos);
+}
+
+.loss {
+  color: var(--neg);
+}
+
+/* --------------------------------------------------------------- headings -- *
+ * The one piece of typographic decoration in the system: a small, tracked,
+ * uppercase label. It marks a group of facts, never a sentence.
+ */
+
+.eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  line-height: var(--leading-snug);
+}
+
+/* ------------------------------------------------------------------ focus -- *
+ * One ring, everywhere, never removed. 2px at 2px offset, drawn in the accent,
+ * which holds better than 3:1 against every surface it can land on in both
+ * themes.
+ */
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-control);
+}
+
+/* Belt and braces for the environments where :focus-visible is not applied but
+   focus is genuinely keyboard-driven (a programmatically focused region). */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
+::selection {
+  background: var(--accent-wash);
+  color: var(--ink);
+}
+
+/* -------------------------------------------------------------- utilities -- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A vertical rhythm of one gap. Six pages already ask for it by name. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.stack-tight {
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.note {
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  margin: var(--space-3) 0 0;
+  max-width: var(--measure);
+}
+
+.lead {
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: var(--measure);
+}
+
+/* ----------------------------------------------------- the temperatures -- *
+ * PART 5, made perceptual. `data-temp` cascades from any container, so a
+ * simulated card inside an economy page is correct and works.
+ *
+ * Three redundant channels — border, texture, and a persistent chip — because
+ * hue alone fails a colourblind reader, texture alone fails at small sizes, and
+ * a chip alone is one word in a viewport full of numbers. A future engineer
+ * will notice the redundancy and try to remove two of them. It is deliberate.
+ */
+
+[data-temp="economy"] {
+  --temp-border: var(--line);
+  --temp-border-style: solid;
+  --temp-figure-filter: none;
+  --temp-row-h: var(--row-h-dense);
+}
+
+/* Real capital. A solid hairline and no motion on a value, ever. */
+[data-temp="real"] {
+  --temp-border: var(--line-strong);
+  --temp-border-style: solid;
+  --temp-figure-filter: none;
+  --temp-row-h: var(--row-h);
+}
+
+[data-temp="real"] [data-changed="true"] {
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/*
+ * Simulated capital must be impossible to mistake for real at a glance, at
+ * speed, in peripheral vision, and in a screenshot pasted into a conversation
+ * with no surrounding context. That last case is the demanding one and it is
+ * why every signal here is visual rather than contextual.
+ *
+ * It is DESATURATED, NEVER DIMMED. Signalling "not real" by making text harder
+ * to read would trade an accessibility failure for a semantic gain.
+ */
+[data-temp="simulated"] {
+  --temp-border: var(--line-strong);
+  --temp-border-style: dashed;
+  --temp-figure-filter: grayscale(1);
+  --temp-row-h: 36px;
+  background-image: var(--hatch);
+}
+
+[data-temp="simulated"] .num,
+[data-temp="simulated"] .figure {
+  /* Defence in depth: a component that hardcodes a semantic colour still comes
+     out gray inside a simulated container. A component author cannot make a
+     replay look like a fill by accident. */
+  filter: var(--temp-figure-filter);
+}
+
+[data-temp="simulated"] [data-changed="true"] {
+  animation: none !important;
+}
+
+/* ------------------------------------------------------------------ flash -- *
+ * The only animation permitted on a figure. It says "this value changed just
+ * now", it is neutral rather than green or red — the direction is already
+ * carried by the sign glyph — and it decays rather than pulses. A pulse repeats
+ * and therefore nags; a decay states a fact once and stops.
+ */
+
+@keyframes nodal-flash {
+  from {
+    background-color: var(--surface-sunken);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+[data-changed="true"] {
+  animation: nodal-flash var(--dur-flash) var(--ease) 1;
+  border-radius: var(--radius-control);
+}
+
+/* ------------------------------------------------------------ transitions -- */
+
+a,
+.btn,
+.nav-link,
+.tab,
+summary {
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+/* --------------------------------------------------------- reduced motion -- *
+ * Substitution, not deletion. The flash carries information, so removing it
+ * would remove data from the interface. It is replaced by a static inset edge
+ * marker that persists for the same duration and then clears — same
+ * information, no movement. Every animation in this product degrades this way.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-changed="true"] {
+    animation: none;
+    box-shadow: inset 2px 0 0 0 var(--ink-soft);
+  }
+
+  [data-temp="real"] [data-changed="true"] {
+    box-shadow: none !important;
+  }
+}
+
+/* --------------------------------------------------------- forced colours -- *
+ * The OS discards every custom colour here, so the temperatures have to survive
+ * on texture and structure alone. The dashed simulated border does; the
+ * simulated hatch does not, which is exactly why the chip exists.
+ */
+
+@media (forced-colors: active) {
+  .panel,
+  .panel-nested,
+  .btn,
+  .badge,
+  .table-scroll,
+  .input,
+  .notice,
+  .refusal,
+  .skeleton {
+    border: 1px solid CanvasText;
+  }
+
+  [data-temp="simulated"] {
+    border-style: dashed;
+    background-image: none;
+  }
+
+  [data-temp="simulated"] .num,
+  [data-temp="simulated"] .figure {
+    filter: none;
+  }
+
+  :focus-visible {
+    outline: var(--focus-width) solid CanvasText;
+  }
+
+  .segment {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* ---------------------------------------------------- coarse pointer taps -- */
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .tab,
+  .bottom-nav a {
+    min-height: var(--tap-min);
+  }
+
+  tbody tr {
+    /* Density fights the 44px target in a market table, so the ROW is the
+       target rather than the text inside it. */
+    min-height: var(--tap-min);
+  }
+}

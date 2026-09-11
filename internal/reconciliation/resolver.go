@@ -67,6 +67,23 @@ func (e *Engine) ResolveAutomatic(ctx context.Context, tx pgx.Tx, recordID Recor
 			"reconciliation: a material record requires a human resolution").
 			WithField("record_id", rec.ID.String())
 	}
+	// The two causes whose contract is about an AMOUNT are checked here, where
+	// the resolution is decided, rather than inside the repair.
+	//
+	// They were not. The dust threshold was tested inside dustRepair, which is
+	// reached only when AutoPostDustAdjustment is true -- and that is false by
+	// default and unreachable from configuration. So on the default path
+	// FEE_DUST closed a record of ANY size with no amount test at all. And the
+	// OBSERVATION_CAUGHT_UP rule, which the comment above states plainly, did
+	// not exist anywhere in the function. The only gate was !rec.Material, a
+	// plain boolean on a table cp_app may update (F-110).
+	//
+	// Which direction that resolved in matters: repair.go writes a customer's
+	// ledger balance DOWN when the chain holds less, by the SYSTEM actor, with
+	// no human.
+	if err := e.autoCauseFits(rec, cause); err != nil {
+		return Record{}, err
+	}
 	patch := &ResolutionPatch{
 		ResolvedByActorType: security.ActorSystem,
 		ResolvedByActorID:   ActorName,
@@ -196,6 +213,47 @@ func (e *Engine) humanActor(ctx context.Context, perm security.Permission) (Acto
 // dustRepair builds the RECONCILIATION_ADJUSTMENT for a dust difference. The
 // difference is read back from the record's own document, so an operator and
 // the posting can never disagree about what is being corrected.
+// autoCauseFits enforces the per-cause conditions ResolveAutomatic's contract
+// states.
+//
+// A record with no difference recorded is refused for both amount-bearing
+// causes rather than treated as zero: "nobody wrote down what the difference
+// was" is not the same fact as "the difference was nothing", and only one of
+// them justifies closing the record without a person.
+func (e *Engine) autoCauseFits(rec Record, cause AutoCause) error {
+	switch cause {
+	case AutoCauseFeeDust:
+		diff, err := recordDifferenceQuantity(rec)
+		if err != nil {
+			return err
+		}
+		if rec.AssetID.IsZero() {
+			return errs.New(errs.CodeValidationFailed,
+				"reconciliation: FEE_DUST needs an asset-scoped record to have a dust threshold at all").
+				WithField("record_id", rec.ID.String())
+		}
+		if !e.policy.IsDust(rec.AssetID, diff) {
+			return errs.New(errs.CodeForbidden,
+				"reconciliation: the difference is above the asset's dust threshold and is not dust").
+				WithField("record_id", rec.ID.String()).WithField("difference", diff.String())
+		}
+	case AutoCauseObservationCaughtUp:
+		diff, err := recordDifferenceQuantity(rec)
+		if err != nil {
+			return err
+		}
+		if !diff.IsZero() {
+			return errs.New(errs.CodeForbidden,
+				"reconciliation: OBSERVATION_CAUGHT_UP means the observation now agrees, so the recorded difference must be exactly zero").
+				WithField("record_id", rec.ID.String()).WithField("difference", diff.String())
+		}
+	}
+	// FINALITY_UPGRADE and DUPLICATE_PROVIDER_EVENT are statements about how an
+	// observation was made rather than about an amount, and the contract claims
+	// no amount condition for them.
+	return nil
+}
+
 func (e *Engine) dustRepair(ctx context.Context, rec Record) (Repair, error) {
 	diff, err := recordDifferenceQuantity(rec)
 	if err != nil {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"reflect"
 	"sort"
@@ -86,10 +87,12 @@ func TestNonPublicOperationsDeclareAPermission(t *testing.T) {
 func TestPublicOperationsAreExactlyTheExpectedSet(t *testing.T) {
 	t.Parallel()
 	want := []string{
-		"GetAuthCallback",      // OIDC callback; the state row is the credential
-		"GetAuthLogin",         // OIDC entry point
-		"GetHealthz",           // liveness
-		"GetReadyz",            // readiness
+		"GetAuthCallback", // OIDC callback; the state row is the credential
+		"GetAuthLogin",    // OIDC entry point
+		"GetHealthz",
+		"GetNativeMarkets", // liveness
+		"GetReadyz",
+		"GetTerms",             // readiness
 		"GetVersion",           // build version and non-secret config hash
 		"PostWebhooksProvider", // authority is the provider signature over raw bytes
 	}
@@ -150,23 +153,35 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 	require.True(t, ok, "the router must be walkable")
 
 	replacements := map[string]string{
-		"{accountId}":    testAccountID.String(),
-		"{instrumentId}": testInstrument.String(),
-		"{intentId}":     testIntentID.String(),
-		"{orderId}":      testOrderID.String(),
-		"{depositId}":    testDepositID.String(),
-		"{sessionId}":    testSessionID,
-		"{actionId}":     testSessionID,
-		"{recordId}":     testSessionID,
-		"{capability}":   "LIVE_FUNDING",
-		"{action}":       "propose",
-		"{decision}":     "approve",
-		"{provider}":     "stripe",
-		"{assetId}":      testInstrument.String(),
-		"{marketId}":     testOrderID.String(),
-		"{payoutId}":     testSessionID,
-		"{paymentId}":    testSessionID,
-		"{productId}":    testOrderID.String(),
+		"{accountId}":      testAccountID.String(),
+		"{instrumentId}":   testInstrument.String(),
+		"{intentId}":       testIntentID.String(),
+		"{orderId}":        testOrderID.String(),
+		"{depositId}":      testDepositID.String(),
+		"{sessionId}":      testSessionID,
+		"{actionId}":       testSessionID,
+		"{recordId}":       testSessionID,
+		"{capability}":     "LIVE_FUNDING",
+		"{action}":         "propose",
+		"{decision}":       "approve",
+		"{provider}":       "stripe_credit",
+		"{assetId}":        testInstrument.String(),
+		"{marketId}":       testOrderID.String(),
+		"{payoutId}":       testSessionID,
+		"{paymentId}":      testSessionID,
+		"{productId}":      testOrderID.String(),
+		"{destinationId}":  testOrderID.String(),
+		"{userId}":         testUserID.String(),
+		"{notificationId}": testOrderID.String(),
+		// The agent surface. `{action}` is shared with the gate route above and
+		// is already mapped; an agent action that is not one of the five is
+		// refused by the handler, and these probes never reach a handler --
+		// authorization answers first, which is what they measure.
+		"{agentId}":    testSessionID,
+		"{strategyId}": testSessionID,
+		// The acceptance route's version NUMBER. Any integer probes the gate;
+		// authorization answers before the version is looked up.
+		"{version}": "1",
 	}
 
 	requiredQuery := map[string]string{
@@ -176,6 +191,23 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
 		"/v1/payouts":          "account_id=" + testAccountID.String(),
 		"/v1/internal-orders":  "account_id=" + testAccountID.String(),
+		// The withdrawal journey. Each of these takes the account as a
+		// required query parameter, so the probe has to carry one or it stops
+		// at VALIDATION_FAILED before reaching the authorization gate.
+		"/v1/me/verification":                        "account_id=" + testAccountID.String(),
+		"/v1/me/verification/sessions/{sessionId}":   "account_id=" + testAccountID.String(),
+		"/v1/me/eligibility":                         "account_id=" + testAccountID.String(),
+		"/v1/me/payout-destinations":                 "account_id=" + testAccountID.String(),
+		"/v1/me/payout-destinations/{destinationId}": "account_id=" + testAccountID.String(),
+		"/v1/me/portfolio":                           "account_id=" + testAccountID.String(),
+		"/v1/me/activity":                            "account_id=" + testAccountID.String(),
+		// The candle window is bounded, so from/to are required and there is
+		// no default worth guessing: a chart that asks for "everything" on a
+		// market with a year of prints is a table scan a client can request by
+		// typing a date.
+		"/v1/native-markets/{marketId}/candles": "interval=1m&from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z",
+		"/v1/agents":                            "account_id=" + testAccountID.String(),
+		"/v1/strategies":                        "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe
@@ -202,12 +234,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 // publicPaths are the concrete paths of the operations declared public.
 func publicPaths() map[string]struct{} {
 	return map[string]struct{}{
-		"GET /v1/auth/login":       {},
-		"GET /v1/auth/callback":    {},
-		"GET /v1/healthz":          {},
-		"GET /v1/readyz":           {},
-		"GET /v1/version":          {},
-		"POST /v1/webhooks/stripe": {},
+		"GET /v1/auth/login":              {},
+		"GET /v1/auth/callback":           {},
+		"GET /v1/healthz":                 {},
+		"GET /v1/readyz":                  {},
+		"GET /v1/version":                 {},
+		"GET /v1/terms":                   {},
+		"GET /v1/native-markets":          {},
+		"POST /v1/webhooks/stripe_credit": {},
 	}
 }
 
@@ -233,6 +267,15 @@ func TestNoRouteIsUnintentionallyUnauthenticated(t *testing.T) {
 			if _, isPublic := public[key]; isPublic {
 				assert.NotEqual(t, http.StatusUnauthorized, res.Code,
 					"%s is declared public but refused anonymous access", key)
+				// And the probe must have REACHED the route. A 404 satisfies
+				// "not 401" while proving nothing, and this assertion existed
+				// in that weaker form: `{provider}` was substituted with
+				// "stripe", which is not a registered provider (F-124 corrected
+				// the contract to `stripe_credit`), so the webhook probe was
+				// answered 404 by the provider lookup and the public claim was
+				// never measured.
+				assert.NotEqual(t, http.StatusNotFound, res.Code,
+					"%s is declared public but the probe never reached it: a 404 makes the assertion above vacuous", key)
 				return
 			}
 			require.Equal(t, http.StatusUnauthorized, res.Code,
@@ -260,7 +303,10 @@ func routeKeyFor(p routeProbe) string {
 }
 
 func anonymousBody(method string) any {
-	if method == http.MethodPost {
+	// PUT as well as POST: the generated binder decodes a required body BEFORE
+	// authorization runs (D-042), so a probe with no body is refused with 400
+	// and never measures what these tests are about.
+	if method == http.MethodPost || method == http.MethodPut {
 		return "{}"
 	}
 	return nil
@@ -330,11 +376,25 @@ func TestAgentPrincipalsAreRefusedEverywhere(t *testing.T) {
 // TestAuthorizeFailsClosedForAnUnknownOperation: the runtime half of
 // deny-by-default. An operation id with no policy is refused even though the
 // principal is a full administrator.
+// TestTheConfiguredStepUpAgeTightensButNeverWidens (F-89).
+//
+// CP_AUTH_STEP_UP_MAX_AGE was loaded, validated as positive, and read by
+// nothing: every window in the process was a hard-coded constant, so the
+// deployment's 5 minutes meant 15 and tightening it changed nothing.
+func TestTheConfiguredStepUpAgeTightensButNeverWidens(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 5*time.Minute, effectiveStepUpMaxAge(5*time.Minute), "a tighter value must be used")
+	assert.Equal(t, stepUpMaxAge, effectiveStepUpMaxAge(24*time.Hour),
+		"a deployment may not widen a window the code chose")
+	assert.Equal(t, stepUpMaxAge, effectiveStepUpMaxAge(0), "unset leaves the constant in force")
+	assert.Equal(t, stepUpMaxAge, effectiveStepUpMaxAge(-time.Hour), "a negative value cannot disable step-up")
+}
+
 func TestAuthorizeFailsClosedForAnUnknownOperation(t *testing.T) {
 	t.Parallel()
 	p := operatorPrincipal()
 	ctx := security.WithPrincipal(t.Context(), p)
-	err := authorize(ctx, "SomeOperationNobodyWroteAPolicyFor", func() time.Time { return testNow })
+	err := authorize(ctx, "SomeOperationNobodyWroteAPolicyFor", func() time.Time { return testNow }, stepUpMaxAge)
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 }
@@ -361,4 +421,48 @@ func TestOperationPolicyCountMatchesRouteCount(t *testing.T) {
 	assert.Equal(t, len(generatedOperations()), len(mountedRoutes(t, h.server)),
 		"every generated operation must be mounted exactly once")
 	assert.Equal(t, len(generatedOperations()), len(operationPolicies))
+}
+
+// The window /v1/me reports is the window authorize enforces (F-104).
+//
+// They used to disagree. authorize takes effectiveStepUpMaxAge(configured),
+// which is the MINIMUM of the deployment's CP_AUTH_STEP_UP_MAX_AGE and the
+// package's own ceiling; the response was built from the ceiling alone. Under
+// the deployed 5m the API told an operator their step-up was good for fifteen
+// minutes while the boundary refused after five -- and the operations it gates
+// are the gate ceremony and the admin plane, where a client that trusts the
+// field submits an approval it is about to be refused for.
+func TestStepUp_TheReportedWindowIsTheEnforcedOne(t *testing.T) {
+	t.Parallel()
+	const configured = 5 * time.Minute
+	require.Less(t, configured, stepUpMaxAge, "the fixture must actually tighten, or this proves nothing")
+
+	h := newHarness(t)
+	srv, err := New(Options{
+		Env: h.server.opts.Env, Clock: h.server.clk, StepUpMaxAge: configured,
+		Authenticator: h.server.opts.Authenticator, Ports: h.ports.ports(),
+	})
+	require.NoError(t, err)
+	h.server = srv
+
+	p := customerPrincipal()
+	h.as(&p)
+	res := h.do(http.MethodGet, "/v1/me", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+
+	var out api.Principal
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &out))
+	require.NotNil(t, out.StepUpValidUntil)
+	assert.Equal(t, p.AuthTime.Add(configured).UTC(), out.StepUpValidUntil.UTC(),
+		"the reported window is the package ceiling, not the tighter one the boundary applies")
+
+	// The control: with nothing configured, the ceiling is what is reported and
+	// what is enforced, so the field does not silently become zero.
+	h2 := newHarness(t)
+	h2.as(&p)
+	var plain api.Principal
+	r2 := h2.do(http.MethodGet, "/v1/me", nil)
+	require.NoError(t, json.Unmarshal(r2.Body.Bytes(), &plain))
+	require.NotNil(t, plain.StepUpValidUntil)
+	assert.Equal(t, p.AuthTime.Add(stepUpMaxAge).UTC(), plain.StepUpValidUntil.UTC())
 }

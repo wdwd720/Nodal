@@ -342,6 +342,48 @@ func (c *Client) GetPurchase(ctx context.Context, ref string) (credit.PurchaseSn
 	return snap, nil
 }
 
+// CancelPurchase implements credit.PurchaseProvider with
+// POST /v1/payment_intents/:id/cancel (IDEMPOTENT_WRITE).
+//
+// Stripe accepts a cancel for a PaymentIntent in any pre-capture status and
+// refuses one that has already succeeded, which is exactly the division the
+// caller needs: a refusal means the payment is no longer ours to abandon, and
+// the caller reconciles rather than insisting.
+//
+// cancellation_reason is `abandoned`, which is Stripe's own word for the case
+// this exists for -- a checkout the customer walked away from. It is not
+// `fraudulent` or `duplicate`: those are claims about the payer, and a
+// deployment that labelled every unfinished checkout as fraud would be feeding
+// its own provider's risk model with a guess.
+func (c *Client) CancelPurchase(ctx context.Context, ref, idempotencyKey string) (credit.PurchaseSnapshot, error) {
+	if ref == "" || !strings.HasPrefix(ref, PaymentIntentIDPrefix) || strings.ContainsAny(ref, "/?#") {
+		return credit.PurchaseSnapshot{}, errs.New(errs.CodeValidationFailed,
+			"stripecredit: payment intent id is invalid")
+	}
+	form := url.Values{}
+	form.Set("cancellation_reason", "abandoned")
+	raw, err := c.do(ctx, http.MethodPost, "/v1/payment_intents/"+url.PathEscape(ref)+"/cancel",
+		form, idempotencyKey)
+	if err != nil {
+		return credit.PurchaseSnapshot{}, err
+	}
+	var pi paymentIntent
+	if err := decodeLoose(raw, &pi); err != nil {
+		return credit.PurchaseSnapshot{}, errs.Wrap(err, errs.CodeProviderUnavailable,
+			"stripecredit: invalid payment intent response").WithField("provider_error", "malformed_response")
+	}
+	snap, err := snapshotFrom(pi)
+	if err != nil {
+		return credit.PurchaseSnapshot{}, errs.Wrap(err, errs.CodeProviderUnavailable,
+			"stripecredit: invalid payment intent response").WithField("provider_error", "malformed_response")
+	}
+	if snap.Livemode != c.livemode() {
+		return credit.PurchaseSnapshot{}, errs.New(errs.CodeInternal,
+			"stripecredit: payment intent livemode does not match the adapter mode")
+	}
+	return snap, nil
+}
+
 // VerifyAccount checks that the API key really belongs to the account this
 // adapter was configured for.
 //

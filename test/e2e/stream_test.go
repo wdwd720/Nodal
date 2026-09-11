@@ -117,10 +117,13 @@ func TestE2E_SSEStreamDeliversAcrossProcesses(t *testing.T) {
 	}
 
 	t.Logf("first frame after %s: %q", time.Since(started), frame)
-	// SSE framing: either a comment (the heartbeat) or a real event block.
+	// SSE framing: a comment (the heartbeat), the retry hint the server sends
+	// first so a browser reconnects at the pace it chooses, or a real event
+	// block.
 	isComment := strings.HasPrefix(frame, ":")
+	isRetry := strings.HasPrefix(frame, "retry: ")
 	isEvent := strings.Contains(frame, "data: ") && strings.Contains(frame, "event: ")
-	assert.Truef(t, isComment || isEvent,
+	assert.Truef(t, isComment || isRetry || isEvent,
 		"the first frame is not SSE framing: %q", frame)
 	assert.Truef(t, strings.HasSuffix(frame, "\n\n"),
 		"an SSE frame is terminated by a blank line: %q", frame)

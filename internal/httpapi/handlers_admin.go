@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/admin"
@@ -113,6 +116,48 @@ func (s *Server) GetAdminGates(ctx context.Context, _ api.GetAdminGatesRequestOb
 	return api.GetAdminGates200JSONResponse(out), nil
 }
 
+// GetAdminGatesCapabilityHistory lists a gate's recorded transitions. The
+// rows are written by the transition functions in the same statement as the
+// state change, so this is the history, not a reconstruction of it; the
+// console uses it to name who moved a gate, which the gate row itself cannot
+// say for a SANDBOX entry (no approval chain is written for one).
+func (s *Server) GetAdminGatesCapabilityHistory(ctx context.Context, request api.GetAdminGatesCapabilityHistoryRequestObject) (api.GetAdminGatesCapabilityHistoryResponseObject, error) {
+	if s.opts.Ports.Gates == nil {
+		return nil, errNotWired("capability gates")
+	}
+	capability := gates.Capability(request.Capability)
+	if !capability.Valid() {
+		return nil, validationError("capability", "unknown capability")
+	}
+	rows, err := s.opts.Ports.Gates.History(ctx, capability)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.CapabilityGateTransition, 0, len(rows))
+	for _, t := range rows {
+		out = append(out, toAPIGateTransition(t))
+	}
+	return api.GetAdminGatesCapabilityHistory200JSONResponse(out), nil
+}
+
+func toAPIGateTransition(t gates.Transition) api.CapabilityGateTransition {
+	evidence := ""
+	if len(t.EvidenceHash) > 0 {
+		evidence = hex.EncodeToString(t.EvidenceHash)
+	}
+	return api.CapabilityGateTransition{
+		TransitionId: uuid.MustParse(t.ID.String()),
+		From:         api.CapabilityGateTransitionFrom(t.From),
+		To:           api.CapabilityGateTransitionTo(t.To),
+		ActorType:    string(t.ActorType),
+		ActorId:      t.ActorID,
+		Reason:       t.Reason,
+		EvidenceHash: &evidence,
+		OccurredAt:   t.OccurredAt.UTC(),
+		Sandbox:      t.To == gates.StateSandbox,
+	}
+}
+
 // PostAdminGatesCapabilityAction drives the gate state machine. Dual control,
 // distinct approvers, evidence references and step-up are enforced by
 // internal/gates; one environment variable can never activate a capability.
@@ -127,7 +172,8 @@ func (s *Server) PostAdminGatesCapabilityAction(ctx context.Context, request api
 	action := GateAction(request.Action)
 	switch action {
 	case GateActionPropose, GateActionApprove, GateActionActivate,
-		GateActionSuspend, GateActionResume, GateActionRevoke:
+		GateActionSuspend, GateActionResume, GateActionRevoke,
+		GateActionSandbox, GateActionUnsandbox:
 	default:
 		return nil, validationError("action", "unknown gate action")
 	}

@@ -138,7 +138,48 @@ function build() {
     fs.copyFileSync(file, dest);
   }
 
+  // 5. The generated documents are the whole authority model this console
+  //    renders from, and they are fetched at runtime from dist/ rather than
+  //    compiled in. A dist/ that predates a regeneration is therefore a console
+  //    showing a permission matrix nobody holds -- silently, because a stale
+  //    document parses perfectly. It has happened: a dist/generated/
+  //    authority.json with 9 action kinds and 10 capabilities survived
+  //    alongside a src/ with 20 of each.
+  //
+  //    Step 3 copies them, so this can only fail after a partial or interrupted
+  //    build -- which is exactly the case worth refusing, because that build
+  //    otherwise reports success.
+  verifyGenerated();
+
   console.log(`admin: built ${count} module(s) into ${path.relative(here, outDir)} in ${Date.now() - started}ms`);
+}
+
+/** Every file under src/generated must be byte-identical under dist/generated. */
+function verifyGenerated() {
+  const srcGenerated = path.join(srcDir, "generated");
+  const outGenerated = path.join(outDir, "generated");
+  if (!fs.existsSync(srcGenerated)) {
+    throw new Error(
+      "admin: src/generated is missing. Regenerate it: go test ./internal/adminplane -run 'TestAuthorityGolden|TestDecisionVectorsGolden' -update-authority -update-vectors",
+    );
+  }
+  const problems = [];
+  for (const file of walk(srcGenerated)) {
+    const rel = path.relative(srcGenerated, file).split(path.sep).join("/");
+    const emitted = path.join(outGenerated, rel);
+    if (!fs.existsSync(emitted)) {
+      problems.push(`dist/generated/${rel} was not emitted`);
+      continue;
+    }
+    if (!fs.readFileSync(file).equals(fs.readFileSync(emitted))) {
+      problems.push(`dist/generated/${rel} differs from src/generated/${rel}`);
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `admin: the built authority documents do not match their source, so the console would render a stale one:\n  ${problems.join("\n  ")}`,
+    );
+  }
 }
 
 build();

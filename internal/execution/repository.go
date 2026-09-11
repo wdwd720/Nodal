@@ -184,27 +184,29 @@ func (r *Repository) transitionLocked(ctx context.Context, tx pgx.Tx, o Order, t
 	from := o.Status
 	actorType, actorID := auditActor(ev.ActorType, ev.ActorID)
 	tid := NewTransitionID()
-	if _, err := tx.Exec(ctx, `INSERT INTO order_transitions (id, order_id, from_status, to_status, actor_type, actor_id, reason, evidence_ref, occurred_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		tid, o.ID, string(from), string(to), actorType, actorID, nullable(ev.Reason), nullable(ev.EvidenceRef), now); err != nil {
-		return Order{}, dbErr("insert order transition", err)
-	}
-	var terminalAt *time.Time
-	if to.Terminal() {
-		t := now
-		terminalAt = &t
-	}
-	rejection := nullable(ev.RejectionCode)
-	if to != OrderRejected && ev.RejectionCode == "" && o.RejectionCode != "" {
-		rejection = &o.RejectionCode
-	}
-	updated, err := scanOrder(tx.QueryRow(ctx, `UPDATE orders SET status = $2, rejection_code = $3, terminal_at = coalesce(terminal_at, $4)
-		WHERE id = $1 AND status = $5 RETURNING `+orderColumns, o.ID, string(to), rejection, terminalAt, string(from)))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	// The rejection code travels on the transition row since 00748, because it
+	// is the reason THIS transition happened. A CHECK requires it exactly when
+	// to_status is REJECTED, which is the validation above expressed once more
+	// where every writer meets it.
+	if _, err := tx.Exec(ctx, `INSERT INTO order_transitions (id, order_id, from_status, to_status, actor_type, actor_id, reason, evidence_ref, occurred_at, rejection_code)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		tid, o.ID, string(from), string(to), actorType, actorID, nullable(ev.Reason), nullable(ev.EvidenceRef), now,
+		nullable(ev.RejectionCode)); err != nil {
+		// The trigger refuses a row whose from_status no longer describes the
+		// order, which is the compare-and-swap this function used to carry in
+		// its own UPDATE. It now applies to every writer, so the conflict is
+		// recognised here rather than produced here.
+		if strings.Contains(err.Error(), "ORDER_CHANGED_CONCURRENTLY") {
 			return Order{}, errs.New(errs.CodeConflict, "execution: order changed concurrently").WithField("order_id", o.ID.String())
 		}
-		return Order{}, dbErr("update order status", err)
+		return Order{}, dbErr("insert order transition", err)
+	}
+	// The INSERT IS the status change. 00748 revoked UPDATE on orders from
+	// cp_app and granted back only the two fill columns, and the trigger has
+	// already written status, rejection_code and terminal_at from the row.
+	updated, err := scanOrder(tx.QueryRow(ctx, `SELECT `+orderColumns+` FROM orders WHERE id = $1`, o.ID))
+	if err != nil {
+		return Order{}, dbErr("read order back", err)
 	}
 	if err := r.emitOrder(ctx, tx, updated, from, to, ev, causationID, now); err != nil {
 		return Order{}, err

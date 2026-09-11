@@ -17,6 +17,7 @@ var declaredKinds = []Kind{
 	KindNativeMarketHalt, KindNativeMarketCloseOnly, KindNativeMarketFreeze, KindNativeMarketResume, KindNativeMarketLaunch,
 	KindNativeAssetModerationVerdict, KindNativeAssetDelist,
 	KindCommerceSellerSuspend, KindCommerceProductWithdraw, KindPayoutManualReviewResolve,
+	KindCreditFundingReviewResolve,
 }
 
 func TestKindTable_Complete(t *testing.T) {
@@ -142,6 +143,11 @@ func TestKindTable_Golden(t *testing.T) {
 			ApprovePermission: security.PermPayoutApprove,
 			StepUpMaxAge:      5 * time.Minute, Expiry: 4 * time.Hour,
 		},
+		KindCreditFundingReviewResolve: {
+			RequiresDual: true, ProposePermission: security.PermCreditReview,
+			ApprovePermission: security.PermCreditAdjust,
+			StepUpMaxAge:      5 * time.Minute, Expiry: 4 * time.Hour,
+		},
 	}
 	assert.Equal(t, want, kindSpecs, "the kind policy table changed; review dual-control consequences before updating this golden")
 
@@ -158,7 +164,7 @@ func TestKindTable_Golden(t *testing.T) {
 		require.True(t, ok, "%s", k)
 		assert.False(t, spec.RequiresDual, "%s stops risk and must not need two signatures", k)
 	}
-	for _, k := range []Kind{KindNativeMarketResume, KindPayoutManualReviewResolve} {
+	for _, k := range []Kind{KindNativeMarketResume, KindPayoutManualReviewResolve, KindCreditFundingReviewResolve} {
 		spec, ok := Spec(k)
 		require.True(t, ok, "%s", k)
 		assert.True(t, spec.RequiresDual, "%s adds risk or moves money and must need two", k)

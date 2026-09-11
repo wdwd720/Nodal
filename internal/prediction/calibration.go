@@ -145,6 +145,18 @@ func NewCalibrator(clk clock.Clock) (*PGCalibrator, error) {
 	return &PGCalibrator{clk: clk}, nil
 }
 
+// calibrationSourceSQL bounds BOTH clocks.
+//
+// The window is on p.committed_at, which is when the prediction was made. The
+// outcome's resolved_at is when this platform learned how it turned out, and
+// nothing bounded it -- so recomputing a snapshot "as of" an earlier date
+// folded in every outcome resolved since, and the same scope recomputed a month
+// later produced a different answer (F-120).
+//
+// That is the reproducibility path that matters: calibration_snapshots rows are
+// cited as CALIBRATION_SNAPSHOT promotion evidence, and evidence that changes
+// when you look at it again is not evidence. The `now` argument existed and was
+// used only to stamp ComputedAt.
 const calibrationSourceSQL = `
 SELECT p.probability_direction::text, p.confidence::text, p.expected_return_bps,
        o.direction_hit, o.brier::text, o.log_loss::text, o.realized_return_bps, o.abs_return_error_bps
@@ -154,6 +166,7 @@ SELECT p.probability_direction::text, p.confidence::text, p.expected_return_bps,
    AND p.mode = $2
    AND p.committed_at >= $3
    AND p.committed_at < $4
+   AND o.resolved_at <= $7
    AND p.direction IS NOT NULL
    AND ($5::uuid IS NULL OR p.agent_id = $5::uuid)
    AND ($6::text IS NULL OR o.regime_label = $6::text)`
@@ -206,7 +219,7 @@ func (c *PGCalibrator) Compute(ctx context.Context, q db.Querier, scope Calibrat
 		regimeFilter = &v
 	}
 	rows, err := q.Query(ctx, calibrationSourceSQL, scope.StrategyVersionID, string(scope.Mode),
-		scope.WindowStart.UTC(), scope.WindowEnd.UTC(), agentFilter, regimeFilter)
+		scope.WindowStart.UTC(), scope.WindowEnd.UTC(), agentFilter, regimeFilter, now.UTC())
 	if err != nil {
 		return nil, errs.Wrap(err, errs.CodeInternal, "prediction: read calibration source")
 	}

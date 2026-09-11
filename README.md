@@ -17,14 +17,19 @@ The authoritative specification is `ULTIMATE MASTER GOAL — Production Universa
 - append-only double-entry, multi-asset ledger; transactional capital reservations; continuous reconciliation
 - prediction ledger, backtesting, paper/shadow/canary/limited/live modes kept strictly separate
 - tamper-evident audit history, production capability gates, operator controls, observability, infrastructure-as-code, CI/CD
+- the customer product built on top of that rail: **Credits** (closed-loop internal value that is not redeemable by default and never becomes redeemable through verification alone), Nodal-native assets and their off-chain constant-product markets, an internal marketplace, an activity timeline, and a customer web app
+- **agents at authority levels 0–3** — research only, recommendation, prepared action, and rule-based execution inside limits the user read and approved. Levels 4–6 exist as named, DISABLED gates so a user can see what is switched off
+- an explicitly isolated **sandbox tier** (ADR-0023): a deployment that declares itself one may exercise a gated surface through a `SANDBOX` gate state that carries no approval, cannot exist in PROD, and is labelled sandbox everywhere it is stored or shown
 
 ## What V1 is not
 
-No proprietary stablecoin, margin, leverage, derivatives, equities, internal order matching, customer-to-customer transfers, principal trading, hidden spread, performance fees, marketplace, arbitrary user code execution, direct agent signing, direct agent withdrawals, cross-chain buying power, or prediction markets. Interfaces are designed so some of these can be added later; none are implemented as live capabilities.
+No proprietary stablecoin, margin, leverage, derivatives, equities, internal order matching, free-form customer-to-customer transfers, principal trading, hidden spread, performance fees, arbitrary user code execution, direct agent signing, direct agent withdrawals, cross-chain buying power, or prediction markets.
+
+Two of these moved while the list did not, and the list is corrected rather than left as a claim somebody would discover was false: the **marketplace** is built (`internal/commerce`, behind the `MARKETPLACE` gate, which is high risk precisely because it moves Credits between users and mints the creator-earning provenance a payout policy may permit to be withdrawn); and Credits do move from a buyer to a creator as a purchase, which is not the same as a transfer anybody may initiate. Every capability named here that exists is behind a gate that is `DISABLED` in every deployment, and no gate reaches `ACTIVE` without persisted, approved, non-expired evidence and dual authorization. Interfaces are designed so the rest can be added later; none is implemented as a live capability.
 
 ## Architecture (summary)
 
-Modular monolith in Go with separate binaries per trust boundary (`cmd/api`, `cmd/execution-worker`, `cmd/reconciliation-worker`, `cmd/market-ingest-worker`, `cmd/agent-worker`, `cmd/workflow-worker`, `cmd/audit-worker`). PostgreSQL is the only financial source of truth. Temporal orchestrates long-lived workflows; Redpanda carries high-volume events; ClickHouse holds analytics; S3 with Object Lock holds evidence. Next.js web app in `apps/web`. Terraform for AWS in `infra/terraform`. See `docs/architecture/` and `docs/adr/`.
+Modular monolith in Go with separate binaries per trust boundary (`cmd/api`, `cmd/execution-worker`, `cmd/reconciliation-worker`, `cmd/market-ingest-worker`, `cmd/agent-worker`, `cmd/workflow-worker`, `cmd/audit-worker`). PostgreSQL is the only financial source of truth. Temporal orchestrates long-lived workflows; Redpanda carries high-volume events; ClickHouse holds analytics; S3 with Object Lock holds evidence. React 19 + Vite single-page app in `apps/web`, routed by react-router and typed against the generated OpenAPI client. Terraform for AWS in `infra/terraform`. See `docs/architecture/` and `docs/adr/`.
 
 ## Repository layout
 
@@ -57,7 +62,7 @@ Every external provider sits behind an interface (`FundingProvider`, `WalletProv
 
 ## Test strategy
 
-Unit, property (rapid), race, fuzz, provider contract (recorded fixtures under `test/contract`), integration (each package on an isolated, fully migrated Postgres database), security (`test/security`: authority-boundary import rules, closed agent permissions, production refusal of fake providers), load (`test/load`, k6, unmeasured until an API binary exists), migration, restore drill; API e2e, Playwright UI e2e, and chaos tiers are pending. See `Makefile`, `docs/build/MASTER_BUILD_STATE.md` §12 for the last recorded result of every tier, and `docs/build/REQUIREMENTS_TRACEABILITY.md` for which test proves which requirement. No result is claimed without a recorded run.
+Unit, property (rapid), race, fuzz, provider contract (recorded fixtures under `test/contract`), integration (each package on an isolated, fully migrated Postgres database), security (`test/security`: twenty files — authority-boundary import rules, closed agent permissions, production refusal of fake providers, IDOR over every account-scoped route, replay, idempotency abuse, the PII and value-domain boundaries), API e2e (`test/e2e`), Playwright UI e2e (`apps/web/e2e`), chaos (`test/chaos`), documentation (`test/docs`), migration, and the restore drill. CI declares a job for each. Load (`test/load`, k6) is the one tier with no numbers: the four scripts pass `k6 inspect` and CI checks that they do, but no measured run against a deployed target has been recorded, so nothing is claimed. See `Makefile`, `docs/build/MASTER_BUILD_STATE.md` §12 for the last recorded result of every tier, and `docs/build/REQUIREMENTS_TRACEABILITY.md` for which test proves which requirement. No result is claimed without a recorded run.
 
 ## Production safety warnings
 

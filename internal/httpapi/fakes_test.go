@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,24 +39,28 @@ func (s *stubErr) fail() error { return s.err }
 
 type fakeIdentity struct {
 	stubErr
-	begun     identity.BeginResult
-	complete  identity.Completed
-	loggedIn  bool
-	loggedOut bool
+	begun        identity.BeginResult
+	complete     identity.Completed
+	loggedIn     bool
+	loggedOut    bool
+	lastBegin    identity.BeginRequest
+	lastComplete identity.CompleteRequest
 }
 
-func (f *fakeIdentity) Begin(context.Context, identity.BeginRequest) (identity.BeginResult, error) {
+func (f *fakeIdentity) Begin(_ context.Context, req identity.BeginRequest) (identity.BeginResult, error) {
 	if err := f.fail(); err != nil {
 		return identity.BeginResult{}, err
 	}
+	f.lastBegin = req
 	return f.begun, nil
 }
 
-func (f *fakeIdentity) Complete(context.Context, identity.CompleteRequest) (identity.Completed, error) {
+func (f *fakeIdentity) Complete(_ context.Context, req identity.CompleteRequest) (identity.Completed, error) {
 	if err := f.fail(); err != nil {
 		return identity.Completed{}, err
 	}
 	f.loggedIn = true
+	f.lastComplete = req
 	return f.complete, nil
 }
 
@@ -303,6 +308,12 @@ func (f *fakeIntents) submitCount() int {
 	return f.submits
 }
 
+func (f *fakeIntents) cancelCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cancels
+}
+
 type fakeOrders struct {
 	stubErr
 	page   OrderPage
@@ -376,6 +387,14 @@ type fakeGates struct {
 	stubErr
 	items      []GateView
 	lastAction GateAction
+	history    []gates.Transition
+}
+
+func (f *fakeGates) History(_ context.Context, _ gates.Capability) ([]gates.Transition, error) {
+	if err := f.fail(); err != nil {
+		return nil, err
+	}
+	return f.history, nil
 }
 
 func (f *fakeGates) List(context.Context) ([]GateView, error) {
@@ -535,6 +554,30 @@ func newFakeIdempotency() *fakeIdempotency {
 	return &fakeIdempotency{records: map[string]fakeIdemRecord{}}
 }
 
+// storedBodies is what the store ended up holding, by operation. It is what a
+// test asserting the never-stored contract reads (F-231).
+func (f *fakeIdempotency) storedBodies() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]string{}
+	for key, rec := range f.records {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		out[parts[1]] = string(rec.result.Body)
+	}
+	return out
+}
+
+// recorded is what the store keeps: the body minus anything the route has
+// declared never-stored.
+func recorded(res CommandResult) CommandResult {
+	res.Body = res.stored()
+	res.StoredBody = nil
+	return res
+}
+
 func (f *fakeIdempotency) Run(ctx context.Context, cmd IdempotentCommand, fn func(context.Context) (CommandResult, error)) (CommandResult, error) {
 	f.mu.Lock()
 	key := cmd.ActorID + "|" + cmd.Endpoint + "|" + cmd.Key
@@ -558,13 +601,16 @@ func (f *fakeIdempotency) Run(ctx context.Context, cmd IdempotentCommand, fn fun
 	if err != nil {
 		if idempotencyOutcomeIsConclusion(res.Status, errs.CodeOf(err)) {
 			f.mu.Lock()
-			f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: res}
+			f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: recorded(res)}
 			f.mu.Unlock()
 		}
 		return CommandResult{}, err
 	}
 	f.mu.Lock()
-	f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: res}
+	// The record keeps what may be kept, exactly as the real adapter does: a
+	// fake that stored the whole body would make the never-stored contract
+	// untestable in this package (F-231, D-125).
+	f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: recorded(res)}
 	f.mu.Unlock()
 	return res, nil
 }

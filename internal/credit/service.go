@@ -32,6 +32,10 @@ type Service struct {
 	// only ever be one (migration 00711's partial unique index), so caching it
 	// cannot go stale in a way that matters.
 	assetID assets.AssetID
+	// decimals is that asset's scale, cached beside it and for the same
+	// reason: a lot's quantity is a count of base units, and an asset's
+	// decimals is immutable once registered.
+	decimals uint8
 }
 
 // NewService returns a Service. Neither argument may be nil.
@@ -65,6 +69,35 @@ func (s *Service) AssetID(ctx context.Context, q db.Querier) (assets.AssetID, er
 	}
 	s.assetID = got
 	return got, nil
+}
+
+// AssetDecimals returns the scale of the registered CREDIT asset.
+//
+// Every Credit figure this package stores, returns and posts is an integer
+// count of that asset's BASE UNITS. Anything that has to turn a count of whole
+// Credits into one of those figures -- a pricing policy, a payout quote, a
+// browser rendering a balance -- needs this number, and every place that
+// assumed it was six instead of reading it was a place that could be wrong
+// about money (F-151). It is resolved once and cached, because an asset's
+// decimals is immutable after registration (migration 00711).
+func (s *Service) AssetDecimals(ctx context.Context, q db.Querier) (uint8, error) {
+	if !s.assetID.IsZero() && s.decimals > 0 {
+		return s.decimals, nil
+	}
+	var (
+		got      assets.AssetID
+		decimals uint8
+	)
+	err := q.QueryRow(ctx, `SELECT id, decimals FROM assets WHERE kind = 'CREDIT'`).Scan(&got, &decimals)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, errs.New(errs.CodeNotFound,
+				"no Credit asset is registered; the internal economy is not provisioned in this environment")
+		}
+		return 0, errs.Wrap(err, errs.CodeInternal, "credit: resolve credit asset scale")
+	}
+	s.assetID, s.decimals = got, decimals
+	return decimals, nil
 }
 
 // Issue mints Credits into an account and records where they came from.
@@ -114,6 +147,7 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 		Quantity:         r.Quantity,
 		Origin:           r.Origin,
 		Finality:         r.Finality,
+		Parents:          r.Parents,
 		Reference:        r.Reference,
 		FundingReference: r.FundingReference,
 		JournalTxID:      res.TransactionID,
@@ -136,6 +170,20 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 // account and asset (SQLSTATE CR004), so RecordLot cannot be used to invent
 // provenance for units nobody moved.
 func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) (Lot, error) {
+	// The parents decide the finality before the request is validated against
+	// it, because a DERIVED lot's finality is not the caller's to state: it is
+	// the least final finality among the lots that funded it, and a caller that
+	// declared proceeds SETTLED on the strength of a reversible purchase would
+	// be the defect F-230 was (D-124).
+	if len(r.Parents) > 0 {
+		// The parents decide outright. A caller's Finality is the fallback for
+		// a mint with no parents -- a grant, or a sale out of a pool whose
+		// record could not account for what left it -- and taking the LESS
+		// final of the two would be wrong in the direction that matters:
+		// UNFUNDED is more final than REVERSIBLE, so proceeds funded by a
+		// promotional grant would stay stranded exactly as they were (F-230).
+		r.Finality = DerivedFinality(r.Parents)
+	}
 	if err := r.Validate(); err != nil {
 		return Lot{}, err
 	}
@@ -182,6 +230,26 @@ func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) 
 	}
 	lot.CreatedAt = lot.CreatedAt.UTC()
 	lot.Version = 1
+	// A lot with no parents has its own origin as its floor, which is what
+	// 00816's cp_credit_lot_open just wrote.
+	lot.OriginFloor = lot.Origin
+	if err := s.recordParents(ctx, tx, lot.ID, r.Parents); err != nil {
+		return Lot{}, err
+	}
+	if len(r.Parents) > 0 {
+		// Read back rather than recomputed here. The floor is lowered by a
+		// trigger as each parent row lands, for the same reason the finality
+		// column is trigger-written: it is not the application's to assert, and
+		// a Go copy of the rule is a second implementation that eventually
+		// disagrees with the one the database enforces (D-131).
+		var roots []string
+		if err := tx.QueryRow(ctx,
+			`SELECT origin_floor, root_origins FROM credit_lot_state WHERE lot_id = $1`, lot.ID).
+			Scan(&lot.OriginFloor, &roots); err != nil {
+			return Lot{}, mapError(err)
+		}
+		lot.RootOrigins = originsOf(roots)
+	}
 	return lot, nil
 }
 
@@ -202,9 +270,34 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 	if err != nil {
 		return nil, err
 	}
-	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID, r.RequireSpendableFinality, r.AllowedOrigins)
+	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID,
+		r.RequireSpendableFinality, r.RequirePayoutFinality, r.RestrictToLots, r.LotIDs)
 	if err != nil {
 		return nil, err
+	}
+	// The lot restriction, asserted on the way out as well as applied on the way
+	// in. The filter is a parameter of one constant statement and cannot be
+	// bypassed by a caller, so this can only fire if the statement and this
+	// field come apart -- which is exactly the kind of drift that let a payout
+	// consume by origin while its decision was made per lot (D-136, F-270). It
+	// refuses; it does not correct.
+	//
+	// It runs whenever a restriction was DECLARED, which is the half that was
+	// missing: guarded by `len(r.LotIDs) > 0`, the check was absent on exactly
+	// the input the filter was absent on, so a consume restricted to nothing was
+	// unrestricted and unasserted (F-281).
+	if r.RestrictToLots {
+		allowed := make(map[LotID]bool, len(r.LotIDs))
+		for _, l := range r.LotIDs {
+			allowed[l] = true
+		}
+		for _, lot := range lots {
+			if !allowed[lot.ID] {
+				return nil, errs.Newf(errs.CodeInternal,
+					"credit: consume selected lot %s, which is outside the %d lots the caller allowed",
+					lot.ID, len(r.LotIDs))
+			}
+		}
 	}
 
 	remaining := r.Quantity
@@ -229,7 +322,9 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 			return nil, err
 		}
 		allocs = append(allocs, Allocation{
-			LotID: lot.ID, Origin: lot.Origin, Finality: lot.Finality, Quantity: take, EventID: ev,
+			LotID: lot.ID, Origin: lot.Origin, OriginFloor: lot.OriginFloor,
+			RootOrigins: append([]valuedomain.CreditOrigin(nil), lot.RootOrigins...),
+			Finality:    lot.Finality, Quantity: take, EventID: ev,
 		})
 		remaining = remaining.Sub(take)
 	}

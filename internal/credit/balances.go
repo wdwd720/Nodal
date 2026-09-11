@@ -36,8 +36,13 @@ func (s *Service) Balances(ctx context.Context, q db.Querier, r BalanceRequest) 
 	if err != nil {
 		return Balances{}, err
 	}
+	decimals, err := s.AssetDecimals(ctx, q)
+	if err != nil {
+		return Balances{}, err
+	}
 
 	b := Balances{
+		CreditDecimals:    decimals,
 		Gross:             money.Quantity{},
 		Spendable:         money.Quantity{},
 		Frozen:            money.Quantity{},
@@ -72,6 +77,8 @@ func (s *Service) Balances(ctx context.Context, q db.Querier, r BalanceRequest) 
 
 		ok, reasons := r.Policy.Permits(valuedomain.PermitInput{
 			Origin:      lot.Origin,
+			OriginFloor: lot.OriginFloor,
+			RootOrigins: lot.RootOrigins,
 			Finality:    lot.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    r.Verified,
@@ -115,6 +122,8 @@ func (s *Service) EligibleLots(ctx context.Context, q db.Querier, r BalanceReque
 		}
 		ok, _ := r.Policy.Permits(valuedomain.PermitInput{
 			Origin:      lot.Origin,
+			OriginFloor: lot.OriginFloor,
+			RootOrigins: lot.RootOrigins,
 			Finality:    lot.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    r.Verified,
@@ -131,10 +140,29 @@ func (s *Service) EligibleLots(ctx context.Context, q db.Querier, r BalanceReque
 	return eligible, total, nil
 }
 
+// EligibleLotIDs are the exact lots a decision approved, in the order it
+// approved them.
+//
+// It is what a payout reservation passes to `ConsumeRequest.LotIDs`. The set of
+// ORIGINS is not enough and never was: eligibility is decided per lot -- on the
+// lot's finality, its origin and its provenance roots -- and two lots of one
+// origin can differ in all three. Passing the origins let a decision approving a
+// settled purchase be filled from a reversible one, and a decision approving
+// proceeds out of a purchase be filled from proceeds out of a promotional grant
+// (D-136, F-270).
+func EligibleLotIDs(lots []Lot) []LotID {
+	out := make([]LotID, 0, len(lots))
+	for _, l := range lots {
+		out = append(out, l.ID)
+	}
+	return out
+}
+
 // EligibleOrigins is the set of origins a payout under this policy may consume.
-// It is passed to ConsumeRequest.AllowedOrigins so that lot selection cannot
-// stray outside what the eligibility decision approved, even if the two are
-// computed a moment apart.
+//
+// It is reported on a Decision so a caller can say what KIND of value a payout
+// draws on without re-deriving it. It is no longer the reservation's filter:
+// see EligibleLotIDs.
 func EligibleOrigins(lots []Lot) []valuedomain.CreditOrigin {
 	seen := map[valuedomain.CreditOrigin]bool{}
 	var out []valuedomain.CreditOrigin

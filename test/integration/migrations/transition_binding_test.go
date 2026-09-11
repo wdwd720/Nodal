@@ -32,8 +32,12 @@ func TestIntegration_StateChangeRequiresTransitionRow(t *testing.T) {
 	_, err = app.Exec(ctx, `INSERT INTO accounts (id, owner_user_id, kind, status) VALUES ($1, $2, 'CUSTOMER', 'ACTIVE')`, accountID, userID)
 	require.NoError(t, err)
 
+	// See the note above: the bare update runs as the owner, the only role that
+	// can still write accounts.status and therefore the only one on which the
+	// audit binding is still what is being measured.
+	owner := connect(t, migrateURL)
 	inTx := func(fn func(tx pgx.Tx) error) error {
-		tx, err := app.Begin(ctx)
+		tx, err := owner.Begin(ctx)
 		require.NoError(t, err)
 		if err := fn(tx); err != nil {
 			_ = tx.Rollback(ctx)

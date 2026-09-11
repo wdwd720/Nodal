@@ -6,21 +6,25 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
@@ -159,7 +163,8 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{
 		t: t, ctx: ctx, clk: clk, led: led, credits: credits,
 		provider: provider, registry: registry,
-		svc:         payout.NewService(led, credits, payout.NewEngine(credits), registry, clk),
+		svc: payout.NewService(led, credits, payout.NewEngine(credits), registry, clk,
+			killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository()),
 		account:     newAccount(t),
 		creditAsset: creditAsset(t),
 	}
@@ -168,8 +173,8 @@ func newFixture(t *testing.T) *fixture {
 		func(ctx context.Context, tx pgx.Tx) error {
 			d, err := f.svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: f.account, Kind: payout.DestinationBank,
-				Provider: "sandbox", ProviderReference: "dest-" + uuid.NewString(),
-				DisplayLabel: "Test bank", Currency: "USD",
+				Provider: "sandbox", ProviderReference: sandboxHandle(),
+				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if err != nil {
 				return err
@@ -180,7 +185,48 @@ func newFixture(t *testing.T) *fixture {
 			f.destination = d.ID
 			return nil
 		}))
+	// A payout names the quote the customer was shown (D-119), so the fixture's
+	// provider has to be one a quote can be computed from: an availability that
+	// says it can be used at all, and a PUBLISHED fee model. payouttest's
+	// default has neither, deliberately -- an adapter nobody has read against a
+	// contract reports nothing -- and that property is asserted on the type
+	// itself in payout_test.go rather than by leaving every fixture unquotable.
+	quotableProvider(f)
 	return f
+}
+
+// quoteThrough makes the pre-commitment quote a payout is required to name.
+//
+// The pricing is the fixture's own: one Credit is one major unit, so every
+// amount these tests use prices to a positive number of minor units and the
+// quote's "is this above the provider's minimum" branch is exercised on real
+// arithmetic rather than on a rounding artefact.
+func (f *fixture) quoteThrough(ctx context.Context, tx pgx.Tx, amount int64) (payout.Quote, error) {
+	dest, err := f.svc.Destination(ctx, tx, f.destination)
+	if err != nil {
+		return payout.Quote{}, err
+	}
+	return f.svc.Quote(ctx, tx, payout.QuoteRequest{
+		AccountID:              f.account,
+		DestinationID:          f.destination,
+		Quantity:               q(amount),
+		CreditsPerMajorUnit:    1,
+		MinorUnitsPerMajorUnit: 100,
+		CreditDecimals:         0,
+		PricingVersion:         "itest-pricing-v1",
+		PolicyVersion:          "payout-policy-itest",
+		Currency:               "USD",
+		Environment:            "TEST",
+		DisclosureAccepted:     true,
+		IdempotencyKey:         "quote-" + uuid.NewString(),
+		Now:                    f.clk.Now(),
+	}, dest)
+}
+
+// terms are what the fixture's provider publishes. Create judges the minimum
+// against them, and refuses a caller that supplies none (D-119).
+func (f *fixture) terms() payout.ProviderTerms {
+	return payout.TermsFrom(f.provider.Capabilities())
 }
 
 // issue mints a lot of a given provenance.
@@ -209,6 +255,12 @@ func (f *fixture) input() payout.EligibilityInput {
 		Now:                 f.clk.Now().Add(48 * time.Hour),
 		DestinationVerified: true,
 		ProviderSupports:    true,
+		// The compliance facts, stated rather than defaulted. None of them has
+		// a permissive zero value: a screen nobody answered and a jurisdiction
+		// nobody established both block, which is what F-226 made true, so a
+		// fixture for an account in good standing has to say so (D-120).
+		SanctionsState:        compliance.SanctionsClear,
+		JurisdictionSupported: true,
 	}
 }
 
@@ -219,11 +271,22 @@ func (f *fixture) create(amount int64, in payout.EligibilityInput) (payout.Reque
 	)
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var err error
 			dest := f.destination
+			quote, qerr := f.quoteThrough(ctx, tx, amount)
+			if qerr != nil {
+				return qerr
+			}
+			var err error
 			req, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest, Quantity: q(amount),
-				IdempotencyKey: "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(amount),
+				ProviderTerms: f.terms(),
+				Environment:   "TEST",
+				// The withdrawal disclosure, accepted. The tests that are about
+				// the disclosure itself set it false; every other test in this
+				// file is about eligibility and provenance, and an unsigned
+				// document would refuse before either was reached.
+				DisclosureAccepted: true,
+				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
 			}, in)
 			return err
 		})
@@ -630,9 +693,20 @@ func TestIntegration_CreateIsIdempotent(t *testing.T) {
 		require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 			func(ctx context.Context, tx pgx.Tx) error {
 				dest := f.destination
+				// A fresh quote each time, because a repeat of the same request
+				// is a repeat of the whole request. The key is what makes the
+				// second one a replay; the second quote is simply never
+				// consumed, which is the honest shape of a retry.
+				quote, qerr := f.quoteThrough(ctx, tx, 250)
+				if qerr != nil {
+					return qerr
+				}
 				r, _, err := f.svc.Create(ctx, tx, payout.CreateRequest{
-					AccountID: f.account, DestinationID: &dest, Quantity: q(250),
-					IdempotencyKey: key, EffectiveAt: f.clk.Now(),
+					AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(250),
+					ProviderTerms:      f.terms(),
+					Environment:        "TEST",
+					DisclosureAccepted: true,
+					IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 				}, f.input())
 				req = r
 				return err
@@ -1012,4 +1086,195 @@ func (f *fixture) providerEvents(id payout.RequestID, rawStatus string) int {
 		  WHERE request_id = $1 AND provider_status = $2 AND direction = 'RESPONSE'`,
 		id, rawStatus).Scan(&n))
 	return n
+}
+
+// An idempotency key belongs to one account (F-106).
+//
+// payout_requests.idempotency_key is globally UNIQUE, and the HTTP boundary's
+// own idempotency record is keyed by (actor, endpoint, key) -- so a DIFFERENT
+// caller reusing a key passes the boundary and arrives in the domain. Create
+// returned the row it found without asking whose it was, which rendered another
+// account's payout to the caller: its account id, its requested, reserved and
+// settled quantities, its destination and its failure reason. It also silently
+// discarded the caller's own request, and told them a payout existed that they
+// had never made.
+//
+// internal/credit, internal/funding, internal/withdrawal and internal/capital
+// all make this comparison. Three tables did not.
+func TestIntegration_AnIdempotencyKeyBelongsToOneAccount(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 50_000)
+
+	const key = "shared-key-0001"
+	first, _, err := f.createWithKey(f.account, key, 10_000)
+	require.NoError(t, err)
+	require.False(t, first.ID.IsZero())
+
+	// A second account, same key.
+	other := newAccount(t)
+	_, _, err = f.createWithKey(other, key, 10_000)
+	require.Error(t, err, "another account's payout was returned as this caller's replay")
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
+
+	// The control: the owner's own retry is still idempotent, which is the
+	// whole point of the key and must not have been broken by scoping it.
+	again, _, err := f.createWithKey(f.account, key, 10_000)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, again.ID, "the owner's retry stopped being a replay")
+}
+
+func (f *fixture) createWithKey(account accounts.AccountID, key string, amount int64) (payout.Request, payout.Decision, error) {
+	var (
+		req payout.Request
+		dec payout.Decision
+	)
+	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			dest := f.destination
+			in := f.input()
+			in.AccountID = account
+			// The quote is always the fixture account's, whoever `account` is.
+			// A second account reusing the key never reaches the quote: Create
+			// compares the key's owner first and refuses there, which is the
+			// property this helper exists for (F-106).
+			quote, qerr := f.quoteThrough(ctx, tx, amount)
+			if qerr != nil {
+				return qerr
+			}
+			var cerr error
+			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(amount),
+				ProviderTerms:      f.terms(),
+				Environment:        "TEST",
+				DisclosureAccepted: true,
+				IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
+			}, in)
+			return cerr
+		})
+	return req, dec, err
+}
+
+// A payout that has ever been submitted cannot be cancelled, whatever state it
+// is in now (F-107).
+//
+// Cancel guarded on the CURRENT state and MANUAL_REVIEW is not in that list --
+// but applyProviderResult parks a payout there precisely when the provider WAS
+// called and the settlement could not be recorded: a lost response, or a ledger
+// posting that refused. So a payout the provider has paid could sit in
+// MANUAL_REVIEW, and the account owner could release the reservation and get
+// their Credits back while the money was already gone.
+//
+// The asymmetry is what makes it a defect rather than a gap: the dual-controlled
+// ResolveManualReview already consulted everSubmitted and refused to retry an
+// ever-submitted payout. The single-user endpoint would unwind one.
+func TestIntegration_APaidPayoutParkedForReviewCannotBeCancelled(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(600, f.input())
+	require.NoError(t, err)
+	require.Equal(t, "600", f.balance(ledger.CodePayoutReserved).String())
+
+	// Submitted, and the response never came back.
+	f.provider.TimeoutNext()
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+
+	// A person parks it, which is the ordinary thing to do with a payout whose
+	// outcome nobody knows.
+	parked := f.toManualReview(req, "provider did not answer")
+	require.Equal(t, payout.StateManualReview, parked.State)
+
+	err = testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, e := f.svc.Cancel(ctx, tx, req.ID, "user changed their mind")
+			return e
+		})
+	require.Error(t, err, "the reservation was released on a payout the provider may have paid")
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
+	assert.Equal(t, "600", f.balance(ledger.CodePayoutReserved).String(),
+		"the value came back to the user while the provider may already have sent it")
+	assert.Equal(t, "400", f.balance(ledger.CodeCreditBalance).String())
+}
+
+// "Do not resubmit" does not resubmit (F-115).
+//
+// Phase one's early-return branch says "Already claimed by an earlier attempt.
+// Reconcile, do not resubmit" for SUBMITTED, PROVIDER_PENDING and
+// PAYOUT_STATUS_UNKNOWN. Phase two then guarded on `req.State != StateSubmitted`
+// -- which sent the last two home and let SUBMITTED fall straight through to the
+// provider call.
+//
+// SUBMITTED is precisely what a crash between the phase-one commit and
+// applyProviderResult leaves behind, so the branch whose comment says do not
+// resubmit was the one that did. The covering test never reached it: after a
+// timeout the state is PAYOUT_STATUS_UNKNOWN, which returns.
+//
+// The only thing that stood between this and paying twice was the provider
+// honouring the idempotency key -- which the sandbox does by construction, so
+// the test double hid it.
+func TestIntegration_ASecondSubmitDoesNotCallTheProviderAgain(t *testing.T) {
+	f := newFixture(t)
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(600, f.input())
+	require.NoError(t, err)
+
+	// A submission that lands the request in SUBMITTED and stays there: the
+	// provider answered, but the process died before the answer was recorded.
+	//
+	// The crash is produced rather than forged. An earlier version wrote the
+	// state by hand, which meant the fixture was asserting against a row no
+	// crash could actually leave -- and migration 00807 now refuses it, because
+	// PAYOUT_STATUS_UNKNOWN -> SUBMITTED is not an edge (F-229).
+	f.provider.CrashNext()
+	require.Panics(t, func() { _, _ = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox") },
+		"fixture check: the provider takes the payout and the process then dies")
+	before := f.provider.Submits()
+	require.Positive(t, before)
+	crashed, err := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, err)
+	require.Equal(t, payout.StateSubmitted, crashed.State,
+		"fixture check: phase one committed SUBMITTED before the provider was called")
+
+	after, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+	assert.Equal(t, before, f.provider.Submits(),
+		"a second Submit called the provider again on a payout it had already claimed")
+	assert.Equal(t, payout.StateSubmitted, after.State)
+}
+
+// A payout is submitted to the provider it was claimed for (F-115).
+//
+// providerName is a caller argument and was compared to nothing. On the
+// re-entry branch it was not even written back, so a second call naming another
+// provider would have handed that provider the FIRST one's idempotency key:
+// two providers, one key, two disbursements, neither able to dedupe the other.
+func TestIntegration_APayoutGoesToTheProviderItWasClaimedFor(t *testing.T) {
+	f := newFixture(t)
+	other := payouttest.NewSandbox("sandbox-two")
+	require.NoError(t, f.registry.Register(other))
+
+	f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 1_000)
+	req, _, err := f.create(600, f.input())
+	require.NoError(t, err)
+
+	f.provider.TimeoutNext()
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
+	require.NoError(t, err)
+
+	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox-two")
+	require.Error(t, err, "a payout claimed for one provider was submitted to another")
+	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
+	assert.Zero(t, other.Submits(), "the second provider was called with the first's idempotency key")
+}
+
+// sandboxHandle is a provider token a fixture can use safely.
+//
+// It replaces the UUID's dashes with a letter rather than stripping them,
+// because payout.ValidateDestinationToken strips '-' before looking for a
+// thirteen-to-nineteen digit run and Luhn-checking it -- and a raw
+// "dest-<uuid>" produces such a run, passing the checksum about one time in
+// ten. A fixture that is refused at random is a fixture that teaches people to
+// rerun the suite.
+func sandboxHandle() string {
+	return "sbx" + strings.ReplaceAll(uuid.NewString(), "-", "x")
 }

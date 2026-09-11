@@ -237,7 +237,8 @@ func TestParseWebhook_LivemodeMismatchIsRefused(t *testing.T) {
 		piEvent(EventPaymentIntentSucceeded, "succeeded", nodalMeta(credit.NewFundingID().String(), "TEST")),
 		`"livemode": false,
 	  "data"`, `"livemode": true,
-	  "data"`, 1)
+	  "data"`, 1,
+	)
 	h, raw := signed(t, body, testNow)
 	_, err := c.ParseWebhook(context.Background(), raw, h)
 	require.ErrorIs(t, err, webhook.ErrMalformed,
@@ -347,7 +348,7 @@ func TestParseWebhook_DisputeOutcomes(t *testing.T) {
 		{EventDisputeCreated, "needs_response", credit.PurchaseDisputed},
 		{EventDisputeClosed, "lost", credit.PurchaseChargeback},
 		{EventDisputeClosed, "won", credit.PurchaseDisputeWon},
-		{EventDisputeClosed, "warning_closed", credit.PurchaseDisputeWon},
+		{EventDisputeClosed, "warning_closed", credit.PurchaseDisputeLifted},
 		{EventDisputeFundsWithdrawn, "under_review", credit.PurchaseChargeback},
 		{EventDisputeFundsReinstated, "won", credit.PurchaseDisputeWon},
 		// An outcome this binary has never seen must stop, because guessing

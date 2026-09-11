@@ -92,6 +92,11 @@ const (
 	// stuck in MANUAL_REVIEW. It can fail, reject or retry one; it can NEVER
 	// declare one settled, because the provider is authoritative for that.
 	KindPayoutManualReviewResolve Kind = "PAYOUT_MANUAL_REVIEW_RESOLVE"
+	// KindCreditFundingReviewResolve applies an operator's decision to a Credit
+	// funding stuck in MANUAL_REVIEW. Like its payout counterpart it can never
+	// declare one settled; unlike it, it can MINT, which is why it is approved
+	// by the same permission as an administrative balance adjustment.
+	KindCreditFundingReviewResolve Kind = "CREDIT_FUNDING_REVIEW_RESOLVE"
 )
 
 // KindSpec is the policy attached to a kind.
@@ -232,6 +237,15 @@ var kindSpecs = map[Kind]KindSpec{
 	KindPayoutManualReviewResolve: {
 		RequiresDual: true, ProposePermission: security.PermPayoutReview,
 		ApprovePermission: security.PermPayoutApprove,
+		StepUpMaxAge:      stepUpSensitive, Expiry: 4 * time.Hour,
+	},
+	// Resolving a Credit funding by hand can issue Credits, which is the same
+	// authority as an administrative balance adjustment and is approved by the
+	// same permission. It is the only exit from MANUAL_REVIEW: a provider event
+	// stopped being one in F-100.
+	KindCreditFundingReviewResolve: {
+		RequiresDual: true, ProposePermission: security.PermCreditReview,
+		ApprovePermission: security.PermCreditAdjust,
 		StepUpMaxAge:      stepUpSensitive, Expiry: 4 * time.Hour,
 	},
 }

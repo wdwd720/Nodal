@@ -45,3 +45,13 @@ Thumbs.db
 # Local data
 /.data/
 /docker/data/
+
+# rapid writes a .fail file recording the seed of a failing property run, and
+# REPLAYS it on every subsequent run of that property. Once the bug is fixed the
+# file pins the suite to a degenerate case forever, and six of them had been
+# committed by accident. The decision to delete a stale one is already recorded
+# in AUDIT_FINDINGS (F-30); this stops them coming back.
+#
+# A property counterexample worth keeping is worth writing as a named test, not
+# left as a timestamped seed file nobody can read.
+**/testdata/rapid/**/*.fail

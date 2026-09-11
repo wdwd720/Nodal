@@ -222,14 +222,24 @@ func TestIntegration_OrderLifecycle(t *testing.T) {
 	require.Equal(t, OrderCreated, trs[0].From)
 	require.Equal(t, OrderSubmitted, trs[4].To)
 
-	// A status change without its transition row is refused at COMMIT by the
-	// binding trigger of migration 00603.
+	// A status change without its transition row is refused, and the refusal got
+	// stronger in 00748. It used to be AU001 from the 00603 binding at COMMIT --
+	// the application COULD write the column and was caught afterwards. It is now
+	// 42501, insufficient privilege, at the statement: cp_app holds UPDATE on the
+	// two fill columns and on nothing else.
 	err = d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE orders SET status = 'ACKNOWLEDGED' WHERE id = $1`, o.ID)
 		return err
 	})
 	require.Error(t, err)
-	require.Equal(t, "AU001", db.SQLState(err))
+	require.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err),
+		"cp_app can still write orders.status; 00748 did not take")
+
+	// The two it may still write, so the revoke is a boundary and not a wall.
+	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE orders SET filled_input_quantity = filled_input_quantity WHERE id = $1`, o.ID)
+		return err
+	}), "cp_app must still be able to record a fill")
 	got, err := f.repo.Get(ctx, d, o.ID)
 	require.NoError(t, err)
 	require.Equal(t, OrderSubmitted, got.Status)

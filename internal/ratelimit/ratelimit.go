@@ -127,47 +127,184 @@ func windowStart(now time.Time, window time.Duration) time.Time {
 	return now.Truncate(window)
 }
 
-// MemoryStore is a process-local Store with bounded memory: expired windows
-// are dropped lazily on access and by Sweep.
+// DefaultMaxKeys is how many distinct counters one MemoryStore holds before it
+// stops counting them one at a time.
+//
+// Ten thousand entries is a few hundred kilobytes -- a key, a start and a
+// count -- on an instance with 512 MB, and it is far more distinct callers than
+// the deployments that use this backend have: config.Validate refuses the
+// memory backend outside a single-process environment, and since F-166 a
+// caller can no longer choose its own key by writing a header, so the
+// cardinality is real source addresses.
+const DefaultMaxKeys = 10_000
+
+// MemoryStore is a process-local Store whose memory is bounded two ways:
+// expired windows are dropped on access and by Sweep, and the number of
+// distinct counters it holds is capped.
+//
+// # Why the cap exists (F-169)
+//
+// "Expired windows are dropped lazily on access" was true only of a key that
+// COMES BACK: the drop happens when the same key is seen in a later window.
+// A key seen once and never again was retained for the life of the process, and
+// nothing anywhere called Sweep -- so the map grew with the number of distinct
+// callers ever seen, which is not a number this process chooses.
+//
+// # What happens when the cap is reached
+//
+// Every counter is dropped and the window is marked SATURATED: for the rest of
+// that window every request, whatever its key, is counted against one shared
+// budget, and the next window starts clean and per-key again.
+//
+// It is a deliberate degradation and not a nice one, so it is worth saying
+// plainly what it costs. During a saturated window callers share a budget, so a
+// legitimate caller can be refused for traffic that is not theirs -- the F-88
+// failure, in miniature and for at most one window. The alternatives are worse:
+// evicting the oldest entries keeps the limiter exact for whoever remains and
+// hands the attacker a way to evict the counter that is watching them, and
+// admitting new keys without counting them removes the limit entirely at the
+// moment it is being tested. A shared budget still refuses a flood, still
+// recovers by itself, and cannot grow.
 type MemoryStore struct {
 	mu   sync.Mutex
+	max  int
 	data map[string]*memWindow
+	// Set while a window is saturated: the instant the saturated window ends,
+	// and the shared counters for it.
+	satUntil  time.Time
+	sat       map[satKey]int
+	overflows int
 }
 
 type memWindow struct {
-	start time.Time
-	count int
+	start  time.Time
+	window time.Duration
+	count  int
 }
 
-// NewMemoryStore returns an empty MemoryStore.
-func NewMemoryStore() *MemoryStore { return &MemoryStore{data: map[string]*memWindow{}} }
+// satKey identifies one shared counter while the store is saturated. There is
+// one per (window start, window length) in flight, which is one per configured
+// limit -- four, in this binary -- and not one per caller.
+type satKey struct {
+	start  time.Time
+	window time.Duration
+}
+
+// NewMemoryStore returns an empty MemoryStore holding at most DefaultMaxKeys
+// counters.
+func NewMemoryStore() *MemoryStore { return NewMemoryStoreWithMax(DefaultMaxKeys) }
+
+// NewMemoryStoreWithMax returns an empty MemoryStore holding at most max
+// counters. A max below one takes DefaultMaxKeys, so a caller cannot configure
+// a store that saturates on its first request.
+func NewMemoryStoreWithMax(max int) *MemoryStore {
+	if max < 1 {
+		max = DefaultMaxKeys
+	}
+	return &MemoryStore{max: max, data: map[string]*memWindow{}}
+}
 
 // Incr implements Store.
 func (m *MemoryStore) Incr(_ context.Context, key string, window time.Duration, now time.Time) (int, time.Time, error) {
 	start := windowStart(now, window)
+	resetAt := start.Add(window)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	w, ok := m.data[key]
-	if !ok || !w.start.Equal(start) {
-		w = &memWindow{start: start}
-		m.data[key] = w
+
+	if m.saturated(now) {
+		k := satKey{start: start, window: window}
+		m.sat[k]++
+		return m.sat[k], resetAt, nil
 	}
-	w.count++
-	return w.count, start.Add(window), nil
+
+	if w, ok := m.data[key]; ok {
+		if w.start.Equal(start) {
+			w.count++
+			return w.count, resetAt, nil
+		}
+		// The same key in a later window: its old window is dropped here,
+		// which is the lazy half of the bound and only ever helps a key that
+		// comes back.
+		w.start, w.window, w.count = start, window, 1
+		return 1, resetAt, nil
+	}
+
+	if len(m.data) >= m.max {
+		// One window has more distinct keys than this store will hold. Drop
+		// them and count the rest of the window together; see the type's
+		// comment for why that is the least bad of the three options.
+		m.data = make(map[string]*memWindow)
+		m.satUntil = resetAt
+		m.sat = map[satKey]int{{start: start, window: window}: 1}
+		m.overflows++
+		return 1, resetAt, nil
+	}
+
+	m.data[key] = &memWindow{start: start, window: window, count: 1}
+	return 1, resetAt, nil
 }
 
-// Sweep removes windows that ended before now.
+// saturated reports whether the store is counting into shared buckets at now,
+// and clears the saturation when its window has ended.
+func (m *MemoryStore) saturated(now time.Time) bool {
+	if m.satUntil.IsZero() {
+		return false
+	}
+	if now.Before(m.satUntil) {
+		return true
+	}
+	m.satUntil, m.sat = time.Time{}, nil
+	return false
+}
+
+// Sweep removes windows that ended at or before now and returns how many it
+// removed. `window` is a fallback for an entry written before the store
+// recorded each window's own length; an entry that knows its own window is
+// swept by that, so a sweeper ticking at the LARGEST configured window never
+// removes a shorter window that is still open, and never keeps one that is not.
 func (m *MemoryStore) Sweep(now time.Time, window time.Duration) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	n := 0
 	for k, w := range m.data {
-		if !w.start.Add(window).After(now) {
+		d := w.window
+		if d <= 0 {
+			d = window
+		}
+		if !w.start.Add(d).After(now) {
 			delete(m.data, k)
 			n++
 		}
 	}
+	m.saturated(now)
 	return n
+}
+
+// MemoryStats is what one MemoryStore is holding, for the sweeper's log. A
+// store that is saturating is a deployment whose caller cardinality has passed
+// what a process-local limiter can count exactly, and the operator wants to
+// know that from a log line rather than from a support ticket.
+type MemoryStats struct {
+	// Keys is how many counters are held right now.
+	Keys int
+	// Max is the cap.
+	Max int
+	// Saturated says whether a shared budget is in force at this instant.
+	Saturated bool
+	// Overflows is how many windows have saturated since the process started.
+	Overflows int
+}
+
+// Stats reports what the store is holding at now.
+func (m *MemoryStore) Stats(now time.Time) MemoryStats {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return MemoryStats{
+		Keys:      len(m.data),
+		Max:       m.max,
+		Saturated: !m.satUntil.IsZero() && now.Before(m.satUntil),
+		Overflows: m.overflows,
+	}
 }
 
 // RedisStore is a Store over a shared Redis; counters expire with their window.

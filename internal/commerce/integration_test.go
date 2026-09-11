@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -197,15 +198,24 @@ func (f *fixture) registerSeller(payoutTo *accounts.AccountID) commerce.Seller {
 }
 
 // list creates a product and publishes it, which is the state a buyer can see.
+// list publishes a product at a price, with the DEPLOYMENT's platform fee set
+// to feeBPS.
+//
+// The fee moved from the product to the service in F-107: a seller setting the
+// platform's own share of their own sales is the counterparty who benefits from
+// the answer choosing it. The helper keeps taking the number so every test that
+// says "a product with a 4% platform fee" still says it -- it just says it to
+// the place that now decides.
 func (f *fixture) list(kind commerce.Kind, price int64, feeBPS money.BPS) commerce.Product {
 	f.t.Helper()
+	require.NoError(f.t, f.svc.SetPlatformFeeBPS(feeBPS))
 	var p commerce.Product
 	require.NoError(f.t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			created, err := f.svc.CreateProduct(ctx, tx, commerce.Product{
 				SellerAccountID: f.seller, Kind: kind,
 				Title: "Test " + string(kind), Description: "for the integration suite",
-				Price: q(price), PlatformFeeBPS: feeBPS,
+				Price: q(price),
 			})
 			if err != nil {
 				return err
@@ -314,8 +324,22 @@ func TestIntegration_ASaleMovesCreditsAndRecordsCreatorProvenance(t *testing.T) 
 	require.Equal(t, valuedomain.OriginDataSaleEarning, sellerLots[0].Origin)
 	require.Equal(t, "900", sellerLots[0].Quantity.String())
 	require.Equal(t, "900", sellerLots[0].Remaining.String())
-	require.Equal(t, valuedomain.FinalityReversible, sellerLots[0].Finality,
-		"an earning cannot be more final than the money behind it")
+	// An earning is exactly as final as the money behind it. The buyer paid
+	// with SETTLED Credits, so the seller's proceeds are SETTLED and
+	// payout-eligible at birth; a REVERSIBLE purchase produces a REVERSIBLE
+	// earning that SettleDerived promotes when the purchase settles, which
+	// TestIntegration_AnEarningFollowsTheFinalityOfWhatPaidForIt drives. Before
+	// D-124 this was REVERSIBLE unconditionally and nothing could ever move it
+	// (F-230).
+	require.Equal(t, valuedomain.FinalitySettled, sellerLots[0].Finality,
+		"an earning is as final as the money behind it, and this one was paid for with settled Credits")
+	require.True(t, sellerLots[0].Finality.PayoutEligible())
+	parents, perr := f.credits.ParentsOf(f.ctx, testDB, sellerLots[0].ID)
+	require.NoError(t, perr)
+	require.NotEmpty(t, parents, "an earning names the lots that funded it")
+	for _, parent := range parents {
+		require.Equal(t, valuedomain.FinalitySettled, parent.Finality)
+	}
 	require.NotNil(t, sellerLots[0].FundingReference)
 	require.Equal(t, "internal_product", sellerLots[0].FundingReference.Type)
 	require.Equal(t, p.ID.String(), sellerLots[0].FundingReference.ID)
@@ -933,4 +957,72 @@ func addStr(base string, n int64) string {
 		panic(err)
 	}
 	return v.Add(q(n)).String()
+}
+
+// An idempotency key belongs to one account (F-106).
+//
+// internal_commerce_orders.idempotency_key is globally UNIQUE and the HTTP
+// boundary's idempotency record is keyed by actor, so a different caller
+// reusing a key reached the domain -- which returned the order it found without
+// asking whose it was: buyer, seller, price, platform fee and proceeds, and the
+// caller's own purchase silently discarded.
+func TestIntegration_ACommerceKeyBelongsToOneAccount(t *testing.T) {
+	f := newFixture(t)
+	f.registerSeller(nil)
+	f.fund(f.buyer, valuedomain.OriginPurchased, valuedomain.FinalitySettled, 10_000)
+	p := f.list(commerce.KindCreatorProduct, 2_500, 400)
+
+	key := "shared-" + uuid.NewString()
+	first, err := f.purchase(p, f.buyer, q(2_500), key)
+	require.NoError(t, err)
+
+	stranger := newAccount(t)
+	f.fund(stranger, valuedomain.OriginPurchased, valuedomain.FinalitySettled, 10_000)
+	_, err = f.purchase(p, stranger, q(2_500), key)
+	require.Error(t, err, "another account's order was returned as this caller's replay")
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
+
+	// The control: the buyer's own retry is still a replay.
+	again, err := f.purchase(p, f.buyer, q(2_500), key)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, again.ID)
+}
+
+// The platform's share is the platform's to set (F-107).
+//
+// It used to be read from the create request, validated against a CEILING with
+// no floor, and defaulted to the Go zero value. commerce:sell is a CUSTOMER
+// permission, so the counterparty who benefits from the answer chose it -- and
+// every rational seller chose nothing by omitting the field.
+func TestIntegration_ASellerDoesNotSetThePlatformsShare(t *testing.T) {
+	f := newFixture(t)
+	f.registerSeller(nil)
+	f.fund(f.buyer, valuedomain.OriginPurchased, valuedomain.FinalitySettled, 10_000)
+
+	p := f.list(commerce.KindCreatorProduct, 2_000, 500) // the deployment's policy: 5%
+	assert.EqualValues(t, 500, p.PlatformFeeBPS,
+		"the product carries the seller's number, not the deployment's")
+
+	// The platform's receivable is one account for the whole deployment, so
+	// what this test owns is the difference across its own sale.
+	before := mustQty(t, f.platformBalance(ledger.CodePlatformFeeReceivable))
+	_, err := f.purchase(p, f.buyer, q(2_000), "fee-"+uuid.NewString())
+	require.NoError(t, err)
+	after := mustQty(t, f.platformBalance(ledger.CodePlatformFeeReceivable))
+	assert.Equal(t, "100", after.Sub(before).String(),
+		"the platform took nothing on a sale its own policy priced at 5%")
+	assert.Equal(t, "1900", f.balance(f.seller, ledger.CodeCreditBalance))
+
+	// The policy is bounded on both sides: a negative is a typo and anything
+	// above the cap is the marketplace the cap exists to refuse.
+	assert.Error(t, f.svc.SetPlatformFeeBPS(-1))
+	assert.Error(t, f.svc.SetPlatformFeeBPS(commerce.MaxPlatformFeeBPS+1))
+	assert.NoError(t, f.svc.SetPlatformFeeBPS(commerce.MaxPlatformFeeBPS))
+}
+
+func mustQty(t *testing.T, s string) money.Quantity {
+	t.Helper()
+	v, err := money.ParseQuantity(s)
+	require.NoError(t, err)
+	return v
 }

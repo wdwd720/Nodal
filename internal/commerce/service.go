@@ -16,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -60,6 +61,9 @@ type Service struct {
 	auditor Audit
 	clk     clock.Clock
 	caps    CapabilityResolver
+	// platformFeeBPS is the platform's share of every sale. A policy value,
+	// never a request field: the seller used to set it (F-107).
+	platformFeeBPS money.BPS
 }
 
 // Audit is the part of internal/audit this package uses. It appends inside
@@ -79,7 +83,23 @@ func NewService(poster Poster, credits Credits, auditor Audit, clk clock.Clock) 
 	if poster == nil || credits == nil || auditor == nil || clk == nil {
 		panic("commerce: NewService requires a poster, a credit service, an audit writer and a clock")
 	}
-	return &Service{poster: poster, credits: credits, auditor: auditor, clk: clk}
+	return &Service{poster: poster, credits: credits, auditor: auditor, clk: clk, platformFeeBPS: DefaultPlatformFeeBPS}
+}
+
+// SetPlatformFeeBPS sets the platform's share of every sale.
+//
+// Separate from NewService because it is a policy value rather than a
+// dependency: a deployment sets it, the code does not decide it, and no seller
+// touches it. Refuses anything above the cap for the same reason Validate
+// does, and refuses a negative outright -- a platform paying sellers to sell is
+// not a fee schedule, it is a typo.
+func (s *Service) SetPlatformFeeBPS(bps money.BPS) error {
+	if bps < 0 || bps > MaxPlatformFeeBPS {
+		return errs.Newf(errs.CodeValidationFailed,
+			"the platform fee must be between 0 and %d bps, got %d", MaxPlatformFeeBPS, bps)
+	}
+	s.platformFeeBPS = bps
+	return nil
 }
 
 // SetCapabilityResolver attaches the deployment's gate state. Passing nil
@@ -216,6 +236,26 @@ func (s *Service) CreateProduct(ctx context.Context, tx pgx.Tx, p Product) (Prod
 	if p.Version == 0 {
 		p.Version = 1
 	}
+	// The platform's share is the platform's to set.
+	//
+	// It used to be read from the create request, validated against a CEILING
+	// with no floor, and defaulted to the Go zero value -- so a seller could
+	// set the platform's own commission on their own sales, and every rational
+	// one set it to nothing by omitting the field. `commerce:sell` is a
+	// CUSTOMER permission, so that was the counterparty who benefits from the
+	// answer choosing it (F-107).
+	//
+	// It is overwritten rather than validated, because a value the seller
+	// cannot influence needs no validation and because refusing would tell them
+	// a field exists that does not. The field is gone from the request schema
+	// for the same reason.
+	//
+	// The native market decides the same number by a dual-controlled admin
+	// action, which is the shape this should eventually take too. Until then it
+	// is one server-side value with an owner, and it is NOT a rate this code
+	// invented: platformFeeBPS is the effective rate today, which is what a
+	// seller who omitted the field already got.
+	p.PlatformFeeBPS = s.platformFeeBPS
 	if err := p.Validate(); err != nil {
 		return Product{}, err
 	}
@@ -310,6 +350,16 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 	if existing, found, err := s.orderByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
 		return Order{}, err
 	} else if found {
+		// Whose replay this is has to be asked, for the reason recorded in
+		// internal/payout: the key is globally unique and the boundary's own
+		// idempotency record is per actor, so another account's order is what
+		// comes back otherwise -- buyer, seller, price, platform fee and
+		// proceeds (F-106).
+		if existing.BuyerAccountID != r.BuyerAccountID {
+			return Order{}, errs.New(errs.CodeInvalidIdempotencyReuse,
+				"commerce: idempotency key belongs to another account").
+				WithField("idempotency_key", r.IdempotencyKey)
+		}
 		return existing, nil
 	}
 
@@ -409,30 +459,45 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 
 	// The buyer's lots. Ordinary spending rules apply: value whose funding is
 	// disputed or reversed cannot buy anything.
-	if _, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
+	//
+	// The allocations are kept, because they are what paid for the seller's
+	// earning: proceeds cannot be more final than the money behind them, and
+	// until D-124 this package asserted that in a comment while minting
+	// REVERSIBLE unconditionally (F-230).
+	spent, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
 		AccountID:                r.BuyerAccountID,
 		Quantity:                 p.Price,
 		JournalTxID:              post.TransactionID,
 		Reference:                credit.Reference{Type: "internal_commerce_order", ID: r.IdempotencyKey},
 		Reason:                   "internal commerce purchase",
 		RequireSpendableFinality: true,
-	}); err != nil {
+	})
+	if err != nil {
 		return Order{}, err
 	}
 
-	// The seller's earning, with the provenance the product kind dictates.
+	// The seller's earning, with the provenance the product kind dictates and
+	// the finality of the money that paid for it.
 	//
-	// Finality is REVERSIBLE, not SETTLED: the Credits that paid for this may
-	// themselves be backed by a card payment still inside its dispute window,
-	// and an earning cannot be more final than the money behind it. It is
-	// spendable, which is what the product needs, and not payout-eligible,
-	// which is the conservative half.
+	// The Credits the buyer spent may be backed by a card payment still inside
+	// its dispute window, and an earning cannot be more final than the money
+	// behind it -- so the lots that were just consumed become this lot's
+	// PARENTS and credit.RecordLot mints it at the least final finality among
+	// them. Purchased-and-settled Credits therefore produce an earning that is
+	// payout-eligible at birth; a reversible purchase produces a REVERSIBLE
+	// earning that credit.Service.SettleDerived promotes when that purchase
+	// settles, and not before (D-124).
 	if proceeds.IsPositive() {
+		parents, perr := credit.ParentsOfAllocations(spent, proceeds)
+		if perr != nil {
+			return Order{}, perr
+		}
 		if _, err := s.credits.RecordLot(ctx, tx, credit.RecordLotRequest{
 			AccountID:        earner,
 			Quantity:         proceeds,
 			Origin:           origin,
 			Finality:         valuedomain.FinalityReversible,
+			Parents:          parents,
 			Reference:        credit.Reference{Type: "internal_commerce_order", ID: r.IdempotencyKey},
 			FundingReference: &credit.Reference{Type: "internal_product", ID: p.ID.String()},
 			JournalTxID:      post.TransactionID,

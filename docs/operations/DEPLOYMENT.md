@@ -146,6 +146,7 @@ Two SNS topics, SEV1 and SEV2, with email and HTTPS (pager) subscriptions per en
 | `oldest-unresolved-mismatch-sev2` / `-sev1` | 2 / 1 | `oldest_unresolved_mismatch` > 900 s / 3600 s | A mismatch has been open that long. The SEV1 threshold is the point at which "still investigating" stops being an acceptable answer while new risk stays blocked. |
 | `unknown-submissions-elevated` | 2 | `unknown_submissions` >= 3 / 5 min | Submissions whose outcome we do not know. Each is money in an undetermined state; `docs/runbooks/submission-unknown.md`. |
 | `unknown-submission-rate-high` | 1 | `unknown/submissions` > 5% over 5 min, min 20 submissions | Not an isolated timeout but a systematic loss of outcome knowledge: the provider or the chain observer has stopped answering. |
+| `verification-heartbeat-missing` | 2 | `verification_passes` < 1 over 15 min, **missing data breaches** | Nothing is checking the ledger against its own entries: the verification pass is broken, the exporter is down, or the instruments were never constructed. Every counter-based SEV1 above is blind while this fires. This is the alarm that stops a system emitting nothing from reading green (F-118). |
 
 **Relay (transactional outbox)**
 
@@ -188,7 +189,18 @@ Relay lag is the number that says whether the rest of the platform is looking at
 
 Alarm names are `cp-<env>-<name>`. `aws cloudwatch describe-alarms --alarm-name-prefix cp-<env>- --state-value ALARM` lists what is currently firing. Thresholds are variables in `modules/observability/variables.tf` and are set per environment; dev is deliberately looser than prod (`relay_lag_thresholds` in `terraform.tfvars.example`).
 
-Two alarms depend on data this stack does not produce and will sit in `INSUFFICIENT_DATA` until the collector is publishing: every application-metric alarm needs the OTLP exporter's namespace and dimensions to match `custom_metric_namespace` / `custom_metric_dimensions` exactly, which cannot be checked without a running collector (section 13).
+Two alarms depend on data this stack does not produce and will sit in `INSUFFICIENT_DATA` until the collector is publishing: every application-metric alarm needs the OTLP exporter's namespace and dimensions to match `custom_metric_namespace` / `custom_metric_dimensions` exactly, which cannot be checked without a running collector (section 13). `test/infra` proves the metric *names* match what the Go code constructs; it cannot prove the namespace.
+
+**On the launch tier (Render), none of the above exists — and alerts are still delivered.** There is no collector, no CloudWatch and no SNS. Every alert `reconciliation.Metrics.Raise` produces is handed to `internal/alert`, which POSTs it to `CP_ALERT_WEBHOOK_URL` from a bounded queue that never blocks the transaction that raised it. Set `NODAL_ALERT_WEBHOOK_URL` in the Render dashboard to one of:
+
+| Destination | Cost | What to paste | Shape sent |
+|---|---|---|---|
+| Slack incoming webhook | $0 | `https://hooks.slack.com/services/…` | `{"text": "[SEV1] STAGING nodal-api ledger_integrity_violation: … (record …)"}` |
+| Discord channel webhook | $0 | `https://discord.com/api/webhooks/…` | `{"content": …}` |
+| ntfy topic (no account) | $0 | `https://ntfy.sh/<a-long-random-topic>` — the topic name is the credential | text body; `Title`, `Priority` (5 for SEV1), `Tags` headers |
+| Anything else | — | any HTTPS endpoint | the event as JSON: `name`, `severity`, `detail`, `record_id`, allowlisted `fields`, `environment`, `service`, `dropped_fields` |
+
+The shape is chosen from the host; set `CP_ALERT_WEBHOOK_FORMAT` only for a self-hosted ntfy or a Mattermost hook. The startup log names the destination's host and shape — never the URL, which is the secret. `config.Validate` refuses STAGING and PROD with no destination, so a deploy that forgets it does not start, and Render keeps the previous one serving. The internal verification pass that raises the ledger-integrity SEV1 runs in the API every five minutes on this tier (`cmd/api/reconverify.go`).
 
 ## 11. External managed services
 

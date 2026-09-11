@@ -201,8 +201,9 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		// guessing.
 		Orders:   execution.NewRepository(clk, outbox, writer),
 		Attempts: execution.NewAttemptRepository(clk, outbox, writer),
-		Metrics:  reconciliation.NoopMetrics(),
-		Logger:   log,
+		// Real instruments; see cmd/api/wire.go for why (F-118).
+		Metrics: financialMetrics(log),
+		Logger:  log,
 	})
 	if err != nil {
 		d.Close()
@@ -225,7 +226,13 @@ func cmdRun(ctx context.Context, d *deps) error {
 		slog.Duration("verify_interval", verify), slog.Int("batch", batch))
 
 	if d.credits != nil {
-		d.credits.window = durationVar(d.lookup, envSettlementWindow, defaultSettlementWindow)
+		// From the configuration table, not the environment: the reversibility
+		// window is a recorded risk decision and belongs in the hash that
+		// proves what is running.
+		d.credits.window = d.cfg.Credit.SettlementWindow
+		if d.credits.window <= 0 {
+			d.credits.window = defaultSettlementWindow
+		}
 	}
 	creditEvery := durationVar(d.lookup, envCreditInterval, defaultCreditInterval)
 
@@ -255,6 +262,7 @@ func cmdRun(ctx context.Context, d *deps) error {
 		case <-creditTick.C:
 			d.credits.settle(ctx, batch)
 			d.credits.reconcile(ctx, batch)
+			d.credits.expire(ctx, batch)
 		case <-fullTick.C:
 			d.log.InfoContext(ctx, "full balance reconciliation is scheduled per account by the composition root")
 		}

@@ -36,6 +36,32 @@ type Config struct {
 	RequireTLS       bool
 	StatementTimeout time.Duration
 	LockTimeout      time.Duration
+
+	// ConnectTimeout bounds one dial. Zero leaves pgx's default, which is
+	// whatever the driver chose rather than anything this system decided.
+	//
+	// It matters most on a database that suspends. Neon's free tier scales to
+	// zero -- render.yaml says so in as many words -- so the first request after
+	// each suspension dials a compute that is waking up, and a dial with no
+	// bound can outlive the HTTP request it was opened to serve. A connect that
+	// finishes after its request has gone is work done for nobody, holding a
+	// pool slot the next request wanted (F-93).
+	ConnectTimeout time.Duration
+
+	// MaxConnIdleTime discards a pooled connection that has been idle this long.
+	// Zero leaves pgxpool's 30-minute default.
+	//
+	// Against a compute that suspends, a pooled connection outlives the server
+	// on the other end of it: the pool believes it is usable, the first request
+	// after the suspension gets a broken pipe, and a connection failure is not
+	// retryable by design. Discarding them earlier than the suspension trades a
+	// cheap reconnect for that failure.
+	//
+	// The value is deliberately not defaulted here. How long this particular
+	// deployment's database stays awake is a fact about the provider, and this
+	// package has no measurement of it -- so the knob exists and the deployment
+	// chooses.
+	MaxConnIdleTime time.Duration
 }
 
 // DB wraps a pgx pool. It satisfies Querier so read-only repositories can be
@@ -99,6 +125,12 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 	}
 	if pc.MinConns > pc.MaxConns {
 		return nil, fmt.Errorf("db: MinConns (%d) exceeds MaxConns (%d)", pc.MinConns, pc.MaxConns)
+	}
+	if cfg.ConnectTimeout > 0 {
+		pc.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
+	}
+	if cfg.MaxConnIdleTime > 0 {
+		pc.MaxConnIdleTime = cfg.MaxConnIdleTime
 	}
 
 	sessionSQL := sessionSetup(cfg.StatementTimeout, cfg.LockTimeout)

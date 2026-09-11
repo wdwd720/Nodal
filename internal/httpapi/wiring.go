@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/activity"
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/auth"
@@ -29,6 +30,7 @@ import (
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/positions"
 	"github.com/nodal/controlplane/internal/provider"
+	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -42,7 +44,11 @@ type WireDeps struct {
 	Clock clock.Clock
 	Env   config.Environment
 
-	Identity     IdentityPort
+	Identity IdentityPort
+	// Profile is the product-level user record, terms acceptance and account
+	// lifecycle (internal/profile). Nil leaves those routes UNSUPPORTED and
+	// GET /v1/me answering exactly what it answered before.
+	Profile      ProfilePort
 	Sessions     *auth.Manager
 	Accounts     *accounts.Repository
 	Assets       *assets.Repository
@@ -81,7 +87,33 @@ type WireDeps struct {
 	// leaves them nil and those routes answer UNSUPPORTED.
 	NativeEconomy NativeEconomyDeps
 
+	// Withdrawal holds the verification, eligibility and conversion-request
+	// services of goal PARTS 19-25. Every field is optional for the same
+	// reason: a deployment with no identity vendor has no verification routes,
+	// which is the honest state of one with no contract.
+	Withdrawal WithdrawalDeps
+	// MarketSurfaces holds what the discovery, portfolio and activity reads
+	// need beyond the native-economy services themselves. It is optional in
+	// the same way: nil parts leave their ports nil and their routes
+	// UNSUPPORTED.
+	MarketSurfaces MarketSurfacesDeps
+
 	IdempotencyTTL time.Duration
+}
+
+// MarketSurfacesDeps are the extra inputs the product read surfaces need
+// (product goal SS12-16, 35, 47).
+type MarketSurfacesDeps struct {
+	// RiskPolicies reports the GLOBAL risk limits a market's detail page
+	// discloses as "in force". Nil means they are not reported, which is not
+	// the same as their being absent.
+	RiskPolicies *risk.Store
+	// ActivityFeed is the unified timeline. Nil leaves GET /me/activity
+	// UNSUPPORTED.
+	ActivityFeed *activity.Feed
+	// Simulated is cfg.SandboxTier(): on a sandbox tier no value is real, and
+	// every figure these surfaces return says so.
+	Simulated bool
 }
 
 // FundingSettlement is the deposit destination the platform accepts.
@@ -115,6 +147,7 @@ func Wire(d WireDeps) (Ports, error) {
 
 	p := Ports{
 		Identity:       d.Identity,
+		Profile:        d.Profile,
 		Reconciliation: d.Reconcile,
 		Quotes:         d.Quotes,
 		Health:         healthAdapter{db: d.DB},
@@ -176,6 +209,25 @@ func Wire(d WireDeps) (Ports, error) {
 		p.Idempotency = idempotencyAdapter{store: d.Idempotency, db: d.DB}
 	}
 	wireNativeEconomy(&p, d)
+	wireWithdrawal(&p, d)
+	// After wireNativeEconomy: the portfolio reads its Credit balance through
+	// the SAME port GET /credits/balance uses, so it cannot be attached before
+	// that port exists.
+	WireMarketData(&p,
+		MarketDataDeps{
+			Markets:      d.NativeEconomy.NativeMarkets,
+			DB:           d.DB,
+			Clock:        d.Clock,
+			RiskPolicies: d.MarketSurfaces.RiskPolicies,
+		},
+		PortfolioDeps{
+			Markets:   d.NativeEconomy.NativeMarkets,
+			Credits:   p.Credits,
+			DB:        d.DB,
+			Clock:     d.Clock,
+			Simulated: d.MarketSurfaces.Simulated,
+		},
+		d.MarketSurfaces.ActivityFeed, d.DB)
 	return p, nil
 }
 
@@ -739,6 +791,14 @@ func (g gatesAdapter) List(ctx context.Context) ([]GateView, error) {
 	return out, nil
 }
 
+func (g gatesAdapter) History(ctx context.Context, capability gates.Capability) ([]gates.Transition, error) {
+	gate, err := gates.Get(ctx, g.q, capability, g.env)
+	if err != nil {
+		return nil, err
+	}
+	return gates.Transitions(ctx, g.q, gate.ID)
+}
+
 func (g gatesAdapter) Act(ctx context.Context, capability gates.Capability, action GateAction, req gates.Proposal, note string) (GateView, error) {
 	var gate gates.Gate
 	err := g.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
@@ -756,6 +816,10 @@ func (g gatesAdapter) Act(ctx context.Context, capability gates.Capability, acti
 			gate, aerr = g.adm.Resume(ctx, tx, capability, note)
 		case GateActionRevoke:
 			gate, aerr = g.adm.Revoke(ctx, tx, capability, note)
+		case GateActionSandbox:
+			gate, aerr = g.adm.Sandbox(ctx, tx, capability, note)
+		case GateActionUnsandbox:
+			gate, aerr = g.adm.Unsandbox(ctx, tx, capability, note)
 		default:
 			aerr = validationError("action", "unknown gate action")
 		}
@@ -957,7 +1021,7 @@ func (i idempotencyAdapter) Run(ctx context.Context, cmd IdempotentCommand, fn f
 	}
 	if err := i.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		return i.store.Complete(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key,
-			res.Status, res.ResourceType, res.ResourceID, res.Body)
+			res.Status, res.ResourceType, res.ResourceID, res.stored())
 	}); err != nil {
 		return CommandResult{}, err
 	}
@@ -966,7 +1030,7 @@ func (i idempotencyAdapter) Run(ctx context.Context, cmd IdempotentCommand, fn f
 
 func (i idempotencyAdapter) record(ctx context.Context, cmd IdempotentCommand, res CommandResult) {
 	_ = i.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-		return i.store.Complete(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, res.Status, "", "", res.Body)
+		return i.store.Complete(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, res.Status, "", "", res.stored())
 	})
 }
 
@@ -976,7 +1040,7 @@ func (i idempotencyAdapter) fail(ctx context.Context, cmd IdempotentCommand, res
 		status = 500
 	}
 	_ = i.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-		return i.store.Fail(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, status, res.Body)
+		return i.store.Fail(ctx, tx, cmd.ActorID, cmd.Endpoint, cmd.Key, status, res.stored())
 	})
 }
 

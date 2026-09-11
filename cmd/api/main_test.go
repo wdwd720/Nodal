@@ -57,6 +57,7 @@ func TestRefuseFakeProviders(t *testing.T) {
 				&cfg2.Providers.Execution, &cfg2.Providers.MarketData, &cfg2.Providers.ChainObserver,
 				&cfg2.Providers.ChainObserverFallback, &cfg2.Providers.Model, &cfg2.Providers.EventBus,
 				&cfg2.Providers.Workflow, &cfg2.Providers.Archive, &cfg2.Providers.Notification,
+				&cfg2.Providers.CreditPurchase, &cfg2.Providers.Payout,
 			} {
 				p.Mode = config.ProviderModeSandbox
 			}
@@ -145,27 +146,29 @@ func TestWithRequestTimeoutIsOptional(t *testing.T) {
 // and nothing more; the persisted, dual-approved gate row decides.
 func TestParseCapabilities(t *testing.T) {
 	t.Parallel()
-	got := parseCapabilities(" live_funding , WITHDRAWALS ,, not-a-capability ")
-	assert.Len(t, got, 2)
+	got, err := parseCapabilities(" live_funding , WITHDRAWALS ,, ")
+	require.NoError(t, err)
+	assert.Len(t, got, 2, "case, surrounding space and an empty element are all forgiven")
 	_, hasFunding := got[gates.LiveFunding]
 	_, hasWithdrawals := got[gates.Withdrawals]
 	assert.True(t, hasFunding)
 	assert.True(t, hasWithdrawals)
 
-	assert.Empty(t, parseCapabilities(""))
-	assert.Empty(t, parseCapabilities("nonsense"))
-}
+	empty, err := parseCapabilities("")
+	require.NoError(t, err, "naming nothing is a valid deployment; it disables every capability")
+	assert.Empty(t, empty)
 
-func TestDurationEnv(t *testing.T) {
-	t.Parallel()
-	lookup := config.LookupFromMap(map[string]string{
-		"GOOD": "30s", "BAD": "not-a-duration", "EMPTY": "  ", "NEGATIVE": "-5s",
-	})
-	assert.Equal(t, 30*time.Second, durationEnv(lookup, "GOOD", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "BAD", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "EMPTY", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "NEGATIVE", time.Minute))
-	assert.Equal(t, time.Minute, durationEnv(lookup, "ABSENT", time.Minute))
+	// And a name nothing answers to is a refusal rather than a silent drop.
+	//
+	// This list is condition 1 of the policy authority, so a dropped name is a
+	// capability switched off with a healthy service and a 200 on every probe
+	// -- and one letter is all it takes (F-145).
+	for _, bad := range []string{"nonsense", "not-a-capability", "CREDIT_PURCHASEE", "live_funding,WITHDRAWALZ"} {
+		_, err := parseCapabilities(bad)
+		require.Errorf(t, err, "%q was accepted", bad)
+		assert.Contains(t, err.Error(), "CP_API_ENABLED_CAPABILITIES",
+			"the refusal must name the variable the operator has to fix")
+	}
 }
 
 func TestProviderCatalogCoversEverySlot(t *testing.T) {
@@ -191,7 +194,8 @@ func TestOneEnvironmentVariableCannotEnableLiveMoney(t *testing.T) {
 	for _, c := range gates.AllCapabilities() {
 		names = append(names, string(c))
 	}
-	enabled := parseCapabilities(strings.Join(names, ","))
+	enabled, err := parseCapabilities(strings.Join(names, ","))
+	require.NoError(t, err)
 	require.Len(t, enabled, len(gates.AllCapabilities()), "every capability is named in the variable")
 
 	now := time.Now().UTC()

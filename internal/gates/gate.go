@@ -219,7 +219,11 @@ func (p Proposal) normalize(c Capability, now time.Time) (Proposal, error) {
 // Verdict is the result of evaluating a gate. Reason is one of the Reason*
 // constants (empty when Active) so callers can match it exactly.
 type Verdict struct {
-	Active          bool
+	Active bool
+	// Sandbox is true when Active came from a SANDBOX row on a sandbox tier
+	// rather than from the five conditions. A caller that shows "active"
+	// without this word is overstating what happened.
+	Sandbox         bool
 	Reason          string
 	State           GateState
 	ApprovalVersion int
@@ -262,6 +266,13 @@ const (
 // conditions are checked in the order of POLICY_AUTHORITY §1 and the first
 // failure is reported.
 func Evaluate(g *Gate, configEnabled bool, now time.Time) Verdict {
+	return EvaluateWith(g, configEnabled, false, now)
+}
+
+// EvaluateWith is Evaluate for a deployment that may or may not be a sandbox
+// tier. A SANDBOX row is active only when sandboxAllowed; every other state is
+// judged exactly as Evaluate judges it, and the flag changes nothing for them.
+func EvaluateWith(g *Gate, configEnabled, sandboxAllowed bool, now time.Time) Verdict {
 	v := Verdict{}
 	if g != nil {
 		v.State = g.State
@@ -278,6 +289,9 @@ func Evaluate(g *Gate, configEnabled bool, now time.Time) Verdict {
 	}
 	if g == nil {
 		return fail(ReasonNoGateRow)
+	}
+	if g.State == StateSandbox {
+		return evaluateSandbox(g, sandboxAllowed, now, v)
 	}
 	if g.State != StateActive {
 		return fail(ReasonStateNotActive)

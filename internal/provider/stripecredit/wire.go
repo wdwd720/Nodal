@@ -43,7 +43,7 @@ const (
 	// written so that the provider's own record shows what was promised, and
 	// it is read back on every event and compared. It is evidence, never an
 	// input: nothing recomputes Credits from this field.
-	MetaCreditQuantity = "nodal_credit_quantity"
+	MetaCreditQuantity = "nodal_credit_quantity" //nolint:gosec // G101: a Stripe metadata key, not a credential
 	MetaEnvironment    = "nodal_environment"
 )
 

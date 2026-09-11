@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -65,6 +66,16 @@ func run() error {
 	case "LOCAL", "DEV", "TEST":
 	default:
 		return fmt.Errorf("refusing to seed in environment %q: seed data is LOCAL/DEV/TEST only (PART 146)", env)
+	}
+	// And the variable that says so. Until D-115 CP_SEED_ENABLED was required
+	// of every binary, documented as governing exactly this, and read by
+	// nothing: an operator who switched it off changed nothing at all (F-144).
+	allowed, err := config.SeedScriptsAllowed(env, os.LookupEnv)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return fmt.Errorf("refusing to seed: CP_SEED_ENABLED is false in environment %q", env)
 	}
 	dsn := os.Getenv("CP_DATABASE_APP_URL")
 	if dsn == "" {

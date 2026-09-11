@@ -108,14 +108,20 @@ SELECT status, payload_hash FROM inbox_messages WHERE source = $1 AND message_id
 	markProcessedSQL = `
 UPDATE inbox_messages
 SET status = 'PROCESSED', processed_at = $3, error = NULL, schema_version = $4,
-    payload_hash = COALESCE($5, payload_hash)
+    payload_hash = COALESCE(payload_hash, $5)
 WHERE source = $1 AND message_id = $2`
 
+	// The hash is recorded on failure as well as on receipt. A row created
+	// straight into FAILED used to carry payload_hash NULL, so the identity a
+	// later delivery would be compared against did not exist (F-85). COALESCE
+	// on the conflict path means the FIRST payload seen under this id stays the
+	// identity: a retry never redefines what the message is.
 	markFailedInboxSQL = `
-INSERT INTO inbox_messages (source, message_id, schema_version, received_at, status, error)
-VALUES ($1, $2, $3, $4, 'FAILED', $5)
+INSERT INTO inbox_messages (source, message_id, schema_version, received_at, status, error, payload_hash)
+VALUES ($1, $2, $3, $4, 'FAILED', $5, $6)
 ON CONFLICT (source, message_id) DO UPDATE
-SET status = 'FAILED', error = EXCLUDED.error
+SET status = 'FAILED', error = EXCLUDED.error,
+    payload_hash = COALESCE(inbox_messages.payload_hash, EXCLUDED.payload_hash)
 WHERE inbox_messages.status <> 'PROCESSED'`
 
 	getInboxSQL = `
@@ -211,6 +217,15 @@ func (i *Inbox) ProcessHashed(ctx context.Context, tx pgx.Tx, source, messageID 
 		case StatusReceived:
 			return 0, inProgress(nil)
 		}
+		// A retry of a message that failed is still the same message. Without
+		// this, a second delivery under one id could carry different bytes and
+		// be processed from them, while provider_events -- which is immutable
+		// and was written by the first delivery -- kept saying the id's bytes
+		// were the first ones. The effect and the evidence would disagree
+		// (F-85).
+		if err := checkHash(source, messageID, storedHash, payloadHash); err != nil {
+			return 0, err
+		}
 		return i.run(ctx, tx, source, messageID, schemaVersion, payloadHash, fn)
 	}
 	return 0, errs.Newf(errs.CodeInternal, "event: inbox row has unknown status %q", status)
@@ -235,14 +250,20 @@ func (i *Inbox) run(ctx context.Context, tx pgx.Tx, source, messageID string, sc
 // consumer's transaction rolled back. PROCESSED rows are never touched. The
 // stored error is the client-safe code and detail of an *errs.Error, or the
 // error text otherwise, bounded in length.
-func (i *Inbox) MarkFailed(ctx context.Context, q db.Querier, source, messageID string, schemaVersion int, cause error) error {
+//
+// payloadHash is the hex SHA-256 of the message this attempt carried, and it
+// is what a later delivery under the same id is compared against. Empty is
+// permitted for a caller that has no payload, and stores NULL -- which
+// compares equal to anything, so a caller that can supply it should.
+func (i *Inbox) MarkFailed(ctx context.Context, q db.Querier, source, messageID string, schemaVersion int, payloadHash string, cause error) error {
 	if err := validateInboxArgs(source, messageID, schemaVersion); err != nil {
 		return err
 	}
 	if q == nil {
 		return errs.New(errs.CodeInternal, "event: nil querier")
 	}
-	_, err := q.Exec(ctx, markFailedInboxSQL, source, messageID, schemaVersion, i.clk.Now().UTC(), safeErrorText(cause))
+	_, err := q.Exec(ctx, markFailedInboxSQL, source, messageID, schemaVersion, i.clk.Now().UTC(),
+		safeErrorText(cause), nullString(payloadHash))
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "event: inbox mark failed")
 	}
@@ -291,6 +312,16 @@ func validateInboxArgs(source, messageID string, schemaVersion int) error {
 func inProgress(cause error) error {
 	return errs.Wrap(cause, errs.CodeIdempotencyInProgress, "event: message is being processed by another transaction").
 		WithRetryAfter(InProgressRetryAfter)
+}
+
+// nullString renders an empty payload hash as SQL NULL, because "" would be a
+// hash nothing can equal and NULL is the absence the comparison already knows
+// how to read.
+func nullString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func checkHash(source, messageID string, stored *string, got string) error {

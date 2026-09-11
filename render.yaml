@@ -1,8 +1,8 @@
 # Render Blueprint for the $0-fixed-cost launch tier.
 #
 # One free web service and nothing else. See docs/operations/LAUNCH_TIER.md for
-# why this tier exists and docs/operations/RENDER_DEPLOY.md for what an operator
-# does with it.
+# why this tier exists and what an operator does with it; the human actions a
+# deployment still needs are docs/build/HUMAN_ACTIONS_QUEUE.md.
 #
 # WHAT IS DELIBERATELY ABSENT
 #
@@ -41,6 +41,18 @@ services:
     # rotation whenever Neon is scaled to zero, which is most of the time.
     healthCheckPath: /v1/healthz
 
+    # The hostname every other value in this file already assumes.
+    #
+    # CP_HTTP_PUBLIC_BASE_URL, CP_AUTH_REDIRECT_URL, CP_HTTP_CORS_ORIGINS, the
+    # app's VITE_API_ORIGIN and the static site's CSP all name
+    # api-nodal.actorvia.xyz. Without this line a blueprint sync answers on
+    # *.onrender.com instead: the OIDC redirect_uri does not match, the session
+    # cookie is set on a host the app never calls, and every request is a CORS
+    # failure. The live service had the domain attached by hand, which is
+    # exactly the drift this file exists to remove (F-141).
+    domains:
+      - api-nodal.actorvia.xyz
+
     envVars:
       # --- the build ----------------------------------------------------
       # build/Dockerfile requires a CMD build arg naming the cmd/ directory to
@@ -57,13 +69,52 @@ services:
       # and the value sits in the variable it names.
       - key: NODAL_DB_APP_URL
         sync: false
-      - key: NODAL_DB_MIGRATE_URL
+      # NODAL_DB_MIGRATE_URL is deliberately ABSENT, like the CP_ variable that
+      # would reference it (see CP_DATABASE_MIGRATE_URL further down). Nothing
+      # in cmd/api reads it, and the schema owner can
+      # `ALTER TABLE ... DISABLE TRIGGER` -- so declaring it here put the one
+      # credential that can undo every state machine into the one process the
+      # internet can reach, for no purpose (F-136). Migrations are run by an
+      # operator from their own machine with `go run ./cmd/migrate`, which
+      # reads CP_DATABASE_MIGRATE_URL from that machine's environment; this
+      # tier deploys no job that could run them, and LAUNCH_TIER.md §10 says so.
+      # The cp_ops role, for the login-attempt purge. cp_app deliberately holds
+      # no DELETE on login_attempts -- an attacker with the application
+      # credential must not be able to erase the record of the logins they
+      # attempted -- so the purge needs its own role.
+      #
+      # Until this is set, cmd/api logs a WARN at startup naming what will not
+      # happen and serves normally: a web service does not refuse to boot
+      # because a retention pass is unconfigured. But the plaintext OIDC nonces
+      # and PKCE verifiers in login_attempts are then kept forever, on a
+      # database whose ceiling halts every financial action when it fills
+      # (F-105).
+      - key: NODAL_DB_OPS_URL
         sync: false
       - key: NODAL_OIDC_CLIENT_SECRET
         sync: false
       - key: NODAL_STRIPE_API_KEY
         sync: false
       - key: NODAL_STRIPE_WEBHOOK_SECRET
+        sync: false
+      # The alert destination. A Slack or Discord incoming-webhook URL IS its
+      # credential -- anyone holding it can post as the integration -- so it is
+      # a dashboard secret and not a value in this file, like every other line
+      # in this block.
+      - key: NODAL_ALERT_WEBHOOK_URL
+        sync: false
+      # The keyring personal data is encrypted under before it reaches
+      # identity_pii (F-47). Thirty-two random bytes, base64, in the JSON
+      # shape internal/pii documents; generate with
+      # `openssl rand -base64 32`. The database never holds it.
+      - key: NODAL_PII_KEYRING
+        sync: false
+      # The first operator (ADR-0024): "<issuer>|<subject>=ADMIN", reconciled
+      # into operator_roles at that person's next login and never taken from a
+      # provider claim. The subject is read out of the identity provider by a
+      # person (HUMAN_ACTIONS_QUEUE §5); PROD accepts an empty value or exactly
+      # one ADMIN. Not a secret, but specific to one deployment and one person.
+      - key: CP_AUTH_BOOTSTRAP_OPERATORS
         sync: false
 
       # --- core ----------------------------------------------------------
@@ -88,8 +139,14 @@ services:
         value: 0.0.0.0:10000
       - key: CP_HTTP_PUBLIC_BASE_URL
         value: https://api-nodal.actorvia.xyz
+      # The API's own origin and the web app's. The list is also the CSRF
+      # allowlist, so a request from the app's origin passes both checks with
+      # this one value. No wildcard, no trailing slash: config.Validate refuses
+      # both. The session cookie is __Host- and SameSite=Lax, which the two
+      # hostnames satisfy because they share the registrable domain -- a
+      # *.onrender.com preview could never sign in, by design.
       - key: CP_HTTP_CORS_ORIGINS
-        value: https://api-nodal.actorvia.xyz
+        value: https://api-nodal.actorvia.xyz,https://app-nodal.actorvia.xyz
       - key: CP_HTTP_READ_TIMEOUT
         value: 15s
       - key: CP_HTTP_WRITE_TIMEOUT
@@ -98,6 +155,25 @@ services:
         value: 120s
       - key: CP_HTTP_MAX_BODY_BYTES
         value: "1048576"
+
+      # The networks the platform's router speaks from, and the only condition
+      # under which X-Forwarded-For is read at all.
+      #
+      # Render terminates TLS at its own edge and forwards the request over its
+      # internal network, so the peer address this process sees is the router's
+      # and is identical for every caller. Without this list the API cannot tell
+      # two callers apart: every audit record and every login_attempts row names
+      # the router, and every unauthenticated rate-limit bucket -- including the
+      # auth budget that exists to stop brute force -- becomes one counter
+      # shared by the whole cohort (F-88).
+      #
+      # Trusting the private ranges is safe here because they are the only way
+      # this container is reachable: nothing routes to it from the public
+      # internet except through the platform. A caller that somehow arrived
+      # from a public address is not in these ranges, so its X-Forwarded-For is
+      # ignored and it is keyed on the address it really came from.
+      - key: CP_HTTP_TRUSTED_PROXY_CIDRS
+        value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,fd00::/8,::1/128"
 
       # --- rate limiting -------------------------------------------------
       # One process, so process-local counters enforce the configured limit
@@ -157,14 +233,51 @@ services:
       # 100 CU-hour monthly allowance on nothing.
       - key: CP_DATABASE_APP_URL
         value: env://NODAL_DB_APP_URL
-      - key: CP_DATABASE_MIGRATE_URL
-        value: env://NODAL_DB_MIGRATE_URL
+      # CP_DATABASE_MIGRATE_URL is deliberately ABSENT from this service.
+      #
+      # It is the schema-owner credential, and the owner can ALTER TABLE ...
+      # DISABLE TRIGGER. Every state machine in this system is enforced by
+      # triggers -- the transition bindings, forbid_mutation on fifty-three
+      # append-only tables, and the eleven that write state columns the
+      # application cannot -- so giving it to the internet-facing process
+      # undercuts all of them (F-93).
+      #
+      # cmd/api never reads it: nothing that loads configuration does, and
+      # cmd/migrate resolves it from its own environment when an operator runs
+      # a migration.
+      - key: CP_DATABASE_OPS_URL
+        value: env://NODAL_DB_OPS_URL
       - key: CP_DATABASE_REQUIRE_TLS
         value: "true"
       - key: CP_DATABASE_MAX_CONNS
         value: "8"
       - key: CP_DATABASE_MIN_CONNS
         value: "0"
+      # Five seconds, under the ten-second request timeout below it.
+      #
+      # Neon's free tier scales to zero and this file already says so, so the
+      # first request after each suspension dials a compute that is waking up.
+      # An unbounded dial there finishes after the request that opened it has
+      # gone, holding a pool slot the next request wanted. config.Validate
+      # refuses a value at or above CP_API_REQUEST_TIMEOUT for exactly that
+      # reason (F-93).
+      - key: CP_DATABASE_CONNECT_TIMEOUT
+        value: 5s
+      # Four minutes, and this one is a judgement rather than a derivation.
+      #
+      # A pooled connection to a suspended compute is broken and the pool does
+      # not know it; the next request gets a dial failure, which is not
+      # retryable by design. Discarding idle connections before the database
+      # goes away trades a cheap reconnect for that failure.
+      #
+      # Neon does not publish the free tier's exact idle threshold and this
+      # repository has no measurement of it, so four minutes is chosen to sit
+      # under the commonly reported five rather than derived from anything. It
+      # is written here rather than defaulted in code because it is a fact about
+      # this provider, and the knob's default of 0 keeps pgxpool's behaviour for
+      # every deployment that has not measured its own.
+      - key: CP_DATABASE_MAX_CONN_IDLE_TIME
+        value: 4m
       - key: CP_DATABASE_STATEMENT_TIMEOUT
         value: 30s
       - key: CP_DATABASE_LOCK_TIMEOUT
@@ -190,6 +303,11 @@ services:
         value: env://NODAL_OIDC_CLIENT_SECRET
       - key: CP_AUTH_REDIRECT_URL
         value: https://api-nodal.actorvia.xyz/v1/auth/callback
+      # The web app is its own site. The callback sets the cookie on this API
+      # host and sends the browser there; without this it sends the browser to
+      # the API's root, which is a 404 problem document.
+      - key: CP_AUTH_POST_LOGIN_URL
+        value: https://app-nodal.actorvia.xyz/
       - key: CP_AUTH_COOKIE_NAME
         value: nodal_session
       - key: CP_AUTH_COOKIE_SECURE
@@ -213,9 +331,94 @@ services:
       - key: CP_TELEMETRY_METRICS_INTERVAL
         value: 60s
 
+      # --- alerting ------------------------------------------------------
+      # Where an alert goes. Until this existed, reconciliation.Metrics.Raise
+      # incremented a counter that died with the process and wrote a log line
+      # to a stream nobody watches: a ledger-integrity violation reached no
+      # human at all (F-118).
+      #
+      # A webhook rather than a paging vendor, because the launch tier may not
+      # incur a fixed monthly cost and an outbound HTTPS POST is the only shape
+      # that both leaves the process and costs nothing. Slack, Discord, ntfy,
+      # healthchecks.io and a Cloudflare Worker all accept one on a free tier,
+      # so the operator picks and this repository commits to nobody.
+      #
+      # This is a real destination, not a placeholder, and the refusal is on
+      # the VALUE rather than on the reference. config.Load refuses to start in
+      # STAGING or PROD when CP_ALERT_WEBHOOK_URL is empty AND when the
+      # variable it names holds nothing -- a non-empty `env://` string used to
+      # satisfy the rule on its own, so a deployment that never set
+      # NODAL_ALERT_WEBHOOK_URL booted healthy and unalerted (F-137).
+      - key: CP_ALERT_WEBHOOK_URL
+        value: env://NODAL_ALERT_WEBHOOK_URL
+      # Derived from the URL's host: a Slack hook is spoken to as Slack, a
+      # Discord hook as Discord, ntfy as ntfy, anything else gets the event as
+      # JSON. Slack and Discord answer any other shape with a 400, and a
+      # destination that rejects every alert is the finding with a URL attached.
+      - key: CP_ALERT_WEBHOOK_FORMAT
+        value: auto
+      # SEV2, so an unknown submission and an unauthorised signing candidate
+      # page as well as a ledger-integrity violation. There are few enough
+      # raise sites that the floor can afford to be low; a channel that is
+      # noisy is a channel somebody mutes, and this one has room before then.
+      - key: CP_ALERT_MIN_SEVERITY
+        value: SEV2
+      # Under the 5s shutdown headroom, so a delivery in flight cannot turn a
+      # clean stop into a kill. cmd/api trims it further if the shutdown budget
+      # ever shrinks below it.
+      - key: CP_ALERT_TIMEOUT
+        value: 5s
+
+      # --- personal data -------------------------------------------------
+      # identity_pii's columns are ciphertext under this keyring, bound to
+      # their row, column and key version; cp_readonly and cp_ops cannot read
+      # the table at all (00754). Without a RESOLVABLE keyring the service
+      # refuses to start here -- the reference alone is not enough (F-137):
+      # personal data is encrypted, or it is not stored, and a STAGING that
+      # silently stored nothing is the state F-47 sat in.
+      # Rotation: add a key, raise "active", deploy, reseal, remove the old key.
+      - key: CP_PII_KEYRING_REF
+        value: env://NODAL_PII_KEYRING
+
       # --- retention -----------------------------------------------------
+      # --- credit funding lifecycle ---------------------------------------
+      # How long a captured card payment stays reversible before its Credits
+      # may be treated as settled. A CONSERVATIVE placeholder, not a
+      # determination: card scheme chargeback windows run to 120 days.
+      #
+      # It matters more than it looks. internal/capacity counts REVERSIBLE
+      # money as at risk and excludes SETTLED, so this window is what lets the
+      # $2,000 ceiling drain. The API sweeps on a ticker because this tier
+      # deploys no worker to do it (F-90).
+      - key: CP_CREDIT_SETTLEMENT_WINDOW
+        value: 720h
+
+      # TWO days, not ninety.
+      #
+      # The row holds a plaintext OIDC nonce and PKCE code_verifier. Both are
+      # single-use, and the durable record that a login happened is a
+      # security_events row -- which is why this variable's documented default is
+      # 2 while every other retention line here is in the hundreds or thousands.
+      # 90 was this line agreeing with its neighbours rather than with what the
+      # table holds (F-93).
+      #
+      # It stopped being theoretical when CP_DATABASE_OPS_URL was set and
+      # cmd/api began actually running the purge (F-105): before that the number
+      # described a sweep that never ran.
       - key: CP_RETENTION_LOGIN_ATTEMPT_DAYS
-        value: "90"
+        value: "2"
+      # security_events is partitioned by month (00740) and this says how many
+      # months are kept. ZERO, deliberately: the mechanism exists, the period
+      # does not, and ADR-0020 leaves the period open as a product and
+      # compliance question. Dropping a security audit trail because nobody
+      # chose a number is worse than a table that grows -- what a growing table
+      # costs is a capacity refusal, which is fail-closed and visible.
+      #
+      # Setting it is one value and a redeploy. The floor is 90, enforced both
+      # by config.Validate at boot and by cp_security_events_drop_expired at
+      # call time.
+      - key: CP_RETENTION_SECURITY_EVENT_DAYS
+        value: "0"
       - key: CP_RETENTION_FINANCIAL_RECORD_DAYS
         value: "2555"
       - key: CP_RETENTION_SECURITY_AUDIT_DAYS
@@ -229,8 +432,22 @@ services:
       - key: CP_RETENTION_OPERATIONAL_LOG_DAYS
         value: "30"
 
+      # The developer seed scripts stay off. This is what RuleNoSeed forbids in
+      # STAGING and PROD, and it has never been the control for the sandbox
+      # demo catalogue -- which is what CP_API_DEMO_DATA below is (D-115).
       - key: CP_SEED_ENABLED
         value: "false"
+
+      # The sandbox demo catalogue: eight labelled demo markets and a demo
+      # Credit balance, seeded at boot so the markets page this tier exists to
+      # rehearse is not empty. Every row is SANDBOX-labelled, migration 00774's
+      # CHECK forbids a PROD one, and config refuses `true` unless the
+      # deployment is a sandbox tier. Until this variable existed the seeding
+      # keyed off the sandbox declaration alone, so the deployment declared
+      # that it does not seed and seeded, and the variable an operator would
+      # reach for to stop it did nothing (F-144).
+      - key: CP_API_DEMO_DATA
+        value: "true"
 
       # --- provider slots ------------------------------------------------
       # `sandbox`, not `live`. Nothing here has a production contract yet, and
@@ -254,7 +471,29 @@ services:
       # that decides whether this deployment may sell Credits; this line only
       # says which capability the deployment is for.
       - key: CP_API_ENABLED_CAPABILITIES
-        value: CREDIT_PURCHASE
+        value: CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE
+      # --- the sandbox tier (ADR-0023) ---------------------------------------
+      # This deployment is a rehearsal: sandbox Stripe, a devnet mint, no live
+      # provider anywhere (config refuses one outside PROD). Declaring it a
+      # sandbox tier lets it exercise the product it exists to rehearse --
+      # buying Credits, trading a native asset, verifying, requesting a payout
+      # to a provider that moves nothing -- through the real router, the real
+      # gates and the real ledger. Every affordance below keys off this one
+      # declaration, and config.Validate refuses the declaration in PROD, so a
+      # production deployment reaches ACTIVE the way it always has: three
+      # principals, four evidence references, and nothing else.
+      - key: CP_API_LEGAL_POLICY
+        value: SANDBOX
+      # The rehearsal payout policy: purchased and earned value withdrawable
+      # once verified; granted, refunded, adjusted or provider-settled value
+      # never. Not a product or legal decision -- the real policy is a
+      # persisted version with evidence.
+      - key: CP_API_PAYOUT_POLICY
+        value: SANDBOX
+      # Sandbox-activated at boot, idempotently. A SANDBOX gate carries no
+      # approval chain, cannot exist in PROD, and is read as active only here.
+      - key: CP_API_SANDBOX_GATES
+        value: CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE
 
       - key: CP_PROVIDER_CREDIT_PURCHASE_MODE
         value: sandbox
@@ -276,8 +515,12 @@ services:
 
       - key: CP_PROVIDER_PAYOUT_MODE
         value: sandbox
+      # The sandbox tier's payout provider: accepts, settles ten seconds later,
+      # moves nothing, and refuses to exist in PROD. The Stripe stablecoin
+      # adapter it replaces here is contractually gated off (private preview)
+      # and is the production candidate, not the rehearsal.
       - key: CP_PROVIDER_PAYOUT_NAME
-        value: stripe_stablecoin_payout
+        value: sandbox_payout
       - key: CP_PROVIDER_PAYOUT_TIMEOUT
         value: 20s
 
@@ -364,3 +607,93 @@ services:
         value: ses
       - key: CP_PROVIDER_NOTIFICATION_TIMEOUT
         value: 20s
+
+  # --- the web app --------------------------------------------------------
+  # A static site, which Render serves from its CDN at no charge and which
+  # consumes none of the free web service's instance-hours. It is the second
+  # entry in this file and the first that is not the API; test/infra holds
+  # the list to exactly these two and to nothing that carries a fixed charge.
+  #
+  # The app calls the API cross-origin (VITE_API_ORIGIN) with credentials; the
+  # session cookie is set by the API on its own host and travels because the
+  # two hostnames share a registrable domain. CP_HTTP_CORS_ORIGINS on the API
+  # names this origin, which is the whole of the cross-origin configuration.
+  #
+  # Every route is the single-page app, so an unknown path is rewritten to
+  # index.html and the router answers -- without this, a deep link or a reload
+  # on /portfolio is a 404 from the CDN.
+  - type: web
+    name: nodal-web
+    runtime: static
+    branch: main
+    buildCommand: corepack enable && corepack prepare pnpm@10.34.5 --activate && pnpm install --frozen-lockfile && pnpm --filter @controlplane/generated-client generate && pnpm --filter @controlplane/web build
+    staticPublishPath: apps/web/dist
+    domains:
+      - app-nodal.actorvia.xyz
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: VITE_API_ORIGIN
+        value: https://api-nodal.actorvia.xyz
+      # Stripe's publishable key for the NODAL Integration account in test
+      # mode. Publishable keys are public by design (they are embedded in
+      # every browser that loads Stripe.js) and can only create tokens and
+      # confirm a PaymentIntent whose client_secret the API handed out; the
+      # secret key stays in NODAL_STRIPE_API_KEY on the API service. The app
+      # refuses a key that is not pk_test_ or pk_live_, and a live key here
+      # would pair with nothing: the API's provider mode is sandbox (D-078).
+      - key: VITE_STRIPE_PUBLISHABLE_KEY
+        value: pk_test_51UDbrdAeDQ6sKD6HvHnIHPrX7yyuZnpz161GCBdkOtWaWfx7Om5gwqaCsX6covukbeA5WDKV6AFV5p4MSIlu7OkD00w6v2Mts6
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    # The app's own security headers. The API emits its own set for its own
+    # responses; a separately hosted page gets none of them unless they are
+    # declared here. The CSP names the one origin the app may talk to.
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        # Stripe.js (the Payment Element) is the one third party: its script
+        # from js.stripe.com, its iframes from js.stripe.com / hooks.stripe.com
+        # (3-D Secure) / m.stripe.network (fraud signals), its calls to
+        # api.stripe.com, its images from *.stripe.com. Nothing else may load.
+        #
+        # `style-src` admits 'unsafe-inline' and that is a decision, not an
+        # oversight (D-116). CSP Level 3 governs a `style=` ATTRIBUTE with
+        # style-src-attr, which falls back to style-src when it is absent, so
+        # `style-src 'self'` refuses every inline style attribute in the
+        # bundle -- including SegmentedBar's, which is the width of each
+        # segment of the available/reserved/pending balance bar. Blocked, the
+        # bar renders empty while its accessible name still states the shares.
+        # The precise form -- `style-src 'self'; style-src-attr 'unsafe-inline'`
+        # -- is not supported by every browser this app targets, and a browser
+        # that ignores style-src-attr falls back to style-src and blocks the
+        # attribute again. The relaxation is bounded: this bundle renders no
+        # user-controlled HTML, `script-src` stays without 'unsafe-inline',
+        # and `object-src 'none'` / `base-uri 'self'` / `frame-ancestors 'none'`
+        # are unchanged, so what an injected style could reach is the
+        # appearance of a page an attacker cannot get script into (F-139).
+        value: "default-src 'self'; connect-src 'self' https://api-nodal.actorvia.xyz https://api.stripe.com; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.stripe.com; font-src 'self'; frame-src https://js.stripe.com https://hooks.stripe.com https://m.stripe.network; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://api-nodal.actorvia.xyz; object-src 'none'"
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        # `payment` is delegated to Stripe's own origin rather than denied.
+        # The Payment Element offers Apple Pay, Google Pay and Link through the
+        # Payment Request API, which it calls from inside the js.stripe.com
+        # iframe; `payment=()` denies that API to every frame including
+        # Stripe's, so the wallet rows disappear from the one page this tier
+        # exists to exercise. `self` is kept because the allowlist is what the
+        # iframe inherits its permission through (F-150).
+        value: "camera=(), microphone=(), geolocation=(), payment=(self \"https://js.stripe.com\"), usb=(), interest-cohort=()"
+      - path: /*
+        name: Strict-Transport-Security
+        value: "max-age=31536000; includeSubDomains"

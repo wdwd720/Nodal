@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -194,4 +195,91 @@ func TestRateLimitStore_TheLimitersUseTheStoreTheyWereGiven(t *testing.T) {
 		config.RateLimitConfig{}, nil, false)
 	require.Error(t, err, "no store, no limiters")
 	assert.Contains(t, err.Error(), "no store")
+}
+
+// TestRateLimitSweepInterval_IsTheLargestConfiguredWindow.
+//
+// A fixed window's counter is dead the moment its window ends, so sweeping at
+// the largest of the four removes every expired counter of every limit on each
+// pass and never runs more often than the slowest counter turns over.
+func TestRateLimitSweepInterval_IsTheLargestConfiguredWindow(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, time.Minute, rateLimitSweepInterval(config.RateLimitConfig{}, quietLogger()),
+		"the defaults are all per minute")
+
+	assert.Equal(t, 10*time.Minute, rateLimitSweepInterval(config.RateLimitConfig{
+		General: "600/1m", Auth: "30/1m", Quote: "60/10s", Command: "120/10m",
+	}, quietLogger()))
+
+	// Everything switched off, which only a development environment can do:
+	// there is nothing to sweep and the ticker still needs a period.
+	assert.Equal(t, time.Minute, rateLimitSweepInterval(config.RateLimitConfig{
+		General: "off", Auth: "off", Quote: "off", Command: "off",
+	}, quietLogger()))
+
+	// An unparseable spec is rateLimits' refusal to make, at startup, before
+	// any of this runs; here it contributes nothing and the rest still decides.
+	assert.Equal(t, 5*time.Minute, rateLimitSweepInterval(config.RateLimitConfig{
+		General: "not a limit", Auth: "30/5m",
+	}, quietLogger()))
+}
+
+// TestRateLimitSweeper_RemovesExpiredCountersAndStops.
+//
+// Nothing in this process called Sweep (F-169): the counters were dropped
+// lazily on access, which only ever helps a key that comes back. This is the
+// caller that makes the documented bound true.
+func TestRateLimitSweeper_RemovesExpiredCountersAndStops(t *testing.T) {
+	t.Parallel()
+	store := ratelimit.NewMemoryStore()
+	for i := 0; i < 500; i++ {
+		_, _, err := store.Incr(context.Background(), fmt.Sprintf("auth:ip:198.51.100.%d", i), time.Minute, swept0)
+		require.NoError(t, err)
+	}
+	require.Equal(t, 500, store.Stats(swept0).Keys)
+
+	stop := make(chan struct{})
+	swept := make(chan struct{})
+	// A clock two windows ahead of the counters, so one tick is enough.
+	go func() {
+		defer close(swept)
+		sweepRateLimitCounters(store, time.Millisecond, func() time.Time { return swept0.Add(2 * time.Minute) },
+			quietLogger(), stop)
+	}()
+
+	require.Eventually(t, func() bool { return store.Stats(swept0.Add(2*time.Minute)).Keys == 0 },
+		2*time.Second, 5*time.Millisecond, "the counters were never swept")
+
+	close(stop)
+	select {
+	case <-swept:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the sweeper outlived the store it sweeps")
+	}
+}
+
+var swept0 = time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+
+// TestRateLimitStore_TheMemoryStoreIsSweptForAsLongAsItExists holds the wiring
+// itself: the store the API gets is swept, and the sweeper stops when the
+// store's cleanup runs.
+func TestRateLimitStore_TheMemoryStoreIsSweptForAsLongAsItExists(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{
+		Env:       config.EnvLocal,
+		Service:   config.ServiceAPI,
+		RateLimit: config.RateLimitConfig{Backend: config.RateLimitMemory, Replicas: 1},
+	}
+	store, _, cleanup, err := newRateLimitStore(context.Background(), cfg, localResolver(t), quietLogger())
+	require.NoError(t, err)
+	memory, ok := store.(*ratelimit.MemoryStore)
+	require.True(t, ok)
+
+	_, _, err = memory.Incr(context.Background(), "auth:ip:198.51.100.1", time.Minute, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 1, memory.Stats(time.Now()).Keys)
+
+	// Closing the store stops the goroutine; running it twice would panic on a
+	// closed channel, which is what the deferred cleanup in main must not do.
+	cleanup()
 }

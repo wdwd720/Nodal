@@ -19,16 +19,12 @@ import (
 
 // Environment variables for the Credit funding sweep.
 const (
-	// envSettlementWindow is how long a captured card payment stays
-	// reversible before its Credits may be treated as settled.
-	//
-	// There is no default seven days here, because the goal document is
-	// explicit that an arbitrary number is not a policy. The default below is
-	// thirty days and it is a CONSERVATIVE placeholder, not a determination:
-	// card scheme chargeback windows run to 120 days and beyond, and the real
-	// value is a risk decision somebody has to make and record.
-	envSettlementWindow = "CP_CREDIT_SETTLEMENT_WINDOW"
-	envCreditInterval   = "CP_CREDIT_SWEEP_INTERVAL"
+	// The reversibility window is CP_CREDIT_SETTLEMENT_WINDOW, and it is read
+	// from the configuration table rather than from the environment: it is a
+	// risk determination somebody has to make and record, and a value read
+	// straight from the environment is outside the configuration hash. See
+	// config.CreditConfig.
+	envCreditInterval = "CP_CREDIT_SWEEP_INTERVAL" //nolint:gosec // G101: the name of an interval variable, not a credential
 
 	defaultSettlementWindow = 30 * 24 * time.Hour
 	defaultCreditInterval   = 15 * time.Minute
@@ -58,8 +54,8 @@ type creditSweeper struct {
 // Credits has no funding to settle, and starting a sweep over an empty table
 // every fifteen minutes would only teach operators to ignore its log lines.
 func newCreditSweeper(ctx context.Context, cfg *config.Config, database *db.DB,
-	resolver config.Resolver, clk clock.Clock, log *slog.Logger) *creditSweeper {
-
+	resolver config.Resolver, clk clock.Clock, log *slog.Logger,
+) *creditSweeper {
 	slot := cfg.Providers.CreditPurchase
 	if slot.Mode == "" || slot.Name == "" {
 		log.InfoContext(ctx, "credit purchase provider is not configured; the Credit settlement sweep is disabled")
@@ -86,9 +82,10 @@ func newCreditSweeper(ctx context.Context, cfg *config.Config, database *db.DB,
 			slog.String("error", err.Error()))
 		return nil
 	}
-	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
+	svc, err := credit.NewPurchaseService(ctx, database, credit.PurchaseServiceConfig{
 		Credits: credits, Provider: prov, Pricing: credit.DefaultPricingPolicy(),
 		Gates: checker, Clock: clk, Environment: string(cfg.Env),
+		ProviderMode: string(slot.Mode),
 	})
 	if err != nil {
 		log.WarnContext(ctx, "credit purchase service could not be built; the Credit settlement sweep is disabled",
@@ -121,65 +118,39 @@ func (s *creditSweeper) settle(ctx context.Context, batch int) {
 }
 
 // reconcile asks the provider what happened to purchases that are still in
-// flight, one transaction each.
+// flight, and expire ends the ones nobody completed.
 //
-// One transaction per purchase, not one for the batch: a provider call inside a
-// transaction holds a database connection across the network, and a batch of
-// them holds several. The pool starvation that caused (F-27) is the reason this
-// loop looks inefficient and is not.
+// Both are internal/credit's, not this file's. They used to be here -- and the
+// listing query here carried `provider_reference IS NOT NULL`, which excluded
+// exactly the fundings the sweep existed to recover (F-154), while nothing
+// anywhere ended an abandoned checkout at all (F-153). A pass that has to run
+// on every tier belongs in the package that owns the state machine, so the API
+// process and this worker cannot drift into running different ones.
 func (s *creditSweeper) reconcile(ctx context.Context, batch int) {
 	if s == nil {
 		return
 	}
-	ids, err := s.stale(ctx, batch)
+	checked, err := s.svc.ReconcileDue(ctx, s.db, credit.DefaultReconcileAfter, batch)
 	if err != nil {
-		s.log.ErrorContext(ctx, "could not list purchases to reconcile", slog.String("error", err.Error()))
-		return
-	}
-	var checked int
-	for _, id := range ids {
-		err := s.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-			func(ctx context.Context, tx pgx.Tx) error {
-				_, rerr := s.svc.Reconcile(ctx, tx, id)
-				return rerr
-			})
-		if err != nil {
-			s.log.WarnContext(ctx, "purchase reconciliation failed",
-				slog.String("funding_id", id.String()), slog.String("error", err.Error()))
-			continue
-		}
-		checked++
+		s.log.WarnContext(ctx, "purchase reconciliation failed", slog.String("error", err.Error()))
 	}
 	if checked > 0 {
 		s.log.InfoContext(ctx, "Credit purchase reconciliation complete", slog.Int("checked", checked))
 	}
 }
 
-// stale lists purchases that have been waiting on the provider longer than the
-// customer would have.
-//
-// Fifteen minutes is not a policy: it is longer than any card authorisation
-// takes and shorter than a person's patience, so anything past it is either
-// abandoned or a lost response, and both want the same question asked.
-func (s *creditSweeper) stale(ctx context.Context, batch int) ([]credit.FundingID, error) {
-	rows, err := s.db.Query(ctx,
-		`SELECT id FROM credit_fundings
-		  WHERE state IN ('CREATED','AUTHORIZATION_PENDING','AUTHORIZED','CAPTURE_PENDING')
-		    AND provider_reference IS NOT NULL
-		    AND updated_at < now() - interval '15 minutes'
-		  ORDER BY updated_at
-		  LIMIT $1`, batch)
+// expire cancels purchases that have been in flight past the provider's intent
+// lifetime, so an abandoned checkout stops holding money-at-risk headroom that
+// nothing else would ever release.
+func (s *creditSweeper) expire(ctx context.Context, batch int) {
+	if s == nil {
+		return
+	}
+	n, err := s.svc.ExpireInFlight(ctx, s.db, credit.DefaultInFlightLifetime, batch)
 	if err != nil {
-		return nil, err
+		s.log.WarnContext(ctx, "Credit purchase expiry failed", slog.String("error", err.Error()))
 	}
-	defer rows.Close()
-	var out []credit.FundingID
-	for rows.Next() {
-		var id credit.FundingID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out = append(out, id)
+	if n > 0 {
+		s.log.InfoContext(ctx, "Credit purchase expiry complete", slog.Int("expired", n))
 	}
-	return out, rows.Err()
 }

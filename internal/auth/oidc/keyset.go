@@ -38,6 +38,7 @@ type keySet struct {
 	client     *http.Client
 	now        func() time.Time
 	minRefresh time.Duration
+	maxAge     time.Duration
 	algs       []jose.SignatureAlgorithm
 	allowed    map[string]bool
 
@@ -48,8 +49,11 @@ type keySet struct {
 
 var _ gooidc.KeySet = (*keySet)(nil)
 
-func newKeySet(url string, client *http.Client, now func() time.Time, minRefresh time.Duration, algs []string) *keySet {
-	k := &keySet{url: url, client: client, now: now, minRefresh: minRefresh, allowed: map[string]bool{}}
+func newKeySet(url string, client *http.Client, now func() time.Time, minRefresh, maxAge time.Duration, algs []string) *keySet {
+	if maxAge <= 0 {
+		maxAge = DefaultJWKSMaxAge
+	}
+	k := &keySet{url: url, client: client, now: now, minRefresh: minRefresh, maxAge: maxAge, allowed: map[string]bool{}}
 	for _, a := range algs {
 		k.algs = append(k.algs, jose.SignatureAlgorithm(a))
 		k.allowed[a] = true
@@ -94,9 +98,26 @@ func (k *keySet) verify(ctx context.Context, jwt string) ([]byte, error) {
 func (k *keySet) candidates(ctx context.Context, kid string) ([]jose.JSONWebKey, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if k.fetchedAt.IsZero() {
+	// A cold cache, or one older than maxAge.
+	//
+	// Without the age check the set was refreshed only when it was empty or
+	// when a token named an unknown kid, so a key WITHDRAWN from the JWKS went
+	// on verifying tokens for the life of the process (F-98). That is the
+	// emergency case: an operator revoking a compromised key removes it and
+	// introduces nothing new, so no unknown kid ever arrives to trigger the
+	// refetch, and the revocation takes effect at the next restart or never.
+	//
+	// Rotation is the ordinary case and already worked, because a new key
+	// means a new kid. This is for the case where nothing new appears.
+	if k.fetchedAt.IsZero() || k.now().Sub(k.fetchedAt) >= k.maxAge {
 		if err := k.refreshLocked(ctx); err != nil {
-			return nil, err
+			// A stale set is still better than no verification at all if the
+			// issuer is briefly unreachable -- but only while it is not yet
+			// expired. Past maxAge the keys are not trusted, because "the
+			// provider is down" must not mean "the withdrawn key works again".
+			if k.fetchedAt.IsZero() || k.now().Sub(k.fetchedAt) >= k.maxAge {
+				return nil, err
+			}
 		}
 	}
 	if keys := k.lookupLocked(kid); len(keys) > 0 {

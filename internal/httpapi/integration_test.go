@@ -34,6 +34,24 @@ import (
 // `go run ./scripts/testdb -name httpapi`, never the shared controlplane_test.
 var testAppURL = os.Getenv("CP_TEST_DATABASE_URL")
 
+// openOwnerDB opens the migration role, for seeding a kill switch into a chosen
+// state. Since 00753 that is not something the application can do -- flipping a
+// switch is an operator action -- so a fixture that used the app pool would be
+// claiming a capability the system does not have.
+func openOwnerDB(t *testing.T) *db.DB {
+	t.Helper()
+	url := os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
+	if url == "" {
+		t.Skip("CP_TEST_MIGRATE_DATABASE_URL not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	d, err := db.Open(ctx, db.Config{URL: url, AppName: "httpapi-itest-owner", MaxConns: 2})
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+	return d
+}
+
 func openTestDB(t *testing.T) *db.DB {
 	t.Helper()
 	if testAppURL == "" {
@@ -306,7 +324,8 @@ func TestIntegration_ReadModelQueries(t *testing.T) {
 	})
 
 	t.Run("kill switches list every row", func(t *testing.T) {
-		require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		owner := openOwnerDB(t)
+		require.NoError(t, owner.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `
 				INSERT INTO kill_switches (id, kind, scope_id, active, severity, reason, activated_at)
 				VALUES ($1, 'VENUE_DISABLE', 'JUPITER', false, 'STANDARD', 'released after incident', now())
@@ -412,9 +431,10 @@ func TestIntegration_KillSwitchReaderUsesTheDomainMatrix(t *testing.T) {
 	// or was already active, and failed on any database where it existed and
 	// was inactive — including a re-run against the same database. Silently, in
 	// the cleanup's case.
+	owner := openOwnerDB(t)
 	setActive := func(t *testing.T, active bool) {
 		t.Helper()
-		require.NoError(t, d.InTx(context.Background(), db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		require.NoError(t, owner.InTx(context.Background(), db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 			var switchID string
 			if err := tx.QueryRow(ctx, `
 				INSERT INTO kill_switches (id, kind, scope_id, active, severity, reason, activated_at)

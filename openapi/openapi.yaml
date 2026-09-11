@@ -19,6 +19,7 @@ tags:
   - name: funding
   - name: withdrawals
   - name: activity
+  - name: notifications
   - name: admin
   - name: system
 
@@ -36,8 +37,17 @@ paths:
           name: step_up
           schema: { type: boolean }
           description: Request strong authentication (MFA/passkey) for a sensitive action
+        - in: query
+          name: return_to
+          schema: { type: string, maxLength: 512 }
+          description: >-
+            Local path within the web app to return to after the callback, e.g. /portfolio.
+            Must start with a single slash; anything else is refused with a validation
+            problem. It is stored with the login attempt, never echoed from the request,
+            and appended to the app origin the deployment configures (CP_AUTH_POST_LOGIN_URL).
       responses:
         "302": { description: Redirect to the identity provider }
+        "400": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /auth/callback:
     get:
@@ -349,7 +359,15 @@ paths:
       security: []
       summary: Provider webhook ingestion (signature-verified, persisted before processing, idempotent — PART 30)
       parameters:
-        - { in: path, name: provider, required: true, schema: { type: string, enum: [stripe] } }
+        # The value cmd/api registers the port under, which is
+        # stripecredit.ProviderName. This said `stripe`, and nothing enforced
+        # the enum at runtime -- no OpenAPI request validator is wired -- so a
+        # delivery to the DOCUMENTED path reached the handler, found no
+        # provider in the map and answered 404, indistinguishable from an
+        # invented provider. Confirmed against the deployment. Stripe retries a
+        # 404 for a few days and then gives up, which is the failure
+        # cmd/api/wire.go says it exists to avoid (F-124).
+        - { in: path, name: provider, required: true, schema: { type: string, enum: [stripe_credit] } }
       requestBody:
         required: true
         content: { application/json: { schema: { type: object } } }
@@ -397,10 +415,14 @@ paths:
   /admin/gates/{capability}/{action}:
     post:
       tags: [admin]
-      summary: Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up)
+      summary: Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
+      description: >-
+        sandbox and unsandbox exist only on a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX,
+        never PROD). A SANDBOX gate carries no approval chain, cannot exist in PROD, and
+        is read as active only by a sandbox tier. Everywhere else the action is refused.
       parameters:
         - { in: path, name: capability, required: true, schema: { $ref: "#/components/schemas/Capability" } }
-        - { in: path, name: action, required: true, schema: { type: string, enum: [propose, approve, activate, suspend, resume, revoke] } }
+        - { in: path, name: action, required: true, schema: { type: string, enum: [propose, approve, activate, suspend, resume, revoke, sandbox, unsandbox] } }
         - { $ref: "#/components/parameters/IdempotencyKey" }
       requestBody:
         content: { application/json: { schema: { $ref: "#/components/schemas/GateActionRequest" } } }
@@ -410,6 +432,22 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/CapabilityGate" } } }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /admin/gates/{capability}/history:
+    get:
+      tags: [admin]
+      summary: Every recorded transition of a gate, oldest first, with who moved it
+      description: >-
+        The rows of capability_gate_transitions, written by cp_gate_transition and
+        cp_gate_sandbox in the same statement as the state change they record. A
+        SANDBOX entry names the operator who moved it or the SYSTEM actor
+        config:CP_API_SANDBOX_GATES; it is not an approval and says so.
+      parameters:
+        - { in: path, name: capability, required: true, schema: { $ref: "#/components/schemas/Capability" } }
+      responses:
+        "200":
+          description: Transitions, oldest first
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CapabilityGateTransition" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
   /admin/kill-switches:
     get:
       tags: [admin]
@@ -953,7 +991,816 @@ paths:
                   build_version: { type: string }
                   config_hash: { type: string }
                   environment: { type: string }
+                  sandbox_tier:
+                    type: boolean
+                    description: True when this deployment is a sandbox tier (ADR-0023). Everything it mints, verifies or pays is a rehearsal; the UI labels the whole product accordingly.
 
+  # ---- profile, terms and account lifecycle ----
+  /me/profile:
+    post:
+      tags: [auth]
+      summary: Update the caller own profile (display name, handle, locale, time zone)
+      description: >-
+        Every field is optional and only the ones present change; an empty
+        handle clears it. There is no id in the path, so this route can reach no
+        profile but the caller own.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ProfileUpdate" } } }
+      responses:
+        "200":
+          description: Updated profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserProfile" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /terms:
+    get:
+      tags: [auth]
+      security: []
+      summary: The legal documents currently served, with their text, for anyone
+      description: >-
+        The same registry a signed-in person accepts from (internal/terms), without
+        any acceptance state: a visitor with no account can read the binding text
+        before creating one, and the public site serves these bytes rather than an
+        explainer. Every document says whether counsel review is still required.
+      responses:
+        "200":
+          description: Current documents, oldest requirement first
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PublicLegalDocument" } } } }
+  /me/terms-acceptances:
+    get:
+      tags: [auth]
+      summary: Legal documents, which of them the caller has accepted, and which are outstanding
+      responses:
+        "200":
+          description: Acceptance state
+          content: { application/json: { schema: { $ref: "#/components/schemas/TermsState" } } }
+    post:
+      tags: [auth]
+      summary: Accept the named documents at the versions currently served
+      description: >-
+        The record names the document, its version and the sha256 of the exact
+        bytes shown. Accepting the same bytes twice is idempotent and produces
+        one record, not two.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TermsAcceptanceRequest" } } }
+      responses:
+        "200":
+          description: Acceptance state after accepting
+          content: { application/json: { schema: { $ref: "#/components/schemas/TermsState" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /me/account:
+    get:
+      tags: [auth]
+      summary: The standing of the caller own account, with any restrictions and open closure request
+      responses:
+        "200":
+          description: Account standing
+          content: { application/json: { schema: { $ref: "#/components/schemas/MyAccount" } } }
+  /me/account/close:
+    post:
+      tags: [auth]
+      summary: Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+      description: >-
+        Requires a recent strong authentication. The request waits out a
+        cooling-off period during which the caller can cancel it, and is then
+        effected by an operator. Nothing is deleted: financial and audit records
+        are retained.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CloseAccountRequest" } } }
+      responses:
+        "200":
+          description: Account standing, including the open request
+          content: { application/json: { schema: { $ref: "#/components/schemas/MyAccount" } } }
+        "409": { $ref: "#/components/responses/Problem" }
+  /me/account/close/cancel:
+    post:
+      tags: [auth]
+      summary: Cancel the caller own open closure request
+      description: >-
+        Deliberately does NOT require a step-up. Requesting closure is the
+        dangerous direction and asks for one; stopping a request must never be
+        harder than starting it.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200":
+          description: Account standing after cancelling
+          content: { application/json: { schema: { $ref: "#/components/schemas/MyAccount" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /me/security:
+    get:
+      tags: [auth]
+      summary: What the system knows about the security of the caller own account
+      description: >-
+        Derived entirely from the session store and the claims of the current
+        session. It holds no secret and creates nothing.
+      responses:
+        "200":
+          description: Security summary
+          content: { application/json: { schema: { $ref: "#/components/schemas/SecuritySummary" } } }
+  /admin/users/{userId}:
+    get:
+      tags: [admin]
+      summary: Operator support view of one user (read only)
+      parameters: [{ $ref: "#/components/parameters/UserId" }]
+      responses:
+        "200":
+          description: Support view
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminUserView" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /admin/users/{userId}/closure:
+    post:
+      tags: [admin]
+      summary: Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+      description: >-
+        The only mutation the support surface offers, and it acts on a request
+        the user themselves opened. EFFECT is refused before the cooling-off
+        period has passed, by the database as well as by the service, and an
+        operator may not decide a request of their own.
+      parameters:
+        - { $ref: "#/components/parameters/UserId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ClosureDecision" } } }
+      responses:
+        "200":
+          description: Support view after the decision
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminUserView" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  # ---- notifications, realtime and the customer's own audit trail ----
+  /me/notifications:
+    get:
+      tags: [notifications]
+      summary: The caller's notification centre, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - in: query
+          name: unread
+          schema: { type: boolean, default: false }
+          description: Only notifications that have not been marked read
+        - in: query
+          name: kinds
+          schema: { type: array, items: { $ref: "#/components/schemas/NotificationKind" } }
+          style: form
+          explode: false
+          description: Restrict to these kinds; omitted means every kind
+      responses:
+        "200":
+          description: Page of notifications
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPage" } } }
+  /me/notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: How many of the caller's notifications are unread
+      responses:
+        "200":
+          description: The badge
+          content: { application/json: { schema: { $ref: "#/components/schemas/UnreadCount" } } }
+  /me/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark every unread notification read
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: How many were changed
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarkedRead" } } }
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      summary: Mark one notification read (idempotent; the first instant is kept)
+      parameters:
+        - { $ref: "#/components/parameters/NotificationId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The notification as it now stands
+          content: { application/json: { schema: { $ref: "#/components/schemas/Notification" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /me/notification-preferences:
+    get:
+      tags: [notifications]
+      summary: Per-kind in-app notification preferences (IN_APP is the only channel that exists)
+      responses:
+        "200":
+          description: One entry per kind
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPreferences" } } }
+    put:
+      tags: [notifications]
+      summary: Replace the caller's answers for the kinds named
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/NotificationPreferencesUpdate" } }
+      responses:
+        "200":
+          description: Preferences as they now stand
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPreferences" } } }
+  /me/audit:
+    get:
+      tags: [activity]
+      summary: The caller's own security and account history (PART 52); never another person's
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of audit entries, newest first
+          content: { application/json: { schema: { $ref: "#/components/schemas/MeAuditPage" } } }
+
+
+  # ---- agents ----
+  /strategies:
+    post:
+      tags: [agents]
+      summary: Describe a strategy in your own words
+      description: >-
+        Records what you want, exactly as you wrote it. Nothing is compiled here
+        and nothing is activated: describing a strategy and asking for it to be
+        compiled are two separate acts, because you must see the compiled result
+        before anything can act on your behalf.
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateStrategyRequest" } } }
+      responses:
+        "201":
+          description: Recorded
+          content: { application/json: { schema: { $ref: "#/components/schemas/Strategy" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/Strategy" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [agents]
+      summary: Your strategies
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of strategies
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /strategies/{strategyId}:
+    get:
+      tags: [agents]
+      summary: One strategy and its current compiled version
+      parameters:
+        - { $ref: "#/components/parameters/StrategyId" }
+      responses:
+        "200":
+          description: Strategy
+          content: { application/json: { schema: { $ref: "#/components/schemas/Strategy" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /strategies/{strategyId}/compile:
+    post:
+      tags: [agents]
+      summary: Compile the description into a reviewable strategy
+      description: >-
+        Every attempt is recorded, successful or not, including an attempt made
+        on a deployment that has no compiler backend configured: that attempt is
+        recorded with outcome MODEL_UNAVAILABLE and the failure code
+        COMPILER_UNAVAILABLE, and no IR is produced. Natural-language text is
+        never turned into financial authority without a compiled strategy the
+        owner has read.
+      parameters:
+        - { $ref: "#/components/parameters/StrategyId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The attempt and what it produced, if anything
+          content: { application/json: { schema: { $ref: "#/components/schemas/CompileResult" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /strategies/{strategyId}/versions/{version}/accept:
+    post:
+      tags: [agents]
+      summary: Accept a compiled strategy version you have read
+      description: >-
+        The review step of goal §18, recorded. An agent can only be created from
+        a version whose owner read it and approved it, and this is the only way
+        that record is written: no compiler can produce an accepted version, and
+        no operator can accept one on somebody's behalf.
+
+
+        The body must echo the `ir_hash` shown on the review screen. Without it,
+        "accept version 2" would mean "accept whatever version 2 is when this
+        request arrives", and a compile that landed between the reading and the
+        pressing would be approved by somebody who never saw it. A hash that does
+        not match this version is refused with 409 and nothing is written.
+
+
+        Accepting a version that is already accepted is a replay and answers the
+        version. Accepting one in any other status is refused with
+        INVALID_STATE_TRANSITION. Acceptance grants nothing on its own: creating
+        an agent is the next separate act, and enabling it the one after.
+      parameters:
+        - { $ref: "#/components/parameters/StrategyId" }
+        - { $ref: "#/components/parameters/StrategyVersionNumber" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptStrategyVersionRequest" }
+      responses:
+        "200":
+          description: The accepted version
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /agents:
+    post:
+      tags: [agents]
+      summary: Create an agent from a compiled strategy version, with the authority and limits granted to it
+      description: >-
+        The agent is created stopped. Authority levels are 0 research only,
+        1 recommendation, 2 prepared action a person confirms, 3 rule-based
+        execution inside the limits on this request. Levels 4 to 6 are declared
+        in the architecture, disabled by policy, and refused here with the
+        capability each would need. The budget is a ceiling on Credits at risk;
+        no Credits move when an agent is created.
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateAgentRequest" } } }
+      responses:
+        "201":
+          description: Created, stopped
+          content: { application/json: { schema: { $ref: "#/components/schemas/Agent" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/Agent" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    get:
+      tags: [agents]
+      summary: Your agents
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: include_archived, schema: { type: boolean, default: false } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of agents
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /agents/{agentId}:
+    get:
+      tags: [agents]
+      summary: One agent - authority, limits, budget used, last run and honest runtime state
+      parameters:
+        - { $ref: "#/components/parameters/AgentId" }
+      responses:
+        "200":
+          description: Agent
+          content: { application/json: { schema: { $ref: "#/components/schemas/Agent" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /agents/{agentId}/{action}:
+    post:
+      tags: [agents]
+      summary: Enable, pause, resume, disable or archive your own agent
+      description: >-
+        enable moves the agent onto the first rung at which it may be evaluated,
+        needs a recent strong authentication, and for an authority level that
+        acts without a person confirming each action it needs the capability gate
+        that governs agent trading to be active. pause opens a pause record and
+        leaves open orders alone; nothing is ever cancelled implicitly. disable
+        revokes authority and is final. archive only hides a stopped agent.
+      parameters:
+        - { $ref: "#/components/parameters/AgentId" }
+        - in: path
+          name: action
+          required: true
+          schema: { type: string, enum: [enable, pause, resume, disable, archive] }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: "#/components/schemas/AgentActionRequest" } } }
+      responses:
+        "200":
+          description: The agent after the action
+          content: { application/json: { schema: { $ref: "#/components/schemas/Agent" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /admin/agents:
+    get:
+      tags: [admin]
+      summary: Every account's agents, with owner, authority level, status and limits
+      parameters:
+        - { in: query, name: account_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: include_archived, schema: { type: boolean, default: false } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of agents
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+  /admin/agents/{agentId}/pause:
+    post:
+      tags: [admin]
+      summary: Operator pause of a customer's agent, with a reason
+      description: >-
+        Writes an agent_pauses row under the OPERATOR reason code and moves the
+        agent to PAUSED, so the owner's own history shows plainly that somebody
+        else stopped it. Open orders are left alone.
+      parameters:
+        - { $ref: "#/components/parameters/AgentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 500 }
+      responses:
+        "200":
+          description: The agent after the pause
+          content: { application/json: { schema: { $ref: "#/components/schemas/Agent" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  # ---- native markets: discovery, charts and the tape (M) ----
+  /native-markets:
+    get:
+      security: []
+      tags: [native-economy]
+      summary: Discover internal markets (product goal §12, §35)
+      description: >-
+        One page of the markets list. `sort` chooses the ordering; only NEWEST is
+        stable under paging, because every other key is a live figure that moves
+        when somebody trades, and the response says which it was. `q` searches the
+        asset's name, symbol and description in PostgreSQL — there is no external
+        index, and a market's identity is never a display name.
+
+
+        This route is unauthenticated, so it carries no account identity and
+        answers no question about one: there is no creator field and no creator
+        filter, and content a moderation verdict REJECTED is not published here.
+        A DELISTED market is off the default page and returned when `status`
+        asks for it. The creator of a market is on
+        `GET /native-markets/{marketId}/summary`, which is behind a session
+        (D-080, D-110).
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - in: query
+          name: status
+          description: Repeat to include several statuses. Absent means every status.
+          schema:
+            type: array
+            items: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
+        - { in: query, name: q, schema: { type: string, maxLength: 128 } }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [NEWEST, VOLUME_24H, CHANGE_24H, LIQUIDITY, PRICE], default: NEWEST }
+      responses:
+        "200":
+          description: Page of market summaries
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeMarketPage" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/summary:
+    get:
+      tags: [native-economy]
+      summary: Everything the asset detail / trading screen needs (product goal §13)
+      description: >-
+        The same summary row the list returns, plus the safety limits in force and
+        the holder concentration. It is a separate read from GET
+        /native-markets/{marketId} so the trade screen and the markets page share
+        one projection and cannot disagree about a price or a volume.
+
+
+        `account_id` is optional and must be an account the caller owns. It marks
+        that account's row in `top_holders` with `is_you` and changes nothing
+        else: the holder list names nobody either way (D-111).
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: query, name: account_id, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Market detail
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeMarketDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/candles:
+    get:
+      tags: [native-economy]
+      summary: OHLCV over a bounded window, computed from the market's own prints (§14)
+      description: >-
+        Buckets with no trades are ABSENT rather than filled forward: §14 asks for
+        an honest empty state, and a flat-filled candle invents a trade that did
+        not happen. `from` and `to` are both required and the window is bounded to
+        1500 buckets.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: query, name: interval, required: true, schema: { type: string, enum: ["1m", "5m", "15m", "1h", "1d"] } }
+        - { in: query, name: from, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { in: query, name: to, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
+      responses:
+        "200":
+          description: Candles, oldest first
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeCandlePage" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/trades:
+    get:
+      tags: [native-economy]
+      summary: The public tape — recent prints, newest first (§13)
+      description: >-
+        No account identity appears here. A tape says what the market did; who did
+        it is somebody else's position.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Recent prints
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeTradePage" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  # ---- portfolio and activity (M) ----
+  /me/portfolio:
+    get:
+      tags: [native-economy]
+      summary: Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+      description: >-
+        The Credit balance breakdown comes from the credit service; the positions
+        come from the invariant-checked read model that migration 00772 maintains
+        from the fills. Unrealised P&L is marked at each market's marginal price at
+        `as_of`, which is stated rather than implied.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Portfolio
+          content: { application/json: { schema: { $ref: "#/components/schemas/Portfolio" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/activity:
+    get:
+      tags: [native-economy]
+      summary: The unified activity timeline (§16)
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - in: query
+          name: kind
+          description: Repeat to include several kinds. Absent means every kind.
+          schema:
+            type: array
+            items: { $ref: "#/components/schemas/ActivityFeedKind" }
+      responses:
+        "200":
+          description: Page of activity
+          content: { application/json: { schema: { $ref: "#/components/schemas/ActivityFeedPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  # ---- verification, eligibility and the conversion request ----
+  #
+  # The withdrawal journey of goal §19-§25. Two rules run through every
+  # response below:
+  #
+  #   1. Verification changes ELIGIBILITY and never changes what Credits are.
+  #      Nothing here says a verified account's Credits became cash, because
+  #      they did not: a conversion is a request to a licensed provider, with
+  #      its own state machine (PROVIDER_BOUNDARY §2).
+  #   2. A sandbox answer says so. Every schema that can carry a rehearsal
+  #      outcome has a `sandbox` field, it is required, and a sandbox tier is
+  #      the only deployment that can produce one.
+  /me/verification:
+    get:
+      tags: [verification]
+      summary: Your financial verification profile, what is missing, and what to do next (§20, §24)
+      description: >-
+        The financial profile area of §24. It carries a state, a level, the
+        sub-checks behind that level and the actions available, and it carries
+        no personal data at all: there is no document identifier, no government
+        number and no date of birth, because this system never had any. A
+        provider holds the evidence; Nodal holds the conclusion.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Verification profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/VerificationProfile" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/verification/sessions:
+    post:
+      tags: [verification]
+      summary: Start a provider-hosted identity verification (§20)
+      description: >-
+        Returns a single-use hosted URL the browser is sent to. Nodal stores the
+        provider's reference and never the URL: those links are credentials for
+        resuming somebody's identity check. The jurisdiction is supplied by the
+        caller and is never inferred from a network address, which is a legal
+        determination wearing a network header's clothes. A person already has
+        at most one open session; asking again resumes it rather than racing it.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StartVerificationRequest" } } }
+      responses:
+        "201":
+          description: A hosted session to send the person to
+          content: { application/json: { schema: { $ref: "#/components/schemas/StartedVerification" } } }
+        "200":
+          description: Idempotent replay, or a resumed session
+          content: { application/json: { schema: { $ref: "#/components/schemas/StartedVerification" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /me/verification/sessions/{sessionId}:
+    get:
+      tags: [verification]
+      summary: Ask the provider what happened, and record it
+      description: >-
+        Never trust the redirect. A customer arriving back at the return URL
+        says they came back, not that they passed, so this polls the provider
+        and ingests whatever it says. It is idempotent: a status that has not
+        moved records nothing.
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The session as it now stands
+          content: { application/json: { schema: { $ref: "#/components/schemas/VerificationSession" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/verification/sandbox-outcome:
+    post:
+      tags: [verification]
+      summary: SANDBOX TIER ONLY - choose what the rehearsal verification decides
+      description: >-
+        A sandbox-tier affordance (ADR-0023) and nothing else. It exists so the
+        whole withdrawal journey can be exercised without fabricating an
+        approval, and it is refused with FORBIDDEN on any deployment that is not
+        a sandbox tier and by any provider that is not the sandbox one. There is
+        no default outcome anywhere in this path: a rehearsal session nobody has
+        answered stays pending forever, because "approved unless told otherwise"
+        is a fabricated approval with extra steps. Every row it writes is
+        labelled sandbox, and a database CHECK refuses that label in PROD.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SandboxVerificationOutcome" } } }
+      responses:
+        "200":
+          description: The session as the chosen outcome left it
+          content: { application/json: { schema: { $ref: "#/components/schemas/VerificationSession" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /me/eligibility:
+    get:
+      tags: [eligibility]
+      summary: What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+      description: >-
+        Eligibility is decided per unit of provenance, not per balance. This
+        returns one bucket per credit origin with the reasons that bucket cannot
+        leave, and a top-level answer that composes them with the account's
+        jurisdiction, its restrictions, the capability gates and the payout
+        provider. It moves nothing and reserves nothing.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Withdrawal eligibility, explained
+          content: { application/json: { schema: { $ref: "#/components/schemas/WithdrawalEligibility" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/payout-destinations:
+    get:
+      tags: [payouts]
+      summary: Where you have asked value to be sent (§25)
+      description: >-
+        Includes disabled and rejected destinations. A person who removed one
+        and cannot see that it is gone will add it again, and a person whose
+        destination a provider refused needs to see the refusal rather than an
+        empty list.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Destinations
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PayoutDestination" } }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [payouts]
+      summary: Register a payout destination from a provider token (§25)
+      description: >-
+        Nodal never stores a bank account number, a card number, an IBAN, a
+        routing number, a private key or a seed phrase. What is sent here is the
+        PROVIDER'S token for a destination plus a mask a person recognises, and
+        an input that looks like a raw number is refused rather than stored.
+        Adding a destination is a high-risk operation and requires a recent
+        strong authentication. A destination is born unusable: whether it may
+        receive value is the provider's decision, not the request's.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePayoutDestination" } } }
+      responses:
+        "201":
+          description: Destination registered, awaiting the provider's verification
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /me/payout-destinations/{destinationId}:
+    delete:
+      tags: [payouts]
+      summary: Stop using a payout destination (§25)
+      description: >-
+        Disables it rather than deleting it: a destination that value has left
+        through is financial history. A disabled destination never returns;
+        adding it again is a new registration with its own creation time, which
+        is what makes a cooldown on a changed destination a fact rather than a
+        field somebody remembers to reset.
+      parameters:
+        - { in: path, name: destinationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: >-
+            Destination disabled. `open_payout_ids` names the conversion
+            requests that still point at it: each is refused at submission from
+            now on and holds its value reserved until it is cancelled.
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+  /payouts/quote:
+    post:
+      tags: [payouts]
+      summary: What a payout would cost, before committing to it (§19, §22)
+      description: >-
+        A separate pre-commitment call, because the customer sees the fee and
+        the net before they commit. The minimum is judged NET of fees, since
+        sub-minimum dust is destroyed rather than returned. A quote expires, and
+        an expired one is refused rather than silently re-priced: a person who
+        saw a number and pressed the button a quarter of an hour later is told
+        the number moved, not charged a different one. Nothing is reserved and
+        no ledger row is written.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePayoutQuote" } } }
+      responses:
+        "201":
+          description: A quote that stands until it expires
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutQuote" } } }
+        "200":
+          description: Idempotent replay of the quote the customer was shown
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutQuote" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     sessionCookie:
@@ -998,6 +1845,16 @@ components:
     PayoutId: { in: path, name: payoutId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     PaymentId: { in: path, name: paymentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     ProductId: { in: path, name: productId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    UserId: { in: path, name: userId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    NotificationId: { in: path, name: notificationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    StrategyId: { in: path, name: strategyId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    StrategyVersionNumber:
+      in: path
+      name: version
+      required: true
+      description: The version NUMBER, which is what the review screen shows, not the version's identifier.
+      schema: { type: integer, minimum: 1 }
+    AgentId: { in: path, name: agentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
     Problem:
       description: Structured error
@@ -1041,7 +1898,8 @@ components:
     # --- Nodal-native economy --------------------------------------------
     CreditBalance:
       type: object
-      required: [account_id, gross, spendable, frozen, payout_eligible, ineligible, policy_version]
+      required: [account_id, credit_decimals, gross, spendable, frozen, reversed,
+                 payout_eligible, ineligible, policy_version]
       description: >-
         The breakdown PART XX requires. gross is every remaining unit;
         payout_eligible is what the named policy version permits to be withdrawn
@@ -1049,10 +1907,23 @@ components:
         one where it means the other.
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
+        credit_decimals:
+          type: integer
+          example: 6
+          description: >-
+            The scale of the CREDIT asset every quantity in this response is
+            expressed in. One Credit is 10^credit_decimals base units. It is
+            carried with the figures because a client that has to assume the
+            scale is a client that can render a balance a million times wrong.
         gross: { $ref: "#/components/schemas/Quantity" }
         spendable: { $ref: "#/components/schemas/Quantity" }
         frozen: { $ref: "#/components/schemas/Quantity" }
-        reversed: { $ref: "#/components/schemas/Quantity" }
+        reversed:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: >-
+            Units whose funding was clawed back and which still have remaining
+            quantity recorded. It should be transient, and it is returned so
+            that it is visible when it is not.
         payout_eligible: { $ref: "#/components/schemas/Quantity" }
         ineligible: { $ref: "#/components/schemas/Quantity" }
         by_origin:
@@ -1171,12 +2042,11 @@ components:
         state_version: { type: integer, format: int64 }
         top_holders:
           type: array
-          description: Holder concentration, which is the number a buyer most needs to see
-          items:
-            type: object
-            properties:
-              account_id: { $ref: "#/components/schemas/UUID" }
-              quantity: { $ref: "#/components/schemas/Quantity" }
+          description: >-
+            Holder concentration, which is the number a buyer most needs to see.
+            It names nobody; see NativeAssetHolder. This read takes no account,
+            so no row is marked `is_you`.
+          items: { $ref: "#/components/schemas/NativeAssetHolder" }
 
     NativeQuoteRequest:
       type: object
@@ -1209,7 +2079,11 @@ components:
           description: >-
             Scale of whichever of input_amount and expected_output is in asset units.
             On a BUY the input is Credits and the output is the asset; on a SELL it is
-            the other way round. Fees and prices are always Credits, at price_scale.
+            the other way round. Fees and prices are always Credits, and they are NOT
+            on one scale between them: platform_fee and creator_fee are taken out of
+            the Credit amount and carry the Credit asset's own decimals, while
+            effective_price and spot_price_before are ratios computed at price_scale.
+            Rendering a fee at price_scale divides it by a million million.
         slippage_bps: { $ref: "#/components/schemas/BPS" }
         state_version: { type: integer, format: int64 }
         expires_at: { $ref: "#/components/schemas/Timestamp" }
@@ -1267,15 +2141,46 @@ components:
 
     CreditPricing:
       type: object
-      required: [version, currency, credits_per_major_unit, min_amount_minor, max_amount_minor]
+      required: [version, currency, credits_per_major_unit, minor_units_per_major_unit,
+                 decimals, rounding, min_amount_minor, max_amount_minor]
       description: >-
         The versioned policy that converts money into Credits. version is
         recorded on every purchase, so a purchase made under one rate is still
         explicable after two more have replaced it.
+
+
+        Every term of the conversion is published, because a client that has
+        credits_per_major_unit and nothing else cannot compute what it is about
+        to be charged for: the quantity the server issues is
+        `amount_minor * credits_per_major_unit * 10^decimals /
+        minor_units_per_major_unit`, rounded as `rounding` says. Publishing only
+        the rate is what let a page render "100 Credits per 1 USD" over a server
+        that issued a millionth of that.
       properties:
         version: { type: string, example: credit-pricing-v1 }
         currency: { type: string, minLength: 3, maxLength: 3, example: USD }
-        credits_per_major_unit: { type: integer, format: int64, example: 100 }
+        credits_per_major_unit:
+          type: integer
+          format: int64
+          example: 100
+          description: Whole Credits one major unit of currency buys.
+        minor_units_per_major_unit:
+          type: integer
+          format: int64
+          example: 100
+          description: 100 for USD. Stated rather than assumed, so a zero-decimal currency does not silently multiply by 100.
+        decimals:
+          type: integer
+          example: 6
+          description: >-
+            The scale of the CREDIT asset this policy prices, and the scale every
+            Credit quantity in this API is expressed in. One Credit is
+            10^decimals base units.
+        rounding:
+          type: string
+          enum: [down, up, half_even, half_up, floor, ceil, exact]
+          example: down
+          description: How a payment that does not divide evenly into whole base units is resolved.
         min_amount_minor: { type: integer, format: int64, example: 100 }
         max_amount_minor: { type: integer, format: int64, example: 1000000 }
 
@@ -1314,6 +2219,24 @@ components:
         currency: { type: string }
         pricing_version: { type: string }
         provider: { type: string }
+        provider_mode:
+          type: string
+          enum: [fake, sandbox, live]
+          description: >-
+            The provider mode that opened THIS payment, recorded on it when it
+            was created. It is absent for a purchase made before the mode was
+            recorded, which is rendered as sandbox rather than as live: an
+            unrecorded mode cannot be asserted to be real money.
+        sandbox:
+          type: boolean
+          description: >-
+            True when the provider this purchase ran through was not a live
+            one: the card was a test card and the Credits it mints are sandbox
+            value. The UI renders such a figure at the simulated temperature
+            and says so; it is a fact about the payment, not a claim about the
+            person, and not the deployment's mode today -- rendering it from
+            today's configuration re-labelled every sandbox purchase a
+            deployment had ever made on the day it went live.
         client_secret:
           type: string
           description: >-
@@ -1330,11 +2253,22 @@ components:
 
     CreatePayoutRequest:
       type: object
-      required: [account_id, amount]
+      required: [account_id, amount, quote_id]
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         amount: { $ref: "#/components/schemas/Quantity" }
         destination_id: { $ref: "#/components/schemas/UUID" }
+        quote_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            The quote from POST /payouts/quote that the customer was shown, and
+            it is REQUIRED. It is consumed in the same transaction that reserves
+            the value, so one quote funds exactly one payout, and an expired or
+            already-used quote refuses the request before anything is decided
+            about the money. It must name the same destination and the same
+            gross amount. Without it there is no fee and no minimum to judge the
+            payout against, which is how a payout below the provider's published
+            minimum was reserved and settled with the fee never taken (D-119).
 
     PayoutRequest:
       type: object
@@ -1366,6 +2300,58 @@ components:
         policy_version: { type: string }
         policy_hash: { type: string }
         failure_reason: { type: string }
+        blocked_reason:
+          type: string
+          description: >-
+            Why this reserved payout cannot be sent, in words its holder can
+            read, absent when nothing is blocking it. It is NOT a failure and
+            NOT a state: the request is still VERIFIED and its Credits are
+            still reserved, and cancelling it is what releases them.
+
+            The case it exists for is a destination the holder removed after
+            asking. The payout stays reserved deliberately -- failing it would
+            return the reservation on the strength of a fact the person can
+            undo -- and until F-277 the request simply read VERIFIED, which
+            reads as "on its way". A client showing this must show the cancel
+            control beside it. There is no route that re-points a payout at a
+            different destination; a new destination is a new request.
+        blocked_at: { type: string, format: date-time }
+        quote_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: The pre-commitment quote this payout was created against.
+        quoted_gross_amount_minor:
+          type: integer
+          format: int64
+          description: >-
+            The gross the customer was shown, in minor units of
+            quoted_currency. Recorded on the request rather than re-derived, so
+            a fee schedule repriced later cannot change what this payout says it
+            sent.
+        quoted_fee_amount_minor: { type: integer, format: int64 }
+        quoted_net_amount_minor:
+          type: integer
+          format: int64
+          description: What the customer was told would reach them. It is what the provider is instructed to send.
+        quoted_currency: { type: string }
+        provenance:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutProvenanceSlice" }
+          description: >-
+            What value is leaving, in the order it leaves (§23). A payout does
+            not take "500 Credits"; it takes specific units from specific
+            provenance lots, and this is which.
+        sandbox:
+          type: boolean
+          description: >-
+            True when this payout was a rehearsal. It is recorded on the request
+            at creation, from the provider's availability and the deployment's
+            own tier, rather than read from today's provider mode -- so the
+            list, the create response and the by-id read agree, and a deployment
+            that swaps its provider does not silently relabel its history
+            (D-096's treatment, F-232).
+        provider:
+          type: string
+          description: The payout provider this request was claimed for, once it has been.
         created_at: { $ref: "#/components/schemas/Timestamp" }
 
     PayoutRequestPage:
@@ -1423,9 +2409,6 @@ components:
         price:
           allOf: [{ $ref: "#/components/schemas/Quantity" }]
           description: In Credit base units. Fixed for this version once published.
-        platform_fee_bps:
-          allOf: [{ $ref: "#/components/schemas/BPS" }]
-          description: The platform share, capped at 3000 (30%) and rounded DOWN on every sale.
 
     SetInternalProductStatusRequest:
       type: object
@@ -1516,7 +2499,7 @@ components:
         instance: { type: string }
         code:
           type: string
-          description: Stable machine-readable code (INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …)
+          description: Stable machine-readable code (BODY_TOO_LARGE, INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …)
         fields: { type: object, additionalProperties: true }
         request_id: { type: string }
     Page:
@@ -1535,6 +2518,16 @@ components:
         auth_time: { $ref: "#/components/schemas/Timestamp" }
         amr: { type: array, items: { type: string } }
         step_up_valid_until: { $ref: "#/components/schemas/Timestamp" }
+        # When a break-glass elevation is live, the instant it expires. The
+        # session already carries it and the roles array already shows
+        # BREAK_GLASS; omitting the expiry left an operator console unable to
+        # say how long an elevation had left. Absent means no elevation.
+        break_glass_until: { $ref: "#/components/schemas/Timestamp" }
+        # Added by the product surfaces, additively: every field above is
+        # unchanged and still required. Both are absent for a principal with
+        # no profile row, so a client must treat them as optional.
+        profile: { $ref: "#/components/schemas/UserProfile" }
+        onboarding: { $ref: "#/components/schemas/Onboarding" }
     SessionSummary:
       type: object
       required: [id, created_at, last_seen_at, expires_at]
@@ -1553,6 +2546,11 @@ components:
       required: [id, kind, status, created_at]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
+        # Read-only, and additive: the account already referenced a user in the
+        # schema, and an operator surface that could list accounts but not reach
+        # the person who owns one had to guess. It is the caller's own user id
+        # on the customer routes, which they already have from /v1/me.
+        owner_user_id: { $ref: "#/components/schemas/UUID" }
         kind: { type: string, enum: [CUSTOMER, CANARY, PLATFORM] }
         status: { type: string, enum: [ACTIVE, RESTRICTED, FROZEN, CLOSED] }
         status_reason: { type: string }
@@ -2007,21 +3005,22 @@ components:
       required: [id, type, occurred_at]
       properties:
         id: { type: string, description: "cursor; monotonically increasing per connection" }
-        type: { type: string, enum: [buying_power.changed, order.transitioned, intent.transitioned, deposit.transitioned, agent.state, resync] }
+        type: { type: string, enum: [buying_power.changed, order.transitioned, intent.transitioned, deposit.transitioned, agent.state, resync, notification.created, data.changed] }
         occurred_at: { $ref: "#/components/schemas/Timestamp" }
         resource_id: { type: string }
         data: { type: object, additionalProperties: true }
     Capability:
       type: string
-      enum: [LIVE_FUNDING, LIVE_MANUAL_TRADING, LIVE_AGENT_TRADING, WITHDRAWALS, SOCIAL_DATA_PERSISTENCE, MARKETPLACE, CROSS_CHAIN, PREDICTION_MARKETS, SECURITIES, CEX_TRADING]
+      enum: [LIVE_FUNDING, LIVE_MANUAL_TRADING, LIVE_AGENT_TRADING, WITHDRAWALS, SOCIAL_DATA_PERSISTENCE, MARKETPLACE, CROSS_CHAIN, PREDICTION_MARKETS, SECURITIES, CEX_TRADING, CREDIT_PURCHASE, NATIVE_ASSET_CREATION, NATIVE_MARKET_TRADING, PAYOUT_RESERVE, PAYOUT_SETTLE, HOSTED_TRADING, HOSTED_FUNDING, AGENT_BOUNDED_DISCRETION, AGENT_AUTONOMOUS_SELECTION, AGENT_AUTONOMOUS_PORTFOLIO]
     CapabilityGate:
       type: object
       required: [capability, environment, state, approval_version, active]
       properties:
         capability: { $ref: "#/components/schemas/Capability" }
         environment: { type: string }
-        state: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED] }
+        state: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED, SANDBOX] }
         active: { type: boolean, description: "Result of the five-condition activation check, not just the row state" }
+        sandbox: { type: boolean, description: "True when active came from a SANDBOX row on a sandbox tier rather than from dual control. Show the word; an active sandbox gate is not an approval." }
         inactive_reason: { type: string }
         approval_version: { type: integer }
         legal_review_ref: { type: string }
@@ -2031,6 +3030,19 @@ components:
         approvers: { type: array, items: { type: object, additionalProperties: true } }
         effective_at: { $ref: "#/components/schemas/Timestamp" }
         expires_at: { $ref: "#/components/schemas/Timestamp" }
+    CapabilityGateTransition:
+      type: object
+      required: [transition_id, from, to, actor_type, actor_id, reason, occurred_at, sandbox]
+      properties:
+        transition_id: { $ref: "#/components/schemas/UUID" }
+        from: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED, SANDBOX] }
+        to: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED, SANDBOX] }
+        actor_type: { type: string, description: "OPERATOR for a person, SYSTEM for a boot-time sandbox activation" }
+        actor_id: { type: string }
+        reason: { type: string }
+        evidence_hash: { type: string, description: "Hex SHA-256 of the evidence references at the time, empty when there were none" }
+        occurred_at: { type: string, format: date-time }
+        sandbox: { type: boolean, description: "True when the transition entered SANDBOX: never an approval" }
     GateActionRequest:
       type: object
       required: [reason]
@@ -2170,3 +3182,1589 @@ components:
         p95_ms: { type: integer }
         last_success_at: { $ref: "#/components/schemas/Timestamp" }
         disable_reason: { type: string }
+    # ---- profile, terms and account lifecycle ----
+    UserProfile:
+      type: object
+      required: [user_id, locale, time_zone, avatar_seed, created_at]
+      description: >-
+        Product-level state only. It carries no e-mail address, phone number,
+        legal name or date of birth: those are sealed in identity_pii and this
+        surface has no route to them.
+      properties:
+        user_id: { $ref: "#/components/schemas/UUID" }
+        display_name: { type: string, maxLength: 64 }
+        handle: { type: string, pattern: "^[a-z][a-z0-9_]{2,29}$" }
+        locale: { type: string, pattern: "^[a-z]{2}(-[A-Z]{2})?$" }
+        time_zone: { type: string, maxLength: 64 }
+        avatar_seed:
+          type: string
+          pattern: "^[0-9a-f]{16}$"
+          description: Sixteen hex characters a client renders an identicon from. Nodal accepts no avatar upload.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    ProfileUpdate:
+      type: object
+      description: Only the fields present are changed. An empty handle clears it.
+      properties:
+        display_name: { type: string, maxLength: 64 }
+        handle: { type: string, maxLength: 30 }
+        locale: { type: string, maxLength: 5 }
+        time_zone: { type: string, maxLength: 64 }
+    Onboarding:
+      type: object
+      required: [started_at, complete, steps]
+      description: >-
+        Timestamps, not a state machine. The steps are independent, may be done
+        in any order, and cannot be undone (D-053).
+      properties:
+        started_at: { $ref: "#/components/schemas/Timestamp" }
+        complete: { type: boolean }
+        completed_at: { $ref: "#/components/schemas/Timestamp" }
+        next_step: { type: string, enum: [PROFILE, TERMS] }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [key, complete]
+            properties:
+              key: { type: string, enum: [PROFILE, TERMS] }
+              complete: { type: boolean }
+              completed_at: { $ref: "#/components/schemas/Timestamp" }
+    LegalDocument:
+      type: object
+      required: [document_id, version, title, content_hash, requirement, counsel_review_required, accepted]
+      properties:
+        document_id:
+          type: string
+          enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, RISK_DISCLOSURE, CREDITS_TERMS, WITHDRAWAL_DISCLOSURE]
+        version: { type: string }
+        title: { type: string }
+        content_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        requirement:
+          type: string
+          enum: [ONBOARDING, WITHDRAWAL]
+          description: When acceptance is required. A WITHDRAWAL document is not asked for at signup.
+        counsel_review_required:
+          type: boolean
+          description: >-
+            The document has not been reviewed by a lawyer. Every document
+            currently served is marked, and a surface must say so rather than
+            presenting a draft as settled.
+        body:
+          type: string
+          description: >-
+            The document text, as Markdown, so a client renders exactly what it
+            records acceptance of.
+        accepted: { type: boolean }
+        accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    PublicLegalDocument:
+      type: object
+      description: A served legal document without any person's acceptance state.
+      required: [document_id, version, title, content_hash, requirement, counsel_review_required, body]
+      properties:
+        document_id: { type: string }
+        version: { type: string }
+        title: { type: string }
+        content_hash: { type: string, description: "sha256 of the exact body bytes; an acceptance records this hash" }
+        requirement: { type: string }
+        counsel_review_required: { type: boolean }
+        body: { type: string }
+    TermsState:
+      type: object
+      required: [documents, outstanding]
+      properties:
+        documents: { type: array, items: { $ref: "#/components/schemas/LegalDocument" } }
+        outstanding:
+          type: array
+          description: Documents required at onboarding whose current bytes the caller has not accepted.
+          items: { type: string }
+        acceptances: { type: array, items: { $ref: "#/components/schemas/TermsAcceptance" } }
+    TermsAcceptance:
+      type: object
+      required: [id, document_id, version, content_hash, accepted_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        document_id: { type: string }
+        version: { type: string }
+        content_hash: { type: string }
+        accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    TermsAcceptanceRequest:
+      type: object
+      required: [document_ids]
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, RISK_DISCLOSURE, CREDITS_TERMS, WITHDRAWAL_DISCLOSURE]
+    AccountRestriction:
+      type: object
+      required: [code, message]
+      description: >-
+        A restriction, written for the person it applies to. The free text an
+        operator wrote on a status change is deliberately not here: it was
+        written for other operators and appears in the support view instead.
+      properties:
+        code:
+          type: string
+          enum: [USER_SUSPENDED, USER_CLOSED, ACCOUNT_RESTRICTED, ACCOUNT_FROZEN, ACCOUNT_CLOSED, CLOSURE_PENDING]
+        account_id: { $ref: "#/components/schemas/UUID" }
+        message: { type: string }
+    ClosureRequest:
+      type: object
+      required: [id, state, requested_at, cooling_off_until]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        state: { type: string, enum: [PENDING, CANCELLED, REFUSED, EFFECTED] }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        cooling_off_until: { $ref: "#/components/schemas/Timestamp" }
+        effectable:
+          type: boolean
+          description: The cooling-off period has passed and an operator may now effect the request.
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        decided_reason: { type: string }
+    MyAccount:
+      type: object
+      required: [user_id, user_status, accounts, restrictions, cooling_off_days]
+      properties:
+        user_id: { $ref: "#/components/schemas/UUID" }
+        user_status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        restrictions: { type: array, items: { $ref: "#/components/schemas/AccountRestriction" } }
+        closure_request: { $ref: "#/components/schemas/ClosureRequest" }
+        cooling_off_days:
+          type: integer
+          description: How long a new closure request would wait before it could be effected.
+    CloseAccountRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Optional. A person leaving does not owe an explanation.
+    SecuritySummary:
+      type: object
+      required: [active_sessions, mfa_present, amr, step_up_max_age_seconds]
+      description: >-
+        Derived from the session store and the claims of the current session.
+        Nothing here is a secret and nothing here is created by asking.
+      properties:
+        active_sessions: { type: integer }
+        mfa_present:
+          type: boolean
+          description: The identity provider asserted a strong authentication method for the current session.
+        amr: { type: array, items: { type: string } }
+        last_login_at: { $ref: "#/components/schemas/Timestamp" }
+        last_step_up_at: { $ref: "#/components/schemas/Timestamp" }
+        step_up_valid_until: { $ref: "#/components/schemas/Timestamp" }
+        step_up_max_age_seconds: { type: integer }
+        current_session_id: { $ref: "#/components/schemas/UUID" }
+    AdminUserView:
+      type: object
+      required: [user_id, user_status, idp_issuer, idp_subject, email_verified, created_at, accounts, restrictions, active_sessions, audit_stream, verification, closure_blockers]
+      description: >-
+        Read only. There is no field here an operator can write, and the only
+        mutation the support surface offers is deciding a closure request the
+        user themselves opened (PART 38).
+      properties:
+        user_id: { $ref: "#/components/schemas/UUID" }
+        user_status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        idp_issuer: { type: string }
+        idp_subject: { type: string }
+        email_verified:
+          type: boolean
+          description: >-
+            The identity provider asserted a verified address. The address
+            itself is sealed and is not reachable from here.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        profile: { $ref: "#/components/schemas/UserProfile" }
+        onboarding: { $ref: "#/components/schemas/Onboarding" }
+        accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        restrictions: { type: array, items: { $ref: "#/components/schemas/AccountRestriction" } }
+        closure_request: { $ref: "#/components/schemas/ClosureRequest" }
+        acceptances: { type: array, items: { $ref: "#/components/schemas/TermsAcceptance" } }
+        active_sessions: { type: integer }
+        audit_stream:
+          type: string
+          description: >-
+            Where this user history is recorded, so the support view points at
+            the evidence rather than restating it.
+        verification:
+          type: object
+          required: [known]
+          description: >-
+            The verification level Nodal has established. known is false when
+            this deployment wired no resolver, which is reported as not known
+            here and never as NONE.
+          properties:
+            known: { type: boolean }
+            level: { type: string }
+        closure_blockers:
+          type: object
+          required: [clear, credit_balance, open_payout_requests, open_native_positions, reasons]
+          description: >-
+            What this person accounts still hold, across every account they own.
+            Effecting a closure is irreversible and puts whatever is left out of
+            their reach, so the decision surface carries the three facts the
+            refusal exists for and the service refuses EFFECT while any of them
+            stands. A blocker means REFUSE with a reason, never a permanent no.
+          properties:
+            clear:
+              type: boolean
+              description: Nothing financial stands in the way of effecting.
+            credit_balance:
+              type: string
+              description: >-
+                The gross Credit balance in base units, as a decimal string.
+                Gross and not spendable a disputed or frozen lot is still value
+                that belongs to this person.
+            open_payout_requests:
+              type: integer
+              description: Payout requests that have not reached a terminal state.
+            open_native_positions:
+              type: integer
+              description: Native-asset positions still holding a non-zero quantity.
+            reasons:
+              type: array
+              items: { type: string }
+              description: >-
+                One sentence per blocker, in a fixed order, written for the
+                operator deciding and for the person who will read the refusal.
+    ClosureDecision:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: { type: string, enum: [CANCEL, REFUSE, EFFECT] }
+        reason: { type: string, minLength: 8 }
+    NotificationKind:
+      type: string
+      description: >-
+        What a notification is about. The list is the product vocabulary; the
+        nine names migration 00640 declared and nothing produces are not
+        accepted here.
+      enum: [CREDIT_PURCHASE_CAPTURED, CREDIT_PURCHASE_REVERSED, NATIVE_TRADE_FILLED, NATIVE_MARKET_PAUSED,
+             PAYOUT_ACCEPTED, PAYOUT_SETTLED, PAYOUT_FAILED, PAYOUT_NEEDS_REVIEW, VERIFICATION_UPDATED,
+             ACCOUNT_RESTRICTED, SECURITY_NEW_SESSION, AGENT_PAUSED, SYSTEM]
+    Notification:
+      type: object
+      required: [id, kind, severity, title, body, occurred_at, sandbox]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/NotificationKind" }
+        severity: { type: string, enum: [INFO, WARN, CRITICAL] }
+        title: { type: string }
+        body: { type: string }
+        account_id: { type: [string, "null"], format: uuid }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        data:
+          type: object
+          additionalProperties: true
+          description: Identifiers and state names only; never a balance. Canonical figures come from REST.
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        read_at: { type: [string, "null"], format: date-time }
+        sandbox:
+          type: boolean
+          description: True when this notification was produced on a sandbox tier and describes nothing of real value (ADR-0023).
+    NotificationPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+        next_cursor: { type: [string, "null"] }
+    UnreadCount:
+      type: object
+      required: [count]
+      properties:
+        count: { type: integer, minimum: 0 }
+    MarkedRead:
+      type: object
+      required: [updated]
+      properties:
+        updated: { type: integer, minimum: 0 }
+    NotificationPreference:
+      type: object
+      required: [kind, channel, enabled, enforced]
+      properties:
+        kind: { $ref: "#/components/schemas/NotificationKind" }
+        channel:
+          type: string
+          enum: [IN_APP]
+          description: The only delivery channel that exists. No e-mail, SMS or push provider is configured anywhere in this system.
+        enabled: { type: boolean }
+        enforced:
+          type: boolean
+          description: >-
+            False where the kind cannot be switched off -- a new sign-in, an
+            account restriction, a reversed purchase, a failed payout, a system
+            message. The stored answer is kept and ignored, and a settings page
+            should show the switch as fixed rather than one that does nothing.
+    NotificationPreferences:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/NotificationPreference" } }
+    NotificationPreferencesUpdate:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [kind, enabled]
+            properties:
+              kind: { $ref: "#/components/schemas/NotificationKind" }
+              enabled: { type: boolean }
+    MeAuditEntry:
+      type: object
+      required: [id, source, action, occurred_at]
+      properties:
+        id: { type: string }
+        source:
+          type: string
+          enum: [SECURITY, ACCOUNT]
+          description: SECURITY is the sign-in and session trail; ACCOUNT is what was done to the caller's own accounts.
+        action: { type: string }
+        severity: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        actor_type:
+          type: string
+          description: Who acted, by category. The operator's identity is never exposed to a customer.
+        ip: { type: string }
+        user_agent: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    MeAuditPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MeAuditEntry" } }
+        next_cursor: { type: [string, "null"] }
+    # ---- agents ----
+    AuthorityLevel:
+      type: object
+      description: >-
+        One rung of the authority ladder, rendered from the matrix the code
+        enforces rather than written out beside it. Disabled levels are returned
+        rather than hidden, with the capability each would need.
+      required: [level, name, summary, enabled]
+      properties:
+        level: { type: integer, minimum: 0, maximum: 6 }
+        name:
+          type: string
+          enum: [RESEARCH_ONLY, RECOMMENDATION, PREPARE_TRANSACTION, USER_APPROVED_RULE,
+                 BOUNDED_DISCRETION, AUTONOMOUS_SELECTION, AUTONOMOUS_PORTFOLIO]
+        summary: { type: string }
+        enabled: { type: boolean }
+        required_capability: { type: string }
+    AgentSchedule:
+      type: object
+      description: How often the agent may evaluate. MANUAL carries no interval.
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [MANUAL, INTERVAL] }
+        interval_minutes: { type: integer, minimum: 5, maximum: 10080 }
+    AgentLimits:
+      type: object
+      description: >-
+        The bounds the owner granted. Every Credit figure is an exact integer
+        string of base units; none of them is a currency amount and none is ever
+        a floating-point number. The budget is a ceiling on Credits at risk, not
+        a reservation - no Credits move when an agent is created.
+      required: [budget_credits, per_trade_cap_credits, daily_loss_stop_credits,
+                 max_position_share_bps, allowed_asset_ids, schedule]
+      properties:
+        budget_credits: { $ref: "#/components/schemas/Quantity" }
+        per_trade_cap_credits: { $ref: "#/components/schemas/Quantity" }
+        daily_loss_stop_credits: { $ref: "#/components/schemas/Quantity" }
+        max_position_share_bps: { $ref: "#/components/schemas/BPS" }
+        allowed_asset_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: { $ref: "#/components/schemas/UUID" }
+        schedule: { $ref: "#/components/schemas/AgentSchedule" }
+    AgentRuntime:
+      type: object
+      description: >-
+        What is actually evaluating and executing, derived from agent runs and
+        from which worker processes this deployment runs. It is not the agent's
+        lifecycle state: an agent can be enabled, correct and evaluated by
+        nothing at all, and NOT_DEPLOYED says exactly that.
+      required: [evaluator, executor, detail]
+      properties:
+        evaluator: { type: string, enum: [NOT_DEPLOYED, IDLE, RUNNING] }
+        executor: { type: string, enum: [NOT_DEPLOYED, IDLE, RUNNING] }
+        last_heartbeat: { $ref: "#/components/schemas/Timestamp" }
+        detail: { type: string }
+    AgentBudget:
+      type: object
+      description: >-
+        granted is the ceiling; used is derived from the intents this agent's
+        runs created that reached a state where value is committed. source names
+        where used came from, so a zero is never mistaken for a measurement that
+        was not made.
+      required: [granted_credits, used_credits, source]
+      properties:
+        granted_credits: { $ref: "#/components/schemas/Quantity" }
+        used_credits: { $ref: "#/components/schemas/Quantity" }
+        source: { type: string, enum: [NO_RUNS_RECORDED, NO_INTENTS_CREATED, COMMITTED_INTENTS] }
+    AgentPause:
+      type: object
+      required: [reason_code, reason, paused_by_actor_type, paused_at]
+      properties:
+        reason_code: { type: string }
+        reason: { type: string }
+        paused_by_actor_type: { type: string, enum: [USER, OPERATOR, SYSTEM] }
+        paused_at: { $ref: "#/components/schemas/Timestamp" }
+        open_orders_policy: { type: string, enum: [LEAVE, CANCEL_CANCELABLE] }
+    Agent:
+      type: object
+      required: [id, account_id, strategy_id, strategy_version_id, name, stage, state, status,
+                 authority, limits, budget, runtime, archived, sandbox, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        strategy_version_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        stage:
+          type: string
+          description: The furthest rung of the promotion ladder this agent has reached.
+          enum: [DRAFT, COMPILED, VALIDATED, BACKTEST_ELIGIBLE, SHADOW, CANARY, LIMITED, LIVE]
+        state:
+          type: string
+          enum: [DRAFT, COMPILED, VALIDATED, BACKTEST_ELIGIBLE, SHADOW, CANARY, LIMITED, LIVE,
+                 PAUSED, FAILED, REVOKED, SUPERSEDED]
+        status:
+          type: string
+          description: >-
+            The product's own word for the state, which is what a person is
+            actually asking. STOPPED means created and never enabled; ENABLED
+            means the owner granted it the right to be evaluated, which is not
+            the same as something evaluating it - read runtime for that.
+          enum: [STOPPED, ENABLED, PAUSED, DISABLED, FAILED]
+        mode: { type: string, enum: [BACKTEST, PAPER, SHADOW, CANARY, LIMITED, LIVE] }
+        authority: { $ref: "#/components/schemas/AuthorityLevel" }
+        limits: { $ref: "#/components/schemas/AgentLimits" }
+        budget: { $ref: "#/components/schemas/AgentBudget" }
+        runtime: { $ref: "#/components/schemas/AgentRuntime" }
+        pause: { $ref: "#/components/schemas/AgentPause" }
+        runs_total: { type: integer }
+        last_run_at: { $ref: "#/components/schemas/Timestamp" }
+        last_run_status: { type: string }
+        archived: { type: boolean }
+        sandbox:
+          type: boolean
+          description: >-
+            True when the strategy version this agent deploys was compiled by a
+            compiler that exists only on a sandbox tier. Everything about the
+            agent is then a rehearsal: it is labelled one wherever it is shown,
+            and no real capital can move through it on any deployment.
+        granted_by_user_id: { $ref: "#/components/schemas/UUID" }
+        granted_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    AgentPage:
+      type: object
+      required: [items, authority_levels]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Agent" }
+        authority_levels:
+          type: array
+          description: Every declared level and whether this build permits it.
+          items: { $ref: "#/components/schemas/AuthorityLevel" }
+        next_cursor: { type: string }
+    CreateAgentRequest:
+      type: object
+      required: [account_id, strategy_id, strategy_version_id, name, authority_level, limits]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        strategy_version_id:
+          $ref: "#/components/schemas/UUID"
+        name: { type: string, minLength: 1, maxLength: 120 }
+        authority_level:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: >-
+            0 to 3 are the product. 4, 5 and 6 are declared, disabled by policy,
+            and refused with the capability each would need.
+        limits: { $ref: "#/components/schemas/AgentLimits" }
+    AgentActionRequest:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500 }
+    StrategyVersion:
+      type: object
+      required: [id, version, status, ir_hash, effect_set, human_readable, sandbox]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        version: { type: integer }
+        status: { type: string, enum: [COMPILED, ACCEPTED, REJECTED, SUPERSEDED, REVOKED] }
+        ir_hash: { type: string }
+        effect_set:
+          type: array
+          items: { type: string }
+        human_readable:
+          type: string
+          description: The compiled strategy in words, which is what a person reviews before approving it.
+        ir:
+          description: The typed intermediate representation itself.
+          type: object
+          additionalProperties: true
+        sandbox:
+          type: boolean
+          description: >-
+            True when this version was produced by a compiler that exists only on
+            a sandbox tier. Everything built from it is a rehearsal, it is
+            labelled one everywhere it is shown, and migration 00812 refuses the
+            row in a production database.
+        environment:
+          type: string
+          description: The deployment that compiled it. Empty for a version compiled before the column existed.
+        accepted_by_user_id:
+          $ref: "#/components/schemas/UUID"
+        accepted_at:
+          allOf: [{ $ref: "#/components/schemas/Timestamp" }]
+          description: >-
+            When a person read this document and approved it. Present exactly
+            when status is ACCEPTED; the two are paired by a CHECK in the schema.
+        built_at: { $ref: "#/components/schemas/Timestamp" }
+    CompilerDescriptor:
+      type: object
+      description: >-
+        Which compiler this deployment has. Absent means none, which is the same
+        fact compiler_configured reports as false.
+      required: [name, sandbox, structured]
+      properties:
+        name: { type: string }
+        sandbox:
+          type: boolean
+          description: Every version this compiler produces is a rehearsal and is labelled one.
+        structured:
+          type: boolean
+          description: >-
+            True when the compiler reads the fields you state rather than your
+            description. A structured compiler never interprets natural language:
+            an unstated field comes back as a named refusal, never as a default.
+    StructuredStrategy:
+      type: object
+      description: >-
+        A strategy stated field by field, which is what a structured compiler
+        reads. Every field is required and there is no default for any of them,
+        because a default is an inference about what somebody meant.
+
+
+        Unknown fields are refused rather than ignored, so a misspelled key is a
+        named refusal instead of a setting that silently did not apply.
+      additionalProperties: false
+      required: [schema_version, universe, entry, exit, risk_limits, capital_limit, frequency, mode]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+          description: The grammar this document is written against. A later grammar is refused by name.
+        universe:
+          type: object
+          additionalProperties: false
+          required: [instrument, venue]
+          properties:
+            instrument:
+              type: string
+              description: An instrument's canonical name, e.g. SOL/USDC. It must be in this deployment's registry and ACTIVE.
+            venue:
+              type: string
+              description: A venue code, e.g. JUPITER. It must be in the registry, able to take new actions, and list the instrument above.
+        entry: { $ref: "#/components/schemas/StructuredRule" }
+        exit: { $ref: "#/components/schemas/StructuredRule" }
+        risk_limits:
+          type: object
+          additionalProperties: false
+          required: [max_single_trade_usd, max_position_usd, max_daily_loss_usd]
+          description: >-
+            The three ceilings. Each is an exact USD amount in MINOR units,
+            written as digits: "5000" is $50.00. None of them is a float and none
+            carries a decimal point. max_single_trade_usd is also the size of
+            every trade the compiled strategy proposes.
+          properties:
+            max_single_trade_usd: { $ref: "#/components/schemas/MinorUSD" }
+            max_position_usd: { $ref: "#/components/schemas/MinorUSD" }
+            max_daily_loss_usd: { $ref: "#/components/schemas/MinorUSD" }
+        capital_limit:
+          type: object
+          additionalProperties: false
+          required: [min_allocation_usd]
+          properties:
+            min_allocation_usd:
+              allOf: [{ $ref: "#/components/schemas/MinorUSD" }]
+              description: The smallest envelope this strategy will run in.
+        frequency:
+          type: object
+          additionalProperties: false
+          required: [interval_minutes, max_intents_per_hour]
+          properties:
+            interval_minutes: { type: integer, minimum: 1, maximum: 10080 }
+            max_intents_per_hour: { type: integer, minimum: 1, maximum: 3600 }
+        mode:
+          type: string
+          enum: [PAPER]
+          description: >-
+            PAPER is the only mode this build compiles. Any other value is
+            refused with the reason; it is never downgraded silently, because
+            compiling a request for a mode that moves value as one that does not
+            would be answering a question nobody asked.
+    StructuredRule:
+      type: object
+      additionalProperties: false
+      description: >-
+        One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid
+        price against a threshold you state; EVERY_INTERVAL carries no condition
+        at all and acts on every evaluation, which is how "rebalance every N
+        minutes" is written. The two extra fields belong to PRICE_THRESHOLD and
+        are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold.
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [PRICE_THRESHOLD, EVERY_INTERVAL] }
+        comparator: { type: string, enum: [LT, LTE, GT, GTE] }
+        price_usd: { $ref: "#/components/schemas/MinorUSD" }
+    MinorUSD:
+      type: string
+      pattern: "^(0|[1-9][0-9]{0,14})$"
+      description: >-
+        An exact USD amount in MINOR units, as digits only. "5000" is $50.00.
+        No sign, no decimal point, no separators, no leading zero, never a float.
+    AcceptStrategyVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [ir_hash]
+      properties:
+        ir_hash:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: >-
+            The semantic hash of the document you read, exactly as the review
+            screen showed it. It is compared with the version's own hash and a
+            mismatch is refused: this is the field that makes "accept" mean
+            "accept THIS document" rather than "accept whatever is there now".
+    Strategy:
+      type: object
+      required: [id, account_id, name, description, source_kind, status, compiler_configured, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        description: { type: string }
+        constraints:
+          allOf: [{ $ref: "#/components/schemas/StructuredStrategy" }]
+          description: >-
+            The structured strategy the owner declared, as they declared it.
+            Absent when none was stated. It is stored in its own column, apart
+            from the description, which is what lets a structured compiler claim
+            it never read the prose.
+        source_kind: { type: string, enum: [NATURAL_LANGUAGE, TYPESCRIPT_SDK, CLONE, STRUCTURED_SANDBOX] }
+        status: { type: string, enum: [ACTIVE, ARCHIVED] }
+        compiler_configured:
+          type: boolean
+          description: >-
+            Whether this deployment can compile at all. False means a compile
+            attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR.
+        compiler: { $ref: "#/components/schemas/CompilerDescriptor" }
+        current_version: { $ref: "#/components/schemas/StrategyVersion" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    StrategyPage:
+      type: object
+      required: [items, compiler_configured]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Strategy" }
+        compiler_configured: { type: boolean }
+        compiler: { $ref: "#/components/schemas/CompilerDescriptor" }
+        next_cursor: { type: string }
+    CreateStrategyRequest:
+      type: object
+      required: [account_id, name, description]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 8000
+          description: >-
+            What you want, in your own words. It is recorded exactly as written
+            and shown back to you unchanged. On a deployment whose compiler is
+            structured it is never read by the compiler and never interpreted.
+        constraints:
+          allOf: [{ $ref: "#/components/schemas/StructuredStrategy" }]
+          description: >-
+            The strategy stated field by field. Recorded in its own column beside
+            the description, never merged into it. A structured compiler reads
+            this and nothing else; an incomplete one compiles to
+            STRUCTURED_CONSTRAINTS_REQUIRED naming the fields it needed.
+    CompileResult:
+      type: object
+      required: [strategy_id, attempt_id, attempt_no, outcome, detail]
+      properties:
+        strategy_id: { $ref: "#/components/schemas/UUID" }
+        attempt_id: { $ref: "#/components/schemas/UUID" }
+        attempt_no: { type: integer }
+        outcome:
+          type: string
+          enum: [SUCCESS, REJECTED, NEEDS_CLARIFICATION, MODEL_UNAVAILABLE, TIMEOUT]
+        failure_codes:
+          type: array
+          description: >-
+            Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment
+            has no compiler backend configured, so nothing was attempted and
+            nothing was inferred. STRUCTURED_CONSTRAINTS_REQUIRED means this
+            deployment's compiler reads a strategy you state field by field and
+            the one you sent is missing or incomplete; every field it needed is
+            listed in clarifications.
+          items: { type: string }
+        clarifications:
+          type: array
+          description: What the compiler could not decide. It never guesses.
+          items: { type: string }
+        detail: { type: string }
+        rationale: { $ref: "#/components/schemas/CompileRationale" }
+        version: { $ref: "#/components/schemas/StrategyVersion" }
+    CompileRationale:
+      type: object
+      description: >-
+        The compiler's own explanation of what it produced, in words, shown beside
+        the rendered strategy on the review step. Never chain-of-thought: a
+        structured compiler's rationale names, element by element, which field you
+        stated it came from.
+      required: [summary, details]
+      properties:
+        summary: { type: string }
+        details:
+          type: array
+          items: { type: string }
+    # ---- native markets: discovery, charts, portfolio, activity (M) ----
+    NativeMarketSummary:
+      type: object
+      description: >-
+        One market as the markets page and the trade screen see it. Every price is
+        an exact integer at price_scale and every quantity is base units; nothing
+        here is a float and nothing is a display string.
+
+
+        It carries no account identity, because the markets list that returns it
+        is unauthenticated: an identifier on a public page is both readable and
+        enumerable by anybody. The creator is a field of NativeMarketDetail,
+        which only a signed-in caller can reach (D-110).
+      required:
+        [market_id, asset_id, credit_asset_id, name, symbol, market_status, asset_status,
+         last_price, price_scale, asset_decimals, virtual_credit_reserve,
+         initial_asset_reserve, real_credit_reserve, asset_reserve, liquidity_credits,
+         circulating_supply, max_supply, credit_volume_24h, trades_24h,
+         platform_fee_bps, creator_fee_bps, demo, created_at]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        credit_asset_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        symbol: { type: string }
+        description: { type: string }
+        image_url: { type: string }
+        market_status: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
+        asset_status: { type: string, enum: [DRAFT, PENDING_REVIEW, ACTIVE, CLOSE_ONLY, HALTED, DELISTED, REJECTED] }
+        moderation_state: { type: string, enum: [PENDING, APPROVED, REJECTED, FLAGGED] }
+        last_price:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: The MARGINAL price -- what the next base unit costs -- at price_scale.
+        price_scale: { type: integer, description: Decimal places every price here carries }
+        reference_price_24h: { $ref: "#/components/schemas/Quantity" }
+        change_24h_bps:
+          type: integer
+          format: int64
+          description: Signed move over the last 24 hours. Meaningless unless has_24h_change.
+        has_24h_change:
+          type: boolean
+          description: >-
+            False when the market has not traded in the window, which is a
+            different fact from having moved nothing.
+        credit_volume_24h: { $ref: "#/components/schemas/Quantity" }
+        trades_24h: { type: integer, format: int64 }
+        virtual_credit_reserve: { $ref: "#/components/schemas/Quantity" }
+        initial_asset_reserve: { $ref: "#/components/schemas/Quantity" }
+        real_credit_reserve:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: R -- the only Credits in this pool that could ever be paid out.
+        asset_reserve: { $ref: "#/components/schemas/Quantity" }
+        liquidity_credits:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: V + R, the depth the curve prices against.
+        circulating_supply: { $ref: "#/components/schemas/Quantity" }
+        max_supply: { $ref: "#/components/schemas/Quantity" }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        platform_fee_bps: { $ref: "#/components/schemas/BPS" }
+        creator_fee_bps: { $ref: "#/components/schemas/BPS" }
+        state_version: { type: integer, format: int64 }
+        demo:
+          type: boolean
+          description: >-
+            This object was created by the sandbox demo seeder. It exists only on a
+            sandbox tier and represents nothing.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        activated_at: { $ref: "#/components/schemas/Timestamp" }
+
+    NativeMarketPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [markets, sort, stable]
+          properties:
+            markets: { type: array, items: { $ref: "#/components/schemas/NativeMarketSummary" } }
+            sort: { type: string, enum: [NEWEST, VOLUME_24H, CHANGE_24H, LIQUIDITY, PRICE] }
+            stable:
+              type: boolean
+              description: >-
+                Whether paging this ordering sees every market exactly once. Only
+                NEWEST does; the others rank by figures that move when somebody
+                trades.
+
+    MarketSafetyLimits:
+      type: object
+      description: >-
+        The limits in force on this market right now (product goal section 47), from
+        two documents: the market-safety policy, which is about the venue, and the
+        risk kernel's GLOBAL policy, which is about an account.
+      required: [safety_policy_version]
+      properties:
+        safety_policy_version: { type: string }
+        max_price_impact_bps: { $ref: "#/components/schemas/BPS" }
+        max_slippage_bps: { $ref: "#/components/schemas/BPS" }
+        circuit_breaker_move_bps: { type: integer, format: int64 }
+        circuit_breaker_window_seconds: { type: integer }
+        min_opening_liquidity_credits: { $ref: "#/components/schemas/Quantity" }
+        creator_may_buy_own_asset: { type: boolean }
+        risk_policy_version: { type: string }
+        max_native_market_concentration_bps: { $ref: "#/components/schemas/BPS" }
+        max_creator_concentration_bps: { $ref: "#/components/schemas/BPS" }
+
+    NativeMarketDetail:
+      type: object
+      required: [market, limits_in_force]
+      properties:
+        market: { $ref: "#/components/schemas/NativeMarketSummary" }
+        limits_in_force: { $ref: "#/components/schemas/MarketSafetyLimits" }
+        creator_account_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            The creator's account id, which is the handle placeholder. A display
+            name belongs to the profile domain and is joined later; inventing one
+            here would be a second source for it. It is on the DETAIL response
+            rather than on the summary because the summary is served
+            unauthenticated by the markets list (D-110).
+        top_holders:
+          type: array
+          description: >-
+            Holder concentration, which is the number a buyer most needs to see.
+            It names nobody; see NativeAssetHolder.
+          items: { $ref: "#/components/schemas/NativeAssetHolder" }
+
+    NativeAssetHolder:
+      type: object
+      description: >-
+        One place in an asset's holder concentration. It says how much and how
+        large a share, and it does not say whose: `top_holders` used to render an
+        account id to any signed-in caller, which made every market's largest
+        positions readable by account and watchable trade by trade. The caller's
+        own row is marked `is_you`, which tells them nothing they did not send.
+        A named holder list is surveillance and belongs behind
+        `native_market:surveil` on an operator route (D-111).
+      required: [rank, quantity, share_bps]
+      properties:
+        rank:
+          type: integer
+          description: >-
+            1 is the largest holder of this asset. The rank is over every holder,
+            not over the returned page, so rank 10 on a page of ten means there
+            are more.
+        quantity:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Base units, at the ASSET's decimals.
+        share_bps:
+          allOf: [{ $ref: "#/components/schemas/BPS" }]
+          description: >-
+            This holding as a share of every unit accounts hold, truncated. The
+            denominator is the sum of customer balances rather than the
+            circulating supply, because units still in the pool are held by
+            nobody and a creator's allocation is minted outside the curve, so a
+            share of circulating supply can exceed 100%. This one cannot.
+        is_you:
+          type: boolean
+          description: >-
+            This row is the calling account's own holding. Present only where the
+            request named an account the caller owns.
+
+    NativeCandle:
+      type: object
+      required: [open_time, open, high, low, close, credit_volume, asset_volume, trades]
+      properties:
+        open_time: { $ref: "#/components/schemas/Timestamp" }
+        open: { $ref: "#/components/schemas/Quantity" }
+        high: { $ref: "#/components/schemas/Quantity" }
+        low: { $ref: "#/components/schemas/Quantity" }
+        close: { $ref: "#/components/schemas/Quantity" }
+        credit_volume: { $ref: "#/components/schemas/Quantity" }
+        asset_volume: { $ref: "#/components/schemas/Quantity" }
+        trades: { type: integer, format: int64 }
+
+    NativeCandlePage:
+      type: object
+      required: [market_id, interval, from, to, price_scale, asset_decimals, candles]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        interval: { type: string, enum: ["1m", "5m", "15m", "1h", "1d"] }
+        from: { $ref: "#/components/schemas/Timestamp" }
+        to: { $ref: "#/components/schemas/Timestamp" }
+        price_scale: { type: integer }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        candles:
+          type: array
+          description: Oldest first. A bucket with no trades is absent, never filled forward.
+          items: { $ref: "#/components/schemas/NativeCandle" }
+
+    NativeTradePrint:
+      type: object
+      description: One public print. It carries no account identity, by design.
+      required: [seq, side, effective_price, spot_price_after, credit_volume, asset_volume, printed_at]
+      properties:
+        seq: { type: integer, format: int64 }
+        side: { type: string, enum: [BUY, SELL] }
+        effective_price: { $ref: "#/components/schemas/Quantity" }
+        spot_price_before: { $ref: "#/components/schemas/Quantity" }
+        spot_price_after: { $ref: "#/components/schemas/Quantity" }
+        credit_volume: { $ref: "#/components/schemas/Quantity" }
+        asset_volume: { $ref: "#/components/schemas/Quantity" }
+        printed_at: { $ref: "#/components/schemas/Timestamp" }
+
+    NativeTradePage:
+      type: object
+      required: [market_id, price_scale, asset_decimals, trades]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        price_scale: { type: integer }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        trades: { type: array, items: { $ref: "#/components/schemas/NativeTradePrint" } }
+
+    SignedQuantity:
+      type: string
+      pattern: '^-?[0-9]+$'
+      description: >-
+        An exact base-unit amount that may be negative. A loss is a real outcome,
+        so P&L is signed where a balance is not.
+
+    ValueTemperature:
+      type: string
+      enum: [ECONOMY, REAL, SIMULATED]
+      description: >-
+        What KIND of value an amount is (product goal section 46). ECONOMY is
+        closed-loop Nodal Credits and native assets; REAL is money at a payment
+        provider; SIMULATED is a sandbox tier or a demo object, where nothing moves
+        anywhere. The three are never synonyms and are never rendered as one number.
+
+    PortfolioPosition:
+      type: object
+      description: >-
+        One native position. quantity, cost_basis_credits, realized_pnl_credits and
+        fees_paid_credits are the read model migration 00772 maintains from the
+        fills; market_value_credits and unrealized_pnl_credits are computed at
+        as_of from the market's marginal price.
+      required:
+        [asset_id, symbol, quantity, cost_basis_credits, realized_pnl_credits,
+         fees_paid_credits, market_value_credits, unrealized_pnl_credits, total_pnl_credits,
+         price_scale, asset_decimals, temperature]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        name: { type: string }
+        market_status: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        cost_basis_credits: { $ref: "#/components/schemas/Quantity" }
+        average_cost_credits:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Cost of one base unit at price_scale. Absent on a closed position.
+        spot_price: { $ref: "#/components/schemas/Quantity" }
+        market_value_credits: { $ref: "#/components/schemas/Quantity" }
+        realized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        unrealized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        total_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        fees_paid_credits: { $ref: "#/components/schemas/Quantity" }
+        units_bought_total: { $ref: "#/components/schemas/Quantity" }
+        units_sold_total: { $ref: "#/components/schemas/Quantity" }
+        allocation_units:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Units granted to the creator at the mint, at zero cost.
+        fill_count: { type: integer, format: int64 }
+        price_scale: { type: integer }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        temperature: { $ref: "#/components/schemas/ValueTemperature" }
+        demo: { type: boolean }
+        first_acquired_at: { $ref: "#/components/schemas/Timestamp" }
+        last_trade_at: { $ref: "#/components/schemas/Timestamp" }
+
+    PortfolioTotals:
+      type: object
+      required:
+        [cost_basis_credits, market_value_credits, unrealized_pnl_credits,
+         realized_pnl_credits, total_pnl_credits, fees_paid_credits,
+         position_count, open_position_count]
+      properties:
+        cost_basis_credits: { $ref: "#/components/schemas/Quantity" }
+        market_value_credits: { $ref: "#/components/schemas/Quantity" }
+        unrealized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        realized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        total_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        fees_paid_credits: { $ref: "#/components/schemas/Quantity" }
+        position_count: { type: integer }
+        open_position_count: { type: integer }
+
+    Portfolio:
+      type: object
+      required: [account_id, as_of, temperature, credits, positions, totals]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        as_of:
+          allOf: [{ $ref: "#/components/schemas/Timestamp" }]
+          description: >-
+            The instant every mark-to-market figure here was computed at. A number
+            on a screen that does not say when it was true is a number nobody can
+            act on.
+        temperature:
+          allOf: [{ $ref: "#/components/schemas/ValueTemperature" }]
+          description: The temperature of this deployment's Credits as a whole.
+        credits: { $ref: "#/components/schemas/CreditBalance" }
+        positions: { type: array, items: { $ref: "#/components/schemas/PortfolioPosition" } }
+        totals: { $ref: "#/components/schemas/PortfolioTotals" }
+
+    ActivityFeedKind:
+      type: string
+      enum:
+        [CREDIT_PURCHASE, CREDIT_REVERSAL, NATIVE_TRADE, NATIVE_ASSET_CREATED,
+         PAYOUT_REQUESTED, PAYOUT_STATE_CHANGED, ADMIN_ADJUSTMENT,
+         VERIFICATION_UPDATED, PAYOUT_DESTINATION_ADDED, PAYOUT_DESTINATION_DISABLED,
+         TERMS_ACCEPTED, ACCOUNT_CLOSURE_REQUESTED, ACCOUNT_CLOSURE_DECIDED,
+         AGENT_CREATED, AGENT_PAUSED, AGENT_RESUMED, AGENT_DISABLED,
+         NATIVE_MARKET_PAUSED]
+      description: >-
+        The closed set of activity kinds. A domain joins the feed by adding a
+        Source and a summary template in internal/activity; see that package's
+        doc.go for the extension point.
+
+    ActivityAmount:
+      type: object
+      required: [unit, value, temperature]
+      properties:
+        unit:
+          type: string
+          enum: [CREDITS, MONEY_MINOR, ASSET_UNITS]
+          description: >-
+            How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor
+            units of `currency`, ASSET_UNITS is base units of `symbol`.
+        value: { $ref: "#/components/schemas/SignedQuantity" }
+        currency: { type: string }
+        symbol: { type: string }
+        origin: { $ref: "#/components/schemas/CreditOrigin" }
+        temperature: { $ref: "#/components/schemas/ValueTemperature" }
+
+    ActivityFeedItem:
+      type: object
+      required: [id, kind, occurred_at, summary, reference, amounts, simulated]
+      properties:
+        id: { type: string }
+        kind: { $ref: "#/components/schemas/ActivityFeedKind" }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        summary:
+          type: string
+          description: Built on the server from a fixed template per kind, never from user text.
+        status: { type: string }
+        amounts: { type: array, items: { $ref: "#/components/schemas/ActivityAmount" } }
+        reference:
+          type: object
+          required: [type, id]
+          properties:
+            type: { type: string }
+            id: { type: string }
+        simulated: { type: boolean }
+
+    ActivityFeedPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ActivityFeedItem" } }
+    # --- verification, eligibility and the conversion request ------------
+    VerificationState:
+      type: string
+      description: >-
+        The financial verification state machine of §20. UNVERIFIED is §20's
+        NOT_STARTED under the name the schema already used. Nothing reaches
+        VERIFIED except through a provider session that decided so.
+      enum: [UNVERIFIED, REQUIRED, STARTED, PENDING, NEEDS_INFORMATION,
+             VERIFIED, REJECTED, EXPIRED, RESTRICTED, SUSPENDED]
+    VerificationLevel:
+      type: string
+      description: >-
+        How thoroughly the person behind an account has been identified.
+        NODAL_IDENTITY is a verified e-mail address and says nothing about who
+        they are or whether they may receive money; PAYOUT_KYC and ENHANCED are
+        a provider's decision plus the sub-checks that justify it.
+      enum: [NONE, NODAL_IDENTITY, PAYOUT_KYC, ENHANCED]
+    VerificationSessionStatus:
+      type: string
+      description: >-
+        The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from
+        what Persona, Veriff, Sumsub and Stripe Identity each report so that no
+        one vendor's vocabulary becomes the schema's.
+      enum: [CREATED, PENDING_USER_ACTION, PROCESSING, REQUIRES_INPUT,
+             MANUAL_REVIEW, APPROVED, DECLINED, CANCELLED, EXPIRED]
+    VerificationCheckKind:
+      type: string
+      description: The five things §21 says must each be able to refuse on their own.
+      enum: [IDENTITY_DOCUMENT, AGE, JURISDICTION, SANCTIONS, PEP]
+    VerificationOutcome:
+      type: string
+      description: >-
+        One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider
+        that has not screened somebody has not cleared them either.
+      enum: [PASS, FAIL, NEEDS_INFORMATION, UNKNOWN, NOT_APPLICABLE]
+    VerificationCheck:
+      type: object
+      required: [kind, outcome, provider, rules_version, sandbox, recorded_at]
+      description: >-
+        One sub-check, its answer, who produced it and under which rule version.
+        `detail` is a safe reason code and never a document, a government
+        identifier or a date of birth.
+      properties:
+        kind: { $ref: "#/components/schemas/VerificationCheckKind" }
+        outcome: { $ref: "#/components/schemas/VerificationOutcome" }
+        provider: { type: string }
+        provider_ref: { type: string }
+        rules_version: { type: string }
+        detail: { type: string }
+        sandbox:
+          type: boolean
+          description: A rehearsal answer. A database CHECK refuses one in PROD.
+        recorded_at: { $ref: "#/components/schemas/Timestamp" }
+    VerificationRequirement:
+      type: object
+      required: [code, detail, action]
+      description: One thing standing between a person and a level, with what they can do about it.
+      properties:
+        code:
+          type: string
+          description: A check kind, or VERIFICATION_SESSION / JURISDICTION / PROVIDER / OPERATOR_REVIEW / VERIFICATION_EXPIRED.
+        detail: { type: string }
+        action:
+          type: string
+          enum: [START_VERIFICATION, CONTINUE_VERIFICATION, PROVIDE_INFORMATION,
+                 REVERIFY, CONTACT_SUPPORT, WAIT, NONE]
+    VerificationSession:
+      type: object
+      required: [session_id, status, purpose, provider, sandbox, created_at]
+      properties:
+        session_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/VerificationSessionStatus" }
+        purpose: { type: string, enum: [PAYOUT_KYC, ENHANCED] }
+        provider: { type: string }
+        provider_ref: { type: string }
+        jurisdiction_country: { type: string }
+        jurisdiction_region: { type: string }
+        rules_version: { type: string }
+        failure_reason: { type: string }
+        sandbox: { type: boolean }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    VerificationProfile:
+      type: object
+      required: [account_id, state, level, jurisdiction_supported, minimum_age,
+                 age_verified, sanctions_state, sandbox, rules_version, payout_ready]
+      description: >-
+        The §24 profile area. It says what has been established, what has not,
+        and what to do next. It carries no personal data.
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        state: { $ref: "#/components/schemas/VerificationState" }
+        level: { $ref: "#/components/schemas/VerificationLevel" }
+        payout_ready:
+          type: boolean
+          description: >-
+            Whether verification, by itself, no longer stands between this
+            person and a withdrawal. It says nothing about whether a withdrawal
+            is possible; see /me/eligibility for that.
+        jurisdiction_country: { type: string }
+        jurisdiction_region: { type: string }
+        jurisdiction_supported: { type: boolean }
+        jurisdiction_refusals: { type: array, items: { type: string } }
+        minimum_age:
+          type: integer
+          description: The age threshold this jurisdiction is judged against, from the versioned rule table.
+        age_verified: { type: boolean }
+        sanctions_state: { type: string, enum: [UNKNOWN, CLEAR, HIT, REVIEW] }
+        restrictions: { type: array, items: { type: string } }
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        session: { $ref: "#/components/schemas/VerificationSession" }
+        checks: { type: array, items: { $ref: "#/components/schemas/VerificationCheck" } }
+        missing: { type: array, items: { $ref: "#/components/schemas/VerificationRequirement" } }
+        sandbox:
+          type: boolean
+          description: True when any of this was established by a rehearsal provider.
+        rules_version: { type: string }
+        provider: { type: string }
+        provider_availability:
+          type: string
+          enum: ["", NOT_OFFERED, REQUIRES_APPLICATION, APPLICATION_PENDING,
+                 APPLICATION_DENIED, SANDBOX_ONLY, LIVE]
+    StartVerificationRequest:
+      type: object
+      required: [account_id, jurisdiction_country]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        purpose:
+          type: string
+          enum: [PAYOUT_KYC, ENHANCED]
+          description: Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+        jurisdiction_country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+          description: ISO 3166-1 alpha-2. Never inferred from a network address.
+        jurisdiction_region:
+          type: string
+          description: The subdivision code without its country prefix. Required where the rules depend on it.
+    StartedVerification:
+      type: object
+      required: [session, sandbox]
+      properties:
+        session: { $ref: "#/components/schemas/VerificationSession" }
+        hosted_url:
+          type: string
+          description: >-
+            Single-use and short-lived. It is returned here and stored nowhere
+            -- not even in the idempotency record, which is why a REPLAY of the
+            same Idempotency-Key answers with the session and no link, and with
+            `resume` saying so (D-125). On a sandbox tier it is a `sandbox:`
+            reference rather than a page, because there is no hosted flow to
+            visit.
+        resume:
+          type: string
+          description: >-
+            Present instead of `hosted_url` when this answer is a replay of an
+            Idempotency-Key whose link was not kept. It tells the client what to
+            do: start a new session, under a new key, to get another link.
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        sandbox: { type: boolean }
+        sandbox_control_path:
+          type: string
+          description: >-
+            Present only for a rehearsal session. It is where a sandbox operator
+            chooses the outcome explicitly, and its presence is what makes a
+            sandbox session visibly a rehearsal.
+    SandboxVerificationOutcome:
+      type: object
+      required: [account_id, outcome]
+      description: SANDBOX TIER ONLY. Refused with FORBIDDEN anywhere else.
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        outcome:
+          type: string
+          enum: [VERIFIED, NEEDS_INFORMATION, REJECTED, UNDERAGE, SANCTIONED]
+          description: >-
+            There is no default. UNDERAGE and SANCTIONED are separate from
+            REJECTED because §21 requires an age failure and a sanctions failure
+            to be separately expressible.
+    WithdrawalReason:
+      type: string
+      description: >-
+        A machine-readable reason value cannot leave. Each names something that
+        could change. REQUIRES_VERIFICATION and TERMS_NOT_ACCEPTED are NEXT
+        STEPS and not denials, and the product must present them as such:
+        TERMS_NOT_ACCEPTED means the withdrawal disclosure has not been accepted
+        at the version now served, which is the normal state of somebody who has
+        never withdrawn. The eligible figures stay true beside it.
+      enum: [REQUIRES_VERIFICATION, ORIGIN_NOT_WITHDRAWABLE, CAPABILITY_INACTIVE,
+             JURISDICTION_RESTRICTED, ACCOUNT_RESTRICTED, PROVIDER_UNAVAILABLE,
+             MINIMUM_NOT_MET, FUNDING_NOT_SETTLED, HOLD_PERIOD_NOT_ELAPSED,
+             NO_VALUE, POLICY_INVALID, TERMS_NOT_ACCEPTED]
+    WithdrawalOriginBucket:
+      type: object
+      required: [origin, quantity, withdrawable, reasons, payout_allowed, consumption_rank]
+      description: >-
+        One PROVENANCE an account holds, and what may leave it: an origin, an
+        origin floor, a root set and a funding finality. Those four are what
+        the payout policy reads about the value itself, so every unit in a
+        bucket gets one answer and `withdrawable_now` is the sum of the buckets.
+
+        More than one bucket may therefore carry the same `origin`. Until D-136
+        there was exactly one per origin, folded to the least final finality and
+        the most restricted floor in it -- so one refused lot zeroed every other
+        lot of its origin and `withdrawable_now` contradicted `payout_eligible`
+        in the same payload. A client that keys on `origin` alone must key on
+        (origin, origin_floor, finality, root_origins) instead.
+      properties:
+        origin: { $ref: "#/components/schemas/CreditOrigin" }
+        finality:
+          allOf: [{ $ref: "#/components/schemas/FundingFinality" }]
+          description: The funding finality of every unit in this bucket.
+        root_origins:
+          type: array
+          items: { $ref: "#/components/schemas/CreditOrigin" }
+          description: >-
+            Every origin the units in this bucket ultimately came from. The
+            payout policy must release the bucket's own origin and all of these.
+        refused_root:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            The first of `root_origins` this policy will not release, absent
+            when it releases them all. It is the origin a person needs to read
+            about when the reason is ORIGIN_NOT_WITHDRAWABLE, and it is not
+            always `origin_floor`: the floor is ranked by the policies this
+            build ships, and a policy persisted later can refuse a different one
+            (D-138).
+        origin_floor:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            What this value ultimately came from: the most restricted origin
+            anywhere in its provenance. It equals `origin` for value nothing
+            else funded. It is here because ORIGIN_NOT_PAYOUT_ELIGIBLE on a
+            bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on --
+            what a person needs to read is that the value came from a
+            promotional grant, not a word about the trade that moved it.
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        withdrawable: { $ref: "#/components/schemas/Quantity" }
+        reasons: { type: array, items: { $ref: "#/components/schemas/WithdrawalReason" } }
+        payout_allowed: { type: boolean }
+        required_verification: { $ref: "#/components/schemas/VerificationLevel" }
+        required_capability: { type: string }
+        min_hold_days: { type: integer }
+        consumption_rank:
+          type: integer
+          description: Where this origin sits in the consumption order. Lower leaves first.
+        verification_would_suffice: { type: boolean }
+    WithdrawalEligibility:
+      type: object
+      required: [account_id, eligible, withdrawable_now, gross, spendable, frozen,
+                 payout_eligible, ineligible, buckets, reasons, policy_version,
+                 current_verification, required_verification, sandbox]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        eligible: { type: boolean }
+        withdrawable_now: { $ref: "#/components/schemas/Quantity" }
+        gross: { $ref: "#/components/schemas/Quantity" }
+        spendable: { $ref: "#/components/schemas/Quantity" }
+        frozen: { $ref: "#/components/schemas/Quantity" }
+        payout_eligible: { $ref: "#/components/schemas/Quantity" }
+        ineligible: { $ref: "#/components/schemas/Quantity" }
+        buckets: { type: array, items: { $ref: "#/components/schemas/WithdrawalOriginBucket" } }
+        reasons: { type: array, items: { $ref: "#/components/schemas/WithdrawalReason" } }
+        verification_would_suffice:
+          type: boolean
+          description: True when identity verification is the only thing standing between this person and some of their money.
+        current_verification: { $ref: "#/components/schemas/VerificationLevel" }
+        required_verification: { $ref: "#/components/schemas/VerificationLevel" }
+        minimum_quantity:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: The provider's minimum expressed in Credits, or "0" when it publishes none. Zero is never "any amount will do".
+        provider: { type: string }
+        provider_available: { type: boolean }
+        destination_configured: { type: boolean }
+        jurisdiction_supported: { type: boolean }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        sandbox: { type: boolean }
+    PayoutDestinationStatus:
+      type: string
+      description: >-
+        UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing
+        names are kept because working code and a registered enum pairing use
+        them (D-060). REJECTED and DISABLED are terminal: a destination never
+        comes back, and adding it again is a new registration.
+      enum: [UNVERIFIED, VERIFIED, REJECTED, DISABLED]
+    PayoutDestination:
+      type: object
+      required: [destination_id, account_id, kind, provider, status, sandbox, created_at]
+      description: >-
+        Nodal stores the provider's token and a mask. There is no account
+        number, card number, IBAN, routing number or key in this object, and
+        there is none in the table behind it.
+      properties:
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, enum: [BANK, CARD_PUSH, FIAT_WALLET, CRYPTO_WALLET] }
+        provider: { type: string }
+        status: { $ref: "#/components/schemas/PayoutDestinationStatus" }
+        display_label: { type: string }
+        masked_display:
+          type: string
+          description: What a person recognises, such as "••••4242". Never the whole number.
+        currency: { type: string }
+        country: { type: string }
+        region:
+          type: string
+          description: The subdivision this pays into, where the provider distinguishes them.
+        usable:
+          type: boolean
+          description: Whether a payout may be sent here right now.
+        sandbox: { type: boolean }
+        open_payout_ids:
+          type: array
+          items: { $ref: "#/components/schemas/UUID" }
+          description: >-
+            Present only on the response to DELETE /me/payout-destinations/{id}:
+            the conversion requests that still point at this destination and are
+            not finished. A reserved payout is refused at submission once its
+            destination stops being usable and stays VERIFIED with its value
+            held out of the balance, so the holder is told here which payouts to
+            cancel rather than left to discover that their money is stuck.
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    CreatePayoutDestination:
+      type: object
+      required: [account_id, kind, provider_token, country]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, enum: [BANK, CARD_PUSH, FIAT_WALLET, CRYPTO_WALLET] }
+        provider_token:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: >-
+            The provider's token for the destination, or on a sandbox tier a
+            sandbox handle. An input that looks like an account number, a card
+            number, an IBAN, a private key or a seed phrase is REFUSED, not
+            stored: Nodal never holds one.
+        display_label: { type: string, maxLength: 64 }
+        masked_display: { type: string, maxLength: 64 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+          description: >-
+            ISO 3166-1 alpha-2, and REQUIRED. The provider is asked whether it
+            can pay a recipient there before the destination is registered;
+            without it the question was skipped entirely and a destination the
+            provider had said it could not pay was accepted and marked VERIFIED
+            (D-122).
+        region:
+          type: string
+          pattern: '^[A-Z0-9]{1,6}$'
+          description: >-
+            The subdivision within country, without its country prefix.
+            Required whenever the provider publishes excluded subdivisions for
+            that country, and refused VALIDATION_FAILED when it is missing
+            there: "we do not know which state" is not "any state".
+    CreatePayoutQuote:
+      type: object
+      required: [account_id, destination_id, amount]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        amount:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: The GROSS Credits the customer would give up. The fee comes out of it.
+    PayoutQuote:
+      type: object
+      required: [quote_id, account_id, destination_id, provider, gross_quantity,
+                 fee_quantity, net_quantity, currency, gross_amount_minor,
+                 fee_amount_minor, net_amount_minor, minimum_ok, expires_at, sandbox]
+      description: >-
+        What the provider said a payout would cost, before anybody committed.
+        Both sides are exact integers; there is no rate field holding a decimal.
+      properties:
+        quote_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        provider: { type: string }
+        gross_quantity: { $ref: "#/components/schemas/Quantity" }
+        fee_quantity: { $ref: "#/components/schemas/Quantity" }
+        net_quantity: { $ref: "#/components/schemas/Quantity" }
+        currency: { type: string }
+        gross_amount_minor: { type: integer, format: int64 }
+        fee_amount_minor: { type: integer, format: int64 }
+        net_amount_minor: { type: integer, format: int64 }
+        minimum_amount_minor: { type: integer, format: int64 }
+        minimum_ok:
+          type: boolean
+          description: Judged NET of fees, because sub-minimum dust is destroyed rather than returned.
+        pricing_version: { type: string }
+        fee_model_version:
+          type: string
+          description: >-
+            Which fee schedule produced these numbers. On a sandbox tier it says
+            in words that the figures are placeholders and not a price anybody
+            has agreed.
+        policy_version: { type: string }
+        provenance:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutProvenanceSlice" }
+          description: What value would leave, in the order it would leave.
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        consumed_at: { $ref: "#/components/schemas/Timestamp" }
+        sandbox: { type: boolean }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    PayoutProvenanceSlice:
+      type: object
+      required: [origin, quantity, consumption_rank]
+      description: >-
+        One provenance's contribution to a payout (§23). The order is the
+        consumption order: among the origins a policy permits, the most
+        restricted permitted one leaves first.
+
+        A provenance is an origin, an origin floor AND a root set. Two slices
+        can carry the same `origin` and different `origin_floor` values --
+        trading proceeds out of a settled purchase and trading proceeds out of
+        a promotional grant are one origin and are not one kind of money -- and
+        two more can share both and differ in `root_origins`, which is what the
+        policy actually reads. All of them are reported separately rather than
+        summed (D-136, D-141).
+      properties:
+        origin: { $ref: "#/components/schemas/CreditOrigin" }
+        origin_floor:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            What these units ultimately came from: the most restricted origin
+            anywhere in their provenance. Equal to `origin` for value nothing
+            else funded.
+        root_origins:
+          type: array
+          items: { $ref: "#/components/schemas/CreditOrigin" }
+          description: >-
+            Every origin these units ultimately came from. It is what the payout
+            policy reads -- value is released only when the policy releases its
+            own origin and all of these -- and `origin_floor` is the most
+            restricted of it. Two slices can share an origin AND a floor and
+            differ here, because the floor is a minimum and two sets share a
+            minimum whenever they share their most restricted member; they are
+            reported separately rather than summed (D-141).
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        consumption_rank: { type: integer }
+        returned:
+          type: boolean
+          description: True for a slice a cancellation gave back to the exact lots it came from.
+    FundingFinality:
+      type: string
+      description: >-
+        How certain it is that value credited to an account cannot be taken back
+        by whoever supplied it (PART XI). UNFUNDED is value nothing external
+        funded; REVERSIBLE is a card payment inside its dispute window;
+        DISPUTED and REVERSED are a dispute in progress and one that succeeded.
+
+        Only SETTLED and UNFUNDED may ever be paid out, which is a strictly
+        smaller set than the one that may be SPENT: reversible value buys things
+        and does not leave.
+      enum: [UNFUNDED, REVERSIBLE, SETTLED, DISPUTED, REVERSED]

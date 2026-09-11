@@ -1,0 +1,28 @@
+<!--
+  NODAL — horizontal lockup
+
+  Mark + wordmark. The wordmark is set in IBM Plex Sans SemiBold with the
+  tracking opened to 0.12em, which is what stops a five-letter all-caps word
+  from reading as a shout.
+
+  The mark stays neutral (currentColor) in every context. It does not adopt
+  a temperature accent, because the brand sits above all three capital pots
+  and must not imply any one of them.
+
+  Clear space: the height of the mark on every side. Minimum width: 96px.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 32" width="140" height="32"
+     fill="none" role="img" aria-label="Nodal">
+  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M2 6 L13.76 13.35" opacity="0.55"/>
+    <path d="M2 16 L13 16"      opacity="0.75"/>
+    <path d="M2 26 L13.76 18.65" opacity="0.55"/>
+    <path d="M23 16 L30 16"/>
+  </g>
+  <circle cx="18" cy="16" r="3.5" fill="currentColor"/>
+
+  <text x="44" y="22"
+        font-family="'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif"
+        font-size="19" font-weight="600" letter-spacing="0.12em"
+        fill="currentColor">NODAL</text>
+</svg>

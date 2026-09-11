@@ -13,13 +13,35 @@ Status: local drill implemented and passing (2026-09-06); production procedure d
 5. reconciliation dry-run: recomputes every ledger balance from journal entries on the restored copy (expects zero drift), compares row counts of every table with the source, and compares a deterministic hash of all journal transactions and entries on both sides;
 6. writes `dist/restore-drill.json` and exits non-zero on any mismatch.
 
-Latest local run (2026-09-09): 119 tables, row counts identical, 0 accounts with balance drift, journal hashes equal, version 730 on both sides, 12.2 s. The fixture is a live internal economy driven through the real services, so the Domain A tables carry rows rather than comparing zero with zero — including the risk policy a trade was evaluated against and the decision it produced. `dist/restore-drill.json` holds the numbers from the last run.
+Latest local run (2026-09-11, after 00825): 160 tables, row counts identical, 0 accounts with balance drift, journal hashes equal, version 825 on both sides, 12.4 s, and one real audited state transition driven on the restored database.
+
+That last step is new and exists because the three before it all compare data. None of them proves the restored database can still be USED — and since 00741 that is no longer implied, because every state change on seventeen tables is checked against a keyed tag computed from a single row in `cp_transition_key`. A restore that brought back every row but lost that one table would have passed every other assertion here and then refused every state change in the system (F-129). `CP_DRILL_BREAK=lose_the_transition_key` empties the table so the probe can be watched firing; a run with it set is expected to fail. The table count jumped from 119 because 00740 partitioned `security_events` into thirteen months and a default — a partition is a table, and the drill counts what it would have to restore. That it comes back with matching row counts is the point: the first partitioned table in this schema restores as a partitioned table, not as an empty parent. The fixture is a live internal economy driven through the real services, so the Domain A tables carry rows rather than comparing zero with zero — including the risk policy a trade was evaluated against and the decision it produced. `dist/restore-drill.json` holds the numbers from the last run.
+
+## Running the race detector on a Windows host
+
+`go test -race` needs an external linker, and it fails to LINK if the GCC
+toolchain's resolved path contains a space — the linker-script argument is split
+on it and `ld` reports the fragment as a script that "appears multiple times".
+The WinGet default install path contains one.
+
+Copy the toolchain somewhere without a space and point `CC` at the copy:
+
+    robocopy "<WinGet packages>\...\mingw64" C:	oolchain\mingw64 /E
+    CC=C:	oolchain\mingw64in\gcc.exe CXX=C:	oolchain\mingw64in\g++.exe make race
+
+A **copy**, not a junction and not an 8.3 short path. Both of those resolve back
+to the original location, and GCC reports its resolved path, so the space
+returns. The property that matters is not "a path without spaces" but "a path
+GCC resolves to without spaces" (F-125).
+
+This is not wired into the Makefile because `CC` is host-specific, and CI runs
+on Linux where none of this applies.
 
 This line said 89 tables and version 604 until F-54. That was a hundred and eleven migrations of schema ago: the drill it reported had never seen the ledger's chart-parity CHECK, the frozen-economics constraints, or a single Domain A table. A restore drill is evidence that the schema you would actually restore comes back — so a stale one is not a weaker claim, it is a claim about a different database. `TestDocs_CountsMatchTheCode` now holds the version cited here against the newest migration in the tree, and fails when migrations land without the drill being re-run.
 
 The drill runs only against `127.0.0.1`/`localhost` and refuses any other host (`internal/testkit/localdb`).
 
-## 2. Production design (AWS, pending Terraform)
+## 2. Production design (AWS; written in Terraform, never applied)
 
 | Concern | Design | Evidence required before claiming |
 |---|---|---|
@@ -30,7 +52,7 @@ The drill runs only against `127.0.0.1`/`localhost` and refuses any other host (
 | Evidence archive | S3 with Object Lock (compliance mode) for audit archives; versioning + replication for raw evidence; restore drill includes fetching and re-hashing a sample of archived objects | archive verification job output |
 | Secrets | restored instance receives new credentials from Secrets Manager; old credentials rotated | rotation log |
 
-RTO/RPO are **not** claimed until a staging drill has been run and measured (PART 205).
+The design above is in `infra/terraform/modules/rds` (encryption at rest, Multi-AZ, backup retention, deletion protection, all as variables) and `modules/s3-evidence`; none of it has been applied against a real account, so every cell of the Evidence column is still owed (EB-012). RTO/RPO are **not** claimed until a staging drill has been run and measured (PART 205).
 
 ## 3. Runbook: restoring production (procedure, unexercised)
 
@@ -44,4 +66,4 @@ RTO/RPO are **not** claimed until a staging drill has been run and measured (PAR
 
 ## 4. Related
 
-`scripts/restoredrill`, `internal/testkit/localdb`, `docs/operations/DISASTER_RECOVERY.md` (pending), `docs/runbooks/database-corruption.md` (pending), BLOCKERS EB-012.
+`scripts/restoredrill`, `internal/testkit/localdb`, `docs/operations/DISASTER_RECOVERY.md`, `docs/runbooks/database-corruption.md`, BLOCKERS EB-012.

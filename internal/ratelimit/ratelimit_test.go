@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -199,4 +200,77 @@ func TestParseLimit(t *testing.T) {
 			assert.Equal(t, tc.limit, limit)
 		})
 	}
+}
+
+// The store holds a bounded number of counters (F-169).
+//
+// "Bounded memory: expired windows are dropped lazily on access and by Sweep"
+// held for neither half of a key that is never revisited: the lazy drop
+// replaces the entry for a key that COMES BACK, and nothing in the process
+// called Sweep. So the map retained one entry per distinct (limiter, key) pair
+// for the life of the process, which on a 512 MB instance is an allocation the
+// callers choose the size of.
+func TestMemoryStore_StopsGrowingAtItsCap(t *testing.T) {
+	t.Parallel()
+	now := t0
+	store := NewMemoryStoreWithMax(100)
+
+	for i := 0; i < 10_000; i++ {
+		_, _, err := store.Incr(context.Background(), fmt.Sprintf("auth:ip:198.51.100.%d", i), time.Minute, now)
+		require.NoError(t, err)
+	}
+
+	stats := store.Stats(now)
+	assert.LessOrEqual(t, stats.Keys, 100, "the store held %d counters for a cap of 100", stats.Keys)
+	assert.Equal(t, 1, stats.Overflows)
+	assert.True(t, stats.Saturated, "the window that ran out of counters is still in force")
+
+	// A saturated window still counts, and counts everybody together: the
+	// limit is degraded, never absent.
+	first, _, err := store.Incr(context.Background(), "auth:ip:203.0.113.1", time.Minute, now)
+	require.NoError(t, err)
+	second, _, err := store.Incr(context.Background(), "auth:ip:203.0.113.2", time.Minute, now)
+	require.NoError(t, err)
+	assert.Greater(t, second, first, "a saturated window admitted a caller without counting it")
+
+	// The next window starts clean and per-key again.
+	next := now.Add(time.Minute)
+	a, _, err := store.Incr(context.Background(), "auth:ip:203.0.113.1", time.Minute, next)
+	require.NoError(t, err)
+	b, _, err := store.Incr(context.Background(), "auth:ip:203.0.113.2", time.Minute, next)
+	require.NoError(t, err)
+	assert.Equal(t, 1, a)
+	assert.Equal(t, 1, b, "two callers shared a counter after the saturated window ended")
+	assert.False(t, store.Stats(next).Saturated)
+}
+
+// TestMemoryStore_SweepUsesEachEntrysOwnWindow.
+//
+// One store serves every limiter, and the limits do not share a window. A
+// sweeper ticking at the LARGEST window must not remove a shorter window that
+// is still open, and must not keep one that has ended -- so each entry is swept
+// by the window it was written with, and the argument is only a fallback.
+func TestMemoryStore_SweepUsesEachEntrysOwnWindow(t *testing.T) {
+	t.Parallel()
+	store := NewMemoryStore()
+	ctx := context.Background()
+
+	_, _, err := store.Incr(ctx, "auth:ip:a", time.Minute, t0)
+	require.NoError(t, err)
+	_, _, err = store.Incr(ctx, "slow:ip:a", 10*time.Minute, t0)
+	require.NoError(t, err)
+
+	// Two minutes on: the minute window is dead and the ten-minute one is open,
+	// swept with the largest window as the argument.
+	assert.Equal(t, 1, store.Sweep(t0.Add(2*time.Minute), 10*time.Minute),
+		"the ended one-minute window survived a ten-minute sweep")
+	assert.Equal(t, 1, store.Stats(t0.Add(2*time.Minute)).Keys)
+
+	// And the open one is still counting where it left off.
+	n, _, err := store.Incr(ctx, "slow:ip:a", 10*time.Minute, t0.Add(2*time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, 2, n, "an open window was swept away and restarted")
+
+	assert.Equal(t, 1, store.Sweep(t0.Add(11*time.Minute), 10*time.Minute))
+	assert.Zero(t, store.Stats(t0.Add(11*time.Minute)).Keys)
 }

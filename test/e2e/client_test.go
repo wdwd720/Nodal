@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nodal/controlplane/internal/auth/httpmw"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/errs"
@@ -179,7 +181,19 @@ func (c *client) signIn(ctx context.Context, code string) session {
 	state := u.Query().Get("state")
 	require.NotEmptyf(c.t, state, "login Location %q carried no state", loc)
 
-	cb := c.get(ctx, "/v1/auth/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state))
+	// F-87 bound the callback to the browser that began the flow by the
+	// login-state cookie set on the login redirect. This client holds no jar,
+	// so the cookie is carried by hand, exactly as a browser would; without
+	// it every sign-in here was refused and every test behind one failed.
+	var loginState option
+	for _, raw := range start.Header.Values("Set-Cookie") {
+		if ck, err := http.ParseSetCookie(raw); err == nil && ck.Name == httpmw.LoginStateCookieName {
+			loginState = asRawCookie(ck.Name, ck.Value)
+		}
+	}
+	require.NotNil(c.t, loginState, "the login redirect set no login-state cookie")
+
+	cb := c.get(ctx, "/v1/auth/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state), loginState)
 	require.Equalf(c.t, http.StatusFound, cb.Status,
 		"GET /v1/auth/callback should redirect after establishing the session; body: %s", cb.Body)
 

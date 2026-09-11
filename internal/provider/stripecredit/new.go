@@ -20,8 +20,8 @@ import (
 // is one API call and one webhook, and Stripe's own test mode is a better fake
 // than any we would write -- one that stays correct when Stripe changes.
 func New(ctx context.Context, cfg config.ProviderConfig, env config.Environment, resolver config.Resolver,
-	clk clock.Clock, hc *http.Client, health *provider.Tracker) (credit.PurchaseProvider, error) {
-
+	clk clock.Clock, hc *http.Client, health *provider.Tracker,
+) (credit.PurchaseProvider, error) {
 	if cfg.Name != "" && cfg.Name != ProviderName {
 		return nil, errs.Newf(errs.CodeValidationFailed, "stripecredit: provider config names %q", cfg.Name)
 	}

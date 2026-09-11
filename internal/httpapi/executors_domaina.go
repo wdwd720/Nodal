@@ -12,6 +12,7 @@ import (
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
@@ -54,6 +55,9 @@ type DomainAExecutorDeps struct {
 	// in. Without it NATIVE_MARKET_LAUNCH stays unregistered: a market priced
 	// in nothing is not a market.
 	Credits CreditAssetResolver
+	// CreditPurchases is the Credit purchase service, which owns the only exit
+	// from a funding parked in MANUAL_REVIEW (F-100).
+	CreditPurchases *credit.PurchaseService
 }
 
 // DomainAExecutors returns the executors for the internal economy.
@@ -82,6 +86,9 @@ func DomainAExecutors(d DomainAExecutorDeps) map[admin.Kind]admin.ExecFunc {
 	}
 	if d.Payouts != nil {
 		out[admin.KindPayoutManualReviewResolve] = payoutManualReviewExecutor(d.Payouts)
+	}
+	if d.CreditPurchases != nil {
+		out[admin.KindCreditFundingReviewResolve] = creditFundingReviewExecutor(d.CreditPurchases)
 	}
 	return out
 }
@@ -383,6 +390,68 @@ func payoutManualReviewExecutor(svc *payout.Service) admin.ExecFunc {
 		}
 		return encode(payoutResolveResult{
 			PayoutID: after.ID.String(), From: string(before.State), To: string(after.State),
+			Resolution: string(resolution), Reason: action.Reason, ApprovalID: action.ID.String(),
+		})
+	}
+}
+
+// --- resolving a parked Credit funding ---------------------------------------
+
+type creditResolveParams struct {
+	Resolution string `json:"resolution"`
+}
+
+type creditResolveResult struct {
+	FundingID  string `json:"funding_id"`
+	From       string `json:"from_state"`
+	To         string `json:"to_state"`
+	Resolution string `json:"resolution"`
+	Reason     string `json:"reason"`
+	ApprovalID string `json:"approval_id"`
+}
+
+// creditFundingReviewExecutor applies a dual-approved decision to a Credit
+// funding stuck in MANUAL_REVIEW.
+//
+// This is the counterpart of payoutManualReviewExecutor and differs from it in
+// one way that decides its permissions: resolving to CAPTURED MINTS Credits. So
+// the approve half is PermCreditAdjust -- the same dual-control permission that
+// guards an administrative balance adjustment -- rather than a review-side one.
+//
+// Like the payout executor there is no resolution that declares the funding
+// settled, and unlike a provider event there is no way to put it back on the
+// automatic path: the review exists because the automatic path could not read
+// what the provider was saying.
+func creditFundingReviewExecutor(svc *credit.PurchaseService) admin.ExecFunc {
+	return func(ctx context.Context, tx pgx.Tx, params json.RawMessage) (json.RawMessage, error) {
+		action, err := executingAction(ctx, admin.KindCreditFundingReviewResolve)
+		if err != nil {
+			return nil, err
+		}
+		var p creditResolveParams
+		if uerr := json.Unmarshal(params, &p); uerr != nil {
+			return nil, errs.Wrap(uerr, errs.CodeValidationFailed,
+				"a credit funding resolution's params must be {resolution}")
+		}
+		resolution := credit.ManualResolution(strings.ToUpper(strings.TrimSpace(p.Resolution)))
+		if !resolution.Valid() {
+			return nil, errs.Newf(errs.CodeValidationFailed,
+				"unknown credit funding resolution %q; a funding is never declared settled by hand", p.Resolution)
+		}
+		fundingID, err := credit.ParseFundingID(action.TargetID)
+		if err != nil {
+			return nil, errs.Wrap(err, errs.CodeValidationFailed,
+				"this action's target is not a credit funding id")
+		}
+		after, err := svc.ResolveManualReview(ctx, tx, fundingID, resolution, action.Reason, action.ID.String())
+		if err != nil {
+			return nil, err
+		}
+		// The origin is not read back: ResolveManualReview refuses a funding
+		// that is not parked, so there is exactly one state it can have come
+		// from, and reporting a re-read would suggest otherwise.
+		return encode(creditResolveResult{
+			FundingID: after.ID.String(), From: string(credit.FundingManualReview), To: string(after.State),
 			Resolution: string(resolution), Reason: action.Reason, ApprovalID: action.ID.String(),
 		})
 	}

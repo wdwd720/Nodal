@@ -295,7 +295,7 @@ webhook, so no Credit purchase can complete outside a local run.
 
 ---
 
-## B-13 — No OIDC identity provider · BLOCKED_EXTERNAL
+## B-13 — No OIDC identity provider · **RESOLVED 2026-09-10**
 
 **Decision needed.** Which identity provider authenticates users, and its issuer, client id and
 client secret.
@@ -303,6 +303,26 @@ client secret.
 **Why external.** `CP_AUTH_MODE` is `oidc` in STAGING and PROD, and `dev` is refused there by
 `config.Validate`. There is no fallback: a deployed environment with no issuer has no way for
 anybody to log in.
+
+**RESOLVED.** ZITADEL, and it is not a claim about configuration — the deployed service performs
+the authorization request. LIVE_OBSERVED against `https://api-nodal.actorvia.xyz` on 2026-09-10:
+
+```
+GET /v1/auth/login  ->  302
+Location: https://nodal-az1hxe.us1.zitadel.cloud/oauth/v2/authorize
+          ?client_id=390076573774056913
+          &code_challenge_method=S256&code_challenge=...&nonce=...
+          &redirect_uri=https%3A%2F%2Fapi-nodal.actorvia.xyz%2Fv1%2Fauth%2Fcallback
+          &response_type=code&scope=openid+email+profile&state=...
+```
+
+A real PKCE challenge, a real nonce and the deployment's own redirect URI, issued by the running
+service. The issuer's discovery document answers 200. `render.yaml` carries the issuer, the client
+id and `CP_AUTH_CLIENT_SECRET_REF`; the secret itself is a Render environment value and is not in
+this repository.
+
+Kept in this file rather than deleted, because what unblocked it is the record of how the next
+environment gets an issuer.
 
 **What the code already supports.** `internal/auth/oidc` is implemented and tested, and
 `internal/auth/devidp` serves LOCAL and TEST only.
@@ -330,7 +350,7 @@ nothing with the configured step-up value.
 
 ---
 
-## B-14 — Hostname and TLS certificate · BLOCKED_EXTERNAL
+## B-14 — Hostname and TLS certificate · **RESOLVED 2026-09-10**
 
 **Decision needed.** The public hostname the API serves on, and approval to create the DNS record
 and certificate for it.
@@ -343,6 +363,11 @@ HTTPS-only in browsers from the first request and needs a valid certificate befo
 **Recommended.** `api-nodal.actorvia.xyz`, a new record that touches neither the apex nor `www`, so
 the Vercel site and the existing Stripe webhook are unaffected. See
 `docs/operations/DEPLOYMENT_GAP_ANALYSIS.md` §6.
+
+**RESOLVED.** `api-nodal.actorvia.xyz` is the hostname, behind Cloudflare, and the certificate
+verifies. LIVE_OBSERVED on 2026-09-10: `curl` reports `ssl_verify_result=0` and the service answers
+on it — `/v1/healthz`, `/v1/readyz` and `/v1/version` all 200. The recommendation above is what was
+done.
 
 **What it blocks.** The Stripe webhook endpoint, which is
 `https://<hostname>/v1/webhooks/stripe_credit`, and with it every Credit purchase that is not run
@@ -367,8 +392,119 @@ Recorded because their absence might otherwise look like one:
 | The ten transition bindings that still compare the destination only | `agents` is fixed (D-044); the rest are not | `AUDIT_FINDINGS.md` F-78; `MASTER_BUILD_STATE.md` §4 |
 | 131 enum CHECK constraints with no Go list compared against them | named individually by `test/integration/enums` | `AUDIT_FINDINGS.md` F-74 |
 
+**Checkpoint 2026-09-09 (second) — after clearing §4.** Unchanged. Nothing in
+F-94 through F-99, and nothing in the §4 queue, produced a new external blocker.
+`docs/audit/LAUNCH_GATE_MATRIX.md` is now the single place the seven external
+items are listed with what the code already does for each, and it is what a
+reader should look at before this file.
+
+**Checkpoint 2026-09-09 — after reconciling the provider workstream.**
+The external blockers are unchanged in kind and sharper in detail. Selling
+Credits for real money needs, and cannot be given from inside this repository:
+
+| Item | Why external |
+|---|---|
+| `CREDIT_PURCHASE` capability activation | Three distinct principals with recent step-up and four approval references. Not fabricable, and doing so would defeat the control. Note F-93: three principals is three `users.id` values, not three people. |
+| Stripe production approval | A business relationship and a restricted-business/compliance review. Not an engineering artefact. |
+| Legal review reference | Counsel. |
+| Independent penetration test | A third party. This audit is not one and does not claim to be. |
+| Risk and security approval references | People with the authority to sign them. |
+| A real settlement mint | `CP_API_SETTLEMENT_MINT` is a Solana devnet USDC mint; the mainnet value is a fact about Solana, not a value to invent (F-93). |
+
+Everything else the reconciliation found was work, and is either fixed
+(F-83, F-86 to F-92) or recorded with its reason in F-93.
+
+**Checkpoint 2026-09-10 — two blockers resolved by the deployment.**
+B-13 (no OIDC identity provider) and B-14 (hostname and TLS certificate) are
+**RESOLVED**, and were already resolved in fact before this checkpoint wrote it
+down — which is its own small instance of the defect class this repository
+keeps recording. Both were verified LIVE_OBSERVED against the running service
+rather than read out of `render.yaml`: the deployment issues a real PKCE
+authorization redirect to ZITADEL, and the hostname serves a certificate that
+verifies.
+
+**Twelve blockers remain, and B-12 is not one of the twelve that stops launch.**
+`aws sts get-caller-identity` still fails (`Your session has expired`), but the
+$0 launch tier does not run on AWS — it runs on Render free, Neon free and
+Cloudflare free. B-12 blocks the scale-up path, not the launch.
+
 **Checkpoint 2026-09-08.** The F-71..F-81 batch added **no** external blockers.
 Every item it left undone is work, and each is named above or in
 `MASTER_BUILD_STATE.md` §4 with the reason it was left. `CP_DATABASE_OPS_URL`
 (D-045) is a new deployment input, not a blocker: it is a database role the
 repository already creates, and the local default is in `.env.example`.
+
+**Checkpoint 2026-09-10 (productization) — the provider boundary, sharpened by research.**
+Public provider documentation was read for the product goal (Tilia/Thunes, Stripe
+Connect, Stripe stablecoin payouts, Bridge, Persona, Veriff, Sumsub, Stripe
+Identity, Plaid IDV, Circle, Onfido, Alloy, Coinbase); the synthesis and the
+provider-abstract contract are in `docs/product/PROVIDER_BOUNDARY.md`. No account
+was created, no terms accepted, no sales team contacted, and no provider approval
+is claimed. What the research adds to the register above, all human actions:
+
+| Item | Sharpens | Why external |
+|---|---|---|
+| Read Stripe's restricted-business list in a browser and settle whether virtual credits are *restricted* (extra diligence) or *prohibited* (cannot launch on Stripe) | B-09 | Two automated reads of the page disagreed. Everything downstream depends on which it is. |
+| The Stripe platform profile must describe Nodal honestly, including withdrawal of earned value | B-11 | An attestation by a responsible human. |
+| Sign up for the identity-verification vendor (Veriff or Persona), accept terms, sign a DPA, decide retention | B-06 | Account creation and a contract; Persona Essential is an annual commitment unless its Startup Program is granted. Stripe Identity alone does no AML or sanctions screening. |
+| Open the Tilia/Thunes conversation: pricing, sandbox, a review of the closed-loop-until-withdrawal model | B-01, B-05 | Sales-led; its entity succession after the Thunes acquisition is UNVERIFIED and needs a human to confirm. |
+| Stripe stablecoin payouts: request the private preview and complete its due-diligence questionnaire; or obtain a Bridge developer account by email | B-10 | Attestations and gated sandboxes. California is supported by Stripe's preview; New York and Hawaii are not. |
+| Whether Nodal's own closed-loop Credit float is stored value requiring a licence, independent of any payout provider | B-02 | Counsel. Stripe Connect does not make Stripe the transmitter for value Nodal holds. |
+| 1099 filing election and thresholds; business KYB on Nodal by the Role C provider | B-11 | A tax adviser and the provider. |
+
+The contract Nodal builds against all of them has no primitive by which Nodal
+itself converts Credits to money; it instructs a licensed provider. That is a
+deliberate property of the architecture, not a gap.
+## Verification and the conversion request — checkpoint 2026-09-10
+
+The software behind goal §19–§25 is built: the financial verification state
+machine, the sub-check evidence model, the versioned age/jurisdiction/sanctions
+rule tables, the composite verification resolver, the per-origin withdrawal
+eligibility explanation, payout destinations, the pre-commitment quote and the
+provenance read model. It is exercised end to end on a sandbox tier against a
+provider that decides nothing on its own. See
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §9 for the full table.
+
+**No new blocker was created.** What follows narrows two existing ones and adds
+one standing operational obligation.
+
+| Item | Sharpens | Why external |
+|---|---|---|
+| B-06 narrows to "no contracted identity vendor", not "no code". `verification.Provider` is the contract, `verification_sessions` and `verification_checks` are the store, and `verification.Resolver` reaches PAYOUT_KYC and ENHANCED from a provider decision plus the sub-checks that justify it. What is missing is an account, accepted terms, a data-processing agreement and a retention decision with Veriff, Persona or Sumsub. | B-06 | Account creation and a contract. A human action. |
+| B-01/B-05 narrows the same way for the conversion side. The registry refuses a provider with no contract reference, and a quote refuses a provider with no published fee model — so the honest state of a deployment with no conversion contract is `PROVIDER_UNAVAILABLE` on every eligibility bucket, which is what it reports. | B-01, B-05 | A licensed provider must accept the closed-loop-until-withdrawal model. Only that provider can say. |
+| **Keeping the sanctions denylist current is an operational obligation, not a property of the code.** `internal/verification/rules` holds the comprehensively-sanctioned jurisdictions as of this date, versioned as `verification-rules-v1-us-only`. OFAC's list changes; nothing in this repository watches it. A person or a scheduled review has to. | B-02 | The authoritative list is OFAC's, and reading it is somebody's job. |
+| Which United States subdivisions restrict a closed-loop credit that becomes convertible at withdrawal is still unanswered, so the restricted-regions map is EMPTY and says so in a comment. A payout rail's own exclusions (Stripe stablecoin: NY, HI; Bridge: NY) are applied separately from the provider's capabilities, because they are facts about a rail rather than about a person. | B-02 | Counsel. |
+| The self-custody USDC destination flow of §25 — wallet connect, ownership proof, a signed nonce, a verified address, a cooldown — is **not started**, deliberately. `DestinationCryptoWallet` exists as a kind and `Capabilities.SupportsExternalWallet` and `SupportedNetworks` exist as the questions an adapter must answer, so the seam is open. Building the challenge-and-signature flow with no contracted crypto rail to send to would be code completion standing in for an external dependency, which the goal forbids. | B-05, B-10 | No crypto payout rail is contracted. |
+
+Two things that must not be described as blocked, because they are built,
+tested against a real database and reachable end to end on a sandbox tier: the
+verification state machine, and the conversion-request surface. BLOCKED_EXTERNAL
+is for software that is complete and an external item that is genuinely
+unavailable (goal PART 167); it is never for missing code.
+## Agents (productization wave 1, 2026-09-10)
+
+**The strategy compiler has no backend in this build, and that is a decision
+rather than an omission (D-074, ADR-0029).** Both halves must arrive before a
+strategy can be compiled at all, and each is genuinely external to this wave:
+
+| Item | What it is | Why it is not built here |
+|---|---|---|
+| A model provider credential on the `model` slot (`CP_PROVIDERS_MODEL_MODE`, `..._API_KEY`) | The configuration already exists; the secret does not. EB-013 in the table above is the same blocker seen from the compiler's side. | An account and a paid key. No production Anthropic key has been used anywhere in this repository, and no test contacts the network. |
+| A validation registry for the compiler's TYPE and RISK_COMPAT stages: instruments, venues, tools and the composed risk policy | `strategy.ValidationRefs`, loaded through the `agents.RefsLoader` interface. Nothing loads it today. | It is a build, not a credential — but building it with the registry empty would be worse than not building it: every instrument a user named would fail the TYPE stage and the API would blame the user for a deployment's missing data. |
+
+Until both exist, `POST /v1/strategies/{id}/compile` records each attempt with
+outcome `MODEL_UNAVAILABLE` and failure code `COMPILER_UNAVAILABLE`, produces no
+IR, and says so in words; `compiler_configured` on the strategy read model lets a
+client say so before a user writes a description. No agent can be created,
+because an agent is created only from a compiled strategy version.
+
+**Not blocked and deliberately not built:** the agent runtime stays inert. There
+is no evaluator, no deployed worker, and no production caller for the runtime's
+own services, which is the premise F-65's deferral of the `AGENT_PAUSE` /
+`MODEL_DISABLE` bridge rests on and which `test/security` watches. Nothing in
+this wave crosses it.
+
+**Not built, and owed to §17 rather than to a provider:** a read route for an
+agent's decision history (the immutable `agent_lifecycle_transitions` rows exist
+and nothing returns them over HTTP), and agent performance (`internal/backtest`
+and `internal/performance` do not exist at all).

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -67,6 +68,28 @@ func prodRuleCases() []struct {
 	}
 }
 
+// TestValidate_AMoneyCeilingMustBeStated (F-97). Zero disables a ceiling in the
+// guard, which is right for a library and wrong for a deployment that takes
+// money: setting the money-at-risk cap to 0 in a dashboard loaded cleanly,
+// validated, and logged "capacity ceilings in force" with it off.
+func TestValidate_AMoneyCeilingMustBeStated(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"CP_CAPACITY_MAX_ACCOUNTS", "CP_CAPACITY_MAX_PURCHASES_PER_DAY", "CP_CAPACITY_MAX_AT_RISK_MINOR",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Load(context.Background(), ServiceAPI, LookupFromMap(withVars(prodEnv(), map[string]string{name: "0"})))
+			require.Error(t, err, "%s = 0 disables a ceiling and was accepted", name)
+			assert.Contains(t, err.Error(), string(RuleCapacityCeiling))
+		})
+	}
+	// The control: the database ceiling may legitimately be zero, because
+	// managed Postgres with no storage quota has nothing to state.
+	_, err := Load(context.Background(), ServiceAPI, LookupFromMap(withVars(prodEnv(), map[string]string{"CP_CAPACITY_MAX_DATABASE_BYTES": "0"})))
+	require.NoError(t, err)
+}
+
 func TestValidate_ValidProdHasNoViolations(t *testing.T) {
 	t.Parallel()
 	c := validProdConfig(t)
@@ -125,15 +148,43 @@ func TestValidate_TheEnvironmentAndTheProviderModeMakeTheSameClaim(t *testing.T)
 		}
 	})
 
-	t.Run("DEV is not constrained either way", func(t *testing.T) {
+	t.Run("a sandbox provider is fine below STAGING", func(t *testing.T) {
 		t.Parallel()
-		// Below STAGING the ladder is about developer conveniences, not about
-		// whose money moves, and a DEV deployment pointed at a live provider is
-		// a decision its operator gets to make.
-		c := validProdConfig(t)
-		c.Env = EnvDev
-		c.Providers.CreditPurchase.Mode = ProviderModeSandbox
-		assert.False(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv))
+		// Below STAGING the ladder is about developer conveniences, and pointing
+		// a DEV deployment at a provider's test environment is a decision its
+		// operator gets to make.
+		for _, env := range []Environment{EnvDev, EnvLocal, EnvTest} {
+			c := validProdConfig(t)
+			c.Env = env
+			demoteProviders(c, ProviderModeSandbox)
+			assert.False(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv),
+				"%s refuses a sandbox provider", env)
+		}
+	})
+
+	t.Run("live money belongs to PROD and nowhere else", func(t *testing.T) {
+		t.Parallel()
+		// This subtest replaces one asserting "DEV is not constrained either
+		// way", which was true and was the defect. The rule was written as a
+		// switch over PROD and STAGING, so every other environment fell
+		// through it -- and DEV constrains nothing else either: it permits
+		// CP_AUTH_MODE=dev, a wildcard CORS origin, a non-secure cookie, no
+		// database TLS and no rate limit. The same file was refused by twenty
+		// rules at PROD and passed clean at DEV, holding live credentials for
+		// all fourteen slots (F-103).
+		//
+		// Stated per environment and per slot, because the hole was in the
+		// shape of the rule rather than in any one case of it.
+		for _, env := range []Environment{EnvStaging, EnvDev, EnvLocal, EnvTest} {
+			for _, slot := range providerSlots() {
+				c := validProdConfig(t)
+				c.Env = env
+				demoteProviders(c, ProviderModeSandbox)
+				slot.Get(&c.Providers).Mode = ProviderModeLive
+				assert.True(t, HasViolation(c.Validate(), RuleProviderModeMatchesEnv),
+					"%s accepts a live %s provider", env, slot.Name)
+			}
+		}
 	})
 }
 
@@ -225,6 +276,7 @@ func TestValidate_LocalAndTestPermitDevelopmentSettings(t *testing.T) {
 			t.Parallel()
 			c := validProdConfig(t)
 			c.Env = env
+			demoteProviders(c, ProviderModeSandbox)
 			// The rate-limit rule is deliberately not environment-dependent
 			// any more, so this test -- which is about the rules that ARE --
 			// states the single replica that makes it moot.
@@ -310,6 +362,7 @@ func TestValidate_DevAllowsFakesButNotPlainSecrets(t *testing.T) {
 	t.Parallel()
 	c := validProdConfig(t)
 	c.Env = EnvDev
+	demoteProviders(c, ProviderModeSandbox)
 	c.Providers.Funding.Mode = ProviderModeFake
 	c.Auth.Mode = AuthModeDev
 	c.Database.RequireTLS = false
@@ -489,4 +542,333 @@ func TestValidate_PresenceRulesBelongToTheServicesThatUseThem(t *testing.T) {
 				"%s does not use this dependency and must not be held to it", tc.notUses)
 		})
 	}
+}
+
+// Three rules that permitted a configuration the deployment cannot survive
+// (F-103). Each is stated as the refusal plus the control that it did not
+// become one condition too strict.
+
+func TestValidate_ATrustedProxyListThatTrustsEveryoneTrustsNobody(t *testing.T) {
+	t.Parallel()
+	// The list is what makes X-Forwarded-For readable, and a trusted peer's
+	// header is taken at face value. A default route therefore does not widen
+	// the control, it inverts it: every caller picks the address that lands in
+	// the audit record and in every unauthenticated rate-limit bucket. F-88
+	// made the list mandatory and nothing made it mean anything.
+	for _, cidr := range []string{"0.0.0.0/0", "::/0", "10.0.0.0/8,0.0.0.0/0"} {
+		c := validProdConfig(t)
+		c.HTTP.TrustedProxyCIDRs = strings.Split(cidr, ",")
+		err := c.Validate()
+		require.Error(t, err, "%q was accepted", cidr)
+		assert.Contains(t, err.Error(), "trusts every peer")
+	}
+
+	// The control: a real list still passes, so the rule is about the prefix
+	// length and not about the list.
+	c := validProdConfig(t)
+	c.HTTP.TrustedProxyCIDRs = []string{"10.0.0.0/8", "172.16.0.0/12", "127.0.0.0/8", "fd00::/8", "::1/128"}
+	assert.NoError(t, c.Validate())
+}
+
+func TestValidate_EveryRetentionClassRefusesANegativeNumber(t *testing.T) {
+	t.Parallel()
+	// Six of the seven were in the map. The seventh bounds how long
+	// login_attempts keeps a plaintext OIDC nonce and PKCE verifier, its own
+	// documentation says "Minimum 1", and a negative value made every purge
+	// pass in cmd/audit-worker fail -- so the secrets it exists to delete were
+	// never deleted and the symptom was a failing worker, not a failing check.
+	//
+	// Written as a loop over the fields rather than one case, because the
+	// defect was an absence from a list and a single case would restate it.
+	for name, set := range map[string]func(*Config){
+		"FinancialRecordDays": func(c *Config) { c.Retention.FinancialRecordDays = -1 },
+		"SecurityAuditDays":   func(c *Config) { c.Retention.SecurityAuditDays = -1 },
+		"RawMarketDataDays":   func(c *Config) { c.Retention.RawMarketDataDays = -1 },
+		"SocialDataDays":      func(c *Config) { c.Retention.SocialDataDays = -1 },
+		"ModelIODays":         func(c *Config) { c.Retention.ModelIODays = -1 },
+		"OperationalLogDays":  func(c *Config) { c.Retention.OperationalLogDays = -1 },
+		"LoginAttemptDays":    func(c *Config) { c.Retention.LoginAttemptDays = -1 },
+	} {
+		c := validProdConfig(t)
+		set(c)
+		err := c.Validate()
+		require.Error(t, err, "Retention.%s accepts a negative number of days", name)
+		assert.Contains(t, err.Error(), "Retention."+name)
+	}
+}
+
+func TestValidate_TheLegalPolicyIsOneTheBinaryCanBuild(t *testing.T) {
+	t.Parallel()
+	// cmd/api refuses to start on an unknown policy, and on a development
+	// policy in a production-like environment. Without a rule here the
+	// deployment passed every configuration check and then would not boot --
+	// the failure the settlement asset already had a rule for, reproduced by a
+	// variable that is in the table and had none.
+	c := validProdConfig(t)
+	c.API.LegalPolicy = "CONSERVATIV"
+	err := c.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a legal policy")
+
+	for _, env := range []Environment{EnvProd, EnvStaging} {
+		c := validProdConfig(t)
+		if env == EnvStaging {
+			c = asStaging(c)
+		}
+		c.API.LegalPolicy = "development"
+		err := c.Validate()
+		require.Error(t, err, "%s accepts a development legal policy", env)
+		assert.True(t, HasViolation(err, RuleLegalPolicyNotDevelopment))
+	}
+
+	// The controls: the two names it does know, in both spellings, and the
+	// empty string meaning the careful one.
+	for _, policy := range []string{"", "CONSERVATIVE", "conservative", " Conservative "} {
+		c := validProdConfig(t)
+		c.API.LegalPolicy = policy
+		assert.NoError(t, c.Validate(), "%q was refused", policy)
+	}
+	c = validProdConfig(t)
+	c.Env = EnvDev
+	demoteProviders(c, ProviderModeSandbox)
+	c.API.LegalPolicy = "DEVELOPMENT"
+	assert.NoError(t, c.Validate(), "a development policy is what DEV is for")
+}
+
+// A cookie Domain removes the __Host- prefix, and the prefix is the whole
+// binding (F-112).
+//
+// httpmw.EffectiveCookieName adds __Host- only when the cookie is secure AND
+// host-only. So naming a domain silently turns both the session cookie and the
+// login-state cookie into ordinary domain cookies, writable by any host that
+// can set a cookie for a suffix of that domain.
+//
+// That re-opens F-87. The login-state cookie is a SHA-256 of the state with no
+// server secret, so an attacker who starts their own sign-in knows the digest;
+// being able to write the cookie lets them plant a callback that signs the
+// victim's browser in as them, which is the attack SetLoginState exists to
+// stop. The session half is classic fixation.
+//
+// Nothing refused it, infra/terraform's PROD example set it, and this suite's
+// own "valid production configuration" fixture set it too.
+func TestValidate_AProductionCookieIsHostOnly(t *testing.T) {
+	t.Parallel()
+	for _, env := range []Environment{EnvProd, EnvStaging} {
+		c := validProdConfig(t)
+		if env == EnvStaging {
+			c = asStaging(c)
+		}
+		c.Auth.CookieDomain = "api-nodal.actorvia.xyz"
+		err := c.Validate()
+		require.Error(t, err, "%s accepts a cookie Domain", env)
+		assert.True(t, HasViolation(err, RuleCookieHostOnly))
+	}
+
+	// Below STAGING a domain is a developer convenience on a host that is not
+	// serving anybody's money, and the prefix needs Secure anyway.
+	c := validProdConfig(t)
+	c.Env = EnvDev
+	demoteProviders(c, ProviderModeSandbox)
+	c.Auth.CookieDomain = "localhost"
+	assert.False(t, HasViolation(c.Validate(), RuleCookieHostOnly))
+
+	// The control: the production fixture, unset, still validates.
+	ok := validProdConfig(t)
+	assert.Empty(t, ok.Auth.CookieDomain)
+	assert.NoError(t, ok.Validate())
+}
+
+// A post-login destination is an operator value the callback redirects to
+// unconditionally, so a malformed one is refused at boot rather than sent to
+// every customer who signs in.
+func TestValidate_PostLoginURL(t *testing.T) {
+	t.Parallel()
+	cfg := validProdConfig(t)
+	cfg.Auth.PostLoginURL = "http://app-nodal.actorvia.xyz/"
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Auth.PostLoginURL")
+
+	cfg = validProdConfig(t)
+	cfg.Auth.PostLoginURL = "not a url"
+	require.Error(t, cfg.Validate())
+
+	cfg = validProdConfig(t)
+	cfg.Auth.PostLoginURL = "https://app-nodal.actorvia.xyz/"
+	require.NoError(t, cfg.Validate())
+
+	// Empty used to be accepted everywhere, "keeping the same-origin default".
+	// It is refused on a deployed tier now (F-146, F-149): the web app is its
+	// own origin there, the API's root is a 404 problem document, and an unset
+	// base is what turned the `return_to` backslash bypass into an open
+	// redirect off the callback that sets the session cookie. The variable was
+	// `opt(...)` and no rule required it, so the vulnerable configuration was a
+	// supported one.
+	cfg = validProdConfig(t)
+	cfg.Auth.PostLoginURL = ""
+	err = cfg.Validate()
+	require.Error(t, err, "PROD accepted an unset post-login origin")
+	assert.True(t, HasViolation(err, RuleOIDCConfigured))
+	require.Error(t, asStaging(cfg).Validate(), "STAGING accepted an unset post-login origin")
+
+	// LOCAL, TEST and DEV keep it, because there the Vite proxy serves the app
+	// from the API's own origin and a relative destination is exactly right.
+	// This is also why the LOCAL/TEST DEFAULT is now empty rather than one
+	// deployment's hostname: a developer's callback must not send their browser
+	// to app-nodal.actorvia.xyz.
+	for _, env := range []Environment{EnvLocal, EnvTest, EnvDev} {
+		local := validProdConfig(t)
+		local.Env = env
+		demoteProviders(local, ProviderModeSandbox)
+		local.Auth.PostLoginURL = ""
+		require.NoErrorf(t, local.Validate(), "%s refused an unset post-login origin", env)
+	}
+	for _, s := range specs() {
+		if s.Name == "CP_AUTH_POST_LOGIN_URL" {
+			assert.Empty(t, s.Default, "the default names one deployment's hostname")
+		}
+	}
+}
+
+// The sandbox tier (ADR-0023) is one declaration, and PROD cannot make it: the
+// sandbox legal policy, the sandbox payout policy and a sandbox gate list are
+// each refused there, and the last two are refused anywhere the declaration is
+// absent, so a deployment is a sandbox tier or it is not.
+func TestValidate_TheSandboxTierCannotBeProd(t *testing.T) {
+	t.Parallel()
+
+	prod := validProdConfig(t)
+	prod.API.LegalPolicy = "SANDBOX"
+	err := prod.Validate()
+	require.Error(t, err, "PROD accepted the sandbox legal policy")
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+	assert.False(t, prod.SandboxTier(), "SandboxTier() must never be true in PROD, whatever the policy says")
+
+	staging := asStaging(validProdConfig(t))
+	staging.API.LegalPolicy = "sandbox"
+	require.NoError(t, staging.Validate(), "STAGING refused the sandbox legal policy")
+	assert.True(t, staging.SandboxTier())
+
+	// The payout policy: unknown names, PROD, and a sandbox policy without the tier.
+	c := asStaging(validProdConfig(t))
+	c.API.PayoutPolicy = "OPEN"
+	err = c.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a payout policy")
+
+	c = asStaging(validProdConfig(t))
+	c.API.PayoutPolicy = "SANDBOX"
+	err = c.Validate()
+	require.Error(t, err, "a sandbox payout policy under a conservative router was accepted")
+	assert.True(t, HasViolation(err, RuleField))
+	assert.Contains(t, err.Error(), "requires CP_API_LEGAL_POLICY=SANDBOX")
+
+	c = validProdConfig(t)
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.PayoutPolicy = "SANDBOX"
+	err = c.Validate()
+	require.Error(t, err)
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+
+	c = asStaging(validProdConfig(t))
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.PayoutPolicy = "sandbox"
+	assert.NoError(t, c.Validate(), "the whole sandbox tier, on STAGING, must validate")
+	for _, closed := range []string{"", "closed", "CLOSED"} {
+		c := asStaging(validProdConfig(t))
+		c.API.PayoutPolicy = closed
+		assert.NoError(t, c.Validate(), "%q is the closed default", closed)
+	}
+
+	// Sandbox gates: only on the tier, and only for enabled capabilities.
+	c = asStaging(validProdConfig(t))
+	c.API.SandboxGates = "CREDIT_PURCHASE"
+	err = c.Validate()
+	require.Error(t, err, "sandbox gates were accepted without the tier")
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+
+	c = validProdConfig(t)
+	c.API.SandboxGates = "CREDIT_PURCHASE"
+	err = c.Validate()
+	require.Error(t, err)
+	assert.True(t, HasViolation(err, RuleSandboxTierNotInProd))
+
+	c = asStaging(validProdConfig(t))
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.EnabledCapabilities = "CREDIT_PURCHASE"
+	c.API.SandboxGates = "CREDIT_PURCHASE, NATIVE_MARKET_TRADING"
+	err = c.Validate()
+	require.Error(t, err, "a sandbox gate for a capability configuration does not enable was accepted")
+	assert.True(t, HasViolation(err, RuleField))
+	assert.Contains(t, err.Error(), "NATIVE_MARKET_TRADING is sandbox-activated but not in CP_API_ENABLED_CAPABILITIES")
+
+	c = asStaging(validProdConfig(t))
+	c.API.LegalPolicy = "SANDBOX"
+	c.API.EnabledCapabilities = "CREDIT_PURCHASE,NATIVE_MARKET_TRADING"
+	c.API.SandboxGates = "credit_purchase, NATIVE_MARKET_TRADING"
+	assert.NoError(t, c.Validate(), "enabled capabilities may be sandbox-activated, in any case")
+}
+
+// TestValidate_TheAlertDestinationAndTheKeyringAreRESOLVED (F-137).
+//
+// RuleAlertDestination and RulePIIKeyring can only see the reference, and
+// render.yaml always writes one: CP_ALERT_WEBHOOK_URL is the literal string
+// "env://NODAL_ALERT_WEBHOOK_URL", which is never empty. So a STAGING whose
+// operator never set the variable behind it passed both rules, booted, served,
+// alerted nobody and stored no personal data -- while render.yaml,
+// HUMAN_ACTIONS_QUEUE.md and MASTER_BUILD_STATE.md all said it could not start.
+func TestValidate_TheAlertDestinationAndTheKeyringAreRESOLVED(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		missing string
+		rule    Rule
+	}{
+		{"alert destination", "CP_SECRET_ALERT_WEBHOOK_URL", RuleAlertDestination},
+		{"pii keyring", "CP_SECRET_PII_KEYRING", RulePIIKeyring},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, env := range []Environment{EnvProd, EnvStaging} {
+				vars := asEnv(prodEnv(), env)
+
+				// Absent entirely.
+				delete(vars, tc.missing)
+				_, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+				require.Errorf(t, err, "%s booted with %s behind a reference that resolves to nothing", env, tc.missing)
+				assert.True(t, HasViolation(err, tc.rule), "%s: wrong rule: %v", env, err)
+
+				// Present and empty, which is what a dashboard field somebody
+				// cleared looks like.
+				vars[tc.missing] = "   "
+				_, err = Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+				require.Errorf(t, err, "%s booted with %s set to whitespace", env, tc.missing)
+				assert.True(t, HasViolation(err, tc.rule), "%s: wrong rule: %v", env, err)
+			}
+		})
+	}
+
+	// LOCAL, TEST and DEV keep the honest degradation: a developer running the
+	// API needs neither a webhook nor a keyring, and the composition root says
+	// out loud what is not happening.
+	for _, env := range []Environment{EnvLocal, EnvTest, EnvDev} {
+		vars := asEnv(prodEnv(), env)
+		delete(vars, "CP_SECRET_ALERT_WEBHOOK_URL")
+		delete(vars, "CP_SECRET_PII_KEYRING")
+		_, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+		require.NoErrorf(t, err, "%s refused to load without a webhook; only STAGING and PROD may", env)
+	}
+
+	// And a scheme this chain cannot resolve at all is NOT a violation: an
+	// aws-sm:// reference is resolved by the running process, and refusing it
+	// here would refuse the AWS architecture.
+	vars := withVars(prodEnv(), map[string]string{
+		"CP_ALERT_WEBHOOK_URL": "aws-sm://cp/prod/alert-webhook-url",
+		"CP_PII_KEYRING_REF":   "aws-sm://cp/prod/pii-keyring",
+	})
+	delete(vars, "CP_SECRET_ALERT_WEBHOOK_URL")
+	delete(vars, "CP_SECRET_PII_KEYRING")
+	_, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+	require.NoError(t, err, "a secret only the running process can resolve was refused at load")
 }

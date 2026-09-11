@@ -213,13 +213,32 @@ func TestIntegration_PriceStore_LatestAndStaleness(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeStaleMarketData, errs.CodeOf(err))
 
-	// An older window still finds the 2-minute-old observation; ordering by observed_at wins over received_at.
+	// An older window still finds the 2-minute-old observation; ordering by
+	// observed_at wins over received_at.
+	//
+	// The as-of instant used to be now-1m, and every row here is RECEIVED at
+	// now -- so under F-119's knowledge-time bound the honest answer to "what
+	// did we know a minute ago" is "none of this". That the test expected an
+	// answer was the defect, in miniature: an as-of read returning rows the
+	// platform had not yet received.
+	//
+	// The point it was making is about ORDERING, so it is made at an instant
+	// where the rows are known: both were received at now, and the fresher
+	// observation is excluded by the WINDOW rather than by the as-of bound.
 	late, err := store.RecordPrice(ctx, d, obs("148.500000", now.Add(-3*time.Minute), "rpc-fallback"))
 	require.NoError(t, err)
 	assert.False(t, late.Duplicate)
-	p, err = store.Latest(ctx, d, sol.ID, usdc.ID, 5*time.Minute, now.Add(-time.Minute))
+	p, err = store.Latest(ctx, d, sol.ID, usdc.ID, 5*time.Minute, now)
 	require.NoError(t, err)
-	assert.Equal(t, "149.000000", p.Mantissa.ToDecimalString(uint8(p.Scale)))
+	assert.Equal(t, "150.123456", p.Mantissa.ToDecimalString(uint8(p.Scale)),
+		"the freshest observed_at wins, whatever order the rows arrived in")
+
+	// And with the freshest two outside the window, the three-minute-old one is
+	// what remains -- which is the ordering claim, stated without asking an
+	// as-of question the data cannot answer.
+	p, err = store.Latest(ctx, d, sol.ID, usdc.ID, 4*time.Minute, now.Add(-90*time.Second))
+	require.Error(t, err, "at an instant before these rows were received, nothing is known")
+	assert.Equal(t, errs.CodeStaleMarketData, errs.CodeOf(err))
 
 	// The reverse pair is a different series.
 	_, err = store.Latest(ctx, d, usdc.ID, sol.ID, time.Hour, now)
@@ -230,4 +249,51 @@ func TestIntegration_PriceStore_LatestAndStaleness(t *testing.T) {
 	var received time.Time
 	require.NoError(t, d.QueryRow(ctx, `SELECT received_at FROM asset_prices WHERE id = $1`, fresh.ID).Scan(&received))
 	assert.Equal(t, now, received.UTC())
+}
+
+// An as-of read is bounded by knowledge time as well as event time (F-119).
+//
+// observed_at is when the price happened; received_at is when this platform
+// learned it. Latest bounded only the first, and its own doc comment said
+// "an as-of valuation never looks ahead" -- so a price observed at T-1m but
+// INSERTED at T+5m was returned by Latest(..., now=T): an answer the platform
+// did not have yet.
+//
+// Latent rather than live, because the sole production caller passes a live
+// clock and at a live now such a row does not exist. It stops being latent the
+// moment anything replays as of a past instant, which is the entire reason
+// received_at is stored. The same table's other reader, prediction/outcome.go,
+// already filters on it.
+func TestIntegration_PriceStore_AnAsOfReadDoesNotSeeWhatItDidNotKnow(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	clk := clock.NewFake(now)
+	store := NewPriceStore(clk)
+	sol, usdc := seedAsset(t, d, "SOLKT", 9, false), seedAsset(t, d, "USDKT", 6, true)
+
+	obs := func(mantissa string, observed, received time.Time) PriceObservation {
+		q, err := money.ParseQuantity(mantissa)
+		require.NoError(t, err)
+		return PriceObservation{
+			AssetID: sol.ID, QuoteAssetID: usdc.ID, Mantissa: q, Scale: 6,
+			Source: "pyth", ObservedAt: observed, ReceivedAt: received,
+		}
+	}
+
+	// Observed before the as-of instant, learned five minutes after it.
+	asOf := now.Add(-10 * time.Minute)
+	_, err := store.RecordPrice(ctx, d, obs("999000000", asOf.Add(-time.Minute), asOf.Add(5*time.Minute)))
+	require.NoError(t, err)
+
+	_, err = store.Latest(ctx, d, sol.ID, usdc.ID, time.Hour, asOf)
+	require.Error(t, err, "an as-of read returned a price the platform had not received yet")
+	assert.Equal(t, errs.CodeStaleMarketData, errs.CodeOf(err))
+
+	// The control: the same observation IS visible once the as-of instant is
+	// past the moment it was learned, so the bound is on knowledge time and not
+	// on the row.
+	p, err := store.Latest(ctx, d, sol.ID, usdc.ID, time.Hour, asOf.Add(6*time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, "999.000000", p.Mantissa.ToDecimalString(uint8(p.Scale)))
 }

@@ -1,16 +1,32 @@
 /**
- * Structural pieces shared by every page.
+ * The structural pieces every page reaches for, and the compatibility surface
+ * for the pages that already do.
  *
- * Two things here are load-bearing rather than decorative. `Field` puts a
- * definition list around every figure, so a screen reader reads "buying power,
- * ten thousand dollars" rather than two unrelated strings. `AsOf` carries the
- * backend's own timestamp next to any snapshot, because a figure without a
- * moment attached invites the reader to assume it is current (PART 110).
+ * Most of what used to live here now lives in a primitive of its own —
+ * `Panel`, `AsOf`, `Field`, `Disclosure`, `Identifier`, `StatusBadge` — because
+ * each of those grew rules that deserved their own file and their own doc
+ * comment. They are re-exported from here unchanged so that sixteen pages did
+ * not have to be rewritten to say the same thing a different way.
+ *
+ * Two things that stayed are load-bearing rather than decorative. `Field` puts
+ * a definition list around every figure, so a screen reader reads "buying
+ * power, ten thousand dollars" rather than two unrelated strings. `AsOf`
+ * carries the backend's own timestamp next to any snapshot, because a figure
+ * without a moment attached invites the reader to assume it is current.
  */
 import type { ReactNode } from "react";
 
-import { exactInstant, formatInstant } from "../lib/time.ts";
 import { UNAVAILABLE_COPY } from "../lib/honesty.ts";
+import { StatusBadge, type Tone } from "./StatusBadge.tsx";
+
+export { AsOf, useStaleness } from "./AsOf.tsx";
+export { Disclosure, DisclosureSet } from "./Disclosure.tsx";
+export { Field, FieldGrid, FormField } from "./Field.tsx";
+export { Identifier, IdentifierShort } from "./Identifier.tsx";
+export { Panel, PanelCard } from "./Panel.tsx";
+export { StatusBadge } from "./StatusBadge.tsx";
+export type { Tone } from "./StatusBadge.tsx";
+export type { Temperature } from "./Panel.tsx";
 
 export function Page(props: {
   readonly title: string;
@@ -32,83 +48,17 @@ export function Page(props: {
   );
 }
 
-export function Panel(props: {
-  readonly title: string;
-  readonly description?: string;
-  readonly actions?: ReactNode;
+/**
+ * The older name for `StatusBadge`, kept because a dozen pages use it and
+ * because the rule it enforces is the same either way: the tone is a second
+ * channel, and the word is the status.
+ */
+export function Pill(props: {
+  readonly tone?: Tone;
   readonly children: ReactNode;
-  readonly id?: string;
+  readonly title?: string;
 }): ReactNode {
-  return (
-    <section className="panel" {...(props.id === undefined ? {} : { id: props.id })} aria-label={props.title}>
-      <div className="panel-head">
-        <div>
-          <h2>{props.title}</h2>
-          {props.description !== undefined && <p className="panel-description">{props.description}</p>}
-        </div>
-        {props.actions !== undefined && <div className="panel-actions">{props.actions}</div>}
-      </div>
-      <div className="panel-body">{props.children}</div>
-    </section>
-  );
-}
-
-/** A labelled figure. `note` explains what the figure actually means. */
-export function Field(props: {
-  readonly label: string;
-  readonly note?: string;
-  readonly children: ReactNode;
-  readonly emphasis?: boolean;
-}): ReactNode {
-  return (
-    <div className={props.emphasis === true ? "field field-emphasis" : "field"}>
-      <dt>{props.label}</dt>
-      <dd>
-        {props.children}
-        {/* The note lives inside the <dd>: a <dl> may only contain dt/dd pairs,
-            optionally wrapped in a <div>, so a sibling <p> here would be
-            invalid markup and an axe 'definition-list' violation. */}
-        {props.note !== undefined && <p className="field-note">{props.note}</p>}
-      </dd>
-    </div>
-  );
-}
-
-export function FieldGrid(props: { readonly children: ReactNode; readonly columns?: 2 | 3 | 4 }): ReactNode {
-  return <dl className={`field-grid cols-${String(props.columns ?? 3)}`}>{props.children}</dl>;
-}
-
-/** The backend's own snapshot instant, with the exact value available. */
-export function AsOf(props: { readonly at: string | undefined; readonly label?: string }): ReactNode {
-  return (
-    <p className="as-of">
-      {props.label ?? "As of"} <time dateTime={props.at ?? ""}>{formatInstant(props.at)}</time>{" "}
-      <span className="mono-small">({exactInstant(props.at)})</span>
-    </p>
-  );
-}
-
-export type Tone = "neutral" | "good" | "warn" | "bad" | "info";
-
-export function Pill(props: { readonly tone?: Tone; readonly children: ReactNode; readonly title?: string }): ReactNode {
-  return (
-    <span
-      className={`pill pill-${props.tone ?? "neutral"}`}
-      {...(props.title === undefined ? {} : { title: props.title })}
-    >
-      {props.children}
-    </span>
-  );
-}
-
-/** A standing disclosure. Always visible; never behind a disclosure triangle. */
-export function Disclosure(props: { readonly title: string; readonly children: ReactNode }): ReactNode {
-  return (
-    <aside className="disclosure" aria-label={props.title}>
-      <p className="disclosure-title">{props.title}</p>
-      <div className="disclosure-body">{props.children}</div>
-    </aside>
-  );
+  return <StatusBadge {...props} />;
 }
 
 /**
@@ -133,13 +83,22 @@ export function NoEndpoint(props: {
   );
 }
 
+/**
+ * A simple table of rows a page composes itself.
+ *
+ * `DataTable` is the richer primitive — sortable, keyboard-navigable, with the
+ * five states — and is what a rebuilt screen should use. This one stays because
+ * it is what the current pages pass `<tr>` children to, and because a table
+ * that is genuinely just a list of facts does not need a sort control it will
+ * never use. Both scroll inside their own container; neither widens the page.
+ */
 export function Table(props: {
   readonly caption: string;
   readonly headers: readonly string[];
   readonly children: ReactNode;
 }): ReactNode {
   return (
-    <div className="table-scroll">
+    <div className="table-scroll" role="group" aria-label={props.caption} tabIndex={0}>
       <table>
         <caption className="visually-hidden">{props.caption}</caption>
         <thead>
@@ -154,18 +113,5 @@ export function Table(props: {
         <tbody>{props.children}</tbody>
       </table>
     </div>
-  );
-}
-
-/** A copyable identifier. Long ids are never truncated without the full value present. */
-export function Identifier(props: { readonly value: string | undefined; readonly label?: string }): ReactNode {
-  if (props.value === undefined || props.value === "") {
-    return <span className="absent">not reported</span>;
-  }
-  return (
-    <span className="identifier">
-      {props.label !== undefined && <span className="identifier-label">{props.label} </span>}
-      <code className="mono-small">{props.value}</code>
-    </span>
   );
 }

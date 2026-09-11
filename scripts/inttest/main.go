@@ -153,6 +153,11 @@ func run() int {
 			return 130
 		}
 		name := dbName(pkg)
+		// Parallel checkouts (git worktrees) share one Postgres; a suffix keeps
+		// their databases apart when two of them test the same package.
+		if suffix := os.Getenv("CP_INTTEST_DB_SUFFIX"); suffix != "" {
+			name += "_" + dbNameUnsafe.ReplaceAllString(strings.ToLower(suffix), "_")
+		}
 		fmt.Printf("\n=== [%d/%d] %s (database controlplane_test_%s)\n", i+1, len(pkgs), pkg, name)
 
 		env, err := provision(ctx, root, name)
@@ -339,7 +344,7 @@ func dbName(pkg string) string {
 // provision runs scripts/testdb and parses the `export NAME=value` lines it
 // prints, returning them as environment entries.
 func provision(ctx context.Context, root, name string) ([]string, error) {
-	// #nosec G204 -- a constant command line; `name` is derived from a package
+	// #nosec G204 G702 -- a constant command line; `name` is derived from a package
 	// path this program enumerated, not from input.
 	cmd := exec.CommandContext(ctx, "go", "run", "./scripts/testdb", "-name", name, "-export")
 	cmd.Dir = root
@@ -366,7 +371,7 @@ func provision(ctx context.Context, root, name string) ([]string, error) {
 // drop removes a package's database. A failure here is reported and ignored:
 // leaking a local test database is untidy, not a test result.
 func drop(ctx context.Context, root, name string) {
-	// #nosec G204 -- a constant command line; `name` is derived from a package
+	// #nosec G204 G702 -- a constant command line; `name` is derived from a package
 	// path this program enumerated, not from input.
 	cmd := exec.CommandContext(ctx, "go", "run", "./scripts/testdb", "-name", name, "-drop")
 	cmd.Dir = root

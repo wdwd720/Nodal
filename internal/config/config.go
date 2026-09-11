@@ -75,8 +75,11 @@ type Config struct {
 	Auth              AuthConfig
 	Providers         ProvidersConfig
 	Telemetry         TelemetryConfig
+	Alert             AlertConfig
+	PII               PIIConfig
 	Seed              SeedConfig
 	Capability        CapabilityConfig
+	Credit            CreditConfig
 	Retention         RetentionConfig
 }
 
@@ -95,9 +98,14 @@ type HTTPConfig struct {
 // DatabaseConfig configures Postgres. The URLs embed credentials and are
 // therefore SecretRefs (plain only in LOCAL/TEST).
 type DatabaseConfig struct {
-	AppURL      SecretRef
-	MigrateURL  SecretRef
-	ReadOnlyURL SecretRef
+	AppURL     SecretRef
+	MigrateURL SecretRef
+	// ConnectTimeout bounds one dial; MaxConnIdleTime discards a pooled
+	// connection before the database it points at suspends underneath it. Both
+	// exist because Neon's free tier scales to zero (F-93).
+	ConnectTimeout  time.Duration
+	MaxConnIdleTime time.Duration
+	ReadOnlyURL     SecretRef
 	// OpsURL is the cp_ops role. It exists for the deletions the application
 	// role is deliberately refused: cp_app may write a login attempt and never
 	// remove one, so an attacker holding it cannot erase the record of the
@@ -199,6 +207,31 @@ type APIConfig struct {
 	// policy in production is refused by the router itself; naming it here is
 	// what lets a configuration check see which one a deployment asked for.
 	LegalPolicy string
+	// PayoutPolicy selects the payout policy: CLOSED (the default, no origin
+	// withdrawable) or SANDBOX (a sandbox tier's rehearsal policy).
+	PayoutPolicy string
+	// SandboxGates are the capabilities the deployment sandbox-activates at
+	// boot. Non-empty only on a sandbox tier; each must be a declared
+	// capability and must also be in EnabledCapabilities.
+	SandboxGates string
+
+	// DemoData asks a sandbox tier to load the demo catalogue at boot: eight
+	// SANDBOX-labelled markets, a demo Credit balance and the activity feed
+	// built out of them.
+	//
+	// It exists because the seeding had no switch at all (D-115, F-144). It
+	// keyed off SandboxTier() alone, so the deployed STAGING seeded on every
+	// boot while CP_SEED_ENABLED -- the variable an operator would reach for,
+	// and the only one either document mentions -- said "false" and was read
+	// by nothing. The two are deliberately separate: RuleNoSeed forbids
+	// CP_SEED_ENABLED in STAGING and PROD, so it could never have been this
+	// control, and the developer seed scripts it does govern write dev
+	// identities and fake USDC rather than SANDBOX-labelled product data.
+	//
+	// True is refused in PROD and on any deployment that is not a sandbox
+	// tier; the default is false, so a deployment that says nothing seeds
+	// nothing.
+	DemoData bool
 }
 
 // CapacityConfig is the deployment tier's hard ceilings on financial activity.
@@ -358,17 +391,34 @@ type KMSConfig struct {
 
 // AuthConfig configures authentication and sessions.
 type AuthConfig struct {
-	Mode             string
-	Issuer           string
-	ClientID         string
-	ClientSecretRef  SecretRef
-	RedirectURL      string
+	Mode            string
+	Issuer          string
+	ClientID        string
+	ClientSecretRef SecretRef
+	RedirectURL     string
+	// PostLoginURL is where the callback sends the browser once the session
+	// cookie is set. Empty means "/", which is right when the app is served
+	// from the API's own origin and wrong when it is not: the API's root is
+	// a 404 problem document, so a customer who signed in from a separate
+	// frontend origin would land on JSON holding a cookie they cannot see.
+	// An operator value, never user input, so it is not an open redirect.
+	PostLoginURL     string
 	CookieName       string
 	CookieDomain     string
 	CookieSecure     bool
 	SessionTTL       time.Duration
 	StepUpMaxAge     time.Duration
 	DebugAuthEnabled bool
+	// BootstrapOperators declares the operator-directory rows this deployment
+	// grants at login, as `issuer|subject=ROLE` entries separated by commas.
+	// It is how a deployment that has never had an operator gets its first one:
+	// nothing else in the system writes operator_roles (ADR-0024).
+	//
+	// It is a raw string here and parsed by internal/operatorroles, so config
+	// keeps no dependency on the security matrix; Validate refuses a value that
+	// does not parse, and refuses anything in PROD but empty or exactly one
+	// ADMIN.
+	BootstrapOperators string
 }
 
 // ProviderConfig configures one external provider adapter.
@@ -482,6 +532,41 @@ type TelemetryConfig struct {
 	MetricsInterval  time.Duration
 }
 
+// PIIConfig is the key material for personal data at rest. internal/pii
+// seals identity_pii's columns under it; the database never sees the key.
+type PIIConfig struct {
+	// Keyring is a SecretRef to the JSON keyring document internal/pii
+	// parses: {"active": N, "keys": {"N": "<base64 32 bytes>", ...}}.
+	Keyring SecretRef
+}
+
+// AlertConfig is where operational alerts go when they leave the process.
+//
+// F-118: nothing in this deployment pages, and the reason that is SOFTWARE was
+// that the raise path's callback had no production caller. The reason that is a
+// DEPLOYMENT DECISION is this: somebody has to say where an alert should be
+// sent.
+//
+// A webhook URL is the shape that satisfies "$0 fixed cost" and "commits to no
+// vendor" at once -- Slack, Discord, ntfy, healthchecks.io and a three-line
+// Worker all accept the same POST. The constraint chose the design.
+type AlertConfig struct {
+	// WebhookFormat is the payload shape: auto, generic, slack, discord or
+	// ntfy. Auto derives it from the URL's host.
+	WebhookFormat string
+
+	// WebhookURL is the destination. Empty means alerts are logged and go
+	// nowhere, which is said out loud at startup rather than assumed.
+	//
+	// A SecretRef because a Slack or Discord webhook URL IS its credential:
+	// anyone holding it can post to the channel.
+	WebhookURL SecretRef
+	// MinSeverity is the lowest severity worth sending. SEV2 sends everything.
+	MinSeverity string
+	// Timeout bounds one delivery attempt.
+	Timeout time.Duration
+}
+
 // SeedConfig controls seeding of clearly-labeled fake data.
 type SeedConfig struct {
 	Enabled bool
@@ -495,6 +580,22 @@ type CapabilityConfig struct {
 	StoreConfigured bool
 }
 
+// CreditConfig holds the Credit funding lifecycle's one risk decision.
+type CreditConfig struct {
+	// SettlementWindow is how long a captured card payment stays reversible
+	// before its Credits may be treated as settled.
+	//
+	// It is in the table rather than read from the environment because it is a
+	// risk determination somebody has to make and record, and a value read
+	// straight from the environment is outside scripts/configcheck and outside
+	// the configuration hash -- so it could be changed in a dashboard while
+	// /v1/version reported the hash that exists to detect exactly that.
+	//
+	// The default is a CONSERVATIVE placeholder, not a determination: card
+	// scheme chargeback windows run to 120 days and beyond.
+	SettlementWindow time.Duration
+}
+
 // RetentionConfig holds retention in days for each retention class (goal
 // PART 122). Production cannot set the financial or security-audit classes to
 // zero.
@@ -503,7 +604,20 @@ type RetentionConfig struct {
 	// nonce and PKCE verifier after the attempt expired. Short by design: the
 	// secrets are single-use and the durable record of a login is a
 	// security_events row.
-	LoginAttemptDays    int
+	LoginAttemptDays int
+	// SecurityEventDays is how long a monthly partition of security_events is
+	// kept before it is detached and dropped (00740, ADR-0020 decision 2).
+	//
+	// Zero means the trail is never pruned, and that is the default on purpose:
+	// the period is the question ADR-0020 leaves open, and dropping a security
+	// audit trail because nobody chose a number is worse than a table that
+	// grows. What a growing table costs is a capacity refusal, which is
+	// fail-closed and visible; what a wrong number costs is evidence.
+	//
+	// When it is set it must be at least 90 days, the same floor
+	// cp_security_events_drop_expired enforces in the database. The floor is in
+	// both places because the SQL function is the one an attacker would call.
+	SecurityEventDays   int
 	FinancialRecordDays int
 	SecurityAuditDays   int
 	RawMarketDataDays   int
@@ -563,4 +677,74 @@ func (c *Config) secretRefs() map[string]*SecretRef {
 	out := map[string]*SecretRef{}
 	forEachSecretRef(reflect.ValueOf(c), "", func(path string, ref *SecretRef) { out[path] = ref })
 	return out
+}
+
+// Legal policy names.
+//
+// The vocabulary lives here rather than in the composition root because both
+// have to agree: internal/config decides whether a deployment is valid, and
+// cmd/api decides whether it can build a router from the same string. When the
+// two were separate lists, config had no list at all and a name it did not
+// recognise -- or a development policy in STAGING -- passed every check and
+// then refused to boot (F-103).
+const (
+	// LegalPolicyConservative asks the jurisdiction questions. It is the
+	// default, and the empty string means it.
+	LegalPolicyConservative = "CONSERVATIVE"
+	// LegalPolicyDevelopment permits the internal economy without them, and is
+	// refused outside LOCAL/TEST/DEV.
+	LegalPolicyDevelopment = "DEVELOPMENT"
+	// LegalPolicySandbox declares a sandbox tier: a deployment that is not
+	// PROD, holds no live provider (refused anywhere else already), and may
+	// therefore exercise the gated product against providers that move
+	// nothing. It permits the internal economy AND a payout for a verified
+	// account, and it is refused in PROD. It is the condition every other
+	// sandbox affordance -- the SANDBOX gate state, the sandbox payout
+	// policy, the sandbox providers -- keys off (ADR-0023).
+	LegalPolicySandbox = "SANDBOX"
+)
+
+// Payout policy names, with the same reasoning as the legal policy names.
+const (
+	// PayoutPolicyClosed is the fail-closed default: no origin is withdrawable.
+	// The empty string means it.
+	PayoutPolicyClosed = "CLOSED"
+	// PayoutPolicySandbox is valuedomain.SandboxPolicy, refused in PROD and
+	// refused unless the legal policy is SANDBOX too.
+	PayoutPolicySandbox = "SANDBOX"
+)
+
+// NormalizePayoutPolicy upper-cases and trims a configured payout policy name
+// and reports whether it is one this binary knows.
+func NormalizePayoutPolicy(s string) (string, bool) {
+	switch name := strings.ToUpper(strings.TrimSpace(s)); name {
+	case "":
+		return PayoutPolicyClosed, true
+	case PayoutPolicyClosed, PayoutPolicySandbox:
+		return name, true
+	default:
+		return name, false
+	}
+}
+
+// SandboxTier reports whether this deployment declared itself a sandbox tier
+// and is somewhere one may exist. Validate refuses the declaration in PROD,
+// so the second half is belt and braces for a Config nobody validated.
+func (c *Config) SandboxTier() bool {
+	name, ok := NormalizeLegalPolicy(c.API.LegalPolicy)
+	return ok && name == LegalPolicySandbox && c.Env != EnvProd
+}
+
+// NormalizeLegalPolicy upper-cases and trims a configured policy name and
+// reports whether it is one this binary knows. The empty string is
+// CONSERVATIVE: naming nothing asks for the careful one.
+func NormalizeLegalPolicy(s string) (string, bool) {
+	switch name := strings.ToUpper(strings.TrimSpace(s)); name {
+	case "":
+		return LegalPolicyConservative, true
+	case LegalPolicyConservative, LegalPolicyDevelopment, LegalPolicySandbox:
+		return name, true
+	default:
+		return name, false
+	}
 }

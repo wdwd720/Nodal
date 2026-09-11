@@ -118,14 +118,57 @@ func TestIntegration_TheWithdrawnInvariantsAreStillEnforced(t *testing.T) {
 		assert.Equal(t, "23514", db.SQLState(err), "got %v", err)
 	})
 
+	// PO001, anchored where the number is written (00815, F-264).
+	//
+	// cp_payout_reservation_balanced is a constraint trigger on
+	// payout_allocations, so it fires when an ALLOCATION is written and never
+	// when a reserved_quantity is. A reservation with no allocation rows behind
+	// it touched that table not at all and was therefore compared to nothing --
+	// which is what let a same-state transition row write the whole requested
+	// amount onto a REJECTED payout as reserved and settled.
+	//
+	// This case used to be the positive control below, written as
+	// `SET reserved_quantity = 5, settled_quantity = 5`. It passed because the
+	// invariant it violates had nowhere to fire. It is a refusal now.
+	t.Run("PO001 a reservation with no allocations behind it is refused", func(t *testing.T) {
+		reqID := seedPayoutRequest(t, admin, creditAsset)
+		tx, err := admin.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx,
+			`UPDATE payout_requests SET reserved_quantity = 5, settled_quantity = 5 WHERE id = $1`, reqID)
+		require.NoError(t, err, "the UPDATE itself is fine; the invariant is deferred to COMMIT")
+		err = tx.Commit(ctx)
+		require.Error(t, err, "a payout reserved 5 with nothing allocated to it")
+		assert.Equal(t, "PO001", db.SQLState(err), "got %v", err)
+	})
+
 	// The positive control. Every case above expects a refusal, so a schema
 	// that refused everything -- a broken fixture, a missing grant -- would pass
 	// all of them. A legal write must still work.
+	//
+	// It is a write of ZERO now, and that is not a weakening: zero IS the
+	// balanced pair for a request with no allocations, which is every request
+	// this file seeds, because seeding one with allocations means seeding a
+	// credit lot, a journal transaction and its entries. The path that reserves
+	// a non-zero quantity against real allocations is driven end to end by
+	// internal/payout's own integration suite, which is where a fixture that
+	// heavy belongs.
 	t.Run("the legal writes still work", func(t *testing.T) {
 		reqID := seedPayoutRequest(t, admin, creditAsset)
 		_, err := admin.Exec(ctx,
-			`UPDATE payout_requests SET reserved_quantity = 5, settled_quantity = 5 WHERE id = $1`, reqID)
-		require.NoError(t, err, "a payout settling exactly what it reserved was refused")
+			`UPDATE payout_requests
+			    SET reserved_quantity = 0, settled_quantity = 0,
+			        verification_level = 'PAYOUT_KYC', failure_reason = 'a legal write'
+			  WHERE id = $1`, reqID)
+		require.NoError(t, err, "a payout whose reservation balances its allocations was refused")
+
+		var level, reason string
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT verification_level, failure_reason FROM payout_requests WHERE id = $1`, reqID).
+			Scan(&level, &reason))
+		assert.Equal(t, "PAYOUT_KYC", level)
+		assert.Equal(t, "a legal write", reason)
 	})
 }
 
@@ -164,9 +207,14 @@ func seedPayoutRequest(t *testing.T, c *pgx.Conn, creditAsset id.ID[id.Any]) id.
 	ctx := context.Background()
 	account := seedAccountRow(t, c)
 	reqID := id.New[id.Any]()
+	// `sandbox` and `environment` are stated because 00817 made the first NOT
+	// NULL: the nullable form was read as a rehearsal by the API and as a real
+	// payout by the PROD CHECK, so one of the two was wrong on every row that
+	// had no recorded fact (D-134). TEST is what this fixture is.
 	_, err := c.Exec(ctx, `INSERT INTO payout_requests
-		(id, account_id, credit_asset_id, state, requested_quantity, policy_version, policy_hash, idempotency_key)
-		VALUES ($1, $2, $3, 'DRAFT', 100, 'v1', 'h1', $4)`,
+		(id, account_id, credit_asset_id, state, requested_quantity, policy_version, policy_hash,
+		 idempotency_key, sandbox, environment)
+		VALUES ($1, $2, $3, 'DRAFT', 100, 'v1', 'h1', $4, true, 'TEST')`,
 		reqID, account, creditAsset, "payout-"+reqID.String())
 	require.NoError(t, err)
 	return reqID

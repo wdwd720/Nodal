@@ -79,6 +79,26 @@ type Lot struct {
 	// started REVERSIBLE and later SETTLED can be told from one that was
 	// issued SETTLED.
 	InitialFinality valuedomain.FundingFinality
+	// OriginFloor is the most restricted origin anywhere in this lot's
+	// provenance: its own Origin when nothing funded it, the most restricted
+	// floor among its parents when something did.
+	//
+	// It is read from `credit_lot_state`, which a trigger maintains, for the
+	// same reason the finality is: a derived lot is as withdrawable as the
+	// least withdrawable thing that funded it, and neither half of that is the
+	// application's to assert (D-131, F-261).
+	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin this lot's provenance bottoms out in, read
+	// from the same trigger-maintained projection and computed by the same
+	// recursive rule as OriginFloor -- of which it is the most restricted
+	// member.
+	//
+	// It exists because one ranked origin cannot be conservative for a policy
+	// it was not ranked by: a lot funded half by a purchase and half by trading
+	// gains records one of them as its floor, and a policy that releases that
+	// one and refuses the other would release the lot (D-138, F-275).
+	// `valuedomain.Policy.Permits` reads the whole set.
+	RootOrigins []valuedomain.CreditOrigin
 
 	FundingReference *Reference
 	JournalTxID      ledger.TransactionID
@@ -142,11 +162,24 @@ func ConsumptionOrderSQL() string { return consumptionOrderSQL }
 
 // Allocation is how much of one lot a single consumption took.
 type Allocation struct {
-	LotID    LotID
-	Origin   valuedomain.CreditOrigin
-	Finality valuedomain.FundingFinality
-	Quantity money.Quantity
-	EventID  LotEventID
+	LotID  LotID
+	Origin valuedomain.CreditOrigin
+	// OriginFloor is the lot's floor at the moment the units were taken. It
+	// travels with the allocation so a consumer recording what left can record
+	// what it WAS: `payout_allocations` stores both, and a payout of
+	// MARKET_TRADING_PROCEEDS whose provenance is a settled purchase is a
+	// different fact from one whose provenance is a promotional grant, however
+	// identical the origin column looks (D-136, F-270).
+	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin the lot's provenance bottoms out in, at the
+	// moment the units were taken. It travels beside the floor because the
+	// floor is only the most restricted of them, and two different sets share a
+	// floor whenever they share a minimum -- while `valuedomain.Policy.Permits`
+	// reads the whole set (D-138, F-282).
+	RootOrigins []valuedomain.CreditOrigin
+	Finality    valuedomain.FundingFinality
+	Quantity    money.Quantity
+	EventID     LotEventID
 }
 
 // IssueRequest mints Credits into an account with a recorded provenance.
@@ -154,6 +187,11 @@ type IssueRequest struct {
 	AccountID accounts.AccountID
 	Quantity  money.Quantity
 	Origin    valuedomain.CreditOrigin
+	// Parents are the lots this issuance was derived from, if any. They are
+	// passed through to RecordLot, which mints at the least final finality
+	// among them (D-124). Empty for an ordinary issuance, which is funded from
+	// outside or from nothing at all.
+	Parents []LotParent
 	// Finality is the funding finality the lot starts at. Promotional grants
 	// and admin adjustments are UNFUNDED; a card purchase is REVERSIBLE until
 	// the dispute window closes; an internal earning inherits the finality of
@@ -229,6 +267,17 @@ type RecordLotRequest struct {
 	// lot whose transaction did not touch this account and asset.
 	JournalTxID ledger.TransactionID
 	Reason      string
+
+	// Parents are the lots consumed to fund this one, for a DERIVED lot:
+	// trading proceeds, a creator earning, marketplace proceeds and the fee on
+	// them. When they are given, RecordLot mints the lot at the LEAST FINAL
+	// finality among them and refuses a Finality more final than that -- a
+	// caller cannot declare proceeds settled that the money behind them is not
+	// (D-124, F-230).
+	//
+	// Empty means the caller states the finality itself, which is what a funded
+	// mint and a grant do.
+	Parents []LotParent
 }
 
 // Validate checks the request without touching the database.
@@ -286,10 +335,56 @@ type ConsumeRequest struct {
 	// a reversal, which must be able to claw back value regardless.
 	RequireSpendableFinality bool
 
-	// AllowedOrigins, when non-empty, restricts consumption to these origins.
-	// Payout reservation uses it to consume only value the policy permits, so
-	// that a payout can never quietly take a promotional grant.
-	AllowedOrigins []valuedomain.CreditOrigin
+	// RequirePayoutFinality, when true, refuses to consume lots whose funding
+	// is not PAYOUT-ELIGIBLE -- which is a strictly smaller set than the
+	// spendable one, because `valuedomain.FundingFinality.Spendable()` admits
+	// REVERSIBLE and `PayoutEligible()` does not.
+	//
+	// Payout reservation sets it and nothing else does. Spending keeps
+	// RequireSpendableFinality: a card payment inside its dispute window may
+	// buy things, and that is the deliberate product answer with a dispute
+	// reserve behind it. What it may not do is LEAVE, and the reservation used
+	// to ask the spendable question, so a payout approved on a settled lot
+	// could be filled from a reversible one of the same origin (D-136, F-270).
+	RequirePayoutFinality bool
+
+	// RestrictToLots declares that LotIDs is the WHOLE set this consume may
+	// draw on, whatever is in it -- including nothing.
+	//
+	// It exists because "restricted to no lots" and "not restricted" are
+	// different instructions and a slice cannot tell them apart. The filter read
+	// `cardinality($5) = 0 OR ...`, so an empty set selected every lot the
+	// account held, and the post-selection assertion was guarded by
+	// `len(r.LotIDs) > 0`, so the one input on which the filter was absent was
+	// also the one on which the check was. A decision that approved NOTHING
+	// produces exactly that empty set (F-281).
+	//
+	// Declared rather than inferred, so a caller that means "these lots" says so
+	// and a caller that names lots without declaring the restriction is refused
+	// by Validate rather than quietly unrestricted.
+	RestrictToLots bool
+
+	// LotIDs are the exact lots this consume may draw on when RestrictToLots is
+	// set. An empty set is a real answer: it takes nothing, and the consume
+	// fails for want of Credits with the required provenance.
+	//
+	// A clawback is the case it exists for. A chargeback reverses ONE funding,
+	// and the units it must destroy are the units THAT funding minted -- not
+	// whichever lots sort first in consumption order, which is what an
+	// unrestricted Consume takes and which is a promotional grant every time
+	// (F-152). The origin filter is not enough: two purchases produce two lots
+	// of the same origin, and a chargeback of one must not destroy the other.
+	//
+	// A PAYOUT RESERVATION is the second case, and it is the same sentence with
+	// different money in it. `payout.Engine.Evaluate` approves specific lots --
+	// it reads each lot's finality, its origin and its provenance roots -- and
+	// the reservation used to pass only the SET OF ORIGINS those lots carried.
+	// Two lots of one origin are one origin, so a decision approving a settled
+	// purchase was filled from a reversible one, and a decision approving
+	// proceeds whose provenance is a purchase was filled from proceeds whose
+	// provenance is a promotional grant (D-136, F-270). A payout now takes
+	// exactly the units its decision evaluated.
+	LotIDs []LotID
 }
 
 // Validate checks the request without touching the database.
@@ -307,9 +402,16 @@ func (r ConsumeRequest) Validate() error {
 	if !r.Reference.Valid() {
 		return errs.New(errs.CodeValidationFailed, "credit: consume requires a financial event reference")
 	}
-	for _, o := range r.AllowedOrigins {
-		if !o.Valid() {
-			return errs.Newf(errs.CodeValidationFailed, "credit: unknown allowed origin %q", o)
+	if len(r.LotIDs) > 0 && !r.RestrictToLots {
+		// Naming lots without declaring the restriction is how a caller ends up
+		// with an unrestricted consume it believes is a restricted one. There is
+		// no reading of this request that is safe to guess at.
+		return errs.New(errs.CodeValidationFailed,
+			"credit: consume named lots without declaring RestrictToLots")
+	}
+	for i, l := range r.LotIDs {
+		if l.IsZero() {
+			return errs.Newf(errs.CodeValidationFailed, "credit: consume lot restriction %d has no lot id", i)
 		}
 	}
 	return nil
@@ -355,6 +457,11 @@ func (r RestoreRequest) Validate() error {
 // so that a user is never told "18,500 Credits = $185 withdrawable" unless
 // policy actually says so.
 type Balances struct {
+	// CreditDecimals is the scale of the CREDIT asset every quantity below is
+	// expressed in. It travels WITH the figures because a consumer that has to
+	// assume the scale is a consumer that can render a balance a million times
+	// wrong, which is what the browser did (F-151).
+	CreditDecimals uint8
 	// Gross is every remaining unit the account holds, regardless of state.
 	Gross money.Quantity
 	// Spendable is what can fund new internal activity now.

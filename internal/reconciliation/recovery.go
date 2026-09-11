@@ -330,20 +330,20 @@ func appendDetail(existing, add string) string {
 // agreement policy. It never picks the optimistic answer (PART 196).
 func (e *Engine) resolveSignature(ctx context.Context, sig string) chain.Resolution {
 	if e.observers.Primary == nil {
-		return chain.Resolution{State: chain.NotFound, Finality: chain.FinalitySubmitted, BlockDependent: true, Detail: "no chain observer configured"}
+		return chain.Resolution{State: chain.NotFound, Finality: chain.FinalitySubmitted, Degraded: true, BlockDependent: true, Detail: "no chain observer configured"}
 	}
 	required := chain.FinalityConfirmed
 	primary, perr := e.observers.Primary.GetTransaction(ctx, sig)
 	if e.observers.Secondary == nil {
 		if perr != nil {
-			return chain.Resolution{State: chain.NotFound, Finality: chain.FinalitySubmitted, BlockDependent: true, Detail: "primary observer failed: " + perr.Error()}
+			return chain.Resolution{State: chain.NotFound, Finality: chain.FinalitySubmitted, Degraded: true, BlockDependent: true, Detail: "primary observer failed: " + perr.Error()}
 		}
 		return e.observers.Policy.ResolveSingle(primary, chain.SidePrimary, required, "secondary observer not configured")
 	}
 	secondary, serr := e.observers.Secondary.GetTransaction(ctx, sig)
 	switch {
 	case perr != nil && serr != nil:
-		return chain.Resolution{State: chain.NotFound, Finality: chain.FinalitySubmitted, BlockDependent: true, Detail: "no observer answered"}
+		return chain.Resolution{State: chain.NotFound, Finality: chain.FinalitySubmitted, Degraded: true, BlockDependent: true, Detail: "no observer answered"}
 	case perr != nil:
 		return e.observers.Policy.ResolveSingle(secondary, chain.SideSecondary, required, "primary unavailable: "+perr.Error())
 	case serr != nil:
@@ -357,6 +357,18 @@ func (e *Engine) resolveSignature(ctx context.Context, sig string) chain.Resolut
 // attempt's last valid block height by the policy margin. A single observer
 // can never prove absence (chain.AgreementPolicy.ResolveSingle says so, and
 // this repeats the rule at the decision point).
+//
+// Degraded is the field that carries "this rests on incomplete observation",
+// and the three resolutions constructed by hand above left it at its zero value
+// (F-108). So "both RPCs errored" arrived here indistinguishable from "both
+// observers looked and the transaction is not there" -- and the remaining gate,
+// GetBlockHeight, is a DIFFERENT method that is routinely healthy while
+// getTransaction is rate-limited.
+//
+// What that cost: a transaction that landed on chain, with the user's tokens
+// already spent, recorded PROVEN_ABSENT, its attempt EXPIRED (which is not
+// Recoverable, so nothing looks again) and its reconciliation record MATCHED,
+// immaterial and terminal. The books would say everything agrees.
 func (e *Engine) provenAbsent(ctx context.Context, att execution.Attempt, res chain.Resolution) bool {
 	if res.State != chain.NotFound || res.Degraded {
 		return false

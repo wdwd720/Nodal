@@ -6,6 +6,7 @@ import (
 	"context"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,13 +41,19 @@ var appendOnlyTables = []*regexp.Regexp{
 // transient records whose retention is an operational policy, never financial
 // history. Everything else is append-only for every role except the migration
 // role.
+//
+// `notifications` was on this list and never belonged: 00640's
+// notifications_guard raises NOTIFICATION_IMMUTABLE on DELETE for every role
+// including the table's owner, so the DELETE grant named a capability the
+// database refuses and this list asserted a retention capability that has never
+// existed. 00803 revokes the grant, and the content written into the table is
+// bounded instead (D-106, F-188).
 var opsHousekeeping = map[string]bool{
 	"outbox_events":    true,
 	"inbox_messages":   true,
 	"idempotency_keys": true,
 	"sessions":         true,
 	"login_attempts":   true,
-	"notifications":    true,
 }
 
 // TestIntegration_ApplicationRolePrivileges asserts the least-privilege
@@ -57,14 +64,41 @@ var opsHousekeeping = map[string]bool{
 //   - cp_app cannot UPDATE append-only tables;
 //   - cp_app can at least SELECT every other table (a table nobody granted is
 //     a migration bug, not a feature);
-//   - cp_readonly and cp_ops can SELECT everything and write nothing.
+//   - cp_readonly and cp_ops can SELECT everything and write nothing, EXCEPT
+//     where a table is named below as an exception with its reason.
+//
+// That last clause used to read "everything", flatly, and F-47 was the finding
+// that it contradicted migration 00010 -- which grants those two roles SELECT
+// on a named list that deliberately excludes `identity_pii` and `sessions`.
+// The blanket ALTER DEFAULT PRIVILEGES in the role bootstrap won silently, and
+// for a year the question could not be settled because nothing wrote the
+// encrypted columns, so whether reading them was an exposure had no answer.
+//
+// internal/pii writes them now, as ciphertext under a key the database never
+// holds, and migration 00754 settles it the way 00010 meant: neither role can
+// read `identity_pii`; `cp_readonly` cannot read `sessions`; `cp_ops` can read
+// exactly the one column its retention DELETE filters by. The bootstrap's
+// default still grants every NEW table to both roles, so the exception below
+// is where a table is withheld on purpose, and this test is what keeps that
+// list from growing silently.
 func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 	requireEnv(t)
 	ctx := context.Background()
 	admin := connect(t, migrateURL)
 	require.NoError(t, migrate.Up(ctx, migrateURL))
 
-	rows, err := admin.Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`)
+	// Partitions are excluded. Privileges on a partitioned table are checked on
+	// the parent when the parent is what the query names, which is how every
+	// reader and writer in this system reaches one -- so a partition carries no
+	// grants of its own and is expected to carry none. Sweeping them would
+	// demand a GRANT on each, which is both unnecessary and a standing invitation
+	// to grant something directly on a partition that the parent does not have
+	// (00740).
+	rows, err := admin.Query(ctx,
+		`SELECT c.relname FROM pg_class c
+		   JOIN pg_namespace n ON n.oid = c.relnamespace
+		  WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+		  ORDER BY c.relname`)
 	require.NoError(t, err)
 	var tables []string
 	for rows.Next() {
@@ -82,11 +116,69 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 		require.NoError(t, admin.QueryRow(ctx, `SELECT has_table_privilege($1, $2, $3)`, role, "public."+table, p).Scan(&ok))
 		return ok
 	}
+	colPriv := func(role, table, col, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx, `SELECT has_column_privilege($1, $2, $3, $4)`, role, "public."+table, col, p).Scan(&ok))
+		return ok
+	}
 	bookkeeping := map[string]bool{migrate.VersionTable: true, migrate.ChecksumTable: true}
 
 	for _, tbl := range tables {
 		if bookkeeping[tbl] {
 			assert.False(t, priv("cp_app", tbl, "SELECT"), "%s: runner bookkeeping must be invisible to the app role", tbl)
+			continue
+		}
+		// The one table nobody but the owner may read, asserted rather than
+		// skipped. cp_transition_key holds the key the transition flag is
+		// tagged with (00741), and a role that can read it can forge a state
+		// change on seventeen audited tables. "cp_readonly reads everything" is
+		// the rule below and this is the deliberate hole in it, so it is
+		// checked in the strong direction here instead of being excused.
+		// F-47, resolved by 00754 once internal/pii made the columns ciphertext.
+		// Neither role has a use for identity_pii; cp_readonly has none for
+		// sessions; cp_ops keeps exactly what its retention DELETE needs --
+		// SELECT on expires_at -- and cannot read a token hash. Asserted in the
+		// strong direction, like cp_transition_key, because the bootstrap's
+		// blanket default would grant all of it back to a table that was
+		// recreated without this migration's REVOKE.
+		//
+		// `notifications` joined them in 00803 under the same rule (ADR-0021
+		// §4): it holds what a customer was TOLD -- a sign-in, a restriction, a
+		// failed payout -- which is personal data, and neither analytics nor
+		// housekeeping has a use for a copy of somebody's inbox (D-106).
+		if tbl == "identity_pii" || tbl == "sessions" || tbl == "notifications" {
+			for _, ro := range []string{"cp_readonly", "cp_ops"} {
+				assert.False(t, priv(ro, tbl, "SELECT"),
+					"%s: %s can read personal data or session material; 00754 withholds it and F-47 says why", tbl, ro)
+				for _, p := range []string{"INSERT", "UPDATE", "TRUNCATE"} {
+					assert.False(t, priv(ro, tbl, p), "%s: %s must not %s", tbl, ro, p)
+				}
+			}
+			assert.False(t, priv("cp_app", tbl, "DELETE"), "%s: cp_app must never DELETE", tbl)
+			assert.True(t, priv("cp_app", tbl, "SELECT"), "%s: cp_app has no SELECT", tbl)
+			if tbl == "sessions" {
+				assert.True(t, priv("cp_ops", tbl, "DELETE"), "sessions: cp_ops performs retention cleanup here")
+				assert.True(t, colPriv("cp_ops", tbl, "expires_at", "SELECT"),
+					"sessions: cp_ops lost the one column its retention DELETE filters by; the purge now fails")
+				for _, col := range []string{"token_hash", "roles", "break_glass_until", "ip", "user_agent", "user_id"} {
+					assert.False(t, colPriv("cp_ops", tbl, col, "SELECT"),
+						"sessions: cp_ops can read %s; housekeeping needs expires_at and nothing else", col)
+				}
+				assert.False(t, priv("cp_readonly", tbl, "DELETE"), "sessions: cp_readonly must not DELETE")
+			} else {
+				for _, ro := range []string{"cp_readonly", "cp_ops"} {
+					assert.False(t, priv(ro, tbl, "DELETE"), "%s: %s must not DELETE", tbl, ro)
+				}
+			}
+			continue
+		}
+		if tbl == "cp_transition_key" {
+			for _, r := range []string{"cp_app", "cp_readonly", "cp_ops"} {
+				for _, p := range []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"} {
+					assert.False(t, priv(r, tbl, p),
+						"%s: %s holds %s; a role that can read this key can forge any transition", tbl, r, p)
+				}
+			}
 			continue
 		}
 		assert.False(t, priv("cp_app", tbl, "DELETE"), "%s: cp_app must never DELETE", tbl)
@@ -185,4 +277,202 @@ func TestIntegration_CapabilityGateStateAuthority(t *testing.T) {
 		VALUES (gen_random_uuid(), 'WITHDRAWALS', 'PROD', 'ACTIVE', now())`)
 	require.Error(t, err, "even the migration role may not create a gate already ACTIVE")
 	assert.Equal(t, "GT005", db.SQLState(err), "got %v", err)
+}
+
+// The application role holds column grants where the columns are money (F-109).
+//
+// Every audited entity binds its STATE change to a transition row. Nothing binds
+// the other columns, and the binding cannot: a constraint trigger declared
+// AFTER UPDATE OF status fires only when status is in the statement's SET list.
+// So a bare rewrite of an amount or a destination fired nothing at all, and one
+// smuggled alongside a lawful state move committed with AU001 satisfied and the
+// trail recording a move that did happen while the payload changed underneath.
+//
+// The remedy is privilege rather than detection, which is why it works, and it
+// is the treatment 00604, 00701, 00719, 00720, 00723 and 00730 already apply.
+// This asserts the four tables 00733 converted, by column, so that a later
+// migration widening one back to table-wide UPDATE fails here.
+func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	admin := connect(t, migrateURL)
+
+	granted := func(table string) []string {
+		var cols []string
+		rows, err := admin.Query(ctx,
+			`SELECT column_name FROM information_schema.column_privileges
+			  WHERE grantee = 'cp_app' AND privilege_type = 'UPDATE' AND table_name = $1
+			  ORDER BY column_name`, table)
+		require.NoError(t, err)
+		defer rows.Close()
+		for rows.Next() {
+			var c string
+			require.NoError(t, rows.Scan(&c))
+			cols = append(cols, c)
+		}
+		require.NoError(t, rows.Err())
+		return cols
+	}
+
+	for table, want := range map[string][]string{
+		// The amount, the destination and the approval are written once.
+		"withdrawals": {"status", "step_up_verified_at"},
+		// What an asset IS decides how reconciliation values it: a stablecoin
+		// pegged to USD is marked at face value, scaled by its own decimals,
+		// with no status or risk-class check. That is the materiality test.
+		"assets": {"status"},
+		// A live instrument's settlement asset is not repointable.
+		"instruments": {"status"},
+		// The account, the requested quantity, the destination and both
+		// idempotency keys are not the application's to change -- and since
+		// 00807 neither are the state, the money beside it, or the provider's
+		// words about it. Those seven are written by
+		// cp_payout_apply_state_transition from the transition row, because a
+		// column grant on `state` plus an edge binding that never asked whether
+		// the edge exists let cp_app move a REJECTED request to SETTLED with a
+		// forged provider reference (F-229).
+		//
+		// blocked_reason and blocked_at joined the list at 00822. They record
+		// why a RESERVED payout cannot be submitted, in words its holder reads,
+		// and they are the application's for the reason failure_reason beside
+		// them is: they say what this deployment DECIDED, not what state the
+		// request is in or how much money is behind it. The state and the seven
+		// columns around it stay unreachable (F-277).
+		"payout_requests": {
+			"blocked_at", "blocked_reason",
+			"eligibility_reasons", "failure_reason", "policy_hash", "policy_version",
+			"provider", "provider_idempotency_key", "submitted_at", "verification_level",
+		},
+	} {
+		assert.Equal(t, want, granted(table),
+			"%s: cp_app's UPDATE grant is not the column set 00733 established; a table-wide "+
+				"grant here means an amount or a destination can be rewritten with no transition row", table)
+	}
+
+	// The negative control. If the query above stopped matching anything it
+	// would report an empty set for every table and pass by comparing nothing.
+	assert.NotEmpty(t, granted("payout_requests"), "the privilege query returned nothing; it is not looking at the catalogue")
+}
+
+// TestIntegration_EverySecurityDefinerPinsPgTemp is the guard F-48's fix did
+// not leave behind, and is why the same defect arrived twice (F-194).
+//
+// A SECURITY DEFINER function runs with its owner's privileges, and `cp_migrate`
+// owns every one here. TEMP on a database is granted to PUBLIC by default and is
+// revoked nowhere in this tree, so any caller may create a temp relation; when
+// `pg_temp` is not named in the function's search_path PostgreSQL searches it
+// FIRST for relation names. A temp table shadowing `native_assets` is therefore
+// read, as the owner, by a trigger that writes a position from it.
+//
+// 00701 and 00717 both state the rule in prose and both fix the functions that
+// existed when they were written. Nothing stated it as a property of the
+// SCHEMA, so 00771 and 00772 reintroduced it four functions at a time. This
+// asserts the property: every definer in `public` pins pg_temp, and the failure
+// message names the ones that do not, so the next migration to forget it fails
+// here rather than in an audit.
+func TestIntegration_EverySecurityDefinerPinsPgTemp(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	admin := connect(t, migrateURL)
+
+	rows, err := admin.Query(ctx,
+		`SELECT p.proname, coalesce(array_to_string(p.proconfig, ' '), '')
+		   FROM pg_proc p
+		   JOIN pg_namespace n ON n.oid = p.pronamespace
+		  WHERE n.nspname = 'public' AND p.prosecdef
+		  ORDER BY p.proname`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var (
+		definers []string
+		unpinned []string
+	)
+	for rows.Next() {
+		var name, config string
+		require.NoError(t, rows.Scan(&name, &config))
+		definers = append(definers, name)
+		// A definer with no search_path at all is the worse version of the same
+		// hazard: it inherits the CALLER's path, pg_temp included.
+		if !strings.Contains(config, "search_path=") || !strings.Contains(config, "pg_temp") {
+			unpinned = append(unpinned, name+" ["+config+"]")
+		}
+	}
+	require.NoError(t, rows.Err())
+
+	assert.Empty(t, unpinned,
+		"every SECURITY DEFINER function in public must SET search_path with pg_temp named "+
+			"(00717's shape: pg_catalog, public, pg_temp). Unpinned, pg_temp is searched first and a "+
+			"caller who may CREATE TEMP chooses which rows the definer reads: %v", unpinned)
+
+	// The negative control. An empty catalogue query would pass by comparing
+	// nothing, and these functions are the ones the rule exists for.
+	for _, want := range []string{
+		"ledger_apply_entry", "cp_gate_transition",
+		"cp_native_market_check_print", "cp_native_position_allocate", "cp_native_position_apply_fill",
+	} {
+		assert.Contains(t, definers, want, "the catalogue query is not finding the definers it is about")
+	}
+}
+
+// TestIntegration_OperatorDirectoryAuthority pins the privilege half of
+// migration 00799.
+//
+// `operator_roles` is the only source of operator authority in this system
+// (ADR-0022, ADR-0024) and it carried 00010's blanket `GRANT SELECT, INSERT,
+// UPDATE` until 00799 -- the one authority-bearing table that never got the
+// treatment 00744 gave `accounts`, 00757 gave `users` and 00758 gave
+// `account_closure_requests`. With it, a revocation did not stay revoked and a
+// role could be rewritten in place while `granted_by`, `granted_at` and `reason`
+// went on describing the grant somebody actually made (F-175).
+//
+// A later migration that re-granted UPDATE on the directory, or INSERT on
+// nothing at all, would put that back, and fails here.
+func TestIntegration_OperatorDirectoryAuthority(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	admin := connect(t, migrateURL)
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+
+	colPriv := func(table, col, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT has_column_privilege('cp_app', $1, $2, $3)`, "public."+table, col, p).Scan(&ok))
+		return ok
+	}
+	for _, col := range []string{"user_id", "role", "granted_by", "granted_at", "expires_at", "revoked_at"} {
+		assert.False(t, colPriv("operator_roles", col, "UPDATE"),
+			"cp_app must not UPDATE operator_roles.%s: it decides who is an operator and for how long", col)
+	}
+	// The single exception, and it is inert: PostgreSQL requires UPDATE on at
+	// least one column for SELECT ... FOR UPDATE (00744), and
+	// cp_operator_role_provenance_is_immutable refuses any change to `reason`
+	// whoever makes it. The grant buys a row lock and nothing else.
+	assert.True(t, colPriv("operator_roles", "reason", "UPDATE"),
+		"cp_app needs UPDATE on one column to take a row lock on a grant")
+
+	tablePriv := func(role, table, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT has_table_privilege($1, $2, $3)`, role, "public."+table, p).Scan(&ok))
+		return ok
+	}
+	assert.True(t, tablePriv("cp_app", "operator_roles", "INSERT"),
+		"the bootstrap declaration writes the first grant (ADR-0024 §2)")
+	assert.True(t, tablePriv("cp_app", "operator_role_transitions", "INSERT"),
+		"a revocation is a row the application can write; the trigger makes the change")
+	for _, p := range []string{"UPDATE", "DELETE"} {
+		assert.False(t, tablePriv("cp_app", "operator_role_transitions", p),
+			"operator_role_transitions is append-only; cp_app must not %s", p)
+	}
+
+	var owner string
+	var secDef bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT pg_get_userbyid(p.proowner), p.prosecdef
+		FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public' AND p.proname = 'cp_operator_role_apply_transition'`).Scan(&owner, &secDef))
+	assert.Equal(t, "cp_migrate", owner, "the directory's authority must be owned by the migration role")
+	assert.True(t, secDef, "cp_operator_role_apply_transition must be SECURITY DEFINER")
 }

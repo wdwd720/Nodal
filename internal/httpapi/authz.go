@@ -14,7 +14,31 @@ import (
 // operations that demand one. It matches the domain packages that enforce
 // their own step-up (gates.StepUpMaxAge, killswitch.StepUpMaxAge,
 // withdrawal.StepUpMaxAge) so the boundary never contradicts them.
+//
+// It is the CEILING, not the answer. CP_AUTH_STEP_UP_MAX_AGE tightens it and
+// can never loosen it -- see effectiveStepUpMaxAge.
 const stepUpMaxAge = 15 * time.Minute
+
+// effectiveStepUpMaxAge is the window the boundary actually enforces: the
+// tighter of this package's constant and the deployment's configured value.
+//
+// CP_AUTH_STEP_UP_MAX_AGE was loaded, validated as positive, and then read by
+// nothing at all. Every step-up window in the process was a hard-coded
+// constant, so a deployment that set it to 5 minutes -- as render.yaml does --
+// was enforcing 15, and an operator tightening it further changed nothing
+// (F-89).
+//
+// Taking the minimum rather than the configured value outright is deliberate.
+// The domain packages set their own windows per action, and a sensitive one
+// (break-glass, gate activation) is meant to be shorter than the general rule.
+// A deployment may make every window stricter; it may not use this variable to
+// widen one the code chose.
+func effectiveStepUpMaxAge(configured time.Duration) time.Duration {
+	if configured > 0 && configured < stepUpMaxAge {
+		return configured
+	}
+	return stepUpMaxAge
+}
 
 // operationPolicy is the explicit authorization requirement of one generated
 // operation. There is no implicit default: authorize refuses any operation
@@ -145,6 +169,35 @@ var operationPolicies = map[string]operationPolicy{
 	"GetPayouts":                      {AnyOf: perms(security.PermPayoutRead)},
 	"GetPayoutsPayoutId":              {AnyOf: perms(security.PermPayoutRead)},
 
+	// --- markets, charts, portfolio and activity (product goal SS12-16, 35) -
+	//
+	// The chart and the tape are the same authority as reading a native asset:
+	// they are market data about assets anyone with native_asset:read may
+	// already list, and neither names an account. The tape deliberately carries
+	// no account id, so it cannot become a way to watch a particular trader.
+	//
+	// Market discovery is product data, not account data, and the public site
+	// previews it for a visitor with no session (D-080). That premise was a
+	// claim about the response and not a property of it: every row carried the
+	// creator's account id and the route took it as a filter, so an anonymous
+	// caller could read the identifier and enumerate one account's creations by
+	// it. It is now a property -- the projection blanks the column and the
+	// filter it answers matches nothing (D-110) -- and content a moderation
+	// verdict REJECTED is off the list as well (F-198). The creator is on the
+	// SUMMARY read below, which is gated, and so is the holder list, which
+	// names nobody either way (D-111). Every other market read stays gated.
+	"GetNativeMarkets":                {Public: true},
+	"GetNativeMarketsMarketIdSummary": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdCandles": {AnyOf: perms(security.PermNativeAssetRead)},
+	"GetNativeMarketsMarketIdTrades":  {AnyOf: perms(security.PermNativeAssetRead)},
+	// The portfolio returns a Credit balance, so it needs the permission that
+	// reads one. Which account is a per-request tenant check (accountScope),
+	// as everywhere else.
+	"GetMePortfolio": {AnyOf: perms(security.PermCreditRead)},
+	// The timeline is the account's own history, so it is the same authority
+	// as GET /accounts/{id}/activity.
+	"GetMeActivity": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+
 	// --- internal commerce (gola.md PART XVII) ----------------------------
 	//
 	// Buying and selling are separate permissions because they are different
@@ -186,6 +239,7 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdminAccounts":                 {AnyOf: perms(security.PermAccountReadAny)},
 	"PostAdminAccountsAccountIdStatus": {AnyOf: perms(security.PermAccountFreeze), StepUp: true, Mutating: true},
 	"GetAdminGates":                    {AnyOf: perms(security.PermGateRead)},
+	"GetAdminGatesCapabilityHistory":   {AnyOf: perms(security.PermGateRead)},
 	"PostAdminGatesCapabilityAction": {
 		AnyOf: perms(security.PermGatePropose, security.PermGateApprove), StepUp: true, Mutating: true,
 	},
@@ -210,10 +264,172 @@ var operationPolicies = map[string]operationPolicy{
 		AnyOf: perms(security.PermReconciliationResolve), StepUp: true, Mutating: true,
 	},
 
+	// --- the withdrawal journey (goal PARTS 19-25) ------------------------
+	//
+	// No new permissions. The customer role already holds payout:create and
+	// payout:read, and verification exists to enable a payout: a role that may
+	// ask for one is exactly the role that may start the identity check that
+	// gates it. Inventing verification:* permissions would widen the
+	// permission set without widening what anybody can do.
+	//
+	// Reading one's own verification profile is account:read, because it is a
+	// property of the person rather than of a payout, and a customer who may
+	// not read payouts should still be able to see whether they are verified.
+	"GetMeVerification": {AnyOf: perms(security.PermAccountRead)},
+	// Starting a verification is a command with an idempotency key. It needs
+	// no step-up: the person is about to prove who they are to a provider, and
+	// demanding a second factor first would gate the remedy behind the thing
+	// it remedies.
+	"PostMeVerificationSessions": {
+		AnyOf: perms(security.PermPayoutCreate, security.PermWithdrawalCreate), Mutating: true,
+	},
+	// The poll is a GET that ingests a provider result. It is not marked
+	// mutating: it carries no Idempotency-Key because it is idempotent by
+	// construction -- a status that has not moved records nothing -- and the
+	// authority for what it writes is the provider's answer, not the caller's
+	// request.
+	"GetMeVerificationSessionsSessionId": {AnyOf: perms(security.PermAccountRead)},
+	// SANDBOX TIER ONLY, refused three times over: here by the handler, again
+	// by the service on cfg.SandboxTier(), and finally by a CHECK that will
+	// not let a sandbox row exist in PROD.
+	"PostMeVerificationSandboxOutcome": {
+		AnyOf: perms(security.PermPayoutCreate, security.PermWithdrawalCreate), Mutating: true,
+	},
+	"GetMeEligibility": {AnyOf: perms(security.PermPayoutRead, security.PermCreditRead)},
+
+	"GetMePayoutDestinations": {AnyOf: perms(security.PermPayoutRead)},
+	// PART 25: "Address changes are high-risk operations. Require recent
+	// strong auth." Both the registration and the removal do, because an
+	// attacker who can only remove a destination can still deny a person their
+	// money at the moment they need it.
+	"PostMePayoutDestinations": {AnyOf: perms(security.PermPayoutCreate), StepUp: true, Mutating: true},
+	"DeleteMePayoutDestinationsDestinationId": {
+		AnyOf: perms(security.PermPayoutCreate), StepUp: true, Mutating: true,
+	},
+	// A quote reserves nothing and moves nothing, so it needs no step-up. It
+	// is still a command: it writes what the customer was shown, which is the
+	// whole reason it exists.
+	"PostPayoutsQuote": {AnyOf: perms(security.PermPayoutCreate), Mutating: true},
+	// --- profile, terms and account lifecycle ------------------------------
+	//
+	// A /me route names no resource but the caller: there is no id in the path,
+	// and the subject comes from the principal. The permission question therefore
+	// degenerates to "is this a principal with a product account", and
+	// account:read is exactly that -- every role holds it, and there is no
+	// deployment that would let somebody hold an account but not choose their own
+	// display name, accept the terms that let them use the product, or ask to
+	// leave. A permission no deployment would ever withhold is not a control; it
+	// is a synonym for a permission that already exists (D-054).
+	//
+	// What IS a control here is the step-up on closure and the cooling-off period
+	// behind it, and the fact that only an operator can effect one.
+	"PostMeProfile":          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), Mutating: true},
+	"GetMeTermsAcceptances":  {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostMeTermsAcceptances": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), Mutating: true},
+	"GetMeAccount":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	// Asking to close an account ends every session and cannot be undone once an
+	// operator effects it, so it demands a recent strong authentication, as the
+	// withdrawal route does.
+	"PostMeAccountClose": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), StepUp: true, Mutating: true},
+	// Cancelling deliberately does NOT: the safe direction must never be harder
+	// than the dangerous one, or a user who cannot step up could not undo a
+	// request made from a session that could (D-055).
+	"PostMeAccountCloseCancel": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), Mutating: true},
+	// The security page is a summary of the caller's own sessions, which is the
+	// authority session:list_own already names.
+	"GetMeSecurity": {AnyOf: perms(security.PermSessionListOwn)},
+
+	// --- admin: product support (PART 38) ---------------------------------
+	// The support view is a read under the permission every operator role holds.
+	// Deciding a closure request is an account status change and takes the same
+	// permission and step-up as PostAdminAccountsAccountIdStatus, because that is
+	// what it ends up performing.
+	"GetAdminUsersUserId":         {AnyOf: perms(security.PermAccountReadAny)},
+	"PostAdminUsersUserIdClosure": {AnyOf: perms(security.PermAccountFreeze), StepUp: true, Mutating: true},
+	// --- notifications and the customer's own audit trail -----------------
+	//
+	// account:read and nothing new. A notification centre grants no authority
+	// a customer did not already have: reading what you were told about your
+	// own account is the same permission as reading the account, and marking
+	// your own notification read adds nothing to it. The question these routes
+	// actually turn on -- is this row addressed to YOU -- is tenant scoping,
+	// which no entry in this table can express and which
+	// internal/notifications answers against the principal on every call.
+	//
+	// account:read_any is deliberately absent from every row here. An operator
+	// investigating an account reads the audit trail; a copy of what the
+	// customer was shown is a different thing, and this is not the route that
+	// hands it over. See D-070.
+	"GetMeNotifications":                    {AnyOf: perms(security.PermAccountRead)},
+	"GetMeNotificationsUnreadCount":         {AnyOf: perms(security.PermAccountRead)},
+	"PostMeNotificationsNotificationIdRead": {AnyOf: perms(security.PermAccountRead), Mutating: true},
+	"PostMeNotificationsReadAll":            {AnyOf: perms(security.PermAccountRead), Mutating: true},
+	"GetMeNotificationPreferences":          {AnyOf: perms(security.PermAccountRead)},
+	"PutMeNotificationPreferences":          {AnyOf: perms(security.PermAccountRead), Mutating: true},
+	"GetMeAudit":                            {AnyOf: perms(security.PermAccountRead)},
+	// --- agents (goal §17, §18) -------------------------------------------
+	//
+	// strategy:write is the customer's authority to describe and compile a
+	// strategy and to create an agent from a compiled version of it, and
+	// strategy:read is the authority to look. They are the permissions the
+	// customer role already holds for exactly this, and no new one is minted:
+	// what an agent MAY DO is the authority level on its grant, checked by
+	// internal/agents against internal/agentauthority, and it is a different
+	// question from who may reach the route.
+	//
+	// Tenant scoping is a per-request check, as everywhere else: WHICH agent
+	// you may enable is an ownership question, answered by RequireAccount once
+	// the agent's account is known.
+	"PostStrategies":                  {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetStrategies":                   {AnyOf: perms(security.PermStrategyRead)},
+	"GetStrategiesStrategyId":         {AnyOf: perms(security.PermStrategyRead)},
+	"PostStrategiesStrategyIdCompile": {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	// Accepting a compiled strategy version is the one act in this block that
+	// takes the step-up AT THE BOUNDARY, and the asymmetry with the action route
+	// below is deliberate.
+	//
+	// `enable` demands its strong authentication inside internal/agents, because
+	// the five actions share one operation id and pausing must stay fast:
+	// POLICY_AUTHORITY §2's reasoning for a kill switch applies exactly, and a
+	// step-up in front of an emergency stop argues with the operator during the
+	// incident. Acceptance has no emergency twin. It is a single-purpose route
+	// whose entire content is a person saying "I read this document and I
+	// approve it", and it is the gate every later grant of authority rests on —
+	// goal §18's review step, F-187's ACCEPTED precondition, D-105's grant. A
+	// hijacked session that can accept a strategy can create an agent from it.
+	"PostStrategiesStrategyIdVersionsVersionAccept": {
+		AnyOf: perms(security.PermStrategyWrite), StepUp: true, Mutating: true,
+	},
+	"PostAgents":       {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetAgents":        {AnyOf: perms(security.PermStrategyRead)},
+	"GetAgentsAgentId": {AnyOf: perms(security.PermStrategyRead)},
+	// Deliberately NOT StepUp at the boundary. The five actions share one
+	// operation id, and pausing must stay fast: POLICY_AUTHORITY §2's reasoning
+	// for kill-switch activation applies exactly here, and a step-up in front of
+	// an emergency stop is a control that argues with the operator during the
+	// incident. `enable` is the action that GRANTS authority, and
+	// internal/agents demands the step-up for that one action alone, the way
+	// internal/gates and internal/killswitch demand their own.
+	"PostAgentsAgentIdAction": {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetAdminAgents":          {AnyOf: perms(security.PermAccountReadAny)},
+	// The floor is kill:activate, not agent:pause, and the reason is worth
+	// stating: the CUSTOMER role holds agent:pause — it is how an owner stops
+	// their own agent — so an admin route floored on it would be reachable by
+	// every customer, which TestCustomerRoleHoldsNoAdminRoutePermission
+	// correctly refuses. kill:activate is the authority to stop risk in this
+	// deployment and is held only by Operations, Risk, Security and Admin.
+	// internal/agents then demands agent:pause AND an OPERATOR actor, so both
+	// halves must hold: the route floor says who may reach it, the domain says
+	// who may do it.
+	"PostAdminAgentsAgentIdPause": {AnyOf: perms(security.PermKillActivate), StepUp: true, Mutating: true},
+
 	// --- system -----------------------------------------------------------
 	"GetHealthz": {Public: true},
 	"GetReadyz":  {Public: true},
 	"GetVersion": {Public: true},
+	// The legal registry is public: a visitor reads the binding text before
+	// creating an account. Acceptance stays behind a session.
+	"GetTerms": {Public: true},
 	// The webhook endpoint carries no session. Its authority is the
 	// provider signature, verified over the raw bytes by internal/webhook
 	// before anything is persisted beyond a security event.
@@ -228,7 +444,7 @@ func policyFor(operationID string) (operationPolicy, bool) {
 
 // authorize enforces the operation's policy against the principal in ctx. It
 // is the single deny-by-default gate: an unknown operation id is FORBIDDEN.
-func authorize(ctx context.Context, operationID string, now func() time.Time) error {
+func authorize(ctx context.Context, operationID string, now func() time.Time, maxStepUpAge time.Duration) error {
 	pol, ok := policyFor(operationID)
 	if !ok {
 		return errs.Newf(errs.CodeForbidden, "operation %q has no authorization policy", operationID)
@@ -252,7 +468,7 @@ func authorize(ctx context.Context, operationID string, now func() time.Time) er
 		return err
 	}
 	if pol.StepUp {
-		if err := security.RequireStepUp(ctx, stepUpMaxAge, now); err != nil {
+		if err := security.RequireStepUp(ctx, maxStepUpAge, now); err != nil {
 			return err
 		}
 	}

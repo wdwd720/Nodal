@@ -4,12 +4,14 @@ package capacity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -200,10 +202,53 @@ func TestIntegration_EachCeilingRefusesAtTheMeasuredValue(t *testing.T) {
 	d := requireDB(t)
 	ctx := context.Background()
 
+	// Everything below runs inside one transaction that is rolled back, so the
+	// suite still writes nothing durable -- and the rows it seeds are visible
+	// to its own measurements, so the ceilings it exercises are non-zero
+	// whatever the database already held (F-92).
+	err := d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		seedAtRisk(ctx, t, tx)
+		eachCeilingRefusesAtTheMeasuredValue(ctx, t, tx)
+		return errRollback
+	})
+	require.ErrorIs(t, err, errRollback)
+}
+
+// errRollback ends the seeding transaction without committing. A test that
+// left its rows behind would change every later measurement in this database.
+var errRollback = errors.New("capacity: rolling back the seeded measurement")
+
+// seedAtRisk writes one account and one CAPTURED funding, so money at risk and
+// today's purchase count are both greater than zero.
+func seedAtRisk(ctx context.Context, t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	var userID, accountID string
+	require.NoError(t, tx.QueryRow(ctx,
+		`INSERT INTO users (id, idp_issuer, idp_subject, status)
+		 VALUES (gen_random_uuid(), 'capacity-itest', gen_random_uuid()::text, 'ACTIVE') RETURNING id`).Scan(&userID))
+	require.NoError(t, tx.QueryRow(ctx,
+		`INSERT INTO accounts (id, owner_user_id, kind, status)
+		 VALUES (gen_random_uuid(), $1, 'CUSTOMER', 'ACTIVE') RETURNING id`, userID).Scan(&accountID))
+	_, err := tx.Exec(ctx,
+		`INSERT INTO credit_fundings (id, account_id, provider, state, credit_quantity, paid_amount_minor, idempotency_key)
+		 VALUES (gen_random_uuid(), $1, 'capacity-itest', 'CAPTURED', 1000, 4200, 'capacity-itest-' || gen_random_uuid()::text)`,
+		accountID)
+	require.NoError(t, err)
+}
+
+func eachCeilingRefusesAtTheMeasuredValue(ctx context.Context, t *testing.T, d db.Querier) {
+	t.Helper()
 	base, err := NewGuard(bigBudget(), time.Now)
 	require.NoError(t, err)
 	r, err := base.Measure(ctx, d)
 	require.NoError(t, err)
+
+	// The seed is what makes the two money ceilings testable at all: a ceiling
+	// of max64(0, 1) against nothing at risk is a ceiling the guard is right to
+	// admit past, so a zero measurement would test the opposite of the name.
+	require.Positive(t, r.Accounts, "the seeded account is not visible to the measurement")
+	require.Positive(t, r.AtRiskMinor, "the seeded funding is not visible to the measurement")
+	require.Positive(t, r.PurchasesToday, "the seeded funding is not counted as today's purchase")
 
 	cases := []struct {
 		name    string

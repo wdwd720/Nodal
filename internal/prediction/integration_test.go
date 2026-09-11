@@ -553,6 +553,13 @@ func TestCalibrationAggregatesResolvedOutcomes(t *testing.T) {
 		f.clk.Advance(time.Second)
 	}
 
+	// Past every horizon and every resolution. These outcomes are stamped a
+	// minute after a one-minute horizon, so at the loop's clock they were still
+	// in the future: the fixture recorded outcomes the platform could not yet
+	// have had. Nothing compared resolved_at to anything until F-120 bounded a
+	// calibration by knowledge time, which is what surfaced it.
+	f.clk.Advance(5 * time.Minute)
+
 	c, err := NewCalibrator(f.clk)
 	require.NoError(t, err)
 	rows, err := c.Compute(context.Background(), testDB, CalibrationScope{
@@ -616,7 +623,12 @@ func TestCalibrationIgnoresUnresolvedPredictions(t *testing.T) {
 	require.NoError(t, err)
 	rows, err := c.Compute(context.Background(), testDB, CalibrationScope{
 		StrategyVersionID: f.versionID, AgentID: f.agentID, Mode: ModeShadow,
-		WindowStart: f.clk.Now().Add(-time.Hour), WindowEnd: f.clk.Now().Add(time.Hour),
+		// The window is a day rather than an hour because resolveIt now moves the
+		// clock to the resolution instant: a prediction with a one-hour horizon
+		// cannot be resolved two seconds after it is committed, and the fixture
+		// used to stamp resolved_at an hour in the future to pretend otherwise.
+		// F-120's bound on knowledge time is what surfaced that.
+		WindowStart: f.clk.Now().Add(-24 * time.Hour), WindowEnd: f.clk.Now().Add(time.Hour),
 	}, f.clk.Now())
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a bucket built from open horizons would describe the future")

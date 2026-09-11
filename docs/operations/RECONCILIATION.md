@@ -23,6 +23,7 @@ This paragraph has been wrong twice in opposite directions. It first said the en
 | EVENT_DRIVEN | after every execution attempt reaches terminal/unknown; after every deposit ≥ PROVIDER_CONFIRMED; after every withdrawal submission | `cmd/reconciliation-worker` consuming outbox events |
 | PERIODIC | every 60 s per provider window; every 5 min per active account | scheduler in `cmd/reconciliation-worker` |
 | FULL | hourly and on demand; PENDING: no `make reconcile-full` target exists, so an on-demand full run means calling `Engine.RunFull` | same |
+| INTERNAL (launch tier) | at start and every 5 min: `VerifyInternal` (Σ entries vs `ledger_balances`, Σ active reservations vs totals, envelope flow) then `SweepEscalations` | `cmd/api/reconverify.go` — the tier has no worker, so the pass that needs only the database runs in the API. Each drift is a SEV1 `ledger_integrity_violation` delivered by `internal/alert` (F-118) |
 
 Checkpoints per (mode, scope) are persisted so restarts resume; resolved records are never reopened by a rerun.
 

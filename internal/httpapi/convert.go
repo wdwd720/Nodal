@@ -111,7 +111,11 @@ func pageLimit(l *api.Limit, def, maxLimit int) int {
 
 func toAPIAccount(a accounts.Account) api.Account {
 	return api.Account{
-		Id:           toUUID(a.ID),
+		Id: toUUID(a.ID),
+		// The owning user, so an operator surface can go from an account to the
+		// person who holds it without guessing. It is read-only: the only route
+		// that sets an owner is the first login, in internal/identity.
+		OwnerUserId:  uuidPtr(a.OwnerUserID),
 		Kind:         api.AccountKind(a.Kind),
 		Status:       api.AccountStatus(a.Status),
 		StatusReason: strPtr(a.StatusReason),
@@ -127,7 +131,16 @@ func toAPIAccounts(in []accounts.Account) []api.Account {
 	return out
 }
 
-func toAPIPrincipal(p security.Principal) api.Principal {
+// stepUpWindow is the window the caller is TOLD about, and it must be the one
+// authorize enforces.
+//
+// It used to be the package constant while authorize used
+// effectiveStepUpMaxAge(configured), which takes the minimum. Under the
+// deployed CP_AUTH_STEP_UP_MAX_AGE=5m the API told an operator their step-up
+// was good for fifteen minutes and the boundary refused after five -- during a
+// three-principal gate ceremony, a control misreporting its own window
+// (F-104).
+func toAPIPrincipal(p security.Principal, stepUpWindow time.Duration) api.Principal {
 	roles := make([]string, 0, len(p.Roles))
 	for _, r := range p.Roles {
 		roles = append(roles, string(r))
@@ -155,8 +168,16 @@ func toAPIPrincipal(p security.Principal) api.Principal {
 		Amr:        amr,
 	}
 	if security.HasStrongAMR(p.AMR) && !p.AuthTime.IsZero() {
-		until := p.AuthTime.Add(stepUpMaxAge).UTC()
+		until := p.AuthTime.Add(stepUpWindow).UTC()
 		out.StepUpValidUntil = &until
+	}
+	// A live break-glass elevation reports when it expires. The session has
+	// carried the value since 00011 and the roles array already names
+	// BREAK_GLASS; only the expiry was missing, which left a console able to say
+	// that an elevation existed but not how long it had left.
+	if p.BreakGlassUntil != nil {
+		until := p.BreakGlassUntil.UTC()
+		out.BreakGlassUntil = &until
 	}
 	return out
 }
@@ -863,6 +884,7 @@ func toAPIGate(v GateView) api.CapabilityGate {
 		Environment:         v.Gate.Environment,
 		State:               api.CapabilityGateState(v.Gate.State),
 		Active:              v.Verdict.Active,
+		Sandbox:             &v.Verdict.Sandbox,
 		InactiveReason:      strPtr(v.Verdict.Reason),
 		ApprovalVersion:     v.Gate.ApprovalVersion,
 		LegalReviewRef:      strPtr(v.Gate.LegalReviewRef),
@@ -908,8 +930,8 @@ func toAPIAdminAction(a admin.Action) api.AdminAction {
 		RequiresDual: a.RequiresDual,
 		Status:       api.AdminActionStatus(a.Status),
 		ProposedAt:   a.ProposedAt.UTC(),
-		ApprovedAt:   a.ApprovedAt,
-		ExecutedAt:   a.ExecutedAt,
+		ApprovedAt:   timePtr(a.ApprovedAt),
+		ExecutedAt:   timePtr(a.ExecutedAt),
 		ExpiresAt:    a.ExpiresAt.UTC(),
 	}
 	if u := parseUUIDText(a.ProposedBy); u != nil {

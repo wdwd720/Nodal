@@ -21,6 +21,15 @@ export interface CommandField {
   readonly required?: boolean;
   readonly multiline?: boolean;
   readonly minLength?: number;
+  /**
+   * The DOM hint shown inside an empty control. It is not a default and cannot
+   * become one: `values()` reads `control.value`, which is the empty string
+   * until someone types, and `firstProblem()` refuses an empty required field
+   * before the submit button is enabled. So "the exact record this action
+   * names" or "incident id, statement, explorer link" describes what to write;
+   * it is never what gets sent. See the note on `Attrs.placeholder` in dom.ts
+   * for why this is written down (goal §62).
+   */
   readonly placeholder?: string;
   readonly value?: string;
   readonly options?: readonly string[];

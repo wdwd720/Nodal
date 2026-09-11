@@ -26,7 +26,15 @@ const (
 	DefaultClockSkew      = 2 * time.Minute
 	DefaultHTTPTimeout    = 10 * time.Second
 	DefaultJWKSMinRefresh = time.Minute
-	DefaultStepUpACR      = "phr" // phishing-resistant (OIDC acr value registry)
+	// DefaultJWKSMaxAge bounds how long a cached JWKS is trusted without being
+	// re-fetched. It is what makes a key WITHDRAWN from the set stop verifying:
+	// an unknown kid triggers a refetch, and a key that simply disappears never
+	// produces one (F-98).
+	//
+	// Fifteen minutes is the window an emergency revocation takes to land, and
+	// the cost is one small HTTP request per process per fifteen minutes.
+	DefaultJWKSMaxAge = 15 * time.Minute
+	DefaultStepUpACR  = "phr" // phishing-resistant (OIDC acr value registry)
 )
 
 // Config configures a Provider. Issuer, ClientID and RedirectURL are
@@ -183,7 +191,8 @@ func New(ctx context.Context, cfg Config) (*Provider, error) {
 		!slices.Contains(disc.CodeChallengeMethodsSupported, "S256") {
 		return nil, fmt.Errorf(
 			"oidc: issuer advertises code_challenge_methods_supported %v and not S256; this client always sends a PKCE challenge, and an issuer that ignores it leaves the authorization code unbound",
-			disc.CodeChallengeMethodsSupported)
+			disc.CodeChallengeMethodsSupported,
+		)
 	}
 
 	// The same reasoning for acr_values. Step-up sends acr_values and is
@@ -210,11 +219,12 @@ func New(ctx context.Context, cfg Config) (*Provider, error) {
 		if !overlap {
 			return nil, fmt.Errorf(
 				"oidc: step-up asks for acr %v and the issuer advertises acr_values_supported %v, which share nothing; the request would be ignored",
-				cfg.StepUpACRValues, disc.ACRValuesSupported)
+				cfg.StepUpACRValues, disc.ACRValuesSupported,
+			)
 		}
 	}
 
-	verifier := gooidc.NewVerifier(cfg.Issuer, newKeySet(disc.JWKSURI, client, cfg.Now, cfg.JWKSMinRefresh, algList), &gooidc.Config{
+	verifier := gooidc.NewVerifier(cfg.Issuer, newKeySet(disc.JWKSURI, client, cfg.Now, cfg.JWKSMinRefresh, DefaultJWKSMaxAge, algList), &gooidc.Config{
 		ClientID:             cfg.ClientID,
 		SupportedSigningAlgs: algList,
 		// go-oidc compares exp against Now with no tolerance; a clock running

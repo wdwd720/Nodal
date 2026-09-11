@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -425,9 +426,18 @@ func TestIntegration_CreatorFeeCarriesItsOwnProvenance(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, lots, 1)
 	require.Equal(t, valuedomain.OriginMarketCreatorEarning, lots[0].Origin)
-	require.Equal(t, valuedomain.FinalityReversible, lots[0].Finality,
-		"value leaving the pool is funded by buyers whose own funding may still reverse")
-	require.False(t, lots[0].Finality.PayoutEligible())
+	// The fee is as final as the Credits the buyer paid it with, and it names
+	// them. The fixture funds the trader with SETTLED purchased Credits, so the
+	// creator's fee is payout-eligible; a trader spending REVERSIBLE Credits
+	// produces a REVERSIBLE fee that credit.Service.SettleDerived promotes when
+	// their purchase settles. Before D-124 this was REVERSIBLE unconditionally
+	// with nothing able to move it, which is F-230.
+	require.Equal(t, valuedomain.FinalitySettled, lots[0].Finality,
+		"a creator fee is as final as the money that paid it")
+	require.True(t, lots[0].Finality.PayoutEligible())
+	parents, perr := f.credits.ParentsOf(f.ctx, testDB, lots[0].ID)
+	require.NoError(t, perr)
+	require.NotEmpty(t, parents, "a creator fee names the trader lots that funded it")
 }
 
 func TestIntegration_SellReturnsCreditsWithTradingProceedsProvenance(t *testing.T) {
@@ -507,6 +517,17 @@ func TestIntegration_ExecutionIsIdempotent(t *testing.T) {
 	require.EqualValues(t, 1, st.Version, "the retry must not have moved the market a second time")
 	require.Equal(t, first.Fill.AssetsOut.String(),
 		f.balance(f.trader, f.asset.AssetID, ledger.CodeNativeAssetBalance).String())
+
+	// The version the trade produced, which the API renders as
+	// state_version_after and the ticket prints. Both answers come out of the
+	// same row -- the first from the version the trade was priced against, the
+	// replay from the fill's own seq -- so a retry reports the version the
+	// market moved to and not the one it is at now (F-195).
+	require.EqualValues(t, 1, first.Fill.StateAfter.Version,
+		"a fill must carry the version it produced, not zero")
+	require.Equal(t, first.Fill.StateAfter.Version, second.Fill.StateAfter.Version,
+		"a replay reports the same version the original did")
+	require.EqualValues(t, 0, second.Fill.StateBefore.Version)
 }
 
 // TestIntegration_AStaleFillIsRefusedByTheDatabase is PART XIV's "execution
@@ -1051,4 +1072,42 @@ func requireNoAlert(t *testing.T, alerts []Alert, unwanted AlertKind) {
 			t.Fatalf("did not expect a %s alert, got %v", unwanted, alerts)
 		}
 	}
+}
+
+// An idempotency key belongs to one account (F-106).
+//
+// native_market_fills.idempotency_key is globally UNIQUE, and the lookup did
+// not even PROJECT account_id -- so no caller could have asked whose fill it
+// was. A market moves on every trade, so what came back was a stranger's trade
+// at a price this caller never saw, and their own order was discarded.
+func TestIntegration_AMarketKeyBelongsToOneAccount(t *testing.T) {
+	f := newFixture(t)
+	key := "shared-" + uuid.NewString()
+	run := func(account accounts.AccountID) (ExecuteResult, error) {
+		var res ExecuteResult
+		err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+			var rerr error
+			res, rerr = f.svc.Execute(ctx, tx, ExecuteRequest{
+				MarketID: f.market.ID, AccountID: account, Side: Buy,
+				Amount: q(2_000_000_000), IdempotencyKey: key, EffectiveAt: f.clk.Now(),
+			})
+			return rerr
+		})
+		return res, err
+	}
+	first, err := run(f.trader)
+	require.NoError(t, err)
+	require.False(t, first.Existing)
+
+	stranger := newAccount(t)
+	f.fund(stranger, 10_000_000_000)
+	_, err = run(stranger)
+	require.Error(t, err, "another account's fill was returned as this caller's replay")
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, errs.CodeOf(err))
+
+	// The control: the trader's own retry is still a replay of their own fill.
+	again, err := run(f.trader)
+	require.NoError(t, err)
+	assert.True(t, again.Existing)
+	assert.Equal(t, first.FillID, again.FillID)
 }

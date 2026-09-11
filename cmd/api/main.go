@@ -120,6 +120,12 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	}
 
 	log := observability.NewLogger(cfg.Env, stderr)
+	// The root context carries the logger, so a background pass that logs
+	// through LoggerFrom -- the reconciliation engine raising an alert, the
+	// settlement sweep parking a funding -- writes through the process logger
+	// rather than LoggerFrom's slog.Default fallback. Requests already get
+	// this from the middleware; the tickers had nothing giving it to them.
+	ctx = observability.WithLogger(ctx, log)
 
 	shutdownTelemetry, err := observability.Setup(ctx, cfg.Telemetry, cfg.ServiceName, config.BuildVersion, cfg.Env)
 	if err != nil {
@@ -168,6 +174,34 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	}
 	defer closeRateLimitStore()
 
+	// Process-local counters are correct for exactly one process, and until now
+	// that was a number an operator typed rather than a fact anything checked --
+	// `render.yaml` sets no numInstances, so the dashboard is authoritative
+	// (F-93). An advisory lock makes it something this process verified.
+	//
+	// Only for the memory backend: a shared Redis store is what makes several
+	// instances correct, so locking there would refuse a topology that works.
+	if cfg.RateLimit.Backend == config.RateLimitMemory {
+		release, lerr := holdSingleInstanceLock(ctx, database, log)
+		if lerr != nil {
+			log.Error("refusing to start", "error", lerr.Error())
+			return exitFailure
+		}
+		defer release()
+	}
+
+	// Where a raised alert goes when it leaves the process (F-118).
+	//
+	// Opened here rather than in build because it owns a goroutine and a queue
+	// that must be drained on shutdown -- the same reason the database and the
+	// rate-limit store are opened here. Closed AFTER the server stops, below,
+	// so an alert raised by the last request in flight still gets delivered.
+	alerts, aerr := newAlertDispatcher(ctx, cfg, resolver, log)
+	if aerr != nil {
+		log.Error("refusing to start", "error", aerr.Error())
+		return exitFailure
+	}
+
 	clk := clock.System()
 	server, err := build(ctx, buildInput{
 		cfg:               cfg,
@@ -178,6 +212,7 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 		logger:            log,
 		rateLimitStore:    rlStore,
 		rateLimitFailOpen: rlFailOpen,
+		alerts:            alerts,
 	})
 	if err != nil {
 		log.Error("composition failed", "error", err.Error())
@@ -256,9 +291,15 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 			log.Warn("close failed", "error", cerr.Error())
 		}
 		<-serveErr
+		// Drained even on the unclean path: an alert raised by a request that
+		// was aborted is exactly the one worth delivering.
+		alerts.Close()
 		return exitFailure
 	}
 	<-serveErr
+	// After the server has stopped, so an alert raised by the last request in
+	// flight is delivered rather than discarded.
+	alerts.Close()
 	log.Info("api stopped")
 	return exitOK
 }
@@ -297,6 +338,8 @@ func providerSlots(cfg *config.Config) map[string]config.ProviderConfig {
 		"workflow":                cfg.Providers.Workflow,
 		"archive":                 cfg.Providers.Archive,
 		"notification":            cfg.Providers.Notification,
+		"credit_purchase":         cfg.Providers.CreditPurchase,
+		"payout":                  cfg.Providers.Payout,
 	}
 }
 
@@ -326,24 +369,4 @@ func withRequestTimeout(next http.Handler, d time.Duration) http.Handler {
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func durationEnv(lookup func(string) (string, bool), name string, def time.Duration) time.Duration {
-	v, ok := lookup(name)
-	if !ok || strings.TrimSpace(v) == "" {
-		return def
-	}
-	d, err := time.ParseDuration(strings.TrimSpace(v))
-	if err != nil || d < 0 {
-		return def
-	}
-	return d
-}
-
-func stringEnv(lookup func(string) (string, bool), name, def string) string {
-	v, ok := lookup(name)
-	if !ok || strings.TrimSpace(v) == "" {
-		return def
-	}
-	return strings.TrimSpace(v)
 }

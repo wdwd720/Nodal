@@ -268,12 +268,56 @@ func (g *Guard) Measure(ctx context.Context, q db.Querier) (Reading, error) {
 	return r, nil
 }
 
+// lockKeys serialise the measure-then-act window, one key per action so that
+// opening an account does not queue behind buying Credits.
+//
+// The numbers are arbitrary and permanent: an advisory lock key means nothing
+// except "the same number is the same lock", and changing one would silently
+// stop coordinating with a deployment still running the old value.
+var lockKeys = map[Action]int64{
+	ActionOpenAccount:    7_010_001,
+	ActionCreditPurchase: 7_010_002,
+}
+
 // Admit decides whether one action may proceed.
 //
 // Every refusal names the number that caused it, because "at capacity" without
 // a number is an outage report rather than a decision. Every measurement
 // failure is also a refusal: see ErrUnmeasurable.
+//
+// # Why it takes a lock
+//
+// A ceiling that is read and then acted on is not a ceiling unless the read and
+// the act are one step. internal/credit's comment used to claim they were --
+// "The guard reads inside this transaction, so two concurrent purchases cannot
+// both be admitted against the same headroom" -- and under READ COMMITTED that
+// is false: a concurrent uncommitted INSERT is invisible to sum(), so N
+// transactions each measure the same headroom and all N are admitted. With the
+// shipped numbers that is eight simultaneous $2,000 purchases against a $2,000
+// ceiling (F-96).
+//
+// pg_advisory_xact_lock is the smallest thing that makes the window atomic
+// without raising the isolation level of a transaction that also writes a
+// funding row. It is transaction-scoped, so it is released by the commit or
+// rollback that ends the caller's transaction and cannot be leaked.
+//
+// It is only sound while that transaction is short. It became short in the same
+// change: the provider call moved out of it, because holding this lock across a
+// 20-second network call would queue every other purchase behind one HTTP
+// request and hold one of eight pool connections while doing it.
 func (g *Guard) Admit(ctx context.Context, q db.Querier, a Action) (Reading, error) {
+	if q == nil {
+		// Measure says the same thing a line later; the lock has to be told
+		// first because it is now the first thing that touches the database.
+		return Reading{}, errs.Wrap(fmt.Errorf("%w: nil querier", ErrUnmeasurable), errs.CodeAtCapacity,
+			"the launch-tier capacity guard could not measure usage, so the action is refused")
+	}
+	if key, ok := lockKeys[a]; ok {
+		if _, err := q.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, key); err != nil {
+			return Reading{}, errs.Wrap(fmt.Errorf("%w: %v", ErrUnmeasurable, err), errs.CodeAtCapacity,
+				"the launch-tier capacity guard could not take its lock, so the action is refused")
+		}
+	}
 	r, err := g.Measure(ctx, q)
 	if err != nil {
 		return r, errs.Wrap(err, errs.CodeAtCapacity,
@@ -323,6 +367,24 @@ func (g *Guard) Admit(ctx context.Context, q db.Querier, a Action) (Reading, err
 // vault straight over it: at 199,000 of 200,000 minor units, a further 50,000
 // is admitted and the tier ends up 49,000 beyond the cap it was given. The
 // ceiling is about what the deployment could owe after the action, not before.
+//
+// # Why the comparison is a subtraction
+//
+// It used to be `after := r.AtRiskMinor + amountMinor` compared against the
+// ceiling. That sum is unchecked int64: an amount near math.MaxInt64 wraps
+// negative, the comparison passes, and the guard whose whole job is to answer
+// "what could this deployment owe after the action" answers with a number
+// below zero (F-159).
+//
+// It was inert only because internal/credit happened to call this BEFORE
+// pricing, and PricingPolicy.CreditsFor then refused the amount for exceeding
+// MaxAmountMinor -- so the order of two calls was the only thing between that
+// arithmetic and a ceiling that could be stepped over. Comparing headroom
+// instead cannot overflow for any non-negative amount, because both sides of
+// `amountMinor > MaxAtRiskMinor - AtRiskMinor` are already bounded by values
+// this guard measured. The API bounds amount_minor before the guard ever sees
+// it as well; a guard that depends on its caller having done that is not a
+// guard.
 func (g *Guard) AdmitAmount(ctx context.Context, q db.Querier, a Action, amountMinor int64) (Reading, error) {
 	if amountMinor < 0 {
 		return Reading{}, errs.New(errs.CodeValidationFailed, "capacity: a negative amount")
@@ -332,11 +394,14 @@ func (g *Guard) AdmitAmount(ctx context.Context, q db.Querier, a Action, amountM
 		return r, err
 	}
 	if g.budget.MaxAtRiskMinor > 0 && a == ActionCreditPurchase {
-		after := r.AtRiskMinor + amountMinor
-		if after > g.budget.MaxAtRiskMinor {
+		// Headroom, not a sum. A measured AtRiskMinor above the ceiling gives
+		// a negative headroom, which refuses every positive amount -- which is
+		// the right answer for a tier already past its cap.
+		headroom := g.budget.MaxAtRiskMinor - r.AtRiskMinor
+		if amountMinor > headroom {
 			return r, g.refuse(a, "money at risk",
-				fmt.Sprintf("%d minor units at risk now and this would make it %d, past the ceiling of %d",
-					r.AtRiskMinor, after, g.budget.MaxAtRiskMinor))
+				fmt.Sprintf("%d minor units at risk now leaves %d of headroom under the ceiling of %d, and this asks for %d",
+					r.AtRiskMinor, headroom, g.budget.MaxAtRiskMinor, amountMinor))
 		}
 	}
 	return r, nil

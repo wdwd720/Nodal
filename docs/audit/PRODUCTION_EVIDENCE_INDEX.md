@@ -1,0 +1,146 @@
+# Production evidence index
+
+Where the evidence for every claim the productization goal's final report makes
+actually lives, and what kind of evidence it is. This is an index, not a
+narrative: each row names a claim, the artefact that proves it (a file, a test,
+a command, a commit, an observed response), and the class of that evidence.
+Where there is no evidence yet it says so, because a row that says UNKNOWN is
+worth more than a row that rounds up.
+
+**Evidence classes** (the same vocabulary as `FINAL_CHECKPOINT_2026-09-10.md`):
+
+| Class | Meaning |
+|---|---|
+| `LIVE_OBSERVED` | A person or this session saw it happen on a running system — a command's output, a deployed endpoint's response, a browser run. The row names the run. |
+| `STATIC_PROOF` | The tree itself proves it — a test that a CI or local run holds green, a constraint in a migration, a declaration in the blueprint. The row names the file or test. |
+| `BLOCKED_EXTERNAL` | Only a person, a provider or counsel outside this repository can produce it. The row names who, and the queue item. |
+| `UNKNOWN` | Not yet observed and not provable from the tree. The row says what would make it known. |
+
+Last written: **2026-09-11, 07:39 PDT**, after the last fix branch merged. The
+matrix rows name the commit each run was made at, because a hash written into
+the object it hashes is wrong the moment anything lands after it. The rows that
+remain *(pending)* are the ones only a person can move: the staging deployment,
+the browser walk of it, and CI's minutes.
+
+---
+
+## 1 · The tree, its checkpoints and its branches
+
+| Claim | Evidence | Class |
+|---|---|---|
+| The pre-productization checkpoint is `024c691` (2026-09-10 14:39 PDT); `SOFTWARE_COMPLETE` was true there for the backend as then audited | `git log -1 024c691`; `docs/audit/FINAL_CHECKPOINT_2026-09-10.md` | `STATIC_PROOF` |
+| `main` stands at `9906c9f` (15:06 PDT) locally and is **not pushed**; the push is the human's (queue item 3). The `productization` branch IS pushed (`origin/productization`, 23:49 PDT) as the §63 safe checkpoint, with draft PR #1 open for CI; neither deploys anything (Render deploys `main` only) | `git log -1 9906c9f`; `git ls-remote origin productization`; `docs/build/HUMAN_ACTIONS_QUEUE.md` §3, §3b | `LIVE_OBSERVED` / `BLOCKED_EXTERNAL` |
+| Everything productization built is on branch `productization`, 240-odd commits after `main`, merged from twenty-five feature and fix branches, each merge followed by build, vet, lint, unit, the touched integration suites and a restore drill | `git log --oneline 9906c9f..productization`; the `Merge branch` commits (`wt/*` product branches, `fix/*` audit-fix branches); `MASTER_BUILD_STATE.md` "RESUME HERE" | `STATIC_PROOF` |
+| Every auditor's reproductions are preserved, tests only, on their own branch | `audit/config-deploy` `4d5c323`, `audit/credits-payments` `0e79145`, `audit/governance` `05e4024`, `audit/platform` `453bf14`, `audit/accounts-auth` `b6a68ab`, `audit/agents-notifications` `8a69aaa`, `audit/markets` `1681ee2`, `audit/frontend` `68f23f9`; wave B: `audit/withdrawal-verification`, `audit/docs-vs-reality`, `audit/e2e-browser` *(pending)* | `STATIC_PROOF` |
+| The schema head is migration **00825**, 136 migration files, applied ones never edited (checksummed) | `ls migrations/`; `internal/migrate`'s checksum journal; `TestDocs_CountsMatchTheCode` | `STATIC_PROOF` |
+| The customer app's route map is D-077's: 34 `<Route>` declarations in `apps/web/src/App.tsx`; the API publishes 98 paths | `apps/web/src/App.tsx`; `openapi/openapi.yaml`; `docs/build/CURRENT_SYSTEM_INVENTORY.md` | `STATIC_PROOF` |
+
+## 2 · Build and static gates
+
+| Claim | Evidence | Class |
+|---|---|---|
+| The tree builds and vets clean | `go build ./... && go vet ./...` at every merge (this session); `make lint` (`fmtcheck`, vet, staticcheck, golangci-lint, `lintfin`) **0 issues at `0ea3f05`** (23:00 PDT) and re-running at `60de57d` *(pending)* | `LIVE_OBSERVED` |
+| The web app typechecks under both tsconfigs, its unit suite passes, and its main chunk is under the 180 kB gzipped budget | `pnpm --filter @controlplane/web typecheck` / `test` / `build` at `60de57d`: clean, **141/141**, **160.20 kB** (the markets and agents areas are lazy chunks, F-web fix `1507f58`) | `LIVE_OBSERVED` |
+| Generated artefacts match the contract | `make openapi-server && make openapi-client` re-run at every merge; `git status` clean afterwards; the admin console's generated-artefact guard | `LIVE_OBSERVED` |
+| Money never passes through a float in the browser; no page hardcodes a figure; the Credit scale is declared once | `apps/web/src/lib/source-scan.test.ts`, `honesty.test.ts`, `audit-frontend.test.ts` ("the scale of a Credit is stated in exactly one place": `src/lib/credits.ts` only) | `STATIC_PROOF` |
+| No `TODO`, `FIXME`, stub, mock, placeholder or "coming soon" is left unexplained in customer-facing code (§62) | Scan of 2026-09-10 22:50 over `apps/web/src`, `internal`, `cmd`: 0 TODO/FIXME/stub/coming-soon; every "placeholder"/"not implemented"/"mock"/"temporary" is a comment, a redaction regex, a declared-and-refused rail, or the sandbox fee model's own `SANDBOX-PLACEHOLDER-NOT-A-PRICE` rendered as such by `Withdraw.tsx` | `LIVE_OBSERVED` |
+
+## 3 · The test matrix on the merged tree
+
+| Tier | Result | At | Class |
+|---|---|---|---|
+| `go test ./...` (unit, every package) | pass, 0 failures | `6c5a3f3` (the web merge), from a verification worktree | `LIVE_OBSERVED` |
+| `go run ./scripts/inttest` (every integration package, one fresh database each) | **58 packages, all passed, 15m42s** | `6c5a3f3` | `LIVE_OBSERVED` |
+| Integration packages touched after that (ledger, commerce, demo, credit, nativemarket, payout, cmd/api, security, migrations) | 9 packages, all passed, 2m18s | `f7328ab` | `LIVE_OBSERVED` |
+| `make contract` (provider contract tests against recorded fixtures) | pass | `f7328ab` | `LIVE_OBSERVED` |
+| `go test -race` on stream, notifications, agents (the packages the concurrency fixes touched) | pass | `0ea3f05`, with `CC=C:/toolchain/mingw64/bin/gcc.exe` (F-125's recipe) | `LIVE_OBSERVED` |
+| `make lint` (fmtcheck, vet, staticcheck, golangci-lint, lintfin) | **0 issues** | `a4830b9` (main tree) | `LIVE_OBSERVED` |
+| `go test ./...` | pass, 0 failures | `60de57d` | `LIVE_OBSERVED` |
+| `make integration-race` (the financial core under the race detector, integration-tagged, one database each) | **12 packages, all passed, 8m02s** (capital, buyingpower, commerce, credit, event, execution, ledger, nativemarket, payout, reconciliation, settlement, signing) | `60de57d`, with the `C:/toolchain/mingw64` GCC | `LIVE_OBSERVED` |
+| `make e2e` (the API binary driven end to end over HTTP, own database) | **14 passed, 0 skipped, 18.5 s** with a provisioned database (`go run ./scripts/testdb -name e2ehead -export`). Note: without `CP_TEST_DATABASE_URL` the suite skips every case in 0.3 s and reports `ok`; a green `make e2e` is evidence only with the database — CI provisions one, the verification worktree's first pass did not | `a4830b9` | `LIVE_OBSERVED` |
+| `make chaos` (fault injection, own database) | pass, 5.2 s; two cases skip by design on this host — the archive-refused case (`CP_TEST_ARCHIVE_ENDPOINT` unset) and the broker-stall case (`CP_TEST_REDPANDA_BROKERS` unset) — each naming its reason in the spec | `a4830b9` | `LIVE_OBSERVED` |
+| `make race` (capital, ledger, execution, reconciliation, event, settlement, signing under the race detector, unit-tagged) | **10 packages ok, exit 0** | `a4830b9`, with the `C:/toolchain/mingw64` GCC | `LIVE_OBSERVED` |
+| `make fuzz` (every fuzz target, 15 s each) | **29 targets, 0 failed, exit 0** | `a4830b9` | `LIVE_OBSERVED` |
+| CI on GitHub (the whole matrix on Linux runners) | draft PR **#1** (`productization` → `main`) opened at 23:49 PDT to run it. **It could not run:** every job failed in seconds with GitHub's annotation *"The job was not started because recent account payments have failed or your spending limit needs to be increased"* — the private repository's Actions minutes are exhausted. The last run that did execute on `main` (`16cba60`, before this goal) was red for reasons fixed on this branch (F-134, the capacity test, `make fmt` drift). Queue item 7 names the three ways to restore CI; none is Claude's to take (§42) | `0bf8330` | `BLOCKED_EXTERNAL` |
+| After the final merge (`5b2a414`, `fix/withdrawal-4`) — the matrix at the end state | `make lint` 0 issues and `go test ./...` green (at `d66bade`); web typecheck / unit (141) / build (161.83 kB gzipped) green; the full integration suite **58 packages, all passed, 14m33s** (at `12f3a9a`); the full Playwright suite **181 passed / 11 stated skips / 0 failed** (5.8 min, at `197a5de`: the Stripe webhook legs and the Buy Credits chooser without a key, the reversed bucket, the no-compiler branch on a tier that has one, the agent sweep that `d-agent` performs, journey 10 on a seeded tier) | `d66bade` | `LIVE_OBSERVED` |
+| After the round-three withdrawal merge (`58d49c2`) | web typecheck / unit (141) / build (160.88 kB gzipped) green; `make lint` 0 issues and `go test ./...` green; the full Playwright suite **180 passed / 11 stated skips / 0 failed** (6.6 min); the full integration suite **58 packages, all passed, 14m49s** | `988dde1` | `LIVE_OBSERVED` |
+| After the round-two withdrawal merge (`4ce0299`) | `make lint` 0 issues and `go test ./...` green; the full Playwright suite **177 passed / 10 skipped / 1 failed** — the failure was the suite's own destination-handle fixture (a thirteen-digit timestamp that satisfies Luhn one run in ten and is refused as a card number), fixed in `9f4ae34`; the journey and withdrawal specs re-run green (19 passed, 1 stated skip); the full integration suite at `4ce0299` **58 packages, all passed, 15m15s** | `9f4ae34` | `LIVE_OBSERVED` |
+| After the wave-B and agents merges (`a1f4739`) | `make lint` 0 issues and `go test ./...` green (twice: after `8a1b701` and after `4814887`); the integration packages the withdrawal fix touches (14) green on its branch; the packages the agents build touches (agents, strategy, httpapi, instruments, risk, demo, payout, cmd/api, security, migrations, enums) **10/10 green on the merged tree**, 3m24s; the full Playwright suite at the withdrawal merge **177 passed / 11 skipped / 0 failed** (7.1 min); the full integration suite at the withdrawal merge **58 packages, all passed, 17m11s** (`92280c6`); the full Playwright suite at `b5fdf08` (after the agents merge, with the level-3 gate declared and the auditor's twelve journeys in the suite) **180 passed / 11 skipped / 0 failed** (6.0 min; every skip environment-shaped and stated: the Stripe webhook legs, the Buy Credits chooser without a key, the reversed bucket, the no-compiler branch on a tier that has one, the agent sweep that `d-agent` performs); the full integration suite at the agents merge **58 packages, all passed, 13m31s** (`460393e`) | `b5fdf08` | `LIVE_OBSERVED` |
+| The pre-audit matrix (before the fix wave) | lint, unit, race, integration-race, fuzz, contract, full inttest (57 packages), e2e and chaos all green at 19:00 PDT, the last two after fixing two baseline test defects that also fail on the audited checkpoint (F-134, F-135) | `ef5d9ae`-era tree | `LIVE_OBSERVED` |
+
+## 4 · Browser evidence
+
+| Claim | Evidence | Class |
+|---|---|---|
+| The merged web app's Playwright suite passes against a sandbox-tier API on a fresh database with demo markets | **180 passed / 11 skipped / 0 failed** at `b5fdf08` (the whole product plus the browser audit's journeys and surface attacks; Scenario D now runs end to end). Earlier: **154 passed / 3 skipped / 1 failed** at `f7328ab` (23:12 PDT; one worker, real OIDC dev flow, demo data seeded at boot, one declared operator). The one failure was the reversed-bucket reproduction's precondition, which now skips with its reason at `60de57d`. Every skip names its cause in the spec (the Stripe webhook leg without a key; the agent compiler wiring). Recipe: `docs/product/STAGING_E2E.md` "How the automated suite runs"; CI: `.github/workflows/ci.yml` `web-e2e` | `LIVE_OBSERVED` |
+| The first merged run (23:00) failed at its sign-in setup — a client race the load exposed — and the demo seeder refused every trade | F-222 and F-223 in `AUDIT_FINDINGS.md`, fixed in `669f454`; the API log of that run is quoted in F-222 | `LIVE_OBSERVED` |
+| Scenarios A–J are proven step by step by an independent auditor as a stranger reading the screen | `audit/e2e-browser` `0c3318f`: `apps/web/e2e/audit-journey.spec.ts` (twelve journeys) and `audit-surface.spec.ts`. Proven on the local sandbox tier: the public site's four "not" sentences; sign-up through the real OIDC flow; terms; the sandbox line on the shell and on Home; Buy Credits' provider-unavailable branch (no key, by design); a buy and a sell on a demo market with the spendable balance moving by exactly the traded amount; portfolio, P&L and activity following the fill with and without the stream; all seven agent levels shown with 4–6 disabled by name; Withdraw explaining itself to an unverified account; verification through the sandbox provider to `VERIFIED`/`ENHANCED` labelled a rehearsal; 375 px on eight routes; sign-out leaving no figure behind. **Not reachable:** the conversion request itself — every earned origin is held at `FUNDING_NOT_SETTLED` because a derived lot is minted `REVERSIBLE` and nothing settles it (F-e2e-1 = F-wv-3, being fixed as D-124 on `fix/withdrawal`); the provider leg (`PROVIDER_PENDING → SETTLED`) has therefore never been observed in a browser on any run | `LIVE_OBSERVED` (local); the conversion leg *(pending the withdrawal fix)* |
+| The deployed CSP holds against the real bundle; the public site leaks no identity, balance or holder on the network | The auditor injected `render.yaml`'s policy as a `<meta http-equiv>` on every document and walked eight routes: zero `securitypolicyviolation` events (the policy had never before been applied to the bundle — `vite preview` serves no headers). Every `/v1/` response a signed-out stranger receives across the fourteen public routes was searched for a signed-in customer's ids, display name and the words spendable / payout_eligible / holder / account_id: nothing. Two signed-in contexts: no cross-customer event on the stream. A retried order after a network abort carried the same `Idempotency-Key`; a changed amount minted a new one | `LIVE_OBSERVED` (local) |
+| The live staging deployment was walked in Chrome (§56) | **Not yet.** The deployed API is still the pre-productization build (see §7); the walk needs the human's queue items 1–4 first | `UNKNOWN` → `BLOCKED_EXTERNAL` |
+
+## 5 · Restore drills
+
+Every drill is `make restore-drill`: dump the live local database, restore into
+a fresh one, compare table counts, row counts, journal hashes and the
+`ledger_balances` drift, boot the API against the restored copy and make one
+state change. The recorded claim is the one line in
+`docs/operations/BACKUP_RESTORE.md`, and `TestDocs_CountsMatchTheCode` holds
+it to the migration head so a merge that adds a migration cannot leave a stale
+drill claim behind.
+
+| After | Head | Result | Commit |
+|---|---|---|---|
+| the notifications merge | 00786 | OK, 153 tables | `de7f377` |
+| the profile / markets / verification merges | 00786 | OK | `22d311c`, `67040b4`, `bab7759` |
+| the governance fix | 00791 | OK | `08345e9` |
+| the accounts fix, the credits fix | 00800 | OK | `5ab91f3`, `5c4caff` |
+| the platform fix (00796 added) | 00800 | OK, 154 tables, 15.4 s | `ccd2235` |
+| the markets fix | 00805 | OK, 154 tables, 14.7 s | `4ef6945` |
+| the agents-notifications fix (00801–00803 added) | 00805 | OK, 154 tables, 15.5 s | `0ea3f05` |
+| the withdrawal fix (00806–00810 added) | 00810 | OK, 159 tables, 15.1 s | `92280c6` |
+| the agents build (00811–00813 added) | 00813 | OK, 159 tables, 12.7 s | `f705630` |
+| the round-two withdrawal fix (00814–00818 added) | 00818 | OK, 160 tables, 12.1 s | `4ce0299` |
+| the round-three withdrawal fix (00819–00822 added) | 00822 | OK, 160 tables, 12.2 s | `c8e96f0` |
+| the round-four withdrawal fix (00823–00825 added) | 00825 | OK, 160 tables, 12.4 s | `d66bade` |
+
+Class: `LIVE_OBSERVED` (each run's `dist/restore-drill.json` on this host; the
+line in `BACKUP_RESTORE.md` is the committed record).
+
+## 6 · The adversarial audit (§54)
+
+| Claim | Evidence | Class |
+|---|---|---|
+| Eight independent auditors (one per area, none the author of what they audited) reported with reproductions | Their branches (§1); `docs/audit/AUDIT_FINDINGS.md` F-136–F-220 with **Found by** lines naming the audit; the fix branches merged: governance `294204c`, config-deploy `95c6a3e`, accounts `9d63b7c`, credits-payments `12601f7`, platform `4352777`, markets `0103d5e`, agents-notifications `c09408e`, web `6c5a3f3` | `STATIC_PROOF` |
+| Every finding fixed has a regression test that fails on the defect and passes on the fix | Each F-entry's **Evidence** line names the test; the auditors' own reproductions (renamed where they asserted the defect) run in the merged suites; the docs suite refuses a FIXED entry without a summary row | `STATIC_PROOF` |
+| Findings the merge itself produced were registered, not absorbed | F-221 (destination key), F-222 (onboarding race), F-223 (demodata resolver); D-118 for the one rule two fix branches disagreed on | `STATIC_PROOF` |
+| Wave B: withdrawal-verification, docs-vs-reality, browser end-to-end | Reported: withdrawal-verification 11 findings (4 P1, 4 P2, 3 P3; `audit/withdrawal-verification` `e02fc46`), docs-vs-reality 14 (6 P2, 8 P3; `audit/docs-vs-reality` `d4c43e6`, a 4,704-row claims ledger with 4,461 HOLDS), browser end-to-end 6 (1 P1 — the same defect as the withdrawal audit's F-wv-3 — and 5 P3; `audit/e2e-browser` `0c3318f`). Fixes: `fix/docs` **merged** (`b861be4`: F-235–F-248, F-253); `fix/withdrawal` **merged** (`8a1b701`: F-224–F-234, F-249, F-250, D-119–D-125, migrations 00806–00810; 14 integration packages and 81 Playwright cases green on its branch; the merged tree's full matrix is re-running); F-251, F-252 fixed on `productization` (`41c2880`); the agents gap the audits exposed is **merged** (`4814887`, `wt/agents-compiler`: F-255 the acceptance route, F-256 the registry loader, F-257 a seeded risk policy that permitted no venue so nothing could ever have compiled; F-258 recorded as a residual; D-128–D-130; migrations 00811–00813; Scenario D end to end — on its branch 157 passed / 10 skipped, twice) | `STATIC_PROOF` |
+| "Findings flatten": wave B against wave A | Wave A: 90 findings over eight areas (1 P0, 12 P1). Wave B: 31 over three areas (0 P0, 5 P1 — four in one area, plus one duplicate of them). The count per area fell from 11.25 to 10.3 and the top severity from P0 to P1; the withdrawal area, audited once at wave A only through its neighbours, is the one that produced the P1s. **Round two of that area did not flatten:** `audit/withdrawal-verification-2` (`a9ad0af`, from `92280c6`) raised 11 findings against round one's 13 — **four P1 again** (a destination with no legal-edge table; the derived-lot sweep starving after a hundred lots; a grant traded into withdrawable proceeds because a derived lot inherited finality but not origin; the pool drawn down FIFO handing a reversible purchase an earlier contributor's settled provenance), four P2, three P3 — and six of the eleven are defects in round one's own remediation (D-124's model, 00806/00807's same-state exemption, F-234's document). Round-one fixes F-224–F-233 and F-249 were each re-attacked and held. The auditor's verdict, verbatim: "That is the opposite of flattening, and it argues for a third round on this area after these are fixed." `fix/withdrawal-2` is **merged** (`e27e674`: F-259–F-269 fixed; D-131 an origin floor inherited with finality, D-132 the pool drawn worst-first, D-133 a per-session poll interval, D-134 the sandbox column NOT NULL, D-135 empty-document redaction; D-121/D-123/D-124 amended in place; migrations 00814–00818; 17 integration packages and 65 browser cases green on its branch). Its one declared incompletion: on a seeded tier every earning now carries a PROMOTIONAL floor, so the browser journey cannot reach a settled conversion request there — the fixer refused to mint a PURCHASED lot without a real funding, which is the goal's rule, and scenario F asserts the floor by name instead. **Round three** (`audit/withdrawal-verification-3` @ `6de84ef`, from `4ce0299`): **6 findings — 1 P1, 3 P2, 2 P3** — against 13 (4 P1) and 11 (4 P1). Every round-two fix was re-attacked and held; the round-two residuals were tested rather than trusted (two of their safety claims were wrong). The P1 is the same invariant for the third time at a third layer: the reservation consumed by ORIGIN while the decision was made per LOT, so a payout approved on a settled, purchased-floor lot could be filled from a reversible or promotional-floor one. Three of the six are in code round two wrote (the floor trigger's one-level rule, the poll interval's read-then-write, the floor's alphabetical tiebreak). The auditor's verdict: "flattening, but not flat … a fourth round is warranted, and it should be narrow" — `reserve`'s lot selection and the allocation record, the floor computation against a persisted policy, and the two per-origin folds. `fix/withdrawal-3` is **merged** (`58d49c2`: F-270–F-277; D-136 a payout takes exactly the units its decision evaluated — `reserve` passes the decision's lot ids and a payout-grade finality set, `Consume` refuses any lot outside them, `payout_allocations.origin_floor` records what left; D-137 the floor computed from the provenance roots, and a parent row after a descendant refused (`CREDIT_PARENT_AFTER_DESCENDANT`); D-138 `credit_lot_state.root_origins`, `Permits` requiring the policy to release every root; D-139 a reserved payout that cannot be sent records `blocked_reason`, notifies once and is rendered above Cancel; the freeze clause from the frozen set; the atomic poll claim; the shortfall branch keeps its parents; D-124/D-131/D-133 amended in place; migrations 00819–00822; 17 integration packages and 65 browser cases green on its branch). The **narrow fourth round** (`audit/withdrawal-verification-4` @ `851cc64`) reported **6 findings — 1 P1, 2 P2, 3 P3** — and declared the area **flattened**: the three invariants round three repaired held under everything it threw at them (a moved, a foreign and a DISPUTED lot refused at the consume; the ordering constraint across two transactions and every insertion order of a cycle; the bucket invariant over 129,960 provenance combinations under both shipped policies with exactly the one named residual, hold days, unreachable in this build). What remains is "the ordinary cost of a large change landed in one pass": the P1 is a seam round three's fix walked into — a derived lot frozen by a disputed funding is never thawed when the dispute is won (D-094's mirror missing for D-124's freeze) — and the rest are a page not updated with its API, a reason column without a state guard, an empty-set convention that fails open, two decisions describing provenance differently, and a `coalesce` in a backfill. Every reproduction of rounds one to three (30 integration, 4 unit) passes on the tree. The auditor's verdict: "Has the area flattened? Yes … Is a fifth round warranted? No — not of this area"; the next marginal finding is at the area's boundaries (the credit lifecycle seam; `sanctions_state` pending B-02). `fix/withdrawal-4` is **merged** (`5b2a414`: F-278–F-283; D-140 a dispute the platform won thaws what its freeze reached; D-141 an allocation records the whole provenance; the blocked reason read only while true and guarded in the database; the Withdraw page naming each row's provenance; an explicit lot restriction; a migration that refuses a provenance it cannot compute; D-124/D-136/D-137/D-139 amended; migrations 00823–00825; its targeted verification: every `TestAuditWV*` reproduction of all four rounds green — 45 functions, 37 integration-tagged and 8 unit — the 101-lot starvation tests still passing, the page change proven in Playwright; 17 integration packages and 66 browser cases green on its branch). **The area is closed at four rounds: 13 → 11 → 6 → 6 findings, P1s 4 → 4 → 1 → 1, the last two rounds' findings in the fixes' own code and the fourth round's verdict that the repaired invariants held under exhaustive attack.** Residuals carried into the report: `sanctions_state` has no legal-edge set (a compliance decision behind B-02, D-121); a lot frozen by a REVERSED parent stays frozen for ever, by design (D-124); a positive `MinHoldDays` would make a bucket heterogeneous and the page refuses loudly (unreachable in this build); `strategy_versions.status` is application-written (F-258) | `STATIC_PROOF` |
+| "Findings flatten": the last audit round finds fewer, and lower, than the one before | *(pending — stated in the §65 report with the wave-B counts against wave A's 89)* | *(pending)* |
+
+## 7 · Deployment, governance state and money
+
+| Claim | Evidence | Class |
+|---|---|---|
+| The staging API is alive at `https://api-nodal.actorvia.xyz` | `GET /v1/version` at 22:50 PDT answered `{"build_version":"dev","config_hash":"e1ad81b6…","environment":"STAGING"}` (HTTP 200) | `LIVE_OBSERVED` |
+| …but it is the **pre-productization build**: `build_version` is `dev` (D-117's commit stamp is not deployed) and its config hash predates the sandbox tier | the same response; `render.yaml` at `productization` vs the dashboard | `LIVE_OBSERVED` |
+| STAGING will refuse to boot the productization build until two secrets exist | `internal/config` validation (F-136 family); queue items 1–2 name the variables (`NODAL_ALERT_WEBHOOK_URL`, `NODAL_PII_KEYRING`) and where the generated values are | `STATIC_PROOF` / `BLOCKED_EXTERNAL` |
+| The blueprint declares both services on the free plan, the API's secrets as dashboard-only (`sync: false`), the custom domain, and the static site's CSP and headers | `render.yaml` (`plan: free` on `nodal-api`; a static site has no paid plan; `NODAL_STRIPE_API_KEY`, `NODAL_STRIPE_WEBHOOK_SECRET`, `NODAL_PII_KEYRING`, `NODAL_ALERT_WEBHOOK_URL` all `sync: false`); `test/infra` blueprint tests | `STATIC_PROOF` |
+| No paid tier, no new infrastructure, no cost was added by this goal (§42) | Only `render.yaml` changed (a free static site, a domain); no Neon, ZITADEL, AWS or observability change; `git log --stat -- infra/ render.yaml` | `STATIC_PROOF`; the account's billing page is the human's to confirm (`BLOCKED_EXTERNAL`) |
+| `CREDIT_PURCHASE` and the five other product gates carry no approval anywhere | Local sandbox tier: the six gates are `SANDBOX` (boot log: "capability sandbox-activated at boot: this gate carries no approval"); STAGING: sandbox activation happens at the first boot of the productization build; PROD: `config.Validate` refuses `SANDBOX`, migration 00755's CHECK refuses a sandbox row, `gates.Admin.Sandbox` refuses outside a sandbox tier (ADR-0023, D-052, F-160–F-162) | `LIVE_OBSERVED` / `STATIC_PROOF` |
+| No real card was charged, no real USD moved, no payout was initiated, no KYC/AML/provider approval was fabricated (§59) | No live Stripe key exists in the tree or the scratchpad (publishable key only, `VITE_STRIPE_PUBLISHABLE_KEY`, D-078); the payout provider on every non-PROD tier is `sandbox_payout`, which moves nothing; the verification provider is `sandbox_verification`, which decides nothing; every sandbox outcome is labelled as such in the API, the log and the page | `STATIC_PROOF` |
+| `LEGAL_APPROVED` stays false; the served documents say they are drafts pending counsel | `internal/terms/documents/*.md` (`counsel_review_required`), `GET /v1/terms`; the onboarding page's own sentence | `STATIC_PROOF` |
+
+## 8 · Product documentation (§53)
+
+| Document | Exists | Reconciled against the tree |
+|---|---|---|
+| `docs/product/PRODUCT_ARCHITECTURE.md`, `USER_JOURNEY.md`, `CREDIT_ECONOMY.md`, `VERIFICATION_AND_WITHDRAWAL.md`, `UI_UX_SYSTEM.md`, `PROVIDER_BOUNDARY.md`, `STAGING_E2E.md` | yes | by the docs-vs-reality audit *(pending)*; `STAGING_E2E.md` corrected at `f7328ab` |
+| `MASTER_BUILD_STATE.md`, `REQUIREMENTS_TRACEABILITY.md`, `BLOCKERS.md`, `DECISION_REGISTER.md` (D-052–D-118), `CURRENT_SYSTEM_INVENTORY.md`, `LAUNCH_GATE_MATRIX.md`, `AUDIT_FINDINGS.md` (F-134–F-223), this index | yes | `test/docs` (counts, references, findings shape, decision evidence) green at `60de57d`; the docs-vs-reality audit *(pending)* |
+
+## 9 · Human actions
+
+Everything a person must do, with the exact place and field, is in
+`docs/build/HUMAN_ACTIONS_QUEUE.md`: two Render secrets, the push of `main`,
+the `app-nodal` CNAME, one stale dashboard variable to delete, and the first
+operator's ZITADEL subject. None of them is software work, and every one of
+them is `BLOCKED_EXTERNAL` for the duration of the human's absence.

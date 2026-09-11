@@ -12,11 +12,18 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/nodal/controlplane/internal/auth/httpmw"
 )
 
 // cookieName is what cmd/api sets when CP_AUTH_COOKIE_SECURE is false. The
 // __Host- prefix is only added for secure cookies.
 const cookieName = "cp_session"
+
+// loginStateCookieName binds an authorization-code flow to the browser that
+// began it. Without the __Host- prefix here for the same reason cookieName has
+// none: this suite runs against a deployment with CP_AUTH_COOKIE_SECURE false.
+const loginStateCookieName = httpmw.LoginStateCookieName
 
 // noRedirect is the client used everywhere: the login flow is asserted on its
 // 302s, so redirects must never be followed.
@@ -142,8 +149,8 @@ type meDoc struct {
 // replay tests re-send exactly these.
 func login(t *testing.T, identity string) (session, string, string) {
 	t.Helper()
-	state := beginLogin(t)
-	resp := completeLogin(t, identity, state)
+	state, loginState := beginLogin(t)
+	resp := completeLoginFrom(t, identity, state, loginState)
 	require.Equal(t, http.StatusFound, resp.Status, "callback for %s: %s", identity, resp.text())
 	token := sessionCookie(t, resp)
 	require.NotEmpty(t, token, "callback for %s set no session cookie", identity)
@@ -158,7 +165,11 @@ func login(t *testing.T, identity string) (session, string, string) {
 	}, identity, state
 }
 
-func beginLogin(t *testing.T) string {
+// beginLogin returns the state from the redirect AND the login-state cookie
+// the browser is expected to send back with the callback. The second value is
+// what binds the flow to one browser: without it the callback is a planted
+// callback and is refused (F-87).
+func beginLogin(t *testing.T) (string, string) {
 	t.Helper()
 	resp := getAs(t, "", "/v1/auth/login")
 	require.Equal(t, http.StatusFound, resp.Status, "GET /v1/auth/login: %s", resp.text())
@@ -171,12 +182,42 @@ func beginLogin(t *testing.T) string {
 		state = state[:amp]
 	}
 	require.NotEmpty(t, state)
-	return state
+
+	loginState := cookieValue(resp, loginStateCookieName)
+	require.NotEmpty(t, loginState, "the login redirect set no login-state cookie")
+	return state, loginState
 }
 
+// completeLogin sends the callback with NO login-state cookie, which is what a
+// planted callback looks like. The replay tests use it deliberately.
 func completeLogin(t *testing.T, code, state string) response {
 	t.Helper()
 	return getAs(t, "", "/v1/auth/callback?code="+code+"&state="+state)
+}
+
+// completeLoginFrom sends the callback from the browser that began the flow.
+func completeLoginFrom(t *testing.T, code, state, loginState string) response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		apiBaseURL+"/v1/auth/callback?code="+code+"&state="+state, nil)
+	require.NoError(t, err)
+	req.Header.Set("Cookie", loginStateCookieName+"="+loginState)
+	return do(t, req)
+}
+
+// cookieValue returns the value of a Set-Cookie by name, or "".
+func cookieValue(r response, name string) string {
+	for _, c := range r.Header.Values("Set-Cookie") {
+		if !strings.HasPrefix(c, name+"=") {
+			continue
+		}
+		v := strings.TrimPrefix(c, name+"=")
+		if semi := strings.IndexByte(v, ';'); semi >= 0 {
+			v = v[:semi]
+		}
+		return v
+	}
+	return ""
 }
 
 func sessionCookie(t *testing.T, r response) string {
@@ -218,14 +259,26 @@ func grantOperatorRole(t *testing.T, subject, role string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	tag, err := testPool.Exec(ctx,
+	// DO NOTHING, not DO UPDATE: migration 00799 took the operator directory
+	// out of the application role's UPDATE reach, and "put a revoked grant
+	// back" is precisely what it exists to refuse. The insert is still
+	// idempotent, so the suite is still re-runnable; the assertion is moved to
+	// the state it was checking rather than to the row count, which said
+	// nothing about whether the grant was live.
+	_, err := testPool.Exec(ctx,
 		`INSERT INTO operator_roles (user_id, role, reason)
 		 SELECT id, $2, 'test/security adversarial suite'
 		 FROM users WHERE idp_issuer = 'devidp' AND idp_subject = $1
-		 ON CONFLICT (user_id, role) DO UPDATE SET revoked_at = NULL, expires_at = NULL`,
+		 ON CONFLICT (user_id, role) DO NOTHING`,
 		"dev:"+subject, role)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, tag.RowsAffected(), "no user row for dev:%s; log in as that identity first", subject)
+	var live int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM operator_roles r JOIN users u ON u.id = r.user_id
+		  WHERE u.idp_issuer = 'devidp' AND u.idp_subject = $1 AND r.role = $2
+		    AND r.revoked_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > now())`,
+		"dev:"+subject, role).Scan(&live))
+	require.Equal(t, 1, live, "no live %s grant for dev:%s; log in as that identity first", role, subject)
 }
 
 // operatorSession logs in once to create the user, grants the role, then logs

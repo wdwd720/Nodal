@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/pii"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -36,6 +39,30 @@ type Deps struct {
 	Audit      audit.Writer
 	Clock      clock.Clock
 	AttemptTTL time.Duration
+	// AdmitAccount is asked before a first login provisions an account, and
+	// refusing is how the launch-cohort ceiling is enforced. It is a function
+	// rather than a capacity.Guard so this package keeps no dependency on the
+	// ceiling's implementation.
+	//
+	// Nil admits, which is right for a deployment that declares no ceilings --
+	// and is why cmd/api always supplies it and TestIdentityIsGivenTheAccount
+	// Ceiling asserts that it does. An optional control is only safe when
+	// something checks that it was not accidentally left out.
+	AdmitAccount func(ctx context.Context, tx pgx.Tx) error
+	// PII keeps the verified e-mail address, encrypted, beside the hash that
+	// finds it (F-47). Nil keeps nothing, which is the LOCAL/TEST default --
+	// and, as with AdmitAccount, cmd/api always supplies one and
+	// TestIdentityIsGivenThePIIStore asserts that it does.
+	PII *pii.Store
+	// Operators writes the operator-directory rows a deployment declared for
+	// this identity, before the directory is read. It is how a deployment with
+	// no operator gets its first one (ADR-0024, D-056); nil declares none.
+	//
+	// This is NOT taking a role from a provider claim, which this package must
+	// never do: the declaration comes from the deployment's own configuration
+	// and lands in operator_roles, which stays the only thing the role decision
+	// below reads.
+	Operators *OperatorBootstrap
 }
 
 // Service implements login/logout.
@@ -68,9 +95,58 @@ type BeginResult struct {
 	ExpiresAt   time.Time
 }
 
+// IsLocalPath reports whether p is a path this system will redirect a browser
+// to after a login: a single "/", then something that is neither a slash nor a
+// backslash.
+//
+// The guard used to be `HasPrefix("/") && !HasPrefix("//")`, and "/\evil.example"
+// walks straight through it. Every browser implementing the WHATWG URL standard
+// resolves a special-scheme relative reference beginning "/\" through the
+// relative-slash state into the AUTHORITY state -- "\" is a slash for http(s)
+// -- so the browser goes to https://evil.example/. That is the standard
+// backslash bypass of a "//" check, and it was reachable as an open redirect on
+// the same response that sets the session cookie (F-146).
+//
+// Three rules, each closing a different door:
+//
+//   - it must start with exactly one "/" followed by a character that is
+//     neither "/" nor "\", so neither "//host" nor "/\host" nor "/\/host"
+//     survives;
+//   - no control character, including the tab, newline and carriage return
+//     that URL parsers STRIP before parsing (a tab between the slash and a
+//     hostname disappears and leaves "//evil.example") and the NUL that
+//     truncates a C string;
+//   - and url.Parse must agree it has no scheme and no host, which catches the
+//     forms nobody has thought of yet rather than the ones that are listed.
+//
+// The bare "/" is allowed: it is the app's own root and carries nowhere.
+func IsLocalPath(p string) bool {
+	if p == "" {
+		return false
+	}
+	if p[0] != '/' {
+		return false
+	}
+	if len(p) > 1 && (p[1] == '/' || p[1] == '\\') {
+		return false
+	}
+	for _, r := range p {
+		// Unicode control characters as well as ASCII: a URL parser that
+		// normalises them can turn one of these into a slash.
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	u, err := url.Parse(p)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "" && u.Host == "" && u.Opaque == ""
+}
+
 // Begin creates a single-use login attempt and returns the provider redirect.
 func (s *Service) Begin(ctx context.Context, req BeginRequest) (BeginResult, error) {
-	if req.ReturnTo != "" && (!strings.HasPrefix(req.ReturnTo, "/") || strings.HasPrefix(req.ReturnTo, "//")) {
+	if req.ReturnTo != "" && !IsLocalPath(req.ReturnTo) {
 		return BeginResult{}, errs.New(errs.CodeValidationFailed, "return_to must be a local path")
 	}
 	state, err := randomToken(32)
@@ -104,6 +180,16 @@ type CompleteRequest struct {
 	IP        string
 	UserAgent string
 	RequestID string
+	// Current is the session the browser already holds, when it holds one.
+	// The callback is a public route and the session middleware attaches
+	// whatever the cookie resolved to, so this is present for a step-up
+	// started from inside the product and absent for a cold sign-in.
+	//
+	// It is a session and not a subject id on purpose: Rotate re-reads it
+	// from the store inside the transaction and refuses a stale copy, and a
+	// caller that could only name a subject could ask for somebody else's
+	// sessions to be replaced.
+	Current *auth.Session
 }
 
 // Completed is a successful login.
@@ -194,6 +280,15 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 			if user, err = s.d.Accounts.CreateUser(ctx, tx, issuer, ident.Subject, emailHash); err != nil {
 				return err
 			}
+			// The launch cohort is a ceiling on how many accounts exist, and
+			// this is the only place one is created for a person. It is asked
+			// before the account rather than after, so a refusal leaves no
+			// half-provisioned user (F-91).
+			if s.d.AdmitAccount != nil {
+				if err := s.d.AdmitAccount(ctx, tx); err != nil {
+					return err
+				}
+			}
 			if _, err := s.d.Accounts.CreateAccount(ctx, tx, user.ID, accounts.KindCustomer); err != nil {
 				return err
 			}
@@ -218,6 +313,14 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		if user.Status != "ACTIVE" {
 			return errs.New(errs.CodeForbidden, "user is not active").WithField("status", user.Status)
 		}
+		// The address itself, encrypted, for the deployments that keep one.
+		// Filling an absence on every login rather than only at creation, for
+		// the same reason email_hash learned to: a user created before this
+		// existed, or before the provider asserted the address, would
+		// otherwise never have it. A row that has one is left alone.
+		if err := s.storeEmail(ctx, tx, user.ID, ident); err != nil {
+			return err
+		}
 		owned, err := s.d.Accounts.ListByOwner(ctx, tx, user.ID)
 		if err != nil {
 			return err
@@ -226,6 +329,15 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		for _, a := range owned {
 			if a.Status != accounts.StatusClosed {
 				accountIDs = append(accountIDs, a.ID.String())
+			}
+		}
+		// A declared bootstrap grant is written before the directory is read,
+		// so the session that first carries the role and the row that grants it
+		// commit together. It is idempotent and it never revives a revoked row.
+		var bootstrapped []security.Role
+		if s.d.Operators != nil {
+			if bootstrapped, err = s.d.Operators.Ensure(ctx, tx, issuer, ident.Subject, user.ID.String(), now); err != nil {
+				return err
 			}
 		}
 		roles, err := operatorRoles(ctx, tx, user.ID, now)
@@ -238,10 +350,10 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		} else {
 			roles = []security.Role{security.RoleCustomer}
 		}
-		issued, err := s.d.Sessions.Issue(ctx, tx, auth.IssueParams{
+		issued, rotatedFrom, err := s.issueOrRotate(ctx, tx, req, auth.IssueParams{
 			SubjectID: user.ID.String(), ActorType: actor, Roles: roles, AccountIDs: accountIDs,
 			AuthTime: ident.AuthTime, AMR: ident.AMR, IP: req.IP, UserAgent: req.UserAgent,
-		})
+		}, at.stepUp)
 		if err != nil {
 			return err
 		}
@@ -252,7 +364,7 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		if len(accountIDs) > 0 {
 			stream = audit.AccountStream(accountIDs[0])
 		}
-		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created})
+		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created, "bootstrapped_roles": bootstrapped, "rotated_from": rotatedFrom})
 		if _, err := s.d.Audit.Append(ctx, tx, audit.Event{
 			Stream: stream, ActorType: string(actor), ActorID: user.ID.String(), Action: "auth.login",
 			ResourceType: "session", ResourceID: issued.Session.ID, RequestID: req.RequestID, SourceIP: req.IP, Device: req.UserAgent,
@@ -260,8 +372,19 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		}); err != nil {
 			return err
 		}
-		if err := insertSecurityEvent(ctx, tx, "login", "INFO", &user.ID, &issued.Session.ID, req, map[string]any{"actor_type": actor, "step_up": at.stepUp, "created": created}, now); err != nil {
+		if err := insertSecurityEvent(ctx, tx, "login", "INFO", &user.ID, &issued.Session.ID, req,
+			map[string]any{"actor_type": actor, "step_up": at.stepUp, "created": created, "rotated_from": rotatedFrom}, now); err != nil {
 			return err
+		}
+		if rotatedFrom != "" {
+			// The replaced session is revoked, and a revocation the user did
+			// not ask for belongs on the security page beside the ones they
+			// did.
+			prior := rotatedFrom
+			if err := insertSecurityEvent(ctx, tx, "session_revoked", "INFO", &user.ID, &prior, req,
+				map[string]any{"by": "step_up_rotation", "replaced_by": issued.Session.ID}, now); err != nil {
+				return err
+			}
 		}
 		out = Completed{Issued: issued, User: user, Accounts: owned, Created: created, StepUp: at.stepUp, ReturnTo: at.returnTo}
 		return nil
@@ -270,6 +393,78 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		return fail(err, "session_issue_failed")
 	}
 	return out, nil
+}
+
+// issueOrRotate creates the session a completed login hands to the browser, and
+// returns the id of the session it replaced when it replaced one.
+//
+// PART 192 requires session rotation on privilege change, and a step-up IS a
+// privilege change: it raises the session's AuthTime and AMR, and it is what a
+// person is asked to do before closing their account or registering a payout
+// destination. auth.Manager.Rotate is the mechanism for it and had no caller
+// anywhere in the repository -- identity.Complete always called Issue -- so the
+// pre-step-up session stayed live, kept its own full absolute lifetime, and was
+// still a usable credential carrying the WEAKER authentication. A stolen cookie
+// survived the step-up the product asked for to defend against it, and the
+// user's own security page counted one browser as two devices (F-177).
+//
+// Rotate is chosen only when the replacement really is the same login moving
+// forward: the same subject, the same actor type, and a session the store still
+// accepts. It revokes the old session and keeps its absolute ExpiresAt, so a
+// rotation can never extend a login -- which is why a cold step-up, where there
+// is nothing to rotate from, still Issues.
+//
+// An actor type that has changed between the two logins means the directory
+// decided something different about this person in between; that is not this
+// session moving forward, so it Issues a new one and revokes the old rather than
+// carrying an OPERATOR actor type onto a principal the directory no longer names.
+func (s *Service) issueOrRotate(ctx context.Context, tx pgx.Tx, req CompleteRequest, p auth.IssueParams, stepUp bool) (auth.Issued, string, error) {
+	cur := req.Current
+	if !stepUp || cur == nil || cur.SubjectID != p.SubjectID || cur.ActorType == security.ActorAgent {
+		issued, err := s.d.Sessions.Issue(ctx, tx, p)
+		return issued, "", err
+	}
+	if cur.ActorType != p.ActorType {
+		issued, err := s.d.Sessions.Issue(ctx, tx, p)
+		if err != nil {
+			return auth.Issued{}, "", err
+		}
+		if err := s.d.Sessions.Revoke(ctx, tx, cur.ID); err != nil {
+			return auth.Issued{}, "", err
+		}
+		return issued, cur.ID, nil
+	}
+	r := auth.Rotation{
+		Roles: append([]security.Role(nil), p.Roles...), AccountIDs: p.AccountIDs,
+		AuthTime: p.AuthTime, AMR: p.AMR,
+	}
+	// A live break-glass elevation survives the step-up, with its role, because
+	// it is bounded by the clock rather than by the session and ending an
+	// emergency because somebody re-authenticated more strongly would be the
+	// wrong way round. Both halves move together: security.Principal refuses
+	// the role without the expiry.
+	if cur.BreakGlassUntil != nil {
+		r.BreakGlassUntil = cur.BreakGlassUntil
+		for _, role := range cur.Roles {
+			if role == security.RoleBreakGlass {
+				r.Roles = append(r.Roles, security.RoleBreakGlass)
+				break
+			}
+		}
+	}
+	issued, err := s.d.Sessions.Rotate(ctx, tx, *cur, r)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidSession) {
+			// The cookie the browser sent is no longer usable -- revoked
+			// elsewhere, expired, or idled out between the redirect and the
+			// callback. There is nothing to rotate from, so this is a cold
+			// step-up and nothing is left live by treating it as one.
+			issued, ierr := s.d.Sessions.Issue(ctx, tx, p)
+			return issued, "", ierr
+		}
+		return auth.Issued{}, "", err
+	}
+	return issued, cur.ID, nil
 }
 
 // Logout revokes the session and records the security event.
@@ -347,4 +542,15 @@ func randomToken(n int) (string, error) {
 		return "", fmt.Errorf("identity: random: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// storeEmail keeps the verified address, encrypted, when a PII store is
+// configured. Only a verified address: an unverified claim is somebody's
+// assertion about somebody else's mailbox, and the hash does not record it
+// either.
+func (s *Service) storeEmail(ctx context.Context, tx pgx.Tx, userID accounts.UserID, ident auth.Identity) error {
+	if s.d.PII == nil || !ident.EmailVerified || ident.Email == "" {
+		return nil
+	}
+	return s.d.PII.EnsureEmail(ctx, tx, userID.String(), strings.TrimSpace(ident.Email))
 }

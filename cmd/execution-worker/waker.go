@@ -130,7 +130,7 @@ func (w *Waker) Handle(ctx context.Context, m event.Message) error {
 		// the bus redeliver rather than dropping the nudge.
 		return err
 	default:
-		if merr := w.inbox.MarkFailed(ctx, w.db, source, env.ID, env.SchemaVersion, err); merr != nil {
+		if merr := w.inbox.MarkFailed(ctx, w.db, source, env.ID, env.SchemaVersion, event.HashPayload(env.Payload), err); merr != nil {
 			w.log.WarnContext(ctx, "execution-worker: inbox mark failed", "error", merr, "event_id", env.ID)
 		}
 		return err

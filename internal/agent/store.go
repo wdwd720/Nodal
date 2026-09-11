@@ -42,12 +42,6 @@ INSERT INTO agents (
     risk_policy_version, version, created_by_actor_type, created_by_actor_id
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
-const updateAgentStateSQL = `
-UPDATE agents
-   SET stage = $2, state = $3, mode = $4, envelope_id = $5, strategy_version_id = $6,
-       risk_policy_version = $7, superseded_by_agent_id = $8, failure_reason = $9
- WHERE id = $1`
-
 // Store reads and writes the agent-runtime tables. It holds no connection and
 // no state; every method takes the caller's Querier or transaction so a
 // change and its transition row commit together.
@@ -165,16 +159,18 @@ func insertAgent(ctx context.Context, tx pgx.Tx, a Agent) error {
 // updateAgentState writes the new lifecycle columns. Migration 00690 refuses
 // the UPDATE at COMMIT (SQLSTATE AU001) unless a matching
 // agent_lifecycle_transitions row was inserted in the same transaction.
-func updateAgentState(ctx context.Context, tx pgx.Tx, a Agent) error {
-	_, err := tx.Exec(ctx, updateAgentStateSQL,
-		a.ID, string(a.Stage), string(a.State), nullText(string(a.Mode)), nullUUID(a.EnvelopeID),
-		nullUUID(a.StrategyVersionID), nullText(a.RiskPolicyVersion),
-		nullUUID(a.SupersededByAgentID), nullText(a.FailureReason))
-	if err != nil {
-		return errs.Wrap(err, errs.CodeInternal, "agent: update agent state")
-	}
-	return nil
-}
+// updateAgentState no longer writes anything.
+//
+// 00750 revoked UPDATE on agents from cp_app and moved every mutable column
+// onto the transition row, so inserting the transition IS the state change --
+// including the mode and the envelope a promotion grants, which are the two
+// 00739 refuses an agent to be born holding. Granting those back would have let
+// the application reach by UPDATE exactly what that migration refuses at INSERT.
+//
+// It is kept as a no-op with this comment rather than deleted, because
+// `commitTransition` reads as three steps and the middle one silently vanishing
+// would invite someone to re-add it.
+func updateAgentState(context.Context, pgx.Tx, Agent) error { return nil }
 
 const insertTransitionSQL = `
 INSERT INTO agent_lifecycle_transitions (
@@ -182,13 +178,16 @@ INSERT INTO agent_lifecycle_transitions (
     approval_id, strategy_version_id, ir_hash, evaluation_dataset_ref, evaluation_dataset_hash,
     risk_policy_version, risk_policy_hash, backtest_id, performance_snapshot_id,
     calibration_snapshot_id, error_rate_bps, operational_health, evidence, evidence_hash,
-    build_version, correlation_id, occurred_at
+    build_version, correlation_id, occurred_at,
+    to_mode, to_envelope_id, to_strategy_version_id, to_risk_policy_version,
+    to_superseded_by_agent_id, to_failure_reason
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9,
     $10, $11, $12, $13, $14,
     $15, $16, $17, $18,
     $19, $20, $21, $22, $23,
-    $24, $25, $26
+    $24, $25, $26,
+    $27, $28, $29, $30, $31, $32
 )`
 
 // Transition is one immutable agent_lifecycle_transitions row.
@@ -219,6 +218,23 @@ type Transition struct {
 	BuildVersion          string
 	CorrelationID         string
 	OccurredAt            time.Time
+
+	// What this transition GRANTS, as opposed to what it records.
+	//
+	// A promotion is the thing that grants real-capital authority, so the
+	// authority it grants belongs on it (00750). Before that migration these
+	// three were written to `agents` by a separate UPDATE beside the transition,
+	// which meant the application held UPDATE on `mode` and `envelope_id` and
+	// could reach by UPDATE exactly what 00739 refuses at INSERT.
+	// Direct values, not hints: a NULL here CLEARS the agent's column, exactly
+	// as the UPDATE this replaced did. `commitTransition` fills all six from the
+	// agent the transition produces, in one place.
+	ToMode                Mode
+	ToEnvelopeID          string
+	ToStrategyVersionID   string
+	ToRiskPolicyVersion   string
+	ToSupersededByAgentID string
+	ToFailureReason       string
 }
 
 // insertTransition writes the immutable lifecycle row.
@@ -237,7 +253,9 @@ func insertTransition(ctx context.Context, tx pgx.Tx, t Transition) error {
 		nullUUID(t.ApprovalID), nullUUID(t.StrategyVersionID), nilBytes(t.IRHash), nullText(t.DatasetRef), nilBytes(t.DatasetHash),
 		nullText(t.RiskPolicyVersion), nilBytes(t.RiskPolicyHash), nullUUID(t.BacktestID), nullUUID(t.PerformanceSnapshotID),
 		nullUUID(t.CalibrationSnapshotID), t.ErrorRateBPS, health, evidence, nilBytes(t.EvidenceHash),
-		nullText(t.BuildVersion), nullText(t.CorrelationID), t.OccurredAt)
+		nullText(t.BuildVersion), nullText(t.CorrelationID), t.OccurredAt,
+		nullText(string(t.ToMode)), nullUUID(t.ToEnvelopeID), nullUUID(t.ToStrategyVersionID),
+		nullText(t.ToRiskPolicyVersion), nullUUID(t.ToSupersededByAgentID), nullText(t.ToFailureReason))
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "agent: record lifecycle transition")
 	}

@@ -138,6 +138,29 @@ type Capabilities struct {
 	MinimumAmount money.USD
 	MaximumAmount money.USD
 
+	// --- the fee model, for the pre-commitment quote ----------------------
+	//
+	// PROVIDER_BOUNDARY §3 makes `QuotePayout` a separate call precisely so
+	// the customer sees the fee and the net before committing. These three
+	// fields are what a quote is computed from.
+
+	// FeeModelPublished is whether this adapter has read a fee schedule out of
+	// a real contract or a published price list.
+	//
+	// It exists because zero is ambiguous and the ambiguity is dangerous: a
+	// fee of zero that means "we do not know" promises a customer a net amount
+	// nobody agreed to. False means there is no quote, rather than a quote of
+	// zero, and `QuoteFee` says so.
+	FeeModelPublished bool
+	// FeeFlat is the fixed part of one payout's fee.
+	FeeFlat money.USD
+	// FeeBasisPoints is the proportional part, in hundredths of a percent.
+	FeeBasisPoints money.BPS
+	// FeeModelVersion identifies the schedule these numbers came from. It is
+	// recorded on every quote, so a quote given in March is still explicable
+	// in June after the provider has repriced.
+	FeeModelVersion string
+
 	// Availability is how far this provider is actually usable, as opposed to
 	// how far its documentation reads.
 	Availability Availability
@@ -260,6 +283,42 @@ type SubmitRequest struct {
 	Currency string
 	// Reference is Nodal's payout request id, for the provider's records.
 	Reference string
+}
+
+// Validate refuses a request no provider could act on.
+//
+// It exists because Submit used to build `SubmitRequest{IdempotencyKey: ...,
+// Reference: ..., Amount: money.USD{}}` and leave the destination, the kind and
+// the currency at their zero values -- so the provider was instructed to pay no
+// amount, to nobody, in no currency, and the request still reached SETTLED with
+// the whole reserved quantity recorded as having left (F-225/F-wv-2).
+//
+// The check is HERE, on the type every adapter is handed, rather than only in
+// the one function that builds it: an adapter must not be able to receive one
+// of these, whichever caller assembled it.
+func (r SubmitRequest) Validate() error {
+	if strings.TrimSpace(r.IdempotencyKey) == "" {
+		return errs.New(errs.CodeInternal,
+			"payout: a submission needs the idempotency key Nodal chose")
+	}
+	if r.Amount.Minor() <= 0 {
+		return errs.New(errs.CodeInternal,
+			"payout: a submission needs a positive amount; a provider told to pay nothing has been told nothing").
+			WithField("amount_minor", r.Amount.Minor())
+	}
+	if strings.TrimSpace(r.Currency) == "" {
+		return errs.New(errs.CodeInternal,
+			"payout: a submission needs a currency; an amount without one is not money")
+	}
+	if strings.TrimSpace(r.DestinationReference) == "" {
+		return errs.New(errs.CodeInternal,
+			"payout: a submission needs the provider's reference for the destination, or it names nobody to pay")
+	}
+	if !r.DestinationKind.Valid() {
+		return errs.Newf(errs.CodeInternal,
+			"payout: a submission needs a declared destination kind; %q is not one", r.DestinationKind)
+	}
+	return nil
 }
 
 // ProviderStatus is the provider's own view of a payout.

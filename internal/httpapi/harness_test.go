@@ -14,6 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/auth"
+	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
@@ -26,6 +27,9 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/notifications"
+	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/quote"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuedomain"
@@ -43,7 +47,10 @@ var (
 	testDepositID  = funding.NewDepositID()
 	testAssetID    = assets.NewAssetID()
 	testSessionID  = "0193b2e0-0000-7000-8000-000000000001"
-	testNow        = time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	// A notification id, typed as the notifications package's own so a test
+	// cannot pass an order id where a notification id belongs.
+	testNotificationID = notifications.NewID()
+	testNow            = time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 )
 
 // customerPrincipal is an ordinary customer who owns testAccountID and has a
@@ -82,6 +89,10 @@ type harness struct {
 	server  *Server
 	ports   *fixtures
 	princip *security.Principal
+	// session stands in for what httpmw.Session would have resolved from the
+	// cookie. Nil means the request carries no session, which is what most of
+	// this suite wants; withSession attaches one.
+	session *auth.Session
 }
 
 // fixtures holds every double so a test can reach in and set an error.
@@ -110,6 +121,18 @@ type fixtures struct {
 	webhook     *fakeWebhook
 	idem        *fakeIdempotency
 	stream      http.Handler
+
+	// The withdrawal journey (goal PARTS 19-25). Defined in
+	// handlers_verification_test.go, beside the tests that drive them.
+	verification *fakeVerification
+	eligibility  *fakeEligibility
+	conversion   *fakeConversion
+	// The product read surfaces (product goal SS12-16).
+	marketData   *fakeMarketData
+	portfolio    *fakePortfolio
+	activityFeed *fakeActivityFeed
+	notifs       *fakeNotifications
+	meAudit      *fakeMeAudit
 }
 
 func newFixtures() *fixtures {
@@ -189,7 +212,21 @@ func newFixtures() *fixtures {
 		health:    &fakeHealth{},
 		webhook:   &fakeWebhook{status: http.StatusOK},
 		idem:      newFakeIdempotency(),
-		stream:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, ": keepalive\n\n") }),
+
+		verification: newFakeVerification(),
+		eligibility:  newFakeEligibility(),
+		conversion:   newFakeConversion(),
+		marketData: &fakeMarketData{
+			page:    nativemarket.MarketPage{Markets: []nativemarket.MarketSummary{sampleMarketSummary()}, Stable: true},
+			detail:  sampleMarketDetail(),
+			candles: sampleCandles(),
+			trades:  sampleTape(),
+		},
+		portfolio:    &fakePortfolio{view: samplePortfolio()},
+		activityFeed: &fakeActivityFeed{page: sampleActivityFeed()},
+		stream:       http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, ": keepalive\n\n") }),
+		notifs:       &fakeNotifications{},
+		meAudit:      &fakeMeAudit{},
 	}
 }
 
@@ -202,8 +239,21 @@ func (f *fixtures) ports() Ports {
 		Withdrawals: f.withdrawals, Gates: f.gates, KillSwitches: f.kill,
 		AdminActions: f.adminActs, Providers: f.providers, Reconciliation: f.reconcile,
 		Health: f.health, Idempotency: f.idem,
-		Webhooks: map[string]WebhookPort{"stripe": f.webhook},
+		MarketData: f.marketData, Portfolio: f.portfolio, ActivityFeed: f.activityFeed,
+		// Keyed by the constant the service actually registers under, not by a
+		// literal. F-124 changed that key from "stripe" to "stripe_credit" and
+		// this harness kept the old one, so every webhook test in this package
+		// exercised a provider key production does not have -- and the
+		// public-route probe was answered 404 by the provider lookup, which
+		// satisfied its "not 401" assertion while measuring nothing (F-132).
+		Webhooks: map[string]WebhookPort{stripecredit.ProviderName: f.webhook},
 		Stream:   f.stream,
+
+		Verification: f.verification, Eligibility: f.eligibility, Conversion: f.conversion,
+		// Scoped to the caller: neither port takes an account id, so neither
+		// fake is given one to hand back.
+		Notifications: f.notifs,
+		MeAudit:       f.meAudit,
 	}
 }
 
@@ -223,11 +273,21 @@ func newHarness(t *testing.T) *harness {
 		Clock:         clock.NewFake(testNow),
 		Authenticator: func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if h.princip == nil {
+				ctx := r.Context()
+				if h.princip != nil {
+					ctx = security.WithPrincipal(ctx, *h.princip)
+				}
+				// The real middleware attaches the session beside the
+				// principal. Only a test that asks for one gets one, so
+				// nothing that was anonymous here becomes authenticated.
+				if h.session != nil {
+					ctx = httpmw.WithSession(ctx, *h.session)
+				}
+				if ctx == r.Context() {
 					next.ServeHTTP(w, r)
 					return
 				}
-				next.ServeHTTP(w, r.WithContext(security.WithPrincipal(r.Context(), *h.princip)))
+				next.ServeHTTP(w, r.WithContext(ctx))
 			})
 		},
 		Ports: fx.ports(),
@@ -240,6 +300,14 @@ func newHarness(t *testing.T) *harness {
 // as runs the next request with the given principal (nil = anonymous).
 func (h *harness) as(p *security.Principal) *harness {
 	h.princip = p
+	return h
+}
+
+// withSession also attaches the auth.Session the session middleware would have
+// resolved, for the handlers that read one (logout, and the callback's
+// rotation decision).
+func (h *harness) withSession(s *auth.Session) *harness {
+	h.session = s
 	return h
 }
 
@@ -268,7 +336,27 @@ func (h *harness) do(method, path string, body any, headers ...string) *response
 	}
 	rec := httptest.NewRecorder()
 	h.server.Router().ServeHTTP(rec, req)
-	return &response{ResponseRecorder: rec, t: h.t}
+	return checkedResponse(h.t, rec)
+}
+
+// doWithCookies is do with cookies attached, for a flow whose second request
+// has to prove it came from the browser that made the first.
+func (h *harness) doWithCookies(method, path string, body any, cookies []*http.Cookie) *response {
+	h.t.Helper()
+	var reader io.Reader
+	if body != nil {
+		reader = strings.NewReader(string(marshalJSON(body)))
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.server.Router().ServeHTTP(rec, req)
+	return checkedResponse(h.t, rec)
 }
 
 // problem decodes the body as an RFC 9457 document and asserts the media type.

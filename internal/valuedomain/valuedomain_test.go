@@ -446,6 +446,8 @@ func TestPolicy_DefaultPermitsNothingEvenForAPerfectUser(t *testing.T) {
 	for _, o := range AllOrigins() {
 		ok, reasons := p.Permits(PermitInput{
 			Origin:      o,
+			OriginFloor: o,
+			RootOrigins: []CreditOrigin{o},
 			Finality:    FinalitySettled,
 			Domain:      InternalCredit,
 			Verified:    VerificationEnhanced,
@@ -521,7 +523,17 @@ func TestPolicy_AnApprovedOriginStillNeedsEveryOtherCondition(t *testing.T) {
 	require.NoError(t, p.Validate())
 
 	base := PermitInput{
-		Origin:      OriginCreatorEarning,
+		Origin: OriginCreatorEarning,
+		// Nothing funded this but the earning itself, so the floor is the
+		// origin. Every PermitInput needs one: an unstated floor is UNKNOWN
+		// and refuses, because a caller that has not established where value
+		// ultimately came from has not established that it may leave (D-131).
+		OriginFloor: OriginCreatorEarning,
+		// And the SET of origins the provenance bottoms out in, for the same
+		// reason and with the same absence of a permissive zero value: one
+		// ranked origin cannot be conservative for a policy it was not ranked
+		// by (D-138).
+		RootOrigins: []CreditOrigin{OriginCreatorEarning},
 		Finality:    FinalitySettled,
 		Domain:      InternalCredit,
 		Verified:    VerificationPayoutKYC,
@@ -589,6 +601,8 @@ func TestPolicy_ReasonsAreDeterministicAndOrdered(t *testing.T) {
 	p := approvedCreatorPolicy()
 	in := PermitInput{
 		Origin:      OriginCreatorEarning,
+		OriginFloor: OriginCreatorEarning,
+		RootOrigins: []CreditOrigin{OriginCreatorEarning},
 		Finality:    FinalityReversible,
 		Domain:      HostedFiat,
 		Verified:    VerificationNone,
@@ -614,7 +628,9 @@ func TestPolicy_ReasonsAreDeterministicAndOrdered(t *testing.T) {
 func TestPolicy_InvalidPolicyDeniesAndSaysSo(t *testing.T) {
 	p := approvedCreatorPolicy()
 	ok, reasons := p.Permits(PermitInput{
-		Origin: OriginCreatorEarning, Finality: FinalitySettled, Domain: InternalCredit,
+		Origin: OriginCreatorEarning, OriginFloor: OriginCreatorEarning,
+		RootOrigins: []CreditOrigin{OriginCreatorEarning},
+		Finality:    FinalitySettled, Domain: InternalCredit,
 		Verified: VerificationPayoutKYC, HeldDays: 999,
 		ActiveCaps:  map[CapabilityKey]bool{"PAYOUT_CREATOR_EARNINGS": true},
 		PolicyValid: false,

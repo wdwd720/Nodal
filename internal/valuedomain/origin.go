@@ -179,6 +179,53 @@ func (f FundingFinality) PayoutEligible() bool {
 	return f == FinalitySettled || f == FinalityUnfunded
 }
 
+// finalityRank orders finalities from least final to most, so "the least final
+// of these" is a minimum.
+//
+// It is here rather than in each caller because three of them had their own
+// copy of this ordering and a fourth needed one: internal/httpapi folds an
+// account's lots into per-origin buckets by it, and internal/credit mints a
+// derived lot at the least final finality among the lots that funded it
+// (D-124). An ordering copied four times is an ordering that eventually
+// disagrees with itself about whether DISPUTED is worse than REVERSIBLE.
+//
+// An undeclared finality is worse than every declared one: Policy.Permits reads
+// it as UNKNOWN_FUNDING_FINALITY and refuses.
+func finalityRank(f FundingFinality) int {
+	switch f {
+	case FinalityReversed:
+		return 1
+	case FinalityDisputed:
+		return 2
+	case FinalityReversible:
+		return 3
+	case FinalityUnfunded:
+		return 4
+	case FinalitySettled:
+		return 5
+	}
+	return 0
+}
+
+// LessFinal reports whether a is less final than b.
+func LessFinal(a, b FundingFinality) bool { return finalityRank(a) < finalityRank(b) }
+
+// LeastFinal is the least final of the given finalities, or the zero value when
+// there are none. A caller with no finalities to compare has established
+// nothing and must not read the answer as permission.
+func LeastFinal(in ...FundingFinality) FundingFinality {
+	if len(in) == 0 {
+		return ""
+	}
+	worst := in[0]
+	for _, f := range in[1:] {
+		if LessFinal(f, worst) {
+			worst = f
+		}
+	}
+	return worst
+}
+
 // ParseFundingFinality parses the canonical uppercase string form.
 func ParseFundingFinality(s string) (FundingFinality, error) {
 	f := FundingFinality(strings.ToUpper(strings.TrimSpace(s)))
@@ -189,14 +236,43 @@ func ParseFundingFinality(s string) (FundingFinality, error) {
 }
 
 // finalityTransitions is the explicit legal transition table for a lot's
-// funding finality. UNFUNDED is terminal: nothing external backs it, so
-// nothing external can change it.
+// funding finality.
+//
+// UNFUNDED used to be terminal, on the reasoning that nothing external backs it
+// so nothing external can change it. That is true of the lots it was written
+// for -- a promotional grant, an admin adjustment -- and false of a DERIVED lot
+// minted there. D-124 mints a derived lot at the LEAST FINAL finality among its
+// parents, and the ordering puts UNFUNDED between REVERSIBLE and SETTLED: a
+// seller's earning funded by a buyer's grant AND a buyer's settled card
+// purchase is minted UNFUNDED, and something external backs part of it. When
+// that card is charged back the earning has to freeze, and could not (F-273).
+//
+// So UNFUNDED has exactly one edge, and it points at frozen. It may not become
+// REVERSIBLE or SETTLED: there is no funding row to settle, and a promotion out
+// of UNFUNDED would be value inventing a backer.
 var finalityTransitions = map[FundingFinality][]FundingFinality{
-	FinalityUnfunded:   {},
+	FinalityUnfunded:   {FinalityDisputed},
 	FinalityReversible: {FinalitySettled, FinalityDisputed, FinalityReversed},
 	FinalitySettled:    {FinalityDisputed},
 	FinalityDisputed:   {FinalitySettled, FinalityReversed, FinalityReversible},
 	FinalityReversed:   {},
+}
+
+// FrozenFinalities are the finalities that freeze anything derived from them: a
+// dispute in progress and one that succeeded.
+//
+// It is here rather than as a literal in the sweep's SQL because the sweep's
+// candidate predicate and its acting branch have to agree about which parents
+// freeze a child, and a list written twice is a list that eventually disagrees
+// with itself. `credit.SettleDerived` reads it for both.
+func FrozenFinalities() []FundingFinality {
+	return []FundingFinality{FinalityDisputed, FinalityReversed}
+}
+
+// Frozen reports whether value at this finality freezes what was derived from
+// it.
+func (f FundingFinality) Frozen() bool {
+	return f == FinalityDisputed || f == FinalityReversed
 }
 
 // CanTransitionFinality reports whether from → to is a legal change.
@@ -204,7 +280,9 @@ var finalityTransitions = map[FundingFinality][]FundingFinality{
 // SETTLED → DISPUTED is permitted because a card network can raise a dispute
 // after the window a payment processor considers settled; refusing the
 // transition would leave the system unable to record something that had
-// already happened.
+// already happened. UNFUNDED → DISPUTED is permitted for the reason above the
+// table: a derived lot can be minted UNFUNDED and still have a parent somebody
+// can reclaim.
 func CanTransitionFinality(from, to FundingFinality) bool {
 	for _, t := range finalityTransitions[from] {
 		if t == to {

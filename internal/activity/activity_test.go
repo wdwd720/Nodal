@@ -1,0 +1,274 @@
+package activity
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/id"
+)
+
+func testAccount(t *testing.T) accounts.AccountID {
+	t.Helper()
+	a, err := accounts.ParseAccountID(id.New[id.Any]().String())
+	require.NoError(t, err)
+	return a
+}
+
+// TestEveryKindHasASource is half of the extension point's guarantee: a Kind
+// declared without a Source would be a filter a client can select and a feed
+// that then returns nothing, with no error to say why.
+func TestEveryKindHasASource(t *testing.T) {
+	t.Parallel()
+	byKind := map[Kind]int{}
+	for _, s := range Sources() {
+		byKind[s.Kind]++
+	}
+	for _, k := range AllKinds() {
+		assert.Equal(t, 1, byKind[k], "kind %s must have exactly one source", k)
+	}
+	assert.Len(t, byKind, len(AllKinds()), "a source names a kind that is not declared")
+}
+
+// TestEveryKindHasASummaryTemplate is the other half: a Kind with no template
+// would render as its own enum name on somebody's activity page.
+func TestEveryKindHasASummaryTemplate(t *testing.T) {
+	t.Parallel()
+	for _, k := range AllKinds() {
+		got := summaryFor(k, "SETTLED", "BUY", "DEMOORB")
+		require.NotEmpty(t, got)
+		assert.NotEqual(t, string(k), got, "kind %s falls through to the default branch", k)
+	}
+	// The default branch exists and is legible rather than empty.
+	assert.Equal(t, "SOMETHING_NEW", summaryFor(Kind("SOMETHING_NEW"), "", "", ""))
+}
+
+// TestEverySourceIsInTheCompiledQuery: the union is a constant, so a Source
+// added to the registry and forgotten in the concatenation would be a source
+// that exists and never runs.
+func TestEverySourceIsInTheCompiledQuery(t *testing.T) {
+	t.Parallel()
+	q := Query()
+	for _, s := range Sources() {
+		assert.Contains(t, q, strings.TrimSpace(s.SQL),
+			"source %s is registered but is not part of feedQuery", s.Kind)
+		// And it carries the predicate that lets PostgreSQL skip it when the
+		// caller filtered it out.
+		assert.Contains(t, s.SQL, "'"+string(s.Kind)+"' = ANY($2)",
+			"source %s cannot be excluded by the kind filter", s.Kind)
+	}
+	assert.Equal(t, len(Sources())-1, strings.Count(q, unionAll),
+		"the union must join every source and no more")
+}
+
+// TestEverySourceSatisfiesTheColumnContract: a UNION ALL takes the type of its
+// first branch, so a branch that is missing a column or names it differently is
+// a runtime scan error rather than a compile one.
+func TestEverySourceSatisfiesTheColumnContract(t *testing.T) {
+	t.Parallel()
+	names := columnNames()
+	require.Len(t, names, 14)
+	for _, s := range Sources() {
+		for _, col := range names {
+			// The kind column is produced as a literal; the rest are aliased
+			// or selected under their own name.
+			assert.True(t,
+				strings.Contains(s.SQL, "AS "+col) || strings.Contains(s.SQL, "."+col+",") ||
+					strings.Contains(s.SQL, "."+col+"\n") || strings.Contains(s.SQL, "."+col+" "),
+				"source %s does not produce %s", s.Kind, col)
+		}
+	}
+	// Every branch binds the account parameter and nothing else beyond the
+	// kind filter: the cursor and the limit belong to the statement around it.
+	for _, s := range Sources() {
+		assert.Contains(t, s.SQL, "$1", "source %s does not scope to an account", s.Kind)
+		assert.NotContains(t, s.SQL, "$3", "source %s reaches for a parameter that is not its own", s.Kind)
+	}
+}
+
+// TestRequest_UnknownKindIsAnError: a client that misspells a filter is told,
+// not shown an empty page it will read as "nothing happened".
+func TestRequest_UnknownKindIsAnError(t *testing.T) {
+	t.Parallel()
+	acct := testAccount(t)
+	require.NoError(t, Request{AccountID: acct}.Validate())
+	require.NoError(t, Request{AccountID: acct, Kinds: AllKinds()}.Validate())
+
+	err := Request{AccountID: acct, Kinds: []Kind{KindNativeTrade, "TRADE"}}.Validate()
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+
+	err = Request{}.Validate()
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}
+
+// TestCursor_IsOpaqueAndRefusesTampering.
+func TestCursor_IsOpaqueAndRefusesTampering(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 5, 4, 3, 2, 1, 0, time.UTC)
+	encoded := encodeCursor(cursor{At: at, ID: "01a08db8-90f7-776e-93f1-1b1eeb69f9f4"})
+	got, ok, err := decodeCursor(encoded)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, at, got.At.UTC())
+
+	_, ok, err = decodeCursor("   ")
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	for _, bad := range []string{"!!!", "bm90LWpzb24", encodeCursor(cursor{At: at}), encodeCursor(cursor{ID: "x"})} {
+		_, _, err := decodeCursor(bad)
+		require.Error(t, err, "cursor %q must be refused", bad)
+		assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	}
+}
+
+// TestTemperature_SimulatedWinsOverEverything: on a sandbox tier no value is
+// real by construction, so nothing in the feed may claim to be.
+func TestTemperature_SimulatedWinsOverEverything(t *testing.T) {
+	t.Parallel()
+	live := NewFeed(false)
+	amounts := live.amountsOf(false, "500", 1999, "USD", "PURCHASED", "", "0")
+	require.Len(t, amounts, 2)
+	assert.Equal(t, UnitCredits, amounts[0].Unit)
+	assert.Equal(t, TemperatureEconomy, amounts[0].Temperature)
+	assert.Equal(t, "PURCHASED", amounts[0].Origin)
+	assert.Equal(t, UnitMoneyMinor, amounts[1].Unit)
+	assert.Equal(t, TemperatureReal, amounts[1].Temperature)
+	assert.Equal(t, "USD", amounts[1].Currency)
+
+	sandbox := NewFeed(true)
+	for _, a := range sandbox.amountsOf(false, "500", 1999, "USD", "PURCHASED", "", "0") {
+		assert.Equal(t, TemperatureSimulated, a.Temperature,
+			"a sandbox tier moves nothing, so no amount on it is REAL or ECONOMY")
+	}
+	// A demo object is SIMULATED even where the deployment is not stamped.
+	for _, a := range live.amountsOf(true, "500", 0, "", "", "DEMOORB", "12") {
+		assert.Equal(t, TemperatureSimulated, a.Temperature)
+	}
+
+	// A zero amount is omitted: "no money on this item" and "none left" are
+	// different facts.
+	assert.Empty(t, live.amountsOf(false, "0", 0, "", "", "", "0"))
+	assert.True(t, isZeroDigits(" 0 "))
+	assert.False(t, isZeroDigits("10"))
+}
+
+// TestSummary_NeverCarriesACharacterSomebodyChose: the sentence is data in a
+// JSON field and stays that way, whatever a creator called their asset.
+func TestSummary_NeverCarriesACharacterSomebodyChose(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "script", sanitizeSymbol("<script>"), "the markup is gone; the letters are just letters")
+	assert.Equal(t, "ABC", sanitizeSymbol("A<B>C"))
+	assert.Equal(t, "AB", sanitizeSymbol("A"+string(rune(0x202E))+"B"),
+		"a bidirectional override is not a ticker character, and a source file that contained one "+
+			"would be a file a reviewer approves something other than what they read")
+	assert.LessOrEqual(t, len(sanitizeSymbol(strings.Repeat("A", 200))), 32)
+
+	got := summaryFor(KindNativeTrade, "", "BUY", "<img src=x>")
+	assert.NotContains(t, got, "<")
+	assert.Contains(t, got, "imgsrcx")
+
+	assert.Equal(t, "Bought an asset on the internal market", summaryFor(KindNativeTrade, "", "BUY", ""))
+	assert.Equal(t, "Sold ORB on the internal market", summaryFor(KindNativeTrade, "", "SELL", "ORB"))
+	assert.Equal(t, "A Credit purchase was refunded", summaryFor(KindCreditReversal, "REFUNDED", "", ""))
+	assert.Equal(t, "A Credit purchase is disputed", summaryFor(KindCreditReversal, "DISPUTED", "", ""))
+	assert.Equal(t, "Payout provider pending", summaryFor(KindPayoutStateChanged, "PROVIDER_PENDING", "", ""))
+}
+
+// TestSummary_TheProductKindsSayWhatHappened (D-081).
+//
+// Every one of these is a sentence somebody reads on their own timeline, and
+// three of them are sentences the product must be careful about: an expired
+// verification is not a rejection, a paused market has not taken anybody's
+// holding, and an agent paused by an operator is not an agent its owner
+// stopped.
+func TestSummary_TheProductKindsSayWhatHappened(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "Your identity verification completed", summaryFor(KindVerificationUpdated, "VERIFIED", "", ""))
+	expired := summaryFor(KindVerificationUpdated, "EXPIRED", "", "")
+	assert.Equal(t, "Your identity verification expired and can be renewed", expired)
+	assert.NotContains(t, strings.ToLower(expired), "reject",
+		"an expired verification is not a rejection and must never read as one")
+	assert.Equal(t, "Identity verification was requested", summaryFor(KindVerificationUpdated, "REQUIRED", "", ""))
+
+	assert.Equal(t, "Added a payout destination (bank)", summaryFor(KindPayoutDestinationAdded, "BANK", "", ""))
+	assert.Equal(t, "A payout destination was rejected by the provider",
+		summaryFor(KindPayoutDestinationDisabled, "REJECTED", "", ""))
+	assert.Equal(t, "A payout destination was disabled",
+		summaryFor(KindPayoutDestinationDisabled, "DISABLED", "", ""))
+
+	assert.Equal(t, "Accepted the Withdrawal and Verification Disclosure",
+		summaryFor(KindTermsAccepted, "WITHDRAWAL_DISCLOSURE", "", ""))
+	assert.Equal(t, "Accepted the Terms of Service", summaryFor(KindTermsAccepted, "TERMS_OF_SERVICE", "", ""))
+
+	assert.Equal(t, "Requested to close this account", summaryFor(KindAccountClosureRequested, "PENDING", "", ""))
+	assert.Equal(t, "This account was closed", summaryFor(KindAccountClosureDecided, "EFFECTED", "", ""))
+	assert.Equal(t, "The request to close this account was cancelled",
+		summaryFor(KindAccountClosureDecided, "CANCELLED", "", ""))
+
+	assert.Equal(t, "Created an agent", summaryFor(KindAgentCreated, "DRAFT", "", ""))
+	assert.Equal(t, "Paused an agent", summaryFor(KindAgentPaused, "OWNER_REQUEST", "", ""))
+	assert.Equal(t, "An agent was paused (operator)", summaryFor(KindAgentPaused, "OPERATOR", "", ""),
+		"an owner reading their own history must see that somebody else stopped it")
+	assert.Equal(t, "An agent was resumed", summaryFor(KindAgentResumed, "OPERATOR", "", ""))
+	assert.Equal(t, "Disabled an agent; its authority is revoked", summaryFor(KindAgentDisabled, "REVOKED", "", ""))
+
+	for _, status := range []string{"CLOSE_ONLY", "HALTED", "FROZEN", "DELISTED"} {
+		got := summaryFor(KindNativeMarketPaused, status, "", "ORB")
+		assert.Contains(t, got, "ORB")
+		// Every one of them says what the person still has. A pause stops
+		// trading; it takes nothing away, and the sentence has to say so.
+		assert.True(t, strings.Contains(got, "unchanged") || strings.Contains(got, "still sell what you hold"),
+			"%s: a paused market must never read as value taken away, got %q", status, got)
+	}
+	assert.Equal(t, "an asset is halted; your holding is unchanged",
+		summaryFor(KindNativeMarketPaused, "HALTED", "", ""))
+
+	// The agent branches carry no agent name: it is owner-supplied text that
+	// has passed through no screen, and a sentence is displayed.
+	for _, k := range []Kind{KindAgentCreated, KindAgentPaused, KindAgentResumed, KindAgentDisabled} {
+		assert.NotContains(t, summaryFor(k, "OWNER_REQUEST", "", "<script>"), "script",
+			"kind %s must not interpolate anything a person chose", k)
+	}
+}
+
+// TestSources_TheProductKindsScopeToTheAccountInTheParameter.
+//
+// Six of the new branches read tables keyed on a USER. Each one has to pin
+// itself to the account in $1 through the owner join, or a person with two
+// accounts sees one verification decision twice.
+func TestSources_TheProductKindsScopeToTheAccountInTheParameter(t *testing.T) {
+	t.Parallel()
+	userScoped := map[Kind]string{
+		KindVerificationUpdated:     "compliance_profile_transitions",
+		KindTermsAccepted:           "terms_acceptances",
+		KindAccountClosureRequested: "account_closure_requests",
+		KindAccountClosureDecided:   "account_closure_request_transitions",
+	}
+	for _, s := range Sources() {
+		table, ok := userScoped[s.Kind]
+		if !ok {
+			continue
+		}
+		assert.Contains(t, s.SQL, table, "source %s reads %s", s.Kind, table)
+		assert.Contains(t, s.SQL, "JOIN accounts acc ON acc.owner_user_id",
+			"source %s reads a user-keyed table and must join the account that owns it", s.Kind)
+		assert.Contains(t, s.SQL, "acc.id = $1",
+			"source %s must pin to ONE account, not filter by owner", s.Kind)
+	}
+	// And the account-keyed ones scope directly.
+	for _, s := range Sources() {
+		if _, ok := userScoped[s.Kind]; ok {
+			continue
+		}
+		assert.Contains(t, s.SQL, "$1", "source %s does not scope to an account", s.Kind)
+	}
+}

@@ -166,12 +166,34 @@ func TestIntegration_AgentCanNeverResolve(t *testing.T) {
 		assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 	})
 
-	t.Run("database refuses AGENT as resolver", func(t *testing.T) {
-		// Even if every Go guard were bypassed, the CHECK constraint on
-		// reconciliation_records.resolved_by_actor_type refuses it.
+	t.Run("the application cannot name a resolver at all", func(t *testing.T) {
+		// 00751 revoked UPDATE on reconciliation_records from cp_app and moved
+		// the whole resolution onto the transition row, so the application
+		// cannot write this column whatever value it intends.
 		_, err := d.Exec(f.ctx, `UPDATE reconciliation_records SET resolved_by_actor_type = 'AGENT' WHERE id = $1`, rec.ID)
 		require.Error(t, err)
-		assert.True(t, db.IsCheckViolation(err), "expected a CHECK violation, got %v", err)
+		assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+	})
+
+	t.Run("and a transition row cannot name an AGENT as resolver", func(t *testing.T) {
+		// The rule that used to live only on reconciliation_records is mirrored
+		// onto the transition by 00751, so an illegal resolver is refused where
+		// the row is written. Driven through the repository, which is the only
+		// path that can write a transition row at all.
+		err := d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, terr := f.records.Transition(ctx, tx, rec.ID, StatusResolvedAutomatic,
+				TransitionEvidence{
+					Actor:  Actor{Type: security.ActorOperator, ID: "op-" + f.suffix},
+					Reason: "probe", EvidenceRef: "ref",
+					Patch: &ResolutionPatch{
+						ResolvedByActorType: "AGENT", ResolvedByActorID: "a",
+						Reason: "r", EvidenceRef: "e",
+					},
+				})
+			return terr
+		})
+		require.Error(t, err, "an agent was recorded as the resolver of a financial discrepancy")
+		assert.Contains(t, err.Error(), "resolver_is_not_an_agent", "got %v", err)
 	})
 
 	// The record is untouched.
@@ -731,4 +753,140 @@ func (f *fixture) submittingOrderWithIntent(t *testing.T, res capital.Reservatio
 	f.intentID, f.planID, f.quoteID = intentID, planID, quoteID
 	defer func() { f.intentID, f.planID, f.quoteID = saveIntent, savePlan, saveQuote }()
 	return f.submittingOrder(res, money.QuantityFromInt64(orderInput), money.QuantityFromInt64(orderMinOut), sig, lastValid)
+}
+
+// A silent observer is not proof the transaction never happened (F-108).
+//
+// chain.AgreementPolicy.ResolveSingle sets Degraded on the honest not-found
+// path, precisely so that silence is never proof, and provenAbsent refuses a
+// degraded resolution. Three resolutions built by hand in recovery.go left
+// Degraded at its zero value -- so "both RPCs errored" arrived at the decision
+// indistinguishable from "both observers looked and it is not there".
+//
+// The remaining gate was GetBlockHeight, a DIFFERENT method that is routinely
+// healthy while getTransaction is rate-limited.
+//
+// The cost: a transaction that landed, with the user's tokens already spent,
+// recorded PROVEN_ABSENT, its attempt EXPIRED (which is not Recoverable, so
+// nothing looks again) and its record MATCHED, immaterial and terminal. The
+// books would say everything agrees.
+//
+// chaintest has had Fault since it was written and no test in this package had
+// ever injected one, which is why the branch survived.
+func TestIntegration_ASilentObserverDoesNotProveAbsence(t *testing.T) {
+	d := openTestDB(t)
+	f := newFixture(t, d)
+	f.fund(f.usdc, money.QuantityFromInt64(fundedUSDC), 10_000)
+	res := f.reserve(money.QuantityFromInt64(reservedUSDC), 5_000)
+	sig := "SIG-silent-" + f.suffix
+	_, att := f.submittingOrder(res,
+		money.QuantityFromInt64(orderInput), money.QuantityFromInt64(orderMinOut), sig, 10)
+
+	// The chain has moved past the deadline, so every other condition for a
+	// proven negative holds. Only the observation is missing.
+	f.sim.Advance(500)
+
+	// BOTH observers' getTransaction fails, which is the "no observer answered"
+	// branch. getBlockHeight is untouched on both, which is the shape of a
+	// rate-limited RPC rather than a dead node -- and is what made the
+	// remaining gate useless.
+	//
+	// Faulting only one would not reach it: a single failure falls to
+	// ResolveSingle, which sets Degraded correctly. That is worth saying,
+	// because a version of this test that faulted one observer PASSED against
+	// the defect.
+	f.primary.Fault(chaintest.MethodGetTransaction, chaintest.Fault{Kind: chaintest.FaultError})
+	f.secondary.Fault(chaintest.MethodGetTransaction, chaintest.Fault{Kind: chaintest.FaultError})
+
+	out, err := f.engine.RecoverAttempt(f.ctx, att.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, DispositionProvenAbsent, out.Disposition,
+		"an RPC failure was read as proof the transaction never happened")
+	assert.Equal(t, DispositionUncertain, out.Disposition)
+	assert.False(t, out.RetryAllowed, "a retry under uncertainty may double-spend")
+	assert.True(t, out.Record.BlocksNewRisk, "uncertainty about a spent balance must hold new risk")
+	assert.NotEqual(t, StatusMatched, out.Record.Status,
+		"a record nobody could observe was filed as agreeing")
+}
+
+// An automatic resolution makes the checks its own contract names (F-110).
+//
+// ResolveAutomatic's doc comment states two amount conditions: FEE_DUST needs a
+// difference at or below the asset's dust threshold, and OBSERVATION_CAUGHT_UP
+// needs the recorded difference to be exactly zero.
+//
+// Neither was in the function. The dust test lived inside dustRepair, reachable
+// only when AutoPostDustAdjustment is true -- false by default and unreachable
+// from configuration -- so on the default path FEE_DUST closed a record of any
+// size with no amount test. The caught-up rule existed nowhere. The only gate
+// was !rec.Material, a plain boolean on a table cp_app may update.
+//
+// The direction it resolves in is what makes it matter: the repair writes a
+// customer's ledger balance DOWN when the chain holds less, by the SYSTEM
+// actor, with no human.
+//
+// Note the fixture: AutoPostDustAdjustment is left at its default, which is the
+// path the deployment actually runs and the one the old test never took. The
+// existing TestIntegration_AutomaticResolutionIsNarrow forces it true.
+func TestIntegration_AnAutomaticResolutionHonoursItsOwnConditions(t *testing.T) {
+	d := openTestDB(t)
+	f := newFixture(t, d)
+	f.fund(f.usdc, money.QuantityFromInt64(fundedUSDC), 10_000)
+
+	policy := DefaultPolicy()
+	policy.DustQuantity[f.usdc.ID] = money.QuantityFromInt64(1_000)
+	policy.MaterialThresholdUSDMinor = 100_000_000 // nothing here is material
+	engine := f.newEngine(Config{Policy: policy})
+
+	// A difference far above the dust threshold, and far enough below the
+	// materiality threshold that the human gate does not fire.
+	f.sim.SetBalance(chain.BalanceObservation{
+		Owner: f.walletAddr, Mint: f.usdc.MintAddress, TokenAccount: "ata-usdc-" + f.suffix,
+		Amount: money.QuantityFromInt64(fundedUSDC - 250_000), Decimals: 6, DecimalsKnown: true,
+	})
+	recs, err := engine.RunFull(f.ctx, f.account)
+	require.NoError(t, err)
+	rec := findRecord(t, recs, KindWalletBalance)
+	require.Equal(t, StatusMismatch, rec.Status)
+	require.False(t, rec.Material, "the fixture must clear the human gate, or this proves nothing")
+
+	t.Run("FEE_DUST refuses a difference that is not dust", func(t *testing.T) {
+		err := d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, rerr := engine.ResolveAutomatic(ctx, tx, rec.ID, AutoCauseFeeDust)
+			return rerr
+		})
+		require.Error(t, err, "a 250,000-unit difference was closed as dust, unattended")
+		assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+	})
+
+	t.Run("OBSERVATION_CAUGHT_UP refuses a difference that is not zero", func(t *testing.T) {
+		err := d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, rerr := engine.ResolveAutomatic(ctx, tx, rec.ID, AutoCauseObservationCaughtUp)
+			return rerr
+		})
+		require.Error(t, err, "a record still disagreeing was closed as having caught up")
+		assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
+	})
+
+	// The record is untouched by either refusal.
+	still, err := f.records.Get(f.ctx, d, rec.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusMismatch, still.Status)
+
+	// The control: a genuine dust difference still resolves, so the conditions
+	// are not one step too strict.
+	f.sim.SetBalance(chain.BalanceObservation{
+		Owner: f.walletAddr, Mint: f.usdc.MintAddress, TokenAccount: "ata-usdc-" + f.suffix,
+		Amount: money.QuantityFromInt64(fundedUSDC - 500), Decimals: 6, DecimalsKnown: true,
+	})
+	recs2, err := engine.RunFull(f.ctx, f.account)
+	require.NoError(t, err)
+	dust := findRecord(t, recs2, KindWalletBalance)
+	require.NoError(t, d.InTx(f.ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		_, rerr := engine.ResolveAutomatic(ctx, tx, dust.ID, AutoCauseFeeDust)
+		return rerr
+	}))
+	closed, err := f.records.Get(f.ctx, d, dust.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusResolvedAutomatic, closed.Status)
 }

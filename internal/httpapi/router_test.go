@@ -20,11 +20,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stream"
 )
@@ -929,26 +931,118 @@ func TestLoginRedirectsToTheIdentityProvider(t *testing.T) {
 	res := h.do(http.MethodGet, "/v1/auth/login?step_up=true", nil)
 	require.Equal(t, http.StatusFound, res.Code)
 	assert.Equal(t, "https://idp.test/authorize?state=abc", res.Header().Get("Location"))
-	assert.Empty(t, res.Header().Values("Set-Cookie"), "no session exists before the callback")
+
+	// No SESSION exists before the callback. The login-state cookie does, and
+	// must: it is what binds the flow to this browser (F-87). Asserting
+	// "no cookies at all" would now be asserting the absence of the control.
+	for _, c := range res.Result().Cookies() {
+		assert.NotEqual(t, "cp_session", c.Name, "no session exists before the callback")
+	}
+	state := loginStateCookie(t, res)
+	require.NotNil(t, state, "the login redirect must bind the flow to this browser")
+	assert.True(t, state.HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, state.SameSite,
+		"Strict would not be sent on the top-level GET the identity provider redirects to")
+	assert.NotContains(t, state.Value, "abc", "the cookie carries a digest, not the state itself")
+}
+
+// The login endpoint forwards the app's return path to the identity service,
+// which stores it with the attempt and refuses anything that is not a local
+// path (internal/identity). Until now the contract exposed only step_up, so
+// the web app had to carry the path in the tab across the round trip.
+func TestLoginForwardsTheReturnPath(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.as(nil)
+	res := h.do(http.MethodGet, "/v1/auth/login?return_to=/markets/abc&step_up=true", nil)
+	require.Equal(t, http.StatusFound, res.Code)
+	assert.Equal(t, "/markets/abc", h.ports.identity.lastBegin.ReturnTo)
+	assert.True(t, h.ports.identity.lastBegin.StepUp)
+
+	res = h.do(http.MethodGet, "/v1/auth/login", nil)
+	require.Equal(t, http.StatusFound, res.Code)
+	assert.Empty(t, h.ports.identity.lastBegin.ReturnTo, "no parameter, no path: the identity service's default applies")
 }
 
 func TestCallbackSetsAnHttpOnlySessionCookie(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.as(nil)
-	res := h.do(http.MethodGet, "/v1/auth/callback?code=abc&state=xyz", nil)
-	require.Equal(t, http.StatusFound, res.Code)
+
+	// The flow begins in this browser, which is what the callback requires.
+	begin := h.do(http.MethodGet, "/v1/auth/login", nil)
+	require.Equal(t, http.StatusFound, begin.Code)
+
+	res := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil,
+		begin.Result().Cookies())
+	require.Equal(t, http.StatusFound, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, "/portfolio", res.Header().Get("Location"))
 
-	cookies := res.Result().Cookies()
-	require.Len(t, cookies, 1)
-	c := cookies[0]
-	assert.Equal(t, "cp_session", c.Name)
-	assert.True(t, c.HttpOnly, "the session cookie must be HttpOnly")
-	assert.Equal(t, http.SameSiteLaxMode, c.SameSite)
-	assert.Equal(t, "raw-session-token-value", c.Value)
+	session := namedCookie(res, "cp_session")
+	require.NotNil(t, session)
+	assert.True(t, session.HttpOnly, "the session cookie must be HttpOnly")
+	assert.Equal(t, http.SameSiteLaxMode, session.SameSite)
+	assert.Equal(t, "raw-session-token-value", session.Value)
 	assert.NotContains(t, res.Body.String(), "raw-session-token-value",
 		"the raw token leaves only in the cookie")
+
+	cleared := namedCookie(res, httpmw.LoginStateCookieName)
+	require.NotNil(t, cleared, "a completed flow clears the state cookie")
+	assert.Negative(t, cleared.MaxAge)
+}
+
+// TestAPlantedCallbackDoesNotSignAnybodyIn is the exploit (F-87).
+//
+// `state` was a server-side lookup key consumed once, which stops a callback
+// being REPLAYED and does nothing about one being PLANTED. The attacker starts
+// a flow in their own browser, authenticates as themselves, keeps
+// code=C&state=S without following the redirect, and induces the victim's
+// browser to navigate to the callback. The server used to find the attempt,
+// exchange the code and set a session cookie -- in the victim's browser, for
+// the attacker's subject. Everything the victim then did landed in the
+// attacker's account, attributed to the attacker.
+func TestAPlantedCallbackDoesNotSignAnybodyIn(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.as(nil)
+
+	// The attacker's browser begins a flow and keeps the callback parameters.
+	attacker := h.do(http.MethodGet, "/v1/auth/login", nil)
+	require.Equal(t, http.StatusFound, attacker.Code)
+	require.NotNil(t, loginStateCookie(t, attacker))
+
+	// The victim's browser follows the planted link. It has no login-state
+	// cookie, because the flow did not begin here.
+	victim := h.do(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil)
+	require.Equal(t, http.StatusUnauthorized, victim.Code,
+		"a callback that did not begin in this browser signed somebody in; body=%s", victim.Body.String())
+	assert.Nil(t, namedCookie(victim, "cp_session"), "no session may be established")
+
+	// A cookie for a DIFFERENT state is no better than none.
+	wrong := &http.Cookie{Name: httpmw.LoginStateCookieName, Value: httpmw.LoginStateDigest("some-other-state")}
+	res := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil, []*http.Cookie{wrong})
+	require.Equal(t, http.StatusUnauthorized, res.Code)
+	assert.Nil(t, namedCookie(res, "cp_session"))
+
+	// The control: the browser that began the flow still completes it. Without
+	// this the three refusals above could be a login that no longer works.
+	ok := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil, attacker.Result().Cookies())
+	require.Equal(t, http.StatusFound, ok.Code, "body=%s", ok.Body.String())
+	require.NotNil(t, namedCookie(ok, "cp_session"))
+}
+
+func namedCookie(res *response, name string) *http.Cookie {
+	for _, c := range res.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+func loginStateCookie(t *testing.T, res *response) *http.Cookie {
+	t.Helper()
+	return namedCookie(res, httpmw.LoginStateCookieName)
 }
 
 func TestLogoutRevokesAndClearsTheCookie(t *testing.T) {
@@ -991,7 +1085,7 @@ func TestWebhookReceivesTheRawBody(t *testing.T) {
 	h.as(nil)
 	const raw = `{"id":"evt_1","type":"crypto.onramp_session.updated","data":{"object":{"id":"cos_1"}}}`
 
-	res := h.do(http.MethodPost, "/v1/webhooks/stripe", raw, "Stripe-Signature", "t=1,v1=deadbeef")
+	res := h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, raw, "Stripe-Signature", "t=1,v1=deadbeef")
 	require.Equal(t, http.StatusOK, res.Code)
 	assert.Equal(t, 1, h.ports.webhook.seen)
 	assert.Equal(t, raw, string(h.ports.webhook.raw), "the pipeline must see the exact bytes")
@@ -1002,11 +1096,11 @@ func TestWebhookForAnUnknownProviderIsNotFound(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.as(nil)
-	res := h.do(http.MethodPost, "/v1/webhooks/stripe", `{"id":"evt"}`)
+	res := h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, `{"id":"evt"}`)
 	require.Equal(t, http.StatusOK, res.Code)
 
 	h.ports.webhook.status = http.StatusBadRequest
-	res = h.do(http.MethodPost, "/v1/webhooks/stripe", `{"id":"evt"}`)
+	res = h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, `{"id":"evt"}`)
 	assert.Equal(t, http.StatusBadRequest, res.Code)
 }
 
@@ -1084,7 +1178,7 @@ func TestCSRFAppliesOnlyToCookieAuthenticatedRequests(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, ok.Code, "body=%s", ok.Body.String())
 
 	// A webhook with no cookie is not subject to the check.
-	wh := h.do(http.MethodPost, "/v1/webhooks/stripe", `{"id":"evt"}`, "Origin", "https://evil.test")
+	wh := h.do(http.MethodPost, "/v1/webhooks/"+stripecredit.ProviderName, `{"id":"evt"}`, "Origin", "https://evil.test")
 	assert.Equal(t, http.StatusOK, wh.Code)
 }
 
@@ -1101,8 +1195,11 @@ func TestOversizedBodyIsRefused(t *testing.T) {
 	h.server = srv
 
 	res := h.do(http.MethodPost, "/v1/intents", strings.Repeat("x", 4096), "Idempotency-Key", "big-body-000001")
-	require.Equal(t, http.StatusBadRequest, res.Code)
-	assert.Equal(t, errs.CodeValidationFailed, res.problem().Code)
+	// 413, not 400: the answer is given before the body is read, so there is
+	// nothing to validate. A configured maximum below the route's own limit
+	// lowers it -- the two are a minimum, not a choice (F-85).
+	require.Equal(t, http.StatusRequestEntityTooLarge, res.Code)
+	assert.Equal(t, errs.CodeBodyTooLarge, res.problem().Code)
 }
 
 // --- SSE ----------------------------------------------------------------------
@@ -1254,7 +1351,7 @@ func TestEventStream_RealStreamPackageOverARealConnection(t *testing.T) {
 	h := newHarness(t)
 	p := customerPrincipal()
 	h.as(&p)
-	h.ports.stream = stream.NewHandler(hub, 60*time.Millisecond)
+	h.ports.stream = stream.NewHandler(hub, 60*time.Millisecond, nil)
 	srv, err := New(Options{
 		Env: config.EnvTest, Clock: clock.NewFake(testNow),
 		Authenticator: h.server.opts.Authenticator, Ports: h.ports.ports(),
@@ -1430,7 +1527,16 @@ func TestClientIPIsAPlainAddress(t *testing.T) {
 		{"forwarded ignored without trust", "203.0.113.9:80", "198.51.100.7", nil, "203.0.113.9"},
 		{"forwarded ignored from an untrusted peer", "203.0.113.9:80", "198.51.100.7", []*net.IPNet{loopback}, "203.0.113.9"},
 		{"forwarded honored from a trusted peer", "127.0.0.1:80", "198.51.100.7", []*net.IPNet{loopback}, "198.51.100.7"},
-		{"leftmost forwarded entry wins", "127.0.0.1:80", "198.51.100.7, 10.0.0.1", []*net.IPNet{loopback}, "198.51.100.7"},
+		// The RIGHT-most entry no trusted hop added is the answer: a proxy
+		// APPENDS to whatever the client sent, so everything to the left of
+		// its own entry is text the caller wrote (F-166). Here 10.0.0.1 is
+		// not a trusted network, so it is the closest address the loopback
+		// proxy vouched for, and 198.51.100.7 is the caller's own claim.
+		{"the rightmost untrusted entry wins", "127.0.0.1:80", "198.51.100.7, 10.0.0.1", []*net.IPNet{loopback}, "10.0.0.1"},
+		{"trusted hops at the right are skipped", "127.0.0.1:80", "198.51.100.7, 127.0.0.9", []*net.IPNet{loopback}, "198.51.100.7"},
+		{"a list of nothing but trusted hops falls back to the peer", "127.0.0.1:80", "127.0.0.8, 127.0.0.9", []*net.IPNet{loopback}, "127.0.0.1"},
+		{"an unparsable entry is skipped rather than trusted", "127.0.0.1:80", "198.51.100.7, junk", []*net.IPNet{loopback}, "198.51.100.7"},
+		{"a forwarded port is stripped like any other", "127.0.0.1:80", "198.51.100.7:9999", []*net.IPNet{loopback}, "198.51.100.7"},
 		{"malformed forwarded falls back", "127.0.0.1:80", "nonsense", []*net.IPNet{loopback}, "127.0.0.1"},
 	}
 	for _, tc := range cases {

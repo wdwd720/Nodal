@@ -33,6 +33,10 @@ var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	testDB         *db.DB
+	// The migration role, for probes that must reach a column cp_app no longer
+	// holds so that the trigger or binding under test is what refuses them
+	// (00750).
+	testOwnerDB *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -53,7 +57,13 @@ func testMain(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "agent integration: open pool:", err)
 		return 1
 	}
+	testOwnerDB, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "agent-itest-owner", MaxConns: 2})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agent integration: open owner pool:", err)
+		return 1
+	}
 	code := m.Run()
+	testOwnerDB.Close()
 	testDB.Close()
 	return code
 }
@@ -285,7 +295,15 @@ func ctxAs(p security.Principal) context.Context {
 // inTx runs fn in a transaction against the isolated test database.
 func inTx(ctx context.Context, t *testing.T, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	t.Helper()
-	return testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 0}, fn)
+	return inTxAs(ctx, t, testDB, fn)
+}
+
+// inTxAs runs fn on a chosen pool. Used with testOwnerDB where the point of the
+// test is a trigger rather than a privilege, so the probe has to reach the
+// column for the trigger to be the thing that refuses it.
+func inTxAs(ctx context.Context, t *testing.T, pool *db.DB, fn func(ctx context.Context, tx pgx.Tx) error) error {
+	t.Helper()
+	return pool.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 0}, fn)
 }
 
 func newUUID() string { return id.New[struct{}]().String() }
@@ -375,17 +393,48 @@ func (f *fixture) ensureEnvelope(t *testing.T, agentID AgentID) string {
 // registers it with the verifier. It must be a real row: the
 // agent_lifecycle_transitions.approval_id foreign key means a promotion can
 // never cite an approval that does not exist.
+// approveFor creates a dual-controlled approval the way one is really created:
+// proposed by one principal, then moved to APPROVED by another, with the
+// transition row that move requires.
+//
+// It used to INSERT the row directly as APPROVED. That is precisely the forgery
+// F-42 records and F-121 closed -- two-person control with no proposal and no
+// second person -- and migration 00735 now refuses it at INSERT, which is how
+// this fixture was found. internal/admin's own comment had already named the
+// shape: "a fixture that has to commit the exploit to reach the code is a
+// fixture that should not exist."
+//
+// It is written in SQL rather than through internal/admin because the authority
+// boundary forbids this tree from importing it (test/security asserts that), so
+// the honest path has to be spelled out here.
 func (f *fixture) approveFor(agentID AgentID) string {
 	f.t.Helper()
 	approvalID := newUUID()
-	_, err := testDB.Exec(context.Background(),
+	ctx := context.Background()
+	_, err := testDB.Exec(ctx,
 		`INSERT INTO admin_actions (id, kind, target_type, target_id, params_hash, reason, requires_dual,
-		          status, proposed_by_user_id, proposer_step_up_at, approved_by_user_id, approved_at,
-		          approver_step_up_at, expires_at)
+		          status, proposed_by_user_id, proposer_step_up_at, expires_at)
 		 VALUES ($1, $2, 'agent', $3, $4, 'integration test promotion approval', true,
-		         'APPROVED', $5, now(), $6, now(), now(), now() + interval '1 hour')`,
-		approvalID, ApprovalKindPromote, agentID.String(), bytes32("params"), f.operatorID, f.approverID)
+		         'PROPOSED', $5, now(), now() + interval '1 hour')`,
+		approvalID, ApprovalKindPromote, agentID.String(), bytes32("params"), f.operatorID)
 	require.NoError(f.t, err)
+
+	// The decision, by a different principal, with its transition row. The
+	// row and the UPDATE are one transaction because AU001 binds them.
+	require.NoError(f.t, testDB.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted, MaxRetries: 0},
+		func(ctx context.Context, tx pgx.Tx) error {
+			if _, terr := tx.Exec(ctx,
+				`INSERT INTO admin_action_transitions (id, action_id, from_status, to_status, actor_id, note)
+				 VALUES ($1, $2, 'PROPOSED', 'APPROVED', $3, 'integration test approval')`,
+				newUUID(), approvalID, f.approverID); terr != nil {
+				return terr
+			}
+			_, uerr := tx.Exec(ctx,
+				`UPDATE admin_actions SET status = 'APPROVED', approved_by_user_id = $2,
+				        approved_at = now(), approver_step_up_at = now()
+				  WHERE id = $1`, approvalID, f.approverID)
+			return uerr
+		}))
 	f.approvals.byID[approvalID] = Approval{
 		ID: approvalID, Kind: ApprovalKindPromote, TargetID: agentID.String(),
 		ProposedBy: f.operatorID, ApprovedBy: f.approverID,
@@ -614,9 +663,15 @@ func TestBareStateUpdateIsRefused(t *testing.T) {
 	a := f.walkTo(t, StageShadow)
 
 	// PAUSED is a side state, so no CHECK on agents refuses it first: the only
-	// thing standing between the application role and a silent state change is
-	// the transition binding.
-	err := inTx(context.Background(), t, func(ctx context.Context, tx pgx.Tx) error {
+	// thing standing between a caller and a silent state change is the
+	// transition binding.
+	//
+	// Driven as the OWNER since 00750, because cp_app can no longer write
+	// agents.state at all and would be refused by privilege before the binding
+	// was consulted. The owner is the strongest role that CAN write the column,
+	// which makes it the only one on which the binding is still what is being
+	// measured. That cp_app is refused outright is asserted just below.
+	err := inTxAs(context.Background(), t, testOwnerDB, func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE agents SET state = 'PAUSED' WHERE id = $1`, a.ID)
 		return err
 	})
@@ -647,8 +702,27 @@ func TestStateUpdateWithAMismatchedTransitionIsRefused(t *testing.T) {
 		_, err := tx.Exec(ctx, `UPDATE agents SET state = 'FAILED' WHERE id = $1`, a.ID)
 		return err
 	})
-	require.Error(t, err)
-	assert.True(t, IsTransitionRequired(err), "expected AU001, got %v", err)
+	require.Error(t, err, "a row naming one state licensed a change to another")
+
+	// The refusal moved EARLIER in 00750, and that is the improvement rather
+	// than a regression to absorb.
+	//
+	// It used to be AU001 at COMMIT: the mismatched row was written, the bare
+	// UPDATE was written, and the binding caught the disagreement at the end.
+	// The row is now the state change, so a row that does not describe a legal
+	// destination is refused where it is WRITTEN -- this one names ToStage
+	// SHADOW with no mode, which agents_check3 forbids and the mirrored CHECK on
+	// the transition now says so directly.
+	//
+	// Either way the forgery does not commit and the agent does not move. The
+	// assertion names the mechanism so that a future change which silently
+	// swapped one for the other would be visible here.
+	assert.Contains(t, err.Error(), "agent_lifecycle_transitions_destination_is_legal",
+		"expected the transition row itself to be refused, got %v", err)
+
+	current, err := f.store.Get(context.Background(), testDB, a.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StateShadow, current.State, "the agent moved")
 }
 
 func TestLifecycleTransitionsAreImmutable(t *testing.T) {
@@ -795,4 +869,75 @@ func TestPromotingAPausedAgentIsRefused(t *testing.T) {
 	})
 	require.Error(t, err, "a paused agent is resumed before it is promoted")
 	assert.Equal(t, errs.CodeInvalidStateTransition, errs.CodeOf(err))
+}
+
+// A revoked agent stays revoked, and the database says so (F-114, 00734).
+//
+// `State.IsTerminal` returns true for REVOKED and SUPERSEDED and CanTransition
+// gives both an empty destination list, so in Go a terminal state has no
+// outgoing edge. The schema said nothing about it, and both promotion CHECKs on
+// agent_lifecycle_transitions open with `from_stage = to_stage OR ...`.
+//
+// That clause is right for what it was written for: a pause, a resume or a
+// revocation does not move the STAGE, and demanding promotion evidence for one
+// would demand evidence for nothing happening. It is wrong for coming BACK.
+// Revoke goes through sideTransition, which keeps the agent's stage -- so a
+// revoked LIVE agent still has stage='LIVE', and a row saying
+// REVOKED -> LIVE with from_stage = to_stage = 'LIVE' satisfies both CHECKs
+// through that first clause: no approval, no ir_hash, no risk_policy_hash, no
+// evidence_hash. It committed, and an agent that had been revoked was trading
+// live capital again with nothing recorded about why.
+//
+// 00726 closed the promotion form of that short-circuit. This is the
+// resurrection form, which survived because returning from a side state does
+// not move the stage either.
+func TestRevokedIsTerminalInTheDatabase(t *testing.T) {
+	f := newFixture(t)
+	a := f.walkTo(t, StageShadow)
+
+	require.NoError(t, inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := f.lifecycle.Revoke(ctx, tx, a.ID, "revoked for the test")
+		return err
+	}))
+
+	// The row that used to commit. Written directly, because no Go path offers
+	// it -- which is exactly why the schema has to refuse it.
+	err := inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
+		_, ierr := tx.Exec(ctx,
+			// The destination columns are stated since 00750, so that the
+			// row is a LEGAL destination and this test still measures the rule
+			// it names. Without them the row is refused for being incomplete,
+			// which is also correct and is not what is under test here.
+			`INSERT INTO agent_lifecycle_transitions
+			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason,
+			    to_mode, to_strategy_version_id)
+			 VALUES (gen_random_uuid(), $1, 'REVOKED', 'LIVE', $2, $2, 'SYSTEM', 'x', 'resurrect',
+			         $3, nullif($4,'')::uuid)`,
+			a.ID, string(a.Stage), string(a.Mode), a.StrategyVersionID)
+		return ierr
+	})
+	require.Error(t, err, "a revoked agent was returned to an operating state with no approval and no evidence")
+	assert.Contains(t, err.Error(), "terminal_is_terminal")
+
+	// The other terminal state, so the rule is about terminality and not about
+	// one value.
+	err = inTx(ctxAs(f.operator(security.RoleOperations, security.RoleRisk)), t, func(ctx context.Context, tx pgx.Tx) error {
+		_, ierr := tx.Exec(ctx,
+			// Destination stated, for the reason above.
+			`INSERT INTO agent_lifecycle_transitions
+			   (id, agent_id, from_state, to_state, from_stage, to_stage, actor_type, actor_id, reason,
+			    to_mode, to_strategy_version_id)
+			 VALUES (gen_random_uuid(), $1, 'SUPERSEDED', 'SHADOW', $2, $2, 'SYSTEM', 'x', 'resurrect',
+			         $3, nullif($4,'')::uuid)`,
+			a.ID, string(a.Stage), string(a.Mode), a.StrategyVersionID)
+		return ierr
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "terminal_is_terminal")
+
+	// The control: the agent is still revoked, and the constraint refused the
+	// rows rather than the transaction failing for some other reason.
+	after, err := f.store.Get(context.Background(), testDB, a.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StateRevoked, after.State)
 }

@@ -89,6 +89,15 @@ function group(digits: string, separator: string): string {
   return parts.join(separator);
 }
 
+/**
+ * Thousands grouping for a run of digits, exported so `format.ts` groups the
+ * same way this module does. Two grouping implementations in one application
+ * is two conventions for what a thousand looks like.
+ */
+export function groupDigits(digits: string): string {
+  return group(digits, ",");
+}
+
 /** -1, 0 or 1 for a USD string, decided by inspecting digits — never by subtraction. */
 export function usdSign(value: string): -1 | 0 | 1 {
   const { negative, integer, fraction } = splitDecimal(value, USD_PATTERN, "USD amount");

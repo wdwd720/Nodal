@@ -35,7 +35,7 @@ func toAPIProduct(p commerce.Product) api.InternalProduct {
 		Status:          api.InternalProductStatus(p.Status),
 		EarningOrigin:   api.CreditOrigin(origin),
 		TermsFrozen:     ptr(p.TermsFrozen()),
-		CreatedAt:       ptr(p.CreatedAt),
+		CreatedAt:       ptr(p.CreatedAt.UTC()),
 	}
 	// The split is shown alongside the price so a seller never has to compute
 	// the platform's share themselves and get the rounding direction wrong.
@@ -54,7 +54,7 @@ func toAPISeller(s commerce.Seller) api.InternalSeller {
 		AccountId:   uuid.MustParse(s.AccountID.String()),
 		DisplayName: s.DisplayName,
 		Status:      api.InternalSellerStatus(s.Status),
-		CreatedAt:   ptr(s.CreatedAt),
+		CreatedAt:   ptr(s.CreatedAt.UTC()),
 	}
 	if s.PayoutAccountID != nil {
 		id := uuid.MustParse(s.PayoutAccountID.String())
@@ -77,7 +77,7 @@ func toAPIInternalOrder(o commerce.Order) api.InternalOrder {
 		PlatformFee:     qtyString(o.PlatformFee),
 		SellerProceeds:  qtyString(o.SellerProceeds),
 		EarningOrigin:   api.CreditOrigin(o.EarningOrigin),
-		CreatedAt:       ptr(o.CreatedAt),
+		CreatedAt:       ptr(o.CreatedAt.UTC()),
 	}
 	if !o.EarningAccountID.IsZero() {
 		id := uuid.MustParse(o.EarningAccountID.String())
@@ -166,9 +166,6 @@ func (s *Server) PostInternalProducts(ctx context.Context, request api.PostInter
 	}
 	if request.Body.Description != nil {
 		cmd.Description = *request.Body.Description
-	}
-	if request.Body.PlatformFeeBps != nil {
-		cmd.PlatformFeeBPS = money.BPS(*request.Body.PlatformFeeBps)
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.InternalProduct, commandMeta, error) {
@@ -264,7 +261,11 @@ func (s *Server) PostInternalProductsProductIdStatus(ctx context.Context, reques
 	if err != nil {
 		return nil, err
 	}
-	if serr := securityRequireAccount(ctx, current.SellerAccountID.String()); serr != nil {
+	// Ownership only. Publishing, pausing or withdrawing a product is a write,
+	// and an operator who needs to take a listing down does it through the
+	// admin plane, where COMMERCE_PRODUCT_WITHDRAW gives it a reason and a
+	// permanent record (F-102).
+	if serr := securityRequireAccountOwner(ctx, current.SellerAccountID.String()); serr != nil {
 		return nil, serr
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,

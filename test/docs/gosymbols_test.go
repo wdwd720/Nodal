@@ -89,11 +89,31 @@ func TestDocs_SessionRevocationIsStillUnreachable(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 
+	// One external caller is expected and is NOT the one this control is about.
+	// internal/profile calls RevokeAllForSubject while effecting an account
+	// closure the account holder themselves asked for: a closed account whose
+	// browser tab still works is closed only on paper. That path is reached
+	// through a closure request, a cooling-off period and an operator decision,
+	// so it is no use at all to an operator responding to a compromise -- which
+	// is what the runbook is waiting for, and why the PENDING marker stays.
+	//
+	// Naming the caller rather than dropping the check keeps the control sharp:
+	// a SECOND caller, or a different one, still fails here.
+	const closureCaller = "internal/profile/account.go"
 	if reachable, callers := reachedFromOutside(t, root, "RevokeAllForSubject"); reachable {
-		t.Errorf("RevokeAllForSubject now has a caller outside its package (%s).\n"+
-			"    That is good news: an operator can revoke a compromised principal's sessions.\n"+
-			"    Delete this control and take the PENDING marker out of docs/runbooks/admin-compromise.md.",
-			strings.Join(callers, ", "))
+		unexpected := make([]string, 0, len(callers))
+		for _, c := range callers {
+			if c != closureCaller {
+				unexpected = append(unexpected, c)
+			}
+		}
+		if len(unexpected) > 0 {
+			t.Errorf("RevokeAllForSubject now has a caller outside its package and outside the account-closure path (%s).\n"+
+				"    If that caller is an operator-facing route, this is good news: an operator can revoke a\n"+
+				"    compromised principal's sessions. Delete this control and take the PENDING marker out of\n"+
+				"    docs/runbooks/admin-compromise.md.",
+				strings.Join(unexpected, ", "))
+		}
 	}
 
 	// So the runbook must still say so, in the step that tells an operator to

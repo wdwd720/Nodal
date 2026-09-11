@@ -489,6 +489,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every account's agents, with owner, authority level, status and limits */
+        get: {
+            parameters: {
+                query?: {
+                    account_id?: components["schemas"]["UUID"];
+                    include_archived?: boolean;
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of agents */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AgentPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/agents/{agentId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator pause of a customer's agent, with a reason
+         * @description Writes an agent_pauses row under the OPERATOR reason code and moves the agent to PAUSED, so the owner's own history shows plainly that somebody else stopped it. Open orders are left alone.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    agentId: components["parameters"]["AgentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The agent after the pause */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/gates": {
         parameters: {
             query?: never;
@@ -534,7 +628,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up) */
+        /**
+         * Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
+         * @description sandbox and unsandbox exist only on a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX, never PROD). A SANDBOX gate carries no approval chain, cannot exist in PROD, and is read as active only by a sandbox tier. Everywhere else the action is refused.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -543,7 +640,7 @@ export interface paths {
                     "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 };
                 path: {
-                    action: "propose" | "approve" | "activate" | "suspend" | "resume" | "revoke";
+                    action: "propose" | "approve" | "activate" | "suspend" | "resume" | "revoke" | "sandbox" | "unsandbox";
                     capability: components["schemas"]["Capability"];
                 };
                 cookie?: never;
@@ -567,6 +664,48 @@ export interface paths {
                 409: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/gates/{capability}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every recorded transition of a gate, oldest first, with who moved it
+         * @description The rows of capability_gate_transitions, written by cp_gate_transition and cp_gate_sandbox in the same statement as the state change they record. A SANDBOX entry names the operator who moved it or the SYSTEM actor config:CP_API_SANDBOX_GATES; it is not an approval and says so.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    capability: components["schemas"]["Capability"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Transitions, oldest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CapabilityGateTransition"][];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -804,6 +943,271 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operator support view of one user (read only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: components["parameters"]["UserId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Support view */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUserView"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userId}/closure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+         * @description The only mutation the support surface offers, and it acts on a request the user themselves opened. EFFECT is refused before the cooling-off period has passed, by the database as well as by the service, and an operator may not decide a request of their own.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    userId: components["parameters"]["UserId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ClosureDecision"];
+                };
+            };
+            responses: {
+                /** @description Support view after the decision */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUserView"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your agents */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    include_archived?: boolean;
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of agents */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AgentPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Create an agent from a compiled strategy version, with the authority and limits granted to it
+         * @description The agent is created stopped. Authority levels are 0 research only, 1 recommendation, 2 prepared action a person confirms, 3 rule-based execution inside the limits on this request. Levels 4 to 6 are declared in the architecture, disabled by policy, and refused here with the capability each would need. The budget is a ceiling on Credits at risk; no Credits move when an agent is created.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateAgentRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                /** @description Created, stopped */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One agent - authority, limits, budget used, last run and honest runtime state */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    agentId: components["parameters"]["AgentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Agent */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable, pause, resume, disable or archive your own agent
+         * @description enable moves the agent onto the first rung at which it may be evaluated, needs a recent strong authentication, and for an authority level that acts without a person confirming each action it needs the capability gate that governs agent trading to be active. pause opens a pause record and leaves open orders alone; nothing is ever cancelled implicitly. disable revokes authority and is final. archive only hides a stopped agent.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    action: "enable" | "pause" | "resume" | "disable" | "archive";
+                    agentId: components["parameters"]["AgentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AgentActionRequest"];
+                };
+            };
+            responses: {
+                /** @description The agent after the action */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets": {
         parameters: {
             query?: never;
@@ -890,6 +1294,8 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    /** @description Local path within the web app to return to after the callback, e.g. /portfolio. Must start with a single slash; anything else is refused with a validation problem. It is stored with the login attempt, never echoed from the request, and appended to the app origin the deployment configures (CP_AUTH_POST_LOGIN_URL). */
+                    return_to?: string;
                     /** @description Request strong authentication (MFA/passkey) for a sensitive action */
                     step_up?: boolean;
                 };
@@ -906,6 +1312,7 @@ export interface paths {
                     };
                     content?: never;
                 };
+                400: components["responses"]["Problem"];
                 503: components["responses"]["Problem"];
             };
         };
@@ -984,6 +1391,45 @@ export interface paths {
                 };
                 403: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/credits/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The rate at which money buys Credits, and the bounds on one purchase
+         * @description Exists so a funding page can show the rate without deriving it. A second implementation of this arithmetic in the browser would eventually disagree with the server, and the server is the one that issues.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The pricing policy in force */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPricing"];
+                    };
+                };
             };
         };
         put?: never;
@@ -1768,6 +2214,1005 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The standing of the caller own account, with any restrictions and open closure request */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account standing */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyAccount"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+         * @description Requires a recent strong authentication. The request waits out a cooling-off period during which the caller can cancel it, and is then effected by an operator. Nothing is deleted: financial and audit records are retained.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CloseAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Account standing, including the open request */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyAccount"];
+                    };
+                };
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account/close/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel the caller own open closure request
+         * @description Deliberately does NOT require a step-up. Requesting closure is the dangerous direction and asks for one; stopping a request must never be harder than starting it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account standing after cancelling */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyAccount"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The unified activity timeline (§16) */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    /** @description Repeat to include several kinds. Absent means every kind. */
+                    kind?: components["schemas"]["ActivityFeedKind"][];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of activity */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityFeedPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's own security and account history (PART 52); never another person's */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of audit entries, newest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MeAuditPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+         * @description Eligibility is decided per unit of provenance, not per balance. This returns one bucket per credit origin with the reasons that bucket cannot leave, and a top-level answer that composes them with the account's jurisdiction, its restrictions, the capability gates and the payout provider. It moves nothing and reserves nothing.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Withdrawal eligibility, explained */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WithdrawalEligibility"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-kind in-app notification preferences (IN_APP is the only channel that exists) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One entry per kind */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPreferences"];
+                    };
+                };
+            };
+        };
+        /** Replace the caller's answers for the kinds named */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesUpdate"];
+                };
+            };
+            responses: {
+                /** @description Preferences as they now stand */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPreferences"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's notification centre, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    /** @description Restrict to these kinds; omitted means every kind */
+                    kinds?: components["schemas"]["NotificationKind"][];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description Only notifications that have not been marked read */
+                    unread?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of notifications */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark one notification read (idempotent; the first instant is kept) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    notificationId: components["parameters"]["NotificationId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The notification as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Notification"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark every unread notification read */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description How many were changed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarkedRead"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How many of the caller's notifications are unread */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The badge */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnreadCount"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/payout-destinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where you have asked value to be sent (§25)
+         * @description Includes disabled and rejected destinations. A person who removed one and cannot see that it is gone will add it again, and a person whose destination a provider refused needs to see the refusal rather than an empty list.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Destinations */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"][];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Register a payout destination from a provider token (§25)
+         * @description Nodal never stores a bank account number, a card number, an IBAN, a routing number, a private key or a seed phrase. What is sent here is the PROVIDER'S token for a destination plus a mask a person recognises, and an input that looks like a raw number is refused rather than stored. Adding a destination is a high-risk operation and requires a recent strong authentication. A destination is born unusable: whether it may receive value is the provider's decision, not the request's.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePayoutDestination"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"];
+                    };
+                };
+                /** @description Destination registered, awaiting the provider's verification */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/payout-destinations/{destinationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop using a payout destination (§25)
+         * @description Disables it rather than deleting it: a destination that value has left through is financial history. A disabled destination never returns; adding it again is a new registration with its own creation time, which is what makes a cooldown on a changed destination a fact rather than a field somebody remembers to reset.
+         */
+        delete: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    destinationId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Destination disabled. `open_payout_ids` names the conversion requests that still point at it: each is refused at submission from now on and holds its value reserved until it is cancelled. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+         * @description The Credit balance breakdown comes from the credit service; the positions come from the invariant-checked read model that migration 00772 maintains from the fills. Unrealised P&L is marked at each market's marginal price at `as_of`, which is stated rather than implied.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Portfolio */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Portfolio"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update the caller own profile (display name, handle, locale, time zone)
+         * @description Every field is optional and only the ones present change; an empty handle clears it. There is no id in the path, so this route can reach no profile but the caller own.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProfileUpdate"];
+                };
+            };
+            responses: {
+                /** @description Updated profile */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserProfile"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the system knows about the security of the caller own account
+         * @description Derived entirely from the session store and the claims of the current session. It holds no secret and creates nothing.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Security summary */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SecuritySummary"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/terms-acceptances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Legal documents, which of them the caller has accepted, and which are outstanding */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Acceptance state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TermsState"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Accept the named documents at the versions currently served
+         * @description The record names the document, its version and the sha256 of the exact bytes shown. Accepting the same bytes twice is idempotent and produces one record, not two.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TermsAcceptanceRequest"];
+                };
+            };
+            responses: {
+                /** @description Acceptance state after accepting */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TermsState"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your financial verification profile, what is missing, and what to do next (§20, §24)
+         * @description The financial profile area of §24. It carries a state, a level, the sub-checks behind that level and the actions available, and it carries no personal data at all: there is no document identifier, no government number and no date of birth, because this system never had any. A provider holds the evidence; Nodal holds the conclusion.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Verification profile */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationProfile"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification/sandbox-outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * SANDBOX TIER ONLY - choose what the rehearsal verification decides
+         * @description A sandbox-tier affordance (ADR-0023) and nothing else. It exists so the whole withdrawal journey can be exercised without fabricating an approval, and it is refused with FORBIDDEN on any deployment that is not a sandbox tier and by any provider that is not the sandbox one. There is no default outcome anywhere in this path: a rehearsal session nobody has answered stays pending forever, because "approved unless told otherwise" is a fabricated approval with extra steps. Every row it writes is labelled sandbox, and a database CHECK refuses that label in PROD.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SandboxVerificationOutcome"];
+                };
+            };
+            responses: {
+                /** @description The session as the chosen outcome left it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationSession"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a provider-hosted identity verification (§20)
+         * @description Returns a single-use hosted URL the browser is sent to. Nodal stores the provider's reference and never the URL: those links are credentials for resuming somebody's identity check. The jurisdiction is supplied by the caller and is never inferred from a network address, which is a legal determination wearing a network header's clothes. A person already has at most one open session; asking again resumes it rather than racing it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StartVerificationRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay, or a resumed session */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedVerification"];
+                    };
+                };
+                /** @description A hosted session to send the person to */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedVerification"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ask the provider what happened, and record it
+         * @description Never trust the redirect. A customer arriving back at the return URL says they came back, not that they passed, so this polls the provider and ingests whatever it says. It is idempotent: a status that has not moved records nothing.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The session as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationSession"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-assets": {
         parameters: {
             query?: never;
@@ -1943,6 +3388,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/native-markets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover internal markets (product goal §12, §35)
+         * @description One page of the markets list. `sort` chooses the ordering; only NEWEST is stable under paging, because every other key is a live figure that moves when somebody trades, and the response says which it was. `q` searches the asset's name, symbol and description in PostgreSQL — there is no external index, and a market's identity is never a display name.
+         *
+         *     This route is unauthenticated, so it carries no account identity and answers no question about one: there is no creator field and no creator filter, and content a moderation verdict REJECTED is not published here. A DELISTED market is off the default page and returned when `status` asks for it. The creator of a market is on `GET /native-markets/{marketId}/summary`, which is behind a session (D-080, D-110).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    q?: string;
+                    sort?: "NEWEST" | "VOLUME_24H" | "CHANGE_24H" | "LIQUIDITY" | "PRICE";
+                    /** @description Repeat to include several statuses. Absent means every status. */
+                    status?: ("PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED")[];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of market summaries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeMarketPage"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-markets/{marketId}": {
         parameters: {
             query?: never;
@@ -1972,6 +3466,53 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/candles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OHLCV over a bounded window, computed from the market's own prints (§14)
+         * @description Buckets with no trades are ABSENT rather than filled forward: §14 asks for an honest empty state, and a flat-filled candle invents a trade that did not happen. `from` and `to` are both required and the window is bounded to 1500 buckets.
+         */
+        get: {
+            parameters: {
+                query: {
+                    from: components["schemas"]["Timestamp"];
+                    interval: "1m" | "5m" | "15m" | "1h" | "1d";
+                    to: components["schemas"]["Timestamp"];
+                };
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Candles, oldest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeCandlePage"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
             };
         };
         put?: never;
@@ -2095,6 +3636,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/native-markets/{marketId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything the asset detail / trading screen needs (product goal §13)
+         * @description The same summary row the list returns, plus the safety limits in force and the holder concentration. It is a separate read from GET /native-markets/{marketId} so the trade screen and the markets page share one projection and cannot disagree about a price or a volume.
+         *
+         *     `account_id` is optional and must be an account the caller owns. It marks that account's row in `top_holders` with `is_you` and changes nothing else: the holder list names nobody either way (D-111).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    account_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Market detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeMarketDetail"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The public tape — recent prints, newest first (§13)
+         * @description No account identity appears here. A tape says what the market did; who did it is somebody else's position.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recent prints */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeTradePage"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orders": {
         parameters: {
             query?: never;
@@ -2161,6 +3792,106 @@ export interface paths {
                         "application/json": components["schemas"]["OrderDetail"];
                     };
                 };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a payment that buys Credits (PART XI, pgf Sections 5-7)
+         * @description The request says how much MONEY the customer will pay. It cannot say how many Credits to issue, because there is no such field: the quantity is derived server-side from the named pricing policy version. The response carries a provider client secret exactly once, on creation, and never on an idempotent replay -- a second browser must not be able to resume somebody else's payment form.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCreditPurchaseRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay. No client_secret is returned */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                /** @description Purchase started; complete the payment with the provider using client_secret */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{paymentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The state of one Credit purchase
+         * @description A funding page polls this rather than trusting a redirect. A provider redirect says the customer came back, not that the money arrived.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: components["parameters"]["PaymentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Purchase state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreditPurchase"];
+                    };
+                };
+                403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
             };
         };
@@ -2349,6 +4080,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payouts/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What a payout would cost, before committing to it (§19, §22)
+         * @description A separate pre-commitment call, because the customer sees the fee and the net before they commit. The minimum is judged NET of fees, since sub-minimum dust is destroyed rather than returned. A quote expires, and an expired one is refused rather than silently re-priced: a person who saw a number and pressed the button a quarter of an hour later is told the number moved, not charged a different one. Nothing is reserved and no ledger row is written.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePayoutQuote"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the quote the customer was shown */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutQuote"];
+                    };
+                };
+                /** @description A quote that stands until it expires */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutQuote"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/quotes/preview": {
         parameters: {
             query?: never;
@@ -2505,6 +4294,273 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your strategies */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of strategies */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Describe a strategy in your own words
+         * @description Records what you want, exactly as you wrote it. Nothing is compiled here and nothing is activated: describing a strategy and asking for it to be compiled are two separate acts, because you must see the compiled result before anything can act on your behalf.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateStrategyRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Strategy"];
+                    };
+                };
+                /** @description Recorded */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Strategy"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{strategyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One strategy and its current compiled version */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    strategyId: components["parameters"]["StrategyId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Strategy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Strategy"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{strategyId}/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compile the description into a reviewable strategy
+         * @description Every attempt is recorded, successful or not, including an attempt made on a deployment that has no compiler backend configured: that attempt is recorded with outcome MODEL_UNAVAILABLE and the failure code COMPILER_UNAVAILABLE, and no IR is produced. Natural-language text is never turned into financial authority without a compiled strategy the owner has read.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    strategyId: components["parameters"]["StrategyId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The attempt and what it produced, if anything */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CompileResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{strategyId}/versions/{version}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a compiled strategy version you have read
+         * @description The review step of goal §18, recorded. An agent can only be created from a version whose owner read it and approved it, and this is the only way that record is written: no compiler can produce an accepted version, and no operator can accept one on somebody's behalf.
+         *
+         *     The body must echo the `ir_hash` shown on the review screen. Without it, "accept version 2" would mean "accept whatever version 2 is when this request arrives", and a compile that landed between the reading and the pressing would be approved by somebody who never saw it. A hash that does not match this version is refused with 409 and nothing is written.
+         *
+         *     Accepting a version that is already accepted is a replay and answers the version. Accepting one in any other status is refused with INVALID_STATE_TRANSITION. Acceptance grants nothing on its own: creating an agent is the next separate act, and enabling it the one after.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    strategyId: components["parameters"]["StrategyId"];
+                    /** @description The version NUMBER, which is what the review screen shows, not the version's identifier. */
+                    version: components["parameters"]["StrategyVersionNumber"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AcceptStrategyVersionRequest"];
+                };
+            };
+            responses: {
+                /** @description The accepted version */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The legal documents currently served, with their text, for anyone
+         * @description The same registry a signed-in person accepts from (internal/terms), without any acceptance state: a visitor with no account can read the binding text before creating one, and the public site serves these bytes rather than an explainer. Every document says whether counsel review is still required.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current documents, oldest requirement first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PublicLegalDocument"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/version": {
         parameters: {
             query?: never;
@@ -2532,6 +4588,8 @@ export interface paths {
                             build_version: string;
                             config_hash: string;
                             environment: string;
+                            /** @description True when this deployment is a sandbox tier (ADR-0023). Everything it mints, verifies or pays is a rehearsal; the UI labels the whole product accordingly. */
+                            sandbox_tier?: boolean;
                         };
                     };
                 };
@@ -2560,7 +4618,7 @@ export interface paths {
                 query?: never;
                 header?: never;
                 path: {
-                    provider: "stripe";
+                    provider: "stripe_credit";
                 };
                 cookie?: never;
             };
@@ -2649,11 +4707,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptStrategyVersionRequest: {
+            /** @description The semantic hash of the document you read, exactly as the review screen showed it. It is compared with the version's own hash and a mismatch is refused: this is the field that makes "accept" mean "accept THIS document" rather than "accept whatever is there now". */
+            ir_hash: string;
+        };
         Account: {
             created_at: components["schemas"]["Timestamp"];
             id: components["schemas"]["UUID"];
             /** @enum {string} */
             kind: "CUSTOMER" | "CANARY" | "PLATFORM";
+            owner_user_id?: components["schemas"]["UUID"];
             /** @enum {string} */
             status: "ACTIVE" | "RESTRICTED" | "FROZEN" | "CLOSED";
             status_reason?: string;
@@ -2661,10 +4724,51 @@ export interface components {
         AccountPage: components["schemas"]["Page"] & {
             items: components["schemas"]["Account"][];
         };
+        /** @description A restriction, written for the person it applies to. The free text an operator wrote on a status change is deliberately not here: it was written for other operators and appears in the support view instead. */
+        AccountRestriction: {
+            account_id?: components["schemas"]["UUID"];
+            /** @enum {string} */
+            code: "USER_SUSPENDED" | "USER_CLOSED" | "ACCOUNT_RESTRICTED" | "ACCOUNT_FROZEN" | "ACCOUNT_CLOSED" | "CLOSURE_PENDING";
+            message: string;
+        };
         AccountStatusChange: {
             reason: string;
             /** @enum {string} */
             to: "ACTIVE" | "RESTRICTED" | "FROZEN" | "CLOSED";
+        };
+        ActivityAmount: {
+            currency?: string;
+            origin?: components["schemas"]["CreditOrigin"];
+            symbol?: string;
+            temperature: components["schemas"]["ValueTemperature"];
+            /**
+             * @description How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor units of `currency`, ASSET_UNITS is base units of `symbol`.
+             * @enum {string}
+             */
+            unit: "CREDITS" | "MONEY_MINOR" | "ASSET_UNITS";
+            value: components["schemas"]["SignedQuantity"];
+        };
+        ActivityFeedItem: {
+            amounts: components["schemas"]["ActivityAmount"][];
+            id: string;
+            kind: components["schemas"]["ActivityFeedKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            reference: {
+                id: string;
+                type: string;
+            };
+            simulated: boolean;
+            status?: string;
+            /** @description Built on the server from a fixed template per kind, never from user text. */
+            summary: string;
+        };
+        /**
+         * @description The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
+         * @enum {string}
+         */
+        ActivityFeedKind: "CREDIT_PURCHASE" | "CREDIT_REVERSAL" | "NATIVE_TRADE" | "NATIVE_ASSET_CREATED" | "PAYOUT_REQUESTED" | "PAYOUT_STATE_CHANGED" | "ADMIN_ADJUSTMENT" | "VERIFICATION_UPDATED" | "PAYOUT_DESTINATION_ADDED" | "PAYOUT_DESTINATION_DISABLED" | "TERMS_ACCEPTED" | "ACCOUNT_CLOSURE_REQUESTED" | "ACCOUNT_CLOSURE_DECIDED" | "AGENT_CREATED" | "AGENT_PAUSED" | "AGENT_RESUMED" | "AGENT_DISABLED" | "NATIVE_MARKET_PAUSED";
+        ActivityFeedPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["ActivityFeedItem"][];
         };
         ActivityItem: {
             correlation_id?: string;
@@ -2715,6 +4819,129 @@ export interface components {
             target_id: string;
             target_type: string;
         };
+        /** @description Read only. There is no field here an operator can write, and the only mutation the support surface offers is deciding a closure request the user themselves opened (PART 38). */
+        AdminUserView: {
+            acceptances?: components["schemas"]["TermsAcceptance"][];
+            accounts: components["schemas"]["Account"][];
+            active_sessions: number;
+            /** @description Where this user history is recorded, so the support view points at the evidence rather than restating it. */
+            audit_stream: string;
+            /** @description What this person accounts still hold, across every account they own. Effecting a closure is irreversible and puts whatever is left out of their reach, so the decision surface carries the three facts the refusal exists for and the service refuses EFFECT while any of them stands. A blocker means REFUSE with a reason, never a permanent no. */
+            closure_blockers: {
+                /** @description Nothing financial stands in the way of effecting. */
+                clear: boolean;
+                /** @description The gross Credit balance in base units, as a decimal string. Gross and not spendable a disputed or frozen lot is still value that belongs to this person. */
+                credit_balance: string;
+                /** @description Native-asset positions still holding a non-zero quantity. */
+                open_native_positions: number;
+                /** @description Payout requests that have not reached a terminal state. */
+                open_payout_requests: number;
+                /** @description One sentence per blocker, in a fixed order, written for the operator deciding and for the person who will read the refusal. */
+                reasons: string[];
+            };
+            closure_request?: components["schemas"]["ClosureRequest"];
+            created_at: components["schemas"]["Timestamp"];
+            /** @description The identity provider asserted a verified address. The address itself is sealed and is not reachable from here. */
+            email_verified: boolean;
+            idp_issuer: string;
+            idp_subject: string;
+            onboarding?: components["schemas"]["Onboarding"];
+            profile?: components["schemas"]["UserProfile"];
+            restrictions: components["schemas"]["AccountRestriction"][];
+            user_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            user_status: "ACTIVE" | "SUSPENDED" | "CLOSED";
+            /** @description The verification level Nodal has established. known is false when this deployment wired no resolver, which is reported as not known here and never as NONE. */
+            verification: {
+                known: boolean;
+                level?: string;
+            };
+        };
+        Agent: {
+            account_id: components["schemas"]["UUID"];
+            archived: boolean;
+            authority: components["schemas"]["AuthorityLevel"];
+            budget: components["schemas"]["AgentBudget"];
+            created_at: components["schemas"]["Timestamp"];
+            granted_at?: components["schemas"]["Timestamp"];
+            granted_by_user_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            last_run_at?: components["schemas"]["Timestamp"];
+            last_run_status?: string;
+            limits: components["schemas"]["AgentLimits"];
+            /** @enum {string} */
+            mode?: "BACKTEST" | "PAPER" | "SHADOW" | "CANARY" | "LIMITED" | "LIVE";
+            name: string;
+            pause?: components["schemas"]["AgentPause"];
+            runs_total?: number;
+            runtime: components["schemas"]["AgentRuntime"];
+            /** @description True when the strategy version this agent deploys was compiled by a compiler that exists only on a sandbox tier. Everything about the agent is then a rehearsal: it is labelled one wherever it is shown, and no real capital can move through it on any deployment. */
+            sandbox: boolean;
+            /**
+             * @description The furthest rung of the promotion ladder this agent has reached.
+             * @enum {string}
+             */
+            stage: "DRAFT" | "COMPILED" | "VALIDATED" | "BACKTEST_ELIGIBLE" | "SHADOW" | "CANARY" | "LIMITED" | "LIVE";
+            /** @enum {string} */
+            state: "DRAFT" | "COMPILED" | "VALIDATED" | "BACKTEST_ELIGIBLE" | "SHADOW" | "CANARY" | "LIMITED" | "LIVE" | "PAUSED" | "FAILED" | "REVOKED" | "SUPERSEDED";
+            /**
+             * @description The product's own word for the state, which is what a person is actually asking. STOPPED means created and never enabled; ENABLED means the owner granted it the right to be evaluated, which is not the same as something evaluating it - read runtime for that.
+             * @enum {string}
+             */
+            status: "STOPPED" | "ENABLED" | "PAUSED" | "DISABLED" | "FAILED";
+            strategy_id: components["schemas"]["UUID"];
+            strategy_version_id: components["schemas"]["UUID"];
+            updated_at?: components["schemas"]["Timestamp"];
+        };
+        AgentActionRequest: {
+            reason?: string;
+        };
+        /** @description granted is the ceiling; used is derived from the intents this agent's runs created that reached a state where value is committed. source names where used came from, so a zero is never mistaken for a measurement that was not made. */
+        AgentBudget: {
+            granted_credits: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            source: "NO_RUNS_RECORDED" | "NO_INTENTS_CREATED" | "COMMITTED_INTENTS";
+            used_credits: components["schemas"]["Quantity"];
+        };
+        /** @description The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created. */
+        AgentLimits: {
+            allowed_asset_ids: components["schemas"]["UUID"][];
+            budget_credits: components["schemas"]["Quantity"];
+            daily_loss_stop_credits: components["schemas"]["Quantity"];
+            max_position_share_bps: components["schemas"]["BPS"];
+            per_trade_cap_credits: components["schemas"]["Quantity"];
+            schedule: components["schemas"]["AgentSchedule"];
+        };
+        AgentPage: {
+            /** @description Every declared level and whether this build permits it. */
+            authority_levels: components["schemas"]["AuthorityLevel"][];
+            items: components["schemas"]["Agent"][];
+            next_cursor?: string;
+        };
+        AgentPause: {
+            /** @enum {string} */
+            open_orders_policy?: "LEAVE" | "CANCEL_CANCELABLE";
+            paused_at: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            paused_by_actor_type: "USER" | "OPERATOR" | "SYSTEM";
+            reason: string;
+            reason_code: string;
+        };
+        /** @description What is actually evaluating and executing, derived from agent runs and from which worker processes this deployment runs. It is not the agent's lifecycle state: an agent can be enabled, correct and evaluated by nothing at all, and NOT_DEPLOYED says exactly that. */
+        AgentRuntime: {
+            detail: string;
+            /** @enum {string} */
+            evaluator: "NOT_DEPLOYED" | "IDLE" | "RUNNING";
+            /** @enum {string} */
+            executor: "NOT_DEPLOYED" | "IDLE" | "RUNNING";
+            last_heartbeat?: components["schemas"]["Timestamp"];
+        };
+        /** @description How often the agent may evaluate. MANUAL carries no interval. */
+        AgentSchedule: {
+            interval_minutes?: number;
+            /** @enum {string} */
+            kind: "MANUAL" | "INTERVAL";
+        };
         Asset: {
             chain: string;
             decimals: number;
@@ -2730,6 +4957,15 @@ export interface components {
             status: "ACTIVE" | "CLOSE_ONLY" | "RESTRICTED" | "HALTED" | "DELISTING" | "DELISTED";
             symbol: string;
             token_extensions?: string[];
+        };
+        /** @description One rung of the authority ladder, rendered from the matrix the code enforces rather than written out beside it. Disabled levels are returned rather than hidden, with the capability each would need. */
+        AuthorityLevel: {
+            enabled: boolean;
+            level: number;
+            /** @enum {string} */
+            name: "RESEARCH_ONLY" | "RECOMMENDATION" | "PREPARE_TRANSACTION" | "USER_APPROVED_RULE" | "BOUNDED_DISCRETION" | "AUTONOMOUS_SELECTION" | "AUTONOMOUS_PORTFOLIO";
+            required_capability?: string;
+            summary: string;
         };
         /** @description Basis points; 10000 == 100% */
         BPS: number;
@@ -2768,7 +5004,7 @@ export interface components {
             withdrawable: components["schemas"]["USD"];
         };
         /** @enum {string} */
-        Capability: "LIVE_FUNDING" | "LIVE_MANUAL_TRADING" | "LIVE_AGENT_TRADING" | "WITHDRAWALS" | "SOCIAL_DATA_PERSISTENCE" | "MARKETPLACE" | "CROSS_CHAIN" | "PREDICTION_MARKETS" | "SECURITIES" | "CEX_TRADING";
+        Capability: "LIVE_FUNDING" | "LIVE_MANUAL_TRADING" | "LIVE_AGENT_TRADING" | "WITHDRAWALS" | "SOCIAL_DATA_PERSISTENCE" | "MARKETPLACE" | "CROSS_CHAIN" | "PREDICTION_MARKETS" | "SECURITIES" | "CEX_TRADING" | "CREDIT_PURCHASE" | "NATIVE_ASSET_CREATION" | "NATIVE_MARKET_TRADING" | "PAYOUT_RESERVE" | "PAYOUT_SETTLE" | "HOSTED_TRADING" | "HOSTED_FUNDING" | "AGENT_BOUNDED_DISCRETION" | "AGENT_AUTONOMOUS_SELECTION" | "AGENT_AUTONOMOUS_PORTFOLIO";
         CapabilityGate: {
             /** @description Result of the five-condition activation check, not just the row state */
             active: boolean;
@@ -2784,16 +5020,101 @@ export interface components {
             legal_review_ref?: string;
             provider_contract_ref?: string;
             risk_approval_ref?: string;
+            /** @description True when active came from a SANDBOX row on a sandbox tier rather than from dual control. Show the word; an active sandbox gate is not an approval. */
+            sandbox?: boolean;
             security_approval_ref?: string;
             /** @enum {string} */
-            state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED";
+            state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
+        };
+        CapabilityGateTransition: {
+            actor_id: string;
+            /** @description OPERATOR for a person, SYSTEM for a boot-time sandbox activation */
+            actor_type: string;
+            /** @description Hex SHA-256 of the evidence references at the time, empty when there were none */
+            evidence_hash?: string;
+            /** @enum {string} */
+            from: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
+            /** Format: date-time */
+            occurred_at: string;
+            reason: string;
+            /** @description True when the transition entered SANDBOX: never an approval */
+            sandbox: boolean;
+            /** @enum {string} */
+            to: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
+            transition_id: components["schemas"]["UUID"];
+        };
+        CloseAccountRequest: {
+            /** @description Optional. A person leaving does not owe an explanation. */
+            reason?: string;
+        };
+        ClosureDecision: {
+            /** @enum {string} */
+            decision: "CANCEL" | "REFUSE" | "EFFECT";
+            reason: string;
+        };
+        ClosureRequest: {
+            cooling_off_until: components["schemas"]["Timestamp"];
+            decided_at?: components["schemas"]["Timestamp"];
+            decided_reason?: string;
+            /** @description The cooling-off period has passed and an operator may now effect the request. */
+            effectable?: boolean;
+            id: components["schemas"]["UUID"];
+            requested_at: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            state: "PENDING" | "CANCELLED" | "REFUSED" | "EFFECTED";
+        };
+        /** @description The compiler's own explanation of what it produced, in words, shown beside the rendered strategy on the review step. Never chain-of-thought: a structured compiler's rationale names, element by element, which field you stated it came from. */
+        CompileRationale: {
+            details: string[];
+            summary: string;
+        };
+        /** @description Which compiler this deployment has. Absent means none, which is the same fact compiler_configured reports as false. */
+        CompilerDescriptor: {
+            name: string;
+            /** @description Every version this compiler produces is a rehearsal and is labelled one. */
+            sandbox: boolean;
+            /** @description True when the compiler reads the fields you state rather than your description. A structured compiler never interprets natural language: an unstated field comes back as a named refusal, never as a default. */
+            structured: boolean;
+        };
+        CompileResult: {
+            attempt_id: components["schemas"]["UUID"];
+            attempt_no: number;
+            /** @description What the compiler could not decide. It never guesses. */
+            clarifications?: string[];
+            detail: string;
+            /** @description Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment has no compiler backend configured, so nothing was attempted and nothing was inferred. STRUCTURED_CONSTRAINTS_REQUIRED means this deployment's compiler reads a strategy you state field by field and the one you sent is missing or incomplete; every field it needed is listed in clarifications. */
+            failure_codes?: string[];
+            /** @enum {string} */
+            outcome: "SUCCESS" | "REJECTED" | "NEEDS_CLARIFICATION" | "MODEL_UNAVAILABLE" | "TIMEOUT";
+            rationale?: components["schemas"]["CompileRationale"];
+            strategy_id: components["schemas"]["UUID"];
+            version?: components["schemas"]["StrategyVersion"];
+        };
+        CreateAgentRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description 0 to 3 are the product. 4, 5 and 6 are declared, disabled by policy, and refused with the capability each would need. */
+            authority_level: number;
+            limits: components["schemas"]["AgentLimits"];
+            name: string;
+            strategy_id: components["schemas"]["UUID"];
+            strategy_version_id: components["schemas"]["UUID"];
+        };
+        /** @description Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write. */
+        CreateCreditPurchaseRequest: {
+            account_id: components["schemas"]["UUID"];
+            /**
+             * Format: int64
+             * @description What the customer will pay, in minor units of the pricing currency.
+             * @example 10000
+             */
+            amount_minor: number;
+            /** @example USD */
+            currency?: string;
         };
         CreateInternalProductRequest: {
             account_id: components["schemas"]["UUID"];
             description?: string;
             kind: components["schemas"]["InternalProductKind"];
-            /** @description The platform share, capped at 3000 (30%) and rounded DOWN on every sale. */
-            platform_fee_bps?: components["schemas"]["BPS"];
             /** @description In Credit base units. Fixed for this version once published. */
             price: components["schemas"]["Quantity"];
             title: string;
@@ -2808,10 +5129,40 @@ export interface components {
             name: string;
             symbol: string;
         };
+        CreatePayoutDestination: {
+            account_id: components["schemas"]["UUID"];
+            /** @description ISO 3166-1 alpha-2, and REQUIRED. The provider is asked whether it can pay a recipient there before the destination is registered; without it the question was skipped entirely and a destination the provider had said it could not pay was accepted and marked VERIFIED (D-122). */
+            country: string;
+            currency?: string;
+            display_label?: string;
+            /** @enum {string} */
+            kind: "BANK" | "CARD_PUSH" | "FIAT_WALLET" | "CRYPTO_WALLET";
+            masked_display?: string;
+            /** @description The provider's token for the destination, or on a sandbox tier a sandbox handle. An input that looks like an account number, a card number, an IBAN, a private key or a seed phrase is REFUSED, not stored: Nodal never holds one. */
+            provider_token: string;
+            /** @description The subdivision within country, without its country prefix. Required whenever the provider publishes excluded subdivisions for that country, and refused VALIDATION_FAILED when it is missing there: "we do not know which state" is not "any state". */
+            region?: string;
+        };
+        CreatePayoutQuote: {
+            account_id: components["schemas"]["UUID"];
+            /** @description The GROSS Credits the customer would give up. The fee comes out of it. */
+            amount: components["schemas"]["Quantity"];
+            destination_id: components["schemas"]["UUID"];
+        };
         CreatePayoutRequest: {
             account_id: components["schemas"]["UUID"];
             amount: components["schemas"]["Quantity"];
             destination_id?: components["schemas"]["UUID"];
+            /** @description The quote from POST /payouts/quote that the customer was shown, and it is REQUIRED. It is consumed in the same transaction that reserves the value, so one quote funds exactly one payout, and an expired or already-used quote refuses the request before anything is decided about the money. It must name the same destination and the same gross amount. Without it there is no fee and no minimum to judge the payout against, which is how a payout below the provider's published minimum was reserved and settled with the fee never taken (D-119). */
+            quote_id: components["schemas"]["UUID"];
+        };
+        CreateStrategyRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description The strategy stated field by field. Recorded in its own column beside the description, never merged into it. A structured compiler reads this and nothing else; an incomplete one compiles to STRUCTURED_CONSTRAINTS_REQUIRED naming the fields it needed. */
+            constraints?: components["schemas"]["StructuredStrategy"];
+            /** @description What you want, in your own words. It is recorded exactly as written and shown back to you unchanged. On a deployment whose compiler is structured it is never read by the compiler and never interpreted. */
+            description: string;
+            name: string;
         };
         /** @description The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other. */
         CreditBalance: {
@@ -2822,6 +5173,11 @@ export interface components {
             by_origin?: {
                 [key: string]: components["schemas"]["Quantity"];
             };
+            /**
+             * @description The scale of the CREDIT asset every quantity in this response is expressed in. One Credit is 10^credit_decimals base units. It is carried with the figures because a client that has to assume the scale is a client that can render a balance a million times wrong.
+             * @example 6
+             */
+            credit_decimals: number;
             frozen: components["schemas"]["Quantity"];
             gross: components["schemas"]["Quantity"];
             ineligible: components["schemas"]["Quantity"];
@@ -2830,7 +5186,8 @@ export interface components {
             payout_eligible: components["schemas"]["Quantity"];
             policy_hash?: string;
             policy_version: string;
-            reversed?: components["schemas"]["Quantity"];
+            /** @description Units whose funding was clawed back and which still have remaining quantity recorded. It should be transient, and it is returned so that it is visible when it is not. */
+            reversed: components["schemas"]["Quantity"];
             spendable: components["schemas"]["Quantity"];
         };
         /**
@@ -2838,6 +5195,82 @@ export interface components {
          * @enum {string}
          */
         CreditOrigin: "PURCHASED" | "PROMOTIONAL" | "REFUND" | "CREATOR_EARNING" | "DATA_SALE_EARNING" | "AGENT_SERVICE_EARNING" | "MARKET_CREATOR_EARNING" | "MARKET_TRADING_PROCEEDS" | "COMPETITION_REWARD" | "ADMIN_ADJUSTMENT" | "PROVIDER_SETTLEMENT";
+        /** @description The versioned policy that converts money into Credits. version is recorded on every purchase, so a purchase made under one rate is still explicable after two more have replaced it.
+         *
+         *     Every term of the conversion is published, because a client that has credits_per_major_unit and nothing else cannot compute what it is about to be charged for: the quantity the server issues is `amount_minor * credits_per_major_unit * 10^decimals / minor_units_per_major_unit`, rounded as `rounding` says. Publishing only the rate is what let a page render "100 Credits per 1 USD" over a server that issued a millionth of that. */
+        CreditPricing: {
+            /**
+             * Format: int64
+             * @description Whole Credits one major unit of currency buys.
+             * @example 100
+             */
+            credits_per_major_unit: number;
+            /** @example USD */
+            currency: string;
+            /**
+             * @description The scale of the CREDIT asset this policy prices, and the scale every Credit quantity in this API is expressed in. One Credit is 10^decimals base units.
+             * @example 6
+             */
+            decimals: number;
+            /**
+             * Format: int64
+             * @example 1000000
+             */
+            max_amount_minor: number;
+            /**
+             * Format: int64
+             * @example 100
+             */
+            min_amount_minor: number;
+            /**
+             * Format: int64
+             * @description 100 for USD. Stated rather than assumed, so a zero-decimal currency does not silently multiply by 100.
+             * @example 100
+             */
+            minor_units_per_major_unit: number;
+            /**
+             * @description How a payment that does not divide evenly into whole base units is resolved.
+             * @example down
+             * @enum {string}
+             */
+            rounding: "down" | "up" | "half_even" | "half_up" | "floor" | "ceil" | "exact";
+            /** @example credit-pricing-v1 */
+            version: string;
+        };
+        CreditPurchase: {
+            account_id: components["schemas"]["UUID"];
+            /** Format: int64 */
+            amount_minor: number;
+            /** @description The provider secret that drives the payment UI. Returned exactly once, on creation. It is never persisted, never logged, and never returned on a replay or a read. */
+            client_secret?: string;
+            /** Format: date-time */
+            created_at?: string;
+            credit_quantity: components["schemas"]["Quantity"];
+            currency: string;
+            failure_reason?: string;
+            pricing_version: string;
+            provider: string;
+            /**
+             * @description The provider mode that opened THIS payment, recorded on it when it was created. It is absent for a purchase made before the mode was recorded, which is rendered as sandbox rather than as live: an unrecorded mode cannot be asserted to be real money.
+             * @enum {string}
+             */
+            provider_mode?: "fake" | "sandbox" | "live";
+            purchase_id: components["schemas"]["UUID"];
+            /**
+             * Format: date-time
+             * @description When the reversibility window opened. The settlement window is measured from here.
+             */
+            reversible_at?: string;
+            /** @description True when the provider this purchase ran through was not a live one: the card was a test card and the Credits it mints are sandbox value. The UI renders such a figure at the simulated temperature and says so; it is a fact about the payment, not a claim about the person, and not the deployment's mode today -- rendering it from today's configuration re-labelled every sandbox purchase a deployment had ever made on the day it went live. */
+            sandbox?: boolean;
+            /** Format: date-time */
+            settled_at?: string;
+            /**
+             * @description The funding lifecycle state. CAPTURED is not SETTLED and REVERSIBLE is not payout-eligible; the difference is a card dispute window that can run for months.
+             * @enum {string}
+             */
+            state: "CREATED" | "AUTHORIZATION_PENDING" | "AUTHORIZED" | "CAPTURE_PENDING" | "CAPTURED" | "REVERSIBLE" | "SETTLED" | "REVERSED" | "REFUNDED" | "DISPUTED" | "FAILED" | "CANCELED" | "MANUAL_REVIEW";
+        };
         Decision: {
             decision: string;
             evaluated_at: components["schemas"]["Timestamp"];
@@ -2894,6 +5327,12 @@ export interface components {
             venue: string;
             venue_fee_quantity?: components["schemas"]["Quantity"];
         };
+        /**
+         * @description How certain it is that value credited to an account cannot be taken back by whoever supplied it (PART XI). UNFUNDED is value nothing external funded; REVERSIBLE is a card payment inside its dispute window; DISPUTED and REVERSED are a dispute in progress and one that succeeded.
+         *     Only SETTLED and UNFUNDED may ever be paid out, which is a strictly smaller set than the one that may be SPENT: reversible value buys things and does not leave.
+         * @enum {string}
+         */
+        FundingFinality: "UNFUNDED" | "REVERSIBLE" | "SETTLED" | "DISPUTED" | "REVERSED";
         GateActionRequest: {
             effective_at?: components["schemas"]["Timestamp"];
             evidence_hashes?: string[];
@@ -3055,6 +5494,74 @@ export interface components {
             /** @default * */
             scope_id: string;
         };
+        LegalDocument: {
+            accepted: boolean;
+            accepted_at?: components["schemas"]["Timestamp"];
+            /** @description The document text, as Markdown, so a client renders exactly what it records acceptance of. */
+            body?: string;
+            content_hash: string;
+            /** @description The document has not been reviewed by a lawyer. Every document currently served is marked, and a surface must say so rather than presenting a draft as settled. */
+            counsel_review_required: boolean;
+            /** @enum {string} */
+            document_id: "TERMS_OF_SERVICE" | "PRIVACY_POLICY" | "RISK_DISCLOSURE" | "CREDITS_TERMS" | "WITHDRAWAL_DISCLOSURE";
+            /**
+             * @description When acceptance is required. A WITHDRAWAL document is not asked for at signup.
+             * @enum {string}
+             */
+            requirement: "ONBOARDING" | "WITHDRAWAL";
+            title: string;
+            version: string;
+        };
+        MarkedRead: {
+            updated: number;
+        };
+        /** @description The limits in force on this market right now (product goal section 47), from two documents: the market-safety policy, which is about the venue, and the risk kernel's GLOBAL policy, which is about an account. */
+        MarketSafetyLimits: {
+            /** Format: int64 */
+            circuit_breaker_move_bps?: number;
+            circuit_breaker_window_seconds?: number;
+            creator_may_buy_own_asset?: boolean;
+            max_creator_concentration_bps?: components["schemas"]["BPS"];
+            max_native_market_concentration_bps?: components["schemas"]["BPS"];
+            max_price_impact_bps?: components["schemas"]["BPS"];
+            max_slippage_bps?: components["schemas"]["BPS"];
+            min_opening_liquidity_credits?: components["schemas"]["Quantity"];
+            risk_policy_version?: string;
+            safety_policy_version: string;
+        };
+        MeAuditEntry: {
+            action: string;
+            /** @description Who acted, by category. The operator's identity is never exposed to a customer. */
+            actor_type?: string;
+            id: string;
+            ip?: string;
+            occurred_at: components["schemas"]["Timestamp"];
+            resource_id?: string;
+            resource_type?: string;
+            severity?: string;
+            /**
+             * @description SECURITY is the sign-in and session trail; ACCOUNT is what was done to the caller's own accounts.
+             * @enum {string}
+             */
+            source: "SECURITY" | "ACCOUNT";
+            user_agent?: string;
+        };
+        MeAuditPage: {
+            items: components["schemas"]["MeAuditEntry"][];
+            next_cursor: string | null;
+        };
+        /** @description An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float. */
+        MinorUSD: string;
+        MyAccount: {
+            accounts: components["schemas"]["Account"][];
+            closure_request?: components["schemas"]["ClosureRequest"];
+            /** @description How long a new closure request would wait before it could be effected. */
+            cooling_off_days: number;
+            restrictions: components["schemas"]["AccountRestriction"][];
+            user_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            user_status: "ACTIVE" | "SUSPENDED" | "CLOSED";
+        };
         NativeAsset: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_id: components["schemas"]["UUID"];
@@ -3073,6 +5580,17 @@ export interface components {
             supply: components["schemas"]["NativeSupply"];
             symbol: string;
         };
+        /** @description One place in an asset's holder concentration. It says how much and how large a share, and it does not say whose: `top_holders` used to render an account id to any signed-in caller, which made every market's largest positions readable by account and watchable trade by trade. The caller's own row is marked `is_you`, which tells them nothing they did not send. A named holder list is surveillance and belongs behind `native_market:surveil` on an operator route (D-111). */
+        NativeAssetHolder: {
+            /** @description This row is the calling account's own holding. Present only where the request named an account the caller owns. */
+            is_you?: boolean;
+            /** @description Base units, at the ASSET's decimals. */
+            quantity: components["schemas"]["Quantity"];
+            /** @description 1 is the largest holder of this asset. The rank is over every holder, not over the returned page, so rank 10 on a page of ten means there are more. */
+            rank: number;
+            /** @description This holding as a share of every unit accounts hold, truncated. The denominator is the sum of customer balances rather than the circulating supply, because units still in the pool are held by nobody and a creator's allocation is minted outside the curve, so a share of circulating supply can exceed 100%. This one cannot. */
+            share_bps: components["schemas"]["BPS"];
+        };
         NativeAssetPage: {
             items: components["schemas"]["NativeAsset"][];
         };
@@ -3086,6 +5604,28 @@ export interface components {
             marketing_restrictions?: string;
             minimum_age: number;
             transferable: boolean;
+        };
+        NativeCandle: {
+            asset_volume: components["schemas"]["Quantity"];
+            close: components["schemas"]["Quantity"];
+            credit_volume: components["schemas"]["Quantity"];
+            high: components["schemas"]["Quantity"];
+            low: components["schemas"]["Quantity"];
+            open: components["schemas"]["Quantity"];
+            open_time: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            trades: number;
+        };
+        NativeCandlePage: {
+            asset_decimals: number;
+            /** @description Oldest first. A bucket with no trades is absent, never filled forward. */
+            candles: components["schemas"]["NativeCandle"][];
+            from: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            interval: "1m" | "5m" | "15m" | "1h" | "1d";
+            market_id: components["schemas"]["UUID"];
+            price_scale: number;
+            to: components["schemas"]["Timestamp"];
         };
         NativeFill: {
             /** @description Surveillance findings this trade raised. They never block it. */
@@ -3133,12 +5673,75 @@ export interface components {
             state_version: number;
             /** @enum {string} */
             status: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
-            /** @description Holder concentration, which is the number a buyer most needs to see */
-            top_holders?: {
-                account_id?: components["schemas"]["UUID"];
-                quantity?: components["schemas"]["Quantity"];
-            }[];
+            /** @description Holder concentration, which is the number a buyer most needs to see. It names nobody; see NativeAssetHolder. This read takes no account, so no row is marked `is_you`. */
+            top_holders?: components["schemas"]["NativeAssetHolder"][];
             virtual_credit_reserve?: components["schemas"]["Quantity"];
+        };
+        NativeMarketDetail: {
+            /** @description The creator's account id, which is the handle placeholder. A display name belongs to the profile domain and is joined later; inventing one here would be a second source for it. It is on the DETAIL response rather than on the summary because the summary is served unauthenticated by the markets list (D-110). */
+            creator_account_id?: components["schemas"]["UUID"];
+            limits_in_force: components["schemas"]["MarketSafetyLimits"];
+            market: components["schemas"]["NativeMarketSummary"];
+            /** @description Holder concentration, which is the number a buyer most needs to see. It names nobody; see NativeAssetHolder. */
+            top_holders?: components["schemas"]["NativeAssetHolder"][];
+        };
+        NativeMarketPage: components["schemas"]["Page"] & {
+            markets: components["schemas"]["NativeMarketSummary"][];
+            /** @enum {string} */
+            sort: "NEWEST" | "VOLUME_24H" | "CHANGE_24H" | "LIQUIDITY" | "PRICE";
+            /** @description Whether paging this ordering sees every market exactly once. Only NEWEST does; the others rank by figures that move when somebody trades. */
+            stable: boolean;
+        };
+        /** @description One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string.
+         *
+         *     It carries no account identity, because the markets list that returns it is unauthenticated: an identifier on a public page is both readable and enumerable by anybody. The creator is a field of NativeMarketDetail, which only a signed-in caller can reach (D-110). */
+        NativeMarketSummary: {
+            activated_at?: components["schemas"]["Timestamp"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            asset_reserve: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            asset_status: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "DELISTED" | "REJECTED";
+            /**
+             * Format: int64
+             * @description Signed move over the last 24 hours. Meaningless unless has_24h_change.
+             */
+            change_24h_bps?: number;
+            circulating_supply: components["schemas"]["Quantity"];
+            created_at: components["schemas"]["Timestamp"];
+            creator_fee_bps: components["schemas"]["BPS"];
+            credit_asset_id: components["schemas"]["UUID"];
+            credit_volume_24h: components["schemas"]["Quantity"];
+            /** @description This object was created by the sandbox demo seeder. It exists only on a sandbox tier and represents nothing. */
+            demo: boolean;
+            description?: string;
+            /** @description False when the market has not traded in the window, which is a different fact from having moved nothing. */
+            has_24h_change?: boolean;
+            image_url?: string;
+            initial_asset_reserve: components["schemas"]["Quantity"];
+            /** @description The MARGINAL price -- what the next base unit costs -- at price_scale. */
+            last_price: components["schemas"]["Quantity"];
+            /** @description V + R, the depth the curve prices against. */
+            liquidity_credits: components["schemas"]["Quantity"];
+            market_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            market_status: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
+            max_supply: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            moderation_state?: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+            name: string;
+            platform_fee_bps: components["schemas"]["BPS"];
+            /** @description Decimal places every price here carries */
+            price_scale: number;
+            /** @description R -- the only Credits in this pool that could ever be paid out. */
+            real_credit_reserve: components["schemas"]["Quantity"];
+            reference_price_24h?: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            state_version?: number;
+            symbol: string;
+            /** Format: int64 */
+            trades_24h: number;
+            virtual_credit_reserve: components["schemas"]["Quantity"];
         };
         NativeOrderRequest: {
             account_id: components["schemas"]["UUID"];
@@ -3150,7 +5753,7 @@ export interface components {
             side: "BUY" | "SELL";
         };
         NativeQuote: {
-            /** @description Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, at price_scale. */
+            /** @description Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, and they are NOT on one scale between them: platform_fee and creator_fee are taken out of the Credit amount and carry the Credit asset's own decimals, while effective_price and spot_price_before are ratios computed at price_scale. Rendering a fee at price_scale divides it by a million million. */
             asset_decimals?: number;
             creator_fee?: components["schemas"]["Quantity"];
             effective_price?: components["schemas"]["Quantity"];
@@ -3180,6 +5783,89 @@ export interface components {
             max_supply: components["schemas"]["Quantity"];
             pool_supply: components["schemas"]["Quantity"];
             treasury_allocation: components["schemas"]["Quantity"];
+        };
+        NativeTradePage: {
+            asset_decimals: number;
+            market_id: components["schemas"]["UUID"];
+            price_scale: number;
+            trades: components["schemas"]["NativeTradePrint"][];
+        };
+        /** @description One public print. It carries no account identity, by design. */
+        NativeTradePrint: {
+            asset_volume: components["schemas"]["Quantity"];
+            credit_volume: components["schemas"]["Quantity"];
+            effective_price: components["schemas"]["Quantity"];
+            printed_at: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            seq: number;
+            /** @enum {string} */
+            side: "BUY" | "SELL";
+            spot_price_after: components["schemas"]["Quantity"];
+            spot_price_before?: components["schemas"]["Quantity"];
+        };
+        Notification: {
+            /** Format: uuid */
+            account_id?: string | null;
+            body: string;
+            /** @description Identifiers and state names only; never a balance. Canonical figures come from REST. */
+            data?: {
+                [key: string]: unknown;
+            };
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["NotificationKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            /** Format: date-time */
+            read_at?: string | null;
+            resource_id?: string;
+            resource_type?: string;
+            /** @description True when this notification was produced on a sandbox tier and describes nothing of real value (ADR-0023). */
+            sandbox: boolean;
+            /** @enum {string} */
+            severity: "INFO" | "WARN" | "CRITICAL";
+            title: string;
+        };
+        /**
+         * @description What a notification is about. The list is the product vocabulary; the nine names migration 00640 declared and nothing produces are not accepted here.
+         * @enum {string}
+         */
+        NotificationKind: "CREDIT_PURCHASE_CAPTURED" | "CREDIT_PURCHASE_REVERSED" | "NATIVE_TRADE_FILLED" | "NATIVE_MARKET_PAUSED" | "PAYOUT_ACCEPTED" | "PAYOUT_SETTLED" | "PAYOUT_FAILED" | "PAYOUT_NEEDS_REVIEW" | "VERIFICATION_UPDATED" | "ACCOUNT_RESTRICTED" | "SECURITY_NEW_SESSION" | "AGENT_PAUSED" | "SYSTEM";
+        NotificationPage: {
+            items: components["schemas"]["Notification"][];
+            next_cursor: string | null;
+        };
+        NotificationPreference: {
+            /**
+             * @description The only delivery channel that exists. No e-mail, SMS or push provider is configured anywhere in this system.
+             * @enum {string}
+             */
+            channel: "IN_APP";
+            enabled: boolean;
+            /** @description False where the kind cannot be switched off -- a new sign-in, an account restriction, a reversed purchase, a failed payout, a system message. The stored answer is kept and ignored, and a settings page should show the switch as fixed rather than one that does nothing. */
+            enforced: boolean;
+            kind: components["schemas"]["NotificationKind"];
+        };
+        NotificationPreferences: {
+            items: components["schemas"]["NotificationPreference"][];
+        };
+        NotificationPreferencesUpdate: {
+            items: {
+                enabled: boolean;
+                kind: components["schemas"]["NotificationKind"];
+            }[];
+        };
+        /** @description Timestamps, not a state machine. The steps are independent, may be done in any order, and cannot be undone (D-053). */
+        Onboarding: {
+            complete: boolean;
+            completed_at?: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            next_step?: "PROFILE" | "TERMS";
+            started_at: components["schemas"]["Timestamp"];
+            steps: {
+                complete: boolean;
+                completed_at?: components["schemas"]["Timestamp"];
+                /** @enum {string} */
+                key: "PROFILE" | "TERMS";
+            }[];
         };
         Order: {
             account_id: components["schemas"]["UUID"];
@@ -3221,8 +5907,85 @@ export interface components {
         Page: {
             next_cursor: string | null;
         };
+        /** @description Nodal stores the provider's token and a mask. There is no account number, card number, IBAN, routing number or key in this object, and there is none in the table behind it. */
+        PayoutDestination: {
+            account_id: components["schemas"]["UUID"];
+            country?: string;
+            created_at: components["schemas"]["Timestamp"];
+            currency?: string;
+            destination_id: components["schemas"]["UUID"];
+            display_label?: string;
+            /** @enum {string} */
+            kind: "BANK" | "CARD_PUSH" | "FIAT_WALLET" | "CRYPTO_WALLET";
+            /** @description What a person recognises, such as "••••4242". Never the whole number. */
+            masked_display?: string;
+            /** @description Present only on the response to DELETE /me/payout-destinations/{id}: the conversion requests that still point at this destination and are not finished. A reserved payout is refused at submission once its destination stops being usable and stays VERIFIED with its value held out of the balance, so the holder is told here which payouts to cancel rather than left to discover that their money is stuck. */
+            open_payout_ids?: components["schemas"]["UUID"][];
+            provider: string;
+            /** @description The subdivision this pays into, where the provider distinguishes them. */
+            region?: string;
+            sandbox: boolean;
+            status: components["schemas"]["PayoutDestinationStatus"];
+            /** @description Whether a payout may be sent here right now. */
+            usable?: boolean;
+            verified_at?: components["schemas"]["Timestamp"];
+        };
+        /**
+         * @description UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing names are kept because working code and a registered enum pairing use them (D-060). REJECTED and DISABLED are terminal: a destination never comes back, and adding it again is a new registration.
+         * @enum {string}
+         */
+        PayoutDestinationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED" | "DISABLED";
+        /** @description One provenance's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first.
+         *     A provenance is an origin, an origin floor AND a root set. Two slices can carry the same `origin` and different `origin_floor` values -- trading proceeds out of a settled purchase and trading proceeds out of a promotional grant are one origin and are not one kind of money -- and two more can share both and differ in `root_origins`, which is what the policy actually reads. All of them are reported separately rather than summed (D-136, D-141). */
+        PayoutProvenanceSlice: {
+            consumption_rank: number;
+            origin: components["schemas"]["CreditOrigin"];
+            /** @description What these units ultimately came from: the most restricted origin anywhere in their provenance. Equal to `origin` for value nothing else funded. */
+            origin_floor?: components["schemas"]["CreditOrigin"];
+            quantity: components["schemas"]["Quantity"];
+            /** @description True for a slice a cancellation gave back to the exact lots it came from. */
+            returned?: boolean;
+            /** @description Every origin these units ultimately came from. It is what the payout policy reads -- value is released only when the policy releases its own origin and all of these -- and `origin_floor` is the most restricted of it. Two slices can share an origin AND a floor and differ here, because the floor is a minimum and two sets share a minimum whenever they share their most restricted member; they are reported separately rather than summed (D-141). */
+            root_origins?: components["schemas"]["CreditOrigin"][];
+        };
+        /** @description What the provider said a payout would cost, before anybody committed. Both sides are exact integers; there is no rate field holding a decimal. */
+        PayoutQuote: {
+            account_id: components["schemas"]["UUID"];
+            consumed_at?: components["schemas"]["Timestamp"];
+            created_at?: components["schemas"]["Timestamp"];
+            currency: string;
+            destination_id: components["schemas"]["UUID"];
+            expires_at: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            fee_amount_minor: number;
+            /** @description Which fee schedule produced these numbers. On a sandbox tier it says in words that the figures are placeholders and not a price anybody has agreed. */
+            fee_model_version?: string;
+            fee_quantity: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            gross_amount_minor: number;
+            gross_quantity: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            minimum_amount_minor?: number;
+            /** @description Judged NET of fees, because sub-minimum dust is destroyed rather than returned. */
+            minimum_ok: boolean;
+            /** Format: int64 */
+            net_amount_minor: number;
+            net_quantity: components["schemas"]["Quantity"];
+            policy_version?: string;
+            pricing_version?: string;
+            /** @description What value would leave, in the order it would leave. */
+            provenance?: components["schemas"]["PayoutProvenanceSlice"][];
+            provider: string;
+            quote_id: components["schemas"]["UUID"];
+            sandbox: boolean;
+        };
         PayoutRequest: {
             account_id: components["schemas"]["UUID"];
+            /** Format: date-time */
+            blocked_at?: string;
+            /** @description Why this reserved payout cannot be sent, in words its holder can read, absent when nothing is blocking it. It is NOT a failure and NOT a state: the request is still VERIFIED and its Credits are still reserved, and cancelling it is what releases them.
+             *     The case it exists for is a destination the holder removed after asking. The payout stays reserved deliberately -- failing it would return the reservation on the strength of a fact the person can undo -- and until F-277 the request simply read VERIFIED, which reads as "on its way". A client showing this must show the cancel control beside it. There is no route that re-points a payout at a different destination; a new destination is a new request. */
+            blocked_reason?: string;
             created_at?: components["schemas"]["Timestamp"];
             destination_id?: components["schemas"]["UUID"];
             eligibility_reasons?: string[];
@@ -3232,9 +5995,30 @@ export interface components {
             payout_id: components["schemas"]["UUID"];
             policy_hash?: string;
             policy_version: string;
+            /** @description What value is leaving, in the order it leaves (§23). A payout does not take "500 Credits"; it takes specific units from specific provenance lots, and this is which. */
+            provenance?: components["schemas"]["PayoutProvenanceSlice"][];
+            /** @description The payout provider this request was claimed for, once it has been. */
+            provider?: string;
+            /** @description The pre-commitment quote this payout was created against. */
+            quote_id?: components["schemas"]["UUID"];
+            quoted_currency?: string;
+            /** Format: int64 */
+            quoted_fee_amount_minor?: number;
+            /**
+             * Format: int64
+             * @description The gross the customer was shown, in minor units of quoted_currency. Recorded on the request rather than re-derived, so a fee schedule repriced later cannot change what this payout says it sent.
+             */
+            quoted_gross_amount_minor?: number;
+            /**
+             * Format: int64
+             * @description What the customer was told would reach them. It is what the provider is instructed to send.
+             */
+            quoted_net_amount_minor?: number;
             requested_quantity: components["schemas"]["Quantity"];
             required_verification?: string;
             reserved_quantity: components["schemas"]["Quantity"];
+            /** @description True when this payout was a rehearsal. It is recorded on the request at creation, from the provider's availability and the deployment's own tier, rather than read from today's provider mode -- so the list, the create response and the by-id read agree, and a deployment that swaps its provider does not silently relabel its history (D-096's treatment, F-232). */
+            sandbox?: boolean;
             settled_quantity?: components["schemas"]["Quantity"];
             /** @enum {string} */
             state: "DRAFT" | "ELIGIBILITY_CHECK" | "VERIFICATION_REQUIRED" | "VERIFICATION_PENDING" | "VERIFIED" | "SUBMITTED" | "PROVIDER_PENDING" | "PAYOUT_STATUS_UNKNOWN" | "SETTLED" | "FAILED" | "REJECTED" | "REVERSED" | "MANUAL_REVIEW";
@@ -3244,18 +6028,72 @@ export interface components {
         PayoutRequestPage: {
             items: components["schemas"]["PayoutRequest"][];
         };
+        Portfolio: {
+            account_id: components["schemas"]["UUID"];
+            /** @description The instant every mark-to-market figure here was computed at. A number on a screen that does not say when it was true is a number nobody can act on. */
+            as_of: components["schemas"]["Timestamp"];
+            credits: components["schemas"]["CreditBalance"];
+            positions: components["schemas"]["PortfolioPosition"][];
+            /** @description The temperature of this deployment's Credits as a whole. */
+            temperature: components["schemas"]["ValueTemperature"];
+            totals: components["schemas"]["PortfolioTotals"];
+        };
+        /** @description One native position. quantity, cost_basis_credits, realized_pnl_credits and fees_paid_credits are the read model migration 00772 maintains from the fills; market_value_credits and unrealized_pnl_credits are computed at as_of from the market's marginal price. */
+        PortfolioPosition: {
+            /** @description Units granted to the creator at the mint, at zero cost. */
+            allocation_units?: components["schemas"]["Quantity"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            /** @description Cost of one base unit at price_scale. Absent on a closed position. */
+            average_cost_credits?: components["schemas"]["Quantity"];
+            cost_basis_credits: components["schemas"]["Quantity"];
+            demo?: boolean;
+            fees_paid_credits: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            fill_count?: number;
+            first_acquired_at?: components["schemas"]["Timestamp"];
+            last_trade_at?: components["schemas"]["Timestamp"];
+            market_id?: components["schemas"]["UUID"];
+            /** @enum {string} */
+            market_status?: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
+            market_value_credits: components["schemas"]["Quantity"];
+            name?: string;
+            price_scale: number;
+            quantity: components["schemas"]["Quantity"];
+            realized_pnl_credits: components["schemas"]["SignedQuantity"];
+            spot_price?: components["schemas"]["Quantity"];
+            symbol: string;
+            temperature: components["schemas"]["ValueTemperature"];
+            total_pnl_credits: components["schemas"]["SignedQuantity"];
+            units_bought_total?: components["schemas"]["Quantity"];
+            units_sold_total?: components["schemas"]["Quantity"];
+            unrealized_pnl_credits: components["schemas"]["SignedQuantity"];
+        };
+        PortfolioTotals: {
+            cost_basis_credits: components["schemas"]["Quantity"];
+            fees_paid_credits: components["schemas"]["Quantity"];
+            market_value_credits: components["schemas"]["Quantity"];
+            open_position_count: number;
+            position_count: number;
+            realized_pnl_credits: components["schemas"]["SignedQuantity"];
+            total_pnl_credits: components["schemas"]["SignedQuantity"];
+            unrealized_pnl_credits: components["schemas"]["SignedQuantity"];
+        };
         Principal: {
             account_ids: components["schemas"]["UUID"][];
             /** @enum {string} */
             actor_type: "USER" | "OPERATOR";
             amr: string[];
             auth_time: components["schemas"]["Timestamp"];
+            break_glass_until?: components["schemas"]["Timestamp"];
+            onboarding?: components["schemas"]["Onboarding"];
+            profile?: components["schemas"]["UserProfile"];
             roles: string[];
             step_up_valid_until?: components["schemas"]["Timestamp"];
             subject_id: components["schemas"]["UUID"];
         };
         Problem: {
-            /** @description Stable machine-readable code (INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …) */
+            /** @description Stable machine-readable code (BODY_TOO_LARGE, INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …) */
             code: string;
             detail?: string;
             fields?: {
@@ -3266,6 +6104,13 @@ export interface components {
             status: number;
             title: string;
             type: string;
+        };
+        /** @description Only the fields present are changed. An empty handle clears it. */
+        ProfileUpdate: {
+            display_name?: string;
+            handle?: string;
+            locale?: string;
+            time_zone?: string;
         };
         ProviderStatus: {
             disable_reason?: string;
@@ -3280,6 +6125,17 @@ export interface components {
             role: string;
             /** @enum {string} */
             verification: "CODE_COMPLETE" | "CONTRACT_TESTED" | "SANDBOX_VERIFIED" | "CANARY_VERIFIED" | "LIVE_VERIFIED" | "BLOCKED_EXTERNAL";
+        };
+        /** @description A served legal document without any person's acceptance state. */
+        PublicLegalDocument: {
+            body: string;
+            /** @description sha256 of the exact body bytes; an acceptance records this hash */
+            content_hash: string;
+            counsel_review_required: boolean;
+            document_id: string;
+            requirement: string;
+            title: string;
+            version: string;
         };
         PurchaseInternalProductRequest: {
             account_id: components["schemas"]["UUID"];
@@ -3380,6 +6236,27 @@ export interface components {
             /** @description Where earnings are attributed. Omit for the selling account itself, which is the ordinary case. */
             payout_account_id?: components["schemas"]["UUID"];
         };
+        /** @description SANDBOX TIER ONLY. Refused with FORBIDDEN anywhere else. */
+        SandboxVerificationOutcome: {
+            account_id: components["schemas"]["UUID"];
+            /**
+             * @description There is no default. UNDERAGE and SANCTIONED are separate from REJECTED because §21 requires an age failure and a sanctions failure to be separately expressible.
+             * @enum {string}
+             */
+            outcome: "VERIFIED" | "NEEDS_INFORMATION" | "REJECTED" | "UNDERAGE" | "SANCTIONED";
+        };
+        /** @description Derived from the session store and the claims of the current session. Nothing here is a secret and nothing here is created by asking. */
+        SecuritySummary: {
+            active_sessions: number;
+            amr: string[];
+            current_session_id?: components["schemas"]["UUID"];
+            last_login_at?: components["schemas"]["Timestamp"];
+            last_step_up_at?: components["schemas"]["Timestamp"];
+            /** @description The identity provider asserted a strong authentication method for the current session. */
+            mfa_present: boolean;
+            step_up_max_age_seconds: number;
+            step_up_valid_until?: components["schemas"]["Timestamp"];
+        };
         SessionSummary: {
             created_at: components["schemas"]["Timestamp"];
             current?: boolean;
@@ -3394,6 +6271,8 @@ export interface components {
         SetInternalProductStatusRequest: {
             status: components["schemas"]["InternalProductStatus"];
         };
+        /** @description An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not. */
+        SignedQuantity: string;
         StartDepositRequest: {
             account_id: components["schemas"]["UUID"];
             fiat_amount: string;
@@ -3401,10 +6280,79 @@ export interface components {
             fiat_currency: "USD";
             funding_source_id?: components["schemas"]["UUID"];
         };
+        StartedVerification: {
+            expires_at?: components["schemas"]["Timestamp"];
+            /** @description Single-use and short-lived. It is returned here and stored nowhere -- not even in the idempotency record, which is why a REPLAY of the same Idempotency-Key answers with the session and no link, and with `resume` saying so (D-125). On a sandbox tier it is a `sandbox:` reference rather than a page, because there is no hosted flow to visit. */
+            hosted_url?: string;
+            /** @description Present instead of `hosted_url` when this answer is a replay of an Idempotency-Key whose link was not kept. It tells the client what to do: start a new session, under a new key, to get another link. */
+            resume?: string;
+            sandbox: boolean;
+            /** @description Present only for a rehearsal session. It is where a sandbox operator chooses the outcome explicitly, and its presence is what makes a sandbox session visibly a rehearsal. */
+            sandbox_control_path?: string;
+            session: components["schemas"]["VerificationSession"];
+        };
+        StartVerificationRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description ISO 3166-1 alpha-2. Never inferred from a network address. */
+            jurisdiction_country: string;
+            /** @description The subdivision code without its country prefix. Required where the rules depend on it. */
+            jurisdiction_region?: string;
+            /**
+             * @description Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+             * @enum {string}
+             */
+            purpose?: "PAYOUT_KYC" | "ENHANCED";
+        };
         StatusChange: {
             policy_version?: string;
             reason: string;
             to: string;
+        };
+        Strategy: {
+            account_id: components["schemas"]["UUID"];
+            compiler?: components["schemas"]["CompilerDescriptor"];
+            /** @description Whether this deployment can compile at all. False means a compile attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR. */
+            compiler_configured: boolean;
+            /** @description The structured strategy the owner declared, as they declared it. Absent when none was stated. It is stored in its own column, apart from the description, which is what lets a structured compiler claim it never read the prose. */
+            constraints?: components["schemas"]["StructuredStrategy"];
+            created_at: components["schemas"]["Timestamp"];
+            current_version?: components["schemas"]["StrategyVersion"];
+            description: string;
+            id: components["schemas"]["UUID"];
+            name: string;
+            /** @enum {string} */
+            source_kind: "NATURAL_LANGUAGE" | "TYPESCRIPT_SDK" | "CLONE" | "STRUCTURED_SANDBOX";
+            /** @enum {string} */
+            status: "ACTIVE" | "ARCHIVED";
+            updated_at?: components["schemas"]["Timestamp"];
+        };
+        StrategyPage: {
+            compiler?: components["schemas"]["CompilerDescriptor"];
+            compiler_configured: boolean;
+            items: components["schemas"]["Strategy"][];
+            next_cursor?: string;
+        };
+        StrategyVersion: {
+            /** @description When a person read this document and approved it. Present exactly when status is ACCEPTED; the two are paired by a CHECK in the schema. */
+            accepted_at?: components["schemas"]["Timestamp"];
+            accepted_by_user_id?: components["schemas"]["UUID"];
+            built_at?: components["schemas"]["Timestamp"];
+            effect_set: string[];
+            /** @description The deployment that compiled it. Empty for a version compiled before the column existed. */
+            environment?: string;
+            /** @description The compiled strategy in words, which is what a person reviews before approving it. */
+            human_readable: string;
+            id: components["schemas"]["UUID"];
+            /** @description The typed intermediate representation itself. */
+            ir?: {
+                [key: string]: unknown;
+            };
+            ir_hash: string;
+            /** @description True when this version was produced by a compiler that exists only on a sandbox tier. Everything built from it is a rehearsal, it is labelled one everywhere it is shown, and migration 00812 refuses the row in a production database. */
+            sandbox: boolean;
+            /** @enum {string} */
+            status: "COMPILED" | "ACCEPTED" | "REJECTED" | "SUPERSEDED" | "REVOKED";
+            version: number;
         };
         StreamEvent: {
             data?: {
@@ -3415,7 +6363,52 @@ export interface components {
             occurred_at: components["schemas"]["Timestamp"];
             resource_id?: string;
             /** @enum {string} */
-            type: "buying_power.changed" | "order.transitioned" | "intent.transitioned" | "deposit.transitioned" | "agent.state" | "resync";
+            type: "buying_power.changed" | "order.transitioned" | "intent.transitioned" | "deposit.transitioned" | "agent.state" | "resync" | "notification.created" | "data.changed";
+        };
+        /** @description One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid price against a threshold you state; EVERY_INTERVAL carries no condition at all and acts on every evaluation, which is how "rebalance every N minutes" is written. The two extra fields belong to PRICE_THRESHOLD and are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold. */
+        StructuredRule: {
+            /** @enum {string} */
+            comparator?: "LT" | "LTE" | "GT" | "GTE";
+            /** @enum {string} */
+            kind: "PRICE_THRESHOLD" | "EVERY_INTERVAL";
+            price_usd?: components["schemas"]["MinorUSD"];
+        };
+        /** @description A strategy stated field by field, which is what a structured compiler reads. Every field is required and there is no default for any of them, because a default is an inference about what somebody meant.
+         *
+         *     Unknown fields are refused rather than ignored, so a misspelled key is a named refusal instead of a setting that silently did not apply. */
+        StructuredStrategy: {
+            capital_limit: {
+                /** @description The smallest envelope this strategy will run in. */
+                min_allocation_usd: components["schemas"]["MinorUSD"];
+            };
+            entry: components["schemas"]["StructuredRule"];
+            exit: components["schemas"]["StructuredRule"];
+            frequency: {
+                interval_minutes: number;
+                max_intents_per_hour: number;
+            };
+            /**
+             * @description PAPER is the only mode this build compiles. Any other value is refused with the reason; it is never downgraded silently, because compiling a request for a mode that moves value as one that does not would be answering a question nobody asked.
+             * @enum {string}
+             */
+            mode: "PAPER";
+            /** @description The three ceilings. Each is an exact USD amount in MINOR units, written as digits: "5000" is $50.00. None of them is a float and none carries a decimal point. max_single_trade_usd is also the size of every trade the compiled strategy proposes. */
+            risk_limits: {
+                max_daily_loss_usd: components["schemas"]["MinorUSD"];
+                max_position_usd: components["schemas"]["MinorUSD"];
+                max_single_trade_usd: components["schemas"]["MinorUSD"];
+            };
+            /**
+             * @description The grammar this document is written against. A later grammar is refused by name.
+             * @enum {integer}
+             */
+            schema_version: 1;
+            universe: {
+                /** @description An instrument's canonical name, e.g. SOL/USDC. It must be in this deployment's registry and ACTIVE. */
+                instrument: string;
+                /** @description A venue code, e.g. JUPITER. It must be in the registry, able to take new actions, and list the instrument above. */
+                venue: string;
+            };
         };
         SubmitIntentRequest: {
             account_id: components["schemas"]["UUID"];
@@ -3433,6 +6426,22 @@ export interface components {
             /** @description Preview quote the user saw; the planner re-quotes and validates freshness */
             quote_id?: components["schemas"]["UUID"];
             target_exposure_usd?: components["schemas"]["USD"];
+        };
+        TermsAcceptance: {
+            accepted_at: components["schemas"]["Timestamp"];
+            content_hash: string;
+            document_id: string;
+            id: components["schemas"]["UUID"];
+            version: string;
+        };
+        TermsAcceptanceRequest: {
+            document_ids: ("TERMS_OF_SERVICE" | "PRIVACY_POLICY" | "RISK_DISCLOSURE" | "CREDITS_TERMS" | "WITHDRAWAL_DISCLOSURE")[];
+        };
+        TermsState: {
+            acceptances?: components["schemas"]["TermsAcceptance"][];
+            documents: components["schemas"]["LegalDocument"][];
+            /** @description Documents required at onboarding whose current bytes the caller has not accepted. */
+            outstanding: string[];
         };
         /** Format: date-time */
         Timestamp: string;
@@ -3481,16 +6490,36 @@ export interface components {
         TradeIntentPage: components["schemas"]["Page"] & {
             items: components["schemas"]["TradeIntent"][];
         };
+        UnreadCount: {
+            count: number;
+        };
         /**
          * @description USD as a decimal string with exactly two fraction digits
          * @example 1234.56
          */
         USD: string;
+        /** @description Product-level state only. It carries no e-mail address, phone number, legal name or date of birth: those are sealed in identity_pii and this surface has no route to them. */
+        UserProfile: {
+            /** @description Sixteen hex characters a client renders an identicon from. Nodal accepts no avatar upload. */
+            avatar_seed: string;
+            created_at: components["schemas"]["Timestamp"];
+            display_name?: string;
+            handle?: string;
+            locale: string;
+            time_zone: string;
+            updated_at?: components["schemas"]["Timestamp"];
+            user_id: components["schemas"]["UUID"];
+        };
         /**
          * Format: uuid
          * @description UUIDv7 in canonical form
          */
         UUID: string;
+        /**
+         * @description What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+         * @enum {string}
+         */
+        ValueTemperature: "ECONOMY" | "REAL" | "SIMULATED";
         VenueListing: {
             base_mint?: string;
             base_precision: number;
@@ -3506,6 +6535,95 @@ export interface components {
             /** @enum {string} */
             venue_status: "ACTIVE" | "DEGRADED" | "DISABLED";
         };
+        /** @description One sub-check, its answer, who produced it and under which rule version. `detail` is a safe reason code and never a document, a government identifier or a date of birth. */
+        VerificationCheck: {
+            detail?: string;
+            kind: components["schemas"]["VerificationCheckKind"];
+            outcome: components["schemas"]["VerificationOutcome"];
+            provider: string;
+            provider_ref?: string;
+            recorded_at: components["schemas"]["Timestamp"];
+            rules_version: string;
+            /** @description A rehearsal answer. A database CHECK refuses one in PROD. */
+            sandbox: boolean;
+        };
+        /**
+         * @description The five things §21 says must each be able to refuse on their own.
+         * @enum {string}
+         */
+        VerificationCheckKind: "IDENTITY_DOCUMENT" | "AGE" | "JURISDICTION" | "SANCTIONS" | "PEP";
+        /**
+         * @description How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+         * @enum {string}
+         */
+        VerificationLevel: "NONE" | "NODAL_IDENTITY" | "PAYOUT_KYC" | "ENHANCED";
+        /**
+         * @description One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider that has not screened somebody has not cleared them either.
+         * @enum {string}
+         */
+        VerificationOutcome: "PASS" | "FAIL" | "NEEDS_INFORMATION" | "UNKNOWN" | "NOT_APPLICABLE";
+        /** @description The §24 profile area. It says what has been established, what has not, and what to do next. It carries no personal data. */
+        VerificationProfile: {
+            account_id: components["schemas"]["UUID"];
+            age_verified: boolean;
+            checks?: components["schemas"]["VerificationCheck"][];
+            expires_at?: components["schemas"]["Timestamp"];
+            jurisdiction_country?: string;
+            jurisdiction_refusals?: string[];
+            jurisdiction_region?: string;
+            jurisdiction_supported: boolean;
+            level: components["schemas"]["VerificationLevel"];
+            /** @description The age threshold this jurisdiction is judged against, from the versioned rule table. */
+            minimum_age: number;
+            missing?: components["schemas"]["VerificationRequirement"][];
+            /** @description Whether verification, by itself, no longer stands between this person and a withdrawal. It says nothing about whether a withdrawal is possible; see /me/eligibility for that. */
+            payout_ready: boolean;
+            provider?: string;
+            /** @enum {string} */
+            provider_availability?: "" | "NOT_OFFERED" | "REQUIRES_APPLICATION" | "APPLICATION_PENDING" | "APPLICATION_DENIED" | "SANDBOX_ONLY" | "LIVE";
+            restrictions?: string[];
+            rules_version: string;
+            /** @enum {string} */
+            sanctions_state: "UNKNOWN" | "CLEAR" | "HIT" | "REVIEW";
+            /** @description True when any of this was established by a rehearsal provider. */
+            sandbox: boolean;
+            session?: components["schemas"]["VerificationSession"];
+            state: components["schemas"]["VerificationState"];
+            verified_at?: components["schemas"]["Timestamp"];
+        };
+        /** @description One thing standing between a person and a level, with what they can do about it. */
+        VerificationRequirement: {
+            /** @enum {string} */
+            action: "START_VERIFICATION" | "CONTINUE_VERIFICATION" | "PROVIDE_INFORMATION" | "REVERIFY" | "CONTACT_SUPPORT" | "WAIT" | "NONE";
+            /** @description A check kind, or VERIFICATION_SESSION / JURISDICTION / PROVIDER / OPERATOR_REVIEW / VERIFICATION_EXPIRED. */
+            code: string;
+            detail: string;
+        };
+        VerificationSession: {
+            created_at: components["schemas"]["Timestamp"];
+            expires_at?: components["schemas"]["Timestamp"];
+            failure_reason?: string;
+            jurisdiction_country?: string;
+            jurisdiction_region?: string;
+            provider: string;
+            provider_ref?: string;
+            /** @enum {string} */
+            purpose: "PAYOUT_KYC" | "ENHANCED";
+            rules_version?: string;
+            sandbox: boolean;
+            session_id: components["schemas"]["UUID"];
+            status: components["schemas"]["VerificationSessionStatus"];
+        };
+        /**
+         * @description The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from what Persona, Veriff, Sumsub and Stripe Identity each report so that no one vendor's vocabulary becomes the schema's.
+         * @enum {string}
+         */
+        VerificationSessionStatus: "CREATED" | "PENDING_USER_ACTION" | "PROCESSING" | "REQUIRES_INPUT" | "MANUAL_REVIEW" | "APPROVED" | "DECLINED" | "CANCELLED" | "EXPIRED";
+        /**
+         * @description The financial verification state machine of §20. UNVERIFIED is §20's NOT_STARTED under the name the schema already used. Nothing reaches VERIFIED except through a provider session that decided so.
+         * @enum {string}
+         */
+        VerificationState: "UNVERIFIED" | "REQUIRED" | "STARTED" | "PENDING" | "NEEDS_INFORMATION" | "VERIFIED" | "REJECTED" | "EXPIRED" | "RESTRICTED" | "SUSPENDED";
         Withdrawal: {
             account_id: components["schemas"]["UUID"];
             asset_id: components["schemas"]["UUID"];
@@ -3515,6 +6633,59 @@ export interface components {
             quantity: components["schemas"]["Quantity"];
             status: string;
         };
+        WithdrawalEligibility: {
+            account_id: components["schemas"]["UUID"];
+            buckets: components["schemas"]["WithdrawalOriginBucket"][];
+            current_verification: components["schemas"]["VerificationLevel"];
+            destination_configured?: boolean;
+            eligible: boolean;
+            frozen: components["schemas"]["Quantity"];
+            gross: components["schemas"]["Quantity"];
+            ineligible: components["schemas"]["Quantity"];
+            jurisdiction_supported?: boolean;
+            /** @description The provider's minimum expressed in Credits, or "0" when it publishes none. Zero is never "any amount will do". */
+            minimum_quantity?: components["schemas"]["Quantity"];
+            payout_eligible: components["schemas"]["Quantity"];
+            policy_hash?: string;
+            policy_version: string;
+            provider?: string;
+            provider_available?: boolean;
+            reasons: components["schemas"]["WithdrawalReason"][];
+            required_verification: components["schemas"]["VerificationLevel"];
+            sandbox: boolean;
+            spendable: components["schemas"]["Quantity"];
+            /** @description True when identity verification is the only thing standing between this person and some of their money. */
+            verification_would_suffice?: boolean;
+            withdrawable_now: components["schemas"]["Quantity"];
+        };
+        /** @description One PROVENANCE an account holds, and what may leave it: an origin, an origin floor, a root set and a funding finality. Those four are what the payout policy reads about the value itself, so every unit in a bucket gets one answer and `withdrawable_now` is the sum of the buckets.
+         *     More than one bucket may therefore carry the same `origin`. Until D-136 there was exactly one per origin, folded to the least final finality and the most restricted floor in it -- so one refused lot zeroed every other lot of its origin and `withdrawable_now` contradicted `payout_eligible` in the same payload. A client that keys on `origin` alone must key on (origin, origin_floor, finality, root_origins) instead. */
+        WithdrawalOriginBucket: {
+            /** @description Where this origin sits in the consumption order. Lower leaves first. */
+            consumption_rank: number;
+            /** @description The funding finality of every unit in this bucket. */
+            finality?: components["schemas"]["FundingFinality"];
+            min_hold_days?: number;
+            origin: components["schemas"]["CreditOrigin"];
+            /** @description What this value ultimately came from: the most restricted origin anywhere in its provenance. It equals `origin` for value nothing else funded. It is here because ORIGIN_NOT_PAYOUT_ELIGIBLE on a bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on -- what a person needs to read is that the value came from a promotional grant, not a word about the trade that moved it. */
+            origin_floor?: components["schemas"]["CreditOrigin"];
+            payout_allowed: boolean;
+            quantity: components["schemas"]["Quantity"];
+            reasons: components["schemas"]["WithdrawalReason"][];
+            /** @description The first of `root_origins` this policy will not release, absent when it releases them all. It is the origin a person needs to read about when the reason is ORIGIN_NOT_WITHDRAWABLE, and it is not always `origin_floor`: the floor is ranked by the policies this build ships, and a policy persisted later can refuse a different one (D-138). */
+            refused_root?: components["schemas"]["CreditOrigin"];
+            required_capability?: string;
+            required_verification?: components["schemas"]["VerificationLevel"];
+            /** @description Every origin the units in this bucket ultimately came from. The payout policy must release the bucket's own origin and all of these. */
+            root_origins?: components["schemas"]["CreditOrigin"][];
+            verification_would_suffice?: boolean;
+            withdrawable: components["schemas"]["Quantity"];
+        };
+        /**
+         * @description A machine-readable reason value cannot leave. Each names something that could change. REQUIRES_VERIFICATION and TERMS_NOT_ACCEPTED are NEXT STEPS and not denials, and the product must present them as such: TERMS_NOT_ACCEPTED means the withdrawal disclosure has not been accepted at the version now served, which is the normal state of somebody who has never withdrawn. The eligible figures stay true beside it.
+         * @enum {string}
+         */
+        WithdrawalReason: "REQUIRES_VERIFICATION" | "ORIGIN_NOT_WITHDRAWABLE" | "CAPABILITY_INACTIVE" | "JURISDICTION_RESTRICTED" | "ACCOUNT_RESTRICTED" | "PROVIDER_UNAVAILABLE" | "MINIMUM_NOT_MET" | "FUNDING_NOT_SETTLED" | "HOLD_PERIOD_NOT_ELAPSED" | "NO_VALUE" | "POLICY_INVALID" | "TERMS_NOT_ACCEPTED";
         WithdrawalRequest: {
             account_id: components["schemas"]["UUID"];
             asset_id: components["schemas"]["UUID"];
@@ -3535,6 +6706,7 @@ export interface components {
     };
     parameters: {
         AccountId: components["schemas"]["UUID"];
+        AgentId: components["schemas"]["UUID"];
         AssetId: components["schemas"]["UUID"];
         Cursor: string;
         DepositId: components["schemas"]["UUID"];
@@ -3544,10 +6716,16 @@ export interface components {
         IntentId: components["schemas"]["UUID"];
         Limit: number;
         MarketId: components["schemas"]["UUID"];
+        NotificationId: components["schemas"]["UUID"];
         OrderId: components["schemas"]["UUID"];
+        PaymentId: components["schemas"]["UUID"];
         PayoutId: components["schemas"]["UUID"];
         ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];
+        StrategyId: components["schemas"]["UUID"];
+        /** @description The version NUMBER, which is what the review screen shows, not the version's identifier. */
+        StrategyVersionNumber: number;
+        UserId: components["schemas"]["UUID"];
     };
     requestBodies: never;
     headers: never;

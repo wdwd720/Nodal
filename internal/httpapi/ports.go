@@ -281,6 +281,8 @@ type WithdrawalRequest struct {
 type GatesPort interface {
 	List(ctx context.Context) ([]GateView, error)
 	Act(ctx context.Context, capability gates.Capability, action GateAction, req gates.Proposal, note string) (GateView, error)
+	// History lists the gate's recorded transitions, oldest first.
+	History(ctx context.Context, capability gates.Capability) ([]gates.Transition, error)
 }
 
 // GateAction is one step of the gate state machine.
@@ -294,6 +296,10 @@ const (
 	GateActionSuspend  GateAction = "suspend"
 	GateActionResume   GateAction = "resume"
 	GateActionRevoke   GateAction = "revoke"
+	// GateActionSandbox and GateActionUnsandbox move a gate into and out of
+	// SANDBOX. Refused unless the deployment is a sandbox tier (ADR-0023).
+	GateActionSandbox   GateAction = "sandbox"
+	GateActionUnsandbox GateAction = "unsandbox"
 )
 
 // GateView is a gate row plus the five-condition activation verdict, which is
@@ -446,6 +452,24 @@ type CommandResult struct {
 	ResourceType string
 	ResourceID   string
 	Body         []byte
+	// StoredBody is what the idempotency record may keep, when that is not the
+	// whole body. Nil means "store Body".
+	//
+	// The two are different exactly where a response carries something the
+	// product documents as never stored: the hosted verification link is a
+	// single-use credential handed to one browser, and it was being written to
+	// idempotency_keys.response_body for the whole TTL in a row two read-only
+	// roles may SELECT (F-231, D-125). The caller still gets Body; the record
+	// gets this.
+	StoredBody []byte
 	// Replayed is set by the port when the result came from the store.
 	Replayed bool
+}
+
+// stored is what the idempotency record keeps for this result.
+func (r CommandResult) stored() []byte {
+	if r.StoredBody != nil {
+		return r.StoredBody
+	}
+	return r.Body
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
@@ -31,6 +32,30 @@ type EligibilityInput struct {
 	// first.
 	AccountFrozen bool
 	FraudFlagged  bool
+
+	// The three compliance facts GET /v1/me/eligibility refuses on.
+	//
+	// Until F-226 this type had a field for none of them, so an open sanctions
+	// review, a restriction recorded against the account and an unsupported
+	// jurisdiction stopped the eligibility page and stopped nothing on the
+	// conversion path: the page reported ACCOUNT_RESTRICTED and 0 withdrawable
+	// while Create reserved the whole balance and Submit settled it. They carry
+	// the same shapes internal/eligibility uses, because two surfaces
+	// disagreeing about one fact is the defect rather than a detail of it
+	// (D-120).
+	//
+	// None of them has a permissive zero value. An empty SanctionsState is
+	// nobody having supplied one, which blocks; UNKNOWN is a supplied answer --
+	// nobody has screened this person yet -- and is read exactly as
+	// eligibility.ExplainWithdrawal reads it. JurisdictionSupported false is
+	// "we do not know where this person is", which is not permission.
+	SanctionsState compliance.SanctionsState
+	// AccountRestrictions are the restriction codes recorded against the
+	// account and the compliance profile. Non-empty blocks.
+	AccountRestrictions []string
+	// JurisdictionSupported is the verification rule table's verdict on where
+	// the person is.
+	JurisdictionSupported bool
 
 	// DestinationVerified is whether the chosen destination may receive value.
 	DestinationVerified bool
@@ -81,6 +106,18 @@ const (
 	// ReasonInsufficientEligibleValue is the ordinary shortfall: the account
 	// holds Credits, and not enough of them are of a kind that may leave.
 	ReasonInsufficientEligibleValue valuedomain.PermitReason = "INSUFFICIENT_ELIGIBLE_VALUE"
+	// ReasonAccountRestricted is a freeze, a compliance hold or a sanctions
+	// screen that is not clear. The word is eligibility.WithdrawalAccountRestricted's,
+	// because the two surfaces answer the same question (D-120).
+	ReasonAccountRestricted valuedomain.PermitReason = "ACCOUNT_RESTRICTED"
+	// ReasonJurisdictionRestricted is a place this is not offered, or a place
+	// nobody has established.
+	ReasonJurisdictionRestricted valuedomain.PermitReason = "JURISDICTION_RESTRICTED"
+	// ReasonMinimumNotMet is a payout the provider will not send because it
+	// nets less than its published minimum. It is carried as a refusal field on
+	// the error Create returns rather than as a shortfall, because the answer is
+	// not "some of this may leave" -- it is "none of it can be sent".
+	ReasonMinimumNotMet valuedomain.PermitReason = "MINIMUM_NOT_MET"
 )
 
 // Evaluate produces a Decision. It moves nothing.
@@ -115,6 +152,12 @@ func (e *Engine) Evaluate(ctx context.Context, q db.Querier, in EligibilityInput
 	}
 	if in.FraudFlagged {
 		blocks = append(blocks, ReasonFraudFlagged)
+	}
+	if restricted(in) {
+		blocks = append(blocks, ReasonAccountRestricted)
+	}
+	if !in.JurisdictionSupported {
+		blocks = append(blocks, ReasonJurisdictionRestricted)
 	}
 	if !in.DestinationVerified {
 		blocks = append(blocks, ReasonDestinationNotVerified)
@@ -186,6 +229,24 @@ func (e *Engine) Evaluate(ctx context.Context, q db.Querier, in EligibilityInput
 	return d, nil
 }
 
+// restricted reports whether a compliance fact stops this account outright.
+//
+// The sanctions screen is read the way eligibility.applyAccountFacts reads it:
+// HIT and REVIEW are restrictions, CLEAR and UNKNOWN are not. Anything else --
+// including the empty string a caller that forgot the field would send -- is
+// nobody having answered, and nobody having answered is not a clearance.
+func restricted(in EligibilityInput) bool {
+	if len(in.AccountRestrictions) > 0 {
+		return true
+	}
+	switch in.SanctionsState {
+	case compliance.SanctionsClear, compliance.SanctionsUnknown:
+		return false
+	default:
+		return true
+	}
+}
+
 // shortfallReasons collects the distinct reasons the account's remaining
 // Credits were refused, in the policy's canonical order and without duplicates.
 func (e *Engine) shortfallReasons(ctx context.Context, q db.Querier, in EligibilityInput) []valuedomain.PermitReason {
@@ -205,6 +266,8 @@ func (e *Engine) shortfallReasons(ctx context.Context, q db.Querier, in Eligibil
 	for _, lot := range lots {
 		ok, reasons := in.Policy.Permits(valuedomain.PermitInput{
 			Origin:      lot.Origin,
+			OriginFloor: lot.OriginFloor,
+			RootOrigins: lot.RootOrigins,
 			Finality:    lot.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    in.Verified,

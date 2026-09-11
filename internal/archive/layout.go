@@ -232,6 +232,21 @@ type KeyParts struct {
 // isPaddedInt reports whether s is exactly n ASCII digits: no sign, no spaces,
 // no shorter unpadded form. Used for the date partition, which must be written
 // the one way PartitionKey renders it so keys sort in time order.
+// canonicalUint reports whether s is the one spelling fmt's %d produces for a
+// non-negative integer: digits only, no sign, and no leading zero unless the
+// number is zero itself.
+func canonicalUint(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s == "0" || s[0] != '0'
+}
+
 func isPaddedInt(s string, n int) bool {
 	if len(s) != n {
 		return false
@@ -262,6 +277,20 @@ func ParseKey(key string) (KeyParts, error) {
 	}
 	if !strings.HasPrefix(segs[3], "v") {
 		return bad("schema segment must start with v")
+	}
+	// The same rule the date partition gets below, and for the same reason:
+	// strconv.Atoi alone accepts "v01", "v0001", "v00001" and "v+1", all of
+	// which parse to schema version 1 and re-render as "v1". A fuzz round-trip
+	// found "v00001" and there are infinitely many more.
+	//
+	// Five spellings of one archive object is the "same object, two keys"
+	// hazard SegmentPattern's comment already refuses for casing, arriving
+	// through a different segment. A dedup check on one spelling does not see
+	// the other; a retention sweep listing the ".../v1/" prefix does not delete
+	// what was written under ".../v01/"; and an audit reconstruction of a
+	// schema version silently omits it.
+	if !canonicalUint(segs[3][1:]) {
+		return bad("schema version must be written without a sign or leading zeros")
 	}
 	v, err := strconv.Atoi(segs[3][1:])
 	if err != nil || v < 1 {

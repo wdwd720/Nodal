@@ -85,12 +85,19 @@ func TestDeployed_TheRunningProcessLoadedTheConfigurationInThisRepository(t *tes
 	env := blueprintEnv(t)
 	// The secrets are blanked before hashing, so any syntactically valid
 	// stand-in produces the same hash as the real value.
+	//
+	// NODAL_DB_MIGRATE_URL is gone with the blueprint entry that demanded it:
+	// the schema owner is not handed to the internet-facing service (F-136).
+	// The alert destination and the keyring are here because the loader now
+	// resolves those two references rather than only parsing them (F-137).
 	for k, v := range map[string]string{
 		"NODAL_DB_APP_URL":            "postgresql://u:p@h/d?sslmode=verify-full",
-		"NODAL_DB_MIGRATE_URL":        "postgresql://u:p@h/d?sslmode=verify-full",
+		"NODAL_DB_OPS_URL":            "postgresql://u:p@h/d?sslmode=verify-full",
 		"NODAL_OIDC_CLIENT_SECRET":    "stand-in",
 		"NODAL_STRIPE_API_KEY":        "stand-in",
 		"NODAL_STRIPE_WEBHOOK_SECRET": "stand-in",
+		"NODAL_ALERT_WEBHOOK_URL":     "https://ntfy.sh/stand-in",
+		"NODAL_PII_KEYRING":           `{"active":1,"keys":{"1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}`,
 	} {
 		env[k] = v
 	}

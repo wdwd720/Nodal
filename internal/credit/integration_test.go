@@ -30,6 +30,19 @@ var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	testDB         *db.DB
+	// testOwnerDB is the migration role, and it exists for exactly one thing:
+	// backdating a money timestamp so a settlement window can be observed
+	// closing without moving this process's clock.
+	//
+	// It is separate because 00743 revoked UPDATE on credit_fundings from
+	// cp_app and granted back only lot_id and provider_reference. Two tests
+	// were backdating reversible_at through testDB -- the APPLICATION pool --
+	// which is precisely the write that must be impossible, since reversible_at
+	// is what the settlement window is measured from and moving it settles
+	// money early. The tests were right about what they needed and wrong about
+	// who should do it: rewinding a clock the database owns is an operator
+	// action.
+	testOwnerDB *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -51,6 +64,12 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	defer testDB.Close()
+	testOwnerDB, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "credit-itest-owner", MaxConns: 2})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "credit integration: open owner pool:", err)
+		return 1
+	}
+	defer testOwnerDB.Close()
 	return m.Run()
 }
 
@@ -159,8 +178,20 @@ func (f *fixture) issue(origin valuedomain.CreditOrigin, fin valuedomain.Funding
 }
 
 // spend posts a single-domain movement of Credits out of the account and
-// consumes the matching lots, exactly as a real spend does.
-func (f *fixture) spend(qty int64, allowed ...valuedomain.CreditOrigin) ([]Allocation, error) {
+// consumes the matching lots, exactly as a real spend does. Unrestricted: it
+// takes whatever consumption order offers.
+func (f *fixture) spend(qty int64) ([]Allocation, error) {
+	return f.spendFrom(qty, false, nil)
+}
+
+// spendLots is the same movement restricted to exact lots, which is what a
+// clawback and a payout reservation do. Naming no lot is a real instruction and
+// takes nothing (F-281).
+func (f *fixture) spendLots(qty int64, lots ...LotID) ([]Allocation, error) {
+	return f.spendFrom(qty, true, lots)
+}
+
+func (f *fixture) spendFrom(qty int64, restrict bool, lots []LotID) ([]Allocation, error) {
 	var allocs []Allocation
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		res, err := f.led.Post(ctx, tx, ledger.Posting{
@@ -183,7 +214,8 @@ func (f *fixture) spend(qty int64, allowed ...valuedomain.CreditOrigin) ([]Alloc
 			Reference:                Reference{Type: "test_spend", ID: uuid.NewString()},
 			Reason:                   "test spend",
 			RequireSpendableFinality: true,
-			AllowedOrigins:           allowed,
+			RestrictToLots:           restrict,
+			LotIDs:                   lots,
 		})
 		return err
 	})
@@ -251,22 +283,49 @@ func TestIntegration_ConsumptionTakesTheMostRestrictedValueFirst(t *testing.T) {
 	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
 }
 
-func TestIntegration_ConsumptionCanBeRestrictedToApprovedOrigins(t *testing.T) {
+// The restriction used to be by ORIGIN. It is by LOT: a decision is made per
+// lot and an origin is not a lot, so two lots of one origin were one origin and
+// a decision approving a settled purchase was filled from a reversible one
+// (D-136, F-270). The origin filter was left in place with nothing setting it
+// and has now been removed (F-281); this is the same property in the mechanism
+// that survived.
+func TestIntegration_ConsumptionCanBeRestrictedToApprovedLots(t *testing.T) {
 	f := newFixture(t)
 	f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 1000)
 	earning := f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 100)
 
-	allocs, err := f.spend(100, valuedomain.OriginCreatorEarning)
+	allocs, err := f.spendLots(100, earning.ID)
 	require.NoError(t, err)
 	require.Len(t, allocs, 1)
 	require.Equal(t, earning.ID, allocs[0].LotID,
-		"a payout restricted to creator earnings must not quietly take the promotional grant")
+		"a payout restricted to a creator's earning must not quietly take the promotional grant")
 
-	// And it cannot exceed what those origins hold, even though the account
-	// has plenty of other Credits.
-	_, err = f.spend(50, valuedomain.OriginCreatorEarning)
+	// And it cannot exceed what those lots hold, even though the account has
+	// plenty of other Credits.
+	_, err = f.spendLots(50, earning.ID)
 	require.Error(t, err)
 	require.Equal(t, errs.CodeInsufficientBuyingPower, errs.CodeOf(err))
+}
+
+// A restriction to NO lots takes nothing. It is the input a decision that
+// approved nothing produces, and reading it as "no restriction" made the one
+// consume with no filter also the one with no assertion behind it (F-281).
+func TestIntegration_ARestrictionToNoLotsTakesNothing(t *testing.T) {
+	f := newFixture(t)
+	grant := f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 1000)
+	purchase := f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1000)
+
+	_, err := f.spendLots(100)
+	require.Error(t, err, "a consume restricted to nothing must take nothing")
+	require.Equal(t, errs.CodeInsufficientBuyingPower, errs.CodeOf(err))
+
+	for _, lot := range []LotID{grant.ID, purchase.ID} {
+		after, lerr := f.svc.Lot(f.ctx, testDB, lot)
+		require.NoError(t, lerr)
+		require.Equal(t, "1000", after.Remaining.String(),
+			"nothing was taken from lot %s", lot)
+	}
+	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
 }
 
 func TestIntegration_DisputedValueIsNotSpendable(t *testing.T) {
@@ -407,6 +466,7 @@ func TestIntegration_ChargebackAfterTheCreditsAreSpent(t *testing.T) {
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
 				AccountID:      f.account,
 				Provider:       "test-provider",
+				ProviderMode:   "fake",
 				CreditQuantity: q(10_000),
 				PaidAmount:     money.USDFromMinor(10_000),
 				IdempotencyKey: "funding-" + uuid.NewString(),
@@ -479,7 +539,7 @@ func TestIntegration_MintingIsExactlyOnceUnderWebhookReplay(t *testing.T) {
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
-				AccountID: f.account, Provider: "test-provider",
+				AccountID: f.account, Provider: "test-provider", ProviderMode: "fake",
 				CreditQuantity: q(2_500), PaidAmount: money.USDFromMinor(2_500),
 				IdempotencyKey: "funding-" + uuid.NewString(),
 			})
@@ -528,20 +588,51 @@ func TestIntegration_FundingStateChangeRequiresItsTransitionRow(t *testing.T) {
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
-				AccountID: f.account, Provider: "test-provider",
+				AccountID: f.account, Provider: "test-provider", ProviderMode: "fake",
 				CreditQuantity: q(100), PaidAmount: money.USDFromMinor(100),
 				IdempotencyKey: "funding-" + uuid.NewString(),
 			})
 			return err
 		}))
 
+	// The refusal got stronger in 00743 and this assertion moved with it.
+	//
+	// It used to be AUDIT_TRANSITION_REQUIRED, raised by the deferred audit
+	// binding at COMMIT: the application COULD write the column and was caught
+	// afterwards. It is now `permission denied`, raised by PostgreSQL at the
+	// statement: cp_app holds UPDATE on lot_id and provider_reference and on
+	// nothing else, so there is no statement it can issue that writes `state`.
+	//
+	// Detection became privilege, which is the whole point of F-42's remaining
+	// remedy, and a test still expecting the weaker error would have been the
+	// thing telling us the stronger one had not landed.
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			_, e := tx.Exec(ctx, `UPDATE credit_fundings SET state = 'SETTLED' WHERE id = $1`, funding.ID)
 			return e
 		})
-	require.Error(t, err, "a bare state update must be refused at commit")
-	require.Contains(t, err.Error(), "AUDIT_TRANSITION_REQUIRED")
+	require.Error(t, err, "a bare state update must be refused")
+	require.Contains(t, err.Error(), "permission denied",
+		"the application can still write credit_fundings.state; 00743 did not take")
+
+	// And the stamps went with it, for the same reason: reversible_at is what
+	// the settlement window is measured from.
+	for _, col := range []string{"reversible_at = now()", "settled_at = now()", "reversed_at = now()", "failure_reason = 'x'"} {
+		err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, e := tx.Exec(ctx, `UPDATE credit_fundings SET `+col+` WHERE id = $1`, funding.ID)
+				return e
+			})
+		require.Error(t, err, "cp_app can write %s", col)
+		require.Contains(t, err.Error(), "permission denied", col)
+	}
+
+	// The two it may still write, so the revoke is a boundary and not a wall.
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, e := tx.Exec(ctx, `UPDATE credit_fundings SET provider_reference = 'pr-1' WHERE id = $1`, funding.ID)
+			return e
+		}), "cp_app must still record the provider reference")
 }
 
 func TestIntegration_BalancesExplainWhatIsAndIsNotWithdrawable(t *testing.T) {

@@ -2,6 +2,7 @@ package nativemarket
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -74,7 +75,11 @@ type Service struct {
 	auditor     Audit
 	instruments Instruments
 	risk        Risk
-	clk         clock.Clock
+	// safety is the market-safety policy source (safety.go). A nil one means
+	// the compiled-in conservative policy, which is a real policy rather than
+	// an absence -- see SetSafety.
+	safety Safety
+	clk    clock.Clock
 }
 
 // NewService returns a Service. No argument may be nil.
@@ -104,6 +109,16 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest) (Marke
 	}
 	if tx == nil {
 		return Market{}, errs.New(errs.CodeInternal, "nativemarket: Create requires a transaction")
+	}
+	// The minimum liquidity a market may open with (§47). It is checked before
+	// the mint because a market refused after its supply exists would leave
+	// units of an asset nobody can trade.
+	safetyPolicy, err := s.safetyPolicy(ctx, tx)
+	if err != nil {
+		return Market{}, err
+	}
+	if err := checkOpeningLiquidity(safetyPolicy, r); err != nil {
+		return Market{}, err
 	}
 
 	// The mint. Every unit that will ever exist is created in one posting:
@@ -187,7 +202,7 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest) (Marke
 		RealCreditReserve: money.Quantity{},
 		AssetReserve:      m.Curve.InitialAssetReserve,
 	})
-	if err := s.publishPrice(ctx, tx, m, opening, r.EffectiveAt, "native_market:"+m.ID.String()); err != nil {
+	if _, err := s.publishPrice(ctx, tx, m, opening, r.EffectiveAt, "native_market:"+m.ID.String()); err != nil {
 		return Market{}, err
 	}
 	if err := s.registerInstrument(ctx, tx, m, r); err != nil {
@@ -222,14 +237,19 @@ func (s *Service) SetStatus(ctx context.Context, tx pgx.Tx, marketID MarketID, t
 		NewTransitionID(), marketID, string(m.Status), string(to), actorType, actorID, reason); err != nil {
 		return Market{}, mapError(err)
 	}
-	set := `status = $2`
-	if to == StatusActive && m.ActivatedAt == nil {
-		set += `, activated_at = now()`
-	}
-	if _, err := tx.Exec(ctx, `UPDATE native_markets SET `+set+` WHERE id = $1`, marketID, string(to)); err != nil {
-		return Market{}, mapError(err)
-	}
+	// The INSERT above IS the status change. 00746 revoked UPDATE on
+	// native_markets from cp_app, and the trigger on native_market_transitions
+	// has already written `status` and stamped `activated_at` from the row --
+	// coalescing the stamp, because cp_native_market_curve_frozen raises NM003
+	// if activated_at moves once set, which is exactly what the
+	// `m.ActivatedAt == nil` guard here used to prevent.
 	m.Status = to
+	if to == StatusActive && m.ActivatedAt == nil {
+		if err := tx.QueryRow(ctx, `SELECT activated_at FROM native_markets WHERE id = $1`, marketID).
+			Scan(&m.ActivatedAt); err != nil {
+			return Market{}, mapError(err)
+		}
+	}
 	// Keep the platform's instrument registry agreeing with the venue. See
 	// reality.go: two sources for "what may be traded" eventually disagree,
 	// and the disagreement is found by something moving that should not have.
@@ -316,9 +336,19 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	if tx == nil {
 		return ExecuteResult{}, errs.New(errs.CodeInternal, "nativemarket: Execute requires a transaction")
 	}
-	if existing, found, err := s.fillByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
+	if existing, owner, found, err := s.fillByIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
 		return ExecuteResult{}, err
 	} else if found {
+		// Whose replay this is, for the reason recorded in internal/payout: the
+		// key is globally unique and the boundary's idempotency record is per
+		// actor, so another account's trade is what comes back otherwise --
+		// and a market moves on every fill, so it is a trade at a price this
+		// caller never saw (F-106).
+		if owner != r.AccountID {
+			return ExecuteResult{}, errs.New(errs.CodeInvalidIdempotencyReuse,
+				"nativemarket: idempotency key belongs to another account").
+				WithField("idempotency_key", r.IdempotencyKey)
+		}
 		return existing, nil
 	}
 
@@ -360,8 +390,24 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	// The risk kernel, before anything is posted (see risk.go). The settlement
 	// compiler has already recorded that this route requires an evaluation;
 	// this is the evaluation.
-	if err := s.checkRisk(ctx, tx, m, r, fill, creatorID); err != nil {
+	afford, err := s.checkRisk(ctx, tx, m, r, fill, creatorID)
+	if err != nil {
 		return ExecuteResult{}, err
+	}
+
+	// Then the market's own safety limits (see safety.go) -- but only for an
+	// order the account can actually pay for. An order larger than the balance
+	// is about to be refused by the ledger's negative-balance guard with the
+	// reason that is true, and "this order would move the market too far" is
+	// the same wrong answer risk.go already declined to give.
+	safetyPolicy, err := s.safetyPolicy(ctx, tx)
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	if afford {
+		if err := s.checkSafety(safetyPolicy, m, r, fill, creatorID); err != nil {
+			return ExecuteResult{}, err
+		}
 	}
 
 	post, err := s.postTrade(ctx, tx, m, r, fill, creatorID)
@@ -373,6 +419,14 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	}
 
 	fillID := NewFillID()
+	// The version this trade produces. The curve cannot know it -- it prices
+	// against reserves and has never seen a row -- and nothing else assigned
+	// it, so `state_version_after` was 0 on every order response in every
+	// deployment and the trade ticket printed "Recorded at state version 0"
+	// (F-195). It is the same number the fill's `seq` column carries and the
+	// same number 00712's apply trigger will move the market to, written here
+	// from one expression so the three cannot disagree.
+	fill.StateAfter.Version = st.Version + 1
 	var quoteID any
 	if r.QuoteID != nil {
 		quoteID = *r.QuoteID
@@ -384,7 +438,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 		    real_credit_reserve_after, asset_reserve_after, quote_id, journal_transaction_id, idempotency_key)
 		 VALUES ($1,$2,$3,$4,$5,$6::numeric,$7::numeric,$8::numeric,$9::numeric,$10::numeric,
 		         $11::numeric,$12::numeric,$13,$14::numeric,$15::numeric,$16,$17,$18)`,
-		fillID, m.ID, st.Version+1, r.AccountID, string(r.Side),
+		fillID, m.ID, fill.StateAfter.Version, r.AccountID, string(r.Side),
 		fill.CreditsIn.String(), fill.CreditsOut.String(), fill.AssetsIn.String(), fill.AssetsOut.String(),
 		fill.CreditsToPool.String(), fill.PlatformFee.String(), fill.CreatorFee.String(),
 		st.Version, fill.StateAfter.RealCreditReserve.String(), fill.StateAfter.AssetReserve.String(),
@@ -394,10 +448,23 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 
 	// Reality and proof, in this transaction with the trade (see reality.go).
 	at := s.clk.Now()
-	if err := s.publishPrice(ctx, tx, m, fill.SpotAfter, at, "native_market_fill:"+fillID.String()); err != nil {
+	printedAt, err := s.publishPrice(ctx, tx, m, fill.SpotAfter, at, "native_market_fill:"+fillID.String())
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	// The public print, stamped with the SAME instant as the price observation
+	// above, because they are the same observation (see prints.go).
+	if err := s.recordPrint(ctx, tx, m, fill, fillID, fill.StateAfter.Version, printedAt); err != nil {
 		return ExecuteResult{}, err
 	}
 	if err := s.recordFill(ctx, tx, m, r, fill, fillID, post.TransactionID.String(), at); err != nil {
+		return ExecuteResult{}, err
+	}
+
+	// The circuit breaker, after the fill: this trade stands, and what the
+	// breaker stops is the next one (see safety.go).
+	trip, err := s.applyBreaker(ctx, tx, safetyPolicy, m, fill, fillID, printedAt)
+	if err != nil {
 		return ExecuteResult{}, err
 	}
 
@@ -405,7 +472,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	if err != nil {
 		return ExecuteResult{}, err
 	}
-	return ExecuteResult{FillID: fillID, MarketID: m.ID, Fill: fill, Alerts: alerts}, nil
+	return ExecuteResult{FillID: fillID, MarketID: m.ID, Fill: fill, Alerts: alerts, Breaker: trip}, nil
 }
 
 // postTrade writes the journal transaction for a fill.
@@ -471,6 +538,54 @@ func (s *Service) postTrade(ctx context.Context, tx pgx.Tx, m Market, r ExecuteR
 	})
 }
 
+// recordPoolShortfall records that a market's pooled-credit record could not
+// account for everything a sale drew out of it.
+//
+// It is an audit row rather than a log line because it is a statement about
+// somebody's money that an operator has to be able to find afterwards: the
+// proceeds it describes carry the provenance of SOME of what funded them, and a
+// reader asking why a lot's floor looks better than the pool's history deserves
+// the row that says the record was short. It is written in the trade's own
+// transaction, so it cannot be lost while the trade lands.
+//
+// On a fresh deployment this cannot happen. `recordPoolSources` records every
+// Credit that reaches a pool, in the same transaction as the buy that sent it,
+// and `drawPoolSources` draws only against those rows -- so the record and the
+// reserve move together. What it exists for is data from before the record
+// existed: a market that traded under an earlier migration has a pool whose
+// history nobody wrote down, and this branch is the only thing between that and
+// a sale with no provenance at all.
+func (s *Service) recordPoolShortfall(
+	ctx context.Context, tx pgx.Tx, marketID MarketID, r ExecuteRequest,
+	wanted, covered money.Quantity, drawn []credit.LotParent,
+) error {
+	payload, err := json.Marshal(map[string]any{
+		"market_id":       marketID.String(),
+		"credits_to_pool": wanted.String(),
+		"covered":         covered.String(),
+		"shortfall":       wanted.Sub(covered).String(),
+		"parents_kept":    len(drawn),
+		"idempotency_key": r.IdempotencyKey,
+	})
+	if err != nil {
+		return errs.Wrap(err, errs.CodeInternal, "nativemarket: encode pool shortfall payload")
+	}
+	actorType, actorID := actorFrom(ctx)
+	_, err = s.auditor.Append(ctx, tx, audit.Event{
+		Stream:       audit.AccountStream(r.AccountID.String()),
+		ActorType:    actorType,
+		ActorID:      actorID,
+		Action:       "native_market.pool_provenance_shortfall",
+		ResourceType: "native_market",
+		ResourceID:   marketID.String(),
+		Reason: "the pooled-credit record could not account for everything this sale drew; " +
+			"the proceeds name the parents that were found and their provenance is incomplete",
+		Payload:    payload,
+		OccurredAt: s.clk.Now().UTC(),
+	})
+	return err
+}
+
 // moveCredits keeps Credit provenance in step with the journal.
 //
 // On a buy the trader's lots are consumed; on a sell the proceeds are issued
@@ -478,35 +593,98 @@ func (s *Service) postTrade(ctx context.Context, tx pgx.Tx, m Market, r ExecuteR
 // policy forbids withdrawing. The creator's fee is issued with origin
 // MARKET_CREATOR_EARNING — deliberately distinct from ordinary creator revenue
 // because its source is speculative trading (PART LXXX).
+//
+// # Where a new lot's finality comes from (D-124, F-230)
+//
+// It used to be `const derived = valuedomain.FinalityReversible`, with a comment
+// saying value leaving the pool is reversible "until something establishes
+// otherwise". Nothing could establish otherwise: the only writer that promotes a
+// lot out of REVERSIBLE reads `credit_fundings.lot_id`, and an earning has no
+// funding row and never gets one. So every MARKET_TRADING_PROCEEDS and every
+// MARKET_CREATOR_EARNING this system has ever minted was permanently
+// un-withdrawable, and the eligibility page said FUNDING_NOT_SETTLED — a reason
+// it documents as one that WAITING fixes.
+//
+// Now a new lot names its parents. On a buy they are the trader's own consumed
+// lots; on a sell they are the pooled contributions the sale drew down
+// (poolprovenance.go), and `credit.RecordLot` mints at the least final finality
+// among them. REVERSIBLE is still what a sale funded by a reversible purchase
+// produces, and it is now a state something can move.
 func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r ExecuteRequest, fill Fill, creatorID accounts.AccountID, journalTx ledger.TransactionID) error {
 	ref := credit.Reference{Type: "native_market_fill", ID: r.IdempotencyKey}
 
-	// The finality new Credits inherit. Proceeds and fees are funded by
-	// whatever buyers paid in, and some of that may still be reversible, so
-	// value leaving the pool is REVERSIBLE until something establishes
-	// otherwise. It is spendable — which is what the product needs — and not
-	// payout-eligible, which is the conservative half.
-	const derived = valuedomain.FinalityReversible
+	// The parents of whatever this trade mints, and the finality a caller falls
+	// back to when the record cannot cover it. REVERSIBLE is that fallback
+	// everywhere below: "we do not know what funded this" is not "it was
+	// settled", and RecordLot takes the LESS final of the two.
+	var feeParents []credit.LotParent
 
 	switch r.Side {
 	case Buy:
-		if _, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
+		spent, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
 			AccountID:                r.AccountID,
 			Quantity:                 fill.CreditsIn,
 			JournalTxID:              journalTx,
 			Reference:                ref,
 			Reason:                   "native market buy",
 			RequireSpendableFinality: true,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
+		// What reached the pool is what the pool may later pay out, so that is
+		// what is recorded against it. The fees came out of the same movement
+		// and are their own derived lots below.
+		if err := s.recordPoolSources(ctx, tx, m.ID, spent, fill.CreditsToPool); err != nil {
+			return err
+		}
+		fp, perr := credit.ParentsOfAllocations(spent, fill.CreatorFee)
+		if perr != nil {
+			return perr
+		}
+		feeParents = fp
 	case Sell:
+		// Credits leave the pool: the seller's proceeds and both fees come out
+		// of one movement, so one draw-down funds all of them.
+		drawn, covered, derr := s.drawPoolSources(ctx, tx, m.ID, fill.CreditsToPool)
+		if derr != nil {
+			return derr
+		}
+		if covered.Cmp(fill.CreditsToPool) < 0 {
+			// The record does not account for all of it.
+			//
+			// The parents that WERE found are KEPT. The line here used to be
+			// `drawn = nil`, one line under a comment saying the found parents
+			// still constrain the mint downwards -- and dropping them is what
+			// made that false. A parentless derived lot is minted REVERSIBLE
+			// and is then outside every direction of SettleDerived, whose
+			// candidate predicate requires a parent row: it is stranded
+			// REVERSIBLE for ever, which is F-230's outcome restored on the one
+			// path the fix did not cover (F-276).
+			//
+			// Keeping them is conservative in the only direction that matters.
+			// RecordLot mints at the LEAST FINAL parent, so naming the parents
+			// the record does know about can only make the proceeds less
+			// withdrawable than the REVERSIBLE fallback, never more -- and the
+			// origin floor is computed from their roots, so provenance is
+			// narrowed rather than invented. What is NOT claimed is that the
+			// parents are complete; the shortfall says so, durably, beside the
+			// market it happened in.
+			if err := s.recordPoolShortfall(ctx, tx, m.ID, r, fill.CreditsToPool, covered, drawn); err != nil {
+				return err
+			}
+		}
 		if fill.CreditsOut.IsPositive() {
+			parents, perr := sharesOf(drawn, fill.CreditsOut)
+			if perr != nil {
+				return perr
+			}
 			if _, err := s.credits.RecordLot(ctx, tx, credit.RecordLotRequest{
 				AccountID:        r.AccountID,
 				Quantity:         fill.CreditsOut,
 				Origin:           valuedomain.OriginMarketTradingProceeds,
-				Finality:         derived,
+				Finality:         valuedomain.FinalityReversible,
+				Parents:          parents,
 				Reference:        ref,
 				FundingReference: &credit.Reference{Type: "native_market", ID: m.ID.String()},
 				JournalTxID:      journalTx,
@@ -515,6 +693,11 @@ func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r Execut
 				return err
 			}
 		}
+		fp, perr := sharesOf(drawn, fill.CreatorFee)
+		if perr != nil {
+			return perr
+		}
+		feeParents = fp
 	}
 
 	if fill.CreatorFee.IsPositive() {
@@ -522,7 +705,8 @@ func (s *Service) moveCredits(ctx context.Context, tx pgx.Tx, m Market, r Execut
 			AccountID:        creatorID,
 			Quantity:         fill.CreatorFee,
 			Origin:           valuedomain.OriginMarketCreatorEarning,
-			Finality:         derived,
+			Finality:         valuedomain.FinalityReversible,
+			Parents:          feeParents,
 			Reference:        ref,
 			FundingReference: &credit.Reference{Type: "native_market", ID: m.ID.String()},
 			JournalTxID:      journalTx,
@@ -559,6 +743,15 @@ func mapError(err error) error {
 		return errs.Wrap(err, errs.CodeAssetRestricted, "this market is not accepting that trade")
 	case "NM005":
 		return errs.Wrap(err, errs.CodeInternal, "this trade would break supply conservation")
+	case "22P02":
+		// invalid_text_representation: a value the caller supplied did not parse
+		// as the type it is cast to. That is the caller's input being wrong, not
+		// this service being broken, and the default branch below rendered it as
+		// a 500 from a public route (F-199). The message names no value: the
+		// database's own text quotes the input back, and a public error that
+		// echoes caller-supplied bytes is a small reflection surface.
+		return errs.Wrap(err, errs.CodeValidationFailed,
+			"a value in this request is not in the form this API accepts")
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errs.New(errs.CodeNotFound, "native market not found")

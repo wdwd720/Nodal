@@ -1,0 +1,704 @@
+/*
+ * NODAL — THE PUBLIC SITE
+ *
+ * The signed-out pages: landing, product, how it works, security, learn, get
+ * started, sign in, and the three policy documents.
+ *
+ * It adds no colour, no radius, no duration and no type size. Everything here
+ * reads a token from `tokens.css`, and the primitives inside a section are the
+ * same `Panel`, `Figure`, `Field` and `DataTable` the application uses. That is
+ * the point: the marketing site is built out of the product, so a visitor is
+ * looking at the real interface rather than a picture of one.
+ *
+ * What this layer contributes is rhythm — a masthead, a section, a measure, a
+ * footer — and one structural idea:
+ *
+ *   THE SECTION IS THE UNIT, AND IT CARRIES ITS OWN HAIRLINE.
+ *
+ * Sections are separated by a rule and an eyebrow rather than by pale panels
+ * floating in whitespace. A page of bordered cards is the pattern the goal
+ * calls "generated-looking feature-card soup"; a page of ruled sections reads
+ * like a document, which is what a financial product should read like.
+ *
+ * The one deliberate absence is decoration. There is no gradient, no glow, no
+ * blob, no illustration and no shadow anywhere in this file. The heaviest
+ * visual device is a 1px line.
+ */
+
+/* ============================================================== structure == */
+
+.site {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+}
+
+.site-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The one width the public site is measured in. */
+.site-width {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding-inline: var(--space-5);
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .site-width {
+    padding-inline: var(--space-4);
+  }
+}
+
+/* --------------------------------------------------------------- masthead -- */
+
+.site-head {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.site-head-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 56px;
+  padding-block: var(--space-2);
+}
+
+.site-head .brand {
+  flex: 0 0 auto;
+}
+
+.site-head-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: var(--space-4);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.site-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+}
+
+.site-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+.site-link:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+/*
+ * The active section carries a rule down its leading edge as well as a tint,
+ * because colour is never the only carrier of state in this system.
+ */
+.site-link-active {
+  color: var(--ink);
+  background: var(--accent-wash);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+
+/* The menu button and the sheet's list, below 768px. */
+.site-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-menu-list .site-link {
+  min-height: var(--tap-min);
+  font-size: var(--text-md);
+}
+
+/* ---------------------------------------------------------------- section -- */
+
+.site-section {
+  padding-block: var(--space-10);
+  border-top: 1px solid var(--line);
+}
+
+.site-section:first-of-type {
+  border-top: 0;
+}
+
+.site-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  min-width: 0;
+}
+
+.site-section-head h2 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  margin: 0;
+}
+
+.site-section-head p {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+.site-prose {
+  max-width: var(--measure);
+  color: var(--ink-soft);
+}
+
+.site-prose p {
+  margin: 0 0 var(--space-3);
+}
+
+.site-prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* -------------------------------------------------------------------- hero -- */
+
+.site-hero {
+  padding-block: var(--space-12) var(--space-10);
+}
+
+.site-hero-grid {
+  display: grid;
+  gap: var(--space-8);
+  align-items: start;
+  grid-template-columns: 1fr;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .site-hero-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--space-10);
+  }
+}
+
+.site-hero h1 {
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-4);
+  max-width: 18ch;
+}
+
+@media (max-width: 480px) {
+  .site-hero h1 {
+    font-size: var(--text-2xl);
+  }
+}
+
+.site-hero .lead {
+  max-width: var(--measure);
+  margin: 0 0 var(--space-5);
+}
+
+.site-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.site-cta-note {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+  max-width: var(--measure);
+}
+
+/* ------------------------------------------------------------------ grids -- */
+
+.site-grid {
+  display: grid;
+  gap: var(--space-6) var(--space-8);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  min-width: 0;
+}
+
+.site-grid-2 {
+  display: grid;
+  gap: var(--space-6) var(--space-8);
+  grid-template-columns: 1fr;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .site-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * A block of copy under a small heading. No border: the grid gap and the
+ * heading weight carry the structure, which is what stops the page turning
+ * into a wall of boxes.
+ */
+.site-item h3 {
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  margin: 0 0 var(--space-2);
+}
+
+.site-item p {
+  margin: 0 0 var(--space-2);
+  color: var(--ink-soft);
+  font-size: var(--text-md);
+}
+
+.site-item p:last-child {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------------- is / is not lists -- */
+
+/*
+ * The claims block. Two columns of plain statements, each prefixed by a glyph
+ * that survives forced-colors and grayscale, because "what this is not" is the
+ * most load-bearing copy on the site and must not depend on a colour.
+ */
+.claims {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.claims li {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  gap: var(--space-2);
+  align-items: baseline;
+  color: var(--ink);
+  font-size: var(--text-md);
+  min-width: 0;
+}
+
+.claims-glyph {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+}
+
+.claims-is .claims-glyph {
+  color: var(--accent);
+}
+
+.claims-not .claims-glyph {
+  color: var(--warn);
+}
+
+/* ------------------------------------------------------------------ steps -- */
+
+/*
+ * The loop, numbered. The rule down the left is the sequence; the caveat under
+ * each step is the honesty. A step with no caveat would be the marketing
+ * version, and this product does not have one.
+ */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.steps > li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--space-3);
+  padding-bottom: var(--space-6);
+  position: relative;
+  min-width: 0;
+}
+
+.steps > li::before {
+  content: counter(step);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums slashed-zero;
+  color: var(--ink-faint);
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+/* The connector. It stops at the last step rather than trailing into nothing. */
+.steps > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-block: 2rem 0;
+  inset-inline-start: calc(1rem - 1px);
+  border-inline-start: 1px solid var(--line);
+}
+
+.steps h3 {
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  margin: var(--space-1) 0 var(--space-2);
+}
+
+.steps p {
+  margin: 0 0 var(--space-2);
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+.steps .step-caveat {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+  max-width: var(--measure);
+}
+
+.steps .step-caveat::before {
+  content: "△ ";
+  color: var(--warn);
+}
+
+/* ------------------------------------------------------------------ terms -- */
+
+/* The glossary on /learn: a definition list that stays readable at 375px. */
+.glossary {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .glossary {
+    grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+    gap: var(--space-3) var(--space-6);
+    align-items: baseline;
+  }
+}
+
+/*
+ * HTML allows a `<div>` inside a `<dl>` to group one term with its definition,
+ * and grouping them is what makes the pair survive being reordered or filtered.
+ * `display: contents` hands the two children back to the grid so the term and
+ * its definition still land in their own columns.
+ */
+.glossary > div {
+  display: contents;
+}
+
+.glossary dt {
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.glossary dd {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-soft);
+  max-width: var(--measure);
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .glossary dd {
+    margin: 0;
+  }
+}
+
+/* --------------------------------------------------------------- policies -- */
+
+.policy {
+  max-width: var(--measure);
+}
+
+.policy-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  margin: var(--space-3) 0 0;
+  color: var(--ink-faint);
+}
+
+.policy section {
+  margin-top: var(--space-8);
+}
+
+.policy h2 {
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  margin: 0 0 var(--space-3);
+}
+
+.policy p {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-soft);
+}
+
+.policy ul {
+  margin: 0 0 var(--space-3);
+  padding-inline-start: var(--space-5);
+  color: var(--ink-soft);
+}
+
+.policy li {
+  margin-bottom: var(--space-2);
+}
+
+.policy-index {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ----------------------------------------------------------------- footer -- */
+
+.site-foot {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding-block: var(--space-8) var(--space-6);
+}
+
+.site-foot-grid {
+  display: grid;
+  gap: var(--space-6) var(--space-8);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  margin-bottom: var(--space-6);
+  min-width: 0;
+}
+
+.site-foot h2 {
+  font-size: var(--text-2xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 var(--space-3);
+  font-weight: var(--weight-semibold);
+}
+
+.site-foot ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.site-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.site-foot a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+@media (pointer: coarse) {
+  .site-foot a {
+    min-height: var(--tap-min);
+  }
+}
+
+.site-foot-legal {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+}
+
+.site-foot-legal p {
+  margin: 0;
+  max-width: var(--measure);
+}
+
+/* ------------------------------------------------------------- get started -- */
+
+.site-narrow {
+  max-width: 40rem;
+  margin-inline: auto;
+}
+
+.site-panel-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-faint);
+  max-width: var(--measure);
+}
+
+/* ------------------------------------------------------------- onboarding -- */
+
+/*
+ * Three screens, one column, capped narrower than the site's own measure. A
+ * form that runs the full width of a desktop is a form nobody finishes.
+ */
+.onboarding {
+  max-width: 44rem;
+  padding-block: var(--space-10) var(--space-12);
+}
+
+.onboarding h1 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  margin: 0 0 var(--space-2);
+}
+
+.onboarding .lead {
+  margin: 0 0 var(--space-6);
+}
+
+.onboarding .panel {
+  margin-bottom: var(--space-5);
+}
+
+/*
+ * The step list is a list, not a progress bar. The steps are independent and
+ * can be done in either order, so a bar would draw a sequence the domain does
+ * not have.
+ */
+.onboarding-steps {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-4);
+}
+
+.onboarding-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.onboarding-step-label {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.onboarding-steps li[aria-current="step"] .onboarding-step-label {
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+
+/* --------------------------------------------------- a legal document, as-is */
+
+/*
+ * The document is shown in its own scroll container so a long one does not push
+ * the acceptance control off the end of the page, and so the container — not
+ * the page — is what a keyboard scrolls.
+ */
+.doc-scroll {
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-sunken);
+  padding: var(--space-4);
+}
+
+/*
+ * `<pre>` because these are the exact bytes the acceptance hashes: nothing is
+ * parsed, transformed or re-rendered on the way to the screen. The face is the
+ * text face rather than the mono one, because a legal document set in a
+ * terminal font is a legal document nobody reads — that is typography, and it
+ * changes no character.
+ */
+.doc-source {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ sandbox line -- */
+
+/*
+ * The standing sandbox statement. It is a line of text in the document, not a
+ * dismissible banner and not a toast: a rehearsal that can be dismissed is a
+ * rehearsal somebody will forget they are in.
+ */
+.sandbox-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: var(--warn-wash);
+  border-bottom: 1px solid var(--warn-line);
+  color: var(--ink);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+.sandbox-line .sandbox-word {
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  font-size: var(--text-2xs);
+  flex: 0 0 auto;
+}
+
+/*
+ * A public policy page shows the whole document rather than an excerpt, so its
+ * scroll region is taller than the one on the acceptance screen — there is no
+ * control below it competing for the fold.
+ */
+.doc-scroll-tall {
+  max-height: 40rem;
+}

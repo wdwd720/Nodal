@@ -83,16 +83,19 @@ func repeat(s string, n int) string {
 
 func TestCanTransition_EveryPair(t *testing.T) {
 	allowed := map[GateState]map[GateState]bool{
-		StateDisabled:        {StatePendingApproval: true, StateRevoked: true},
+		StateDisabled:        {StatePendingApproval: true, StateRevoked: true, StateSandbox: true},
 		StatePendingApproval: {StateApproved: true, StateRevoked: true},
 		StateApproved:        {StateActive: true, StateExpired: true, StateRevoked: true},
 		StateActive:          {StateSuspended: true, StateExpired: true, StateRevoked: true},
 		StateSuspended:       {StateApproved: true, StateRevoked: true},
-		StateRevoked:         {StatePendingApproval: true},
-		StateExpired:         {StatePendingApproval: true, StateRevoked: true},
+		StateRevoked:         {StatePendingApproval: true, StateSandbox: true},
+		StateExpired:         {StatePendingApproval: true, StateRevoked: true, StateSandbox: true},
+		// SANDBOX is not on the path to ACTIVE: it leaves only to DISABLED or
+		// REVOKED, and the real ceremony starts again from there.
+		StateSandbox: {StateDisabled: true, StateRevoked: true},
 	}
 	states := AllStates()
-	require.Len(t, states, 7)
+	require.Len(t, states, 8)
 	pairs := 0
 	for _, from := range states {
 		for _, to := range states {
@@ -101,11 +104,13 @@ func TestCanTransition_EveryPair(t *testing.T) {
 			assert.Equalf(t, want, CanTransition(from, to), "%s -> %s", from, to)
 		}
 	}
-	assert.Equal(t, 49, pairs)
+	assert.Equal(t, 64, pairs)
 	// Invariants worth stating explicitly.
 	for _, s := range states {
 		assert.Falsef(t, CanTransition(s, s), "%s -> %s self transition", s, s)
-		assert.Falsef(t, CanTransition(s, StateDisabled), "%s -> DISABLED: DISABLED is only ever the bootstrap default", s)
+		if s != StateSandbox {
+			assert.Falsef(t, CanTransition(s, StateDisabled), "%s -> DISABLED: DISABLED is the bootstrap default and where a sandbox rehearsal ends, nothing else", s)
+		}
 		if s != StateRevoked {
 			assert.Truef(t, CanTransition(s, StateRevoked), "%s -> REVOKED must be allowed (any -> REVOKED)", s)
 		}

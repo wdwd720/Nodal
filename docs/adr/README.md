@@ -37,6 +37,16 @@ The set of ADRs is the one required by goal PART 210.
 | [0017](0017-single-primary-region-v1.md) | Single primary write region for V1; no active-active money writes | Accepted | 12, 13, 137–139, 141, 172, 205, 219 | EB-007, EB-008 |
 | [0018](0018-no-proprietary-stablecoin.md) | No proprietary stablecoin or platform-issued dollar token | Accepted | 4, 11, 13, 20, 26, 27, 32, 33, 94 | EB-002, EB-009, EB-010 |
 | [0019](0019-no-internal-crossing.md) | No internal order matching, crossing, or principal trading | Accepted | 3, 4, 10, 41, 46, 50, 163, 182 | EB-009, EB-011 |
+| [0020](0020-retention-against-append-only-tables.md) | Retention on an append-only table is partition detachment, never row deletion under a disabled trigger | Accepted | 122 | — |
+| [0021](0021-who-may-read-personal-data.md) | Personal data is encrypted in the application or not stored, and a role with no use for it cannot read it | Accepted | 121 | — |
+| [0022](0022-one-identity-source-of-truth.md) | One identity source of truth: ZITADEL authenticates, Neon owns the Nodal user; no second authentication system | Accepted | 4 (product goal §3) | — |
+| [0023](0023-the-sandbox-tier.md) | The sandbox tier: one declaration, refused in PROD, lets a non-production deployment exercise every gated surface without approving anything | Accepted | 4 (product goal §9) | — |
+| [0025](0025-verification-is-provider-hosted-and-evidence-based.md) | Verification is provider-hosted, evidence-based, and never touches a Credit | Accepted | 4 (product goal §20, §21, §24) | D-057, D-058, D-059, D-061; B-02, B-06 |
+| [0026](0026-the-conversion-request-is-payout-requests.md) | The conversion request is `payout_requests`, with a destination, a quote and its provenance | Accepted | 4 (product goal §19, §22, §23, §25) | D-060, D-062; B-01, B-05, B-09 |
+| [0027](0027-a-position-is-the-sum-of-its-fills.md) | A native position is the sum of its fills: positions, prices and candles are read models only the database writes, and market safety is its own versioned policy | Accepted | 4 (product goal §§11-16, §35, §46, §47, §51) | — |
+| [0024](0024-how-a-principal-becomes-an-operator.md) | How a principal becomes an operator: a declaration in the deployment reconciled into `operator_roles`, never a claim from the identity provider | Accepted | 4 (product goal §38) | — |
+| [0028](0028-notifications-and-realtime-on-one-instance.md) | A notification is a fact of the transaction that caused it, and realtime is one process's memory | Accepted | 109, 193 (product goal §34, §36, §52) | D-069, D-070, D-071, D-072 |
+| [0029](0029-agents-as-a-constrained-authority-management-surface.md) | Agents are a constrained-authority management surface: authority is a grant a person made, levels 4-6 stay refused, and execution stays behind F-65 | Accepted | 17, 18 (product goal) | — |
 
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.

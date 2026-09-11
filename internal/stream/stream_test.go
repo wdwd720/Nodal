@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -106,15 +108,39 @@ func TestHub_ResumeAndResync(t *testing.T) {
 	assert.Empty(t, replay)
 }
 
+// A subscriber that does not read is still dropped, and now SAYS so.
+//
+// The drop used to be signalled by closing the subscriber's channel, which is
+// the one thing a hub must never do to a channel it also sends on: the close
+// raced Publish's send and panicked the publishing goroutine (F-185). The
+// property is unchanged -- one stalled client cannot back-pressure the
+// publisher -- and it is reported by Done plus Dropped instead.
 func TestHub_SlowSubscriberDropped(t *testing.T) {
 	hub := NewHub(16, nil)
 	s, _ := hub.Subscribe(customer("acct-a"), 0, 1)
 	hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"})
-	hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"}) // buffer full → dropped after 50 ms
+	hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"}) // buffer full → dropped after the grace
 	_, open := <-s.Events()
 	assert.True(t, open, "first event delivered")
-	_, open = <-s.Events()
-	assert.False(t, open, "channel closed for the slow subscriber")
+	select {
+	case <-s.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the slow subscriber was never dropped")
+	}
+	assert.True(t, s.Dropped(), "the drop is reported explicitly, not by closing a channel a publisher sends on")
+
+	// And the hub no longer holds it: a publish after the drop reaches nobody
+	// and returns immediately.
+	done := make(chan struct{})
+	go func() {
+		hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a publish after the drop is still waiting on the dropped subscriber")
+	}
 }
 
 func TestHub_AttachToMemoryBus(t *testing.T) {
@@ -136,7 +162,7 @@ func TestHub_AttachToMemoryBus(t *testing.T) {
 
 func TestSSEHandler_FramingHeartbeatAndAuth(t *testing.T) {
 	hub := NewHub(16, nil)
-	h := NewHandler(hub, 30*time.Millisecond)
+	h := NewHandler(hub, 30*time.Millisecond, nil)
 
 	// Unauthenticated / agent principals are refused.
 	rec := httptest.NewRecorder()
@@ -185,4 +211,67 @@ func TestSSEHandler_FramingHeartbeatAndAuth(t *testing.T) {
 	assert.Regexp(t, `id: \d+`, joined)
 	assert.Contains(t, joined, `"resource_id":"o-1"`)
 	cancel()
+}
+
+// A revoked session stops streaming (F-116).
+//
+// Revocation in this system is per request: auth.Manager re-reads the session
+// row on every one, so a revoked session dies at the next call. An SSE stream is
+// ONE request that never ends, so the per-request model had no purchase on it.
+// A stolen cookie's stream kept delivering the victim's balance, order and
+// deposit events after they logged out, after an operator revoked the session,
+// and past the session's own absolute expiry -- while the incident runbook
+// presents revocation as the containment for a leaked cookie.
+//
+// The heartbeat is where the stream re-earns its right to exist.
+func TestSSEHandler_ARevokedSessionStopsStreaming(t *testing.T) {
+	t.Parallel()
+	hub := NewHub(16, nil)
+
+	var revoked atomic.Bool
+	var checks atomic.Int64
+	h := NewHandler(hub, 20*time.Millisecond, func(_ context.Context, sessionID string) error {
+		checks.Add(1)
+		if sessionID != "sess-1" {
+			return errors.New("wrong session")
+		}
+		if revoked.Load() {
+			return errors.New("session revoked")
+		}
+		return nil
+	})
+
+	p := customer("acct-a")
+	p.SessionID = "sess-1"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(security.WithPrincipal(r.Context(), p)))
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// The stream is live: heartbeats arrive and the session is being re-checked.
+	require.Eventually(t, func() bool { return checks.Load() >= 2 }, 2*time.Second, 10*time.Millisecond,
+		"the session was never re-checked; the stream would outlive any revocation")
+
+	// Revoke, and the server ends the stream of its own accord. Reading to EOF
+	// is the proof: the client never closed it.
+	revoked.Store(true)
+	done := make(chan error, 1)
+	go func() {
+		_, rerr := io.Copy(io.Discard, resp.Body)
+		done <- rerr
+	}()
+	select {
+	case rerr := <-done:
+		assert.NoError(t, rerr, "the stream ended, which is what was wanted")
+	case <-time.After(3 * time.Second):
+		t.Fatal("the stream outlived the revocation of its own session")
+	}
 }

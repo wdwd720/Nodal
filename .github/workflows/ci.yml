@@ -157,6 +157,13 @@ jobs:
 
   # The dev host is Windows; scripts must behave identically everywhere (D-013).
   scripts-crossplatform:
+    # On pushes to main only. A macOS runner bills at ten times a Linux minute
+    # and Windows at two, so this one job costs more than the rest of the
+    # matrix together; on a private repository's included minutes it is what
+    # exhausted September's allowance and stopped every job of the first
+    # productization PR from starting. The scripts it checks change rarely and
+    # a pull request's Linux run already vets and tests them.
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -472,7 +479,10 @@ jobs:
         run: git diff --exit-code
 
   # Every workspace package that is not apps/web: the generated client and the
-  # strategy SDK both ship lint/typecheck/test scripts and had no job.
+  # strategy SDK both ship lint/typecheck/test scripts and had no job — and
+  # neither did the operator console, whose filter said "not apps/web" and read
+  # `./packages/*`. Nothing in CI had ever compiled apps/admin, run its money,
+  # decision-vector or source-scan tests, or built it.
   workspace-packages:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -491,6 +501,15 @@ jobs:
           pnpm --filter "./packages/*" run lint
           pnpm --filter "./packages/*" run typecheck
           pnpm --filter "./packages/*" run test
+      - name: Lint, typecheck, test and build the operator console
+        # The build is part of the gate, not a convenience: it verifies that
+        # dist/generated matches src/generated, so a console that would render a
+        # stale authority model fails here rather than in a browser.
+        run: |
+          pnpm --filter @controlplane/admin run lint
+          pnpm --filter @controlplane/admin run typecheck
+          pnpm --filter @controlplane/admin run test
+          pnpm --filter @controlplane/admin run build
 
   # Playwright critical-path UI tests. apps/web owns the Playwright config,
   # including whether it starts the app itself through `webServer`; this job
@@ -527,6 +546,10 @@ jobs:
           CP_ENV: LOCAL
           CP_AUTH_MODE: dev
           CP_HTTP_ADDR: 127.0.0.1:18099
+          # One declared operator (ADR-0024), so the suite can pause a demo
+          # market through the real NATIVE_MARKET_CLOSE_ONLY control and prove
+          # the trade ticket's refusal; without it that case skips (F-216).
+          CP_AUTH_BOOTSTRAP_OPERATORS: "devidp|dev:operations=OPERATIONS"
         run: |
           set -euo pipefail
           # The DSNs come from testdb itself rather than being written out by
@@ -548,17 +571,21 @@ jobs:
           # a fresh development deployment gets; riskpolicy refuses to write it
           # outside LOCAL/DEV/TEST.
           go run ./scripts/riskpolicy -operator ci-operator -reason "continuous integration: the compiled-in development limits"
-          # MARKETPLACE, through the REAL three-principal ceremony rather than
-          # by writing an ACTIVE row. gateceremony drives gates.Admin, so the
-          # state machine, the permission split, the step-up and all four
-          # evidence references apply, and it refuses any environment but
-          # LOCAL/DEV/TEST and any non-local database host.
-          #
-          # Without it the purchase spec takes its refusal branch: that branch
-          # asserts the refusal names the capability and that no Credits moved,
-          # so CI would still be testing something -- but it would not be
-          # testing that a customer can buy anything, which is the point.
-          go run ./scripts/gateceremony -capability MARKETPLACE             -proposer ci-proposer -approver ci-approver -activator ci-activator             -legal "CI-NOT-A-LEGAL-REVIEW" -contract "CI-NO-PROVIDER-CONTRACT"             -risk "CI-NOT-A-RISK-APPROVAL" -security "CI-NOT-A-SECURITY-REVIEW"             -reason "continuous integration: exercise the committed purchase path"
+          # The API under test is a SANDBOX TIER (ADR-0023): the six product
+          # capabilities plus LIVE_AGENT_TRADING (a level-3 agent grant needs
+          # it; the runtime stays NOT_DEPLOYED, so nothing executes) are
+          # sandbox-activated at boot, the sandbox legal and
+          # payout policies are loaded, the sandbox payout provider settles
+          # without moving value, and the demo seeder gives the markets a
+          # history. That is what lets the browser suite walk scenarios B-J
+          # rather than their refusal branches. The real three-principal
+          # ceremony is exercised by internal/gates' own suites; a sandbox
+          # tier refuses to move a gate that a ceremony already owns, so the
+          # two must not be combined on one database.
+          # Demo data is seeded by the API itself at boot (CP_API_DEMO_DATA,
+          # D-115), through the same wired services a request goes through, so
+          # the market, portfolio and activity specs have fills to look at
+          # rather than skipping on an empty catalogue.
           # Settlement asset: buying power and holdings answer 422 UNSUPPORTED
           # without it, and the specs assert real figures.
           db="${CP_TEST_DATABASE_URL##*/}"; db="${db%%\?*}"
@@ -571,7 +598,7 @@ jobs:
             echo "CP_API_SETTLEMENT_MINT=${asset#* }"
           } >> "$GITHUB_ENV"
           go build -o bin/api ./cmd/api
-          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=DEVELOPMENT             CP_API_ENABLED_CAPABILITIES=MARKETPLACE             ./bin/api > api.log 2>&1 &
+          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=SANDBOX CP_API_PAYOUT_POLICY=SANDBOX CP_API_DEMO_DATA=true             CP_API_ENABLED_CAPABILITIES=CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE,LIVE_AGENT_TRADING             CP_API_SANDBOX_GATES=CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE,LIVE_AGENT_TRADING             CP_PROVIDER_PAYOUT_NAME=sandbox_payout CP_PROVIDER_PAYOUT_MODE=sandbox             CP_API_RATE_LIMIT_GENERAL=6000/1m CP_API_RATE_LIMIT_AUTH=600/1m CP_API_RATE_LIMIT_COMMAND=1200/1m CP_API_RATE_LIMIT_QUOTE=1200/1m             ./bin/api > api.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -m 2 http://127.0.0.1:18099/v1/healthz >/dev/null; then
               echo "api up"; exit 0

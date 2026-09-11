@@ -245,7 +245,40 @@ const (
 // PermitInput is everything Permits needs. Every field is supplied by the
 // caller; this package reads no clock and no store.
 type PermitInput struct {
-	Origin      CreditOrigin
+	Origin CreditOrigin
+	// OriginFloor is the most restricted origin anywhere in this value's
+	// provenance: its own origin when nothing funded it, and the most
+	// restricted floor among its parents when something did (D-131).
+	//
+	// It has no permissive zero value. An empty or undeclared floor is read as
+	// UNKNOWN_ORIGIN and refuses, exactly as an empty Origin does, because a
+	// caller that has not established where value ultimately came from has not
+	// established that it may leave. Every lot the database returns carries one:
+	// `credit_lot_state.origin_floor` is NOT NULL and trigger-maintained.
+	OriginFloor CreditOrigin
+	// RootOrigins is the SET of origins this value's provenance bottoms out
+	// in: its own origin when nothing funded it, and the union of its parents'
+	// roots when something did (D-138).
+	//
+	// It exists because OriginFloor is one origin, and one origin cannot say
+	// what a policy nobody has written yet will refuse. The floor is "the most
+	// restricted parent" ranked by the two policies this BUILD ships, with the
+	// origin's own name breaking a tie -- so a lot funded half by a purchase
+	// and half by trading gains records MARKET_TRADING_PROCEEDS, and a policy
+	// that releases trading gains and closes the purchased float releases it.
+	// That policy is not hypothetical: it is one of the two answers B-02 can
+	// come back with (F-275).
+	//
+	// Provenance is therefore carried as a set and judged as a set. A rank
+	// cannot be conservative for a policy it was not computed from; a set can,
+	// because every root is asked.
+	//
+	// It has no permissive zero value. An empty set is a caller that has not
+	// established where value came from, which is read as UNKNOWN_ORIGIN and
+	// refuses, exactly as an empty Origin or an empty OriginFloor does. Every
+	// lot the database returns carries one: `credit_lot_state.root_origins` is
+	// NOT NULL, non-empty and trigger-maintained.
+	RootOrigins []CreditOrigin
 	Finality    FundingFinality
 	Domain      Domain
 	Verified    VerificationLevel
@@ -271,7 +304,10 @@ func (p Policy) Permits(in PermitInput) (bool, []PermitReason) {
 	if !in.PolicyValid {
 		add(ReasonPolicyInvalid)
 	}
-	if !in.Origin.Valid() {
+	// One reason for both, because a caller that supplied neither has the same
+	// problem twice and a duplicated reason is a decision record that hashes
+	// differently for no reason anybody can explain.
+	if !in.Origin.Valid() || !in.OriginFloor.Valid() {
 		add(ReasonUnknownOrigin)
 	}
 	if !in.Finality.Valid() {
@@ -284,10 +320,39 @@ func (p Policy) Permits(in PermitInput) (bool, []PermitReason) {
 		add(ReasonDomainNotWithdrawable)
 	}
 
+	// BOTH the origin and the floor. A derived lot is as withdrawable as the
+	// least withdrawable thing that funded it: MARKET_TRADING_PROCEEDS out of a
+	// promotional grant is a promotional grant that has been round-tripped, and
+	// goal §23 forbids the round trip from changing the answer (D-131).
+	//
+	// The floor's rule is consulted only for PayoutAllowed. The capability, the
+	// verification level and the hold period belong to the value as it is now,
+	// and asking a grant's rule for them would demand a capability no rule that
+	// forbids payout is even allowed to name (OriginRule.Validate).
+	// ...and every ROOT, not only the most restricted one by this build's rank.
+	// The floor is a display and ordering answer; the permission answer is the
+	// set (D-138). A caller that supplies no roots has established nothing, and
+	// nothing established is not permission.
 	rule := p.Rule(in.Origin)
-	if !rule.PayoutAllowed {
+	floorRule := p.Rule(in.OriginFloor)
+	if len(in.RootOrigins) == 0 {
+		add(ReasonUnknownOrigin)
+	}
+	rootsAllowed := true
+	for _, r := range in.RootOrigins {
+		if !r.Valid() {
+			add(ReasonUnknownOrigin)
+			rootsAllowed = false
+			break
+		}
+		if !p.Rule(r).PayoutAllowed {
+			rootsAllowed = false
+		}
+	}
+	if !rule.PayoutAllowed || !floorRule.PayoutAllowed || !rootsAllowed {
 		add(ReasonOriginForbidden)
-	} else {
+	}
+	if rule.PayoutAllowed {
 		// Capability is checked only when the rule would otherwise permit, so
 		// the reason list of a forbidden origin does not also complain about a
 		// capability that could never have helped.
@@ -309,7 +374,43 @@ func (p Policy) Permits(in PermitInput) (bool, []PermitReason) {
 		return true, nil
 	}
 	sortReasons(reasons)
-	return false, reasons
+	return false, dedupeReasons(reasons)
+}
+
+// dedupeReasons drops repeats, keeping the first of each.
+//
+// Two inputs can now raise UNKNOWN_ORIGIN -- an undeclared origin or floor, and
+// an undeclared or missing root -- and a decision record that hashes differently
+// depending on how many of them were wrong is the defect the ordering comment
+// above already names. The slice is sorted first, so this is a linear pass.
+func dedupeReasons(rs []PermitReason) []PermitReason {
+	out := rs[:0]
+	for i, r := range rs {
+		if i > 0 && r == rs[i-1] {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// RefusedRoot is the first root origin this policy refuses to release, scanned
+// most restricted first with the origin's own name breaking a tie.
+//
+// It exists for the reason OriginFloor exists: ORIGIN_NOT_PAYOUT_ELIGIBLE on a
+// bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on. Once
+// provenance is a set, the origin a person needs to read about is the one THIS
+// policy refuses, which is not always the one this build's rank calls the most
+// restricted (D-138).
+func (p Policy) RefusedRoot(roots []CreditOrigin) (CreditOrigin, bool) {
+	ordered := append([]CreditOrigin(nil), roots...)
+	sort.SliceStable(ordered, func(i, j int) bool { return MoreRestricted(ordered[i], ordered[j]) })
+	for _, r := range ordered {
+		if !r.Valid() || !p.Rule(r).PayoutAllowed {
+			return r, true
+		}
+	}
+	return "", false
 }
 
 var reasonRank = map[PermitReason]int{

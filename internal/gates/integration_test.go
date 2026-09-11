@@ -509,7 +509,12 @@ func TestIntegration_Expiry(t *testing.T) {
 	assert.False(t, again)
 
 	// EXPIRED → PENDING_APPROVAL with a new version.
-	g2, err := f.do(t, proposer, func(ctx context.Context, tx pgx.Tx) (Gate, error) {
+	//
+	// A freshly authenticated proposer, not the one from an hour ago: Propose
+	// demands a recent step-up like every other step of the ceremony (F-99),
+	// and the clock has moved an hour since `proposer` authenticated.
+	renewer := f.op("risk-alice", security.RoleRisk)
+	g2, err := f.do(t, renewer, func(ctx context.Context, tx pgx.Tx) (Gate, error) {
 		return f.admin.Propose(ctx, tx, c, highRiskProposal("renewal"))
 	})
 	require.NoError(t, err)

@@ -20,6 +20,8 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/webhook"
+
+	"github.com/nodal/controlplane/internal/capacity"
 )
 
 // ---------------------------------------------------------------------------
@@ -38,7 +40,12 @@ type fakePurchaseProvider struct {
 	// transport failure, which is the case that decides whether a lost
 	// response can charge twice.
 	loseResponse bool
-	created      int
+	// failCancel, when set, is returned instead of cancelling; failLookup,
+	// when set, is returned instead of answering a lookup.
+	failCancel error
+	failLookup error
+	created    int
+	canceled   int
 }
 
 func newFakeProvider() *fakePurchaseProvider {
@@ -95,9 +102,40 @@ func (p *fakePurchaseProvider) CreatePurchase(_ context.Context, req CreatePurch
 func (p *fakePurchaseProvider) GetPurchase(_ context.Context, ref string) (PurchaseSnapshot, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.failLookup != nil {
+		return PurchaseSnapshot{}, p.failLookup
+	}
 	snap, ok := p.byRef[ref]
 	if !ok {
 		return PurchaseSnapshot{}, errs.New(errs.CodeNotFound, "no such payment")
+	}
+	return snap, nil
+}
+
+// CancelPurchase behaves the way an acquirer does: a pre-capture payment
+// becomes CANCELED, and one that already succeeded is refused.
+func (p *fakePurchaseProvider) CancelPurchase(_ context.Context, ref, _ string) (PurchaseSnapshot, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.failCancel != nil {
+		return PurchaseSnapshot{}, p.failCancel
+	}
+	snap, ok := p.byRef[ref]
+	if !ok {
+		return PurchaseSnapshot{}, errs.New(errs.CodeNotFound, "no such payment")
+	}
+	switch snap.Status {
+	case PurchaseSucceeded, PurchaseRefunded, PurchaseDisputed, PurchaseChargeback:
+		return PurchaseSnapshot{}, errs.Newf(errs.CodeConflict,
+			"a payment in %s cannot be canceled", snap.Status)
+	}
+	p.canceled++
+	snap.Status, snap.RawStatus = PurchaseCanceled, "canceled"
+	p.byRef[ref] = snap
+	for k, v := range p.byKey {
+		if v.ProviderReference == ref {
+			p.byKey[k] = snap
+		}
 	}
 	return snap, nil
 }
@@ -152,12 +190,108 @@ func newPurchaseFixture(t *testing.T) *purchaseFixture {
 	f := newFixture(t)
 	prov := newFakeProvider()
 	gate := &fakeGate{active: true}
-	svcP, err := NewPurchaseService(PurchaseServiceConfig{
+	svcP, err := NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
 		Credits: f.svc, Provider: prov, Pricing: DefaultPricingPolicy(),
-		Gates: gate, Clock: f.clk, Environment: "TEST",
+		Gates: gate, Clock: f.clk, Environment: "TEST", ProviderMode: "fake",
 	})
 	require.NoError(t, err)
 	return &purchaseFixture{fixture: f, svcP: svcP, prov: prov, gate: gate, keyPrefix: uuid.NewString()}
+}
+
+// newPurchaseFixtureWithCeiling is newPurchaseFixture with a money-at-risk
+// ceiling in force, for the tests that are about the ceiling rather than about
+// the purchase.
+func newPurchaseFixtureWithCeiling(t *testing.T, maxAtRiskMinor int64) *purchaseFixture {
+	t.Helper()
+	f := newFixture(t)
+	prov := newFakeProvider()
+	gate := &fakeGate{active: true}
+	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: maxAtRiskMinor}, f.clk.Now)
+	require.NoError(t, err)
+	svcP, err := NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
+		Credits: f.svc, Provider: prov, Pricing: DefaultPricingPolicy(),
+		Gates: gate, Clock: f.clk, Environment: "TEST", Capacity: guard, ProviderMode: "fake",
+	})
+	require.NoError(t, err)
+	return &purchaseFixture{fixture: f, svcP: svcP, prov: prov, gate: gate, keyPrefix: uuid.NewString()}
+}
+
+// TestIntegration_APurchaseServiceRefusesAPolicyAtTheWrongScale is the half of
+// F-151 that only a database can prove.
+//
+// A PricingPolicy converts money into BASE UNITS of the CREDIT asset, and it
+// can only do that correctly if it prices the scale that asset is actually
+// registered with. Validate cannot check that -- it never sees a deployment --
+// so the constructor does, against the assets table, and refuses rather than
+// building a service that would issue a millionth (or a million times) what it
+// charged for.
+func TestIntegration_APurchaseServiceRefusesAPolicyAtTheWrongScale(t *testing.T) {
+	f := newFixture(t)
+	registered, err := f.svc.AssetDecimals(f.ctx, testDB)
+	require.NoError(t, err)
+	require.EqualValues(t, DefaultCreditDecimals, registered,
+		"the suite registers the scale the rest of the repository documents")
+
+	wrong := DefaultPricingPolicy()
+	wrong.Decimals = registered + 2
+	require.NoError(t, wrong.Validate(), "internally coherent; it prices the wrong asset")
+
+	_, err = NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
+		Credits: f.svc, Provider: newFakeProvider(), Pricing: wrong,
+		Gates: &fakeGate{active: true}, Clock: f.clk, Environment: "TEST", ProviderMode: "fake",
+	})
+	require.Error(t, err)
+	require.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	require.Contains(t, err.Error(), "decimal Credit")
+
+	// And the shipped policy, which prices the registered scale, builds.
+	_, err = NewPurchaseService(f.ctx, testDB, PurchaseServiceConfig{
+		Credits: f.svc, Provider: newFakeProvider(), Pricing: DefaultPricingPolicy(),
+		Gates: &fakeGate{active: true}, Clock: f.clk, Environment: "TEST", ProviderMode: "fake",
+	})
+	require.NoError(t, err)
+}
+
+// TestIntegration_APurchaseMintsWhatTheFundingPagePromised walks the money all
+// the way to a lot and asserts the number a customer was shown.
+//
+// $10.00 at 100 Credits per dollar is 1,000 Credits. Under F-151 the lot held
+// 1,000 BASE UNITS -- 0.001 Credits -- and every row agreed with every other
+// row, which is why nothing caught it: the defect is in the unit, not in the
+// arithmetic between the rows.
+func TestIntegration_APurchaseMintsWhatTheFundingPagePromised(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.svcP.Pricing()
+
+	started := f.start(t, "scale", 1000) // $10.00
+	promised := money.QuantityFromInt64(int64(p.CreditsPerMajorUnit) * 10).ScaleUp(p.Decimals)
+	require.Equal(t, promised.String(), started.CreditQuantity.String(),
+		"1,000 Credits, in the CREDIT asset's base units")
+
+	f.deliver(t, event(started.Funding.ProviderReference, PurchaseSucceeded, f.keyPrefix+":scale-e1", 1000))
+	minted := f.funding(t, started.Funding.ID)
+	require.Equal(t, FundingReversible, minted.State)
+	require.NotNil(t, minted.LotID)
+
+	lot, err := f.svc.Lot(f.ctx, testDB, *minted.LotID)
+	require.NoError(t, err)
+	require.Equal(t, promised.String(), lot.Quantity.String())
+	require.Equal(t, promised.String(), lot.Remaining.String())
+	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
+}
+
+// creditsForDollars is what the deployment's own pricing policy says a whole
+// number of dollars buys, in the CREDIT asset's base units.
+//
+// Tests used to write the answer as a literal, and every one of those literals
+// was the pre-F-151 answer: a count of whole Credits in a field that means base
+// units. Asking the policy means a scale change moves the expectation with the
+// code rather than against it.
+func creditsForDollars(t *testing.T, f *purchaseFixture, dollars int64) money.Quantity {
+	t.Helper()
+	q, err := f.svcP.Pricing().CreditsFor(money.USDFromMinor(dollars * 100))
+	require.NoError(t, err)
+	return q
 }
 
 // start buys Credits. The key is namespaced per fixture because the suite
@@ -167,15 +301,13 @@ func newPurchaseFixture(t *testing.T) *purchaseFixture {
 func (f *purchaseFixture) start(t *testing.T, key string, minor int64) StartedPurchase {
 	t.Helper()
 	key = f.keyPrefix + ":" + key
-	var out StartedPurchase
-	require.NoError(t, f.tx(func(tx pgx.Tx) error {
-		var err error
-		out, err = f.svcP.StartPurchase(f.ctx, tx, StartPurchaseRequest{
-			AccountID: f.account, Amount: money.USDFromMinor(minor),
-			Currency: "USD", IdempotencyKey: key,
-		})
-		return err
-	}))
+	// No wrapping transaction: StartPurchase opens its own, because the
+	// provider call has to happen between two of them (F-96).
+	out, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(minor),
+		Currency: "USD", IdempotencyKey: key,
+	})
+	require.NoError(t, err)
 	return out
 }
 
@@ -246,17 +378,18 @@ func TestPAY001_OnePaymentCreatesExactlyOneFundingRecord(t *testing.T) {
 func TestPAY002_CreditAmountIsDerivedServerSide(t *testing.T) {
 	f := newPurchaseFixture(t)
 
-	// $100.00 at 100 Credits per dollar.
+	// $100.00 at 100 Credits per dollar: 10,000 Credits, in base units.
 	got := f.start(t, "pay002", 10000)
-	require.Equal(t, "10000", got.CreditQuantity.String())
-	require.Equal(t, "10000", got.Funding.CreditQuantity.String())
+	want := creditsForDollars(t, f, 100)
+	require.Equal(t, want.String(), got.CreditQuantity.String())
+	require.Equal(t, want.String(), got.Funding.CreditQuantity.String())
 	require.Equal(t, DefaultPricingVersion, got.PricingVersion)
 
 	// There is no request field that could have asked for more. The only
 	// input was the amount, so the only way to get more Credits is to pay
 	// more money.
 	more := f.start(t, "pay002b", 20000)
-	require.Equal(t, "20000", more.CreditQuantity.String())
+	require.Equal(t, creditsForDollars(t, f, 200).String(), more.CreditQuantity.String())
 }
 
 func TestPAY003_DuplicateWebhookCreatesNoDuplicateCredits(t *testing.T) {
@@ -276,7 +409,7 @@ func TestPAY003_DuplicateWebhookCreatesNoDuplicateCredits(t *testing.T) {
 	require.NotNil(t, got.LotID)
 
 	b := f.balances(t)
-	require.Equal(t, "10000", b.Gross.String(), "four deliveries, one issuance")
+	require.Equal(t, creditsForDollars(t, f, 100).String(), b.Gross.String(), "four deliveries, one issuance")
 
 	var lots int
 	require.NoError(t, testDB.QueryRow(f.ctx,
@@ -288,7 +421,7 @@ func TestPAY004_RefundIsHandledSafely(t *testing.T) {
 	f := newPurchaseFixture(t)
 	p := f.start(t, "pay004", 10000)
 	f.deliver(t, event(p.Funding.ProviderReference, PurchaseSucceeded, "e1", 10000))
-	require.Equal(t, "10000", f.balances(t).Gross.String())
+	require.Equal(t, creditsForDollars(t, f, 100).String(), f.balances(t).Gross.String())
 
 	f.deliver(t, event(p.Funding.ProviderReference, PurchaseRefunded, "e2", 10000))
 
@@ -300,7 +433,7 @@ func TestPAY004_RefundIsHandledSafely(t *testing.T) {
 
 	// The ledger must still balance. A refund that leaves the books unequal is
 	// worse than a refund that fails.
-	requireLedgerBalanced(t, f.ctx)
+	requireLedgerBalanced(f.ctx, t)
 }
 
 func TestPAY005_DisputeAffectsPayoutEligibilityImmediately(t *testing.T) {
@@ -309,7 +442,7 @@ func TestPAY005_DisputeAffectsPayoutEligibilityImmediately(t *testing.T) {
 	f.deliver(t, event(p.Funding.ProviderReference, PurchaseSucceeded, "e1", 10000))
 
 	before := f.balances(t)
-	require.Equal(t, "10000", before.Spendable.String())
+	require.Equal(t, creditsForDollars(t, f, 100).String(), before.Spendable.String())
 
 	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputed, "e2", 10000))
 
@@ -319,7 +452,7 @@ func TestPAY005_DisputeAffectsPayoutEligibilityImmediately(t *testing.T) {
 	after := f.balances(t)
 	require.Equal(t, "0", after.Spendable.String(),
 		"value under dispute must stop being spendable the moment the dispute lands, not when somebody notices")
-	require.Equal(t, "10000", after.Frozen.String())
+	require.Equal(t, creditsForDollars(t, f, 100).String(), after.Frozen.String())
 	require.Equal(t, "0", after.PayoutEligible.String())
 
 	// And the lot itself, not merely the funding row, must say so. This is the
@@ -362,7 +495,7 @@ func TestPAY006_ChargebackCannotCreateFreeWithdrawableValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "8000", deficit)
 
-	requireLedgerBalanced(t, f.ctx)
+	requireLedgerBalanced(f.ctx, t)
 }
 
 // ---------------------------------------------------------------------------
@@ -438,12 +571,9 @@ func TestStartPurchase_RefusedWhenTheCapabilityIsNotActive(t *testing.T) {
 	f := newPurchaseFixture(t)
 	f.gate.active = false
 
-	err := f.tx(func(tx pgx.Tx) error {
-		_, err := f.svcP.StartPurchase(f.ctx, tx, StartPurchaseRequest{
-			AccountID: f.account, Amount: money.USDFromMinor(10000),
-			Currency: "USD", IdempotencyKey: f.keyPrefix + ":gated",
-		})
-		return err
+	_, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(10000),
+		Currency: "USD", IdempotencyKey: f.keyPrefix + ":gated",
 	})
 	require.Equal(t, errs.CodeCapabilityNotApproved, errs.CodeOf(err))
 	require.Equal(t, 0, f.prov.created, "the provider must not be called when the gate refuses")
@@ -459,12 +589,9 @@ func TestStartPurchase_LostResponseReconcilesWithoutASecondCharge(t *testing.T) 
 	f.prov.loseResponse = true
 
 	// The provider created the payment and we never heard back.
-	err := f.tx(func(tx pgx.Tx) error {
-		_, err := f.svcP.StartPurchase(f.ctx, tx, StartPurchaseRequest{
-			AccountID: f.account, Amount: money.USDFromMinor(10000),
-			Currency: "USD", IdempotencyKey: f.keyPrefix + ":lost",
-		})
-		return err
+	_, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(10000),
+		Currency: "USD", IdempotencyKey: f.keyPrefix + ":lost",
 	})
 	require.Error(t, err)
 	require.Equal(t, 1, f.prov.created, "the payment exists at the provider")
@@ -492,7 +619,7 @@ func TestReconcile_AdoptsTheProvidersView(t *testing.T) {
 		return err
 	}))
 	require.Equal(t, FundingReversible, got.State)
-	require.Equal(t, "10000", f.balances(t).Gross.String())
+	require.Equal(t, creditsForDollars(t, f, 100).String(), f.balances(t).Gross.String())
 }
 
 func TestSettleDue_PromotesTheLotAndNotJustTheRow(t *testing.T) {
@@ -513,7 +640,10 @@ func TestSettleDue_PromotesTheLotAndNotJustTheRow(t *testing.T) {
 	// compares the database's reversible_at against the database's now(), so
 	// moving this process's clock proves nothing -- which is exactly the
 	// property that made mixing the two a bug.
-	_, err := testDB.Exec(f.ctx,
+	// Through the OWNER pool, not the application one: 00743 put reversible_at
+	// out of cp_app's reach, because it is what the settlement window is
+	// measured from and an application that can move it can settle money early.
+	_, err := testOwnerDB.Exec(f.ctx,
 		`UPDATE credit_fundings SET reversible_at = now() - interval '31 days' WHERE id = $1`,
 		p.Funding.ID)
 	require.NoError(t, err)
@@ -547,7 +677,7 @@ func TestSettleDue_RefusesAZeroWindow(t *testing.T) {
 }
 
 // requireLedgerBalanced asserts the global double-entry invariant.
-func requireLedgerBalanced(t *testing.T, ctx context.Context) {
+func requireLedgerBalanced(ctx context.Context, t *testing.T) {
 	t.Helper()
 	var unbalanced int
 	require.NoError(t, testDB.QueryRow(ctx,
@@ -592,7 +722,7 @@ func TestSEC003_AProviderEventCannotCreditAnotherUsersAccount(t *testing.T) {
 func TestSEC_MetadataCannotDecideHowManyCreditsAreIssued(t *testing.T) {
 	f := newPurchaseFixture(t)
 	p := f.start(t, "meta-qty", 10000)
-	require.Equal(t, "10000", p.Funding.CreditQuantity.String())
+	require.Equal(t, creditsForDollars(t, f, 100).String(), p.Funding.CreditQuantity.String())
 
 	// Suppose the nodal_credit_quantity metadata on the Stripe object were
 	// edited to nine million -- by a compromised dashboard session, or by
@@ -605,7 +735,7 @@ func TestSEC_MetadataCannotDecideHowManyCreditsAreIssued(t *testing.T) {
 	}
 	require.Equal(t, webhook.Applied, f.deliver(t, ev))
 
-	require.Equal(t, "10000", f.balances(t).Gross.String(),
+	require.Equal(t, creditsForDollars(t, f, 100).String(), f.balances(t).Gross.String(),
 		"the Credit quantity comes from the pricing policy at purchase time and from nowhere else")
 }
 

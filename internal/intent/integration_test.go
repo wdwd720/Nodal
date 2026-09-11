@@ -42,7 +42,10 @@ const testAdvisoryLockID = 424242
 var (
 	testAppURL     = os.Getenv("CP_TEST_DATABASE_URL")
 	testMigrateURL = os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
-	testDB         *db.DB
+	// See testMain: only for probes that must reach a column cp_app no longer
+	// holds, so the trigger under test is the thing that refuses them.
+	testOwnerDB *db.DB
+	testDB      *db.DB
 )
 
 func TestMain(m *testing.M) { os.Exit(testMain(m)) }
@@ -74,6 +77,17 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	defer testDB.Close()
+	// The migration role, for the one thing it is needed for: driving a bare
+	// UPDATE that an immutability trigger must refuse. Since 00749 cp_app cannot
+	// write those columns at all, so a probe issued through testDB would be
+	// answered `permission denied` and would stop measuring the trigger it
+	// names.
+	testOwnerDB, err = db.Open(ctx, db.Config{URL: testMigrateURL, AppName: "intent-itest-owner", MaxConns: 2})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "intent integration: open owner pool:", err)
+		return 1
+	}
+	defer testOwnerDB.Close()
 	return m.Run()
 }
 
@@ -316,11 +330,20 @@ func TestIntegration_Transition_WritesEvidenceAndBindingRefusesBareUpdate(t *tes
 	_, err = f.transition(intent.NewIntentID(), intent.StatusRiskChecked, ev)
 	assert.Equal(t, errs.CodeNotFound, errs.CodeOf(err))
 
-	// Bare status UPDATE as cp_app is refused at COMMIT by migration 00603.
+	// A bare status UPDATE as cp_app is refused, and the refusal got stronger in
+	// 00749: 00603's binding caught it at COMMIT, and privilege now refuses it
+	// at the statement.
 	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE trade_intents SET status = 'RISK_CHECKED' WHERE id = $1`, ti.ID)
 		return err
 	})
+	require.Error(t, err)
+	assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "got %v", err)
+
+	// The binding itself still refuses the role that CAN write the column, which
+	// is what keeps it meaningful for the five tables that have not had this
+	// treatment yet.
+	_, err = testOwnerDB.Exec(f.ctx, `UPDATE trade_intents SET status = 'RISK_CHECKED' WHERE id = $1`, ti.ID)
 	require.Error(t, err)
 	assert.Equal(t, "AU001", db.SQLState(err), "got %v", err)
 	cur, err := f.repo.Get(f.ctx, testDB, ti.ID)
@@ -600,15 +623,35 @@ func TestIntegration_Submit_AgentIntents(t *testing.T) {
 func TestIntegration_IdentityIsImmutable(t *testing.T) {
 	f := newFixture(t)
 	ti := f.create(f.userIntent("k-immutable"))
+	// Driven as the OWNER, and that is the point of this test rather than a
+	// detail of it.
+	//
+	// 00749 revoked UPDATE on trade_intents from cp_app, so these probes issued
+	// as the application are answered `permission denied` before any trigger
+	// runs -- and the test would pass while measuring nothing. The immutability
+	// trigger is what is under test here, so the probe must come from a role
+	// that can reach the column: the owner can, and the trigger refuses it
+	// anyway, which is exactly the guarantee being asserted.
 	for _, stmt := range []string{
 		`UPDATE trade_intents SET mode = 'PAPER' WHERE id = $1`,
 		`UPDATE trade_intents SET notional_usd_minor = 1 WHERE id = $1`,
 		`UPDATE trade_intents SET account_id = account_id, content_hash = sha256('x'::bytea) WHERE id = $1`,
 		`UPDATE trade_intents SET idempotency_key = 'other' WHERE id = $1`,
 	} {
-		_, err := testDB.Exec(f.ctx, stmt, ti.ID)
+		_, err := testOwnerDB.Exec(f.ctx, stmt, ti.ID)
 		require.Error(t, err, stmt)
 		assert.True(t, intent.IsImmutableIntent(err), "%s: %v", stmt, err)
+	}
+
+	// And the application cannot reach them at all, which is the newer and
+	// stronger half. Asserted separately so that neither can hide the other.
+	for _, stmt := range []string{
+		`UPDATE trade_intents SET mode = 'PAPER' WHERE id = $1`,
+		`UPDATE trade_intents SET status = 'REJECTED' WHERE id = $1`,
+	} {
+		_, err := testDB.Exec(f.ctx, stmt, ti.ID)
+		require.Error(t, err, stmt)
+		assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(err), "%s: %v", stmt, err)
 	}
 	got, err := f.repo.Get(f.ctx, testDB, ti.ID)
 	require.NoError(t, err)

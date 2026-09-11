@@ -161,6 +161,12 @@ func Load(ctx context.Context, service Service, lookup func(string) (string, boo
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	// The two prod-like secrets whose reference cannot stand in for their
+	// value. This needs the lookup, which is why it is here rather than in
+	// Validate (F-137).
+	if err := c.ResolvableSecrets(ctx, lookup); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -338,7 +344,10 @@ const (
 	secAuth       = "Auth"
 	secProviders  = "Providers"
 	secTelemetry  = "Telemetry"
+	secAlert      = "Alerting"
+	secPII        = "Personal data"
 	secSeed       = "Seed"
+	secCredit     = "Credit (funding lifecycle)"
 	secRetention  = "Retention (days per retention class)" // #nosec G101 -- config section heading, not a credential
 )
 
@@ -383,9 +392,30 @@ func specs() []varSpec {
 		secretVar(req("CP_DATABASE_APP_URL", secDatabase, "SecretRef to the application-role Postgres URL (cp_app). Plain value only in LOCAL/TEST.",
 			"postgres://cp_app:cp_app_local@127.0.0.1:5433/controlplane?sslmode=disable",
 			setSecret(func(c *Config) *SecretRef { return &c.Database.AppURL }))),
-		secretVar(req("CP_DATABASE_MIGRATE_URL", secDatabase, "SecretRef to the migration-role Postgres URL (cp_migrate).",
+		// Required of TOOLING only, and the change is a security one (F-93).
+		//
+		// This was declared unconditionally required, so every binary that loads configuration --
+		// including the internet-facing one -- had to be given the SCHEMA OWNER
+		// credential. The owner can `ALTER TABLE ... DISABLE TRIGGER`, and since
+		// 00743-00753 every state machine in this system is enforced by triggers:
+		// the transition bindings, forbid_mutation on fifty-three append-only
+		// tables, and the eleven triggers that now write state columns the
+		// application cannot. Handing that credential to the process exposed to
+		// the internet undercuts all of them.
+		//
+		// Nothing that loads configuration reads it. `Database.MigrateURL` has no
+		// reader anywhere in the tree, and `cmd/migrate` -- the only binary that
+		// migrates -- resolves the variable from the environment itself, with its
+		// own LOCAL default and its own refusal outside LOCAL/TEST. So requiring
+		// it bought nothing and cost the credential.
+		//
+		// It stays declared and keeps its LOCAL default, so `.env.example` and
+		// `configcheck` still describe it and a developer's local tooling still
+		// works without being told about it. What changed is which binaries are
+		// made to hold it.
+		only(ServiceTooling, secretVar(req("CP_DATABASE_MIGRATE_URL", secDatabase, "SecretRef to the migration-role Postgres URL (cp_migrate). Required only of tooling; cmd/migrate reads it from the environment itself, and the internet-facing binary must not be given it.",
 			"postgres://cp_migrate:cp_migrate_local@127.0.0.1:5433/controlplane?sslmode=disable",
-			setSecret(func(c *Config) *SecretRef { return &c.Database.MigrateURL }))),
+			setSecret(func(c *Config) *SecretRef { return &c.Database.MigrateURL })))),
 		secretVar(opt("CP_DATABASE_READONLY_URL", secDatabase, "SecretRef to the read-only Postgres URL (cp_readonly). Optional; readers fall back to the app URL.", "",
 			setSecret(func(c *Config) *SecretRef { return &c.Database.ReadOnlyURL }))),
 		secretVar(opt("CP_DATABASE_OPS_URL", secDatabase, "SecretRef to the operations-role Postgres URL (cp_ops). Optional; the retention passes need it, because cp_app holds no DELETE on the rows they remove.",
@@ -397,6 +427,10 @@ func specs() []varSpec {
 			setInt32(func(c *Config) *int32 { return &c.Database.MaxConns })),
 		req("CP_DATABASE_MIN_CONNS", secDatabase, "Minimum idle pool connections.", "1",
 			setInt32(func(c *Config) *int32 { return &c.Database.MinConns })),
+		req("CP_DATABASE_CONNECT_TIMEOUT", secDatabase, "How long one dial to Postgres may take. Bounded below the API request timeout on purpose: a connect that outlives the request it serves is work done for nobody, holding a pool slot the next request wanted.", "5s",
+			setDuration(func(c *Config) *time.Duration { return &c.Database.ConnectTimeout })),
+		req("CP_DATABASE_MAX_CONN_IDLE_TIME", secDatabase, "Discard a pooled connection idle this long. On a database that suspends when idle -- Neon's free tier scales to zero -- a pooled connection outlives the server on the other end of it, and a connection failure is not retryable by design. 0 leaves pgxpool's 30-minute default.", "0s",
+			setDuration(func(c *Config) *time.Duration { return &c.Database.MaxConnIdleTime })),
 		req("CP_DATABASE_STATEMENT_TIMEOUT", secDatabase, "Postgres statement_timeout applied per session.", "30s",
 			setDuration(func(c *Config) *time.Duration { return &c.Database.StatementTimeout })),
 		req("CP_DATABASE_LOCK_TIMEOUT", secDatabase, "Postgres lock_timeout applied per session.", "5s",
@@ -412,11 +446,17 @@ func specs() []varSpec {
 			setString(func(c *Config) *string { return &c.API.FundingNetwork }))),
 		only(ServiceAPI, opt("CP_API_FUNDING_CURRENCY", secAPI, "Currency the funding endpoints quote an onramp in.", "usdc",
 			setString(func(c *Config) *string { return &c.API.FundingCurrency }))),
-		only(ServiceAPI, opt("CP_API_LEGAL_POLICY", secAPI, "Jurisdiction routing policy to load. The router refuses a development policy outside LOCAL/TEST/DEV; naming it here is what lets a configuration check see which one was asked for.", "development",
+		only(ServiceAPI, opt("CP_API_LEGAL_POLICY", secAPI, "Jurisdiction routing policy to load: CONSERVATIVE (the default), DEVELOPMENT (LOCAL/TEST/DEV only) or SANDBOX (any environment but PROD: declares a sandbox tier that may exercise the gated product against providers that move nothing, ADR-0023). Naming it here is what lets a configuration check see which one was asked for.", "development",
 			setString(func(c *Config) *string { return &c.API.LegalPolicy }))),
-		only(ServiceAPI, opt("CP_API_SETTLEMENT_CHAIN", secAPI, "Chain of the USD-pegged asset that funds settle into, e.g. solana. Required in STAGING/PROD; cmd/api also checks the pair resolves to a known stablecoin, which needs the database and so stays there.", "solana",
+		only(ServiceAPI, opt("CP_API_PAYOUT_POLICY", secAPI, "Payout policy to load: CLOSED (the default; no origin is withdrawable) or SANDBOX (the rehearsal policy of a sandbox tier; refused in PROD and refused unless CP_API_LEGAL_POLICY is SANDBOX). A real policy is a persisted version with evidence, never a name here.", "closed",
+			setString(func(c *Config) *string { return &c.API.PayoutPolicy }))),
+		only(ServiceAPI, opt("CP_API_SANDBOX_GATES", secAPI, "Comma-separated capabilities the deployment sandbox-activates at boot, e.g. CREDIT_PURCHASE,NATIVE_MARKET_TRADING. Only on a sandbox tier; each must also be in CP_API_ENABLED_CAPABILITIES. A SANDBOX gate carries no approval, cannot exist in PROD, and is read as active only by a sandbox tier.", "",
+			setString(func(c *Config) *string { return &c.API.SandboxGates }))),
+		only(ServiceAPI, opt("CP_API_DEMO_DATA", secAPI, "Load the SANDBOX demo catalogue at boot: eight labelled demo markets, a demo Credit balance and the activity feed built from them. Only on a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX) and never in PROD; false by default, so a deployment that says nothing seeds nothing. Distinct from CP_SEED_ENABLED, which governs the developer seed scripts and is refused outright in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.API.DemoData }))),
+		only(ServiceAPI, opt("CP_API_SETTLEMENT_CHAIN", secAPI, "Chain of the USD-pegged asset that funds settle into. Required in STAGING/PROD; cmd/api also checks the pair resolves to a known stablecoin, which needs the database and so stays there. The example is the DEVNET pair scripts/seed registers, because that is what README + this file has to boot against; a deployment that settles on mainnet states the mainnet pair and has the providers to back the claim.", "solana-devnet",
 			setString(func(c *Config) *string { return &c.API.SettlementChain }))),
-		only(ServiceAPI, opt("CP_API_SETTLEMENT_MINT", secAPI, "Mint address of that asset. Required in STAGING/PROD.", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+		only(ServiceAPI, opt("CP_API_SETTLEMENT_MINT", secAPI, "Mint address of that asset. Required in STAGING/PROD. The example is devnet USDC, the mint scripts/seed registers.", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
 			setString(func(c *Config) *string { return &c.API.SettlementMint }))),
 		only(ServiceAPI, req("CP_CAPACITY_MAX_ACCOUNTS", secCapacity, "Most accounts this deployment tier will hold. Reached, it refuses to open more. 0 disables the ceiling, which is only correct where the tier has no such limit.", "50",
 			setInt64(func(c *Config) *int64 { return &c.Capacity.MaxAccounts }))),
@@ -511,6 +551,8 @@ func specs() []varSpec {
 			setSecret(func(c *Config) *SecretRef { return &c.Auth.ClientSecretRef }))),
 		opt("CP_AUTH_REDIRECT_URL", secAuth, "OIDC redirect URL. Required when CP_AUTH_MODE=oidc; https in STAGING/PROD.", "",
 			setString(func(c *Config) *string { return &c.Auth.RedirectURL })),
+		opt("CP_AUTH_POST_LOGIN_URL", secAuth, "Where the OIDC callback sends the browser after setting the session cookie. Empty means a path on the API's own origin, which is what a same-origin development run (the Vite proxy) needs and is only right there. Required in STAGING/PROD with CP_AUTH_MODE=oidc, where the app has its own origin and the API's root is a 404 problem document. The LOCAL/TEST default is empty rather than one deployment's hostname: a default naming app-nodal.actorvia.xyz would send a developer's browser to the internet.", "",
+			setString(func(c *Config) *string { return &c.Auth.PostLoginURL })),
 		req("CP_AUTH_COOKIE_NAME", secAuth, "Session cookie name.", "cp_session",
 			setString(func(c *Config) *string { return &c.Auth.CookieName })),
 		opt("CP_AUTH_COOKIE_DOMAIN", secAuth, "Session cookie Domain attribute. Empty means host-only.", "",
@@ -523,6 +565,8 @@ func specs() []varSpec {
 			setDuration(func(c *Config) *time.Duration { return &c.Auth.StepUpMaxAge })),
 		req("CP_AUTH_DEBUG_ENABLED", secAuth, "Enable debug authentication endpoints. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Auth.DebugAuthEnabled })),
+		opt("CP_AUTH_BOOTSTRAP_OPERATORS", secAuth, "Operator-directory rows this deployment grants at login, as issuer|subject=ROLE entries separated by commas. Nothing else writes operator_roles, so this is how a deployment gets its first operator. Empty declares none. PROD accepts only empty or exactly one ADMIN.", "",
+			setString(func(c *Config) *string { return &c.Auth.BootstrapOperators })),
 	}
 
 	for _, slot := range providerSlots() {
@@ -565,11 +609,28 @@ func specs() []varSpec {
 		req("CP_TELEMETRY_METRICS_INTERVAL", secTelemetry, "Metric export interval (Go duration).", "30s",
 			setDuration(func(c *Config) *time.Duration { return &c.Telemetry.MetricsInterval })),
 
-		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
+		secretVar(opt("CP_ALERT_WEBHOOK_URL", secAlert, "Where a raised alert is POSTed as JSON. Empty means alerts are logged and delivered nowhere, which is said at startup rather than assumed. A SecretRef because a Slack or Discord webhook URL is itself the credential.",
+			"https://hooks.example.test/services/AAA/BBB/CCC",
+			setSecret(func(c *Config) *SecretRef { return &c.Alert.WebhookURL }))),
+		req("CP_ALERT_WEBHOOK_FORMAT", secAlert, "Payload shape the destination accepts: auto, generic, slack, discord or ntfy. Slack and Discord refuse a body that is not their own shape with a 400, so a wrong value here is a destination that rejects every alert. auto derives it from the URL's host and is right for hooks.slack.com, discord.com and ntfy.sh; name it explicitly for a self-hosted ntfy or a Mattermost hook.", "auto",
+			setString(func(c *Config) *string { return &c.Alert.WebhookFormat })),
+		req("CP_ALERT_MIN_SEVERITY", secAlert, "Lowest severity worth delivering: SEV1 or SEV2. SEV2 delivers everything.", "SEV2",
+			setString(func(c *Config) *string { return &c.Alert.MinSeverity })),
+		req("CP_ALERT_TIMEOUT", secAlert, "Bound on one delivery attempt. Short on purpose: delivery runs behind a small queue and a slow destination delays every alert behind it.", "5s",
+			setDuration(func(c *Config) *time.Duration { return &c.Alert.Timeout })),
+		secretVar(opt("CP_PII_KEYRING_REF", secPII, "Keyring for personal data at rest, as a JSON document: {\"active\": N, \"keys\": {\"N\": \"<base64 32 bytes>\"}}. internal/pii seals identity_pii's columns with AES-256-GCM under the active version and opens a row under whichever version it names, so rotation is: add a key, make it active, deploy, reseal, then remove the old key. Required in STAGING/PROD. Empty in LOCAL/TEST means no personal data is stored, which is said at startup. A SecretRef because it IS the key.", "env://NODAL_PII_KEYRING",
+			setSecret(func(c *Config) *SecretRef { return &c.PII.Keyring }))),
+
+		req("CP_SEED_ENABLED", secSeed, "Allow the developer seed scripts (scripts/seed, scripts/seedeconomy) to write clearly-labelled fake identities, assets and balances. They refuse anything but LOCAL/DEV/TEST anyway; setting this false stops them there too. Must be false in STAGING/PROD, which is why it is not and cannot be the control for a sandbox tier's demo catalogue -- that is CP_API_DEMO_DATA.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
+
+		req("CP_CREDIT_SETTLEMENT_WINDOW", secCredit, "How long a captured card payment stays reversible before its Credits may be treated as settled. A risk determination, not a default worth trusting: card scheme chargeback windows run to 120 days.", "720h",
+			setDuration(func(c *Config) *time.Duration { return &c.Credit.SettlementWindow })),
 
 		req("CP_RETENTION_LOGIN_ATTEMPT_DAYS", secRetention, "Days a login_attempts row is kept after it expired. It holds a plaintext OIDC nonce and PKCE verifier; the durable record of a login is a security_events row. Minimum 1.", "2",
 			setInt(func(c *Config) *int { return &c.Retention.LoginAttemptDays })),
+		req("CP_RETENTION_SECURITY_EVENT_DAYS", secRetention, "Days a monthly partition of security_events is kept before it is detached and dropped. 0 disables pruning entirely, which is the default because ADR-0020 leaves the period open; when set it must be at least 90.", "0",
+			setInt(func(c *Config) *int { return &c.Retention.SecurityEventDays })),
 		req("CP_RETENTION_FINANCIAL_RECORD_DAYS", secRetention, "Retention of the FINANCIAL_RECORD class. Must be > 0 in STAGING/PROD.", "2555",
 			setInt(func(c *Config) *int { return &c.Retention.FinancialRecordDays })),
 		req("CP_RETENTION_SECURITY_AUDIT_DAYS", secRetention, "Retention of the SECURITY_AUDIT class. Must be > 0 in STAGING/PROD.", "2555",

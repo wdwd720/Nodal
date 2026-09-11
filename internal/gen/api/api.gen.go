@@ -70,6 +70,36 @@ func (e AccountStatus) Valid() bool {
 	}
 }
 
+// Defines values for AccountRestrictionCode.
+const (
+	AccountRestrictionCodeACCOUNTCLOSED     AccountRestrictionCode = "ACCOUNT_CLOSED"
+	AccountRestrictionCodeACCOUNTFROZEN     AccountRestrictionCode = "ACCOUNT_FROZEN"
+	AccountRestrictionCodeACCOUNTRESTRICTED AccountRestrictionCode = "ACCOUNT_RESTRICTED"
+	AccountRestrictionCodeCLOSUREPENDING    AccountRestrictionCode = "CLOSURE_PENDING"
+	AccountRestrictionCodeUSERCLOSED        AccountRestrictionCode = "USER_CLOSED"
+	AccountRestrictionCodeUSERSUSPENDED     AccountRestrictionCode = "USER_SUSPENDED"
+)
+
+// Valid indicates whether the value is a known member of the AccountRestrictionCode enum.
+func (e AccountRestrictionCode) Valid() bool {
+	switch e {
+	case AccountRestrictionCodeACCOUNTCLOSED:
+		return true
+	case AccountRestrictionCodeACCOUNTFROZEN:
+		return true
+	case AccountRestrictionCodeACCOUNTRESTRICTED:
+		return true
+	case AccountRestrictionCodeCLOSUREPENDING:
+		return true
+	case AccountRestrictionCodeUSERCLOSED:
+		return true
+	case AccountRestrictionCodeUSERSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AccountStatusChangeTo.
 const (
 	AccountStatusChangeToACTIVE     AccountStatusChangeTo = "ACTIVE"
@@ -88,6 +118,93 @@ func (e AccountStatusChangeTo) Valid() bool {
 	case AccountStatusChangeToFROZEN:
 		return true
 	case AccountStatusChangeToRESTRICTED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ActivityAmountUnit.
+const (
+	ASSETUNITS ActivityAmountUnit = "ASSET_UNITS"
+	CREDITS    ActivityAmountUnit = "CREDITS"
+	MONEYMINOR ActivityAmountUnit = "MONEY_MINOR"
+)
+
+// Valid indicates whether the value is a known member of the ActivityAmountUnit enum.
+func (e ActivityAmountUnit) Valid() bool {
+	switch e {
+	case ASSETUNITS:
+		return true
+	case CREDITS:
+		return true
+	case MONEYMINOR:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ActivityFeedKind.
+const (
+	ActivityFeedKindACCOUNTCLOSUREDECIDED     ActivityFeedKind = "ACCOUNT_CLOSURE_DECIDED"
+	ActivityFeedKindACCOUNTCLOSUREREQUESTED   ActivityFeedKind = "ACCOUNT_CLOSURE_REQUESTED"
+	ActivityFeedKindADMINADJUSTMENT           ActivityFeedKind = "ADMIN_ADJUSTMENT"
+	ActivityFeedKindAGENTCREATED              ActivityFeedKind = "AGENT_CREATED"
+	ActivityFeedKindAGENTDISABLED             ActivityFeedKind = "AGENT_DISABLED"
+	ActivityFeedKindAGENTPAUSED               ActivityFeedKind = "AGENT_PAUSED"
+	ActivityFeedKindAGENTRESUMED              ActivityFeedKind = "AGENT_RESUMED"
+	ActivityFeedKindCREDITPURCHASE            ActivityFeedKind = "CREDIT_PURCHASE"
+	ActivityFeedKindCREDITREVERSAL            ActivityFeedKind = "CREDIT_REVERSAL"
+	ActivityFeedKindNATIVEASSETCREATED        ActivityFeedKind = "NATIVE_ASSET_CREATED"
+	ActivityFeedKindNATIVEMARKETPAUSED        ActivityFeedKind = "NATIVE_MARKET_PAUSED"
+	ActivityFeedKindNATIVETRADE               ActivityFeedKind = "NATIVE_TRADE"
+	ActivityFeedKindPAYOUTDESTINATIONADDED    ActivityFeedKind = "PAYOUT_DESTINATION_ADDED"
+	ActivityFeedKindPAYOUTDESTINATIONDISABLED ActivityFeedKind = "PAYOUT_DESTINATION_DISABLED"
+	ActivityFeedKindPAYOUTREQUESTED           ActivityFeedKind = "PAYOUT_REQUESTED"
+	ActivityFeedKindPAYOUTSTATECHANGED        ActivityFeedKind = "PAYOUT_STATE_CHANGED"
+	ActivityFeedKindTERMSACCEPTED             ActivityFeedKind = "TERMS_ACCEPTED"
+	ActivityFeedKindVERIFICATIONUPDATED       ActivityFeedKind = "VERIFICATION_UPDATED"
+)
+
+// Valid indicates whether the value is a known member of the ActivityFeedKind enum.
+func (e ActivityFeedKind) Valid() bool {
+	switch e {
+	case ActivityFeedKindACCOUNTCLOSUREDECIDED:
+		return true
+	case ActivityFeedKindACCOUNTCLOSUREREQUESTED:
+		return true
+	case ActivityFeedKindADMINADJUSTMENT:
+		return true
+	case ActivityFeedKindAGENTCREATED:
+		return true
+	case ActivityFeedKindAGENTDISABLED:
+		return true
+	case ActivityFeedKindAGENTPAUSED:
+		return true
+	case ActivityFeedKindAGENTRESUMED:
+		return true
+	case ActivityFeedKindCREDITPURCHASE:
+		return true
+	case ActivityFeedKindCREDITREVERSAL:
+		return true
+	case ActivityFeedKindNATIVEASSETCREATED:
+		return true
+	case ActivityFeedKindNATIVEMARKETPAUSED:
+		return true
+	case ActivityFeedKindNATIVETRADE:
+		return true
+	case ActivityFeedKindPAYOUTDESTINATIONADDED:
+		return true
+	case ActivityFeedKindPAYOUTDESTINATIONDISABLED:
+		return true
+	case ActivityFeedKindPAYOUTREQUESTED:
+		return true
+	case ActivityFeedKindPAYOUTSTATECHANGED:
+		return true
+	case ActivityFeedKindTERMSACCEPTED:
+		return true
+	case ActivityFeedKindVERIFICATIONUPDATED:
 		return true
 	default:
 		return false
@@ -175,6 +292,288 @@ func (e AdminActionStatus) Valid() bool {
 	}
 }
 
+// Defines values for AdminUserViewUserStatus.
+const (
+	AdminUserViewUserStatusACTIVE    AdminUserViewUserStatus = "ACTIVE"
+	AdminUserViewUserStatusCLOSED    AdminUserViewUserStatus = "CLOSED"
+	AdminUserViewUserStatusSUSPENDED AdminUserViewUserStatus = "SUSPENDED"
+)
+
+// Valid indicates whether the value is a known member of the AdminUserViewUserStatus enum.
+func (e AdminUserViewUserStatus) Valid() bool {
+	switch e {
+	case AdminUserViewUserStatusACTIVE:
+		return true
+	case AdminUserViewUserStatusCLOSED:
+		return true
+	case AdminUserViewUserStatusSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentMode.
+const (
+	AgentModeBACKTEST AgentMode = "BACKTEST"
+	AgentModeCANARY   AgentMode = "CANARY"
+	AgentModeLIMITED  AgentMode = "LIMITED"
+	AgentModeLIVE     AgentMode = "LIVE"
+	AgentModePAPER    AgentMode = "PAPER"
+	AgentModeSHADOW   AgentMode = "SHADOW"
+)
+
+// Valid indicates whether the value is a known member of the AgentMode enum.
+func (e AgentMode) Valid() bool {
+	switch e {
+	case AgentModeBACKTEST:
+		return true
+	case AgentModeCANARY:
+		return true
+	case AgentModeLIMITED:
+		return true
+	case AgentModeLIVE:
+		return true
+	case AgentModePAPER:
+		return true
+	case AgentModeSHADOW:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentStage.
+const (
+	AgentStageBACKTESTELIGIBLE AgentStage = "BACKTEST_ELIGIBLE"
+	AgentStageCANARY           AgentStage = "CANARY"
+	AgentStageCOMPILED         AgentStage = "COMPILED"
+	AgentStageDRAFT            AgentStage = "DRAFT"
+	AgentStageLIMITED          AgentStage = "LIMITED"
+	AgentStageLIVE             AgentStage = "LIVE"
+	AgentStageSHADOW           AgentStage = "SHADOW"
+	AgentStageVALIDATED        AgentStage = "VALIDATED"
+)
+
+// Valid indicates whether the value is a known member of the AgentStage enum.
+func (e AgentStage) Valid() bool {
+	switch e {
+	case AgentStageBACKTESTELIGIBLE:
+		return true
+	case AgentStageCANARY:
+		return true
+	case AgentStageCOMPILED:
+		return true
+	case AgentStageDRAFT:
+		return true
+	case AgentStageLIMITED:
+		return true
+	case AgentStageLIVE:
+		return true
+	case AgentStageSHADOW:
+		return true
+	case AgentStageVALIDATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentState.
+const (
+	AgentStateBACKTESTELIGIBLE AgentState = "BACKTEST_ELIGIBLE"
+	AgentStateCANARY           AgentState = "CANARY"
+	AgentStateCOMPILED         AgentState = "COMPILED"
+	AgentStateDRAFT            AgentState = "DRAFT"
+	AgentStateFAILED           AgentState = "FAILED"
+	AgentStateLIMITED          AgentState = "LIMITED"
+	AgentStateLIVE             AgentState = "LIVE"
+	AgentStatePAUSED           AgentState = "PAUSED"
+	AgentStateREVOKED          AgentState = "REVOKED"
+	AgentStateSHADOW           AgentState = "SHADOW"
+	AgentStateSUPERSEDED       AgentState = "SUPERSEDED"
+	AgentStateVALIDATED        AgentState = "VALIDATED"
+)
+
+// Valid indicates whether the value is a known member of the AgentState enum.
+func (e AgentState) Valid() bool {
+	switch e {
+	case AgentStateBACKTESTELIGIBLE:
+		return true
+	case AgentStateCANARY:
+		return true
+	case AgentStateCOMPILED:
+		return true
+	case AgentStateDRAFT:
+		return true
+	case AgentStateFAILED:
+		return true
+	case AgentStateLIMITED:
+		return true
+	case AgentStateLIVE:
+		return true
+	case AgentStatePAUSED:
+		return true
+	case AgentStateREVOKED:
+		return true
+	case AgentStateSHADOW:
+		return true
+	case AgentStateSUPERSEDED:
+		return true
+	case AgentStateVALIDATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentStatus.
+const (
+	AgentStatusDISABLED AgentStatus = "DISABLED"
+	AgentStatusENABLED  AgentStatus = "ENABLED"
+	AgentStatusFAILED   AgentStatus = "FAILED"
+	AgentStatusPAUSED   AgentStatus = "PAUSED"
+	AgentStatusSTOPPED  AgentStatus = "STOPPED"
+)
+
+// Valid indicates whether the value is a known member of the AgentStatus enum.
+func (e AgentStatus) Valid() bool {
+	switch e {
+	case AgentStatusDISABLED:
+		return true
+	case AgentStatusENABLED:
+		return true
+	case AgentStatusFAILED:
+		return true
+	case AgentStatusPAUSED:
+		return true
+	case AgentStatusSTOPPED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentBudgetSource.
+const (
+	COMMITTEDINTENTS AgentBudgetSource = "COMMITTED_INTENTS"
+	NOINTENTSCREATED AgentBudgetSource = "NO_INTENTS_CREATED"
+	NORUNSRECORDED   AgentBudgetSource = "NO_RUNS_RECORDED"
+)
+
+// Valid indicates whether the value is a known member of the AgentBudgetSource enum.
+func (e AgentBudgetSource) Valid() bool {
+	switch e {
+	case COMMITTEDINTENTS:
+		return true
+	case NOINTENTSCREATED:
+		return true
+	case NORUNSRECORDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentPauseOpenOrdersPolicy.
+const (
+	CANCELCANCELABLE AgentPauseOpenOrdersPolicy = "CANCEL_CANCELABLE"
+	LEAVE            AgentPauseOpenOrdersPolicy = "LEAVE"
+)
+
+// Valid indicates whether the value is a known member of the AgentPauseOpenOrdersPolicy enum.
+func (e AgentPauseOpenOrdersPolicy) Valid() bool {
+	switch e {
+	case CANCELCANCELABLE:
+		return true
+	case LEAVE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentPausePausedByActorType.
+const (
+	AgentPausePausedByActorTypeOPERATOR AgentPausePausedByActorType = "OPERATOR"
+	AgentPausePausedByActorTypeSYSTEM   AgentPausePausedByActorType = "SYSTEM"
+	AgentPausePausedByActorTypeUSER     AgentPausePausedByActorType = "USER"
+)
+
+// Valid indicates whether the value is a known member of the AgentPausePausedByActorType enum.
+func (e AgentPausePausedByActorType) Valid() bool {
+	switch e {
+	case AgentPausePausedByActorTypeOPERATOR:
+		return true
+	case AgentPausePausedByActorTypeSYSTEM:
+		return true
+	case AgentPausePausedByActorTypeUSER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeEvaluator.
+const (
+	AgentRuntimeEvaluatorIDLE        AgentRuntimeEvaluator = "IDLE"
+	AgentRuntimeEvaluatorNOTDEPLOYED AgentRuntimeEvaluator = "NOT_DEPLOYED"
+	AgentRuntimeEvaluatorRUNNING     AgentRuntimeEvaluator = "RUNNING"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeEvaluator enum.
+func (e AgentRuntimeEvaluator) Valid() bool {
+	switch e {
+	case AgentRuntimeEvaluatorIDLE:
+		return true
+	case AgentRuntimeEvaluatorNOTDEPLOYED:
+		return true
+	case AgentRuntimeEvaluatorRUNNING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeExecutor.
+const (
+	AgentRuntimeExecutorIDLE        AgentRuntimeExecutor = "IDLE"
+	AgentRuntimeExecutorNOTDEPLOYED AgentRuntimeExecutor = "NOT_DEPLOYED"
+	AgentRuntimeExecutorRUNNING     AgentRuntimeExecutor = "RUNNING"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeExecutor enum.
+func (e AgentRuntimeExecutor) Valid() bool {
+	switch e {
+	case AgentRuntimeExecutorIDLE:
+		return true
+	case AgentRuntimeExecutorNOTDEPLOYED:
+		return true
+	case AgentRuntimeExecutorRUNNING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentScheduleKind.
+const (
+	INTERVAL AgentScheduleKind = "INTERVAL"
+	MANUAL   AgentScheduleKind = "MANUAL"
+)
+
+// Valid indicates whether the value is a known member of the AgentScheduleKind enum.
+func (e AgentScheduleKind) Valid() bool {
+	switch e {
+	case INTERVAL:
+		return true
+	case MANUAL:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetKind.
 const (
 	FIAT         AssetKind = "FIAT"
@@ -229,6 +628,39 @@ func (e AssetStatus) Valid() bool {
 	}
 }
 
+// Defines values for AuthorityLevelName.
+const (
+	AUTONOMOUSPORTFOLIO AuthorityLevelName = "AUTONOMOUS_PORTFOLIO"
+	AUTONOMOUSSELECTION AuthorityLevelName = "AUTONOMOUS_SELECTION"
+	BOUNDEDDISCRETION   AuthorityLevelName = "BOUNDED_DISCRETION"
+	PREPARETRANSACTION  AuthorityLevelName = "PREPARE_TRANSACTION"
+	RECOMMENDATION      AuthorityLevelName = "RECOMMENDATION"
+	RESEARCHONLY        AuthorityLevelName = "RESEARCH_ONLY"
+	USERAPPROVEDRULE    AuthorityLevelName = "USER_APPROVED_RULE"
+)
+
+// Valid indicates whether the value is a known member of the AuthorityLevelName enum.
+func (e AuthorityLevelName) Valid() bool {
+	switch e {
+	case AUTONOMOUSPORTFOLIO:
+		return true
+	case AUTONOMOUSSELECTION:
+		return true
+	case BOUNDEDDISCRETION:
+		return true
+	case PREPARETRANSACTION:
+		return true
+	case RECOMMENDATION:
+		return true
+	case RESEARCHONLY:
+		return true
+	case USERAPPROVEDRULE:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BuyingPowerPurpose.
 const (
 	BuyingPowerPurposeAGENTDEPLOY BuyingPowerPurpose = "AGENT_DEPLOY"
@@ -276,40 +708,70 @@ func (e BuyingPowerRestrictionsScope) Valid() bool {
 
 // Defines values for Capability.
 const (
-	CEXTRADING            Capability = "CEX_TRADING"
-	CROSSCHAIN            Capability = "CROSS_CHAIN"
-	LIVEAGENTTRADING      Capability = "LIVE_AGENT_TRADING"
-	LIVEFUNDING           Capability = "LIVE_FUNDING"
-	LIVEMANUALTRADING     Capability = "LIVE_MANUAL_TRADING"
-	MARKETPLACE           Capability = "MARKETPLACE"
-	PREDICTIONMARKETS     Capability = "PREDICTION_MARKETS"
-	SECURITIES            Capability = "SECURITIES"
-	SOCIALDATAPERSISTENCE Capability = "SOCIAL_DATA_PERSISTENCE"
-	WITHDRAWALS           Capability = "WITHDRAWALS"
+	CapabilityAGENTAUTONOMOUSPORTFOLIO Capability = "AGENT_AUTONOMOUS_PORTFOLIO"
+	CapabilityAGENTAUTONOMOUSSELECTION Capability = "AGENT_AUTONOMOUS_SELECTION"
+	CapabilityAGENTBOUNDEDDISCRETION   Capability = "AGENT_BOUNDED_DISCRETION"
+	CapabilityCEXTRADING               Capability = "CEX_TRADING"
+	CapabilityCREDITPURCHASE           Capability = "CREDIT_PURCHASE"
+	CapabilityCROSSCHAIN               Capability = "CROSS_CHAIN"
+	CapabilityHOSTEDFUNDING            Capability = "HOSTED_FUNDING"
+	CapabilityHOSTEDTRADING            Capability = "HOSTED_TRADING"
+	CapabilityLIVEAGENTTRADING         Capability = "LIVE_AGENT_TRADING"
+	CapabilityLIVEFUNDING              Capability = "LIVE_FUNDING"
+	CapabilityLIVEMANUALTRADING        Capability = "LIVE_MANUAL_TRADING"
+	CapabilityMARKETPLACE              Capability = "MARKETPLACE"
+	CapabilityNATIVEASSETCREATION      Capability = "NATIVE_ASSET_CREATION"
+	CapabilityNATIVEMARKETTRADING      Capability = "NATIVE_MARKET_TRADING"
+	CapabilityPAYOUTRESERVE            Capability = "PAYOUT_RESERVE"
+	CapabilityPAYOUTSETTLE             Capability = "PAYOUT_SETTLE"
+	CapabilityPREDICTIONMARKETS        Capability = "PREDICTION_MARKETS"
+	CapabilitySECURITIES               Capability = "SECURITIES"
+	CapabilitySOCIALDATAPERSISTENCE    Capability = "SOCIAL_DATA_PERSISTENCE"
+	CapabilityWITHDRAWALS              Capability = "WITHDRAWALS"
 )
 
 // Valid indicates whether the value is a known member of the Capability enum.
 func (e Capability) Valid() bool {
 	switch e {
-	case CEXTRADING:
+	case CapabilityAGENTAUTONOMOUSPORTFOLIO:
 		return true
-	case CROSSCHAIN:
+	case CapabilityAGENTAUTONOMOUSSELECTION:
 		return true
-	case LIVEAGENTTRADING:
+	case CapabilityAGENTBOUNDEDDISCRETION:
 		return true
-	case LIVEFUNDING:
+	case CapabilityCEXTRADING:
 		return true
-	case LIVEMANUALTRADING:
+	case CapabilityCREDITPURCHASE:
 		return true
-	case MARKETPLACE:
+	case CapabilityCROSSCHAIN:
 		return true
-	case PREDICTIONMARKETS:
+	case CapabilityHOSTEDFUNDING:
 		return true
-	case SECURITIES:
+	case CapabilityHOSTEDTRADING:
 		return true
-	case SOCIALDATAPERSISTENCE:
+	case CapabilityLIVEAGENTTRADING:
 		return true
-	case WITHDRAWALS:
+	case CapabilityLIVEFUNDING:
+		return true
+	case CapabilityLIVEMANUALTRADING:
+		return true
+	case CapabilityMARKETPLACE:
+		return true
+	case CapabilityNATIVEASSETCREATION:
+		return true
+	case CapabilityNATIVEMARKETTRADING:
+		return true
+	case CapabilityPAYOUTRESERVE:
+		return true
+	case CapabilityPAYOUTSETTLE:
+		return true
+	case CapabilityPREDICTIONMARKETS:
+		return true
+	case CapabilitySECURITIES:
+		return true
+	case CapabilitySOCIALDATAPERSISTENCE:
+		return true
+	case CapabilityWITHDRAWALS:
 		return true
 	default:
 		return false
@@ -324,6 +786,7 @@ const (
 	CapabilityGateStateEXPIRED         CapabilityGateState = "EXPIRED"
 	CapabilityGateStatePENDINGAPPROVAL CapabilityGateState = "PENDING_APPROVAL"
 	CapabilityGateStateREVOKED         CapabilityGateState = "REVOKED"
+	CapabilityGateStateSANDBOX         CapabilityGateState = "SANDBOX"
 	CapabilityGateStateSUSPENDED       CapabilityGateState = "SUSPENDED"
 )
 
@@ -342,7 +805,177 @@ func (e CapabilityGateState) Valid() bool {
 		return true
 	case CapabilityGateStateREVOKED:
 		return true
+	case CapabilityGateStateSANDBOX:
+		return true
 	case CapabilityGateStateSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CapabilityGateTransitionFrom.
+const (
+	CapabilityGateTransitionFromACTIVE          CapabilityGateTransitionFrom = "ACTIVE"
+	CapabilityGateTransitionFromAPPROVED        CapabilityGateTransitionFrom = "APPROVED"
+	CapabilityGateTransitionFromDISABLED        CapabilityGateTransitionFrom = "DISABLED"
+	CapabilityGateTransitionFromEXPIRED         CapabilityGateTransitionFrom = "EXPIRED"
+	CapabilityGateTransitionFromPENDINGAPPROVAL CapabilityGateTransitionFrom = "PENDING_APPROVAL"
+	CapabilityGateTransitionFromREVOKED         CapabilityGateTransitionFrom = "REVOKED"
+	CapabilityGateTransitionFromSANDBOX         CapabilityGateTransitionFrom = "SANDBOX"
+	CapabilityGateTransitionFromSUSPENDED       CapabilityGateTransitionFrom = "SUSPENDED"
+)
+
+// Valid indicates whether the value is a known member of the CapabilityGateTransitionFrom enum.
+func (e CapabilityGateTransitionFrom) Valid() bool {
+	switch e {
+	case CapabilityGateTransitionFromACTIVE:
+		return true
+	case CapabilityGateTransitionFromAPPROVED:
+		return true
+	case CapabilityGateTransitionFromDISABLED:
+		return true
+	case CapabilityGateTransitionFromEXPIRED:
+		return true
+	case CapabilityGateTransitionFromPENDINGAPPROVAL:
+		return true
+	case CapabilityGateTransitionFromREVOKED:
+		return true
+	case CapabilityGateTransitionFromSANDBOX:
+		return true
+	case CapabilityGateTransitionFromSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CapabilityGateTransitionTo.
+const (
+	CapabilityGateTransitionToACTIVE          CapabilityGateTransitionTo = "ACTIVE"
+	CapabilityGateTransitionToAPPROVED        CapabilityGateTransitionTo = "APPROVED"
+	CapabilityGateTransitionToDISABLED        CapabilityGateTransitionTo = "DISABLED"
+	CapabilityGateTransitionToEXPIRED         CapabilityGateTransitionTo = "EXPIRED"
+	CapabilityGateTransitionToPENDINGAPPROVAL CapabilityGateTransitionTo = "PENDING_APPROVAL"
+	CapabilityGateTransitionToREVOKED         CapabilityGateTransitionTo = "REVOKED"
+	CapabilityGateTransitionToSANDBOX         CapabilityGateTransitionTo = "SANDBOX"
+	CapabilityGateTransitionToSUSPENDED       CapabilityGateTransitionTo = "SUSPENDED"
+)
+
+// Valid indicates whether the value is a known member of the CapabilityGateTransitionTo enum.
+func (e CapabilityGateTransitionTo) Valid() bool {
+	switch e {
+	case CapabilityGateTransitionToACTIVE:
+		return true
+	case CapabilityGateTransitionToAPPROVED:
+		return true
+	case CapabilityGateTransitionToDISABLED:
+		return true
+	case CapabilityGateTransitionToEXPIRED:
+		return true
+	case CapabilityGateTransitionToPENDINGAPPROVAL:
+		return true
+	case CapabilityGateTransitionToREVOKED:
+		return true
+	case CapabilityGateTransitionToSANDBOX:
+		return true
+	case CapabilityGateTransitionToSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClosureDecisionDecision.
+const (
+	CANCEL ClosureDecisionDecision = "CANCEL"
+	EFFECT ClosureDecisionDecision = "EFFECT"
+	REFUSE ClosureDecisionDecision = "REFUSE"
+)
+
+// Valid indicates whether the value is a known member of the ClosureDecisionDecision enum.
+func (e ClosureDecisionDecision) Valid() bool {
+	switch e {
+	case CANCEL:
+		return true
+	case EFFECT:
+		return true
+	case REFUSE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClosureRequestState.
+const (
+	ClosureRequestStateCANCELLED ClosureRequestState = "CANCELLED"
+	ClosureRequestStateEFFECTED  ClosureRequestState = "EFFECTED"
+	ClosureRequestStatePENDING   ClosureRequestState = "PENDING"
+	ClosureRequestStateREFUSED   ClosureRequestState = "REFUSED"
+)
+
+// Valid indicates whether the value is a known member of the ClosureRequestState enum.
+func (e ClosureRequestState) Valid() bool {
+	switch e {
+	case ClosureRequestStateCANCELLED:
+		return true
+	case ClosureRequestStateEFFECTED:
+		return true
+	case ClosureRequestStatePENDING:
+		return true
+	case ClosureRequestStateREFUSED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CompileResultOutcome.
+const (
+	CompileResultOutcomeMODELUNAVAILABLE   CompileResultOutcome = "MODEL_UNAVAILABLE"
+	CompileResultOutcomeNEEDSCLARIFICATION CompileResultOutcome = "NEEDS_CLARIFICATION"
+	CompileResultOutcomeREJECTED           CompileResultOutcome = "REJECTED"
+	CompileResultOutcomeSUCCESS            CompileResultOutcome = "SUCCESS"
+	CompileResultOutcomeTIMEOUT            CompileResultOutcome = "TIMEOUT"
+)
+
+// Valid indicates whether the value is a known member of the CompileResultOutcome enum.
+func (e CompileResultOutcome) Valid() bool {
+	switch e {
+	case CompileResultOutcomeMODELUNAVAILABLE:
+		return true
+	case CompileResultOutcomeNEEDSCLARIFICATION:
+		return true
+	case CompileResultOutcomeREJECTED:
+		return true
+	case CompileResultOutcomeSUCCESS:
+		return true
+	case CompileResultOutcomeTIMEOUT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatePayoutDestinationKind.
+const (
+	CreatePayoutDestinationKindBANK         CreatePayoutDestinationKind = "BANK"
+	CreatePayoutDestinationKindCARDPUSH     CreatePayoutDestinationKind = "CARD_PUSH"
+	CreatePayoutDestinationKindCRYPTOWALLET CreatePayoutDestinationKind = "CRYPTO_WALLET"
+	CreatePayoutDestinationKindFIATWALLET   CreatePayoutDestinationKind = "FIAT_WALLET"
+)
+
+// Valid indicates whether the value is a known member of the CreatePayoutDestinationKind enum.
+func (e CreatePayoutDestinationKind) Valid() bool {
+	switch e {
+	case CreatePayoutDestinationKindBANK:
+		return true
+	case CreatePayoutDestinationKindCARDPUSH:
+		return true
+	case CreatePayoutDestinationKindCRYPTOWALLET:
+		return true
+	case CreatePayoutDestinationKindFIATWALLET:
 		return true
 	default:
 		return false
@@ -351,43 +984,97 @@ func (e CapabilityGateState) Valid() bool {
 
 // Defines values for CreditOrigin.
 const (
-	ADMINADJUSTMENT       CreditOrigin = "ADMIN_ADJUSTMENT"
-	AGENTSERVICEEARNING   CreditOrigin = "AGENT_SERVICE_EARNING"
-	COMPETITIONREWARD     CreditOrigin = "COMPETITION_REWARD"
-	CREATOREARNING        CreditOrigin = "CREATOR_EARNING"
-	DATASALEEARNING       CreditOrigin = "DATA_SALE_EARNING"
-	MARKETCREATOREARNING  CreditOrigin = "MARKET_CREATOR_EARNING"
-	MARKETTRADINGPROCEEDS CreditOrigin = "MARKET_TRADING_PROCEEDS"
-	PROMOTIONAL           CreditOrigin = "PROMOTIONAL"
-	PROVIDERSETTLEMENT    CreditOrigin = "PROVIDER_SETTLEMENT"
-	PURCHASED             CreditOrigin = "PURCHASED"
-	REFUND                CreditOrigin = "REFUND"
+	CreditOriginADMINADJUSTMENT       CreditOrigin = "ADMIN_ADJUSTMENT"
+	CreditOriginAGENTSERVICEEARNING   CreditOrigin = "AGENT_SERVICE_EARNING"
+	CreditOriginCOMPETITIONREWARD     CreditOrigin = "COMPETITION_REWARD"
+	CreditOriginCREATOREARNING        CreditOrigin = "CREATOR_EARNING"
+	CreditOriginDATASALEEARNING       CreditOrigin = "DATA_SALE_EARNING"
+	CreditOriginMARKETCREATOREARNING  CreditOrigin = "MARKET_CREATOR_EARNING"
+	CreditOriginMARKETTRADINGPROCEEDS CreditOrigin = "MARKET_TRADING_PROCEEDS"
+	CreditOriginPROMOTIONAL           CreditOrigin = "PROMOTIONAL"
+	CreditOriginPROVIDERSETTLEMENT    CreditOrigin = "PROVIDER_SETTLEMENT"
+	CreditOriginPURCHASED             CreditOrigin = "PURCHASED"
+	CreditOriginREFUND                CreditOrigin = "REFUND"
 )
 
 // Valid indicates whether the value is a known member of the CreditOrigin enum.
 func (e CreditOrigin) Valid() bool {
 	switch e {
-	case ADMINADJUSTMENT:
+	case CreditOriginADMINADJUSTMENT:
 		return true
-	case AGENTSERVICEEARNING:
+	case CreditOriginAGENTSERVICEEARNING:
 		return true
-	case COMPETITIONREWARD:
+	case CreditOriginCOMPETITIONREWARD:
 		return true
-	case CREATOREARNING:
+	case CreditOriginCREATOREARNING:
 		return true
-	case DATASALEEARNING:
+	case CreditOriginDATASALEEARNING:
 		return true
-	case MARKETCREATOREARNING:
+	case CreditOriginMARKETCREATOREARNING:
 		return true
-	case MARKETTRADINGPROCEEDS:
+	case CreditOriginMARKETTRADINGPROCEEDS:
 		return true
-	case PROMOTIONAL:
+	case CreditOriginPROMOTIONAL:
 		return true
-	case PROVIDERSETTLEMENT:
+	case CreditOriginPROVIDERSETTLEMENT:
 		return true
-	case PURCHASED:
+	case CreditOriginPURCHASED:
 		return true
-	case REFUND:
+	case CreditOriginREFUND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreditPricingRounding.
+const (
+	Ceil     CreditPricingRounding = "ceil"
+	Down     CreditPricingRounding = "down"
+	Exact    CreditPricingRounding = "exact"
+	Floor    CreditPricingRounding = "floor"
+	HalfEven CreditPricingRounding = "half_even"
+	HalfUp   CreditPricingRounding = "half_up"
+	Up       CreditPricingRounding = "up"
+)
+
+// Valid indicates whether the value is a known member of the CreditPricingRounding enum.
+func (e CreditPricingRounding) Valid() bool {
+	switch e {
+	case Ceil:
+		return true
+	case Down:
+		return true
+	case Exact:
+		return true
+	case Floor:
+		return true
+	case HalfEven:
+		return true
+	case HalfUp:
+		return true
+	case Up:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreditPurchaseProviderMode.
+const (
+	CreditPurchaseProviderModeFake    CreditPurchaseProviderMode = "fake"
+	CreditPurchaseProviderModeLive    CreditPurchaseProviderMode = "live"
+	CreditPurchaseProviderModeSandbox CreditPurchaseProviderMode = "sandbox"
+)
+
+// Valid indicates whether the value is a known member of the CreditPurchaseProviderMode enum.
+func (e CreditPurchaseProviderMode) Valid() bool {
+	switch e {
+	case CreditPurchaseProviderModeFake:
+		return true
+	case CreditPurchaseProviderModeLive:
+		return true
+	case CreditPurchaseProviderModeSandbox:
 		return true
 	default:
 		return false
@@ -562,6 +1249,33 @@ func (e FillFinality) Valid() bool {
 	case FINALIZED:
 		return true
 	case OBSERVED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FundingFinality.
+const (
+	FundingFinalityDISPUTED   FundingFinality = "DISPUTED"
+	FundingFinalityREVERSED   FundingFinality = "REVERSED"
+	FundingFinalityREVERSIBLE FundingFinality = "REVERSIBLE"
+	FundingFinalitySETTLED    FundingFinality = "SETTLED"
+	FundingFinalityUNFUNDED   FundingFinality = "UNFUNDED"
+)
+
+// Valid indicates whether the value is a known member of the FundingFinality enum.
+func (e FundingFinality) Valid() bool {
+	switch e {
+	case FundingFinalityDISPUTED:
+		return true
+	case FundingFinalityREVERSED:
+		return true
+	case FundingFinalityREVERSIBLE:
+		return true
+	case FundingFinalitySETTLED:
+		return true
+	case FundingFinalityUNFUNDED:
 		return true
 	default:
 		return false
@@ -871,6 +1585,90 @@ func (e KillSwitchRequestAction) Valid() bool {
 	}
 }
 
+// Defines values for LegalDocumentDocumentId.
+const (
+	LegalDocumentDocumentIdCREDITSTERMS         LegalDocumentDocumentId = "CREDITS_TERMS"
+	LegalDocumentDocumentIdPRIVACYPOLICY        LegalDocumentDocumentId = "PRIVACY_POLICY"
+	LegalDocumentDocumentIdRISKDISCLOSURE       LegalDocumentDocumentId = "RISK_DISCLOSURE"
+	LegalDocumentDocumentIdTERMSOFSERVICE       LegalDocumentDocumentId = "TERMS_OF_SERVICE"
+	LegalDocumentDocumentIdWITHDRAWALDISCLOSURE LegalDocumentDocumentId = "WITHDRAWAL_DISCLOSURE"
+)
+
+// Valid indicates whether the value is a known member of the LegalDocumentDocumentId enum.
+func (e LegalDocumentDocumentId) Valid() bool {
+	switch e {
+	case LegalDocumentDocumentIdCREDITSTERMS:
+		return true
+	case LegalDocumentDocumentIdPRIVACYPOLICY:
+		return true
+	case LegalDocumentDocumentIdRISKDISCLOSURE:
+		return true
+	case LegalDocumentDocumentIdTERMSOFSERVICE:
+		return true
+	case LegalDocumentDocumentIdWITHDRAWALDISCLOSURE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LegalDocumentRequirement.
+const (
+	LegalDocumentRequirementONBOARDING LegalDocumentRequirement = "ONBOARDING"
+	LegalDocumentRequirementWITHDRAWAL LegalDocumentRequirement = "WITHDRAWAL"
+)
+
+// Valid indicates whether the value is a known member of the LegalDocumentRequirement enum.
+func (e LegalDocumentRequirement) Valid() bool {
+	switch e {
+	case LegalDocumentRequirementONBOARDING:
+		return true
+	case LegalDocumentRequirementWITHDRAWAL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MeAuditEntrySource.
+const (
+	MeAuditEntrySourceACCOUNT  MeAuditEntrySource = "ACCOUNT"
+	MeAuditEntrySourceSECURITY MeAuditEntrySource = "SECURITY"
+)
+
+// Valid indicates whether the value is a known member of the MeAuditEntrySource enum.
+func (e MeAuditEntrySource) Valid() bool {
+	switch e {
+	case MeAuditEntrySourceACCOUNT:
+		return true
+	case MeAuditEntrySourceSECURITY:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MyAccountUserStatus.
+const (
+	MyAccountUserStatusACTIVE    MyAccountUserStatus = "ACTIVE"
+	MyAccountUserStatusCLOSED    MyAccountUserStatus = "CLOSED"
+	MyAccountUserStatusSUSPENDED MyAccountUserStatus = "SUSPENDED"
+)
+
+// Valid indicates whether the value is a known member of the MyAccountUserStatus enum.
+func (e MyAccountUserStatus) Valid() bool {
+	switch e {
+	case MyAccountUserStatusACTIVE:
+		return true
+	case MyAccountUserStatusCLOSED:
+		return true
+	case MyAccountUserStatusSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NativeAssetModerationState.
 const (
 	NativeAssetModerationStateAPPROVED NativeAssetModerationState = "APPROVED"
@@ -928,21 +1726,48 @@ func (e NativeAssetStatus) Valid() bool {
 	}
 }
 
+// Defines values for NativeCandlePageInterval.
+const (
+	NativeCandlePageIntervalN15m NativeCandlePageInterval = "15m"
+	NativeCandlePageIntervalN1d  NativeCandlePageInterval = "1d"
+	NativeCandlePageIntervalN1h  NativeCandlePageInterval = "1h"
+	NativeCandlePageIntervalN1m  NativeCandlePageInterval = "1m"
+	NativeCandlePageIntervalN5m  NativeCandlePageInterval = "5m"
+)
+
+// Valid indicates whether the value is a known member of the NativeCandlePageInterval enum.
+func (e NativeCandlePageInterval) Valid() bool {
+	switch e {
+	case NativeCandlePageIntervalN15m:
+		return true
+	case NativeCandlePageIntervalN1d:
+		return true
+	case NativeCandlePageIntervalN1h:
+		return true
+	case NativeCandlePageIntervalN1m:
+		return true
+	case NativeCandlePageIntervalN5m:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NativeFillAlertsSeverity.
 const (
-	CRITICAL NativeFillAlertsSeverity = "CRITICAL"
-	INFO     NativeFillAlertsSeverity = "INFO"
-	WARN     NativeFillAlertsSeverity = "WARN"
+	NativeFillAlertsSeverityCRITICAL NativeFillAlertsSeverity = "CRITICAL"
+	NativeFillAlertsSeverityINFO     NativeFillAlertsSeverity = "INFO"
+	NativeFillAlertsSeverityWARN     NativeFillAlertsSeverity = "WARN"
 )
 
 // Valid indicates whether the value is a known member of the NativeFillAlertsSeverity enum.
 func (e NativeFillAlertsSeverity) Valid() bool {
 	switch e {
-	case CRITICAL:
+	case NativeFillAlertsSeverityCRITICAL:
 		return true
-	case INFO:
+	case NativeFillAlertsSeverityINFO:
 		return true
-	case WARN:
+	case NativeFillAlertsSeverityWARN:
 		return true
 	default:
 		return false
@@ -997,6 +1822,120 @@ func (e NativeMarketStatus) Valid() bool {
 	}
 }
 
+// Defines values for NativeMarketPageSort.
+const (
+	NativeMarketPageSortCHANGE24H NativeMarketPageSort = "CHANGE_24H"
+	NativeMarketPageSortLIQUIDITY NativeMarketPageSort = "LIQUIDITY"
+	NativeMarketPageSortNEWEST    NativeMarketPageSort = "NEWEST"
+	NativeMarketPageSortPRICE     NativeMarketPageSort = "PRICE"
+	NativeMarketPageSortVOLUME24H NativeMarketPageSort = "VOLUME_24H"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketPageSort enum.
+func (e NativeMarketPageSort) Valid() bool {
+	switch e {
+	case NativeMarketPageSortCHANGE24H:
+		return true
+	case NativeMarketPageSortLIQUIDITY:
+		return true
+	case NativeMarketPageSortNEWEST:
+		return true
+	case NativeMarketPageSortPRICE:
+		return true
+	case NativeMarketPageSortVOLUME24H:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketSummaryAssetStatus.
+const (
+	NativeMarketSummaryAssetStatusACTIVE        NativeMarketSummaryAssetStatus = "ACTIVE"
+	NativeMarketSummaryAssetStatusCLOSEONLY     NativeMarketSummaryAssetStatus = "CLOSE_ONLY"
+	NativeMarketSummaryAssetStatusDELISTED      NativeMarketSummaryAssetStatus = "DELISTED"
+	NativeMarketSummaryAssetStatusDRAFT         NativeMarketSummaryAssetStatus = "DRAFT"
+	NativeMarketSummaryAssetStatusHALTED        NativeMarketSummaryAssetStatus = "HALTED"
+	NativeMarketSummaryAssetStatusPENDINGREVIEW NativeMarketSummaryAssetStatus = "PENDING_REVIEW"
+	NativeMarketSummaryAssetStatusREJECTED      NativeMarketSummaryAssetStatus = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketSummaryAssetStatus enum.
+func (e NativeMarketSummaryAssetStatus) Valid() bool {
+	switch e {
+	case NativeMarketSummaryAssetStatusACTIVE:
+		return true
+	case NativeMarketSummaryAssetStatusCLOSEONLY:
+		return true
+	case NativeMarketSummaryAssetStatusDELISTED:
+		return true
+	case NativeMarketSummaryAssetStatusDRAFT:
+		return true
+	case NativeMarketSummaryAssetStatusHALTED:
+		return true
+	case NativeMarketSummaryAssetStatusPENDINGREVIEW:
+		return true
+	case NativeMarketSummaryAssetStatusREJECTED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketSummaryMarketStatus.
+const (
+	NativeMarketSummaryMarketStatusACTIVE    NativeMarketSummaryMarketStatus = "ACTIVE"
+	NativeMarketSummaryMarketStatusCLOSEONLY NativeMarketSummaryMarketStatus = "CLOSE_ONLY"
+	NativeMarketSummaryMarketStatusDELISTED  NativeMarketSummaryMarketStatus = "DELISTED"
+	NativeMarketSummaryMarketStatusFROZEN    NativeMarketSummaryMarketStatus = "FROZEN"
+	NativeMarketSummaryMarketStatusHALTED    NativeMarketSummaryMarketStatus = "HALTED"
+	NativeMarketSummaryMarketStatusPENDING   NativeMarketSummaryMarketStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketSummaryMarketStatus enum.
+func (e NativeMarketSummaryMarketStatus) Valid() bool {
+	switch e {
+	case NativeMarketSummaryMarketStatusACTIVE:
+		return true
+	case NativeMarketSummaryMarketStatusCLOSEONLY:
+		return true
+	case NativeMarketSummaryMarketStatusDELISTED:
+		return true
+	case NativeMarketSummaryMarketStatusFROZEN:
+		return true
+	case NativeMarketSummaryMarketStatusHALTED:
+		return true
+	case NativeMarketSummaryMarketStatusPENDING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeMarketSummaryModerationState.
+const (
+	NativeMarketSummaryModerationStateAPPROVED NativeMarketSummaryModerationState = "APPROVED"
+	NativeMarketSummaryModerationStateFLAGGED  NativeMarketSummaryModerationState = "FLAGGED"
+	NativeMarketSummaryModerationStatePENDING  NativeMarketSummaryModerationState = "PENDING"
+	NativeMarketSummaryModerationStateREJECTED NativeMarketSummaryModerationState = "REJECTED"
+)
+
+// Valid indicates whether the value is a known member of the NativeMarketSummaryModerationState enum.
+func (e NativeMarketSummaryModerationState) Valid() bool {
+	switch e {
+	case NativeMarketSummaryModerationStateAPPROVED:
+		return true
+	case NativeMarketSummaryModerationStateFLAGGED:
+		return true
+	case NativeMarketSummaryModerationStatePENDING:
+		return true
+	case NativeMarketSummaryModerationStateREJECTED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NativeOrderRequestSide.
 const (
 	NativeOrderRequestSideBUY  NativeOrderRequestSide = "BUY"
@@ -1045,6 +1984,147 @@ func (e NativeQuoteRequestSide) Valid() bool {
 	case NativeQuoteRequestSideBUY:
 		return true
 	case NativeQuoteRequestSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NativeTradePrintSide.
+const (
+	NativeTradePrintSideBUY  NativeTradePrintSide = "BUY"
+	NativeTradePrintSideSELL NativeTradePrintSide = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the NativeTradePrintSide enum.
+func (e NativeTradePrintSide) Valid() bool {
+	switch e {
+	case NativeTradePrintSideBUY:
+		return true
+	case NativeTradePrintSideSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NotificationSeverity.
+const (
+	NotificationSeverityCRITICAL NotificationSeverity = "CRITICAL"
+	NotificationSeverityINFO     NotificationSeverity = "INFO"
+	NotificationSeverityWARN     NotificationSeverity = "WARN"
+)
+
+// Valid indicates whether the value is a known member of the NotificationSeverity enum.
+func (e NotificationSeverity) Valid() bool {
+	switch e {
+	case NotificationSeverityCRITICAL:
+		return true
+	case NotificationSeverityINFO:
+		return true
+	case NotificationSeverityWARN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NotificationKind.
+const (
+	NotificationKindACCOUNTRESTRICTED      NotificationKind = "ACCOUNT_RESTRICTED"
+	NotificationKindAGENTPAUSED            NotificationKind = "AGENT_PAUSED"
+	NotificationKindCREDITPURCHASECAPTURED NotificationKind = "CREDIT_PURCHASE_CAPTURED"
+	NotificationKindCREDITPURCHASEREVERSED NotificationKind = "CREDIT_PURCHASE_REVERSED"
+	NotificationKindNATIVEMARKETPAUSED     NotificationKind = "NATIVE_MARKET_PAUSED"
+	NotificationKindNATIVETRADEFILLED      NotificationKind = "NATIVE_TRADE_FILLED"
+	NotificationKindPAYOUTACCEPTED         NotificationKind = "PAYOUT_ACCEPTED"
+	NotificationKindPAYOUTFAILED           NotificationKind = "PAYOUT_FAILED"
+	NotificationKindPAYOUTNEEDSREVIEW      NotificationKind = "PAYOUT_NEEDS_REVIEW"
+	NotificationKindPAYOUTSETTLED          NotificationKind = "PAYOUT_SETTLED"
+	NotificationKindSECURITYNEWSESSION     NotificationKind = "SECURITY_NEW_SESSION"
+	NotificationKindSYSTEM                 NotificationKind = "SYSTEM"
+	NotificationKindVERIFICATIONUPDATED    NotificationKind = "VERIFICATION_UPDATED"
+)
+
+// Valid indicates whether the value is a known member of the NotificationKind enum.
+func (e NotificationKind) Valid() bool {
+	switch e {
+	case NotificationKindACCOUNTRESTRICTED:
+		return true
+	case NotificationKindAGENTPAUSED:
+		return true
+	case NotificationKindCREDITPURCHASECAPTURED:
+		return true
+	case NotificationKindCREDITPURCHASEREVERSED:
+		return true
+	case NotificationKindNATIVEMARKETPAUSED:
+		return true
+	case NotificationKindNATIVETRADEFILLED:
+		return true
+	case NotificationKindPAYOUTACCEPTED:
+		return true
+	case NotificationKindPAYOUTFAILED:
+		return true
+	case NotificationKindPAYOUTNEEDSREVIEW:
+		return true
+	case NotificationKindPAYOUTSETTLED:
+		return true
+	case NotificationKindSECURITYNEWSESSION:
+		return true
+	case NotificationKindSYSTEM:
+		return true
+	case NotificationKindVERIFICATIONUPDATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NotificationPreferenceChannel.
+const (
+	INAPP NotificationPreferenceChannel = "IN_APP"
+)
+
+// Valid indicates whether the value is a known member of the NotificationPreferenceChannel enum.
+func (e NotificationPreferenceChannel) Valid() bool {
+	switch e {
+	case INAPP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OnboardingNextStep.
+const (
+	OnboardingNextStepPROFILE OnboardingNextStep = "PROFILE"
+	OnboardingNextStepTERMS   OnboardingNextStep = "TERMS"
+)
+
+// Valid indicates whether the value is a known member of the OnboardingNextStep enum.
+func (e OnboardingNextStep) Valid() bool {
+	switch e {
+	case OnboardingNextStepPROFILE:
+		return true
+	case OnboardingNextStepTERMS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OnboardingStepsKey.
+const (
+	OnboardingStepsKeyPROFILE OnboardingStepsKey = "PROFILE"
+	OnboardingStepsKeyTERMS   OnboardingStepsKey = "TERMS"
+)
+
+// Valid indicates whether the value is a known member of the OnboardingStepsKey enum.
+func (e OnboardingStepsKey) Valid() bool {
+	switch e {
+	case OnboardingStepsKeyPROFILE:
+		return true
+	case OnboardingStepsKeyTERMS:
 		return true
 	default:
 		return false
@@ -1219,6 +2299,54 @@ func (e OrderDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for PayoutDestinationKind.
+const (
+	PayoutDestinationKindBANK         PayoutDestinationKind = "BANK"
+	PayoutDestinationKindCARDPUSH     PayoutDestinationKind = "CARD_PUSH"
+	PayoutDestinationKindCRYPTOWALLET PayoutDestinationKind = "CRYPTO_WALLET"
+	PayoutDestinationKindFIATWALLET   PayoutDestinationKind = "FIAT_WALLET"
+)
+
+// Valid indicates whether the value is a known member of the PayoutDestinationKind enum.
+func (e PayoutDestinationKind) Valid() bool {
+	switch e {
+	case PayoutDestinationKindBANK:
+		return true
+	case PayoutDestinationKindCARDPUSH:
+		return true
+	case PayoutDestinationKindCRYPTOWALLET:
+		return true
+	case PayoutDestinationKindFIATWALLET:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PayoutDestinationStatus.
+const (
+	PayoutDestinationStatusDISABLED   PayoutDestinationStatus = "DISABLED"
+	PayoutDestinationStatusREJECTED   PayoutDestinationStatus = "REJECTED"
+	PayoutDestinationStatusUNVERIFIED PayoutDestinationStatus = "UNVERIFIED"
+	PayoutDestinationStatusVERIFIED   PayoutDestinationStatus = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the PayoutDestinationStatus enum.
+func (e PayoutDestinationStatus) Valid() bool {
+	switch e {
+	case PayoutDestinationStatusDISABLED:
+		return true
+	case PayoutDestinationStatusREJECTED:
+		return true
+	case PayoutDestinationStatusUNVERIFIED:
+		return true
+	case PayoutDestinationStatusVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PayoutRequestState.
 const (
 	PayoutRequestStateDRAFT                PayoutRequestState = "DRAFT"
@@ -1270,6 +2398,36 @@ func (e PayoutRequestState) Valid() bool {
 	}
 }
 
+// Defines values for PortfolioPositionMarketStatus.
+const (
+	PortfolioPositionMarketStatusACTIVE    PortfolioPositionMarketStatus = "ACTIVE"
+	PortfolioPositionMarketStatusCLOSEONLY PortfolioPositionMarketStatus = "CLOSE_ONLY"
+	PortfolioPositionMarketStatusDELISTED  PortfolioPositionMarketStatus = "DELISTED"
+	PortfolioPositionMarketStatusFROZEN    PortfolioPositionMarketStatus = "FROZEN"
+	PortfolioPositionMarketStatusHALTED    PortfolioPositionMarketStatus = "HALTED"
+	PortfolioPositionMarketStatusPENDING   PortfolioPositionMarketStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the PortfolioPositionMarketStatus enum.
+func (e PortfolioPositionMarketStatus) Valid() bool {
+	switch e {
+	case PortfolioPositionMarketStatusACTIVE:
+		return true
+	case PortfolioPositionMarketStatusCLOSEONLY:
+		return true
+	case PortfolioPositionMarketStatusDELISTED:
+		return true
+	case PortfolioPositionMarketStatusFROZEN:
+		return true
+	case PortfolioPositionMarketStatusHALTED:
+		return true
+	case PortfolioPositionMarketStatusPENDING:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PrincipalActorType.
 const (
 	PrincipalActorTypeOPERATOR PrincipalActorType = "OPERATOR"
@@ -1314,19 +2472,19 @@ func (e ProviderStatusHealth) Valid() bool {
 
 // Defines values for ProviderStatusMode.
 const (
-	Fake    ProviderStatusMode = "fake"
-	Live    ProviderStatusMode = "live"
-	Sandbox ProviderStatusMode = "sandbox"
+	ProviderStatusModeFake    ProviderStatusMode = "fake"
+	ProviderStatusModeLive    ProviderStatusMode = "live"
+	ProviderStatusModeSandbox ProviderStatusMode = "sandbox"
 )
 
 // Valid indicates whether the value is a known member of the ProviderStatusMode enum.
 func (e ProviderStatusMode) Valid() bool {
 	switch e {
-	case Fake:
+	case ProviderStatusModeFake:
 		return true
-	case Live:
+	case ProviderStatusModeLive:
 		return true
-	case Sandbox:
+	case ProviderStatusModeSandbox:
 		return true
 	default:
 		return false
@@ -1465,6 +2623,33 @@ func (e ReconciliationResolutionCompensationEntriesSide) Valid() bool {
 	}
 }
 
+// Defines values for SandboxVerificationOutcomeOutcome.
+const (
+	SandboxVerificationOutcomeOutcomeNEEDSINFORMATION SandboxVerificationOutcomeOutcome = "NEEDS_INFORMATION"
+	SandboxVerificationOutcomeOutcomeREJECTED         SandboxVerificationOutcomeOutcome = "REJECTED"
+	SandboxVerificationOutcomeOutcomeSANCTIONED       SandboxVerificationOutcomeOutcome = "SANCTIONED"
+	SandboxVerificationOutcomeOutcomeUNDERAGE         SandboxVerificationOutcomeOutcome = "UNDERAGE"
+	SandboxVerificationOutcomeOutcomeVERIFIED         SandboxVerificationOutcomeOutcome = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the SandboxVerificationOutcomeOutcome enum.
+func (e SandboxVerificationOutcomeOutcome) Valid() bool {
+	switch e {
+	case SandboxVerificationOutcomeOutcomeNEEDSINFORMATION:
+		return true
+	case SandboxVerificationOutcomeOutcomeREJECTED:
+		return true
+	case SandboxVerificationOutcomeOutcomeSANCTIONED:
+		return true
+	case SandboxVerificationOutcomeOutcomeUNDERAGE:
+		return true
+	case SandboxVerificationOutcomeOutcomeVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StartDepositRequestFiatCurrency.
 const (
 	StartDepositRequestFiatCurrencyUSD StartDepositRequestFiatCurrency = "USD"
@@ -1474,6 +2659,165 @@ const (
 func (e StartDepositRequestFiatCurrency) Valid() bool {
 	switch e {
 	case StartDepositRequestFiatCurrencyUSD:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StartVerificationRequestPurpose.
+const (
+	StartVerificationRequestPurposeENHANCED  StartVerificationRequestPurpose = "ENHANCED"
+	StartVerificationRequestPurposePAYOUTKYC StartVerificationRequestPurpose = "PAYOUT_KYC"
+)
+
+// Valid indicates whether the value is a known member of the StartVerificationRequestPurpose enum.
+func (e StartVerificationRequestPurpose) Valid() bool {
+	switch e {
+	case StartVerificationRequestPurposeENHANCED:
+		return true
+	case StartVerificationRequestPurposePAYOUTKYC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategySourceKind.
+const (
+	CLONE             StrategySourceKind = "CLONE"
+	NATURALLANGUAGE   StrategySourceKind = "NATURAL_LANGUAGE"
+	STRUCTUREDSANDBOX StrategySourceKind = "STRUCTURED_SANDBOX"
+	TYPESCRIPTSDK     StrategySourceKind = "TYPESCRIPT_SDK"
+)
+
+// Valid indicates whether the value is a known member of the StrategySourceKind enum.
+func (e StrategySourceKind) Valid() bool {
+	switch e {
+	case CLONE:
+		return true
+	case NATURALLANGUAGE:
+		return true
+	case STRUCTUREDSANDBOX:
+		return true
+	case TYPESCRIPTSDK:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyStatus.
+const (
+	StrategyStatusACTIVE   StrategyStatus = "ACTIVE"
+	StrategyStatusARCHIVED StrategyStatus = "ARCHIVED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyStatus enum.
+func (e StrategyStatus) Valid() bool {
+	switch e {
+	case StrategyStatusACTIVE:
+		return true
+	case StrategyStatusARCHIVED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyVersionStatus.
+const (
+	StrategyVersionStatusACCEPTED   StrategyVersionStatus = "ACCEPTED"
+	StrategyVersionStatusCOMPILED   StrategyVersionStatus = "COMPILED"
+	StrategyVersionStatusREJECTED   StrategyVersionStatus = "REJECTED"
+	StrategyVersionStatusREVOKED    StrategyVersionStatus = "REVOKED"
+	StrategyVersionStatusSUPERSEDED StrategyVersionStatus = "SUPERSEDED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyVersionStatus enum.
+func (e StrategyVersionStatus) Valid() bool {
+	switch e {
+	case StrategyVersionStatusACCEPTED:
+		return true
+	case StrategyVersionStatusCOMPILED:
+		return true
+	case StrategyVersionStatusREJECTED:
+		return true
+	case StrategyVersionStatusREVOKED:
+		return true
+	case StrategyVersionStatusSUPERSEDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredRuleComparator.
+const (
+	GT  StructuredRuleComparator = "GT"
+	GTE StructuredRuleComparator = "GTE"
+	LT  StructuredRuleComparator = "LT"
+	LTE StructuredRuleComparator = "LTE"
+)
+
+// Valid indicates whether the value is a known member of the StructuredRuleComparator enum.
+func (e StructuredRuleComparator) Valid() bool {
+	switch e {
+	case GT:
+		return true
+	case GTE:
+		return true
+	case LT:
+		return true
+	case LTE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredRuleKind.
+const (
+	EVERYINTERVAL  StructuredRuleKind = "EVERY_INTERVAL"
+	PRICETHRESHOLD StructuredRuleKind = "PRICE_THRESHOLD"
+)
+
+// Valid indicates whether the value is a known member of the StructuredRuleKind enum.
+func (e StructuredRuleKind) Valid() bool {
+	switch e {
+	case EVERYINTERVAL:
+		return true
+	case PRICETHRESHOLD:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredStrategyMode.
+const (
+	StructuredStrategyModePAPER StructuredStrategyMode = "PAPER"
+)
+
+// Valid indicates whether the value is a known member of the StructuredStrategyMode enum.
+func (e StructuredStrategyMode) Valid() bool {
+	switch e {
+	case StructuredStrategyModePAPER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredStrategySchemaVersion.
+const (
+	N1 StructuredStrategySchemaVersion = 1
+)
+
+// Valid indicates whether the value is a known member of the StructuredStrategySchemaVersion enum.
+func (e StructuredStrategySchemaVersion) Valid() bool {
+	switch e {
+	case N1:
 		return true
 	default:
 		return false
@@ -1492,6 +2836,33 @@ func (e SubmitIntentRequestMode) Valid() bool {
 	case SubmitIntentRequestModeLIVE:
 		return true
 	case SubmitIntentRequestModePAPER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TermsAcceptanceRequestDocumentIds.
+const (
+	TermsAcceptanceRequestDocumentIdsCREDITSTERMS         TermsAcceptanceRequestDocumentIds = "CREDITS_TERMS"
+	TermsAcceptanceRequestDocumentIdsPRIVACYPOLICY        TermsAcceptanceRequestDocumentIds = "PRIVACY_POLICY"
+	TermsAcceptanceRequestDocumentIdsRISKDISCLOSURE       TermsAcceptanceRequestDocumentIds = "RISK_DISCLOSURE"
+	TermsAcceptanceRequestDocumentIdsTERMSOFSERVICE       TermsAcceptanceRequestDocumentIds = "TERMS_OF_SERVICE"
+	TermsAcceptanceRequestDocumentIdsWITHDRAWALDISCLOSURE TermsAcceptanceRequestDocumentIds = "WITHDRAWAL_DISCLOSURE"
+)
+
+// Valid indicates whether the value is a known member of the TermsAcceptanceRequestDocumentIds enum.
+func (e TermsAcceptanceRequestDocumentIds) Valid() bool {
+	switch e {
+	case TermsAcceptanceRequestDocumentIdsCREDITSTERMS:
+		return true
+	case TermsAcceptanceRequestDocumentIdsPRIVACYPOLICY:
+		return true
+	case TermsAcceptanceRequestDocumentIdsRISKDISCLOSURE:
+		return true
+	case TermsAcceptanceRequestDocumentIdsTERMSOFSERVICE:
+		return true
+	case TermsAcceptanceRequestDocumentIdsWITHDRAWALDISCLOSURE:
 		return true
 	default:
 		return false
@@ -1696,6 +3067,27 @@ func (e TradeIntentDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for ValueTemperature.
+const (
+	ECONOMY   ValueTemperature = "ECONOMY"
+	REAL      ValueTemperature = "REAL"
+	SIMULATED ValueTemperature = "SIMULATED"
+)
+
+// Valid indicates whether the value is a known member of the ValueTemperature enum.
+func (e ValueTemperature) Valid() bool {
+	switch e {
+	case ECONOMY:
+		return true
+	case REAL:
+		return true
+	case SIMULATED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VenueListingStatus.
 const (
 	VenueListingStatusACTIVE   VenueListingStatus = "ACTIVE"
@@ -1732,6 +3124,321 @@ func (e VenueListingVenueStatus) Valid() bool {
 	case VenueListingVenueStatusDEGRADED:
 		return true
 	case VenueListingVenueStatusDISABLED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationCheckKind.
+const (
+	AGE              VerificationCheckKind = "AGE"
+	IDENTITYDOCUMENT VerificationCheckKind = "IDENTITY_DOCUMENT"
+	JURISDICTION     VerificationCheckKind = "JURISDICTION"
+	PEP              VerificationCheckKind = "PEP"
+	SANCTIONS        VerificationCheckKind = "SANCTIONS"
+)
+
+// Valid indicates whether the value is a known member of the VerificationCheckKind enum.
+func (e VerificationCheckKind) Valid() bool {
+	switch e {
+	case AGE:
+		return true
+	case IDENTITYDOCUMENT:
+		return true
+	case JURISDICTION:
+		return true
+	case PEP:
+		return true
+	case SANCTIONS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationLevel.
+const (
+	VerificationLevelENHANCED      VerificationLevel = "ENHANCED"
+	VerificationLevelNODALIDENTITY VerificationLevel = "NODAL_IDENTITY"
+	VerificationLevelNONE          VerificationLevel = "NONE"
+	VerificationLevelPAYOUTKYC     VerificationLevel = "PAYOUT_KYC"
+)
+
+// Valid indicates whether the value is a known member of the VerificationLevel enum.
+func (e VerificationLevel) Valid() bool {
+	switch e {
+	case VerificationLevelENHANCED:
+		return true
+	case VerificationLevelNODALIDENTITY:
+		return true
+	case VerificationLevelNONE:
+		return true
+	case VerificationLevelPAYOUTKYC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationOutcome.
+const (
+	VerificationOutcomeFAIL             VerificationOutcome = "FAIL"
+	VerificationOutcomeNEEDSINFORMATION VerificationOutcome = "NEEDS_INFORMATION"
+	VerificationOutcomeNOTAPPLICABLE    VerificationOutcome = "NOT_APPLICABLE"
+	VerificationOutcomePASS             VerificationOutcome = "PASS"
+	VerificationOutcomeUNKNOWN          VerificationOutcome = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the VerificationOutcome enum.
+func (e VerificationOutcome) Valid() bool {
+	switch e {
+	case VerificationOutcomeFAIL:
+		return true
+	case VerificationOutcomeNEEDSINFORMATION:
+		return true
+	case VerificationOutcomeNOTAPPLICABLE:
+		return true
+	case VerificationOutcomePASS:
+		return true
+	case VerificationOutcomeUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationProfileProviderAvailability.
+const (
+	VerificationProfileProviderAvailabilityAPPLICATIONDENIED   VerificationProfileProviderAvailability = "APPLICATION_DENIED"
+	VerificationProfileProviderAvailabilityAPPLICATIONPENDING  VerificationProfileProviderAvailability = "APPLICATION_PENDING"
+	VerificationProfileProviderAvailabilityEmpty               VerificationProfileProviderAvailability = ""
+	VerificationProfileProviderAvailabilityLIVE                VerificationProfileProviderAvailability = "LIVE"
+	VerificationProfileProviderAvailabilityNOTOFFERED          VerificationProfileProviderAvailability = "NOT_OFFERED"
+	VerificationProfileProviderAvailabilityREQUIRESAPPLICATION VerificationProfileProviderAvailability = "REQUIRES_APPLICATION"
+	VerificationProfileProviderAvailabilitySANDBOXONLY         VerificationProfileProviderAvailability = "SANDBOX_ONLY"
+)
+
+// Valid indicates whether the value is a known member of the VerificationProfileProviderAvailability enum.
+func (e VerificationProfileProviderAvailability) Valid() bool {
+	switch e {
+	case VerificationProfileProviderAvailabilityAPPLICATIONDENIED:
+		return true
+	case VerificationProfileProviderAvailabilityAPPLICATIONPENDING:
+		return true
+	case VerificationProfileProviderAvailabilityEmpty:
+		return true
+	case VerificationProfileProviderAvailabilityLIVE:
+		return true
+	case VerificationProfileProviderAvailabilityNOTOFFERED:
+		return true
+	case VerificationProfileProviderAvailabilityREQUIRESAPPLICATION:
+		return true
+	case VerificationProfileProviderAvailabilitySANDBOXONLY:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationProfileSanctionsState.
+const (
+	VerificationProfileSanctionsStateCLEAR   VerificationProfileSanctionsState = "CLEAR"
+	VerificationProfileSanctionsStateHIT     VerificationProfileSanctionsState = "HIT"
+	VerificationProfileSanctionsStateREVIEW  VerificationProfileSanctionsState = "REVIEW"
+	VerificationProfileSanctionsStateUNKNOWN VerificationProfileSanctionsState = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the VerificationProfileSanctionsState enum.
+func (e VerificationProfileSanctionsState) Valid() bool {
+	switch e {
+	case VerificationProfileSanctionsStateCLEAR:
+		return true
+	case VerificationProfileSanctionsStateHIT:
+		return true
+	case VerificationProfileSanctionsStateREVIEW:
+		return true
+	case VerificationProfileSanctionsStateUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationRequirementAction.
+const (
+	VerificationRequirementActionCONTACTSUPPORT       VerificationRequirementAction = "CONTACT_SUPPORT"
+	VerificationRequirementActionCONTINUEVERIFICATION VerificationRequirementAction = "CONTINUE_VERIFICATION"
+	VerificationRequirementActionNONE                 VerificationRequirementAction = "NONE"
+	VerificationRequirementActionPROVIDEINFORMATION   VerificationRequirementAction = "PROVIDE_INFORMATION"
+	VerificationRequirementActionREVERIFY             VerificationRequirementAction = "REVERIFY"
+	VerificationRequirementActionSTARTVERIFICATION    VerificationRequirementAction = "START_VERIFICATION"
+	VerificationRequirementActionWAIT                 VerificationRequirementAction = "WAIT"
+)
+
+// Valid indicates whether the value is a known member of the VerificationRequirementAction enum.
+func (e VerificationRequirementAction) Valid() bool {
+	switch e {
+	case VerificationRequirementActionCONTACTSUPPORT:
+		return true
+	case VerificationRequirementActionCONTINUEVERIFICATION:
+		return true
+	case VerificationRequirementActionNONE:
+		return true
+	case VerificationRequirementActionPROVIDEINFORMATION:
+		return true
+	case VerificationRequirementActionREVERIFY:
+		return true
+	case VerificationRequirementActionSTARTVERIFICATION:
+		return true
+	case VerificationRequirementActionWAIT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationSessionPurpose.
+const (
+	VerificationSessionPurposeENHANCED  VerificationSessionPurpose = "ENHANCED"
+	VerificationSessionPurposePAYOUTKYC VerificationSessionPurpose = "PAYOUT_KYC"
+)
+
+// Valid indicates whether the value is a known member of the VerificationSessionPurpose enum.
+func (e VerificationSessionPurpose) Valid() bool {
+	switch e {
+	case VerificationSessionPurposeENHANCED:
+		return true
+	case VerificationSessionPurposePAYOUTKYC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationSessionStatus.
+const (
+	VerificationSessionStatusAPPROVED          VerificationSessionStatus = "APPROVED"
+	VerificationSessionStatusCANCELLED         VerificationSessionStatus = "CANCELLED"
+	VerificationSessionStatusCREATED           VerificationSessionStatus = "CREATED"
+	VerificationSessionStatusDECLINED          VerificationSessionStatus = "DECLINED"
+	VerificationSessionStatusEXPIRED           VerificationSessionStatus = "EXPIRED"
+	VerificationSessionStatusMANUALREVIEW      VerificationSessionStatus = "MANUAL_REVIEW"
+	VerificationSessionStatusPENDINGUSERACTION VerificationSessionStatus = "PENDING_USER_ACTION"
+	VerificationSessionStatusPROCESSING        VerificationSessionStatus = "PROCESSING"
+	VerificationSessionStatusREQUIRESINPUT     VerificationSessionStatus = "REQUIRES_INPUT"
+)
+
+// Valid indicates whether the value is a known member of the VerificationSessionStatus enum.
+func (e VerificationSessionStatus) Valid() bool {
+	switch e {
+	case VerificationSessionStatusAPPROVED:
+		return true
+	case VerificationSessionStatusCANCELLED:
+		return true
+	case VerificationSessionStatusCREATED:
+		return true
+	case VerificationSessionStatusDECLINED:
+		return true
+	case VerificationSessionStatusEXPIRED:
+		return true
+	case VerificationSessionStatusMANUALREVIEW:
+		return true
+	case VerificationSessionStatusPENDINGUSERACTION:
+		return true
+	case VerificationSessionStatusPROCESSING:
+		return true
+	case VerificationSessionStatusREQUIRESINPUT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationState.
+const (
+	VerificationStateEXPIRED          VerificationState = "EXPIRED"
+	VerificationStateNEEDSINFORMATION VerificationState = "NEEDS_INFORMATION"
+	VerificationStatePENDING          VerificationState = "PENDING"
+	VerificationStateREJECTED         VerificationState = "REJECTED"
+	VerificationStateREQUIRED         VerificationState = "REQUIRED"
+	VerificationStateRESTRICTED       VerificationState = "RESTRICTED"
+	VerificationStateSTARTED          VerificationState = "STARTED"
+	VerificationStateSUSPENDED        VerificationState = "SUSPENDED"
+	VerificationStateUNVERIFIED       VerificationState = "UNVERIFIED"
+	VerificationStateVERIFIED         VerificationState = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the VerificationState enum.
+func (e VerificationState) Valid() bool {
+	switch e {
+	case VerificationStateEXPIRED:
+		return true
+	case VerificationStateNEEDSINFORMATION:
+		return true
+	case VerificationStatePENDING:
+		return true
+	case VerificationStateREJECTED:
+		return true
+	case VerificationStateREQUIRED:
+		return true
+	case VerificationStateRESTRICTED:
+		return true
+	case VerificationStateSTARTED:
+		return true
+	case VerificationStateSUSPENDED:
+		return true
+	case VerificationStateUNVERIFIED:
+		return true
+	case VerificationStateVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WithdrawalReason.
+const (
+	WithdrawalReasonACCOUNTRESTRICTED      WithdrawalReason = "ACCOUNT_RESTRICTED"
+	WithdrawalReasonCAPABILITYINACTIVE     WithdrawalReason = "CAPABILITY_INACTIVE"
+	WithdrawalReasonFUNDINGNOTSETTLED      WithdrawalReason = "FUNDING_NOT_SETTLED"
+	WithdrawalReasonHOLDPERIODNOTELAPSED   WithdrawalReason = "HOLD_PERIOD_NOT_ELAPSED"
+	WithdrawalReasonJURISDICTIONRESTRICTED WithdrawalReason = "JURISDICTION_RESTRICTED"
+	WithdrawalReasonMINIMUMNOTMET          WithdrawalReason = "MINIMUM_NOT_MET"
+	WithdrawalReasonNOVALUE                WithdrawalReason = "NO_VALUE"
+	WithdrawalReasonORIGINNOTWITHDRAWABLE  WithdrawalReason = "ORIGIN_NOT_WITHDRAWABLE"
+	WithdrawalReasonPOLICYINVALID          WithdrawalReason = "POLICY_INVALID"
+	WithdrawalReasonPROVIDERUNAVAILABLE    WithdrawalReason = "PROVIDER_UNAVAILABLE"
+	WithdrawalReasonREQUIRESVERIFICATION   WithdrawalReason = "REQUIRES_VERIFICATION"
+	WithdrawalReasonTERMSNOTACCEPTED       WithdrawalReason = "TERMS_NOT_ACCEPTED"
+)
+
+// Valid indicates whether the value is a known member of the WithdrawalReason enum.
+func (e WithdrawalReason) Valid() bool {
+	switch e {
+	case WithdrawalReasonACCOUNTRESTRICTED:
+		return true
+	case WithdrawalReasonCAPABILITYINACTIVE:
+		return true
+	case WithdrawalReasonFUNDINGNOTSETTLED:
+		return true
+	case WithdrawalReasonHOLDPERIODNOTELAPSED:
+		return true
+	case WithdrawalReasonJURISDICTIONRESTRICTED:
+		return true
+	case WithdrawalReasonMINIMUMNOTMET:
+		return true
+	case WithdrawalReasonNOVALUE:
+		return true
+	case WithdrawalReasonORIGINNOTWITHDRAWABLE:
+		return true
+	case WithdrawalReasonPOLICYINVALID:
+		return true
+	case WithdrawalReasonPROVIDERUNAVAILABLE:
+		return true
+	case WithdrawalReasonREQUIRESVERIFICATION:
+		return true
+	case WithdrawalReasonTERMSNOTACCEPTED:
 		return true
 	default:
 		return false
@@ -1800,12 +3507,14 @@ func (e PostAdminActionsActionIdDecisionParamsDecision) Valid() bool {
 
 // Defines values for PostAdminGatesCapabilityActionParamsAction.
 const (
-	PostAdminGatesCapabilityActionParamsActionActivate PostAdminGatesCapabilityActionParamsAction = "activate"
-	PostAdminGatesCapabilityActionParamsActionApprove  PostAdminGatesCapabilityActionParamsAction = "approve"
-	PostAdminGatesCapabilityActionParamsActionPropose  PostAdminGatesCapabilityActionParamsAction = "propose"
-	PostAdminGatesCapabilityActionParamsActionResume   PostAdminGatesCapabilityActionParamsAction = "resume"
-	PostAdminGatesCapabilityActionParamsActionRevoke   PostAdminGatesCapabilityActionParamsAction = "revoke"
-	PostAdminGatesCapabilityActionParamsActionSuspend  PostAdminGatesCapabilityActionParamsAction = "suspend"
+	PostAdminGatesCapabilityActionParamsActionActivate  PostAdminGatesCapabilityActionParamsAction = "activate"
+	PostAdminGatesCapabilityActionParamsActionApprove   PostAdminGatesCapabilityActionParamsAction = "approve"
+	PostAdminGatesCapabilityActionParamsActionPropose   PostAdminGatesCapabilityActionParamsAction = "propose"
+	PostAdminGatesCapabilityActionParamsActionResume    PostAdminGatesCapabilityActionParamsAction = "resume"
+	PostAdminGatesCapabilityActionParamsActionRevoke    PostAdminGatesCapabilityActionParamsAction = "revoke"
+	PostAdminGatesCapabilityActionParamsActionSandbox   PostAdminGatesCapabilityActionParamsAction = "sandbox"
+	PostAdminGatesCapabilityActionParamsActionSuspend   PostAdminGatesCapabilityActionParamsAction = "suspend"
+	PostAdminGatesCapabilityActionParamsActionUnsandbox PostAdminGatesCapabilityActionParamsAction = "unsandbox"
 )
 
 // Valid indicates whether the value is a known member of the PostAdminGatesCapabilityActionParamsAction enum.
@@ -1821,7 +3530,38 @@ func (e PostAdminGatesCapabilityActionParamsAction) Valid() bool {
 		return true
 	case PostAdminGatesCapabilityActionParamsActionRevoke:
 		return true
+	case PostAdminGatesCapabilityActionParamsActionSandbox:
+		return true
 	case PostAdminGatesCapabilityActionParamsActionSuspend:
+		return true
+	case PostAdminGatesCapabilityActionParamsActionUnsandbox:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostAgentsAgentIdActionParamsAction.
+const (
+	PostAgentsAgentIdActionParamsActionArchive PostAgentsAgentIdActionParamsAction = "archive"
+	PostAgentsAgentIdActionParamsActionDisable PostAgentsAgentIdActionParamsAction = "disable"
+	PostAgentsAgentIdActionParamsActionEnable  PostAgentsAgentIdActionParamsAction = "enable"
+	PostAgentsAgentIdActionParamsActionPause   PostAgentsAgentIdActionParamsAction = "pause"
+	PostAgentsAgentIdActionParamsActionResume  PostAgentsAgentIdActionParamsAction = "resume"
+)
+
+// Valid indicates whether the value is a known member of the PostAgentsAgentIdActionParamsAction enum.
+func (e PostAgentsAgentIdActionParamsAction) Valid() bool {
+	switch e {
+	case PostAgentsAgentIdActionParamsActionArchive:
+		return true
+	case PostAgentsAgentIdActionParamsActionDisable:
+		return true
+	case PostAgentsAgentIdActionParamsActionEnable:
+		return true
+	case PostAgentsAgentIdActionParamsActionPause:
+		return true
+	case PostAgentsAgentIdActionParamsActionResume:
 		return true
 	default:
 		return false
@@ -1846,19 +3586,109 @@ func (e GetInternalOrdersParamsRole) Valid() bool {
 	}
 }
 
+// Defines values for GetNativeMarketsParamsStatus.
+const (
+	GetNativeMarketsParamsStatusACTIVE    GetNativeMarketsParamsStatus = "ACTIVE"
+	GetNativeMarketsParamsStatusCLOSEONLY GetNativeMarketsParamsStatus = "CLOSE_ONLY"
+	GetNativeMarketsParamsStatusDELISTED  GetNativeMarketsParamsStatus = "DELISTED"
+	GetNativeMarketsParamsStatusFROZEN    GetNativeMarketsParamsStatus = "FROZEN"
+	GetNativeMarketsParamsStatusHALTED    GetNativeMarketsParamsStatus = "HALTED"
+	GetNativeMarketsParamsStatusPENDING   GetNativeMarketsParamsStatus = "PENDING"
+)
+
+// Valid indicates whether the value is a known member of the GetNativeMarketsParamsStatus enum.
+func (e GetNativeMarketsParamsStatus) Valid() bool {
+	switch e {
+	case GetNativeMarketsParamsStatusACTIVE:
+		return true
+	case GetNativeMarketsParamsStatusCLOSEONLY:
+		return true
+	case GetNativeMarketsParamsStatusDELISTED:
+		return true
+	case GetNativeMarketsParamsStatusFROZEN:
+		return true
+	case GetNativeMarketsParamsStatusHALTED:
+		return true
+	case GetNativeMarketsParamsStatusPENDING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetNativeMarketsParamsSort.
+const (
+	GetNativeMarketsParamsSortCHANGE24H GetNativeMarketsParamsSort = "CHANGE_24H"
+	GetNativeMarketsParamsSortLIQUIDITY GetNativeMarketsParamsSort = "LIQUIDITY"
+	GetNativeMarketsParamsSortNEWEST    GetNativeMarketsParamsSort = "NEWEST"
+	GetNativeMarketsParamsSortPRICE     GetNativeMarketsParamsSort = "PRICE"
+	GetNativeMarketsParamsSortVOLUME24H GetNativeMarketsParamsSort = "VOLUME_24H"
+)
+
+// Valid indicates whether the value is a known member of the GetNativeMarketsParamsSort enum.
+func (e GetNativeMarketsParamsSort) Valid() bool {
+	switch e {
+	case GetNativeMarketsParamsSortCHANGE24H:
+		return true
+	case GetNativeMarketsParamsSortLIQUIDITY:
+		return true
+	case GetNativeMarketsParamsSortNEWEST:
+		return true
+	case GetNativeMarketsParamsSortPRICE:
+		return true
+	case GetNativeMarketsParamsSortVOLUME24H:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetNativeMarketsMarketIdCandlesParamsInterval.
+const (
+	GetNativeMarketsMarketIdCandlesParamsIntervalN15m GetNativeMarketsMarketIdCandlesParamsInterval = "15m"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN1d  GetNativeMarketsMarketIdCandlesParamsInterval = "1d"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN1h  GetNativeMarketsMarketIdCandlesParamsInterval = "1h"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN1m  GetNativeMarketsMarketIdCandlesParamsInterval = "1m"
+	GetNativeMarketsMarketIdCandlesParamsIntervalN5m  GetNativeMarketsMarketIdCandlesParamsInterval = "5m"
+)
+
+// Valid indicates whether the value is a known member of the GetNativeMarketsMarketIdCandlesParamsInterval enum.
+func (e GetNativeMarketsMarketIdCandlesParamsInterval) Valid() bool {
+	switch e {
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN15m:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN1d:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN1h:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN1m:
+		return true
+	case GetNativeMarketsMarketIdCandlesParamsIntervalN5m:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PostWebhooksProviderParamsProvider.
 const (
-	Stripe PostWebhooksProviderParamsProvider = "stripe"
+	StripeCredit PostWebhooksProviderParamsProvider = "stripe_credit"
 )
 
 // Valid indicates whether the value is a known member of the PostWebhooksProviderParamsProvider enum.
 func (e PostWebhooksProviderParamsProvider) Valid() bool {
 	switch e {
-	case Stripe:
+	case StripeCredit:
 		return true
 	default:
 		return false
 	}
+}
+
+// AcceptStrategyVersionRequest defines model for AcceptStrategyVersionRequest.
+type AcceptStrategyVersionRequest struct {
+	// IrHash The semantic hash of the document you read, exactly as the review screen showed it. It is compared with the version's own hash and a mismatch is refused: this is the field that makes "accept" mean "accept THIS document" rather than "accept whatever is there now".
+	IrHash string `json:"ir_hash"`
 }
 
 // Account defines model for Account.
@@ -1866,8 +3696,11 @@ type Account struct {
 	CreatedAt Timestamp `json:"created_at"`
 
 	// Id UUIDv7 in canonical form
-	Id           UUID          `json:"id"`
-	Kind         AccountKind   `json:"kind"`
+	Id   UUID        `json:"id"`
+	Kind AccountKind `json:"kind"`
+
+	// OwnerUserId UUIDv7 in canonical form
+	OwnerUserId  *UUID         `json:"owner_user_id,omitempty"`
 	Status       AccountStatus `json:"status"`
 	StatusReason *string       `json:"status_reason,omitempty"`
 }
@@ -1884,6 +3717,17 @@ type AccountPage struct {
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
 }
 
+// AccountRestriction A restriction, written for the person it applies to. The free text an operator wrote on a status change is deliberately not here: it was written for other operators and appears in the support view instead.
+type AccountRestriction struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId *UUID                  `json:"account_id,omitempty"`
+	Code      AccountRestrictionCode `json:"code"`
+	Message   string                 `json:"message"`
+}
+
+// AccountRestrictionCode defines model for AccountRestriction.Code.
+type AccountRestrictionCode string
+
 // AccountStatusChange defines model for AccountStatusChange.
 type AccountStatusChange struct {
 	Reason string                `json:"reason"`
@@ -1892,6 +3736,55 @@ type AccountStatusChange struct {
 
 // AccountStatusChangeTo defines model for AccountStatusChange.To.
 type AccountStatusChangeTo string
+
+// ActivityAmount defines model for ActivityAmount.
+type ActivityAmount struct {
+	Currency *string `json:"currency,omitempty"`
+
+	// Origin Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+	Origin *CreditOrigin `json:"origin,omitempty"`
+	Symbol *string       `json:"symbol,omitempty"`
+
+	// Temperature What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+	Temperature ValueTemperature `json:"temperature"`
+
+	// Unit How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor units of `currency`, ASSET_UNITS is base units of `symbol`.
+	Unit ActivityAmountUnit `json:"unit"`
+
+	// Value An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	Value SignedQuantity `json:"value"`
+}
+
+// ActivityAmountUnit How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor units of `currency`, ASSET_UNITS is base units of `symbol`.
+type ActivityAmountUnit string
+
+// ActivityFeedItem defines model for ActivityFeedItem.
+type ActivityFeedItem struct {
+	Amounts []ActivityAmount `json:"amounts"`
+	Id      string           `json:"id"`
+
+	// Kind The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
+	Kind       ActivityFeedKind `json:"kind"`
+	OccurredAt Timestamp        `json:"occurred_at"`
+	Reference  struct {
+		Id   string `json:"id"`
+		Type string `json:"type"`
+	} `json:"reference"`
+	Simulated bool    `json:"simulated"`
+	Status    *string `json:"status,omitempty"`
+
+	// Summary Built on the server from a fixed template per kind, never from user text.
+	Summary string `json:"summary"`
+}
+
+// ActivityFeedKind The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
+type ActivityFeedKind string
+
+// ActivityFeedPage defines model for ActivityFeedPage.
+type ActivityFeedPage struct {
+	Items      []ActivityFeedItem        `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
 
 // ActivityItem defines model for ActivityItem.
 type ActivityItem struct {
@@ -1956,6 +3849,217 @@ type AdminActionProposal struct {
 	TargetType string                  `json:"target_type"`
 }
 
+// AdminUserView Read only. There is no field here an operator can write, and the only mutation the support surface offers is deciding a closure request the user themselves opened (PART 38).
+type AdminUserView struct {
+	Acceptances    *[]TermsAcceptance `json:"acceptances,omitempty"`
+	Accounts       []Account          `json:"accounts"`
+	ActiveSessions int                `json:"active_sessions"`
+
+	// AuditStream Where this user history is recorded, so the support view points at the evidence rather than restating it.
+	AuditStream string `json:"audit_stream"`
+
+	// ClosureBlockers What this person accounts still hold, across every account they own. Effecting a closure is irreversible and puts whatever is left out of their reach, so the decision surface carries the three facts the refusal exists for and the service refuses EFFECT while any of them stands. A blocker means REFUSE with a reason, never a permanent no.
+	ClosureBlockers struct {
+		// Clear Nothing financial stands in the way of effecting.
+		Clear bool `json:"clear"`
+
+		// CreditBalance The gross Credit balance in base units, as a decimal string. Gross and not spendable a disputed or frozen lot is still value that belongs to this person.
+		CreditBalance string `json:"credit_balance"`
+
+		// OpenNativePositions Native-asset positions still holding a non-zero quantity.
+		OpenNativePositions int `json:"open_native_positions"`
+
+		// OpenPayoutRequests Payout requests that have not reached a terminal state.
+		OpenPayoutRequests int `json:"open_payout_requests"`
+
+		// Reasons One sentence per blocker, in a fixed order, written for the operator deciding and for the person who will read the refusal.
+		Reasons []string `json:"reasons"`
+	} `json:"closure_blockers"`
+	ClosureRequest *ClosureRequest `json:"closure_request,omitempty"`
+	CreatedAt      Timestamp       `json:"created_at"`
+
+	// EmailVerified The identity provider asserted a verified address. The address itself is sealed and is not reachable from here.
+	EmailVerified bool   `json:"email_verified"`
+	IdpIssuer     string `json:"idp_issuer"`
+	IdpSubject    string `json:"idp_subject"`
+
+	// Onboarding Timestamps, not a state machine. The steps are independent, may be done in any order, and cannot be undone (D-053).
+	Onboarding *Onboarding `json:"onboarding,omitempty"`
+
+	// Profile Product-level state only. It carries no e-mail address, phone number, legal name or date of birth: those are sealed in identity_pii and this surface has no route to them.
+	Profile      *UserProfile         `json:"profile,omitempty"`
+	Restrictions []AccountRestriction `json:"restrictions"`
+
+	// UserId UUIDv7 in canonical form
+	UserId     UUID                    `json:"user_id"`
+	UserStatus AdminUserViewUserStatus `json:"user_status"`
+
+	// Verification The verification level Nodal has established. known is false when this deployment wired no resolver, which is reported as not known here and never as NONE.
+	Verification struct {
+		Known bool    `json:"known"`
+		Level *string `json:"level,omitempty"`
+	} `json:"verification"`
+}
+
+// AdminUserViewUserStatus defines model for AdminUserView.UserStatus.
+type AdminUserViewUserStatus string
+
+// Agent defines model for Agent.
+type Agent struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+	Archived  bool `json:"archived"`
+
+	// Authority One rung of the authority ladder, rendered from the matrix the code enforces rather than written out beside it. Disabled levels are returned rather than hidden, with the capability each would need.
+	Authority AuthorityLevel `json:"authority"`
+
+	// Budget granted is the ceiling; used is derived from the intents this agent's runs created that reached a state where value is committed. source names where used came from, so a zero is never mistaken for a measurement that was not made.
+	Budget    AgentBudget `json:"budget"`
+	CreatedAt Timestamp   `json:"created_at"`
+	GrantedAt *Timestamp  `json:"granted_at,omitempty"`
+
+	// GrantedByUserId UUIDv7 in canonical form
+	GrantedByUserId *UUID `json:"granted_by_user_id,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id            UUID       `json:"id"`
+	LastRunAt     *Timestamp `json:"last_run_at,omitempty"`
+	LastRunStatus *string    `json:"last_run_status,omitempty"`
+
+	// Limits The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created.
+	Limits    AgentLimits `json:"limits"`
+	Mode      *AgentMode  `json:"mode,omitempty"`
+	Name      string      `json:"name"`
+	Pause     *AgentPause `json:"pause,omitempty"`
+	RunsTotal *int        `json:"runs_total,omitempty"`
+
+	// Runtime What is actually evaluating and executing, derived from agent runs and from which worker processes this deployment runs. It is not the agent's lifecycle state: an agent can be enabled, correct and evaluated by nothing at all, and NOT_DEPLOYED says exactly that.
+	Runtime AgentRuntime `json:"runtime"`
+
+	// Sandbox True when the strategy version this agent deploys was compiled by a compiler that exists only on a sandbox tier. Everything about the agent is then a rehearsal: it is labelled one wherever it is shown, and no real capital can move through it on any deployment.
+	Sandbox bool `json:"sandbox"`
+
+	// Stage The furthest rung of the promotion ladder this agent has reached.
+	Stage AgentStage `json:"stage"`
+	State AgentState `json:"state"`
+
+	// Status The product's own word for the state, which is what a person is actually asking. STOPPED means created and never enabled; ENABLED means the owner granted it the right to be evaluated, which is not the same as something evaluating it - read runtime for that.
+	Status AgentStatus `json:"status"`
+
+	// StrategyId UUIDv7 in canonical form
+	StrategyId UUID `json:"strategy_id"`
+
+	// StrategyVersionId UUIDv7 in canonical form
+	StrategyVersionId UUID       `json:"strategy_version_id"`
+	UpdatedAt         *Timestamp `json:"updated_at,omitempty"`
+}
+
+// AgentMode defines model for Agent.Mode.
+type AgentMode string
+
+// AgentStage The furthest rung of the promotion ladder this agent has reached.
+type AgentStage string
+
+// AgentState defines model for Agent.State.
+type AgentState string
+
+// AgentStatus The product's own word for the state, which is what a person is actually asking. STOPPED means created and never enabled; ENABLED means the owner granted it the right to be evaluated, which is not the same as something evaluating it - read runtime for that.
+type AgentStatus string
+
+// AgentActionRequest defines model for AgentActionRequest.
+type AgentActionRequest struct {
+	Reason *string `json:"reason,omitempty"`
+}
+
+// AgentBudget granted is the ceiling; used is derived from the intents this agent's runs created that reached a state where value is committed. source names where used came from, so a zero is never mistaken for a measurement that was not made.
+type AgentBudget struct {
+	// GrantedCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	GrantedCredits Quantity          `json:"granted_credits"`
+	Source         AgentBudgetSource `json:"source"`
+
+	// UsedCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UsedCredits Quantity `json:"used_credits"`
+}
+
+// AgentBudgetSource defines model for AgentBudget.Source.
+type AgentBudgetSource string
+
+// AgentLimits The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created.
+type AgentLimits struct {
+	AllowedAssetIds []UUID `json:"allowed_asset_ids"`
+
+	// BudgetCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	BudgetCredits Quantity `json:"budget_credits"`
+
+	// DailyLossStopCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	DailyLossStopCredits Quantity `json:"daily_loss_stop_credits"`
+
+	// MaxPositionShareBps Basis points; 10000 == 100%
+	MaxPositionShareBps BPS `json:"max_position_share_bps"`
+
+	// PerTradeCapCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PerTradeCapCredits Quantity `json:"per_trade_cap_credits"`
+
+	// Schedule How often the agent may evaluate. MANUAL carries no interval.
+	Schedule AgentSchedule `json:"schedule"`
+}
+
+// AgentPage defines model for AgentPage.
+type AgentPage struct {
+	// AuthorityLevels Every declared level and whether this build permits it.
+	AuthorityLevels []AuthorityLevel `json:"authority_levels"`
+	Items           []Agent          `json:"items"`
+	NextCursor      *string          `json:"next_cursor,omitempty"`
+}
+
+// AgentPause defines model for AgentPause.
+type AgentPause struct {
+	OpenOrdersPolicy  *AgentPauseOpenOrdersPolicy `json:"open_orders_policy,omitempty"`
+	PausedAt          Timestamp                   `json:"paused_at"`
+	PausedByActorType AgentPausePausedByActorType `json:"paused_by_actor_type"`
+	Reason            string                      `json:"reason"`
+	ReasonCode        string                      `json:"reason_code"`
+}
+
+// AgentPauseOpenOrdersPolicy defines model for AgentPause.OpenOrdersPolicy.
+type AgentPauseOpenOrdersPolicy string
+
+// AgentPausePausedByActorType defines model for AgentPause.PausedByActorType.
+type AgentPausePausedByActorType string
+
+// AgentRuntime What is actually evaluating and executing, derived from agent runs and from which worker processes this deployment runs. It is not the agent's lifecycle state: an agent can be enabled, correct and evaluated by nothing at all, and NOT_DEPLOYED says exactly that.
+type AgentRuntime struct {
+	Detail        string                `json:"detail"`
+	Evaluator     AgentRuntimeEvaluator `json:"evaluator"`
+	Executor      AgentRuntimeExecutor  `json:"executor"`
+	LastHeartbeat *Timestamp            `json:"last_heartbeat,omitempty"`
+}
+
+// AgentRuntimeEvaluator defines model for AgentRuntime.Evaluator.
+type AgentRuntimeEvaluator string
+
+// AgentRuntimeExecutor defines model for AgentRuntime.Executor.
+type AgentRuntimeExecutor string
+
+// AgentSchedule How often the agent may evaluate. MANUAL carries no interval.
+type AgentSchedule struct {
+	IntervalMinutes *int              `json:"interval_minutes,omitempty"`
+	Kind            AgentScheduleKind `json:"kind"`
+}
+
+// AgentScheduleKind defines model for AgentSchedule.Kind.
+type AgentScheduleKind string
+
 // Asset defines model for Asset.
 type Asset struct {
 	Chain    string `json:"chain"`
@@ -1979,6 +4083,18 @@ type AssetKind string
 
 // AssetStatus defines model for Asset.Status.
 type AssetStatus string
+
+// AuthorityLevel One rung of the authority ladder, rendered from the matrix the code enforces rather than written out beside it. Disabled levels are returned rather than hidden, with the capability each would need.
+type AuthorityLevel struct {
+	Enabled            bool               `json:"enabled"`
+	Level              int                `json:"level"`
+	Name               AuthorityLevelName `json:"name"`
+	RequiredCapability *string            `json:"required_capability,omitempty"`
+	Summary            string             `json:"summary"`
+}
+
+// AuthorityLevelName defines model for AuthorityLevel.Name.
+type AuthorityLevelName string
 
 // BPS Basis points; 10000 == 100%
 type BPS = int
@@ -2077,12 +4193,136 @@ type CapabilityGate struct {
 	LegalReviewRef      *string                   `json:"legal_review_ref,omitempty"`
 	ProviderContractRef *string                   `json:"provider_contract_ref,omitempty"`
 	RiskApprovalRef     *string                   `json:"risk_approval_ref,omitempty"`
-	SecurityApprovalRef *string                   `json:"security_approval_ref,omitempty"`
-	State               CapabilityGateState       `json:"state"`
+
+	// Sandbox True when active came from a SANDBOX row on a sandbox tier rather than from dual control. Show the word; an active sandbox gate is not an approval.
+	Sandbox             *bool               `json:"sandbox,omitempty"`
+	SecurityApprovalRef *string             `json:"security_approval_ref,omitempty"`
+	State               CapabilityGateState `json:"state"`
 }
 
 // CapabilityGateState defines model for CapabilityGate.State.
 type CapabilityGateState string
+
+// CapabilityGateTransition defines model for CapabilityGateTransition.
+type CapabilityGateTransition struct {
+	ActorId string `json:"actor_id"`
+
+	// ActorType OPERATOR for a person, SYSTEM for a boot-time sandbox activation
+	ActorType string `json:"actor_type"`
+
+	// EvidenceHash Hex SHA-256 of the evidence references at the time, empty when there were none
+	EvidenceHash *string                      `json:"evidence_hash,omitempty"`
+	From         CapabilityGateTransitionFrom `json:"from"`
+	OccurredAt   time.Time                    `json:"occurred_at"`
+	Reason       string                       `json:"reason"`
+
+	// Sandbox True when the transition entered SANDBOX: never an approval
+	Sandbox bool                       `json:"sandbox"`
+	To      CapabilityGateTransitionTo `json:"to"`
+
+	// TransitionId UUIDv7 in canonical form
+	TransitionId UUID `json:"transition_id"`
+}
+
+// CapabilityGateTransitionFrom defines model for CapabilityGateTransition.From.
+type CapabilityGateTransitionFrom string
+
+// CapabilityGateTransitionTo defines model for CapabilityGateTransition.To.
+type CapabilityGateTransitionTo string
+
+// CloseAccountRequest defines model for CloseAccountRequest.
+type CloseAccountRequest struct {
+	// Reason Optional. A person leaving does not owe an explanation.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// ClosureDecision defines model for ClosureDecision.
+type ClosureDecision struct {
+	Decision ClosureDecisionDecision `json:"decision"`
+	Reason   string                  `json:"reason"`
+}
+
+// ClosureDecisionDecision defines model for ClosureDecision.Decision.
+type ClosureDecisionDecision string
+
+// ClosureRequest defines model for ClosureRequest.
+type ClosureRequest struct {
+	CoolingOffUntil Timestamp  `json:"cooling_off_until"`
+	DecidedAt       *Timestamp `json:"decided_at,omitempty"`
+	DecidedReason   *string    `json:"decided_reason,omitempty"`
+
+	// Effectable The cooling-off period has passed and an operator may now effect the request.
+	Effectable *bool `json:"effectable,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id          UUID                `json:"id"`
+	RequestedAt Timestamp           `json:"requested_at"`
+	State       ClosureRequestState `json:"state"`
+}
+
+// ClosureRequestState defines model for ClosureRequest.State.
+type ClosureRequestState string
+
+// CompileRationale The compiler's own explanation of what it produced, in words, shown beside the rendered strategy on the review step. Never chain-of-thought: a structured compiler's rationale names, element by element, which field you stated it came from.
+type CompileRationale struct {
+	Details []string `json:"details"`
+	Summary string   `json:"summary"`
+}
+
+// CompileResult defines model for CompileResult.
+type CompileResult struct {
+	// AttemptId UUIDv7 in canonical form
+	AttemptId UUID `json:"attempt_id"`
+	AttemptNo int  `json:"attempt_no"`
+
+	// Clarifications What the compiler could not decide. It never guesses.
+	Clarifications *[]string `json:"clarifications,omitempty"`
+	Detail         string    `json:"detail"`
+
+	// FailureCodes Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment has no compiler backend configured, so nothing was attempted and nothing was inferred. STRUCTURED_CONSTRAINTS_REQUIRED means this deployment's compiler reads a strategy you state field by field and the one you sent is missing or incomplete; every field it needed is listed in clarifications.
+	FailureCodes *[]string            `json:"failure_codes,omitempty"`
+	Outcome      CompileResultOutcome `json:"outcome"`
+
+	// Rationale The compiler's own explanation of what it produced, in words, shown beside the rendered strategy on the review step. Never chain-of-thought: a structured compiler's rationale names, element by element, which field you stated it came from.
+	Rationale *CompileRationale `json:"rationale,omitempty"`
+
+	// StrategyId UUIDv7 in canonical form
+	StrategyId UUID             `json:"strategy_id"`
+	Version    *StrategyVersion `json:"version,omitempty"`
+}
+
+// CompileResultOutcome defines model for CompileResult.Outcome.
+type CompileResultOutcome string
+
+// CompilerDescriptor Which compiler this deployment has. Absent means none, which is the same fact compiler_configured reports as false.
+type CompilerDescriptor struct {
+	Name string `json:"name"`
+
+	// Sandbox Every version this compiler produces is a rehearsal and is labelled one.
+	Sandbox bool `json:"sandbox"`
+
+	// Structured True when the compiler reads the fields you state rather than your description. A structured compiler never interprets natural language: an unstated field comes back as a named refusal, never as a default.
+	Structured bool `json:"structured"`
+}
+
+// CreateAgentRequest defines model for CreateAgentRequest.
+type CreateAgentRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AuthorityLevel 0 to 3 are the product. 4, 5 and 6 are declared, disabled by policy, and refused with the capability each would need.
+	AuthorityLevel int `json:"authority_level"`
+
+	// Limits The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created.
+	Limits AgentLimits `json:"limits"`
+	Name   string      `json:"name"`
+
+	// StrategyId UUIDv7 in canonical form
+	StrategyId UUID `json:"strategy_id"`
+
+	// StrategyVersionId UUIDv7 in canonical form
+	StrategyVersionId UUID `json:"strategy_version_id"`
+}
 
 // CreateCreditPurchaseRequest Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write.
 type CreateCreditPurchaseRequest struct {
@@ -2102,9 +4342,6 @@ type CreateInternalProductRequest struct {
 
 	// Kind What is being sold. This is the ONLY input to the provenance decision, so it is closed rather than free text: a kind nobody has decided the payout treatment of must not be sellable.
 	Kind InternalProductKind `json:"kind"`
-
-	// PlatformFeeBps The platform share, capped at 3000 (30%) and rounded DOWN on every sale.
-	PlatformFeeBps *BPS `json:"platform_fee_bps,omitempty"`
 
 	// Price In Credit base units. Fixed for this version once published.
 	Price Quantity `json:"price"`
@@ -2132,6 +4369,40 @@ type CreateNativeAssetRequest struct {
 	Symbol    string   `json:"symbol"`
 }
 
+// CreatePayoutDestination defines model for CreatePayoutDestination.
+type CreatePayoutDestination struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Country ISO 3166-1 alpha-2, and REQUIRED. The provider is asked whether it can pay a recipient there before the destination is registered; without it the question was skipped entirely and a destination the provider had said it could not pay was accepted and marked VERIFIED (D-122).
+	Country       string                      `json:"country"`
+	Currency      *string                     `json:"currency,omitempty"`
+	DisplayLabel  *string                     `json:"display_label,omitempty"`
+	Kind          CreatePayoutDestinationKind `json:"kind"`
+	MaskedDisplay *string                     `json:"masked_display,omitempty"`
+
+	// ProviderToken The provider's token for the destination, or on a sandbox tier a sandbox handle. An input that looks like an account number, a card number, an IBAN, a private key or a seed phrase is REFUSED, not stored: Nodal never holds one.
+	ProviderToken string `json:"provider_token"`
+
+	// Region The subdivision within country, without its country prefix. Required whenever the provider publishes excluded subdivisions for that country, and refused VALIDATION_FAILED when it is missing there: "we do not know which state" is not "any state".
+	Region *string `json:"region,omitempty"`
+}
+
+// CreatePayoutDestinationKind defines model for CreatePayoutDestination.Kind.
+type CreatePayoutDestinationKind string
+
+// CreatePayoutQuote defines model for CreatePayoutQuote.
+type CreatePayoutQuote struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount The GROSS Credits the customer would give up. The fee comes out of it.
+	Amount Quantity `json:"amount"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId UUID `json:"destination_id"`
+}
+
 // CreatePayoutRequest defines model for CreatePayoutRequest.
 type CreatePayoutRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -2144,6 +4415,22 @@ type CreatePayoutRequest struct {
 
 	// DestinationId UUIDv7 in canonical form
 	DestinationId *UUID `json:"destination_id,omitempty"`
+
+	// QuoteId The quote from POST /payouts/quote that the customer was shown, and it is REQUIRED. It is consumed in the same transaction that reserves the value, so one quote funds exactly one payout, and an expired or already-used quote refuses the request before anything is decided about the money. It must name the same destination and the same gross amount. Without it there is no fee and no minimum to judge the payout against, which is how a payout below the provider's published minimum was reserved and settled with the fee never taken (D-119).
+	QuoteId UUID `json:"quote_id"`
+}
+
+// CreateStrategyRequest defines model for CreateStrategyRequest.
+type CreateStrategyRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Constraints The strategy stated field by field. Recorded in its own column beside the description, never merged into it. A structured compiler reads this and nothing else; an incomplete one compiles to STRUCTURED_CONSTRAINTS_REQUIRED naming the fields it needed.
+	Constraints *StructuredStrategy `json:"constraints,omitempty"`
+
+	// Description What you want, in your own words. It is recorded exactly as written and shown back to you unchanged. On a deployment whose compiler is structured it is never read by the compiler and never interpreted.
+	Description string `json:"description"`
+	Name        string `json:"name"`
 }
 
 // CreditBalance The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
@@ -2152,6 +4439,9 @@ type CreditBalance struct {
 	AccountId  UUID                 `json:"account_id"`
 	ByFinality *map[string]Quantity `json:"by_finality,omitempty"`
 	ByOrigin   *map[string]Quantity `json:"by_origin,omitempty"`
+
+	// CreditDecimals The scale of the CREDIT asset every quantity in this response is expressed in. One Credit is 10^credit_decimals base units. It is carried with the figures because a client that has to assume the scale is a client that can render a balance a million times wrong.
+	CreditDecimals int `json:"credit_decimals"`
 
 	// Frozen Exact asset base units as an integer string
 	//
@@ -2178,10 +4468,8 @@ type CreditBalance struct {
 	PolicyHash     *string  `json:"policy_hash,omitempty"`
 	PolicyVersion  string   `json:"policy_version"`
 
-	// Reversed Exact asset base units as an integer string
-	//
-	// Examples: 1500000000
-	Reversed *Quantity `json:"reversed,omitempty"`
+	// Reversed Units whose funding was clawed back and which still have remaining quantity recorded. It should be transient, and it is returned so that it is visible when it is not.
+	Reversed Quantity `json:"reversed"`
 
 	// Spendable Exact asset base units as an integer string
 	//
@@ -2193,13 +4481,28 @@ type CreditBalance struct {
 type CreditOrigin string
 
 // CreditPricing The versioned policy that converts money into Credits. version is recorded on every purchase, so a purchase made under one rate is still explicable after two more have replaced it.
+//
+// Every term of the conversion is published, because a client that has credits_per_major_unit and nothing else cannot compute what it is about to be charged for: the quantity the server issues is `amount_minor * credits_per_major_unit * 10^decimals / minor_units_per_major_unit`, rounded as `rounding` says. Publishing only the rate is what let a page render "100 Credits per 1 USD" over a server that issued a millionth of that.
 type CreditPricing struct {
+	// CreditsPerMajorUnit Whole Credits one major unit of currency buys.
 	CreditsPerMajorUnit int64  `json:"credits_per_major_unit"`
 	Currency            string `json:"currency"`
-	MaxAmountMinor      int64  `json:"max_amount_minor"`
-	MinAmountMinor      int64  `json:"min_amount_minor"`
-	Version             string `json:"version"`
+
+	// Decimals The scale of the CREDIT asset this policy prices, and the scale every Credit quantity in this API is expressed in. One Credit is 10^decimals base units.
+	Decimals       int   `json:"decimals"`
+	MaxAmountMinor int64 `json:"max_amount_minor"`
+	MinAmountMinor int64 `json:"min_amount_minor"`
+
+	// MinorUnitsPerMajorUnit 100 for USD. Stated rather than assumed, so a zero-decimal currency does not silently multiply by 100.
+	MinorUnitsPerMajorUnit int64 `json:"minor_units_per_major_unit"`
+
+	// Rounding How a payment that does not divide evenly into whole base units is resolved.
+	Rounding CreditPricingRounding `json:"rounding"`
+	Version  string                `json:"version"`
 }
+
+// CreditPricingRounding How a payment that does not divide evenly into whole base units is resolved.
+type CreditPricingRounding string
 
 // CreditPurchase defines model for CreditPurchase.
 type CreditPurchase struct {
@@ -2220,16 +4523,25 @@ type CreditPurchase struct {
 	PricingVersion string   `json:"pricing_version"`
 	Provider       string   `json:"provider"`
 
+	// ProviderMode The provider mode that opened THIS payment, recorded on it when it was created. It is absent for a purchase made before the mode was recorded, which is rendered as sandbox rather than as live: an unrecorded mode cannot be asserted to be real money.
+	ProviderMode *CreditPurchaseProviderMode `json:"provider_mode,omitempty"`
+
 	// PurchaseId UUIDv7 in canonical form
 	PurchaseId UUID `json:"purchase_id"`
 
 	// ReversibleAt When the reversibility window opened. The settlement window is measured from here.
 	ReversibleAt *time.Time `json:"reversible_at,omitempty"`
-	SettledAt    *time.Time `json:"settled_at,omitempty"`
+
+	// Sandbox True when the provider this purchase ran through was not a live one: the card was a test card and the Credits it mints are sandbox value. The UI renders such a figure at the simulated temperature and says so; it is a fact about the payment, not a claim about the person, and not the deployment's mode today -- rendering it from today's configuration re-labelled every sandbox purchase a deployment had ever made on the day it went live.
+	Sandbox   *bool      `json:"sandbox,omitempty"`
+	SettledAt *time.Time `json:"settled_at,omitempty"`
 
 	// State The funding lifecycle state. CAPTURED is not SETTLED and REVERSIBLE is not payout-eligible; the difference is a card dispute window that can run for months.
 	State CreditPurchaseState `json:"state"`
 }
+
+// CreditPurchaseProviderMode The provider mode that opened THIS payment, recorded on it when it was created. It is absent for a purchase made before the mode was recorded, which is rendered as sandbox rather than as live: an unrecorded mode cannot be asserted to be real money.
+type CreditPurchaseProviderMode string
 
 // CreditPurchaseState The funding lifecycle state. CAPTURED is not SETTLED and REVERSIBLE is not payout-eligible; the difference is a card dispute window that can run for months.
 type CreditPurchaseState string
@@ -2381,6 +4693,10 @@ type Fill struct {
 
 // FillFinality defines model for Fill.Finality.
 type FillFinality string
+
+// FundingFinality How certain it is that value credited to an account cannot be taken back by whoever supplied it (PART XI). UNFUNDED is value nothing external funded; REVERSIBLE is a card payment inside its dispute window; DISPUTED and REVERSED are a dispute in progress and one that succeeded.
+// Only SETTLED and UNFUNDED may ever be paid out, which is a strictly smaller set than the one that may be SPENT: reversible value buys things and does not leave.
+type FundingFinality string
 
 // GateActionRequest defines model for GateActionRequest.
 type GateActionRequest struct {
@@ -2714,6 +5030,109 @@ type KillSwitchRequest struct {
 // KillSwitchRequestAction defines model for KillSwitchRequest.Action.
 type KillSwitchRequestAction string
 
+// LegalDocument defines model for LegalDocument.
+type LegalDocument struct {
+	Accepted   bool       `json:"accepted"`
+	AcceptedAt *Timestamp `json:"accepted_at,omitempty"`
+
+	// Body The document text, as Markdown, so a client renders exactly what it records acceptance of.
+	Body        *string `json:"body,omitempty"`
+	ContentHash string  `json:"content_hash"`
+
+	// CounselReviewRequired The document has not been reviewed by a lawyer. Every document currently served is marked, and a surface must say so rather than presenting a draft as settled.
+	CounselReviewRequired bool                    `json:"counsel_review_required"`
+	DocumentId            LegalDocumentDocumentId `json:"document_id"`
+
+	// Requirement When acceptance is required. A WITHDRAWAL document is not asked for at signup.
+	Requirement LegalDocumentRequirement `json:"requirement"`
+	Title       string                   `json:"title"`
+	Version     string                   `json:"version"`
+}
+
+// LegalDocumentDocumentId defines model for LegalDocument.DocumentId.
+type LegalDocumentDocumentId string
+
+// LegalDocumentRequirement When acceptance is required. A WITHDRAWAL document is not asked for at signup.
+type LegalDocumentRequirement string
+
+// MarkedRead defines model for MarkedRead.
+type MarkedRead struct {
+	Updated int `json:"updated"`
+}
+
+// MarketSafetyLimits The limits in force on this market right now (product goal section 47), from two documents: the market-safety policy, which is about the venue, and the risk kernel's GLOBAL policy, which is about an account.
+type MarketSafetyLimits struct {
+	CircuitBreakerMoveBps       *int64 `json:"circuit_breaker_move_bps,omitempty"`
+	CircuitBreakerWindowSeconds *int   `json:"circuit_breaker_window_seconds,omitempty"`
+	CreatorMayBuyOwnAsset       *bool  `json:"creator_may_buy_own_asset,omitempty"`
+
+	// MaxCreatorConcentrationBps Basis points; 10000 == 100%
+	MaxCreatorConcentrationBps *BPS `json:"max_creator_concentration_bps,omitempty"`
+
+	// MaxNativeMarketConcentrationBps Basis points; 10000 == 100%
+	MaxNativeMarketConcentrationBps *BPS `json:"max_native_market_concentration_bps,omitempty"`
+
+	// MaxPriceImpactBps Basis points; 10000 == 100%
+	MaxPriceImpactBps *BPS `json:"max_price_impact_bps,omitempty"`
+
+	// MaxSlippageBps Basis points; 10000 == 100%
+	MaxSlippageBps *BPS `json:"max_slippage_bps,omitempty"`
+
+	// MinOpeningLiquidityCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MinOpeningLiquidityCredits *Quantity `json:"min_opening_liquidity_credits,omitempty"`
+	RiskPolicyVersion          *string   `json:"risk_policy_version,omitempty"`
+	SafetyPolicyVersion        string    `json:"safety_policy_version"`
+}
+
+// MeAuditEntry defines model for MeAuditEntry.
+type MeAuditEntry struct {
+	Action string `json:"action"`
+
+	// ActorType Who acted, by category. The operator's identity is never exposed to a customer.
+	ActorType    *string   `json:"actor_type,omitempty"`
+	Id           string    `json:"id"`
+	Ip           *string   `json:"ip,omitempty"`
+	OccurredAt   Timestamp `json:"occurred_at"`
+	ResourceId   *string   `json:"resource_id,omitempty"`
+	ResourceType *string   `json:"resource_type,omitempty"`
+	Severity     *string   `json:"severity,omitempty"`
+
+	// Source SECURITY is the sign-in and session trail; ACCOUNT is what was done to the caller's own accounts.
+	Source    MeAuditEntrySource `json:"source"`
+	UserAgent *string            `json:"user_agent,omitempty"`
+}
+
+// MeAuditEntrySource SECURITY is the sign-in and session trail; ACCOUNT is what was done to the caller's own accounts.
+type MeAuditEntrySource string
+
+// MeAuditPage defines model for MeAuditPage.
+type MeAuditPage struct {
+	Items      []MeAuditEntry            `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// MinorUSD An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float.
+type MinorUSD = string
+
+// MyAccount defines model for MyAccount.
+type MyAccount struct {
+	Accounts       []Account       `json:"accounts"`
+	ClosureRequest *ClosureRequest `json:"closure_request,omitempty"`
+
+	// CoolingOffDays How long a new closure request would wait before it could be effected.
+	CoolingOffDays int                  `json:"cooling_off_days"`
+	Restrictions   []AccountRestriction `json:"restrictions"`
+
+	// UserId UUIDv7 in canonical form
+	UserId     UUID                `json:"user_id"`
+	UserStatus MyAccountUserStatus `json:"user_status"`
+}
+
+// MyAccountUserStatus defines model for MyAccount.UserStatus.
+type MyAccountUserStatus string
+
 // NativeAsset defines model for NativeAsset.
 type NativeAsset struct {
 	ActivatedAt *Timestamp `json:"activated_at,omitempty"`
@@ -2744,6 +5163,21 @@ type NativeAssetModerationState string
 // NativeAssetStatus defines model for NativeAsset.Status.
 type NativeAssetStatus string
 
+// NativeAssetHolder One place in an asset's holder concentration. It says how much and how large a share, and it does not say whose: `top_holders` used to render an account id to any signed-in caller, which made every market's largest positions readable by account and watchable trade by trade. The caller's own row is marked `is_you`, which tells them nothing they did not send. A named holder list is surveillance and belongs behind `native_market:surveil` on an operator route (D-111).
+type NativeAssetHolder struct {
+	// IsYou This row is the calling account's own holding. Present only where the request named an account the caller owns.
+	IsYou *bool `json:"is_you,omitempty"`
+
+	// Quantity Base units, at the ASSET's decimals.
+	Quantity Quantity `json:"quantity"`
+
+	// Rank 1 is the largest holder of this asset. The rank is over every holder, not over the returned page, so rank 10 on a page of ten means there are more.
+	Rank int `json:"rank"`
+
+	// ShareBps This holding as a share of every unit accounts hold, truncated. The denominator is the sum of customer balances rather than the circulating supply, because units still in the pool are held by nobody and a creator's allocation is minted outside the curve, so a share of circulating supply can exceed 100%. This one cannot.
+	ShareBps BPS `json:"share_bps"`
+}
+
 // NativeAssetPage defines model for NativeAssetPage.
 type NativeAssetPage struct {
 	Items []NativeAsset `json:"items"`
@@ -2760,6 +5194,59 @@ type NativeAssetPolicy struct {
 	MinimumAge             int     `json:"minimum_age"`
 	Transferable           bool    `json:"transferable"`
 }
+
+// NativeCandle defines model for NativeCandle.
+type NativeCandle struct {
+	// AssetVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetVolume Quantity `json:"asset_volume"`
+
+	// Close Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Close Quantity `json:"close"`
+
+	// CreditVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditVolume Quantity `json:"credit_volume"`
+
+	// High Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	High Quantity `json:"high"`
+
+	// Low Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Low Quantity `json:"low"`
+
+	// Open Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Open     Quantity  `json:"open"`
+	OpenTime Timestamp `json:"open_time"`
+	Trades   int64     `json:"trades"`
+}
+
+// NativeCandlePage defines model for NativeCandlePage.
+type NativeCandlePage struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// Candles Oldest first. A bucket with no trades is absent, never filled forward.
+	Candles  []NativeCandle           `json:"candles"`
+	From     Timestamp                `json:"from"`
+	Interval NativeCandlePageInterval `json:"interval"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId   UUID      `json:"market_id"`
+	PriceScale int       `json:"price_scale"`
+	To         Timestamp `json:"to"`
+}
+
+// NativeCandlePageInterval defines model for NativeCandlePage.Interval.
+type NativeCandlePageInterval string
 
 // NativeFill defines model for NativeFill.
 type NativeFill struct {
@@ -2884,16 +5371,8 @@ type NativeMarket struct {
 	StateVersion int64              `json:"state_version"`
 	Status       NativeMarketStatus `json:"status"`
 
-	// TopHolders Holder concentration, which is the number a buyer most needs to see
-	TopHolders *[]struct {
-		// AccountId UUIDv7 in canonical form
-		AccountId *UUID `json:"account_id,omitempty"`
-
-		// Quantity Exact asset base units as an integer string
-		//
-		// Examples: 1500000000
-		Quantity *Quantity `json:"quantity,omitempty"`
-	} `json:"top_holders,omitempty"`
+	// TopHolders Holder concentration, which is the number a buyer most needs to see. It names nobody; see NativeAssetHolder. This read takes no account, so no row is marked `is_you`.
+	TopHolders *[]NativeAssetHolder `json:"top_holders,omitempty"`
 
 	// VirtualCreditReserve Exact asset base units as an integer string
 	//
@@ -2903,6 +5382,134 @@ type NativeMarket struct {
 
 // NativeMarketStatus defines model for NativeMarket.Status.
 type NativeMarketStatus string
+
+// NativeMarketDetail defines model for NativeMarketDetail.
+type NativeMarketDetail struct {
+	// CreatorAccountId The creator's account id, which is the handle placeholder. A display name belongs to the profile domain and is joined later; inventing one here would be a second source for it. It is on the DETAIL response rather than on the summary because the summary is served unauthenticated by the markets list (D-110).
+	CreatorAccountId *UUID `json:"creator_account_id,omitempty"`
+
+	// LimitsInForce The limits in force on this market right now (product goal section 47), from two documents: the market-safety policy, which is about the venue, and the risk kernel's GLOBAL policy, which is about an account.
+	LimitsInForce MarketSafetyLimits `json:"limits_in_force"`
+
+	// Market One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string.
+	//
+	// It carries no account identity, because the markets list that returns it is unauthenticated: an identifier on a public page is both readable and enumerable by anybody. The creator is a field of NativeMarketDetail, which only a signed-in caller can reach (D-110).
+	Market NativeMarketSummary `json:"market"`
+
+	// TopHolders Holder concentration, which is the number a buyer most needs to see. It names nobody; see NativeAssetHolder.
+	TopHolders *[]NativeAssetHolder `json:"top_holders,omitempty"`
+}
+
+// NativeMarketPage defines model for NativeMarketPage.
+type NativeMarketPage struct {
+	Markets    []NativeMarketSummary     `json:"markets"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+	Sort       NativeMarketPageSort      `json:"sort"`
+
+	// Stable Whether paging this ordering sees every market exactly once. Only NEWEST does; the others rank by figures that move when somebody trades.
+	Stable bool `json:"stable"`
+}
+
+// NativeMarketPageSort defines model for NativeMarketPage.Sort.
+type NativeMarketPageSort string
+
+// NativeMarketSummary One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string.
+//
+// It carries no account identity, because the markets list that returns it is unauthenticated: an identifier on a public page is both readable and enumerable by anybody. The creator is a field of NativeMarketDetail, which only a signed-in caller can reach (D-110).
+type NativeMarketSummary struct {
+	ActivatedAt   *Timestamp `json:"activated_at,omitempty"`
+	AssetDecimals int        `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// AssetReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetReserve Quantity                       `json:"asset_reserve"`
+	AssetStatus  NativeMarketSummaryAssetStatus `json:"asset_status"`
+
+	// Change24hBps Signed move over the last 24 hours. Meaningless unless has_24h_change.
+	Change24hBps *int64 `json:"change_24h_bps,omitempty"`
+
+	// CirculatingSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CirculatingSupply Quantity  `json:"circulating_supply"`
+	CreatedAt         Timestamp `json:"created_at"`
+
+	// CreatorFeeBps Basis points; 10000 == 100%
+	CreatorFeeBps BPS `json:"creator_fee_bps"`
+
+	// CreditAssetId UUIDv7 in canonical form
+	CreditAssetId UUID `json:"credit_asset_id"`
+
+	// CreditVolume24h Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditVolume24h Quantity `json:"credit_volume_24h"`
+
+	// Demo This object was created by the sandbox demo seeder. It exists only on a sandbox tier and represents nothing.
+	Demo        bool    `json:"demo"`
+	Description *string `json:"description,omitempty"`
+
+	// Has24hChange False when the market has not traded in the window, which is a different fact from having moved nothing.
+	Has24hChange *bool   `json:"has_24h_change,omitempty"`
+	ImageUrl     *string `json:"image_url,omitempty"`
+
+	// InitialAssetReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialAssetReserve Quantity `json:"initial_asset_reserve"`
+
+	// LastPrice The MARGINAL price -- what the next base unit costs -- at price_scale.
+	LastPrice Quantity `json:"last_price"`
+
+	// LiquidityCredits V + R, the depth the curve prices against.
+	LiquidityCredits Quantity `json:"liquidity_credits"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId     UUID                            `json:"market_id"`
+	MarketStatus NativeMarketSummaryMarketStatus `json:"market_status"`
+
+	// MaxSupply Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaxSupply       Quantity                            `json:"max_supply"`
+	ModerationState *NativeMarketSummaryModerationState `json:"moderation_state,omitempty"`
+	Name            string                              `json:"name"`
+
+	// PlatformFeeBps Basis points; 10000 == 100%
+	PlatformFeeBps BPS `json:"platform_fee_bps"`
+
+	// PriceScale Decimal places every price here carries
+	PriceScale int `json:"price_scale"`
+
+	// RealCreditReserve R -- the only Credits in this pool that could ever be paid out.
+	RealCreditReserve Quantity `json:"real_credit_reserve"`
+
+	// ReferencePrice24h Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	ReferencePrice24h *Quantity `json:"reference_price_24h,omitempty"`
+	StateVersion      *int64    `json:"state_version,omitempty"`
+	Symbol            string    `json:"symbol"`
+	Trades24h         int64     `json:"trades_24h"`
+
+	// VirtualCreditReserve Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	VirtualCreditReserve Quantity `json:"virtual_credit_reserve"`
+}
+
+// NativeMarketSummaryAssetStatus defines model for NativeMarketSummary.AssetStatus.
+type NativeMarketSummaryAssetStatus string
+
+// NativeMarketSummaryMarketStatus defines model for NativeMarketSummary.MarketStatus.
+type NativeMarketSummaryMarketStatus string
+
+// NativeMarketSummaryModerationState defines model for NativeMarketSummary.ModerationState.
+type NativeMarketSummaryModerationState string
 
 // NativeOrderRequest defines model for NativeOrderRequest.
 type NativeOrderRequest struct {
@@ -2927,7 +5534,7 @@ type NativeOrderRequestSide string
 
 // NativeQuote defines model for NativeQuote.
 type NativeQuote struct {
-	// AssetDecimals Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, at price_scale.
+	// AssetDecimals Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, and they are NOT on one scale between them: platform_fee and creator_fee are taken out of the Credit amount and carry the Credit asset's own decimals, while effective_price and spot_price_before are ratios computed at price_scale. Rendering a fee at price_scale divides it by a million million.
 	AssetDecimals *int `json:"asset_decimals,omitempty"`
 
 	// CreatorFee Exact asset base units as an integer string
@@ -3012,6 +5619,136 @@ type NativeSupply struct {
 	// Examples: 1500000000
 	TreasuryAllocation Quantity `json:"treasury_allocation"`
 }
+
+// NativeTradePage defines model for NativeTradePage.
+type NativeTradePage struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId   UUID               `json:"market_id"`
+	PriceScale int                `json:"price_scale"`
+	Trades     []NativeTradePrint `json:"trades"`
+}
+
+// NativeTradePrint One public print. It carries no account identity, by design.
+type NativeTradePrint struct {
+	// AssetVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AssetVolume Quantity `json:"asset_volume"`
+
+	// CreditVolume Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CreditVolume Quantity `json:"credit_volume"`
+
+	// EffectivePrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EffectivePrice Quantity             `json:"effective_price"`
+	PrintedAt      Timestamp            `json:"printed_at"`
+	Seq            int64                `json:"seq"`
+	Side           NativeTradePrintSide `json:"side"`
+
+	// SpotPriceAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPriceAfter Quantity `json:"spot_price_after"`
+
+	// SpotPriceBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPriceBefore *Quantity `json:"spot_price_before,omitempty"`
+}
+
+// NativeTradePrintSide defines model for NativeTradePrint.Side.
+type NativeTradePrintSide string
+
+// Notification defines model for Notification.
+type Notification struct {
+	AccountId nullable.Nullable[openapi_types.UUID] `json:"account_id,omitempty"`
+	Body      string                                `json:"body"`
+
+	// Data Identifiers and state names only; never a balance. Canonical figures come from REST.
+	Data *map[string]interface{} `json:"data,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Kind What a notification is about. The list is the product vocabulary; the nine names migration 00640 declared and nothing produces are not accepted here.
+	Kind         NotificationKind             `json:"kind"`
+	OccurredAt   Timestamp                    `json:"occurred_at"`
+	ReadAt       nullable.Nullable[time.Time] `json:"read_at,omitempty"`
+	ResourceId   *string                      `json:"resource_id,omitempty"`
+	ResourceType *string                      `json:"resource_type,omitempty"`
+
+	// Sandbox True when this notification was produced on a sandbox tier and describes nothing of real value (ADR-0023).
+	Sandbox  bool                 `json:"sandbox"`
+	Severity NotificationSeverity `json:"severity"`
+	Title    string               `json:"title"`
+}
+
+// NotificationSeverity defines model for Notification.Severity.
+type NotificationSeverity string
+
+// NotificationKind What a notification is about. The list is the product vocabulary; the nine names migration 00640 declared and nothing produces are not accepted here.
+type NotificationKind string
+
+// NotificationPage defines model for NotificationPage.
+type NotificationPage struct {
+	Items      []Notification            `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+}
+
+// NotificationPreference defines model for NotificationPreference.
+type NotificationPreference struct {
+	// Channel The only delivery channel that exists. No e-mail, SMS or push provider is configured anywhere in this system.
+	Channel NotificationPreferenceChannel `json:"channel"`
+	Enabled bool                          `json:"enabled"`
+
+	// Enforced False where the kind cannot be switched off -- a new sign-in, an account restriction, a reversed purchase, a failed payout, a system message. The stored answer is kept and ignored, and a settings page should show the switch as fixed rather than one that does nothing.
+	Enforced bool `json:"enforced"`
+
+	// Kind What a notification is about. The list is the product vocabulary; the nine names migration 00640 declared and nothing produces are not accepted here.
+	Kind NotificationKind `json:"kind"`
+}
+
+// NotificationPreferenceChannel The only delivery channel that exists. No e-mail, SMS or push provider is configured anywhere in this system.
+type NotificationPreferenceChannel string
+
+// NotificationPreferences defines model for NotificationPreferences.
+type NotificationPreferences struct {
+	Items []NotificationPreference `json:"items"`
+}
+
+// NotificationPreferencesUpdate defines model for NotificationPreferencesUpdate.
+type NotificationPreferencesUpdate struct {
+	Items []struct {
+		Enabled bool `json:"enabled"`
+
+		// Kind What a notification is about. The list is the product vocabulary; the nine names migration 00640 declared and nothing produces are not accepted here.
+		Kind NotificationKind `json:"kind"`
+	} `json:"items"`
+}
+
+// Onboarding Timestamps, not a state machine. The steps are independent, may be done in any order, and cannot be undone (D-053).
+type Onboarding struct {
+	Complete    bool                `json:"complete"`
+	CompletedAt *Timestamp          `json:"completed_at,omitempty"`
+	NextStep    *OnboardingNextStep `json:"next_step,omitempty"`
+	StartedAt   Timestamp           `json:"started_at"`
+	Steps       []struct {
+		Complete    bool               `json:"complete"`
+		CompletedAt *Timestamp         `json:"completed_at,omitempty"`
+		Key         OnboardingStepsKey `json:"key"`
+	} `json:"steps"`
+}
+
+// OnboardingNextStep defines model for Onboarding.NextStep.
+type OnboardingNextStep string
+
+// OnboardingStepsKey defines model for Onboarding.Steps.Key.
+type OnboardingStepsKey string
 
 // Order defines model for Order.
 type Order struct {
@@ -3144,11 +5881,125 @@ type Page struct {
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
 }
 
+// PayoutDestination Nodal stores the provider's token and a mask. There is no account number, card number, IBAN, routing number or key in this object, and there is none in the table behind it.
+type PayoutDestination struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID      `json:"account_id"`
+	Country   *string   `json:"country,omitempty"`
+	CreatedAt Timestamp `json:"created_at"`
+	Currency  *string   `json:"currency,omitempty"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId UUID                  `json:"destination_id"`
+	DisplayLabel  *string               `json:"display_label,omitempty"`
+	Kind          PayoutDestinationKind `json:"kind"`
+
+	// MaskedDisplay What a person recognises, such as "••••4242". Never the whole number.
+	MaskedDisplay *string `json:"masked_display,omitempty"`
+
+	// OpenPayoutIds Present only on the response to DELETE /me/payout-destinations/{id}: the conversion requests that still point at this destination and are not finished. A reserved payout is refused at submission once its destination stops being usable and stays VERIFIED with its value held out of the balance, so the holder is told here which payouts to cancel rather than left to discover that their money is stuck.
+	OpenPayoutIds *[]UUID `json:"open_payout_ids,omitempty"`
+	Provider      string  `json:"provider"`
+
+	// Region The subdivision this pays into, where the provider distinguishes them.
+	Region  *string `json:"region,omitempty"`
+	Sandbox bool    `json:"sandbox"`
+
+	// Status UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing names are kept because working code and a registered enum pairing use them (D-060). REJECTED and DISABLED are terminal: a destination never comes back, and adding it again is a new registration.
+	Status PayoutDestinationStatus `json:"status"`
+
+	// Usable Whether a payout may be sent here right now.
+	Usable     *bool      `json:"usable,omitempty"`
+	VerifiedAt *Timestamp `json:"verified_at,omitempty"`
+}
+
+// PayoutDestinationKind defines model for PayoutDestination.Kind.
+type PayoutDestinationKind string
+
+// PayoutDestinationStatus UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing names are kept because working code and a registered enum pairing use them (D-060). REJECTED and DISABLED are terminal: a destination never comes back, and adding it again is a new registration.
+type PayoutDestinationStatus string
+
+// PayoutProvenanceSlice One provenance's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first.
+// A provenance is an origin, an origin floor AND a root set. Two slices can carry the same `origin` and different `origin_floor` values -- trading proceeds out of a settled purchase and trading proceeds out of a promotional grant are one origin and are not one kind of money -- and two more can share both and differ in `root_origins`, which is what the policy actually reads. All of them are reported separately rather than summed (D-136, D-141).
+type PayoutProvenanceSlice struct {
+	ConsumptionRank int `json:"consumption_rank"`
+
+	// Origin Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+	Origin CreditOrigin `json:"origin"`
+
+	// OriginFloor What these units ultimately came from: the most restricted origin anywhere in their provenance. Equal to `origin` for value nothing else funded.
+	OriginFloor *CreditOrigin `json:"origin_floor,omitempty"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Returned True for a slice a cancellation gave back to the exact lots it came from.
+	Returned *bool `json:"returned,omitempty"`
+
+	// RootOrigins Every origin these units ultimately came from. It is what the payout policy reads -- value is released only when the policy releases its own origin and all of these -- and `origin_floor` is the most restricted of it. Two slices can share an origin AND a floor and differ here, because the floor is a minimum and two sets share a minimum whenever they share their most restricted member; they are reported separately rather than summed (D-141).
+	RootOrigins *[]CreditOrigin `json:"root_origins,omitempty"`
+}
+
+// PayoutQuote What the provider said a payout would cost, before anybody committed. Both sides are exact integers; there is no rate field holding a decimal.
+type PayoutQuote struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId  UUID       `json:"account_id"`
+	ConsumedAt *Timestamp `json:"consumed_at,omitempty"`
+	CreatedAt  *Timestamp `json:"created_at,omitempty"`
+	Currency   string     `json:"currency"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId  UUID      `json:"destination_id"`
+	ExpiresAt      Timestamp `json:"expires_at"`
+	FeeAmountMinor int64     `json:"fee_amount_minor"`
+
+	// FeeModelVersion Which fee schedule produced these numbers. On a sandbox tier it says in words that the figures are placeholders and not a price anybody has agreed.
+	FeeModelVersion *string `json:"fee_model_version,omitempty"`
+
+	// FeeQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FeeQuantity      Quantity `json:"fee_quantity"`
+	GrossAmountMinor int64    `json:"gross_amount_minor"`
+
+	// GrossQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	GrossQuantity      Quantity `json:"gross_quantity"`
+	MinimumAmountMinor *int64   `json:"minimum_amount_minor,omitempty"`
+
+	// MinimumOk Judged NET of fees, because sub-minimum dust is destroyed rather than returned.
+	MinimumOk      bool  `json:"minimum_ok"`
+	NetAmountMinor int64 `json:"net_amount_minor"`
+
+	// NetQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	NetQuantity    Quantity `json:"net_quantity"`
+	PolicyVersion  *string  `json:"policy_version,omitempty"`
+	PricingVersion *string  `json:"pricing_version,omitempty"`
+
+	// Provenance What value would leave, in the order it would leave.
+	Provenance *[]PayoutProvenanceSlice `json:"provenance,omitempty"`
+	Provider   string                   `json:"provider"`
+
+	// QuoteId UUIDv7 in canonical form
+	QuoteId UUID `json:"quote_id"`
+	Sandbox bool `json:"sandbox"`
+}
+
 // PayoutRequest defines model for PayoutRequest.
 type PayoutRequest struct {
 	// AccountId UUIDv7 in canonical form
 	AccountId UUID       `json:"account_id"`
-	CreatedAt *Timestamp `json:"created_at,omitempty"`
+	BlockedAt *time.Time `json:"blocked_at,omitempty"`
+
+	// BlockedReason Why this reserved payout cannot be sent, in words its holder can read, absent when nothing is blocking it. It is NOT a failure and NOT a state: the request is still VERIFIED and its Credits are still reserved, and cancelling it is what releases them.
+	// The case it exists for is a destination the holder removed after asking. The payout stays reserved deliberately -- failing it would return the reservation on the strength of a fact the person can undo -- and until F-277 the request simply read VERIFIED, which reads as "on its way". A client showing this must show the cancel control beside it. There is no route that re-points a payout at a different destination; a new destination is a new request.
+	BlockedReason *string    `json:"blocked_reason,omitempty"`
+	CreatedAt     *Timestamp `json:"created_at,omitempty"`
 
 	// DestinationId UUIDv7 in canonical form
 	DestinationId      *UUID     `json:"destination_id,omitempty"`
@@ -3163,6 +6014,23 @@ type PayoutRequest struct {
 	PolicyHash    *string `json:"policy_hash,omitempty"`
 	PolicyVersion string  `json:"policy_version"`
 
+	// Provenance What value is leaving, in the order it leaves (§23). A payout does not take "500 Credits"; it takes specific units from specific provenance lots, and this is which.
+	Provenance *[]PayoutProvenanceSlice `json:"provenance,omitempty"`
+
+	// Provider The payout provider this request was claimed for, once it has been.
+	Provider *string `json:"provider,omitempty"`
+
+	// QuoteId The pre-commitment quote this payout was created against.
+	QuoteId              *UUID   `json:"quote_id,omitempty"`
+	QuotedCurrency       *string `json:"quoted_currency,omitempty"`
+	QuotedFeeAmountMinor *int64  `json:"quoted_fee_amount_minor,omitempty"`
+
+	// QuotedGrossAmountMinor The gross the customer was shown, in minor units of quoted_currency. Recorded on the request rather than re-derived, so a fee schedule repriced later cannot change what this payout says it sent.
+	QuotedGrossAmountMinor *int64 `json:"quoted_gross_amount_minor,omitempty"`
+
+	// QuotedNetAmountMinor What the customer was told would reach them. It is what the provider is instructed to send.
+	QuotedNetAmountMinor *int64 `json:"quoted_net_amount_minor,omitempty"`
+
 	// RequestedQuantity Exact asset base units as an integer string
 	//
 	// Examples: 1500000000
@@ -3173,6 +6041,9 @@ type PayoutRequest struct {
 	//
 	// Examples: 1500000000
 	ReservedQuantity Quantity `json:"reserved_quantity"`
+
+	// Sandbox True when this payout was a rehearsal. It is recorded on the request at creation, from the provider's availability and the deployment's own tier, rather than read from today's provider mode -- so the list, the create response and the by-id read agree, and a deployment that swaps its provider does not silently relabel its history (D-096's treatment, F-232).
+	Sandbox *bool `json:"sandbox,omitempty"`
 
 	// SettledQuantity Exact asset base units as an integer string
 	//
@@ -3192,14 +6063,141 @@ type PayoutRequestPage struct {
 	Items []PayoutRequest `json:"items"`
 }
 
+// Portfolio defines model for Portfolio.
+type Portfolio struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AsOf The instant every mark-to-market figure here was computed at. A number on a screen that does not say when it was true is a number nobody can act on.
+	AsOf Timestamp `json:"as_of"`
+
+	// Credits The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
+	Credits   CreditBalance       `json:"credits"`
+	Positions []PortfolioPosition `json:"positions"`
+
+	// Temperature The temperature of this deployment's Credits as a whole.
+	Temperature ValueTemperature `json:"temperature"`
+	Totals      PortfolioTotals  `json:"totals"`
+}
+
+// PortfolioPosition One native position. quantity, cost_basis_credits, realized_pnl_credits and fees_paid_credits are the read model migration 00772 maintains from the fills; market_value_credits and unrealized_pnl_credits are computed at as_of from the market's marginal price.
+type PortfolioPosition struct {
+	// AllocationUnits Units granted to the creator at the mint, at zero cost.
+	AllocationUnits *Quantity `json:"allocation_units,omitempty"`
+	AssetDecimals   int       `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// AverageCostCredits Cost of one base unit at price_scale. Absent on a closed position.
+	AverageCostCredits *Quantity `json:"average_cost_credits,omitempty"`
+
+	// CostBasisCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CostBasisCredits Quantity `json:"cost_basis_credits"`
+	Demo             *bool    `json:"demo,omitempty"`
+
+	// FeesPaidCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FeesPaidCredits Quantity   `json:"fees_paid_credits"`
+	FillCount       *int64     `json:"fill_count,omitempty"`
+	FirstAcquiredAt *Timestamp `json:"first_acquired_at,omitempty"`
+	LastTradeAt     *Timestamp `json:"last_trade_at,omitempty"`
+
+	// MarketId UUIDv7 in canonical form
+	MarketId     *UUID                          `json:"market_id,omitempty"`
+	MarketStatus *PortfolioPositionMarketStatus `json:"market_status,omitempty"`
+
+	// MarketValueCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValueCredits Quantity `json:"market_value_credits"`
+	Name               *string  `json:"name,omitempty"`
+	PriceScale         int      `json:"price_scale"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// RealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	RealizedPnlCredits SignedQuantity `json:"realized_pnl_credits"`
+
+	// SpotPrice Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	SpotPrice *Quantity `json:"spot_price,omitempty"`
+	Symbol    string    `json:"symbol"`
+
+	// Temperature What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+	Temperature ValueTemperature `json:"temperature"`
+
+	// TotalPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	TotalPnlCredits SignedQuantity `json:"total_pnl_credits"`
+
+	// UnitsBoughtTotal Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnitsBoughtTotal *Quantity `json:"units_bought_total,omitempty"`
+
+	// UnitsSoldTotal Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnitsSoldTotal *Quantity `json:"units_sold_total,omitempty"`
+
+	// UnrealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	UnrealizedPnlCredits SignedQuantity `json:"unrealized_pnl_credits"`
+}
+
+// PortfolioPositionMarketStatus defines model for PortfolioPosition.MarketStatus.
+type PortfolioPositionMarketStatus string
+
+// PortfolioTotals defines model for PortfolioTotals.
+type PortfolioTotals struct {
+	// CostBasisCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CostBasisCredits Quantity `json:"cost_basis_credits"`
+
+	// FeesPaidCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FeesPaidCredits Quantity `json:"fees_paid_credits"`
+
+	// MarketValueCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValueCredits Quantity `json:"market_value_credits"`
+	OpenPositionCount  int      `json:"open_position_count"`
+	PositionCount      int      `json:"position_count"`
+
+	// RealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	RealizedPnlCredits SignedQuantity `json:"realized_pnl_credits"`
+
+	// TotalPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	TotalPnlCredits SignedQuantity `json:"total_pnl_credits"`
+
+	// UnrealizedPnlCredits An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+	UnrealizedPnlCredits SignedQuantity `json:"unrealized_pnl_credits"`
+}
+
 // Principal defines model for Principal.
 type Principal struct {
-	AccountIds       []UUID             `json:"account_ids"`
-	ActorType        PrincipalActorType `json:"actor_type"`
-	Amr              []string           `json:"amr"`
-	AuthTime         Timestamp          `json:"auth_time"`
-	Roles            []string           `json:"roles"`
-	StepUpValidUntil *Timestamp         `json:"step_up_valid_until,omitempty"`
+	AccountIds      []UUID             `json:"account_ids"`
+	ActorType       PrincipalActorType `json:"actor_type"`
+	Amr             []string           `json:"amr"`
+	AuthTime        Timestamp          `json:"auth_time"`
+	BreakGlassUntil *Timestamp         `json:"break_glass_until,omitempty"`
+
+	// Onboarding Timestamps, not a state machine. The steps are independent, may be done in any order, and cannot be undone (D-053).
+	Onboarding *Onboarding `json:"onboarding,omitempty"`
+
+	// Profile Product-level state only. It carries no e-mail address, phone number, legal name or date of birth: those are sealed in identity_pii and this surface has no route to them.
+	Profile          *UserProfile `json:"profile,omitempty"`
+	Roles            []string     `json:"roles"`
+	StepUpValidUntil *Timestamp   `json:"step_up_valid_until,omitempty"`
 
 	// SubjectId UUIDv7 in canonical form
 	SubjectId UUID `json:"subject_id"`
@@ -3210,7 +6208,7 @@ type PrincipalActorType string
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code Stable machine-readable code (INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …)
+	// Code Stable machine-readable code (BODY_TOO_LARGE, INSUFFICIENT_BUYING_POWER, ACCOUNT_FROZEN, ASSET_RESTRICTED, VENUE_UNAVAILABLE, QUOTE_EXPIRED, RISK_MAX_POSITION, RISK_DAILY_LOSS, ELIGIBILITY_JURISDICTION, CAPABILITY_NOT_APPROVED, SUBMISSION_STATE_UNKNOWN, RECONCILIATION_REQUIRED, PROVIDER_UNAVAILABLE, STALE_MARKET_DATA, INVALID_IDEMPOTENCY_REUSE, KILL_SWITCH_ACTIVE, NO_VALID_PLAN, …)
 	Code      string                  `json:"code"`
 	Detail    *string                 `json:"detail,omitempty"`
 	Fields    *map[string]interface{} `json:"fields,omitempty"`
@@ -3219,6 +6217,14 @@ type Problem struct {
 	Status    int                     `json:"status"`
 	Title     string                  `json:"title"`
 	Type      string                  `json:"type"`
+}
+
+// ProfileUpdate Only the fields present are changed. An empty handle clears it.
+type ProfileUpdate struct {
+	DisplayName *string `json:"display_name,omitempty"`
+	Handle      *string `json:"handle,omitempty"`
+	Locale      *string `json:"locale,omitempty"`
+	TimeZone    *string `json:"time_zone,omitempty"`
 }
 
 // ProviderStatus defines model for ProviderStatus.
@@ -3242,6 +6248,19 @@ type ProviderStatusMode string
 
 // ProviderStatusVerification defines model for ProviderStatus.Verification.
 type ProviderStatusVerification string
+
+// PublicLegalDocument A served legal document without any person's acceptance state.
+type PublicLegalDocument struct {
+	Body string `json:"body"`
+
+	// ContentHash sha256 of the exact body bytes; an acceptance records this hash
+	ContentHash           string `json:"content_hash"`
+	CounselReviewRequired bool   `json:"counsel_review_required"`
+	DocumentId            string `json:"document_id"`
+	Requirement           string `json:"requirement"`
+	Title                 string `json:"title"`
+	Version               string `json:"version"`
+}
 
 // PurchaseInternalProductRequest defines model for PurchaseInternalProductRequest.
 type PurchaseInternalProductRequest struct {
@@ -3431,6 +6450,34 @@ type RegisterSellerRequest struct {
 	PayoutAccountId *UUID `json:"payout_account_id,omitempty"`
 }
 
+// SandboxVerificationOutcome SANDBOX TIER ONLY. Refused with FORBIDDEN anywhere else.
+type SandboxVerificationOutcome struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Outcome There is no default. UNDERAGE and SANCTIONED are separate from REJECTED because §21 requires an age failure and a sanctions failure to be separately expressible.
+	Outcome SandboxVerificationOutcomeOutcome `json:"outcome"`
+}
+
+// SandboxVerificationOutcomeOutcome There is no default. UNDERAGE and SANCTIONED are separate from REJECTED because §21 requires an age failure and a sanctions failure to be separately expressible.
+type SandboxVerificationOutcomeOutcome string
+
+// SecuritySummary Derived from the session store and the claims of the current session. Nothing here is a secret and nothing here is created by asking.
+type SecuritySummary struct {
+	ActiveSessions int      `json:"active_sessions"`
+	Amr            []string `json:"amr"`
+
+	// CurrentSessionId UUIDv7 in canonical form
+	CurrentSessionId *UUID      `json:"current_session_id,omitempty"`
+	LastLoginAt      *Timestamp `json:"last_login_at,omitempty"`
+	LastStepUpAt     *Timestamp `json:"last_step_up_at,omitempty"`
+
+	// MfaPresent The identity provider asserted a strong authentication method for the current session.
+	MfaPresent          bool       `json:"mfa_present"`
+	StepUpMaxAgeSeconds int        `json:"step_up_max_age_seconds"`
+	StepUpValidUntil    *Timestamp `json:"step_up_valid_until,omitempty"`
+}
+
 // SessionSummary defines model for SessionSummary.
 type SessionSummary struct {
 	CreatedAt   Timestamp `json:"created_at"`
@@ -3451,6 +6498,9 @@ type SetInternalProductStatusRequest struct {
 	Status InternalProductStatus `json:"status"`
 }
 
+// SignedQuantity An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not.
+type SignedQuantity = string
+
 // StartDepositRequest defines model for StartDepositRequest.
 type StartDepositRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -3465,12 +6515,184 @@ type StartDepositRequest struct {
 // StartDepositRequestFiatCurrency defines model for StartDepositRequest.FiatCurrency.
 type StartDepositRequestFiatCurrency string
 
+// StartVerificationRequest defines model for StartVerificationRequest.
+type StartVerificationRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// JurisdictionCountry ISO 3166-1 alpha-2. Never inferred from a network address.
+	JurisdictionCountry string `json:"jurisdiction_country"`
+
+	// JurisdictionRegion The subdivision code without its country prefix. Required where the rules depend on it.
+	JurisdictionRegion *string `json:"jurisdiction_region,omitempty"`
+
+	// Purpose Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+	Purpose *StartVerificationRequestPurpose `json:"purpose,omitempty"`
+}
+
+// StartVerificationRequestPurpose Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+type StartVerificationRequestPurpose string
+
+// StartedVerification defines model for StartedVerification.
+type StartedVerification struct {
+	ExpiresAt *Timestamp `json:"expires_at,omitempty"`
+
+	// HostedUrl Single-use and short-lived. It is returned here and stored nowhere -- not even in the idempotency record, which is why a REPLAY of the same Idempotency-Key answers with the session and no link, and with `resume` saying so (D-125). On a sandbox tier it is a `sandbox:` reference rather than a page, because there is no hosted flow to visit.
+	HostedUrl *string `json:"hosted_url,omitempty"`
+
+	// Resume Present instead of `hosted_url` when this answer is a replay of an Idempotency-Key whose link was not kept. It tells the client what to do: start a new session, under a new key, to get another link.
+	Resume  *string `json:"resume,omitempty"`
+	Sandbox bool    `json:"sandbox"`
+
+	// SandboxControlPath Present only for a rehearsal session. It is where a sandbox operator chooses the outcome explicitly, and its presence is what makes a sandbox session visibly a rehearsal.
+	SandboxControlPath *string             `json:"sandbox_control_path,omitempty"`
+	Session            VerificationSession `json:"session"`
+}
+
 // StatusChange defines model for StatusChange.
 type StatusChange struct {
 	PolicyVersion *string `json:"policy_version,omitempty"`
 	Reason        string  `json:"reason"`
 	To            string  `json:"to"`
 }
+
+// Strategy defines model for Strategy.
+type Strategy struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Compiler Which compiler this deployment has. Absent means none, which is the same fact compiler_configured reports as false.
+	Compiler *CompilerDescriptor `json:"compiler,omitempty"`
+
+	// CompilerConfigured Whether this deployment can compile at all. False means a compile attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR.
+	CompilerConfigured bool `json:"compiler_configured"`
+
+	// Constraints The structured strategy the owner declared, as they declared it. Absent when none was stated. It is stored in its own column, apart from the description, which is what lets a structured compiler claim it never read the prose.
+	Constraints    *StructuredStrategy `json:"constraints,omitempty"`
+	CreatedAt      Timestamp           `json:"created_at"`
+	CurrentVersion *StrategyVersion    `json:"current_version,omitempty"`
+	Description    string              `json:"description"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID               `json:"id"`
+	Name       string             `json:"name"`
+	SourceKind StrategySourceKind `json:"source_kind"`
+	Status     StrategyStatus     `json:"status"`
+	UpdatedAt  *Timestamp         `json:"updated_at,omitempty"`
+}
+
+// StrategySourceKind defines model for Strategy.SourceKind.
+type StrategySourceKind string
+
+// StrategyStatus defines model for Strategy.Status.
+type StrategyStatus string
+
+// StrategyPage defines model for StrategyPage.
+type StrategyPage struct {
+	// Compiler Which compiler this deployment has. Absent means none, which is the same fact compiler_configured reports as false.
+	Compiler           *CompilerDescriptor `json:"compiler,omitempty"`
+	CompilerConfigured bool                `json:"compiler_configured"`
+	Items              []Strategy          `json:"items"`
+	NextCursor         *string             `json:"next_cursor,omitempty"`
+}
+
+// StrategyVersion defines model for StrategyVersion.
+type StrategyVersion struct {
+	// AcceptedAt When a person read this document and approved it. Present exactly when status is ACCEPTED; the two are paired by a CHECK in the schema.
+	AcceptedAt *Timestamp `json:"accepted_at,omitempty"`
+
+	// AcceptedByUserId UUIDv7 in canonical form
+	AcceptedByUserId *UUID      `json:"accepted_by_user_id,omitempty"`
+	BuiltAt          *Timestamp `json:"built_at,omitempty"`
+	EffectSet        []string   `json:"effect_set"`
+
+	// Environment The deployment that compiled it. Empty for a version compiled before the column existed.
+	Environment *string `json:"environment,omitempty"`
+
+	// HumanReadable The compiled strategy in words, which is what a person reviews before approving it.
+	HumanReadable string `json:"human_readable"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Ir The typed intermediate representation itself.
+	Ir     *map[string]interface{} `json:"ir,omitempty"`
+	IrHash string                  `json:"ir_hash"`
+
+	// Sandbox True when this version was produced by a compiler that exists only on a sandbox tier. Everything built from it is a rehearsal, it is labelled one everywhere it is shown, and migration 00812 refuses the row in a production database.
+	Sandbox bool                  `json:"sandbox"`
+	Status  StrategyVersionStatus `json:"status"`
+	Version int                   `json:"version"`
+}
+
+// StrategyVersionStatus defines model for StrategyVersion.Status.
+type StrategyVersionStatus string
+
+// StructuredRule One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid price against a threshold you state; EVERY_INTERVAL carries no condition at all and acts on every evaluation, which is how "rebalance every N minutes" is written. The two extra fields belong to PRICE_THRESHOLD and are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold.
+type StructuredRule struct {
+	Comparator *StructuredRuleComparator `json:"comparator,omitempty"`
+	Kind       StructuredRuleKind        `json:"kind"`
+
+	// PriceUsd An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float.
+	PriceUsd *MinorUSD `json:"price_usd,omitempty"`
+}
+
+// StructuredRuleComparator defines model for StructuredRule.Comparator.
+type StructuredRuleComparator string
+
+// StructuredRuleKind defines model for StructuredRule.Kind.
+type StructuredRuleKind string
+
+// StructuredStrategy A strategy stated field by field, which is what a structured compiler reads. Every field is required and there is no default for any of them, because a default is an inference about what somebody meant.
+//
+// Unknown fields are refused rather than ignored, so a misspelled key is a named refusal instead of a setting that silently did not apply.
+type StructuredStrategy struct {
+	CapitalLimit struct {
+		// MinAllocationUsd The smallest envelope this strategy will run in.
+		MinAllocationUsd MinorUSD `json:"min_allocation_usd"`
+	} `json:"capital_limit"`
+
+	// Entry One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid price against a threshold you state; EVERY_INTERVAL carries no condition at all and acts on every evaluation, which is how "rebalance every N minutes" is written. The two extra fields belong to PRICE_THRESHOLD and are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold.
+	Entry StructuredRule `json:"entry"`
+
+	// Exit One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid price against a threshold you state; EVERY_INTERVAL carries no condition at all and acts on every evaluation, which is how "rebalance every N minutes" is written. The two extra fields belong to PRICE_THRESHOLD and are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold.
+	Exit      StructuredRule `json:"exit"`
+	Frequency struct {
+		IntervalMinutes   int `json:"interval_minutes"`
+		MaxIntentsPerHour int `json:"max_intents_per_hour"`
+	} `json:"frequency"`
+
+	// Mode PAPER is the only mode this build compiles. Any other value is refused with the reason; it is never downgraded silently, because compiling a request for a mode that moves value as one that does not would be answering a question nobody asked.
+	Mode StructuredStrategyMode `json:"mode"`
+
+	// RiskLimits The three ceilings. Each is an exact USD amount in MINOR units, written as digits: "5000" is $50.00. None of them is a float and none carries a decimal point. max_single_trade_usd is also the size of every trade the compiled strategy proposes.
+	RiskLimits struct {
+		// MaxDailyLossUsd An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float.
+		MaxDailyLossUsd MinorUSD `json:"max_daily_loss_usd"`
+
+		// MaxPositionUsd An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float.
+		MaxPositionUsd MinorUSD `json:"max_position_usd"`
+
+		// MaxSingleTradeUsd An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float.
+		MaxSingleTradeUsd MinorUSD `json:"max_single_trade_usd"`
+	} `json:"risk_limits"`
+
+	// SchemaVersion The grammar this document is written against. A later grammar is refused by name.
+	SchemaVersion StructuredStrategySchemaVersion `json:"schema_version"`
+	Universe      struct {
+		// Instrument An instrument's canonical name, e.g. SOL/USDC. It must be in this deployment's registry and ACTIVE.
+		Instrument string `json:"instrument"`
+
+		// Venue A venue code, e.g. JUPITER. It must be in the registry, able to take new actions, and list the instrument above.
+		Venue string `json:"venue"`
+	} `json:"universe"`
+}
+
+// StructuredStrategyMode PAPER is the only mode this build compiles. Any other value is refused with the reason; it is never downgraded silently, because compiling a request for a mode that moves value as one that does not would be answering a question nobody asked.
+type StructuredStrategyMode string
+
+// StructuredStrategySchemaVersion The grammar this document is written against. A later grammar is refused by name.
+type StructuredStrategySchemaVersion int
 
 // SubmitIntentRequest defines model for SubmitIntentRequest.
 type SubmitIntentRequest struct {
@@ -3507,6 +6729,34 @@ type SubmitIntentRequest struct {
 
 // SubmitIntentRequestMode Manual trades are PAPER until LIVE_MANUAL_TRADING is ACTIVE
 type SubmitIntentRequestMode string
+
+// TermsAcceptance defines model for TermsAcceptance.
+type TermsAcceptance struct {
+	AcceptedAt  Timestamp `json:"accepted_at"`
+	ContentHash string    `json:"content_hash"`
+	DocumentId  string    `json:"document_id"`
+
+	// Id UUIDv7 in canonical form
+	Id      UUID   `json:"id"`
+	Version string `json:"version"`
+}
+
+// TermsAcceptanceRequest defines model for TermsAcceptanceRequest.
+type TermsAcceptanceRequest struct {
+	DocumentIds []TermsAcceptanceRequestDocumentIds `json:"document_ids"`
+}
+
+// TermsAcceptanceRequestDocumentIds defines model for TermsAcceptanceRequest.DocumentIds.
+type TermsAcceptanceRequestDocumentIds string
+
+// TermsState defines model for TermsState.
+type TermsState struct {
+	Acceptances *[]TermsAcceptance `json:"acceptances,omitempty"`
+	Documents   []LegalDocument    `json:"documents"`
+
+	// Outstanding Documents required at onboarding whose current bytes the caller has not accepted.
+	Outstanding []string `json:"outstanding"`
+}
 
 // Timestamp defines model for Timestamp.
 type Timestamp = time.Time
@@ -3648,6 +6898,29 @@ type USD = string
 // UUID UUIDv7 in canonical form
 type UUID = openapi_types.UUID
 
+// UnreadCount defines model for UnreadCount.
+type UnreadCount struct {
+	Count int `json:"count"`
+}
+
+// UserProfile Product-level state only. It carries no e-mail address, phone number, legal name or date of birth: those are sealed in identity_pii and this surface has no route to them.
+type UserProfile struct {
+	// AvatarSeed Sixteen hex characters a client renders an identicon from. Nodal accepts no avatar upload.
+	AvatarSeed  string     `json:"avatar_seed"`
+	CreatedAt   Timestamp  `json:"created_at"`
+	DisplayName *string    `json:"display_name,omitempty"`
+	Handle      *string    `json:"handle,omitempty"`
+	Locale      string     `json:"locale"`
+	TimeZone    string     `json:"time_zone"`
+	UpdatedAt   *Timestamp `json:"updated_at,omitempty"`
+
+	// UserId UUIDv7 in canonical form
+	UserId UUID `json:"user_id"`
+}
+
+// ValueTemperature What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+type ValueTemperature string
+
 // VenueListing defines model for VenueListing.
 type VenueListing struct {
 	BaseMint      *string `json:"base_mint,omitempty"`
@@ -3679,6 +6952,116 @@ type VenueListingStatus string
 // VenueListingVenueStatus defines model for VenueListing.VenueStatus.
 type VenueListingVenueStatus string
 
+// VerificationCheck One sub-check, its answer, who produced it and under which rule version. `detail` is a safe reason code and never a document, a government identifier or a date of birth.
+type VerificationCheck struct {
+	Detail *string `json:"detail,omitempty"`
+
+	// Kind The five things §21 says must each be able to refuse on their own.
+	Kind VerificationCheckKind `json:"kind"`
+
+	// Outcome One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider that has not screened somebody has not cleared them either.
+	Outcome      VerificationOutcome `json:"outcome"`
+	Provider     string              `json:"provider"`
+	ProviderRef  *string             `json:"provider_ref,omitempty"`
+	RecordedAt   Timestamp           `json:"recorded_at"`
+	RulesVersion string              `json:"rules_version"`
+
+	// Sandbox A rehearsal answer. A database CHECK refuses one in PROD.
+	Sandbox bool `json:"sandbox"`
+}
+
+// VerificationCheckKind The five things §21 says must each be able to refuse on their own.
+type VerificationCheckKind string
+
+// VerificationLevel How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+type VerificationLevel string
+
+// VerificationOutcome One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider that has not screened somebody has not cleared them either.
+type VerificationOutcome string
+
+// VerificationProfile The §24 profile area. It says what has been established, what has not, and what to do next. It carries no personal data.
+type VerificationProfile struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId             UUID                 `json:"account_id"`
+	AgeVerified           bool                 `json:"age_verified"`
+	Checks                *[]VerificationCheck `json:"checks,omitempty"`
+	ExpiresAt             *Timestamp           `json:"expires_at,omitempty"`
+	JurisdictionCountry   *string              `json:"jurisdiction_country,omitempty"`
+	JurisdictionRefusals  *[]string            `json:"jurisdiction_refusals,omitempty"`
+	JurisdictionRegion    *string              `json:"jurisdiction_region,omitempty"`
+	JurisdictionSupported bool                 `json:"jurisdiction_supported"`
+
+	// Level How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	Level VerificationLevel `json:"level"`
+
+	// MinimumAge The age threshold this jurisdiction is judged against, from the versioned rule table.
+	MinimumAge int                        `json:"minimum_age"`
+	Missing    *[]VerificationRequirement `json:"missing,omitempty"`
+
+	// PayoutReady Whether verification, by itself, no longer stands between this person and a withdrawal. It says nothing about whether a withdrawal is possible; see /me/eligibility for that.
+	PayoutReady          bool                                     `json:"payout_ready"`
+	Provider             *string                                  `json:"provider,omitempty"`
+	ProviderAvailability *VerificationProfileProviderAvailability `json:"provider_availability,omitempty"`
+	Restrictions         *[]string                                `json:"restrictions,omitempty"`
+	RulesVersion         string                                   `json:"rules_version"`
+	SanctionsState       VerificationProfileSanctionsState        `json:"sanctions_state"`
+
+	// Sandbox True when any of this was established by a rehearsal provider.
+	Sandbox bool                 `json:"sandbox"`
+	Session *VerificationSession `json:"session,omitempty"`
+
+	// State The financial verification state machine of §20. UNVERIFIED is §20's NOT_STARTED under the name the schema already used. Nothing reaches VERIFIED except through a provider session that decided so.
+	State      VerificationState `json:"state"`
+	VerifiedAt *Timestamp        `json:"verified_at,omitempty"`
+}
+
+// VerificationProfileProviderAvailability defines model for VerificationProfile.ProviderAvailability.
+type VerificationProfileProviderAvailability string
+
+// VerificationProfileSanctionsState defines model for VerificationProfile.SanctionsState.
+type VerificationProfileSanctionsState string
+
+// VerificationRequirement One thing standing between a person and a level, with what they can do about it.
+type VerificationRequirement struct {
+	Action VerificationRequirementAction `json:"action"`
+
+	// Code A check kind, or VERIFICATION_SESSION / JURISDICTION / PROVIDER / OPERATOR_REVIEW / VERIFICATION_EXPIRED.
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
+
+// VerificationRequirementAction defines model for VerificationRequirement.Action.
+type VerificationRequirementAction string
+
+// VerificationSession defines model for VerificationSession.
+type VerificationSession struct {
+	CreatedAt           Timestamp                  `json:"created_at"`
+	ExpiresAt           *Timestamp                 `json:"expires_at,omitempty"`
+	FailureReason       *string                    `json:"failure_reason,omitempty"`
+	JurisdictionCountry *string                    `json:"jurisdiction_country,omitempty"`
+	JurisdictionRegion  *string                    `json:"jurisdiction_region,omitempty"`
+	Provider            string                     `json:"provider"`
+	ProviderRef         *string                    `json:"provider_ref,omitempty"`
+	Purpose             VerificationSessionPurpose `json:"purpose"`
+	RulesVersion        *string                    `json:"rules_version,omitempty"`
+	Sandbox             bool                       `json:"sandbox"`
+
+	// SessionId UUIDv7 in canonical form
+	SessionId UUID `json:"session_id"`
+
+	// Status The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from what Persona, Veriff, Sumsub and Stripe Identity each report so that no one vendor's vocabulary becomes the schema's.
+	Status VerificationSessionStatus `json:"status"`
+}
+
+// VerificationSessionPurpose defines model for VerificationSession.Purpose.
+type VerificationSessionPurpose string
+
+// VerificationSessionStatus The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from what Persona, Veriff, Sumsub and Stripe Identity each report so that no one vendor's vocabulary becomes the schema's.
+type VerificationSessionStatus string
+
+// VerificationState The financial verification state machine of §20. UNVERIFIED is §20's NOT_STARTED under the name the schema already used. Nothing reaches VERIFIED except through a provider session that decided so.
+type VerificationState string
+
 // Withdrawal defines model for Withdrawal.
 type Withdrawal struct {
 	// AccountId UUIDv7 in canonical form
@@ -3699,6 +7082,107 @@ type Withdrawal struct {
 	Status   string   `json:"status"`
 }
 
+// WithdrawalEligibility defines model for WithdrawalEligibility.
+type WithdrawalEligibility struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                     `json:"account_id"`
+	Buckets   []WithdrawalOriginBucket `json:"buckets"`
+
+	// CurrentVerification How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	CurrentVerification   VerificationLevel `json:"current_verification"`
+	DestinationConfigured *bool             `json:"destination_configured,omitempty"`
+	Eligible              bool              `json:"eligible"`
+
+	// Frozen Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Frozen Quantity `json:"frozen"`
+
+	// Gross Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Gross Quantity `json:"gross"`
+
+	// Ineligible Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Ineligible            Quantity `json:"ineligible"`
+	JurisdictionSupported *bool    `json:"jurisdiction_supported,omitempty"`
+
+	// MinimumQuantity The provider's minimum expressed in Credits, or "0" when it publishes none. Zero is never "any amount will do".
+	MinimumQuantity *Quantity `json:"minimum_quantity,omitempty"`
+
+	// PayoutEligible Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PayoutEligible    Quantity           `json:"payout_eligible"`
+	PolicyHash        *string            `json:"policy_hash,omitempty"`
+	PolicyVersion     string             `json:"policy_version"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderAvailable *bool              `json:"provider_available,omitempty"`
+	Reasons           []WithdrawalReason `json:"reasons"`
+
+	// RequiredVerification How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	RequiredVerification VerificationLevel `json:"required_verification"`
+	Sandbox              bool              `json:"sandbox"`
+
+	// Spendable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Spendable Quantity `json:"spendable"`
+
+	// VerificationWouldSuffice True when identity verification is the only thing standing between this person and some of their money.
+	VerificationWouldSuffice *bool `json:"verification_would_suffice,omitempty"`
+
+	// WithdrawableNow Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	WithdrawableNow Quantity `json:"withdrawable_now"`
+}
+
+// WithdrawalOriginBucket One PROVENANCE an account holds, and what may leave it: an origin, an origin floor, a root set and a funding finality. Those four are what the payout policy reads about the value itself, so every unit in a bucket gets one answer and `withdrawable_now` is the sum of the buckets.
+// More than one bucket may therefore carry the same `origin`. Until D-136 there was exactly one per origin, folded to the least final finality and the most restricted floor in it -- so one refused lot zeroed every other lot of its origin and `withdrawable_now` contradicted `payout_eligible` in the same payload. A client that keys on `origin` alone must key on (origin, origin_floor, finality, root_origins) instead.
+type WithdrawalOriginBucket struct {
+	// ConsumptionRank Where this origin sits in the consumption order. Lower leaves first.
+	ConsumptionRank int `json:"consumption_rank"`
+
+	// Finality The funding finality of every unit in this bucket.
+	Finality    *FundingFinality `json:"finality,omitempty"`
+	MinHoldDays *int             `json:"min_hold_days,omitempty"`
+
+	// Origin Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+	Origin CreditOrigin `json:"origin"`
+
+	// OriginFloor What this value ultimately came from: the most restricted origin anywhere in its provenance. It equals `origin` for value nothing else funded. It is here because ORIGIN_NOT_PAYOUT_ELIGIBLE on a bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on -- what a person needs to read is that the value came from a promotional grant, not a word about the trade that moved it.
+	OriginFloor   *CreditOrigin `json:"origin_floor,omitempty"`
+	PayoutAllowed bool          `json:"payout_allowed"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity           `json:"quantity"`
+	Reasons  []WithdrawalReason `json:"reasons"`
+
+	// RefusedRoot The first of `root_origins` this policy will not release, absent when it releases them all. It is the origin a person needs to read about when the reason is ORIGIN_NOT_WITHDRAWABLE, and it is not always `origin_floor`: the floor is ranked by the policies this build ships, and a policy persisted later can refuse a different one (D-138).
+	RefusedRoot        *CreditOrigin `json:"refused_root,omitempty"`
+	RequiredCapability *string       `json:"required_capability,omitempty"`
+
+	// RequiredVerification How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	RequiredVerification *VerificationLevel `json:"required_verification,omitempty"`
+
+	// RootOrigins Every origin the units in this bucket ultimately came from. The payout policy must release the bucket's own origin and all of these.
+	RootOrigins              *[]CreditOrigin `json:"root_origins,omitempty"`
+	VerificationWouldSuffice *bool           `json:"verification_would_suffice,omitempty"`
+
+	// Withdrawable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Withdrawable Quantity `json:"withdrawable"`
+}
+
+// WithdrawalReason A machine-readable reason value cannot leave. Each names something that could change. REQUIRES_VERIFICATION and TERMS_NOT_ACCEPTED are NEXT STEPS and not denials, and the product must present them as such: TERMS_NOT_ACCEPTED means the withdrawal disclosure has not been accepted at the version now served, which is the normal state of somebody who has never withdrawn. The eligible figures stay true beside it.
+type WithdrawalReason string
+
 // WithdrawalRequest defines model for WithdrawalRequest.
 type WithdrawalRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -3716,6 +7200,9 @@ type WithdrawalRequest struct {
 
 // AccountId UUIDv7 in canonical form
 type AccountId = UUID
+
+// AgentId UUIDv7 in canonical form
+type AgentId = UUID
 
 // AssetId UUIDv7 in canonical form
 type AssetId = UUID
@@ -3741,6 +7228,9 @@ type Limit = int
 // MarketId UUIDv7 in canonical form
 type MarketId = UUID
 
+// NotificationId UUIDv7 in canonical form
+type NotificationId = UUID
+
 // OrderId UUIDv7 in canonical form
 type OrderId = UUID
 
@@ -3755,6 +7245,15 @@ type ProductId = UUID
 
 // SessionId UUIDv7 in canonical form
 type SessionId = UUID
+
+// StrategyId UUIDv7 in canonical form
+type StrategyId = UUID
+
+// StrategyVersionNumber defines model for StrategyVersionNumber.
+type StrategyVersionNumber = int
+
+// UserId UUIDv7 in canonical form
+type UserId = UUID
 
 // GetAccountsAccountIdActivityParams defines parameters for GetAccountsAccountIdActivity.
 type GetAccountsAccountIdActivityParams struct {
@@ -3827,6 +7326,24 @@ type PostAdminActionsActionIdDecisionParams struct {
 // PostAdminActionsActionIdDecisionParamsDecision defines parameters for PostAdminActionsActionIdDecision.
 type PostAdminActionsActionIdDecisionParamsDecision string
 
+// GetAdminAgentsParams defines parameters for GetAdminAgents.
+type GetAdminAgentsParams struct {
+	AccountId       *UUID  `form:"account_id,omitempty" json:"account_id,omitempty"`
+	IncludeArchived *bool  `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+	Limit           *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdminAgentsAgentIdPauseJSONBody defines parameters for PostAdminAgentsAgentIdPause.
+type PostAdminAgentsAgentIdPauseJSONBody struct {
+	Reason string `json:"reason"`
+}
+
+// PostAdminAgentsAgentIdPauseParams defines parameters for PostAdminAgentsAgentIdPause.
+type PostAdminAgentsAgentIdPauseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // PostAdminGatesCapabilityActionParams defines parameters for PostAdminGatesCapabilityAction.
 type PostAdminGatesCapabilityActionParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
@@ -3862,6 +7379,34 @@ type PostAdminReconciliationRecordsRecordIdResolveParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PostAdminUsersUserIdClosureParams defines parameters for PostAdminUsersUserIdClosure.
+type PostAdminUsersUserIdClosureParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAgentsParams defines parameters for GetAgents.
+type GetAgentsParams struct {
+	AccountId       UUID   `form:"account_id" json:"account_id"`
+	IncludeArchived *bool  `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+	Limit           *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAgentsParams defines parameters for PostAgents.
+type PostAgentsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentsAgentIdActionParams defines parameters for PostAgentsAgentIdAction.
+type PostAgentsAgentIdActionParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentsAgentIdActionParamsAction defines parameters for PostAgentsAgentIdAction.
+type PostAgentsAgentIdActionParamsAction string
+
 // GetAuthCallbackParams defines parameters for GetAuthCallback.
 type GetAuthCallbackParams struct {
 	Code  string `form:"code" json:"code"`
@@ -3872,6 +7417,9 @@ type GetAuthCallbackParams struct {
 type GetAuthLoginParams struct {
 	// StepUp Request strong authentication (MFA/passkey) for a sensitive action
 	StepUp *bool `form:"step_up,omitempty" json:"step_up,omitempty"`
+
+	// ReturnTo Local path within the web app to return to after the callback, e.g. /portfolio. Must start with a single slash; anything else is refused with a validation problem. It is stored with the login attempt, never echoed from the request, and appended to the app origin the deployment configures (CP_AUTH_POST_LOGIN_URL).
+	ReturnTo *string `form:"return_to,omitempty" json:"return_to,omitempty"`
 }
 
 // GetCreditsBalanceParams defines parameters for GetCreditsBalance.
@@ -3959,6 +7507,128 @@ type PostInternalSellersParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PostMeAccountCloseParams defines parameters for PostMeAccountClose.
+type PostMeAccountCloseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostMeAccountCloseCancelParams defines parameters for PostMeAccountCloseCancel.
+type PostMeAccountCloseCancelParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMeActivityParams defines parameters for GetMeActivity.
+type GetMeActivityParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Kind Repeat to include several kinds. Absent means every kind.
+	Kind *[]ActivityFeedKind `form:"kind,omitempty" json:"kind,omitempty"`
+}
+
+// GetMeAuditParams defines parameters for GetMeAudit.
+type GetMeAuditParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetMeEligibilityParams defines parameters for GetMeEligibility.
+type GetMeEligibilityParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PutMeNotificationPreferencesParams defines parameters for PutMeNotificationPreferences.
+type PutMeNotificationPreferencesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMeNotificationsParams defines parameters for GetMeNotifications.
+type GetMeNotificationsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Unread Only notifications that have not been marked read
+	Unread *bool `form:"unread,omitempty" json:"unread,omitempty"`
+
+	// Kinds Restrict to these kinds; omitted means every kind
+	Kinds *[]NotificationKind `form:"kinds,omitempty" json:"kinds,omitempty"`
+}
+
+// PostMeNotificationsReadAllParams defines parameters for PostMeNotificationsReadAll.
+type PostMeNotificationsReadAllParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostMeNotificationsNotificationIdReadParams defines parameters for PostMeNotificationsNotificationIdRead.
+type PostMeNotificationsNotificationIdReadParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMePayoutDestinationsParams defines parameters for GetMePayoutDestinations.
+type GetMePayoutDestinationsParams struct {
+	AccountId UUID   `form:"account_id" json:"account_id"`
+	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostMePayoutDestinationsParams defines parameters for PostMePayoutDestinations.
+type PostMePayoutDestinationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// DeleteMePayoutDestinationsDestinationIdParams defines parameters for DeleteMePayoutDestinationsDestinationId.
+type DeleteMePayoutDestinationsDestinationIdParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMePortfolioParams defines parameters for GetMePortfolio.
+type GetMePortfolioParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostMeProfileParams defines parameters for PostMeProfile.
+type PostMeProfileParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostMeTermsAcceptancesParams defines parameters for PostMeTermsAcceptances.
+type PostMeTermsAcceptancesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMeVerificationParams defines parameters for GetMeVerification.
+type GetMeVerificationParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostMeVerificationSandboxOutcomeParams defines parameters for PostMeVerificationSandboxOutcome.
+type PostMeVerificationSandboxOutcomeParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostMeVerificationSessionsParams defines parameters for PostMeVerificationSessions.
+type PostMeVerificationSessionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMeVerificationSessionsSessionIdParams defines parameters for GetMeVerificationSessionsSessionId.
+type GetMeVerificationSessionsSessionIdParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
 // GetNativeAssetsParams defines parameters for GetNativeAssets.
 type GetNativeAssetsParams struct {
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
@@ -3982,6 +7652,33 @@ type PostNativeAssetsAssetIdSubmitParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetNativeMarketsParams defines parameters for GetNativeMarkets.
+type GetNativeMarketsParams struct {
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Status Repeat to include several statuses. Absent means every status.
+	Status *[]GetNativeMarketsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Q      *string                         `form:"q,omitempty" json:"q,omitempty"`
+	Sort   *GetNativeMarketsParamsSort     `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// GetNativeMarketsParamsStatus defines parameters for GetNativeMarkets.
+type GetNativeMarketsParamsStatus string
+
+// GetNativeMarketsParamsSort defines parameters for GetNativeMarkets.
+type GetNativeMarketsParamsSort string
+
+// GetNativeMarketsMarketIdCandlesParams defines parameters for GetNativeMarketsMarketIdCandles.
+type GetNativeMarketsMarketIdCandlesParams struct {
+	Interval GetNativeMarketsMarketIdCandlesParamsInterval `form:"interval" json:"interval"`
+	From     Timestamp                                     `form:"from" json:"from"`
+	To       Timestamp                                     `form:"to" json:"to"`
+}
+
+// GetNativeMarketsMarketIdCandlesParamsInterval defines parameters for GetNativeMarketsMarketIdCandles.
+type GetNativeMarketsMarketIdCandlesParamsInterval string
+
 // PostNativeMarketsMarketIdOrdersParams defines parameters for PostNativeMarketsMarketIdOrders.
 type PostNativeMarketsMarketIdOrdersParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
@@ -3992,6 +7689,16 @@ type PostNativeMarketsMarketIdOrdersParams struct {
 type PostNativeMarketsMarketIdQuotesParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetNativeMarketsMarketIdSummaryParams defines parameters for GetNativeMarketsMarketIdSummary.
+type GetNativeMarketsMarketIdSummaryParams struct {
+	AccountId *UUID `form:"account_id,omitempty" json:"account_id,omitempty"`
+}
+
+// GetNativeMarketsMarketIdTradesParams defines parameters for GetNativeMarketsMarketIdTrades.
+type GetNativeMarketsMarketIdTradesParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // GetOrdersParams defines parameters for GetOrders.
@@ -4019,6 +7726,12 @@ type PostPayoutsParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PostPayoutsQuoteParams defines parameters for PostPayoutsQuote.
+type PostPayoutsQuoteParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // PostPayoutsPayoutIdCancelJSONBody defines parameters for PostPayoutsPayoutIdCancel.
 type PostPayoutsPayoutIdCancelJSONBody struct {
 	// AccountId UUIDv7 in canonical form
@@ -4028,6 +7741,30 @@ type PostPayoutsPayoutIdCancelJSONBody struct {
 
 // PostPayoutsPayoutIdCancelParams defines parameters for PostPayoutsPayoutIdCancel.
 type PostPayoutsPayoutIdCancelParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetStrategiesParams defines parameters for GetStrategies.
+type GetStrategiesParams struct {
+	AccountId UUID   `form:"account_id" json:"account_id"`
+	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostStrategiesParams defines parameters for PostStrategies.
+type PostStrategiesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostStrategiesStrategyIdCompileParams defines parameters for PostStrategiesStrategyIdCompile.
+type PostStrategiesStrategyIdCompileParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostStrategiesStrategyIdVersionsVersionAcceptParams defines parameters for PostStrategiesStrategyIdVersionsVersionAccept.
+type PostStrategiesStrategyIdVersionsVersionAcceptParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -4053,6 +7790,9 @@ type PostAdminActionsJSONRequestBody = AdminActionProposal
 // PostAdminActionsActionIdDecisionJSONRequestBody defines body for PostAdminActionsActionIdDecision for application/json ContentType.
 type PostAdminActionsActionIdDecisionJSONRequestBody PostAdminActionsActionIdDecisionJSONBody
 
+// PostAdminAgentsAgentIdPauseJSONRequestBody defines body for PostAdminAgentsAgentIdPause for application/json ContentType.
+type PostAdminAgentsAgentIdPauseJSONRequestBody PostAdminAgentsAgentIdPauseJSONBody
+
 // PostAdminGatesCapabilityActionJSONRequestBody defines body for PostAdminGatesCapabilityAction for application/json ContentType.
 type PostAdminGatesCapabilityActionJSONRequestBody = GateActionRequest
 
@@ -4064,6 +7804,15 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
+
+// PostAdminUsersUserIdClosureJSONRequestBody defines body for PostAdminUsersUserIdClosure for application/json ContentType.
+type PostAdminUsersUserIdClosureJSONRequestBody = ClosureDecision
+
+// PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
+type PostAgentsJSONRequestBody = CreateAgentRequest
+
+// PostAgentsAgentIdActionJSONRequestBody defines body for PostAgentsAgentIdAction for application/json ContentType.
+type PostAgentsAgentIdActionJSONRequestBody = AgentActionRequest
 
 // PostFundingDepositsJSONRequestBody defines body for PostFundingDeposits for application/json ContentType.
 type PostFundingDepositsJSONRequestBody = StartDepositRequest
@@ -4083,6 +7832,27 @@ type PostInternalProductsProductIdStatusJSONRequestBody = SetInternalProductStat
 // PostInternalSellersJSONRequestBody defines body for PostInternalSellers for application/json ContentType.
 type PostInternalSellersJSONRequestBody = RegisterSellerRequest
 
+// PostMeAccountCloseJSONRequestBody defines body for PostMeAccountClose for application/json ContentType.
+type PostMeAccountCloseJSONRequestBody = CloseAccountRequest
+
+// PutMeNotificationPreferencesJSONRequestBody defines body for PutMeNotificationPreferences for application/json ContentType.
+type PutMeNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdate
+
+// PostMePayoutDestinationsJSONRequestBody defines body for PostMePayoutDestinations for application/json ContentType.
+type PostMePayoutDestinationsJSONRequestBody = CreatePayoutDestination
+
+// PostMeProfileJSONRequestBody defines body for PostMeProfile for application/json ContentType.
+type PostMeProfileJSONRequestBody = ProfileUpdate
+
+// PostMeTermsAcceptancesJSONRequestBody defines body for PostMeTermsAcceptances for application/json ContentType.
+type PostMeTermsAcceptancesJSONRequestBody = TermsAcceptanceRequest
+
+// PostMeVerificationSandboxOutcomeJSONRequestBody defines body for PostMeVerificationSandboxOutcome for application/json ContentType.
+type PostMeVerificationSandboxOutcomeJSONRequestBody = SandboxVerificationOutcome
+
+// PostMeVerificationSessionsJSONRequestBody defines body for PostMeVerificationSessions for application/json ContentType.
+type PostMeVerificationSessionsJSONRequestBody = StartVerificationRequest
+
 // PostNativeAssetsJSONRequestBody defines body for PostNativeAssets for application/json ContentType.
 type PostNativeAssetsJSONRequestBody = CreateNativeAssetRequest
 
@@ -4101,11 +7871,20 @@ type PostPaymentsJSONRequestBody = CreateCreditPurchaseRequest
 // PostPayoutsJSONRequestBody defines body for PostPayouts for application/json ContentType.
 type PostPayoutsJSONRequestBody = CreatePayoutRequest
 
+// PostPayoutsQuoteJSONRequestBody defines body for PostPayoutsQuote for application/json ContentType.
+type PostPayoutsQuoteJSONRequestBody = CreatePayoutQuote
+
 // PostPayoutsPayoutIdCancelJSONRequestBody defines body for PostPayoutsPayoutIdCancel for application/json ContentType.
 type PostPayoutsPayoutIdCancelJSONRequestBody PostPayoutsPayoutIdCancelJSONBody
 
 // PostQuotesPreviewJSONRequestBody defines body for PostQuotesPreview for application/json ContentType.
 type PostQuotesPreviewJSONRequestBody = QuotePreviewRequest
+
+// PostStrategiesJSONRequestBody defines body for PostStrategies for application/json ContentType.
+type PostStrategiesJSONRequestBody = CreateStrategyRequest
+
+// PostStrategiesStrategyIdVersionsVersionAcceptJSONRequestBody defines body for PostStrategiesStrategyIdVersionsVersionAccept for application/json ContentType.
+type PostStrategiesStrategyIdVersionsVersionAcceptJSONRequestBody = AcceptStrategyVersionRequest
 
 // PostWebhooksProviderJSONRequestBody defines body for PostWebhooksProvider for application/json ContentType.
 type PostWebhooksProviderJSONRequestBody = PostWebhooksProviderJSONBody
@@ -4151,10 +7930,19 @@ type ServerInterface interface {
 	// PostAdminActionsActionIdDecision Approve or reject a proposed action (approver ≠ proposer; step-up)
 	// (POST /admin/actions/{actionId}/{decision})
 	PostAdminActionsActionIdDecision(w http.ResponseWriter, r *http.Request, actionId UUID, decision PostAdminActionsActionIdDecisionParamsDecision, params PostAdminActionsActionIdDecisionParams)
+	// GetAdminAgents Every account's agents, with owner, authority level, status and limits
+	// (GET /admin/agents)
+	GetAdminAgents(w http.ResponseWriter, r *http.Request, params GetAdminAgentsParams)
+	// PostAdminAgentsAgentIdPause Operator pause of a customer's agent, with a reason
+	// (POST /admin/agents/{agentId}/pause)
+	PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAdminAgentsAgentIdPauseParams)
 	// GetAdminGates Production capability gates for this environment
 	// (GET /admin/gates)
 	GetAdminGates(w http.ResponseWriter, r *http.Request)
-	// PostAdminGatesCapabilityAction Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up)
+	// GetAdminGatesCapabilityHistory Every recorded transition of a gate, oldest first, with who moved it
+	// (GET /admin/gates/{capability}/history)
+	GetAdminGatesCapabilityHistory(w http.ResponseWriter, r *http.Request, capability Capability)
+	// PostAdminGatesCapabilityAction Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
 	// (POST /admin/gates/{capability}/{action})
 	PostAdminGatesCapabilityAction(w http.ResponseWriter, r *http.Request, capability Capability, action PostAdminGatesCapabilityActionParamsAction, params PostAdminGatesCapabilityActionParams)
 	// PostAdminInstrumentsInstrumentIdStatus Change instrument status (ACTIVE / CLOSE_ONLY / RESTRICTED / HALTED / DELISTING / DELISTED)
@@ -4175,6 +7963,24 @@ type ServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams)
+	// GetAdminUsersUserId Operator support view of one user (read only)
+	// (GET /admin/users/{userId})
+	GetAdminUsersUserId(w http.ResponseWriter, r *http.Request, userId UserId)
+	// PostAdminUsersUserIdClosure Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+	// (POST /admin/users/{userId}/closure)
+	PostAdminUsersUserIdClosure(w http.ResponseWriter, r *http.Request, userId UserId, params PostAdminUsersUserIdClosureParams)
+	// GetAgents Your agents
+	// (GET /agents)
+	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
+	// PostAgents Create an agent from a compiled strategy version, with the authority and limits granted to it
+	// (POST /agents)
+	PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams)
+	// GetAgentsAgentId One agent - authority, limits, budget used, last run and honest runtime state
+	// (GET /agents/{agentId})
+	GetAgentsAgentId(w http.ResponseWriter, r *http.Request, agentId AgentId)
+	// PostAgentsAgentIdAction Enable, pause, resume, disable or archive your own agent
+	// (POST /agents/{agentId}/{action})
+	PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request, agentId AgentId, action PostAgentsAgentIdActionParamsAction, params PostAgentsAgentIdActionParams)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(w http.ResponseWriter, r *http.Request)
@@ -4250,6 +8056,78 @@ type ServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetMeAccount The standing of the caller own account, with any restrictions and open closure request
+	// (GET /me/account)
+	GetMeAccount(w http.ResponseWriter, r *http.Request)
+	// PostMeAccountClose Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+	// (POST /me/account/close)
+	PostMeAccountClose(w http.ResponseWriter, r *http.Request, params PostMeAccountCloseParams)
+	// PostMeAccountCloseCancel Cancel the caller own open closure request
+	// (POST /me/account/close/cancel)
+	PostMeAccountCloseCancel(w http.ResponseWriter, r *http.Request, params PostMeAccountCloseCancelParams)
+	// GetMeActivity The unified activity timeline (§16)
+	// (GET /me/activity)
+	GetMeActivity(w http.ResponseWriter, r *http.Request, params GetMeActivityParams)
+	// GetMeAudit The caller's own security and account history (PART 52); never another person's
+	// (GET /me/audit)
+	GetMeAudit(w http.ResponseWriter, r *http.Request, params GetMeAuditParams)
+	// GetMeEligibility What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+	// (GET /me/eligibility)
+	GetMeEligibility(w http.ResponseWriter, r *http.Request, params GetMeEligibilityParams)
+	// GetMeNotificationPreferences Per-kind in-app notification preferences (IN_APP is the only channel that exists)
+	// (GET /me/notification-preferences)
+	GetMeNotificationPreferences(w http.ResponseWriter, r *http.Request)
+	// PutMeNotificationPreferences Replace the caller's answers for the kinds named
+	// (PUT /me/notification-preferences)
+	PutMeNotificationPreferences(w http.ResponseWriter, r *http.Request, params PutMeNotificationPreferencesParams)
+	// GetMeNotifications The caller's notification centre, newest first
+	// (GET /me/notifications)
+	GetMeNotifications(w http.ResponseWriter, r *http.Request, params GetMeNotificationsParams)
+	// PostMeNotificationsReadAll Mark every unread notification read
+	// (POST /me/notifications/read-all)
+	PostMeNotificationsReadAll(w http.ResponseWriter, r *http.Request, params PostMeNotificationsReadAllParams)
+	// GetMeNotificationsUnreadCount How many of the caller's notifications are unread
+	// (GET /me/notifications/unread-count)
+	GetMeNotificationsUnreadCount(w http.ResponseWriter, r *http.Request)
+	// PostMeNotificationsNotificationIdRead Mark one notification read (idempotent; the first instant is kept)
+	// (POST /me/notifications/{notificationId}/read)
+	PostMeNotificationsNotificationIdRead(w http.ResponseWriter, r *http.Request, notificationId NotificationId, params PostMeNotificationsNotificationIdReadParams)
+	// GetMePayoutDestinations Where you have asked value to be sent (§25)
+	// (GET /me/payout-destinations)
+	GetMePayoutDestinations(w http.ResponseWriter, r *http.Request, params GetMePayoutDestinationsParams)
+	// PostMePayoutDestinations Register a payout destination from a provider token (§25)
+	// (POST /me/payout-destinations)
+	PostMePayoutDestinations(w http.ResponseWriter, r *http.Request, params PostMePayoutDestinationsParams)
+	// DeleteMePayoutDestinationsDestinationId Stop using a payout destination (§25)
+	// (DELETE /me/payout-destinations/{destinationId})
+	DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request, destinationId UUID, params DeleteMePayoutDestinationsDestinationIdParams)
+	// GetMePortfolio Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+	// (GET /me/portfolio)
+	GetMePortfolio(w http.ResponseWriter, r *http.Request, params GetMePortfolioParams)
+	// PostMeProfile Update the caller own profile (display name, handle, locale, time zone)
+	// (POST /me/profile)
+	PostMeProfile(w http.ResponseWriter, r *http.Request, params PostMeProfileParams)
+	// GetMeSecurity What the system knows about the security of the caller own account
+	// (GET /me/security)
+	GetMeSecurity(w http.ResponseWriter, r *http.Request)
+	// GetMeTermsAcceptances Legal documents, which of them the caller has accepted, and which are outstanding
+	// (GET /me/terms-acceptances)
+	GetMeTermsAcceptances(w http.ResponseWriter, r *http.Request)
+	// PostMeTermsAcceptances Accept the named documents at the versions currently served
+	// (POST /me/terms-acceptances)
+	PostMeTermsAcceptances(w http.ResponseWriter, r *http.Request, params PostMeTermsAcceptancesParams)
+	// GetMeVerification Your financial verification profile, what is missing, and what to do next (§20, §24)
+	// (GET /me/verification)
+	GetMeVerification(w http.ResponseWriter, r *http.Request, params GetMeVerificationParams)
+	// PostMeVerificationSandboxOutcome SANDBOX TIER ONLY - choose what the rehearsal verification decides
+	// (POST /me/verification/sandbox-outcome)
+	PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request, params PostMeVerificationSandboxOutcomeParams)
+	// PostMeVerificationSessions Start a provider-hosted identity verification (§20)
+	// (POST /me/verification/sessions)
+	PostMeVerificationSessions(w http.ResponseWriter, r *http.Request, params PostMeVerificationSessionsParams)
+	// GetMeVerificationSessionsSessionId Ask the provider what happened, and record it
+	// (GET /me/verification/sessions/{sessionId})
+	GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetMeVerificationSessionsSessionIdParams)
 	// GetNativeAssets Native assets that currently accept at least sells
 	// (GET /native-assets)
 	GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams)
@@ -4262,15 +8140,27 @@ type ServerInterface interface {
 	// PostNativeAssetsAssetIdSubmit Submit your own DRAFT asset for moderation review (PART XIII)
 	// (POST /native-assets/{assetId}/submit)
 	PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r *http.Request, assetId AssetId, params PostNativeAssetsAssetIdSubmitParams)
+	// GetNativeMarkets Discover internal markets (product goal §12, §35)
+	// (GET /native-markets)
+	GetNativeMarkets(w http.ResponseWriter, r *http.Request, params GetNativeMarketsParams)
 	// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
 	// (GET /native-markets/{marketId})
 	GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId)
+	// GetNativeMarketsMarketIdCandles OHLCV over a bounded window, computed from the market's own prints (§14)
+	// (GET /native-markets/{marketId}/candles)
+	GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdCandlesParams)
 	// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
 	// (POST /native-markets/{marketId}/orders)
 	PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdOrdersParams)
 	// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
 	// (POST /native-markets/{marketId}/quotes)
 	PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams)
+	// GetNativeMarketsMarketIdSummary Everything the asset detail / trading screen needs (product goal §13)
+	// (GET /native-markets/{marketId}/summary)
+	GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdSummaryParams)
+	// GetNativeMarketsMarketIdTrades The public tape — recent prints, newest first (§13)
+	// (GET /native-markets/{marketId}/trades)
+	GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdTradesParams)
 
 	// (GET /orders)
 	GetOrders(w http.ResponseWriter, r *http.Request, params GetOrdersParams)
@@ -4289,6 +8179,9 @@ type ServerInterface interface {
 	// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
 	// (POST /payouts)
 	PostPayouts(w http.ResponseWriter, r *http.Request, params PostPayoutsParams)
+	// PostPayoutsQuote What a payout would cost, before committing to it (§19, §22)
+	// (POST /payouts/quote)
+	PostPayoutsQuote(w http.ResponseWriter, r *http.Request, params PostPayoutsQuoteParams)
 
 	// (GET /payouts/{payoutId})
 	GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId)
@@ -4307,6 +8200,24 @@ type ServerInterface interface {
 	// DeleteSessionsSessionId Revoke one of the caller's sessions
 	// (DELETE /sessions/{sessionId})
 	DeleteSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// GetStrategies Your strategies
+	// (GET /strategies)
+	GetStrategies(w http.ResponseWriter, r *http.Request, params GetStrategiesParams)
+	// PostStrategies Describe a strategy in your own words
+	// (POST /strategies)
+	PostStrategies(w http.ResponseWriter, r *http.Request, params PostStrategiesParams)
+	// GetStrategiesStrategyId One strategy and its current compiled version
+	// (GET /strategies/{strategyId})
+	GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request, strategyId StrategyId)
+	// PostStrategiesStrategyIdCompile Compile the description into a reviewable strategy
+	// (POST /strategies/{strategyId}/compile)
+	PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request, strategyId StrategyId, params PostStrategiesStrategyIdCompileParams)
+	// PostStrategiesStrategyIdVersionsVersionAccept Accept a compiled strategy version you have read
+	// (POST /strategies/{strategyId}/versions/{version}/accept)
+	PostStrategiesStrategyIdVersionsVersionAccept(w http.ResponseWriter, r *http.Request, strategyId StrategyId, version StrategyVersionNumber, params PostStrategiesStrategyIdVersionsVersionAcceptParams)
+	// GetTerms The legal documents currently served, with their text, for anyone
+	// (GET /terms)
+	GetTerms(w http.ResponseWriter, r *http.Request)
 	// GetVersion Build version and non-secret configuration hash (PART 222)
 	// (GET /version)
 	GetVersion(w http.ResponseWriter, r *http.Request)
@@ -4393,13 +8304,31 @@ func (_ Unimplemented) PostAdminActionsActionIdDecision(w http.ResponseWriter, r
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetAdminAgents Every account's agents, with owner, authority level, status and limits
+// (GET /admin/agents)
+func (_ Unimplemented) GetAdminAgents(w http.ResponseWriter, r *http.Request, params GetAdminAgentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdminAgentsAgentIdPause Operator pause of a customer's agent, with a reason
+// (POST /admin/agents/{agentId}/pause)
+func (_ Unimplemented) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAdminAgentsAgentIdPauseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetAdminGates Production capability gates for this environment
 // (GET /admin/gates)
 func (_ Unimplemented) GetAdminGates(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// PostAdminGatesCapabilityAction Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up)
+// GetAdminGatesCapabilityHistory Every recorded transition of a gate, oldest first, with who moved it
+// (GET /admin/gates/{capability}/history)
+func (_ Unimplemented) GetAdminGatesCapabilityHistory(w http.ResponseWriter, r *http.Request, capability Capability) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdminGatesCapabilityAction Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
 // (POST /admin/gates/{capability}/{action})
 func (_ Unimplemented) PostAdminGatesCapabilityAction(w http.ResponseWriter, r *http.Request, capability Capability, action PostAdminGatesCapabilityActionParamsAction, params PostAdminGatesCapabilityActionParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -4436,6 +8365,42 @@ func (_ Unimplemented) GetAdminReconciliationRecords(w http.ResponseWriter, r *h
 // PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 // (POST /admin/reconciliation/records/{recordId}/resolve)
 func (_ Unimplemented) PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdminUsersUserId Operator support view of one user (read only)
+// (GET /admin/users/{userId})
+func (_ Unimplemented) GetAdminUsersUserId(w http.ResponseWriter, r *http.Request, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdminUsersUserIdClosure Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+// (POST /admin/users/{userId}/closure)
+func (_ Unimplemented) PostAdminUsersUserIdClosure(w http.ResponseWriter, r *http.Request, userId UserId, params PostAdminUsersUserIdClosureParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAgents Your agents
+// (GET /agents)
+func (_ Unimplemented) GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAgents Create an agent from a compiled strategy version, with the authority and limits granted to it
+// (POST /agents)
+func (_ Unimplemented) PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAgentsAgentId One agent - authority, limits, budget used, last run and honest runtime state
+// (GET /agents/{agentId})
+func (_ Unimplemented) GetAgentsAgentId(w http.ResponseWriter, r *http.Request, agentId AgentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAgentsAgentIdAction Enable, pause, resume, disable or archive your own agent
+// (POST /agents/{agentId}/{action})
+func (_ Unimplemented) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request, agentId AgentId, action PostAgentsAgentIdActionParamsAction, params PostAgentsAgentIdActionParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4583,6 +8548,150 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetMeAccount The standing of the caller own account, with any restrictions and open closure request
+// (GET /me/account)
+func (_ Unimplemented) GetMeAccount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeAccountClose Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+// (POST /me/account/close)
+func (_ Unimplemented) PostMeAccountClose(w http.ResponseWriter, r *http.Request, params PostMeAccountCloseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeAccountCloseCancel Cancel the caller own open closure request
+// (POST /me/account/close/cancel)
+func (_ Unimplemented) PostMeAccountCloseCancel(w http.ResponseWriter, r *http.Request, params PostMeAccountCloseCancelParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeActivity The unified activity timeline (§16)
+// (GET /me/activity)
+func (_ Unimplemented) GetMeActivity(w http.ResponseWriter, r *http.Request, params GetMeActivityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeAudit The caller's own security and account history (PART 52); never another person's
+// (GET /me/audit)
+func (_ Unimplemented) GetMeAudit(w http.ResponseWriter, r *http.Request, params GetMeAuditParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeEligibility What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+// (GET /me/eligibility)
+func (_ Unimplemented) GetMeEligibility(w http.ResponseWriter, r *http.Request, params GetMeEligibilityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeNotificationPreferences Per-kind in-app notification preferences (IN_APP is the only channel that exists)
+// (GET /me/notification-preferences)
+func (_ Unimplemented) GetMeNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PutMeNotificationPreferences Replace the caller's answers for the kinds named
+// (PUT /me/notification-preferences)
+func (_ Unimplemented) PutMeNotificationPreferences(w http.ResponseWriter, r *http.Request, params PutMeNotificationPreferencesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeNotifications The caller's notification centre, newest first
+// (GET /me/notifications)
+func (_ Unimplemented) GetMeNotifications(w http.ResponseWriter, r *http.Request, params GetMeNotificationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeNotificationsReadAll Mark every unread notification read
+// (POST /me/notifications/read-all)
+func (_ Unimplemented) PostMeNotificationsReadAll(w http.ResponseWriter, r *http.Request, params PostMeNotificationsReadAllParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeNotificationsUnreadCount How many of the caller's notifications are unread
+// (GET /me/notifications/unread-count)
+func (_ Unimplemented) GetMeNotificationsUnreadCount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeNotificationsNotificationIdRead Mark one notification read (idempotent; the first instant is kept)
+// (POST /me/notifications/{notificationId}/read)
+func (_ Unimplemented) PostMeNotificationsNotificationIdRead(w http.ResponseWriter, r *http.Request, notificationId NotificationId, params PostMeNotificationsNotificationIdReadParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMePayoutDestinations Where you have asked value to be sent (§25)
+// (GET /me/payout-destinations)
+func (_ Unimplemented) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request, params GetMePayoutDestinationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMePayoutDestinations Register a payout destination from a provider token (§25)
+// (POST /me/payout-destinations)
+func (_ Unimplemented) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request, params PostMePayoutDestinationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteMePayoutDestinationsDestinationId Stop using a payout destination (§25)
+// (DELETE /me/payout-destinations/{destinationId})
+func (_ Unimplemented) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request, destinationId UUID, params DeleteMePayoutDestinationsDestinationIdParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMePortfolio Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+// (GET /me/portfolio)
+func (_ Unimplemented) GetMePortfolio(w http.ResponseWriter, r *http.Request, params GetMePortfolioParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeProfile Update the caller own profile (display name, handle, locale, time zone)
+// (POST /me/profile)
+func (_ Unimplemented) PostMeProfile(w http.ResponseWriter, r *http.Request, params PostMeProfileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeSecurity What the system knows about the security of the caller own account
+// (GET /me/security)
+func (_ Unimplemented) GetMeSecurity(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeTermsAcceptances Legal documents, which of them the caller has accepted, and which are outstanding
+// (GET /me/terms-acceptances)
+func (_ Unimplemented) GetMeTermsAcceptances(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeTermsAcceptances Accept the named documents at the versions currently served
+// (POST /me/terms-acceptances)
+func (_ Unimplemented) PostMeTermsAcceptances(w http.ResponseWriter, r *http.Request, params PostMeTermsAcceptancesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeVerification Your financial verification profile, what is missing, and what to do next (§20, §24)
+// (GET /me/verification)
+func (_ Unimplemented) GetMeVerification(w http.ResponseWriter, r *http.Request, params GetMeVerificationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeVerificationSandboxOutcome SANDBOX TIER ONLY - choose what the rehearsal verification decides
+// (POST /me/verification/sandbox-outcome)
+func (_ Unimplemented) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request, params PostMeVerificationSandboxOutcomeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeVerificationSessions Start a provider-hosted identity verification (§20)
+// (POST /me/verification/sessions)
+func (_ Unimplemented) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request, params PostMeVerificationSessionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeVerificationSessionsSessionId Ask the provider what happened, and record it
+// (GET /me/verification/sessions/{sessionId})
+func (_ Unimplemented) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetMeVerificationSessionsSessionIdParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetNativeAssets Native assets that currently accept at least sells
 // (GET /native-assets)
 func (_ Unimplemented) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
@@ -4606,9 +8715,21 @@ func (_ Unimplemented) PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetNativeMarkets Discover internal markets (product goal §12, §35)
+// (GET /native-markets)
+func (_ Unimplemented) GetNativeMarkets(w http.ResponseWriter, r *http.Request, params GetNativeMarketsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
 // (GET /native-markets/{marketId})
 func (_ Unimplemented) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketIdCandles OHLCV over a bounded window, computed from the market's own prints (§14)
+// (GET /native-markets/{marketId}/candles)
+func (_ Unimplemented) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdCandlesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4621,6 +8742,18 @@ func (_ Unimplemented) PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r 
 // PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
 // (POST /native-markets/{marketId}/quotes)
 func (_ Unimplemented) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request, marketId MarketId, params PostNativeMarketsMarketIdQuotesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketIdSummary Everything the asset detail / trading screen needs (product goal §13)
+// (GET /native-markets/{marketId}/summary)
+func (_ Unimplemented) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdSummaryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetNativeMarketsMarketIdTrades The public tape — recent prints, newest first (§13)
+// (GET /native-markets/{marketId}/trades)
+func (_ Unimplemented) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdTradesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4657,6 +8790,12 @@ func (_ Unimplemented) PostPayouts(w http.ResponseWriter, r *http.Request, param
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// PostPayoutsQuote What a payout would cost, before committing to it (§19, §22)
+// (POST /payouts/quote)
+func (_ Unimplemented) PostPayoutsQuote(w http.ResponseWriter, r *http.Request, params PostPayoutsQuoteParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (GET /payouts/{payoutId})
 func (_ Unimplemented) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -4689,6 +8828,42 @@ func (_ Unimplemented) GetSessions(w http.ResponseWriter, r *http.Request) {
 // DeleteSessionsSessionId Revoke one of the caller's sessions
 // (DELETE /sessions/{sessionId})
 func (_ Unimplemented) DeleteSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetStrategies Your strategies
+// (GET /strategies)
+func (_ Unimplemented) GetStrategies(w http.ResponseWriter, r *http.Request, params GetStrategiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostStrategies Describe a strategy in your own words
+// (POST /strategies)
+func (_ Unimplemented) PostStrategies(w http.ResponseWriter, r *http.Request, params PostStrategiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetStrategiesStrategyId One strategy and its current compiled version
+// (GET /strategies/{strategyId})
+func (_ Unimplemented) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request, strategyId StrategyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostStrategiesStrategyIdCompile Compile the description into a reviewable strategy
+// (POST /strategies/{strategyId}/compile)
+func (_ Unimplemented) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request, strategyId StrategyId, params PostStrategiesStrategyIdCompileParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostStrategiesStrategyIdVersionsVersionAccept Accept a compiled strategy version you have read
+// (POST /strategies/{strategyId}/versions/{version}/accept)
+func (_ Unimplemented) PostStrategiesStrategyIdVersionsVersionAccept(w http.ResponseWriter, r *http.Request, strategyId StrategyId, version StrategyVersionNumber, params PostStrategiesStrategyIdVersionsVersionAcceptParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetTerms The legal documents currently served, with their text, for anyone
+// (GET /terms)
+func (_ Unimplemented) GetTerms(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5285,11 +9460,150 @@ func (siw *ServerInterfaceWrapper) PostAdminActionsActionIdDecision(w http.Respo
 	handler.ServeHTTP(w, r)
 }
 
+// GetAdminAgents operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdminAgentsParams
+
+	// ------------- Optional query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdminAgentsAgentIdPause operation middleware
+func (siw *ServerInterfaceWrapper) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agentId" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agentId", chi.URLParam(r, "agentId"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdminAgentsAgentIdPauseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdminAgentsAgentIdPause(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdminGates operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminGates(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminGates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdminGatesCapabilityHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminGatesCapabilityHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "capability" -------------
+	var capability Capability
+
+	err = runtime.BindStyledParameterWithOptions("simple", "capability", chi.URLParam(r, "capability"), &capability, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "capability", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminGatesCapabilityHistory(w, r, capability)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5615,6 +9929,279 @@ func (siw *ServerInterfaceWrapper) PostAdminReconciliationRecordsRecordIdResolve
 	handler.ServeHTTP(w, r)
 }
 
+// GetAdminUsersUserId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminUsersUserId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminUsersUserId(w, r, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdminUsersUserIdClosure operation middleware
+func (siw *ServerInterfaceWrapper) PostAdminUsersUserIdClosure(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "userId" -------------
+	var userId UserId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdminUsersUserIdClosureParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdminUsersUserIdClosure(w, r, userId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgents operation middleware
+func (siw *ServerInterfaceWrapper) GetAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgents operation middleware
+func (siw *ServerInterfaceWrapper) PostAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentsAgentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentsAgentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agentId" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agentId", chi.URLParam(r, "agentId"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentsAgentId(w, r, agentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentsAgentIdAction operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agentId" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agentId", chi.URLParam(r, "agentId"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agentId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "action" -------------
+	var action PostAgentsAgentIdActionParamsAction
+
+	err = runtime.BindStyledParameterWithOptions("simple", "action", chi.URLParam(r, "action"), &action, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentsAgentIdActionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentsAgentIdAction(w, r, agentId, action, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAssets operation middleware
 func (siw *ServerInterfaceWrapper) GetAssets(w http.ResponseWriter, r *http.Request) {
 
@@ -5693,6 +10280,19 @@ func (siw *ServerInterfaceWrapper) GetAuthLogin(w http.ResponseWriter, r *http.R
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "step_up"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "step_up", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "return_to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "return_to", r.URL.Query(), &params.ReturnTo, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "return_to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "return_to", Err: err})
 		}
 		return
 	}
@@ -6521,6 +11121,979 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetMeAccount operation middleware
+func (siw *ServerInterfaceWrapper) GetMeAccount(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeAccount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeAccountClose operation middleware
+func (siw *ServerInterfaceWrapper) PostMeAccountClose(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeAccountCloseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeAccountClose(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeAccountCloseCancel operation middleware
+func (siw *ServerInterfaceWrapper) PostMeAccountCloseCancel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeAccountCloseCancelParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeAccountCloseCancel(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeActivity operation middleware
+func (siw *ServerInterfaceWrapper) GetMeActivity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeActivityParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeActivity(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeAudit operation middleware
+func (siw *ServerInterfaceWrapper) GetMeAudit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeAuditParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeAudit(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeEligibility operation middleware
+func (siw *ServerInterfaceWrapper) GetMeEligibility(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeEligibilityParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeEligibility(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) GetMeNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeNotificationPreferences(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutMeNotificationPreferences operation middleware
+func (siw *ServerInterfaceWrapper) PutMeNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PutMeNotificationPreferencesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutMeNotificationPreferences(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeNotifications operation middleware
+func (siw *ServerInterfaceWrapper) GetMeNotifications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeNotificationsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "unread" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "unread", r.URL.Query(), &params.Unread, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "unread"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "unread", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "kinds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, false, "kinds", r.URL.Query(), &params.Kinds, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kinds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kinds", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeNotifications(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeNotificationsReadAll operation middleware
+func (siw *ServerInterfaceWrapper) PostMeNotificationsReadAll(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeNotificationsReadAllParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeNotificationsReadAll(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeNotificationsUnreadCount operation middleware
+func (siw *ServerInterfaceWrapper) GetMeNotificationsUnreadCount(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeNotificationsUnreadCount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeNotificationsNotificationIdRead operation middleware
+func (siw *ServerInterfaceWrapper) PostMeNotificationsNotificationIdRead(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "notificationId" -------------
+	var notificationId NotificationId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "notificationId", chi.URLParam(r, "notificationId"), &notificationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "notificationId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeNotificationsNotificationIdReadParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeNotificationsNotificationIdRead(w, r, notificationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMePayoutDestinations operation middleware
+func (siw *ServerInterfaceWrapper) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMePayoutDestinationsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMePayoutDestinations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMePayoutDestinations operation middleware
+func (siw *ServerInterfaceWrapper) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMePayoutDestinationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMePayoutDestinations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMePayoutDestinationsDestinationId operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "destinationId" -------------
+	var destinationId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "destinationId", chi.URLParam(r, "destinationId"), &destinationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "destinationId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMePayoutDestinationsDestinationIdParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMePayoutDestinationsDestinationId(w, r, destinationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMePortfolio operation middleware
+func (siw *ServerInterfaceWrapper) GetMePortfolio(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMePortfolioParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMePortfolio(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeProfile operation middleware
+func (siw *ServerInterfaceWrapper) PostMeProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeProfileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeProfile(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeSecurity operation middleware
+func (siw *ServerInterfaceWrapper) GetMeSecurity(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeSecurity(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeTermsAcceptances operation middleware
+func (siw *ServerInterfaceWrapper) GetMeTermsAcceptances(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeTermsAcceptances(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeTermsAcceptances operation middleware
+func (siw *ServerInterfaceWrapper) PostMeTermsAcceptances(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeTermsAcceptancesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeTermsAcceptances(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeVerification operation middleware
+func (siw *ServerInterfaceWrapper) GetMeVerification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeVerificationParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeVerification(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeVerificationSandboxOutcome operation middleware
+func (siw *ServerInterfaceWrapper) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeVerificationSandboxOutcomeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeVerificationSandboxOutcome(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeVerificationSessions operation middleware
+func (siw *ServerInterfaceWrapper) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeVerificationSessionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeVerificationSessions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeVerificationSessionsSessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeVerificationSessionsSessionIdParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeVerificationSessionsSessionId(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNativeAssets operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeAssets(w http.ResponseWriter, r *http.Request) {
 
@@ -6679,6 +12252,91 @@ func (siw *ServerInterfaceWrapper) PostNativeAssetsAssetIdSubmit(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
+// GetNativeMarkets operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarkets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarkets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNativeMarketsMarketId operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request) {
 
@@ -6696,6 +12354,74 @@ func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetNativeMarketsMarketId(w, r, marketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketIdCandles operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsMarketIdCandlesParams
+
+	// ------------- Required query parameter "interval" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "interval", r.URL.Query(), &params.Interval, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "interval"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "interval", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketIdCandles(w, r, marketId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6804,6 +12530,90 @@ func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdQuotes(w http.Respon
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostNativeMarketsMarketIdQuotes(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketIdSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsMarketIdSummaryParams
+
+	// ------------- Optional query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketIdSummary(w, r, marketId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNativeMarketsMarketIdTrades operation middleware
+func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marketId" -------------
+	var marketId MarketId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marketId", chi.URLParam(r, "marketId"), &marketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marketId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNativeMarketsMarketIdTradesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNativeMarketsMarketIdTrades(w, r, marketId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7060,6 +12870,51 @@ func (siw *ServerInterfaceWrapper) PostPayouts(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// PostPayoutsQuote operation middleware
+func (siw *ServerInterfaceWrapper) PostPayoutsQuote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostPayoutsQuoteParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostPayoutsQuote(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPayoutsPayoutId operation middleware
 func (siw *ServerInterfaceWrapper) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request) {
 
@@ -7199,6 +13054,254 @@ func (siw *ServerInterfaceWrapper) DeleteSessionsSessionId(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteSessionsSessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategies operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetStrategiesParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostStrategies operation middleware
+func (siw *ServerInterfaceWrapper) PostStrategies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostStrategiesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostStrategies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategiesStrategyId operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "strategyId" -------------
+	var strategyId StrategyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "strategyId", chi.URLParam(r, "strategyId"), &strategyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "strategyId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategiesStrategyId(w, r, strategyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostStrategiesStrategyIdCompile operation middleware
+func (siw *ServerInterfaceWrapper) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "strategyId" -------------
+	var strategyId StrategyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "strategyId", chi.URLParam(r, "strategyId"), &strategyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "strategyId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostStrategiesStrategyIdCompileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostStrategiesStrategyIdCompile(w, r, strategyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostStrategiesStrategyIdVersionsVersionAccept operation middleware
+func (siw *ServerInterfaceWrapper) PostStrategiesStrategyIdVersionsVersionAccept(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "strategyId" -------------
+	var strategyId StrategyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "strategyId", chi.URLParam(r, "strategyId"), &strategyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "strategyId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "version" -------------
+	var version StrategyVersionNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "version", chi.URLParam(r, "version"), &version, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "version", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostStrategiesStrategyIdVersionsVersionAcceptParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostStrategiesStrategyIdVersionsVersionAccept(w, r, strategyId, version, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTerms operation middleware
+func (siw *ServerInterfaceWrapper) GetTerms(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTerms(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7506,6 +13609,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/admin/gates/{capability}/{action}", wrapper.PostAdminGatesCapabilityAction)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/gates/{capability}/history", wrapper.GetAdminGatesCapabilityHistory)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/admin/kill-switches", wrapper.GetAdminKillSwitches)
 	})
 	r.Group(func(r chi.Router) {
@@ -7606,6 +13712,135 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/version", wrapper.GetVersion)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/profile", wrapper.PostMeProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/terms", wrapper.GetTerms)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/terms-acceptances", wrapper.GetMeTermsAcceptances)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/terms-acceptances", wrapper.PostMeTermsAcceptances)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/account", wrapper.GetMeAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/account/close", wrapper.PostMeAccountClose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/account/close/cancel", wrapper.PostMeAccountCloseCancel)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/security", wrapper.GetMeSecurity)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/users/{userId}", wrapper.GetAdminUsersUserId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users/{userId}/closure", wrapper.PostAdminUsersUserIdClosure)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/notifications", wrapper.GetMeNotifications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/notifications/unread-count", wrapper.GetMeNotificationsUnreadCount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/notifications/read-all", wrapper.PostMeNotificationsReadAll)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/notifications/{notificationId}/read", wrapper.PostMeNotificationsNotificationIdRead)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/notification-preferences", wrapper.GetMeNotificationPreferences)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/me/notification-preferences", wrapper.PutMeNotificationPreferences)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/audit", wrapper.GetMeAudit)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/strategies", wrapper.GetStrategies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/strategies", wrapper.PostStrategies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/strategies/{strategyId}", wrapper.GetStrategiesStrategyId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/strategies/{strategyId}/compile", wrapper.PostStrategiesStrategyIdCompile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/strategies/{strategyId}/versions/{version}/accept", wrapper.PostStrategiesStrategyIdVersionsVersionAccept)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/agents", wrapper.GetAgents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/agents", wrapper.PostAgents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/agents/{agentId}", wrapper.GetAgentsAgentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/agents/{agentId}/{action}", wrapper.PostAgentsAgentIdAction)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/agents", wrapper.GetAdminAgents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/agents/{agentId}/pause", wrapper.PostAdminAgentsAgentIdPause)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets", wrapper.GetNativeMarkets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}/summary", wrapper.GetNativeMarketsMarketIdSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}/candles", wrapper.GetNativeMarketsMarketIdCandles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/native-markets/{marketId}/trades", wrapper.GetNativeMarketsMarketIdTrades)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/portfolio", wrapper.GetMePortfolio)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/activity", wrapper.GetMeActivity)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/verification", wrapper.GetMeVerification)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/verification/sessions", wrapper.PostMeVerificationSessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/verification/sessions/{sessionId}", wrapper.GetMeVerificationSessionsSessionId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/verification/sandbox-outcome", wrapper.PostMeVerificationSandboxOutcome)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/eligibility", wrapper.GetMeEligibility)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/payout-destinations", wrapper.GetMePayoutDestinations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/payout-destinations", wrapper.PostMePayoutDestinations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/me/payout-destinations/{destinationId}", wrapper.DeleteMePayoutDestinationsDestinationId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/payouts/quote", wrapper.PostPayoutsQuote)
 	})
 
 	return r
@@ -8028,6 +14263,112 @@ func (response PostAdminActionsActionIdDecision409ApplicationProblemPlusJSONResp
 	return err
 }
 
+type GetAdminAgentsRequestObject struct {
+	Params GetAdminAgentsParams
+}
+
+type GetAdminAgentsResponseObject interface {
+	VisitGetAdminAgentsResponse(w http.ResponseWriter) error
+}
+
+type GetAdminAgents200JSONResponse AgentPage
+
+func (response GetAdminAgents200JSONResponse) VisitGetAdminAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdminAgents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdminAgents403ApplicationProblemPlusJSONResponse) VisitGetAdminAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPauseRequestObject struct {
+	AgentId AgentId `json:"agentId"`
+	Params  PostAdminAgentsAgentIdPauseParams
+	Body    *PostAdminAgentsAgentIdPauseJSONRequestBody
+}
+
+type PostAdminAgentsAgentIdPauseResponseObject interface {
+	VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error
+}
+
+type PostAdminAgentsAgentIdPause200JSONResponse Agent
+
+func (response PostAdminAgentsAgentIdPause200JSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetAdminGatesRequestObject struct {
 }
 
@@ -8045,6 +14386,44 @@ func (response GetAdminGates200JSONResponse) VisitGetAdminGatesResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdminGatesCapabilityHistoryRequestObject struct {
+	Capability Capability `json:"capability"`
+}
+
+type GetAdminGatesCapabilityHistoryResponseObject interface {
+	VisitGetAdminGatesCapabilityHistoryResponse(w http.ResponseWriter) error
+}
+
+type GetAdminGatesCapabilityHistory200JSONResponse []CapabilityGateTransition
+
+func (response GetAdminGatesCapabilityHistory200JSONResponse) VisitGetAdminGatesCapabilityHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdminGatesCapabilityHistory404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdminGatesCapabilityHistory404ApplicationProblemPlusJSONResponse) VisitGetAdminGatesCapabilityHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -8285,6 +14664,352 @@ func (response PostAdminReconciliationRecordsRecordIdResolve422ApplicationProble
 	return err
 }
 
+type GetAdminUsersUserIdRequestObject struct {
+	UserId UserId `json:"userId"`
+}
+
+type GetAdminUsersUserIdResponseObject interface {
+	VisitGetAdminUsersUserIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdminUsersUserId200JSONResponse AdminUserView
+
+func (response GetAdminUsersUserId200JSONResponse) VisitGetAdminUsersUserIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdminUsersUserId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdminUsersUserId404ApplicationProblemPlusJSONResponse) VisitGetAdminUsersUserIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminUsersUserIdClosureRequestObject struct {
+	UserId UserId `json:"userId"`
+	Params PostAdminUsersUserIdClosureParams
+	Body   *PostAdminUsersUserIdClosureJSONRequestBody
+}
+
+type PostAdminUsersUserIdClosureResponseObject interface {
+	VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error
+}
+
+type PostAdminUsersUserIdClosure200JSONResponse AdminUserView
+
+func (response PostAdminUsersUserIdClosure200JSONResponse) VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminUsersUserIdClosure404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdminUsersUserIdClosure404ApplicationProblemPlusJSONResponse) VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminUsersUserIdClosure409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdminUsersUserIdClosure409ApplicationProblemPlusJSONResponse) VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsRequestObject struct {
+	Params GetAgentsParams
+}
+
+type GetAgentsResponseObject interface {
+	VisitGetAgentsResponse(w http.ResponseWriter) error
+}
+
+type GetAgents200JSONResponse AgentPage
+
+func (response GetAgents200JSONResponse) VisitGetAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAgents403ApplicationProblemPlusJSONResponse) VisitGetAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsRequestObject struct {
+	Params PostAgentsParams
+	Body   *PostAgentsJSONRequestBody
+}
+
+type PostAgentsResponseObject interface {
+	VisitPostAgentsResponse(w http.ResponseWriter) error
+}
+
+type PostAgents200JSONResponse Agent
+
+func (response PostAgents200JSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents201JSONResponse Agent
+
+func (response PostAgents201JSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAgents403ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgents409ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgents422ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsAgentIdRequestObject struct {
+	AgentId AgentId `json:"agentId"`
+}
+
+type GetAgentsAgentIdResponseObject interface {
+	VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAgentsAgentId200JSONResponse Agent
+
+func (response GetAgentsAgentId200JSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsAgentId403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAgentsAgentId403ApplicationProblemPlusJSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsAgentId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAgentsAgentId404ApplicationProblemPlusJSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdActionRequestObject struct {
+	AgentId AgentId                             `json:"agentId"`
+	Action  PostAgentsAgentIdActionParamsAction `json:"action"`
+	Params  PostAgentsAgentIdActionParams
+	Body    *PostAgentsAgentIdActionJSONRequestBody
+}
+
+type PostAgentsAgentIdActionResponseObject interface {
+	VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error
+}
+
+type PostAgentsAgentIdAction200JSONResponse Agent
+
+func (response PostAgentsAgentIdAction200JSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetAssetsRequestObject struct {
 }
 
@@ -8368,9 +15093,23 @@ func (response GetAuthLogin302Response) VisitGetAuthLoginResponse(w http.Respons
 	return nil
 }
 
-type GetAuthLogin503ApplicationProblemPlusJSONResponse struct {
+type GetAuthLogin400ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response GetAuthLogin400ApplicationProblemPlusJSONResponse) VisitGetAuthLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAuthLogin503ApplicationProblemPlusJSONResponse Problem
 
 func (response GetAuthLogin503ApplicationProblemPlusJSONResponse) VisitGetAuthLoginResponse(w http.ResponseWriter) error {
 
@@ -9279,6 +16018,975 @@ func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w 
 	return err
 }
 
+type GetMeAccountRequestObject struct {
+}
+
+type GetMeAccountResponseObject interface {
+	VisitGetMeAccountResponse(w http.ResponseWriter) error
+}
+
+type GetMeAccount200JSONResponse MyAccount
+
+func (response GetMeAccount200JSONResponse) VisitGetMeAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeAccountCloseRequestObject struct {
+	Params PostMeAccountCloseParams
+	Body   *PostMeAccountCloseJSONRequestBody
+}
+
+type PostMeAccountCloseResponseObject interface {
+	VisitPostMeAccountCloseResponse(w http.ResponseWriter) error
+}
+
+type PostMeAccountClose200JSONResponse MyAccount
+
+func (response PostMeAccountClose200JSONResponse) VisitPostMeAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeAccountClose409ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeAccountClose409ApplicationProblemPlusJSONResponse) VisitPostMeAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeAccountCloseCancelRequestObject struct {
+	Params PostMeAccountCloseCancelParams
+}
+
+type PostMeAccountCloseCancelResponseObject interface {
+	VisitPostMeAccountCloseCancelResponse(w http.ResponseWriter) error
+}
+
+type PostMeAccountCloseCancel200JSONResponse MyAccount
+
+func (response PostMeAccountCloseCancel200JSONResponse) VisitPostMeAccountCloseCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeAccountCloseCancel404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeAccountCloseCancel404ApplicationProblemPlusJSONResponse) VisitPostMeAccountCloseCancelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeActivityRequestObject struct {
+	Params GetMeActivityParams
+}
+
+type GetMeActivityResponseObject interface {
+	VisitGetMeActivityResponse(w http.ResponseWriter) error
+}
+
+type GetMeActivity200JSONResponse ActivityFeedPage
+
+func (response GetMeActivity200JSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeActivity403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeActivity403ApplicationProblemPlusJSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeActivity422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMeActivity422ApplicationProblemPlusJSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeAuditRequestObject struct {
+	Params GetMeAuditParams
+}
+
+type GetMeAuditResponseObject interface {
+	VisitGetMeAuditResponse(w http.ResponseWriter) error
+}
+
+type GetMeAudit200JSONResponse MeAuditPage
+
+func (response GetMeAudit200JSONResponse) VisitGetMeAuditResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeEligibilityRequestObject struct {
+	Params GetMeEligibilityParams
+}
+
+type GetMeEligibilityResponseObject interface {
+	VisitGetMeEligibilityResponse(w http.ResponseWriter) error
+}
+
+type GetMeEligibility200JSONResponse WithdrawalEligibility
+
+func (response GetMeEligibility200JSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeEligibility403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeEligibility403ApplicationProblemPlusJSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeEligibility404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMeEligibility404ApplicationProblemPlusJSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeNotificationPreferencesRequestObject struct {
+}
+
+type GetMeNotificationPreferencesResponseObject interface {
+	VisitGetMeNotificationPreferencesResponse(w http.ResponseWriter) error
+}
+
+type GetMeNotificationPreferences200JSONResponse NotificationPreferences
+
+func (response GetMeNotificationPreferences200JSONResponse) VisitGetMeNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMeNotificationPreferencesRequestObject struct {
+	Params PutMeNotificationPreferencesParams
+	Body   *PutMeNotificationPreferencesJSONRequestBody
+}
+
+type PutMeNotificationPreferencesResponseObject interface {
+	VisitPutMeNotificationPreferencesResponse(w http.ResponseWriter) error
+}
+
+type PutMeNotificationPreferences200JSONResponse NotificationPreferences
+
+func (response PutMeNotificationPreferences200JSONResponse) VisitPutMeNotificationPreferencesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeNotificationsRequestObject struct {
+	Params GetMeNotificationsParams
+}
+
+type GetMeNotificationsResponseObject interface {
+	VisitGetMeNotificationsResponse(w http.ResponseWriter) error
+}
+
+type GetMeNotifications200JSONResponse NotificationPage
+
+func (response GetMeNotifications200JSONResponse) VisitGetMeNotificationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeNotificationsReadAllRequestObject struct {
+	Params PostMeNotificationsReadAllParams
+}
+
+type PostMeNotificationsReadAllResponseObject interface {
+	VisitPostMeNotificationsReadAllResponse(w http.ResponseWriter) error
+}
+
+type PostMeNotificationsReadAll200JSONResponse MarkedRead
+
+func (response PostMeNotificationsReadAll200JSONResponse) VisitPostMeNotificationsReadAllResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeNotificationsUnreadCountRequestObject struct {
+}
+
+type GetMeNotificationsUnreadCountResponseObject interface {
+	VisitGetMeNotificationsUnreadCountResponse(w http.ResponseWriter) error
+}
+
+type GetMeNotificationsUnreadCount200JSONResponse UnreadCount
+
+func (response GetMeNotificationsUnreadCount200JSONResponse) VisitGetMeNotificationsUnreadCountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeNotificationsNotificationIdReadRequestObject struct {
+	NotificationId NotificationId `json:"notificationId"`
+	Params         PostMeNotificationsNotificationIdReadParams
+}
+
+type PostMeNotificationsNotificationIdReadResponseObject interface {
+	VisitPostMeNotificationsNotificationIdReadResponse(w http.ResponseWriter) error
+}
+
+type PostMeNotificationsNotificationIdRead200JSONResponse Notification
+
+func (response PostMeNotificationsNotificationIdRead200JSONResponse) VisitPostMeNotificationsNotificationIdReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeNotificationsNotificationIdRead404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeNotificationsNotificationIdRead404ApplicationProblemPlusJSONResponse) VisitPostMeNotificationsNotificationIdReadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePayoutDestinationsRequestObject struct {
+	Params GetMePayoutDestinationsParams
+}
+
+type GetMePayoutDestinationsResponseObject interface {
+	VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error
+}
+
+type GetMePayoutDestinations200JSONResponse []PayoutDestination
+
+func (response GetMePayoutDestinations200JSONResponse) VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePayoutDestinations403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMePayoutDestinations403ApplicationProblemPlusJSONResponse) VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinationsRequestObject struct {
+	Params PostMePayoutDestinationsParams
+	Body   *PostMePayoutDestinationsJSONRequestBody
+}
+
+type PostMePayoutDestinationsResponseObject interface {
+	VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error
+}
+
+type PostMePayoutDestinations200JSONResponse PayoutDestination
+
+func (response PostMePayoutDestinations200JSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations201JSONResponse PayoutDestination
+
+func (response PostMePayoutDestinations201JSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMePayoutDestinations403ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMePayoutDestinations409ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMePayoutDestinations422ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationIdRequestObject struct {
+	DestinationId UUID `json:"destinationId"`
+	Params        DeleteMePayoutDestinationsDestinationIdParams
+}
+
+type DeleteMePayoutDestinationsDestinationIdResponseObject interface {
+	VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error
+}
+
+type DeleteMePayoutDestinationsDestinationId200JSONResponse PayoutDestination
+
+func (response DeleteMePayoutDestinationsDestinationId200JSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationId409ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteMePayoutDestinationsDestinationId409ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePortfolioRequestObject struct {
+	Params GetMePortfolioParams
+}
+
+type GetMePortfolioResponseObject interface {
+	VisitGetMePortfolioResponse(w http.ResponseWriter) error
+}
+
+type GetMePortfolio200JSONResponse Portfolio
+
+func (response GetMePortfolio200JSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePortfolio403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMePortfolio403ApplicationProblemPlusJSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePortfolio404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMePortfolio404ApplicationProblemPlusJSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeProfileRequestObject struct {
+	Params PostMeProfileParams
+	Body   *PostMeProfileJSONRequestBody
+}
+
+type PostMeProfileResponseObject interface {
+	VisitPostMeProfileResponse(w http.ResponseWriter) error
+}
+
+type PostMeProfile200JSONResponse UserProfile
+
+func (response PostMeProfile200JSONResponse) VisitPostMeProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeProfile400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeProfile400ApplicationProblemPlusJSONResponse) VisitPostMeProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeProfile409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeProfile409ApplicationProblemPlusJSONResponse) VisitPostMeProfileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeSecurityRequestObject struct {
+}
+
+type GetMeSecurityResponseObject interface {
+	VisitGetMeSecurityResponse(w http.ResponseWriter) error
+}
+
+type GetMeSecurity200JSONResponse SecuritySummary
+
+func (response GetMeSecurity200JSONResponse) VisitGetMeSecurityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeTermsAcceptancesRequestObject struct {
+}
+
+type GetMeTermsAcceptancesResponseObject interface {
+	VisitGetMeTermsAcceptancesResponse(w http.ResponseWriter) error
+}
+
+type GetMeTermsAcceptances200JSONResponse TermsState
+
+func (response GetMeTermsAcceptances200JSONResponse) VisitGetMeTermsAcceptancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeTermsAcceptancesRequestObject struct {
+	Params PostMeTermsAcceptancesParams
+	Body   *PostMeTermsAcceptancesJSONRequestBody
+}
+
+type PostMeTermsAcceptancesResponseObject interface {
+	VisitPostMeTermsAcceptancesResponse(w http.ResponseWriter) error
+}
+
+type PostMeTermsAcceptances200JSONResponse TermsState
+
+func (response PostMeTermsAcceptances200JSONResponse) VisitPostMeTermsAcceptancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeTermsAcceptances400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeTermsAcceptances400ApplicationProblemPlusJSONResponse) VisitPostMeTermsAcceptancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerificationRequestObject struct {
+	Params GetMeVerificationParams
+}
+
+type GetMeVerificationResponseObject interface {
+	VisitGetMeVerificationResponse(w http.ResponseWriter) error
+}
+
+type GetMeVerification200JSONResponse VerificationProfile
+
+func (response GetMeVerification200JSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerification403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeVerification403ApplicationProblemPlusJSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerification404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMeVerification404ApplicationProblemPlusJSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcomeRequestObject struct {
+	Params PostMeVerificationSandboxOutcomeParams
+	Body   *PostMeVerificationSandboxOutcomeJSONRequestBody
+}
+
+type PostMeVerificationSandboxOutcomeResponseObject interface {
+	VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error
+}
+
+type PostMeVerificationSandboxOutcome200JSONResponse VerificationSession
+
+func (response PostMeVerificationSandboxOutcome200JSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcome422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeVerificationSandboxOutcome422ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessionsRequestObject struct {
+	Params PostMeVerificationSessionsParams
+	Body   *PostMeVerificationSessionsJSONRequestBody
+}
+
+type PostMeVerificationSessionsResponseObject interface {
+	VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error
+}
+
+type PostMeVerificationSessions200JSONResponse StartedVerification
+
+func (response PostMeVerificationSessions200JSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessions201JSONResponse StartedVerification
+
+func (response PostMeVerificationSessions201JSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeVerificationSessions403ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeVerificationSessions422ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerificationSessionsSessionIdRequestObject struct {
+	SessionId SessionId `json:"sessionId"`
+	Params    GetMeVerificationSessionsSessionIdParams
+}
+
+type GetMeVerificationSessionsSessionIdResponseObject interface {
+	VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error
+}
+
+type GetMeVerificationSessionsSessionId200JSONResponse VerificationSession
+
+func (response GetMeVerificationSessionsSessionId200JSONResponse) VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerificationSessionsSessionId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeVerificationSessionsSessionId404ApplicationProblemPlusJSONResponse) VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetNativeAssetsRequestObject struct {
 	Params GetNativeAssetsParams
 }
@@ -9474,6 +17182,44 @@ func (response PostNativeAssetsAssetIdSubmit409ApplicationProblemPlusJSONRespons
 	return err
 }
 
+type GetNativeMarketsRequestObject struct {
+	Params GetNativeMarketsParams
+}
+
+type GetNativeMarketsResponseObject interface {
+	VisitGetNativeMarketsResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarkets200JSONResponse NativeMarketPage
+
+func (response GetNativeMarkets200JSONResponse) VisitGetNativeMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarkets422ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarkets422ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetNativeMarketsMarketIdRequestObject struct {
 	MarketId MarketId `json:"marketId"`
 }
@@ -9508,6 +17254,59 @@ func (response GetNativeMarketsMarketId404ApplicationProblemPlusJSONResponse) Vi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdCandlesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetNativeMarketsMarketIdCandlesParams
+}
+
+type GetNativeMarketsMarketIdCandlesResponseObject interface {
+	VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketIdCandles200JSONResponse NativeCandlePage
+
+func (response GetNativeMarketsMarketIdCandles200JSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdCandles422ApplicationProblemPlusJSONResponse Problem
+
+func (response GetNativeMarketsMarketIdCandles422ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9616,6 +17415,84 @@ func (response PostNativeMarketsMarketIdQuotes422ApplicationProblemPlusJSONRespo
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdSummaryRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetNativeMarketsMarketIdSummaryParams
+}
+
+type GetNativeMarketsMarketIdSummaryResponseObject interface {
+	VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketIdSummary200JSONResponse NativeMarketDetail
+
+func (response GetNativeMarketsMarketIdSummary200JSONResponse) VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdSummary404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketIdSummary404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdTradesRequestObject struct {
+	MarketId MarketId `json:"marketId"`
+	Params   GetNativeMarketsMarketIdTradesParams
+}
+
+type GetNativeMarketsMarketIdTradesResponseObject interface {
+	VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error
+}
+
+type GetNativeMarketsMarketIdTrades200JSONResponse NativeTradePage
+
+func (response GetNativeMarketsMarketIdTrades200JSONResponse) VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNativeMarketsMarketIdTrades404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetNativeMarketsMarketIdTrades404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9874,6 +17751,87 @@ func (response PostPayouts422ApplicationProblemPlusJSONResponse) VisitPostPayout
 	return err
 }
 
+type PostPayoutsQuoteRequestObject struct {
+	Params PostPayoutsQuoteParams
+	Body   *PostPayoutsQuoteJSONRequestBody
+}
+
+type PostPayoutsQuoteResponseObject interface {
+	VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error
+}
+
+type PostPayoutsQuote200JSONResponse PayoutQuote
+
+func (response PostPayoutsQuote200JSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote201JSONResponse PayoutQuote
+
+func (response PostPayoutsQuote201JSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostPayoutsQuote403ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostPayoutsQuote404ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostPayoutsQuote422ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetPayoutsPayoutIdRequestObject struct {
 	PayoutId PayoutId `json:"payoutId"`
 }
@@ -10094,6 +18052,362 @@ func (response DeleteSessionsSessionId404ApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type GetStrategiesRequestObject struct {
+	Params GetStrategiesParams
+}
+
+type GetStrategiesResponseObject interface {
+	VisitGetStrategiesResponse(w http.ResponseWriter) error
+}
+
+type GetStrategies200JSONResponse StrategyPage
+
+func (response GetStrategies200JSONResponse) VisitGetStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategies403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetStrategies403ApplicationProblemPlusJSONResponse) VisitGetStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesRequestObject struct {
+	Params PostStrategiesParams
+	Body   *PostStrategiesJSONRequestBody
+}
+
+type PostStrategiesResponseObject interface {
+	VisitPostStrategiesResponse(w http.ResponseWriter) error
+}
+
+type PostStrategies200JSONResponse Strategy
+
+func (response PostStrategies200JSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies201JSONResponse Strategy
+
+func (response PostStrategies201JSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostStrategies403ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategies409ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategies422ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategiesStrategyIdRequestObject struct {
+	StrategyId StrategyId `json:"strategyId"`
+}
+
+type GetStrategiesStrategyIdResponseObject interface {
+	VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error
+}
+
+type GetStrategiesStrategyId200JSONResponse Strategy
+
+func (response GetStrategiesStrategyId200JSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategiesStrategyId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetStrategiesStrategyId404ApplicationProblemPlusJSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompileRequestObject struct {
+	StrategyId StrategyId `json:"strategyId"`
+	Params     PostStrategiesStrategyIdCompileParams
+}
+
+type PostStrategiesStrategyIdCompileResponseObject interface {
+	VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error
+}
+
+type PostStrategiesStrategyIdCompile200JSONResponse CompileResult
+
+func (response PostStrategiesStrategyIdCompile200JSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdVersionsVersionAcceptRequestObject struct {
+	StrategyId StrategyId            `json:"strategyId"`
+	Version    StrategyVersionNumber `json:"version"`
+	Params     PostStrategiesStrategyIdVersionsVersionAcceptParams
+	Body       *PostStrategiesStrategyIdVersionsVersionAcceptJSONRequestBody
+}
+
+type PostStrategiesStrategyIdVersionsVersionAcceptResponseObject interface {
+	VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w http.ResponseWriter) error
+}
+
+type PostStrategiesStrategyIdVersionsVersionAccept200JSONResponse StrategyVersion
+
+func (response PostStrategiesStrategyIdVersionsVersionAccept200JSONResponse) VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdVersionsVersionAccept403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostStrategiesStrategyIdVersionsVersionAccept403ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdVersionsVersionAccept404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdVersionsVersionAccept404ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdVersionsVersionAccept409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdVersionsVersionAccept409ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdVersionsVersionAccept422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdVersionsVersionAccept422ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTermsRequestObject struct {
+}
+
+type GetTermsResponseObject interface {
+	VisitGetTermsResponse(w http.ResponseWriter) error
+}
+
+type GetTerms200JSONResponse []PublicLegalDocument
+
+func (response GetTerms200JSONResponse) VisitGetTermsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetVersionRequestObject struct {
 }
 
@@ -10105,6 +18419,9 @@ type GetVersion200JSONResponse struct {
 	BuildVersion string `json:"build_version"`
 	ConfigHash   string `json:"config_hash"`
 	Environment  string `json:"environment"`
+
+	// SandboxTier True when this deployment is a sandbox tier (ADR-0023). Everything it mints, verifies or pays is a rehearsal; the UI labels the whole product accordingly.
+	SandboxTier *bool `json:"sandbox_tier,omitempty"`
 }
 
 func (response GetVersion200JSONResponse) VisitGetVersionResponse(w http.ResponseWriter) error {
@@ -10235,10 +18552,19 @@ type StrictServerInterface interface {
 	// PostAdminActionsActionIdDecision Approve or reject a proposed action (approver ≠ proposer; step-up)
 	// (POST /admin/actions/{actionId}/{decision})
 	PostAdminActionsActionIdDecision(ctx context.Context, request PostAdminActionsActionIdDecisionRequestObject) (PostAdminActionsActionIdDecisionResponseObject, error)
+	// GetAdminAgents Every account's agents, with owner, authority level, status and limits
+	// (GET /admin/agents)
+	GetAdminAgents(ctx context.Context, request GetAdminAgentsRequestObject) (GetAdminAgentsResponseObject, error)
+	// PostAdminAgentsAgentIdPause Operator pause of a customer's agent, with a reason
+	// (POST /admin/agents/{agentId}/pause)
+	PostAdminAgentsAgentIdPause(ctx context.Context, request PostAdminAgentsAgentIdPauseRequestObject) (PostAdminAgentsAgentIdPauseResponseObject, error)
 	// GetAdminGates Production capability gates for this environment
 	// (GET /admin/gates)
 	GetAdminGates(ctx context.Context, request GetAdminGatesRequestObject) (GetAdminGatesResponseObject, error)
-	// PostAdminGatesCapabilityAction Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up)
+	// GetAdminGatesCapabilityHistory Every recorded transition of a gate, oldest first, with who moved it
+	// (GET /admin/gates/{capability}/history)
+	GetAdminGatesCapabilityHistory(ctx context.Context, request GetAdminGatesCapabilityHistoryRequestObject) (GetAdminGatesCapabilityHistoryResponseObject, error)
+	// PostAdminGatesCapabilityAction Propose / approve / activate / suspend / resume / revoke a gate (dual control; step-up), or sandbox / unsandbox it on a sandbox tier
 	// (POST /admin/gates/{capability}/{action})
 	PostAdminGatesCapabilityAction(ctx context.Context, request PostAdminGatesCapabilityActionRequestObject) (PostAdminGatesCapabilityActionResponseObject, error)
 	// PostAdminInstrumentsInstrumentIdStatus Change instrument status (ACTIVE / CLOSE_ONLY / RESTRICTED / HALTED / DELISTING / DELISTED)
@@ -10259,6 +18585,24 @@ type StrictServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(ctx context.Context, request PostAdminReconciliationRecordsRecordIdResolveRequestObject) (PostAdminReconciliationRecordsRecordIdResolveResponseObject, error)
+	// GetAdminUsersUserId Operator support view of one user (read only)
+	// (GET /admin/users/{userId})
+	GetAdminUsersUserId(ctx context.Context, request GetAdminUsersUserIdRequestObject) (GetAdminUsersUserIdResponseObject, error)
+	// PostAdminUsersUserIdClosure Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+	// (POST /admin/users/{userId}/closure)
+	PostAdminUsersUserIdClosure(ctx context.Context, request PostAdminUsersUserIdClosureRequestObject) (PostAdminUsersUserIdClosureResponseObject, error)
+	// GetAgents Your agents
+	// (GET /agents)
+	GetAgents(ctx context.Context, request GetAgentsRequestObject) (GetAgentsResponseObject, error)
+	// PostAgents Create an agent from a compiled strategy version, with the authority and limits granted to it
+	// (POST /agents)
+	PostAgents(ctx context.Context, request PostAgentsRequestObject) (PostAgentsResponseObject, error)
+	// GetAgentsAgentId One agent - authority, limits, budget used, last run and honest runtime state
+	// (GET /agents/{agentId})
+	GetAgentsAgentId(ctx context.Context, request GetAgentsAgentIdRequestObject) (GetAgentsAgentIdResponseObject, error)
+	// PostAgentsAgentIdAction Enable, pause, resume, disable or archive your own agent
+	// (POST /agents/{agentId}/{action})
+	PostAgentsAgentIdAction(ctx context.Context, request PostAgentsAgentIdActionRequestObject) (PostAgentsAgentIdActionResponseObject, error)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(ctx context.Context, request GetAssetsRequestObject) (GetAssetsResponseObject, error)
@@ -10334,6 +18678,78 @@ type StrictServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetMeAccount The standing of the caller own account, with any restrictions and open closure request
+	// (GET /me/account)
+	GetMeAccount(ctx context.Context, request GetMeAccountRequestObject) (GetMeAccountResponseObject, error)
+	// PostMeAccountClose Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+	// (POST /me/account/close)
+	PostMeAccountClose(ctx context.Context, request PostMeAccountCloseRequestObject) (PostMeAccountCloseResponseObject, error)
+	// PostMeAccountCloseCancel Cancel the caller own open closure request
+	// (POST /me/account/close/cancel)
+	PostMeAccountCloseCancel(ctx context.Context, request PostMeAccountCloseCancelRequestObject) (PostMeAccountCloseCancelResponseObject, error)
+	// GetMeActivity The unified activity timeline (§16)
+	// (GET /me/activity)
+	GetMeActivity(ctx context.Context, request GetMeActivityRequestObject) (GetMeActivityResponseObject, error)
+	// GetMeAudit The caller's own security and account history (PART 52); never another person's
+	// (GET /me/audit)
+	GetMeAudit(ctx context.Context, request GetMeAuditRequestObject) (GetMeAuditResponseObject, error)
+	// GetMeEligibility What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+	// (GET /me/eligibility)
+	GetMeEligibility(ctx context.Context, request GetMeEligibilityRequestObject) (GetMeEligibilityResponseObject, error)
+	// GetMeNotificationPreferences Per-kind in-app notification preferences (IN_APP is the only channel that exists)
+	// (GET /me/notification-preferences)
+	GetMeNotificationPreferences(ctx context.Context, request GetMeNotificationPreferencesRequestObject) (GetMeNotificationPreferencesResponseObject, error)
+	// PutMeNotificationPreferences Replace the caller's answers for the kinds named
+	// (PUT /me/notification-preferences)
+	PutMeNotificationPreferences(ctx context.Context, request PutMeNotificationPreferencesRequestObject) (PutMeNotificationPreferencesResponseObject, error)
+	// GetMeNotifications The caller's notification centre, newest first
+	// (GET /me/notifications)
+	GetMeNotifications(ctx context.Context, request GetMeNotificationsRequestObject) (GetMeNotificationsResponseObject, error)
+	// PostMeNotificationsReadAll Mark every unread notification read
+	// (POST /me/notifications/read-all)
+	PostMeNotificationsReadAll(ctx context.Context, request PostMeNotificationsReadAllRequestObject) (PostMeNotificationsReadAllResponseObject, error)
+	// GetMeNotificationsUnreadCount How many of the caller's notifications are unread
+	// (GET /me/notifications/unread-count)
+	GetMeNotificationsUnreadCount(ctx context.Context, request GetMeNotificationsUnreadCountRequestObject) (GetMeNotificationsUnreadCountResponseObject, error)
+	// PostMeNotificationsNotificationIdRead Mark one notification read (idempotent; the first instant is kept)
+	// (POST /me/notifications/{notificationId}/read)
+	PostMeNotificationsNotificationIdRead(ctx context.Context, request PostMeNotificationsNotificationIdReadRequestObject) (PostMeNotificationsNotificationIdReadResponseObject, error)
+	// GetMePayoutDestinations Where you have asked value to be sent (§25)
+	// (GET /me/payout-destinations)
+	GetMePayoutDestinations(ctx context.Context, request GetMePayoutDestinationsRequestObject) (GetMePayoutDestinationsResponseObject, error)
+	// PostMePayoutDestinations Register a payout destination from a provider token (§25)
+	// (POST /me/payout-destinations)
+	PostMePayoutDestinations(ctx context.Context, request PostMePayoutDestinationsRequestObject) (PostMePayoutDestinationsResponseObject, error)
+	// DeleteMePayoutDestinationsDestinationId Stop using a payout destination (§25)
+	// (DELETE /me/payout-destinations/{destinationId})
+	DeleteMePayoutDestinationsDestinationId(ctx context.Context, request DeleteMePayoutDestinationsDestinationIdRequestObject) (DeleteMePayoutDestinationsDestinationIdResponseObject, error)
+	// GetMePortfolio Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+	// (GET /me/portfolio)
+	GetMePortfolio(ctx context.Context, request GetMePortfolioRequestObject) (GetMePortfolioResponseObject, error)
+	// PostMeProfile Update the caller own profile (display name, handle, locale, time zone)
+	// (POST /me/profile)
+	PostMeProfile(ctx context.Context, request PostMeProfileRequestObject) (PostMeProfileResponseObject, error)
+	// GetMeSecurity What the system knows about the security of the caller own account
+	// (GET /me/security)
+	GetMeSecurity(ctx context.Context, request GetMeSecurityRequestObject) (GetMeSecurityResponseObject, error)
+	// GetMeTermsAcceptances Legal documents, which of them the caller has accepted, and which are outstanding
+	// (GET /me/terms-acceptances)
+	GetMeTermsAcceptances(ctx context.Context, request GetMeTermsAcceptancesRequestObject) (GetMeTermsAcceptancesResponseObject, error)
+	// PostMeTermsAcceptances Accept the named documents at the versions currently served
+	// (POST /me/terms-acceptances)
+	PostMeTermsAcceptances(ctx context.Context, request PostMeTermsAcceptancesRequestObject) (PostMeTermsAcceptancesResponseObject, error)
+	// GetMeVerification Your financial verification profile, what is missing, and what to do next (§20, §24)
+	// (GET /me/verification)
+	GetMeVerification(ctx context.Context, request GetMeVerificationRequestObject) (GetMeVerificationResponseObject, error)
+	// PostMeVerificationSandboxOutcome SANDBOX TIER ONLY - choose what the rehearsal verification decides
+	// (POST /me/verification/sandbox-outcome)
+	PostMeVerificationSandboxOutcome(ctx context.Context, request PostMeVerificationSandboxOutcomeRequestObject) (PostMeVerificationSandboxOutcomeResponseObject, error)
+	// PostMeVerificationSessions Start a provider-hosted identity verification (§20)
+	// (POST /me/verification/sessions)
+	PostMeVerificationSessions(ctx context.Context, request PostMeVerificationSessionsRequestObject) (PostMeVerificationSessionsResponseObject, error)
+	// GetMeVerificationSessionsSessionId Ask the provider what happened, and record it
+	// (GET /me/verification/sessions/{sessionId})
+	GetMeVerificationSessionsSessionId(ctx context.Context, request GetMeVerificationSessionsSessionIdRequestObject) (GetMeVerificationSessionsSessionIdResponseObject, error)
 	// GetNativeAssets Native assets that currently accept at least sells
 	// (GET /native-assets)
 	GetNativeAssets(ctx context.Context, request GetNativeAssetsRequestObject) (GetNativeAssetsResponseObject, error)
@@ -10346,15 +18762,27 @@ type StrictServerInterface interface {
 	// PostNativeAssetsAssetIdSubmit Submit your own DRAFT asset for moderation review (PART XIII)
 	// (POST /native-assets/{assetId}/submit)
 	PostNativeAssetsAssetIdSubmit(ctx context.Context, request PostNativeAssetsAssetIdSubmitRequestObject) (PostNativeAssetsAssetIdSubmitResponseObject, error)
+	// GetNativeMarkets Discover internal markets (product goal §12, §35)
+	// (GET /native-markets)
+	GetNativeMarkets(ctx context.Context, request GetNativeMarketsRequestObject) (GetNativeMarketsResponseObject, error)
 	// GetNativeMarketsMarketId Market state, curve, fees and holder concentration (PART LIV)
 	// (GET /native-markets/{marketId})
 	GetNativeMarketsMarketId(ctx context.Context, request GetNativeMarketsMarketIdRequestObject) (GetNativeMarketsMarketIdResponseObject, error)
+	// GetNativeMarketsMarketIdCandles OHLCV over a bounded window, computed from the market's own prints (§14)
+	// (GET /native-markets/{marketId}/candles)
+	GetNativeMarketsMarketIdCandles(ctx context.Context, request GetNativeMarketsMarketIdCandlesRequestObject) (GetNativeMarketsMarketIdCandlesResponseObject, error)
 	// PostNativeMarketsMarketIdOrders Execute a trade against the internal market
 	// (POST /native-markets/{marketId}/orders)
 	PostNativeMarketsMarketIdOrders(ctx context.Context, request PostNativeMarketsMarketIdOrdersRequestObject) (PostNativeMarketsMarketIdOrdersResponseObject, error)
 	// PostNativeMarketsMarketIdQuotes Price a hypothetical trade against current state (PART XIV)
 	// (POST /native-markets/{marketId}/quotes)
 	PostNativeMarketsMarketIdQuotes(ctx context.Context, request PostNativeMarketsMarketIdQuotesRequestObject) (PostNativeMarketsMarketIdQuotesResponseObject, error)
+	// GetNativeMarketsMarketIdSummary Everything the asset detail / trading screen needs (product goal §13)
+	// (GET /native-markets/{marketId}/summary)
+	GetNativeMarketsMarketIdSummary(ctx context.Context, request GetNativeMarketsMarketIdSummaryRequestObject) (GetNativeMarketsMarketIdSummaryResponseObject, error)
+	// GetNativeMarketsMarketIdTrades The public tape — recent prints, newest first (§13)
+	// (GET /native-markets/{marketId}/trades)
+	GetNativeMarketsMarketIdTrades(ctx context.Context, request GetNativeMarketsMarketIdTradesRequestObject) (GetNativeMarketsMarketIdTradesResponseObject, error)
 
 	// (GET /orders)
 	GetOrders(ctx context.Context, request GetOrdersRequestObject) (GetOrdersResponseObject, error)
@@ -10373,6 +18801,9 @@ type StrictServerInterface interface {
 	// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
 	// (POST /payouts)
 	PostPayouts(ctx context.Context, request PostPayoutsRequestObject) (PostPayoutsResponseObject, error)
+	// PostPayoutsQuote What a payout would cost, before committing to it (§19, §22)
+	// (POST /payouts/quote)
+	PostPayoutsQuote(ctx context.Context, request PostPayoutsQuoteRequestObject) (PostPayoutsQuoteResponseObject, error)
 
 	// (GET /payouts/{payoutId})
 	GetPayoutsPayoutId(ctx context.Context, request GetPayoutsPayoutIdRequestObject) (GetPayoutsPayoutIdResponseObject, error)
@@ -10391,6 +18822,24 @@ type StrictServerInterface interface {
 	// DeleteSessionsSessionId Revoke one of the caller's sessions
 	// (DELETE /sessions/{sessionId})
 	DeleteSessionsSessionId(ctx context.Context, request DeleteSessionsSessionIdRequestObject) (DeleteSessionsSessionIdResponseObject, error)
+	// GetStrategies Your strategies
+	// (GET /strategies)
+	GetStrategies(ctx context.Context, request GetStrategiesRequestObject) (GetStrategiesResponseObject, error)
+	// PostStrategies Describe a strategy in your own words
+	// (POST /strategies)
+	PostStrategies(ctx context.Context, request PostStrategiesRequestObject) (PostStrategiesResponseObject, error)
+	// GetStrategiesStrategyId One strategy and its current compiled version
+	// (GET /strategies/{strategyId})
+	GetStrategiesStrategyId(ctx context.Context, request GetStrategiesStrategyIdRequestObject) (GetStrategiesStrategyIdResponseObject, error)
+	// PostStrategiesStrategyIdCompile Compile the description into a reviewable strategy
+	// (POST /strategies/{strategyId}/compile)
+	PostStrategiesStrategyIdCompile(ctx context.Context, request PostStrategiesStrategyIdCompileRequestObject) (PostStrategiesStrategyIdCompileResponseObject, error)
+	// PostStrategiesStrategyIdVersionsVersionAccept Accept a compiled strategy version you have read
+	// (POST /strategies/{strategyId}/versions/{version}/accept)
+	PostStrategiesStrategyIdVersionsVersionAccept(ctx context.Context, request PostStrategiesStrategyIdVersionsVersionAcceptRequestObject) (PostStrategiesStrategyIdVersionsVersionAcceptResponseObject, error)
+	// GetTerms The legal documents currently served, with their text, for anyone
+	// (GET /terms)
+	GetTerms(ctx context.Context, request GetTermsRequestObject) (GetTermsResponseObject, error)
 	// GetVersion Build version and non-secret configuration hash (PART 222)
 	// (GET /version)
 	GetVersion(ctx context.Context, request GetVersionRequestObject) (GetVersionResponseObject, error)
@@ -10782,6 +19231,66 @@ func (sh *strictHandler) PostAdminActionsActionIdDecision(w http.ResponseWriter,
 	}
 }
 
+// GetAdminAgents operation middleware
+func (sh *strictHandler) GetAdminAgents(w http.ResponseWriter, r *http.Request, params GetAdminAgentsParams) {
+	var request GetAdminAgentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdminAgents(ctx, request.(GetAdminAgentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdminAgents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdminAgentsResponseObject); ok {
+		if err := validResponse.VisitGetAdminAgentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdminAgentsAgentIdPause operation middleware
+func (sh *strictHandler) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAdminAgentsAgentIdPauseParams) {
+	var request PostAdminAgentsAgentIdPauseRequestObject
+
+	request.AgentId = agentId
+	request.Params = params
+
+	var body PostAdminAgentsAgentIdPauseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdminAgentsAgentIdPause(ctx, request.(PostAdminAgentsAgentIdPauseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdminAgentsAgentIdPause")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdminAgentsAgentIdPauseResponseObject); ok {
+		if err := validResponse.VisitPostAdminAgentsAgentIdPauseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetAdminGates operation middleware
 func (sh *strictHandler) GetAdminGates(w http.ResponseWriter, r *http.Request) {
 	var request GetAdminGatesRequestObject
@@ -10799,6 +19308,32 @@ func (sh *strictHandler) GetAdminGates(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdminGatesResponseObject); ok {
 		if err := validResponse.VisitGetAdminGatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdminGatesCapabilityHistory operation middleware
+func (sh *strictHandler) GetAdminGatesCapabilityHistory(w http.ResponseWriter, r *http.Request, capability Capability) {
+	var request GetAdminGatesCapabilityHistoryRequestObject
+
+	request.Capability = capability
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdminGatesCapabilityHistory(ctx, request.(GetAdminGatesCapabilityHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdminGatesCapabilityHistory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdminGatesCapabilityHistoryResponseObject); ok {
+		if err := validResponse.VisitGetAdminGatesCapabilityHistoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -11012,6 +19547,189 @@ func (sh *strictHandler) PostAdminReconciliationRecordsRecordIdResolve(w http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PostAdminReconciliationRecordsRecordIdResolveResponseObject); ok {
 		if err := validResponse.VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdminUsersUserId operation middleware
+func (sh *strictHandler) GetAdminUsersUserId(w http.ResponseWriter, r *http.Request, userId UserId) {
+	var request GetAdminUsersUserIdRequestObject
+
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdminUsersUserId(ctx, request.(GetAdminUsersUserIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdminUsersUserId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdminUsersUserIdResponseObject); ok {
+		if err := validResponse.VisitGetAdminUsersUserIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdminUsersUserIdClosure operation middleware
+func (sh *strictHandler) PostAdminUsersUserIdClosure(w http.ResponseWriter, r *http.Request, userId UserId, params PostAdminUsersUserIdClosureParams) {
+	var request PostAdminUsersUserIdClosureRequestObject
+
+	request.UserId = userId
+	request.Params = params
+
+	var body PostAdminUsersUserIdClosureJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdminUsersUserIdClosure(ctx, request.(PostAdminUsersUserIdClosureRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdminUsersUserIdClosure")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdminUsersUserIdClosureResponseObject); ok {
+		if err := validResponse.VisitPostAdminUsersUserIdClosureResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgents operation middleware
+func (sh *strictHandler) GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams) {
+	var request GetAgentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgents(ctx, request.(GetAgentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentsResponseObject); ok {
+		if err := validResponse.VisitGetAgentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAgents operation middleware
+func (sh *strictHandler) PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams) {
+	var request PostAgentsRequestObject
+
+	request.Params = params
+
+	var body PostAgentsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAgents(ctx, request.(PostAgentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAgents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAgentsResponseObject); ok {
+		if err := validResponse.VisitPostAgentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgentsAgentId operation middleware
+func (sh *strictHandler) GetAgentsAgentId(w http.ResponseWriter, r *http.Request, agentId AgentId) {
+	var request GetAgentsAgentIdRequestObject
+
+	request.AgentId = agentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgentsAgentId(ctx, request.(GetAgentsAgentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgentsAgentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentsAgentIdResponseObject); ok {
+		if err := validResponse.VisitGetAgentsAgentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAgentsAgentIdAction operation middleware
+func (sh *strictHandler) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request, agentId AgentId, action PostAgentsAgentIdActionParamsAction, params PostAgentsAgentIdActionParams) {
+	var request PostAgentsAgentIdActionRequestObject
+
+	request.AgentId = agentId
+	request.Action = action
+	request.Params = params
+
+	var body PostAgentsAgentIdActionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAgentsAgentIdAction(ctx, request.(PostAgentsAgentIdActionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAgentsAgentIdAction")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAgentsAgentIdActionResponseObject); ok {
+		if err := validResponse.VisitPostAgentsAgentIdActionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -11702,6 +20420,672 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetMeAccount operation middleware
+func (sh *strictHandler) GetMeAccount(w http.ResponseWriter, r *http.Request) {
+	var request GetMeAccountRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeAccount(ctx, request.(GetMeAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeAccountResponseObject); ok {
+		if err := validResponse.VisitGetMeAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeAccountClose operation middleware
+func (sh *strictHandler) PostMeAccountClose(w http.ResponseWriter, r *http.Request, params PostMeAccountCloseParams) {
+	var request PostMeAccountCloseRequestObject
+
+	request.Params = params
+
+	var body PostMeAccountCloseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeAccountClose(ctx, request.(PostMeAccountCloseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeAccountClose")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeAccountCloseResponseObject); ok {
+		if err := validResponse.VisitPostMeAccountCloseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeAccountCloseCancel operation middleware
+func (sh *strictHandler) PostMeAccountCloseCancel(w http.ResponseWriter, r *http.Request, params PostMeAccountCloseCancelParams) {
+	var request PostMeAccountCloseCancelRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeAccountCloseCancel(ctx, request.(PostMeAccountCloseCancelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeAccountCloseCancel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeAccountCloseCancelResponseObject); ok {
+		if err := validResponse.VisitPostMeAccountCloseCancelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeActivity operation middleware
+func (sh *strictHandler) GetMeActivity(w http.ResponseWriter, r *http.Request, params GetMeActivityParams) {
+	var request GetMeActivityRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeActivity(ctx, request.(GetMeActivityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeActivity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeActivityResponseObject); ok {
+		if err := validResponse.VisitGetMeActivityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeAudit operation middleware
+func (sh *strictHandler) GetMeAudit(w http.ResponseWriter, r *http.Request, params GetMeAuditParams) {
+	var request GetMeAuditRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeAudit(ctx, request.(GetMeAuditRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeAudit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeAuditResponseObject); ok {
+		if err := validResponse.VisitGetMeAuditResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeEligibility operation middleware
+func (sh *strictHandler) GetMeEligibility(w http.ResponseWriter, r *http.Request, params GetMeEligibilityParams) {
+	var request GetMeEligibilityRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeEligibility(ctx, request.(GetMeEligibilityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeEligibility")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeEligibilityResponseObject); ok {
+		if err := validResponse.VisitGetMeEligibilityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeNotificationPreferences operation middleware
+func (sh *strictHandler) GetMeNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+	var request GetMeNotificationPreferencesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeNotificationPreferences(ctx, request.(GetMeNotificationPreferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeNotificationPreferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeNotificationPreferencesResponseObject); ok {
+		if err := validResponse.VisitGetMeNotificationPreferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutMeNotificationPreferences operation middleware
+func (sh *strictHandler) PutMeNotificationPreferences(w http.ResponseWriter, r *http.Request, params PutMeNotificationPreferencesParams) {
+	var request PutMeNotificationPreferencesRequestObject
+
+	request.Params = params
+
+	var body PutMeNotificationPreferencesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutMeNotificationPreferences(ctx, request.(PutMeNotificationPreferencesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutMeNotificationPreferences")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutMeNotificationPreferencesResponseObject); ok {
+		if err := validResponse.VisitPutMeNotificationPreferencesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeNotifications operation middleware
+func (sh *strictHandler) GetMeNotifications(w http.ResponseWriter, r *http.Request, params GetMeNotificationsParams) {
+	var request GetMeNotificationsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeNotifications(ctx, request.(GetMeNotificationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeNotifications")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeNotificationsResponseObject); ok {
+		if err := validResponse.VisitGetMeNotificationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeNotificationsReadAll operation middleware
+func (sh *strictHandler) PostMeNotificationsReadAll(w http.ResponseWriter, r *http.Request, params PostMeNotificationsReadAllParams) {
+	var request PostMeNotificationsReadAllRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeNotificationsReadAll(ctx, request.(PostMeNotificationsReadAllRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeNotificationsReadAll")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeNotificationsReadAllResponseObject); ok {
+		if err := validResponse.VisitPostMeNotificationsReadAllResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeNotificationsUnreadCount operation middleware
+func (sh *strictHandler) GetMeNotificationsUnreadCount(w http.ResponseWriter, r *http.Request) {
+	var request GetMeNotificationsUnreadCountRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeNotificationsUnreadCount(ctx, request.(GetMeNotificationsUnreadCountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeNotificationsUnreadCount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeNotificationsUnreadCountResponseObject); ok {
+		if err := validResponse.VisitGetMeNotificationsUnreadCountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeNotificationsNotificationIdRead operation middleware
+func (sh *strictHandler) PostMeNotificationsNotificationIdRead(w http.ResponseWriter, r *http.Request, notificationId NotificationId, params PostMeNotificationsNotificationIdReadParams) {
+	var request PostMeNotificationsNotificationIdReadRequestObject
+
+	request.NotificationId = notificationId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeNotificationsNotificationIdRead(ctx, request.(PostMeNotificationsNotificationIdReadRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeNotificationsNotificationIdRead")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeNotificationsNotificationIdReadResponseObject); ok {
+		if err := validResponse.VisitPostMeNotificationsNotificationIdReadResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMePayoutDestinations operation middleware
+func (sh *strictHandler) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request, params GetMePayoutDestinationsParams) {
+	var request GetMePayoutDestinationsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMePayoutDestinations(ctx, request.(GetMePayoutDestinationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMePayoutDestinations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMePayoutDestinationsResponseObject); ok {
+		if err := validResponse.VisitGetMePayoutDestinationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMePayoutDestinations operation middleware
+func (sh *strictHandler) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request, params PostMePayoutDestinationsParams) {
+	var request PostMePayoutDestinationsRequestObject
+
+	request.Params = params
+
+	var body PostMePayoutDestinationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMePayoutDestinations(ctx, request.(PostMePayoutDestinationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMePayoutDestinations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMePayoutDestinationsResponseObject); ok {
+		if err := validResponse.VisitPostMePayoutDestinationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMePayoutDestinationsDestinationId operation middleware
+func (sh *strictHandler) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request, destinationId UUID, params DeleteMePayoutDestinationsDestinationIdParams) {
+	var request DeleteMePayoutDestinationsDestinationIdRequestObject
+
+	request.DestinationId = destinationId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMePayoutDestinationsDestinationId(ctx, request.(DeleteMePayoutDestinationsDestinationIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMePayoutDestinationsDestinationId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMePayoutDestinationsDestinationIdResponseObject); ok {
+		if err := validResponse.VisitDeleteMePayoutDestinationsDestinationIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMePortfolio operation middleware
+func (sh *strictHandler) GetMePortfolio(w http.ResponseWriter, r *http.Request, params GetMePortfolioParams) {
+	var request GetMePortfolioRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMePortfolio(ctx, request.(GetMePortfolioRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMePortfolio")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMePortfolioResponseObject); ok {
+		if err := validResponse.VisitGetMePortfolioResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeProfile operation middleware
+func (sh *strictHandler) PostMeProfile(w http.ResponseWriter, r *http.Request, params PostMeProfileParams) {
+	var request PostMeProfileRequestObject
+
+	request.Params = params
+
+	var body PostMeProfileJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeProfile(ctx, request.(PostMeProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeProfile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeProfileResponseObject); ok {
+		if err := validResponse.VisitPostMeProfileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeSecurity operation middleware
+func (sh *strictHandler) GetMeSecurity(w http.ResponseWriter, r *http.Request) {
+	var request GetMeSecurityRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeSecurity(ctx, request.(GetMeSecurityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeSecurity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeSecurityResponseObject); ok {
+		if err := validResponse.VisitGetMeSecurityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeTermsAcceptances operation middleware
+func (sh *strictHandler) GetMeTermsAcceptances(w http.ResponseWriter, r *http.Request) {
+	var request GetMeTermsAcceptancesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeTermsAcceptances(ctx, request.(GetMeTermsAcceptancesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeTermsAcceptances")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeTermsAcceptancesResponseObject); ok {
+		if err := validResponse.VisitGetMeTermsAcceptancesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeTermsAcceptances operation middleware
+func (sh *strictHandler) PostMeTermsAcceptances(w http.ResponseWriter, r *http.Request, params PostMeTermsAcceptancesParams) {
+	var request PostMeTermsAcceptancesRequestObject
+
+	request.Params = params
+
+	var body PostMeTermsAcceptancesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeTermsAcceptances(ctx, request.(PostMeTermsAcceptancesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeTermsAcceptances")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeTermsAcceptancesResponseObject); ok {
+		if err := validResponse.VisitPostMeTermsAcceptancesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeVerification operation middleware
+func (sh *strictHandler) GetMeVerification(w http.ResponseWriter, r *http.Request, params GetMeVerificationParams) {
+	var request GetMeVerificationRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeVerification(ctx, request.(GetMeVerificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeVerification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeVerificationResponseObject); ok {
+		if err := validResponse.VisitGetMeVerificationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeVerificationSandboxOutcome operation middleware
+func (sh *strictHandler) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request, params PostMeVerificationSandboxOutcomeParams) {
+	var request PostMeVerificationSandboxOutcomeRequestObject
+
+	request.Params = params
+
+	var body PostMeVerificationSandboxOutcomeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeVerificationSandboxOutcome(ctx, request.(PostMeVerificationSandboxOutcomeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeVerificationSandboxOutcome")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeVerificationSandboxOutcomeResponseObject); ok {
+		if err := validResponse.VisitPostMeVerificationSandboxOutcomeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeVerificationSessions operation middleware
+func (sh *strictHandler) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request, params PostMeVerificationSessionsParams) {
+	var request PostMeVerificationSessionsRequestObject
+
+	request.Params = params
+
+	var body PostMeVerificationSessionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeVerificationSessions(ctx, request.(PostMeVerificationSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeVerificationSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeVerificationSessionsResponseObject); ok {
+		if err := validResponse.VisitPostMeVerificationSessionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeVerificationSessionsSessionId operation middleware
+func (sh *strictHandler) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetMeVerificationSessionsSessionIdParams) {
+	var request GetMeVerificationSessionsSessionIdRequestObject
+
+	request.SessionId = sessionId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeVerificationSessionsSessionId(ctx, request.(GetMeVerificationSessionsSessionIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeVerificationSessionsSessionId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeVerificationSessionsSessionIdResponseObject); ok {
+		if err := validResponse.VisitGetMeVerificationSessionsSessionIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetNativeAssets operation middleware
 func (sh *strictHandler) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
 	var request GetNativeAssetsRequestObject
@@ -11821,6 +21205,32 @@ func (sh *strictHandler) PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r 
 	}
 }
 
+// GetNativeMarkets operation middleware
+func (sh *strictHandler) GetNativeMarkets(w http.ResponseWriter, r *http.Request, params GetNativeMarketsParams) {
+	var request GetNativeMarketsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarkets(ctx, request.(GetNativeMarketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarkets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetNativeMarketsMarketId operation middleware
 func (sh *strictHandler) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request, marketId MarketId) {
 	var request GetNativeMarketsMarketIdRequestObject
@@ -11840,6 +21250,33 @@ func (sh *strictHandler) GetNativeMarketsMarketId(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetNativeMarketsMarketIdResponseObject); ok {
 		if err := validResponse.VisitGetNativeMarketsMarketIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketIdCandles operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdCandlesParams) {
+	var request GetNativeMarketsMarketIdCandlesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketIdCandles(ctx, request.(GetNativeMarketsMarketIdCandlesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketIdCandles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdCandlesResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdCandlesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -11908,6 +21345,60 @@ func (sh *strictHandler) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PostNativeMarketsMarketIdQuotesResponseObject); ok {
 		if err := validResponse.VisitPostNativeMarketsMarketIdQuotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketIdSummary operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdSummaryParams) {
+	var request GetNativeMarketsMarketIdSummaryRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketIdSummary(ctx, request.(GetNativeMarketsMarketIdSummaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketIdSummary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdSummaryResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdSummaryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNativeMarketsMarketIdTrades operation middleware
+func (sh *strictHandler) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request, marketId MarketId, params GetNativeMarketsMarketIdTradesParams) {
+	var request GetNativeMarketsMarketIdTradesRequestObject
+
+	request.MarketId = marketId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNativeMarketsMarketIdTrades(ctx, request.(GetNativeMarketsMarketIdTradesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNativeMarketsMarketIdTrades")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNativeMarketsMarketIdTradesResponseObject); ok {
+		if err := validResponse.VisitGetNativeMarketsMarketIdTradesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -12085,6 +21576,39 @@ func (sh *strictHandler) PostPayouts(w http.ResponseWriter, r *http.Request, par
 	}
 }
 
+// PostPayoutsQuote operation middleware
+func (sh *strictHandler) PostPayoutsQuote(w http.ResponseWriter, r *http.Request, params PostPayoutsQuoteParams) {
+	var request PostPayoutsQuoteRequestObject
+
+	request.Params = params
+
+	var body PostPayoutsQuoteJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostPayoutsQuote(ctx, request.(PostPayoutsQuoteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostPayoutsQuote")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostPayoutsQuoteResponseObject); ok {
+		if err := validResponse.VisitPostPayoutsQuoteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPayoutsPayoutId operation middleware
 func (sh *strictHandler) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId) {
 	var request GetPayoutsPayoutIdRequestObject
@@ -12250,6 +21774,177 @@ func (sh *strictHandler) DeleteSessionsSessionId(w http.ResponseWriter, r *http.
 	}
 }
 
+// GetStrategies operation middleware
+func (sh *strictHandler) GetStrategies(w http.ResponseWriter, r *http.Request, params GetStrategiesParams) {
+	var request GetStrategiesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategies(ctx, request.(GetStrategiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategiesResponseObject); ok {
+		if err := validResponse.VisitGetStrategiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostStrategies operation middleware
+func (sh *strictHandler) PostStrategies(w http.ResponseWriter, r *http.Request, params PostStrategiesParams) {
+	var request PostStrategiesRequestObject
+
+	request.Params = params
+
+	var body PostStrategiesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostStrategies(ctx, request.(PostStrategiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostStrategies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostStrategiesResponseObject); ok {
+		if err := validResponse.VisitPostStrategiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStrategiesStrategyId operation middleware
+func (sh *strictHandler) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request, strategyId StrategyId) {
+	var request GetStrategiesStrategyIdRequestObject
+
+	request.StrategyId = strategyId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategiesStrategyId(ctx, request.(GetStrategiesStrategyIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategiesStrategyId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategiesStrategyIdResponseObject); ok {
+		if err := validResponse.VisitGetStrategiesStrategyIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostStrategiesStrategyIdCompile operation middleware
+func (sh *strictHandler) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request, strategyId StrategyId, params PostStrategiesStrategyIdCompileParams) {
+	var request PostStrategiesStrategyIdCompileRequestObject
+
+	request.StrategyId = strategyId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostStrategiesStrategyIdCompile(ctx, request.(PostStrategiesStrategyIdCompileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostStrategiesStrategyIdCompile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostStrategiesStrategyIdCompileResponseObject); ok {
+		if err := validResponse.VisitPostStrategiesStrategyIdCompileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostStrategiesStrategyIdVersionsVersionAccept operation middleware
+func (sh *strictHandler) PostStrategiesStrategyIdVersionsVersionAccept(w http.ResponseWriter, r *http.Request, strategyId StrategyId, version StrategyVersionNumber, params PostStrategiesStrategyIdVersionsVersionAcceptParams) {
+	var request PostStrategiesStrategyIdVersionsVersionAcceptRequestObject
+
+	request.StrategyId = strategyId
+	request.Version = version
+	request.Params = params
+
+	var body PostStrategiesStrategyIdVersionsVersionAcceptJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostStrategiesStrategyIdVersionsVersionAccept(ctx, request.(PostStrategiesStrategyIdVersionsVersionAcceptRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostStrategiesStrategyIdVersionsVersionAccept")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostStrategiesStrategyIdVersionsVersionAcceptResponseObject); ok {
+		if err := validResponse.VisitPostStrategiesStrategyIdVersionsVersionAcceptResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTerms operation middleware
+func (sh *strictHandler) GetTerms(w http.ResponseWriter, r *http.Request) {
+	var request GetTermsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTerms(ctx, request.(GetTermsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTerms")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTermsResponseObject); ok {
+		if err := validResponse.VisitGetTermsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetVersion operation middleware
 func (sh *strictHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	var request GetVersionRequestObject
@@ -12345,271 +22040,702 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"afsZlsCxHpgr/eX9l/9vAA==",
+	"7P3rchtJli4KvoobZh9LaTdIUcpLVUm27RhEQil0UiALAJWVXcoNORAOwlOBcFR4BClUjsz2r2M2f4+d",
+	"BxibH1PvUY/STzK2Lu7hEYjAjRSl6jNtbZUi4uaXtZav67d+b03NYmkSlWS29fz31lKmcqEyleJfnenU",
+	"5EnWi+APnbSet5Yym7farUQuVOt5S/rr7Vaq/pbrVEWt51maq3bLTudqIeHB/5aqWet56//xpPjUE7pq",
+	"n1xd9c5anz61W51rtelD1+qePmOt2vAZvnrnz5zmqTWp/8rfcpWuis9M6Wr41my1hCs2S3Vyja84U0tj",
+	"dfNYI3/9zqPtRWqxNJlKpquf1Aoei5SdpnqZaQMfHsqFEh/USvybsPDPiYlWIlXLWK6syOZKmFRf60TG",
+	"IlU2j7MXwhZPRHo2U6lKMnrsP/+P/1N8d/In0eu/7Zz3zsa9s+6by4tRt3/6y3jQvRp2j8VoTs9qK8xS",
+	"/i1XIjP4GavSG5WKSZ6JqUlslkqdqAiuykTkiVxM9HVuciumc5lalT0XOhMTNTULZcVSppkwMyHFMtUL",
+	"ma7gG234iJrOjYqETmD4S5NYZdtCJhFcu011lqkEvhGba4s/yzzSmUjV1KSRbQtrYDRZamL8rpwC9+CN",
+	"f8tNppNrsVCZDC+lSqRqllsVCZnhzFR0rUQqs7lKRTaXiVB2KpcqElOTpmqaxSu4U92odCVMomAe2dxY",
+	"JaxOPlgxMylcOxZdvCNW1zrTC5nROso4VTJaCSszbWdawZ5pK/7zf/1fIlG35c1/9FikKsvTxAopgECO",
+	"W22ivrmSkUoL+gueOwKq2USFC/nxXCXX2bz1/OmzP7ZbC524v//YBrrOVArf+J9/7Rz9hzz6+8nRn47H",
+	"z49+/bf/1mrXsEYP9j5fbBIYOrzl7gySZJs/lt3Th871QmdNYiPGi+E7IzWTeZy1nn9/0oZF1ot80Xr+",
+	"7OQEl5j+eupXEIZ5rVL80BuZftggCBfu8p1n1DeZnumpBFHS+LmkfNOdP3qRRipt/Jrhq3f+zKVcbSTC",
+	"pb9+H58y+cYvmfx+PpSaKJ9u+JK/fudPDZW1m6jC+ut3/1SWykxdr5q/Vdxwbx97q1IYfz9fTFS6fqrC",
+	"MXdDt4j+1ZuX3UFb3M71dI7nzpxPhlTdaHUr7DRVKhF2bm5tWySGLvLj31ihI5UAD6nUC+zyBPnWzWJ6",
+	"s8y4shuYKrf3wVOf2i1/BsMjl6mZxGoB/4QzViUoHOVyGbO0eLKkO/7tNwuL+vuOn3PvxS9WlJ0szadZ",
+	"nqpIqDQ1NHV+jnVitcwqezxQf8uVpcFFkYZXyfgyNUuVZhqmMpOxVe3WMvjp95ZOx3Np5/WkYdVCJpme",
+	"CriFDnwlIjPFQ02sTC7gVG8L9VGSfmAb6AVUm+xY9DKgK1gLCXO71dm8QkPmNqGPoZIjFtouZEbkyOrK",
+	"c9IcNH1qplUcgbqSiYX8oKx4BwaBWmbvWmKhZOL/FqPXvaEf+7tWSdPxNwHJgxbDr0+VSMztu9Zxq6wh",
+	"nBz9SR7Nfv39h+8+1WsHBQH+1a/wr/5GM/lNTbMWmAJkvKDVU9qWaapkpqKxzLaR0UgvlM3kYgnv09Fu",
+	"RN5ufdAJ3qsSYLa/tk6vhqOLN91Bq9067fQ7g19a7dbleWf06mLwpvXr2hzbLXObqHQMLDfe/as2k1lu",
+	"w+92Tke9t91WuzXoDkeD3umoe9Zqt14NLv6j24exnF8Mu2e1A6B3jVMlme22bEPU4ln7YbTDZd6wPZfy",
+	"WiFbxfHFrPX8r1v4Gu7+1K7uqM7UovyPTS/hL7c++VHJNJWr9Vnhy9bH/msx+oGCFZkSW1e5vCPS4nLb",
+	"mxozkyJ7LVVqTQImDMo7ZUVmyDiapUqJTH3MwO6BecrMpOI2NZkSJhFS0BqDOZJcK+CnSMV6AvepeIWn",
+	"B/AXmke30pa+bJAz3UvZ4FkulUwtWEgwMJsvlybNBAoandhMyQi5tLTm7BvYg0CnJlIheV4Nu4Px8Gp4",
+	"2e2fIWXiD0yV7Vbn9PTiqj8al4jX/eiJ2P3gH4N/XA26Y3hrr/9jLXkvlLVMd5sJG4dc3L+Bjoe4Jae4",
+	"I+sip2Cksmm0NrLM3AcDV2aRmVbbDaF+Cpm+0dmqs2gQmHmagh1Ys17tFvkGttHAaaoinV3QvSBgVouJ",
+	"iWtfmKkFUmeeqm1vfSvjXI2C+z+1W3mis3VefG1uwcaHI1W8v4HH3h+L00H3rDcaAgPR+MREWiXgDbYt",
+	"3lz0u7+M3/T6FwO4Y6ETk9I1OK3fu0V53xad4bA7Gl/1+V3FS/BGmup74CB/INCHW+1W8BEg5uJFtXSL",
+	"A9+2KEN9najozzloF9m6VMP1ca8qr/Ym2nilVNTL1GKdOiRSzT7it0Rta1LYnbRrs3fH6i4vh+H+BPcD",
+	"hU5xr/Y+8FOFjq1pDT83jJB+2CZU8CrOsm7BrV7kMRycwYsmxsRKJuVTfu3rNl+A32ud+F/mOs6EYelO",
+	"TrZZahZCipn+CB42tVjCN+FMErDMbZEofxfoIXgcHW/XxwJFIFz2YnDhsrY97YTT3kaFPzEZrKvU09iA",
+	"z80qcgTyMzgheyw6IjILqRPxm9EJa7hKRWKyEqDTJ9dCiqHJ06liBZmHXKyOToROMpUmMn7i3v5CWKVI",
+	"SV7K6Qd5rb6xoAofXxt/0quPmUrQDlwanWTrkmB8eTU4fd0ZgqjnXwbdt93BsHPearf6HTgFxqNB56xb",
+	"/Emy4nTQ7dCpcNn55eIKnvvzVXdY+mk46oy649PXnf6PdIaeven1x52zf78ajt50+6NWu/W2O+i96p12",
+	"Rr2L/vjq8qz8zrPucNTr08XO2VnTpbPesPPyHK+OuoM3w3Hn9LR7WT633ekcDrN67ax72qOPdH7s9sM5",
+	"0t+Xnath8OegO7x6E/wdDIOX6k1n8FPXP1cnWEP6+iIaaUXI3k01pZfVS2t0OMdoW48bpFikMqnjZluX",
+	"7P41Ht0itR3Fn3VGnXH3LdHdJRD7KVBPq93q9Uf0a/e892PvZe+8NwJLadAb/kQGE9zU/Uv39IofeNU7",
+	"P0fl6PSif9o773X49/Pu2Y9obb26Ih2w3Rp2T68G8L5ac+uuB4RtXqzGUyIU+YXgvqt43SQ8vyBh352o",
+	"o4VOOt7Qqmggy2VqbvbfP//cZLWrDaM+qml+gPNAfVzqVNnP73NYozaM+Nq9uZke8/6r9demZgmn7b4z",
+	"8s/tvuaNXghPPnYc5TLepjA5CXQ5uLh0Nubl5eDiLf5z0P33LhtYJGPI1ur0zvm3y94A/3Xa6Z92z88b",
+	"TpJMptcqaxKtfHU3PTHk9vDB8COBv6W8FuWVLu9XiRxrJUbBbV9CaBRfvy+ZcYmzJxIpD+2++WZ3S//+",
+	"CGUrjWyy/WGRwPP/VqvbdbV6AAazSeIVeqZSdDYlhl3D+EPooprKBJ1NiuLrmDqQxCuxyDPUOEruJZun",
+	"MzmFWPdMpZa8WFPNijio8jnG0dHxjg+SHTJXC6viG2Xhs4mKxKPLzmAkvv3j41oflVpm0p3QO1HfSKUL",
+	"2/EP1tmn7Pq6B48jvCvTN2rMsbBQYfChmXYLMxLGNkuVXKzv0c+4D+i5xyWaa5uZdEV+fUhiUBFmMaz5",
+	"9tAasT5H4QaCTNNynkIKkhuTHHSd+ddu8UaNJ7GZfuC0ourw8APaOo+nWz5hMx3HYm7iqC3kNDXWcgoE",
+	"3wHDWkHY4lh0ZzM1zcq0AZGKFBMjrJ7EZLUt88yWIg2xmmXC5BlHWHQqUiWnc78gQHNomjlynMo0pRwK",
+	"WNNUKTGT04z+xjCJjIX6qG2GaRmezsGs1lO+RVnRffWqezqCgB+ObMXfXwibSTZHeckwlmLFoPvqatil",
+	"uI0UxLHODJewdAsJRCUSs07n01jJmghk32RzWLKZTmQy1TLmjztH763EYSm3tsEGBwfoFF1j44mMJftC",
+	"1i3va9w870TDO+EroT9NWiFxuRc4ECCgY/EjPgiLmJhM2KVKIol7KSJtl6BpCYNuiL+rRMQGY1xENujA",
+	"IsN7omKTXFtKI/J0VkuuIDPGiUSew/wqx3SVlcM7jjBfTPj7AoIlSkxMcvR3lRrxN/a2Bd8M2Bc/SiH8",
+	"MQu0mm9SCoCTeJamNpc3CpcGqRYSikSm0gUmYwFnqvovEvnUfOQiAVJNMmT0pUodEbZht5w7CBMo1gMW",
+	"XswXcjqJquGM27kRt7BK6GoNmAYG6oVlk01Uf8gTea9RYsPCNm1ysSp156CTY2kR6d3oz6bbXVz4U/vQ",
+	"qKJaSB2Pb1QKwf0GvxYF/7OVAHNFRyAQrFVphuTgHgUnVqqspRAS/yF0ZlU8Q65RMlaRy3vzJIXchm4+",
+	"OEXqJYCOlmNtbU5ZDmt7B5dtTitZd90kEyNTIJhtK3NR3EmmwkzHW/3doLxc8q1IOD7mtvcBHYbzas7q",
+	"PQOyePuGqGwY+toQi6UNpnSIxiwTf4eI1Y2KRd9EMoZovwBSm8TazlV0LD4kkASgrcB8BXE7VwmJzEgt",
+	"Y4PZTOIW2A6UvFRZE9+oNEhbSRVoD0BGREL0PtYDI3daWdG/6HfXjym8u95Kw1HvoOniG9b5t3Kb26jy",
+	"HpQIuUy2a3xY4udA46vQ17r+VlHWKttXoy/VKuXXqi4Ot3/IVabTub5piiXIPJubVGdbLfGOu/Ect+lT",
+	"uzXJo2u1VdLhPF7SrYeLyOtUJnd4bLLaN5Ni9ztjabNxmif7js0/tyGcg+mgdqclPqdbIbJdibG/7Jz+",
+	"NOoO0dfauUSn6PB15+zi5zAX5bz3pkfujnOQTHVCiLLAas3k3KqdBnmJdwKn5okdZyYreWxC5SVPMr3Y",
+	"7aUDvvdTu2VlEk3MxxoRmeZe1CnhMgF9bh7KPyxAYCloMWkCvqhjjg+5v1LSylj/R9uWEjLo2yLTPkub",
+	"VG85AZ0OvktfoNynBDX8uZKplTGmaYClIicqhg+aBIebkgmD1yDPK2mzngwHdyymcqkz/G8iFuYGjRWT",
+	"X8/hCRhTsgqEev25bjN27qwfKbM8zebKZiLNk2uXnbZMzcLQISOjSKXh0sFRwzpqGN86G3ReAfGdXry5",
+	"ZE8a1gVwQMeR55hc/ufdQ+kTdeFSmOEzfLjd4hBS4BccdN9e/IT/Gl5ddgfD7tnGlKr61eakW87RuzVp",
+	"oVbjxKqJo9InD1kIc+YyxgTBD2hSDUcXl5fdMzYrWeYGx7NKQOeLXohuH+NkfCN8DPPOBAtOICT4MdXX",
+	"8wxsqwn4CGScw/uCEblkVawJkVZYs1BE/Hy3Ru+BOCKTgLmbJyhL0VAeeqvd4rGFSx7E9Xj165eZ2Huv",
+	"xDl+hCXCHo/my2j/E63OzRsc7eU51A+PBbJjYUf/gTe4ONv9SeJP7ULEBhpCIUC3p+4Bx5NjNUiMbcx4",
+	"KopDvj858a8LNLz6D7z0KkaZYTx5Es1OlY51cv1CYL0NqrIpTIiMGriDyjdsIK2+sUCGBXOgUC8sbFxM",
+	"EsHsZqDM2oXOMtCiLWUJwBZYvg0/PgUOgM+id0kKdA1oy3y30DaTH9ielsB1oAiiyo3fv2WdeiEjta47",
+	"O22GbOCtakGR/tNu0XBD4di/GA+u+sMxRE4HZID0L8YUfx0G8fbTizdveqNR98xdq2W53B4yrgoXVOdX",
+	"ea2fRSM9nnt1aV2+TkwObq81EecKqthxNdPX7FeUCeVdC1ZL2F8FB2Hh0nohEl+rpRb4mHBZYYIyW/jE",
+	"TvCl7MqbxQZl4hG6X0WC5QNktRN/8puIruEsp+GhozbV9gPVB4AGAU5HsvqOQC9w96E6gAqPTAq9g4m9",
+	"xksex5BFPkZv11hHu5vNTgwu5Mce3f/Dd1iaxH89XbehaYqHkHEkdbwax8basc3M8pBXLORH7xAa27kE",
+	"O2y59Q0vL4fw8FKl4yyVkRpP5UFfh9+iPN5NsR26m6uMUlnApnE1r1fjMrRrKCEYdSPnuRBhharcATRG",
+	"276GM4n3IjWNsWIBb0OGuZ0rjkBANmWu4wj930DaFIXYzaezZrSu5RnuF5aEuda9JlEfs/HUVwRvCeri",
+	"p9rry7NheXNbs77o5ERPrR0vTaynq1DCn3c7b7s+WD2m/4D6VCvB0YjbP5RPT01WYznNTOqDlWF+d6vd",
+	"urjsDjojzG8d/jIcdetLHjYG+eHS2KWPb17f8Gb/1oaxhhNvXP5BYY3WxLVCBTxQd4GKKVVEJ9ftskpC",
+	"Ahn1D5nwb6RM35oU4kHL1EyVta6ON3DNwUOu0sep3U6hifVMTVfTmE2G54XsBwtxopze33Y1xzRIp9CD",
+	"mZtwvAgsjDgmc7N/AUl+l+cXv3TPhIWCcFeQ5JT3MlkWyWNr+8jfMmlIJOH7W+1W7wxNscFVv9+UvE/r",
+	"ete3oAcGLPBsou6ivReTCkbmc+gaqWoYnAXrmepmlrG3gnZwIT11qWPxptO/6pz7QGViKCv1Rsbr2+Gu",
+	"jBc6yTP6zRcSPz05+WNYSvx9XSipmr9HX+d0vcHbzvn2+gN8Re1SWKvq6g3mUicNqYkYPmwIk+/h4YMz",
+	"EdhhanSDR7o6b8olBSF2eT4eXfzU7Yf/Hj87efYMUxI7o/qSE51kY47K1E6t2cOmrscbKzBAJxxPY9nw",
+	"4g0RCIw6jC/6579Ua0xed87pH2fd895wREmU9O8mw3tDRYf5oJKxz4IuH7n7hQLR9iX6qKxpUYBGA/Em",
+	"sqeZ6raXVs6vUy2dllWJ2qhq6Cjzhzs7ytoiVUmk0tAqXcgs1R/xn3BYCZXMTDpVtpR+4UKw4EScKKsj",
+	"hbWeZ9qiLCedySFOZHmaqKj0/FxHkUralFWAn5JLOdExDA3MXXFr8hgcQ3V2AR8YWwI2Xpr8EEiSkzpJ",
+	"4ijckeGgO+x2BqevCwIEe7PbP3N5vJeD7mVngJnv/WHHpQljlZhL3BsPrlDUv7y4gkgaJH+fDrp8Z+dq",
+	"dNG/eHNxNRwPu+fd0/WfLy8Go1cX572LBp2ECG9crNq2wovNgpAWrXDe8HNtv9R1xAfmx3pJh7TacgLP",
+	"C/H05OTkRPyP/wH/+N9a7ZKEPznZti8v85VOri/NLcV3K2q8HZvZflm1N1LHMJ1xYm63CuThGVmFMITx",
+	"0o1hh0fmUqfTvJKEVR27VdmuR8KMFMPd7cFdi2NpFKUPbMzIq5oXS5XsEjvnZSFTwPkK6w8Uk2YzE2sz",
+	"3qmezL04T5fGln3sveHleQdY19Wm/NwbvT4bdH7unBflGKiWNfAXFiNFO46gMbJ/h13HMCyvbk3qU73J",
+	"0d6k5dqpKZtBXN6ytjpQv7Ndd2JDhj/oXh8MfBcSyuHwiZHFOHnm3hZws0a2TPVUjfE1NUvlsqb2cqJs",
+	"qH9r1kByG+1B7A0M7BWLQKPwUwi/Ec57o15R3Sc4pqNU3oL0PGSkVc6uCNaqbA44sBAzlVHUE08gftcy",
+	"IioSqM1HSCFB6lbitHTCei8GVG8VRTznVMwF9gdWwwW/kqwpfixYbQhq+sVpr3M+xtIjCNKBFts/BYFF",
+	"pWGX551Tqr27GA6hUq7XLxUncQXZsCgk6nXhj9PuX4JvrtfyrZfqkQZSrksr3uBr+Ibdwdtu8cOwOxqh",
+	"mvP6AvTv4An+oVgjWoh6dQgvNSlF1YubVaNiv37kwGs1VQXSYuryyW0eu2RcMYMky6lJKL+eKjbJnz2d",
+	"qyk7un/LOf87NbfCxblqklmwmEfGNUdfmEmNd6m0LP/2yvCvMm1ZOdyYNFjc+and4rTbG7V3ymByo1OT",
+	"LDhHqMZBclitUcK5TBtccbG6lvGYMGgaxbrLUhwjbJ6cZo13ov3lN67prh0SO2jkRQAOSnk7/bOXF39B",
+	"qlnL0SgZSfgAFM04nL9jMZybW0qRNmn0Qkj/BfeSa6wHJi8cXOU5NORZqGmOrt7tU11LYyiC3gxowaYP",
+	"6RBF+VJtVmGRnFCUL/G67KB5FNRaprki2rzGcy4fbouMB5kxSmVCIYha6WHSptKYsrO5Yoizr5ljrJQl",
+	"0Rbkd+YfJ8ZkR5iC4DazkDt1KeOuLqIBy+m1+iiGrztHz77/wYm1opLCF4i6Igv4bluoxTJb+ZSkVIlb",
+	"hXBIiaobANDnl6KJteLYmUkX8K9WJDN1xEkE+3jzd0zTyjx5CJVk6DrhUT53aaYF29VyXWa+3KIVo985",
+	"maTCfeU3MBG0CcqlFMLwvBJEOyq1wbzitTwZG6t89vPWXI4Kty3p0IRiFk5IipW8gRBCZBQJR3OrKJq+",
+	"jGWCPHbcah+SE8IZ92dcr7M+yii44uEVMO6FGwjVNbB/WJezJQS1sXSvslH+sxuN+kq9QE1ZvoFo/9jM",
+	"ZmMIOMV7Hd0whmj/AJ57bAO3kpLi7JEayA0a95GZzYAEtIkwE3ApreWks7A+EOIYibnliiOuDsEVaSo8",
+	"2L1GGF+z/xqsnbgsHUqFvo5+zjwB7QK75MtzVasywHbNftdSDWWdDiTxWeMe4F0ppw8GrAYHEiYM6oxz",
+	"DCH+pynF0LYprdQ5lmk32E3ts2S5aNPBDmZqeSz6KH/RC39kZkfZHPJOs+eYOeXBFYNRpW78lDLVFiqm",
+	"vKfJyv3T5RNSYSmgH+LCYRKi1+qaoo17BRT2cNcW/ln3nU2bhJZNjS6TZXDc75O0z08kpt6GgXwJX1LQ",
+	"XHBZEIaYkpffZFS6pTCGTKfodY6h5n2qsza6v2ZSx1DfAH6rmrG9kdO5TtRRqiQV+nFN1rHgRN3B+Krf",
+	"edvpYbKCT00th8HnmClXTG8ipx9UAiSXUAoX1bu6cDYk1vGaukTY4IpOZgrOSkicHVydjq4G3bPx6UV/",
+	"OBp0epAOB1A1cOTXD+YbW4wDJmWFLJjH0zHT9WTF/yiqoxXdxDlaC20tDMykQifw3lhl6gVXxdKjOsNw",
+	"DeU6xtoikySiTBT7bafJs6kpx2aGV6en3eGwjIvQ73bPhuPT804BFoQQZmfd83DXWu3WqPeme3HVcMyG",
+	"0myjuVyVfoel9wb+gE23VxBf14VBKSk34OoSwxaLuTEHgKeWnjFzmLSOjUEgBoUHa0xwLDoTpByizMQk",
+	"Yaa4z8mGwIN/z7hgEq7mskJyPdi6fG0MSjdq8ZTUVaqt8FPgI8hSgqMvgHA1iWEBRFPBgjtetpkPFZ70",
+	"cLY24MnQB7AyeSqCF4JKW3OYsdDErIplqjIrEpnlqYxFLJPrXF5T3k2e8OlFLEsNCkBKURE0rGrk6mLb",
+	"RdWcFAz4Xjf7Cjm6EKLP2Q7WppbiMPuTMpqalNAD6svKWWzru3IiMiO+xQB1VhQ6HIvv2uJ73Pcf8JpL",
+	"AmxD2TeFticrQZ5kykNyDRV2jGTvHpU+qMzK8UWp8cFJqfHB0y9cnFANYhxYYFDdYb9gzURGaciXeTqd",
+	"SxuaPGvoBEQUEoQYAoEI6VKxfUG96IhprH2SPGkyxL9weIZ/JzpRYqHjGOF2SwAkdNxPVHarUEBIX2fP",
+	"WH8xdOhIhbY2R+wCoqaJggJrGeuI1GlrFoqboywUpG1TdxKEPLkPhFxKGh8j1OgmvS63mVmolArtl3KF",
+	"On0FoJTYTU9h4i596BiT1CSoFT43wDt0dJL98F0tmkCYfeQfb0EAqmTJf1ui/2+3mUcliizNvJm0egy/",
+	"yF0M7lGSlZa6WrRy0j4MjbQyXAdICtuyB6hSEf78tTLOVi9ZR649Fq8QxYEKrLT1h7EBwl7mrhgcRpLp",
+	"LK4KMtdepFmQbdpIh0WEL3ZTbd5QAtrAPMB73EwsdTDpGPLZi8L5nQsNgpB2kUnzx20HSTMFPaunIL2Q",
+	"12qcp3GV4J4+q7kbkvZtvlzGe4XLaw4qLtHwg9uYyxcecCdbnttEFk5dcSH0YDbNxEGIKGfKZjqRTZGC",
+	"vWkD7q9Dye0NL8S3T3/44eipkPFyLo+e0SHi7D8q0fEQHKDD2g+qqFbQlGm9lCtUbqd6yceWSpWYqJlh",
+	"HSgq5iMQUuFaW3Rwv0DlBlL9uPIS+QFuAzvVftDLpYqESjKdAsw7HVzh27JwfHMZCSs1eVC8/Q+jg7cR",
+	"Mhabw9gNKBIEAts9E4/Ojp4+e/a42pmhc/Qfv/7+rK4rQ/mI2ONIaLcibaHP2BiV/xpK3Yon+rLT/wmd",
+	"dYOz8eXV8DUn4Y5/7pyfd7ECePDL5ejC/V2bm4sbOeah7DIIH+LE1NbGol685xsr8C5f0htsWRss/fXo",
+	"ZPHnXCZRrI5FJxE6WeasBcXGfADj/4Oi0CTSNFeStaF2TKZR8Wciei87/TZ1RrtxXcMwFmaVisRynsLh",
+	"oR0G1RnF3W1mUhU9ZygRMlIA+sg6+yyUcN9/v1X5BUJvQjCx+STSNwTEBUwADg3i03bAFNb9KJapmumP",
+	"x2LA8gYNPxxhiQfcYQdFC9M4B6dJ8CXra5CLj4WmBteLQ/4HFRzjV4QueWoy6rTwrnWrRGQ8KAqb4aiY",
+	"vmu5SPG7FpTl84817HVy9Kdff3/a/mGHzid1h26FKgtZt03E/jk39Ukchymw96LaAFn8CPk4vqyxrPqi",
+	"SLuGmHy+5LYZSrGpzXhvUCxGB7Pjt3uxnirv87Petsr3aXf7dd5dqdl/ESC9zWSK799tR+nJ2t3El1G2",
+	"xeXFcCSeEHKXfUIXsnXzRpaQL4jxiuPYdTxKbL4gJ6h3eWH0VE75VERrDxPdiIgwOQ5dxGBC8rCwQtjV",
+	"NsHvNLq2C2JRVg3C0XHDxSOUEvS4g/0LQlruzJcJY4E4hEsVBbAgC5OoFc5lkdsMXUPFNMLD3QMNyoXD",
+	"2yMqOBY/l9SGAqRTKYcYwporGKu/Qf0oiUmcoJDXUic2CzyHkPwi3WUA17stidVvbGFF+DffSusWmZQK",
+	"q7IsDh02MByW0VgGD1rG0z89Pt7FMGwFpNjMZs6Fe5+WhOtDmtndeaBoMeZG1MARPlBQche6KAEcbwTf",
+	"CbSNZv0tnItxvigF7YL3OmfiQqXX+FhmsGCk3pnpfKPalqIiKrYKc56KEAT7WvA5xFncFitJ5IJPR+d3",
+	"9XGL4xpjqcbRAX7aW5lk6NtA96zDRvElkA7dNOyR5ipmkAQpvAl+18zgC/OEeiZFx+IiETL0p99iv1W/",
+	"NtqGS0aih9YWVg32qORmLuBVvG/YOyJ9KsHJyXYX4UGexR0sr3CFGzgo0tnLTSCfk1TJDxEsKSLu/uUv",
+	"gj9qj1kgaQfgmqqF1AlQALgkXrAsGatYXyNUa9gBkbzh5Ov1vgpX702wMy4jOWEwmsTc4pG/Iuex70BM",
+	"Kq/1spLdzSxacXuAJgqEJaFd8ARux95Y9+HHm6zGgLnqckKbOgPsenavbdZkNS7aLt372xlmM3SD1Iiu",
+	"KcTz2c9Imc+C4FKJApwDl45lZFbq+4hE8nGZKswQ0QlwonJeLG3F05P/WRlAybfFhz7WvoaHC4a0LHSD",
+	"lrlViBJceI0hYJwZGF/ujlccvraVG6cIeZwgxKbHsZXOqYzZeyBiDGHlel/oD3X+IAKt3WcnkIn2eUAn",
+	"jqMOe2rciBP783zF2DmeZ4mnYWmmMgFrJmTMveLNFWmwz9i5uKC5LcH28idCjFbRvVgpV+hup7MDVEiX",
+	"VTCNJTTmpJhfErFuxfjB8satJtzuOcUdZ0jkdu4iEJQJiDkyhRbsqz0RxpoyfMDVqwkKOzBUE0NWkMdW",
+	"Phiip3SsVIWEo97wQ54HgkVf3/0SGa/tYPNZdeElYB0cukSBAQLKmY9FGpEYBV1OI20znUy9A+12buJC",
+	"N06nc50p1AJAgiHo33OhZJoQAnQkMwlCz0oHQA5ItIgBQXnoRcsocrNllSOL+0hp15NeupMQd9Udg3Bg",
+	"0SFmWMefrPhicHI54YhtsNolnYRyXNyY2CCZ5A753QtAlyWGv5PIDfDZXGkLZtEOLt5cgHOk4/Ir+2dU",
+	"BAMJ2ONuZ9DnqnGouhl2zrvBb1RtAlUuvdPwd66IWX9JuVRmfDm4OIVkFAb464566KYZdH/uDBpaXEGC",
+	"b++sO+BiGvy1trKFopcUOdvY1bnQWtiHlNyoFOGXErUi3Ztp79g9UtJaTcJn5ZJDpQwb5v5EJDCB5VdI",
+	"ACnXHJAUgTQ/PSWw9FmmUpHdGrEAg5PlyzKWU+oN/C55l1BeRqbShTu0abxuVN6ia284Q4np7Xip0vFC",
+	"/mbSMTJZ1XhwBwQIlxyR1LyAYsMXtbrpXKKVMjPpc/Z3syQM+tQhXC8y6/swRij+e9Ng/jtoEF51eEJh",
+	"UbxUvfV9W6QADEZwxu/x3zq5fo8wJ8fiklaEMLhiGpTbApxRrBCJUV67vEnxrvX05MQLnKVKxVNxNTx7",
+	"1xKGsL94UiSxYWZRoV1k3AW6DlWlfq51sg+ElxsASg2428tCD082yVe2Gg1+yFhwOcq2j3pJCP/Edxhd",
+	"tEWsn55SIabbmh7aueztoILW6Z5bNT4IalVD+OVw+46LvNDJxhft+pIGwl9fciBbcIZfDc+OxZCcEWF6",
+	"FGnOUYBreMQrVJCUT/m3OlZJhm1f4kwv4xVYy09PTg6iN8eV9UA56KUqIBT9EMDFH9HBFrMopnO92E4S",
+	"xYhwXkKsBQO31W7lSyxyjWdjeIn7N/46i41JW+3WVGFFNjofWr8Gc3PvqINy9xUK/mbi7SPO1Ti6ebrV",
+	"919UW3lubDeJiI10UCpl9itdQ381tN2smLnMn/tzdBdcsIuEwkNrbNU0VVm9dPEBIrqJiQcwuqzzjCJR",
+	"XfXAB8eaduEbnqo2HN6YZYC5gr3APbSEzbEIkUs/xOb6uqyOeeXdEBA0RB0pHpdyq+31+GoJOn23IixW",
+	"0Q+pst+IN+RSvDeUjTAxb4ah4E3YeHHsAM03bCLcQlvIHaFGr3tDt4ftkr6lM28a3coCEpM3UFI2LdcO",
+	"lrSwIH6PnyN3t2uuFPRH4PoJaX0ItyxHRaxvXJKoHxm+srCqfXcP0pMQ7pviBIGcmskP5QTQuFx3Gawl",
+	"z2S8TzmN66rEFLdmYvmyELyP8jBvdRKZW94FislRFID7SuBVbR30bVTuO7IbUe9YPuiJg9QFt5epTDxO",
+	"usPblbgloCw958TSNMKLUmTKZvS30zCcagV+Q2qelRZ1pBhXonlf9ZgWrLD5dC4ke6hcHahvdyyCBtz4",
+	"FcTYs+aFU5gpfbsIGHm6prFPY6kX4WUueXUtlShAEFQrELeYSK7E0REPkhG6cTvwElY1UJ44RZ9SdeTT",
+	"s0m/cpP2ayvL2el0H3EPm9bwTeA8uAHWvKlaGgNHe4k6X8VVh2RPXpkKPuKxOO1cYgDDBefJLjzjnB/o",
+	"vgy48O4qOQSOnKPiBU2IzfipcyUCqXDjKkfvhV8xpxSQBaj6ttIE2jU4vhq9vhj0/oOyDopSNPc7N6DE",
+	"gY/DSjWaClWq8sgRrAKn5H/2pWxc1goAPtVGl1T1hv9kqI1B922v+/P2erdQzqwhmlMVXPVIqhzwJYWm",
+	"eoYEJ0ad7rFbYWgTKOX+hYO7C9OdfJIetfTO6HhBQWrly5XvVCZfv6iIE3wvmpyHntlzoUMIm5LPeF10",
+	"lFQ/B7JQ6bLmDga612mAvlX7YqKiSEVP5gYrq0ySysVSXPXaodY2RTnu9L/t+to+bYLVNHMIzLs3Jean",
+	"DlH1Zlpm4yKfZF3bg+sb9cHdacBMKEHgoIHupi9yI6Ym8IhAsdm/zHodSbOQ3MPucAgyu/jl9Go4ungD",
+	"WIWn7Jyk2Hjoi0Q/5nDI6D/u19OL/qve4E33zItw8FaOL14iLNBZ0PIc/wgL7zb2K64cAyDVi1HVwhh8",
+	"HFt9jSVO9WVgHioq3siZWzte+L0NOlhUeKFJENQPYmsPC5ZsZ0Wv+51CQfxYTY/j30wOXv5xkHq0h3Qs",
+	"4B42IbM5JJB77GDfaMJlZnuBdAhKEQ5hO9bZp9qOzby6X6DndLGvh/ebfqXjmgbTAHuLhDHTcdwklsJs",
+	"ASdbAnYPBcKrXr9zjppgHcfuTnGYTnyQIL4bpScqA5zz8Uypg77uz5A9Sd3k2aETXsYyAzvk4DHb2GT1",
+	"tfxbJeyNSvINVw4cUp1Api+11wl2jVbWFzOg4PIO1UmCV2SRvQpoft2zO1VpJrULYqMRRa14yIQg50iQ",
+	"/F54Tyi7ECPvEwBZMpT3A8UmmlK5qGP4X3qPj8VVn4whDJ7j+30gi5cBDUgozijbhGzsOU+hThic2Vbs",
+	"vxfCGVmBYQl/pEGTYwhOLFNzjS1b4TaTsEfL5tMpZc29Sy7Alx1aqX7whA+vUpj+Emo+MHHVe6UQkUCj",
+	"89IuZBzDcpDXM/EoBPg1eM9ECcA9Gj0XQWttWhoIGlEpJY3Su9sB9UeFFq0bWbNBGpiebk1qBRpAhW1p",
+	"NXU4kF6I7KX2RBE5EGVvJwS9hNPx7wKttxuY0c4YfDtC2NV246iVAq+pi7YdcF7YfUBPc2fuewO3bW5E",
+	"MDUWGlFbbce53RXAeDNWbliqWJaHmBAfrYS7oy3U8fWxt1XFLfB0Jgok/P27D9w/UC94rfXfVTReJvEe",
+	"a7QJxDc58J2AzAvJN58Z/Bc/sUYateMOdnsnXTkckSdyh6xb94ZeYrM0XzS0EUZh6YyJnbmLn9vfboag",
+	"634ejalMTKKnMh43IpDsW8Sy1/e3tdTwUY39XvtArTiqjZiGlxej8WWnN2i1W9236Eq4Gp1evOnuiGGG",
+	"t6xtSs0y1HfUaJcobjO17muPF0/WmIATuUNrYhw44oDYbO3s2PTkW9CXz+mpOgXhb66obofPV3u8wcDd",
+	"G4Kh1dudvSTz/TjLtIWunXE/TNM7uzot/UJ0d3kx7DGc06gz+LE7Gnf/cnkxvBrU9wujL56Wa2Pqmwqi",
+	"VbG3aoWds0wyjpSMYp2ovcQNpCqAWbR7Kwd4gk5AvViCVrXfozbWS0gD2+cxnYxTNVUMkr3roUqibJYq",
+	"O0+UtWNaUI9L8PSkBpngUy3DkXFzkUZ1TT8m+Uql4wNxFw7welM67QEfdE8W1RCbnirlDd/ZkYG99/a4",
+	"P/Qi7Of31tM9H8Cql32Gxk9shE63EP09hCr4QWxrp6LDW8T6BS9NcX307XX6rRu9W9nKzqyPd43Mft3G",
+	"UfUdMffzSJZeeLBfshgYY9CsD+tApq1U8K0HVtdYc7cTvcyktWWTCOGfcG2O9Ymi2vqCL/qvsoTkngQp",
+	"zbS5mAGaIEgNOpKCkv0pVGSaFPN9dYpOkCRXIpYJFDEmQSbQCuEXw6oMV97L1YFQli9kjHAJd0QMOlR2",
+	"BM/t0+r2AUSOyzffl+4eXgyFevseezekh4BzVbqw46IerCZxqYzN9IIym9u+hBspaSoTkRgRm+Sa4HeT",
+	"64YUGg/rtCkDtUZPKGVzhCK2TnrWIj0VXwgjebuLz5DuGzuuThQ4aK2Jo3IpD1hPDibFiKwsKVxaBOYw",
+	"66BQptILQimRqY+IZoyrnhhEfIPyB8feQfF8BsITPcBmVlToTBTKGch2CL2iUAlTLX7hCparEfwL6qhH",
+	"3R9/GY+6by7PO/ib65IHD172xh2HyxrWvXT7o8EvQfHN5eDi7KoB5byy0vd5VPEr7++wGq7Zy2eDzqtR",
+	"iNJ/2WFcbtfxp79x1kMk5HvDGDvg2GS8o+Z2n1Qed4B8a3YuhK0M0OBraOGZY+3eJkT4jbgo4dQ29r36",
+	"d1K8R4XeXYeIj0Zmc6nnVgXk8P46Wao3d0jjaTf2h9vLK3RQRFH9rUFL11G5gUz3ZW/km1PVbvudmqPB",
+	"QNrlBWkXTlMdqdBPuksPtN0J3ulT6yxkDukEsLnNOFznXM8acRlt8Gts4yG8ivOuWx4Kwsl4h1BILXJR",
+	"eFQXM6hwR7hkBf23yzy4GyN/gdyN9UHcKY3jJx3Hw1udTecNrvNDxH7RD217p+kfzy9eds7HfcjO6g1/",
+	"Gv/UO8ceNdRHcvxq0O3+R9frEXgAhroDhlsv+mPueNNqt952+1fd4O8eALZcYU5Zye0c/A5OZ5Aa0ArP",
+	"PYkjomS2YZiuVn+ZW9IFnw168gW/Eny8+/vX/ZoJpSpW0h5gREzNUjUl41hguUoyznDU6Z9RbfEQwtXd",
+	"HbueB5/yRBB8oY6nCvrbgGNU9fU6wmz5NaldSh+9vQcpu3OEOVxsBjhvPW/999aOC8iT3dhe5xyi6mdm",
+	"2hjxIrTLev5zV/dOTDbRqr7mIOKRoCXRFtKKNzJF6ByuoOTkY1ci4krLXKE0FQY5lE5J4Nj1dWEVLSkE",
+	"FDw5+pM8mv36+w/fNWB2mjyxKkhGcEu/cUpzLpuZKJVwWxjyeEgRy9sVwBBQrbl/gpKHYX4MD6YtQ446",
+	"yAObpzM5ZYgDK1ewSKFVtkyVVUnGkAupnGWwplwoUm8Cu68z3Tk+GXUHb4bji1eB+XU56L3tnP4yvrw4",
+	"751i9A2ELnTOPKcIiFOehmN8uiTJwvs2tBB3ZFlTRhXsMRaQ0SYAZFfxlWItXctBRJ7FQrVMQAJZvgwN",
+	"zYv+y4vOYK0Vau0I9/EVNLXACta6eKxwDZSItLwmzVRY8GUtx79BAhooGa2ze76MJHP7JsjmyizcU41f",
+	"y4ZyprLVuW8YsM4lhI0PbkJs5i9cCwyG/vDoVeKR81ReGxkLqwh/5Ls/PG5zFdat8ZtuqS6N3nFkcRC+",
+	"N0KR5OVLwNBhWRTFQ0hWfFBpouJvrCDlounxIqGuBoNAp9NcZ2OEAcPKzBvvU9ylLLfyOKXHQa2GSaKG",
+	"lBiH472Qq/EkX43NbVIE3Nd5HmJx7pGpSaYqyah8bc94XoKg5GNa8Du96eGDimap0NcW67/lOoKMLS4M",
+	"3yt3B6L4O5QtES1uv7NqM9Y+Vst3qpNHOus6xO4mNWivJqE/z42QU6zQnqy8v5/qNl2rum+s0JFi5AhX",
+	"2q0+Lo3lzFOPUlp7LDdolnp5z9n71uTpVDUXu/D1BkO0rOquX8SH19ePW2D/4psM6evkSDPkIpXfiCyV",
+	"On4h2GbxkClQVhthuqnhWtu4aFzHkqdUGum+Vdg/DS4M8E5f13dErm3LR3MLtMtt9QtMivfhLy1RdY0L",
+	"JFEfseTKmqDY6a9uPu1Wksdx69d6m7b8dO1EdGJScOWsbWwnIU0UYEAYXBaOsje9/sWAQDNQl430NaHL",
+	"xKtj8a4F/TEI4vq/fX9yfHJyLPoGaaIN0QoHE7I0moqWhVVLiTxm8c9YSazPBVAR3wtJzGLDODiFQvvo",
+	"5P/516dHf/r1rwiTfdJ++t2nx7WK7ZsVdzRt9NztvlfuTTXbNKWenuO0MNM2BjbLLUA/lZtARnJl6zPh",
+	"Id4jpEjUreAveoRhAsG+ldqDDXuw/4niLpslBTk4W0td+/dcjUHxbN3CIDfubmHi7Xf1XleVOetSBcK3",
+	"t4v9ryxAzWbU8U7QruQ+nUPwvs8fevBdUe7aHGfd1T41iVnoqR3HZvph/5GVOqGsvX1hIsXaV2IyZbfd",
+	"tKGla9DnOehr+Oq88+OPDTGR5jgNai/bphkQzCU9UBupcWEtHqkruW835IdWUkLL86mP7OzSOIYGO6R7",
+	"N+Vi1+VIe1jIKo2tN3/x3MjD8otZs41buBCqCFRNrywA9EIAPIGKCWGHfWOxgQU2RA10esLblCsCPl8g",
+	"XEcS4R+xTK8xa2QuU+UzPQqkK7ki7M/n4n1mlmN6u30vclYTHZZsUaek8XdsA6GvExWB4kRakDPGEDGD",
+	"MDbIAvnG0jhsJrBIEVtX+Aaqk5V/NwKNymw6xwtZCi+arOgfpN6W9K2U0Vio+8t7bccrk793w8hUHKN+",
+	"t/AlUZjzEmkCFrEqQS8FwTfzusbaoo/C5umN0jHj5yYRoshD2dBEzSGo/r5kYj3n298jIFLQLzo1eaYI",
+	"KP7p43WLlEZcZ4lr62bntEwYP68TT5/z6I/FJXmXCOWPYKFDGH+aYLCFheIK77H1/qcwqHdnlNmXHrWs",
+	"7QBkOsNhd/SNdfqVPabWqsmHGnA3tw6OinizXNIU8gbRB7wA7ka4QqJBupngZozrsOKxEMBCbZO7Lvkg",
+	"np7gDuKv+HqVFPDaqcKit4VJVb1GgkzmzN3d1gwN35ocMW3d9lJfTXw1jIjmRKiVrArgnW2RpXkyJTQo",
+	"9HcqONESJENn5+QLwlDk9hSMD21LrkokDnB1xBL9lSTiClBN3EWG8OSOFUtjYlyaOaP/c8oJ+UZZon5j",
+	"RdHNDNkWVg4r/XwjgCmwEXuY/YzXB4OJROrjVKkIYPn+N06iQYh/rKJcb8mAhFUqeCk2a4uEvg+DKXjd",
+	"HZJL1s/ieuhJgj90otb78JBNXO3oX/7Se/vYebq5MTM1cHVZRs6S4YgHtwiiXzmR6F0L9xgv8E8iMfBr",
+	"CSIYAKCaMO0RZTWZxZJ6ada0SJ9KOy/hLdcjp/C57VK1Nt/tII3HIDLrb/ktT7WNSL0eF7pSTe8tdLK5",
+	"rLwtH6a7YYBV86Wu5A08v2Mmv3Vxg1nfM5XKHUErSnOuPN5eX+byCJrp8RQ7fDUUKo5voNvHXqmYmNS2",
+	"1wOEybT/l+b6er7P/bG53ed2s1TJvvePESBsH9MDlaPdfNjVdHT/PR4rrwhN1G1EdX3b5Y31A9hGIPVi",
+	"lN51YMPKKb64xutwEUfKZmKmU4u9Yyb5FKIX2GwhMaRP2gIw0ck6wAugqNStTKNSC/rtwp3ZoMabsHed",
+	"InLqjYxDA+vpotVufQ//85T+F/bpadTQDhBF0j7lE+DlR/DhBlFj9phAhcyK0QQza5egV8Lvt6s0Uexz",
+	"M4nVI5fIWKV1ga5hqNzPNII5cBshsjlSqS3rUSumjQk4BrAhW7spqW6HRIOdUjV6/VcXEPbsDPoYuu2N",
+	"eqe1sc9PO2SjrTNYZS1CnGq82SFOa2UR2hJQFokzPFwGaXb4Zm6ZNUYI92MPL/loppRt+65lbUa6foya",
+	"AWriCS/mHvxe88V95Cs+bsc6OeAhk2d7HkmojexZ7eAgkHVyyFN7jrFIoNu7WiJAAtpFvOwvj+5SabZJ",
+	"jqVKxhxPPJyOqhmqL69+wayq8/r8hAPioKjB+272foD7HvAF/k0ogzmnte4bzQKW8gd2Ob8bxAvZrWj0",
+	"F5D2TryUGLstdKIzLeNx5efAEOTWyyiHlARnj1myof+NDXrv9+ohaPHFbTHDNuMBEGJYCtW/GAWAuYTM",
+	"/7zSUoJQ5cny1JazI9gLo2NVGL9iLpdLlWATp+ncGKuE1R+970M8enX03XePDxKHu3NVaTn3EjBrC3+g",
+	"LNyDBWppYJ/P3kno7FtqVsicBvK3S5ORnC1X/OBPRFxtD3fMvt6msNeaCNtLePmB7Fs/psL8iB3yZdaD",
+	"BEEYY3NU4NXg4j+6/a0oEYXDui7wuO4nD7KFYJmp2R70SYNqW7Ewljo8IpdapVB8JHKhLDu0XsCvYs15",
+	"zzuKbRUBuwtud845dGYlpsFVvaeJEXyzTtW70WmW34E4NujtQYDExz7qCLEqZKqUU8Nl6wJi2ylUQGzU",
+	"1AGvhQfv3PU38F/6EEiFkqjJOcVr5kwTHcHlREhCPn5Q1PXN4ISIzEJy5om24jejwScNzrD0hdDJDeeM",
+	"wvmCZ+WtC41LQXlngvJAMJNSZ+7AY7jys+6o0zsvGheGbl6+xeaLhUxX3rsb/qaty3fNE5lncxgMOphd",
+	"eTBRiKWgCQY5Th4fExTJgtTYMWYRbk0nWU9O9AJ8N87gN9DAvyrZcI8cXsufrfXV3sY/91Lhwnu/pwd8",
+	"fZ8qMsyaNAuPjH735+5wBCUgF+dXb7rjZ9+9pqqO/o/uj/Pen696Z5RidTmAlOhf6wH2J3FtLp1CpljK",
+	"a4oQAvuk3FLAKmVLkcxSDxXouhSvBA0RY6ovil52lgJKkxX3TWAISMg5pSYP1iwURknIG1UXhKvdcNvi",
+	"VfJzqq8Cqlvw2igzz0zaEk9jBMy57HGIwk5TBQNXCkUNhQ5IgcEGzLQ4glUAgc34vG6E76p2Vg27U73w",
+	"UVrXAZyTqErd2fBnJ1hpd7E7XC/jlqrh4eszINsl+VYSW9xcPcvTxLLmX5F22OuE3jTTKuUAIVS6T2mV",
+	"YBommxcRbZxqki/It44B7mQFe30sggOFp4ihFzMT6yecE0loUMi1cDv3egXrx8ve9v1m9Bzol30ww4Qe",
+	"fPhsFIIuGD/7bu4MhYraj1tFzO5DzrG0mXj2nZibPLXH4o2SEKiKlQWKw//MpcV3FsgIu6al3804OzwT",
+	"az9TiZXFA7LFivgDLNA+E4zUwjQkWJC0DPsoOcXGtYaBh0HeRdybVH3UlhNHSQy4GzPNLdRTxaU+1oms",
+	"huqeLQlpZVJYn8ArGdugWxDLcFfahPI6cuF5KlQowemWY7PcxkjegIQFoo02D35zttudLXdglMJEvXPu",
+	"CYjcN53BjwA7zsfV0VHQvV19zIpjSEwN7PDRUeX4YrW2piThzuN7K/5NDNquz1E2LzIhaABWyGupE0td",
+	"kPd2a/ADn90ax5KPveXPw2c9fgYvz5lLEQf7zymMRGmoy7Bmso87585UNQAaJmzseFV0/Upc+1ETu6a/",
+	"YFFWsbePS3gBXAW0p+Q9yGfUDJ5LarIbxA7vehh3SPVMW08WLTNgRWkpSbutgdCGKTXJ3F19NOtyrVat",
+	"KPF43bFc2qSdXD18Pm9tdkLKMSLJbagpP6w3517iCgrUsHXAvR1NZFuh/3CGWbd6hj3mkC/JMBGoHXJ2",
+	"nra+TfpcQa66Ox7AmEiVnccr17c6wrgtN9rjm+Dc48QuxOIUVuootI+0rfhAgmxROQXyA2vkOlWYIHxc",
+	"gHruvu57BdA2AfZwKIv3sbQ9zVT0Zwdre2AkC9UoXEIzI7Au7j5Fdp9r+kPjgLXUnL3NXZjFBWiOL69+",
+	"wZXVCd/lRLSzuYvnfUjgBSmdsFC+rQS7G8StXFEz8GPxSinLrfxJfUiVkPGtXPmP+NraFV6EUBfmCboG",
+	"1BOV3SpSLRfPRcjH+GDAxfg8NayA4Jrrd42fEcGywBG4Kl3jfHZIZHaL3uawWSUyjS8o4hZjrhSCL6Pq",
+	"YAt6ryhtYuC7Q0qCoitd5y7LaPdPVkUjc/ffPeNxBwb97xCHrxDbno8e0v0hpPcHi8bdawrAZxVWh0X7",
+	"q6T9ebWsikD161GbJVDa73WCW4/vBHS1RQR/loP8zkeyE8PUQ/nl1S9tFt5B43W6hiTw+U6z5tUbeiur",
+	"If4Vh504dufQQ+w3MCQOeCxLsYPy6qCxrinmZaW0ugb1XysPvXmxR6CefYbc1c+Qo+kTgfcIyND0Up1k",
+	"O8abAuDpZjtla0pw8Nn6yjd2r8MdqO5udu6vRKTAPV7jAD80Cf3QnPI7nOY420PwhP+2q3W951FWnEv7",
+	"58gdfqbV4jOybKyubs0gt+arB8tcS6Am0zNdyKRNZ5Nf8zwv+ozUAB0UUFtrixzJTOKLowirdRA61n8w",
+	"S3NVPaF6PhRFWj6ewByLBmfPC1+5w/Vdx+LUNT7xwcipWShy+0KrluNWzULsj7C2UdwEy+pAwe/Q9HOH",
+	"7up123APgCO7tO8nkCs/XwwxMKJ71BA4oJdNlI8bgC0F7htuXfeoczY4Ojl59u3jpqbzd0gkbwbR2gDG",
+	"6b/onmYqL+9rsWLbmG0DZLYsL6dDe6JwqivZDWvLbsxUTvJYpisKySc6cSyy0NfkcBYnJz98dwLGZyxT",
+	"LJAtwsy8WdanqzsoL3ToVlrfn/VG48urwenrzrA7DjrZVy8FvYv7HfC4j0eDzll3/Kp3fh7++qYz+KnL",
+	"uJhniBD9y8XVCIGzL0fhL0UzQv7BN0/mv/vd7tmwiH6+7Q56r3qn1Jv/6vLM9exnXM5S0yaHW4OgmNwb",
+	"ugzZiXf9Mhx139RSVLi191JCGbzv4TFnSrPZAKQL8bpExfWFmeiKj1SsMUDAt5IbniKLiDyjjhYY/B++",
+	"GQqTimVu58K1TUS3n0lIigPJrqjc2/n17cpmahHSZ68/7lxe1u6QSiA9oQFTUiWYTBRtCD1ymbmD9ne4",
+	"8Yj8CXJuNsM4GgK/MMRSOyxDDyog20Jyt04oXM3T6Vxa1cbEbQ0lWYQpDj/QDMVCWSuvGRTAZoZWw97S",
+	"En1QS3I76esELnmYRpVhHyrK24B6xziC/9ziRGjkQlpODC+ny3GHUQed0BwdPew0rIcOdeRUbFawM7vT",
+	"qb1P5itee5dS5vpxXiGE4S6jLV/fSMr3uSHuQ3VzWsiPPRre9ycHL8xFMjEyhYq0GhnilCDLPn3W/RZy",
+	"OteJZwa1pHNLJ5FCOPwka7vOuIhdhgmnK0pzawtZYt88wVsenR2dfP9tTUYRrF2ssqYqbL66t0qH8heG",
+	"XgoADy5e9RBjmXBLG/L60gO+h6u0gaA+0zQ/qNV+E6xSoVq1is/v33ozWK3gNW45aumxvsHag7Wb4MrD",
+	"w5u98wvu0D1935b0e/VOOHxi2neOHO8zwmy/B4qQ2kGDXDQ1I+B37rVWqfqNcGabexzs6+JYy4rBDjSo",
+	"277tnPecinzaueyNOuegIncHlIhyed7p9/Ffw6uXb3oj7mvKf7Bi/VP/4ufz7tmPrJQPRr3O+fkvhcbv",
+	"/4GqPL/Ba/VBrkv3L5c9tio6/dMujOTPV93hKPjpvBgMauvjqz58vo8vOr3on/bOe6T6w7P8NrIYxq8g",
+	"OareMFTpQgNqxF58W2c2FqTXLvu9y4TsfT0LE6mw3iRkruaO/u56Hd02SZNGIbE1LwGl474tX11DvDWZ",
+	"mmVqscw29m2hW8aJacAbBtsgXRyY0HmIdE5k3AS/Shf/vv9bD2kZtM7a+WShswPmlH0cg7Uiszzd1SMS",
+	"bEtAsFtoZw0mQsfx7ho5Ih7UHfc1pQCllo4P2Nfkbp0fYeT1joPDTP1tJv4l2phnymY6aehj3zeRjMnc",
+	"9P4mtMu/sSIzkARBduZC2g+ojVMhQxC0oJyaNsQzIv9H72Wn30asOPA90a9g+n9QK2/Z0zh94oZ7caJc",
+	"lm9GtQYET6ezulqAvVU2uD+tZ+5DE8exlUIDlFJUrP0eo3Rdu2I5UfWpg9X+NC87/Z/w2BycjS+vhq/x",
+	"IO6Mxj93zs+71Gvql8vRhfu7PtsVGhiM+duNbsulSq1JsB3GdaKtsm1hc/IxvGv95//6//j//+7Zd8/e",
+	"tY5FX7lygdu5iV0OVi1EN8L3cLM1HdVkLJVgAbnez9cCZkacdc+7o654slBP6DVHwQbYJ7/r6BMB909N",
+	"wgF+hynI1UyEAofIyATrhy1E/TuIG9iDOtMJtoaEykhOPXR+nTD7Dd4KkptQuLGrpM7Kb7WZWboeirn1",
+	"FTc2gwwn8nF2zwjsBx4l/zlC0wUpShwbwfpc+JshBTUwchxxtSUmzNMYqXQfHolLjqFYzbBZY6TtlEs9",
+	"ZMatVxcmUVRGmeXTDzuXAjrCrh4QTtg0RC6ua0UWugTyCWQ64YriHi1hpXSSmXbgx3Ovh6mAIMphu6wH",
+	"ZdsUCakJR+zUcHRN5BYtR2ljm+v1pKMddmwgpeNcfI+KevccBC1mel/JVW0YUpZUFYWWfUV+v0LAWF60",
+	"rdpB09KsLchV35O8tuKf/3j2/TfMBb/0+j8iZ4Q3AEdQvj9FRtDxjMcORkeAW9F76hJCb036AS6DxcWn",
+	"G5CazRS4XEGiiqXUKfEiEtICnUc/nDw+Fs6AwQe5Q9YZfsOZFc8RYLDgbQpdQnQSagOnH9hzGyESpuY0",
+	"VqphAbcyDYVRcAOvd7EoPuxRtajccGrFO63+pW++Ooz1VDWkKvibvkHffJbqCfb+py4LTKWP/vkPCN1R",
+	"i4bUSRqSrTZf4AvpwnNImySsWkH9ZmGyBEAI58kC8zfhKhYlOye6ivhihiFGJWIlb5RlDLR3SScYKJdr",
+	"0tvbxT+h3tKkotM/g102iJELQbZbI2yMqaRTmQSpnFYulHhPz76nKKavK+Kfx/jK9ySEsa4GckM4xIaA",
+	"iU4oS9cOyfv/8Y3Nty9TszAUMhfXqYQjKFU4dZ5NePrAzxioMDMWy0dH9P5bg4iuODXCHMVizmI2oGC9",
+	"h9Xg9r/2fVBK5cuIeIN8hjTEqO2x6MQxnzgLHEuqlgY8cK6JgIpXpeMEau9VhAWd3/7QFmdHT797WuuF",
+	"9VQzdpi569Zg0bl8937l7Va4cffW9fxnXiefQ5fHmV7Q/KeScxGe15K1380w1gXHa0HQx6L7t1zGwHGe",
+	"HCFJj45+F9RVELea5UkEHQUObFvqcIMb4v+UGYjMIiSrCzFJtmt5o1CkOQgIqpaOTYb5x34R6k+tkP7W",
+	"v02l2LxQ21bZlQ8UpEsiiikYCRe4gxYPVTPqUejxpZOQ4vkqnSyQzR1yn6d+qxzDVQSDtvWbPhN6XfQQ",
+	"fxbyiiQVSa2AYYFMyiXfdAseG5yW55nfqsy6F/uLMEmnia/4qtPpygNdKFDQXxTJ9HtwOLP2TkphlUs3",
+	"mtTM+CW84zWR0ax1+AqJeh4uNEUL5WL+jKOSlamxWdt18+C6dzjQ6Wg6Fi9BulpMu4flKmEGEICCN5ph",
+	"9bhA3oNhu2KB+7FvYUkezFn2GWzfA7P4ofyK0ozHC52YdMf8QXgMvLJxmG9epRE4GGdKCfhwlMeqSHwi",
+	"MUAWrSuDKeVBae5ioBNQOyPrbSmftgYUE6DsWJe0g+qAnhYEB5XQVKRUa7vATA4R/9epsfaQpaMHD/mk",
+	"B2He/6PuUVODqf/veXStItHvjkDWElqnk5g2nxzxsyLKKbsK6DM1q0pahDsO6w+tRGWHDBseO2Slduj3",
+	"BkQCFY2b73FqRYMIpIORpB1q2W3ng2PNPgsv7izh622Off0Ae5e3NFvxzYUi5a75VVs4sHsrZF9hvMpW",
+	"BxKyltNq5FYNjZXIviQhN6ci0vLfY1HKpNRKaEOiarB77pkCMbhKfyvy4FQ9aEH+FaZ7eBGqs6JnDDKs",
+	"jNoMe02qXICsg1/Hf3skMSgNpCysPCWDjH7BxJPnpTYj2nWF8O4GiZ7ooLQxVXyLG77PPgE9mb7sVVOv",
+	"WKIH6l1C7V8stghjII6ZU+pCF0LgzUsVoVlgZjj0nMV2KaNC5yWfoV9MyM2bKFbaAPZYajeqUj0uTRse",
+	"kkWHBZhbil2kyT5FZA34mZ3AsPyQXeMU4TzJdCxeHT37wx9K62j1YskGpF9KZ3GSco7eYwRQtlD3CX7j",
+	"jsMlhWw2D2RF7Yhdfht7L9FHYWIxUdh3Q2flSAW1rGFYpCP07dpCx0OvdmHlB+v+gl0y4VYEfhqcW30H",
+	"6MO0qQMVJuxuoCFmyUxWDmetja4qfF17hPG99sd57fo2sXfa0UJgZ3nvTtt1kwayc8i1qNQQl443wI37",
+	"cMGu68VnquvO3dBE7D7OU23xvNTJ9fpxyr4s50TrOGr0faygApk6OTph8671Qmi6YIVdqqme6amr34O6",
+	"B/9bMT40xl2Ijergke0+7xG+7q93Bjnf5CQ+t0yUVkxjqRfUqaDtYiSo8k6USmqZLFQL7oyIuUzVEVl0",
+	"2NIb3+0DCybnMRJbl8Br8M5ovNEQ4nsONFH46Xo9fX0meB8D7nBTJBg7iMwEyRCfZbIxM1GZABSYQ6N7",
+	"quoIGbesJB9FKtV43GFro5J5lCq0XBj10x3khPvkfDTFypJ9hM3Lsh0BwnjMdcp4g31fWgsMh7nTD6G2",
+	"4The8yEFCeqUz4PeEQTLTKIdR8qLFzQa2M81R7rqmCI8RQVXXZUPnvcHfWbXAqCAFSBkMlcytTJ2C5c2",
+	"0E0JjBzlVCXNQN5IHUs6wTxWRKSWsVkBMzKiQqZV2q4QoYz4hSaSq29ssWVg0oNSwpHQWNuMAgzEwkXM",
+	"2H1usjrSEb0RbWyXXl8Mg8PDt3JJGqj/lpfYVscqyVDPwcA93jbXNjPpCgNIf/oBkipgBAvUaF8dPfv2",
+	"WWPxE0YODtvPKuyUAw/snvd+7L3snUMRzOnr7ulP1QqaII2u9HuBWxVEnsK8QACz6p11B8GdrqJn1Bld",
+	"DYPMvSIZ0Nf2BDGsoKLoTad/1Tl3tT51Ma2QLcbI0GObz2a1ga2QlrluxUxsJqcxHtS+s3j4zgJtv9AP",
+	"uSQD6e5di1qD1bUBcxoNAoMIk6gd4FALXaZikNKO1oqTOt5fU2K2Wof3Uc5UeuEdCikuTZrNTKzNveAo",
+	"2LGZ7a4iBPp4rZ6gE5vJJAsQdI8yc8RYheTS40QLWcJwwa6cnAWFTkICni3V33DrUpWgcQbnVJozaiw/",
+	"yk0Ip1hxBMrycdAsZTd3+0tKEiFFlxuX7r7Dbmcu+dE6RTBTC+wVyrmGu637W1CYR8GT9csfvNu3yiyd",
+	"FN4uh1XDfCNcosxkjGew0/RGdPtGaAsirPJ0i70IV9d/fiOx+yWtDclTb1bfAPHYIw63MToxnkirrcM6",
+	"a2OVLaapLhMHlkaO5ZlSdryUOip+9a1VZYTnZlyqJ/3DH56JhdRJJnVii+MbMztfMEjnGM2d0nfypH4I",
+	"qQq5QuAiFm/1vXUXMr3WEAWn/hLrgRGPejFGRfZeLNYreBPF3UnPywJkY1YKF9gxX2bYGh+X/vjhsYVv",
+	"VApwPLjx9wnbeWosJiKYRAXwoVUAqs7EWeoSm98HfTlJHK3R4yHgtusa0Rrp7t3eaeogdXYJDOnUZmM5",
+	"ZQV8T08OIiAiZMi+T37FYKjrrL7PDjTDl26HtzrEclqXPtueJ4jre+gsswHxs3w27nci8jlytymhuBxP",
+	"TH49z8b4vn2mRk9bE0eHPHsfm9Lc5t6jk5YyBNZkUQNt1MmXBqJvnErdBm0HFgq2eKOCMPI6TDVx6i7y",
+	"9k5S9a4ygfK9+fAoxPO6CNjlnvth+Xthsc9A6LWUvC957kG1ddxQ2YX6/aul4VQnU72U8SaLbnczpCmb",
+	"XE4zk3qcG584O+wOWu3WxWV30BldDGoPN7lI94uZQDuN/RsbT1IlP4yvY2ntGGNlez1tSnX0mx4LKu7J",
+	"Mz/T8daRXlmVXvKtmJ4Xqz0DSTZTy3G+BHrU0QETtDlSzM7KT4VFgsdLtODm0i4RW7iHRAD1lGsmsVrU",
+	"Sd2orjkelSwxesGRb58Cd4tHLy/OfhmPLi7G553Bj9226PWHV69e9U57AEDz8gqS28eXFz93B23hAGxI",
+	"N2tTl8kAzqYt3nb7V93xVb/zttM7h7Tvtvjz1cWoO+a62rYY9IY/jd90/jK+vBj2wI3HP511eue/jM8v",
+	"hsO2CD2C/3416A3Peqd062nnssMX+hejscOrb4ugHBd8e13n2muLhprctvDewdJwh6POuYcGOuuMOrAi",
+	"WKI87p1131xejLr901/Gg+7VsNsWP/XOz8fDn3uj09djUmjbon8xpvuhcrkt/vN//X8f10WKIl/Nmq0X",
+	"dKqYJM8mtLI1siA30FQ1+OLRA9YEyLVW4BmcYU2YVW4I20o3md7pNWHdJlBrA30DwxcgJVXXQ7xiex/W",
+	"yTs10Y7HeA4UPyVCLZbZyvWMm8ZKpra2YM8VtjljYCE/nmN+Qev5D9+163qGuEb8wZ3fntTcCf6AtTu/",
+	"r7kRGH78d5Ps8P1P9QuGbv+idmVthsDxmyLWKk1NOk5l5hF11wlhrmSczcNj7HW3cz56/QuaaT8CyBaY",
+	"blf94OdN1R9okNp8OlV279RKB3jgRjKTH1Sp7gfQn/ZsWfGn78eLhqmDsK59qBoE8/gGF2fd8enFm0uo",
+	"/QMr96I/GnROR+ORQxMYdvpnLy/+Mg6CF6edfmfwS/jLOQCVBX+/PL84/al7Nu7+ZdQd9Ds7QN9ymwSc",
+	"gN/CyrhrmRChQc/VtYzPzBRhA9ZZseM6F8Zwn4j4RiwKxDSWZMVpOdTWUS1RQlFa0zonNqI3Tg2BGrj8",
+	"iPIo7Fw++/4Hl9NBmc7wKjFZZdAsTibhtykkyH3o8YV1yTImT6yKx6m60ep2XCxonRPITbsZ7RCfdku4",
+	"Myhgu+VCJVtlbDiE4rFC6JYWsDyi5sky0GA9dVDtUC/JVErHE0SZ7jGtz0Ng31+HIh94p2aTPgOBU9V4",
+	"Sus9IhIjoKkohHBlNp0ry/kFNpMxxXF9yzx8UMZtjw1q83SZaosnUwrNxjb67yuTrlv5PweOp0p1ChL+",
+	"Goq2xCI01y3QF++rj3KxRG36r62n35/w/8EnlzKDTW09b/3Po//9rydHf/r13/5bHY9g+cKZtuBvZd9R",
+	"edNrMHrLI2aPAw+qzRkuS+iRI21t4ubDI/FDgswO2VcPCknkM2/3XoREZVBpSmk/+ww2fFBZqnba58OH",
+	"4BAd3JvgLr2n9GIpp9lej91jmniqpgoymPalUswmLRnGe5kOa0bz/t0VyF/jSCOiQFBut898eEYnXZI3",
+	"nYFJrvYlAf/QPhTXnIgfpNrTQPeFSVpv6FDh4Rryq2xDuBIN/FhhmdrWUI37VCa+SkY/0Vf9eWQydUmq",
+	"w322mpju0qygh1pNZ+rC/lOT2CyVOsnsbo+eBg8civWWcHX0HtS+v9DfpDVUgb147ep2C/Iok6mONSr+",
+	"lFV5L9u1Z7gYSyDsOAF1U9sPzfCPKrHUHO03k4OiCQHMxNIM9wKvmQVYwnvJRse6ez+4P7C7Mx67f+me",
+	"Xo0ICZrAccYvO+eAPgeR0SsXQkXEu8G412dbsN1yTrUxXarHqasPpGYq1TKu34iqsd19C87Bs0HvLYZo",
+	"L7uD3sVZ7xQH14AAaCZkKe69imapkgPOQ2VNjPAQYwWSO5mC92PWCEbP925wkOBdB5zMdmqWjTj4dLEZ",
+	"BH8tfn5xiSv+pjM6fU35iL0h/tFqt3r9t93hqPdjhyESB93hxfnb7tm4czW6eNMZ9U7DHymRsdVudYen",
+	"nfNOfYR9Ayy9gw0sZhDMNfDyecpaZ/pwc3cVVl8AXq1uGHdCW6u+0JFfjSBeguYh472KrZ3QrEvbGiCB",
+	"H4HrNRKhfBVLg2bsWlcLoSKdrXlqVJKl1cWsP0MaIUT3MgUOyjiuYJSedV/2Rr5fwO5No6ZE6U6Vw9cG",
+	"I9oFc5DkStNa1Ll0d5BaTlQtdOL8xX/cNid+qvL+euYj9KGhgpaU96jZbXC3P3120g6n87TdWFpV/u6d",
+	"Sm1+xtxYJdMEMesRoSIjeCGIJFwsdIYVkFh6yPWTvjlSZlU8C4BquJ5KJxJaD0i7zeNTWo26fRiSR/tt",
+	"4K+9yLOpWdRF+silLEa97kBARhUUzpAnC2HaXl0MXvbOzrr9AuVFxVbdB8aDaRpTWPMYqZnM4+xYXPXP",
+	"uoPOj11Myxx2+hjeY8gqh+fh2uYwtJUrmv/nP549Fbyc6NmCFgNh4SyCHaB+aP3vmRGT4s3xCtqHpspa",
+	"qDAM8awCTzv19IDWLoM3HdbFgpIANwNy5PP492xE59asdtvVNE91thrmi4VMV3XNsLHUqchTtYqw/BA2",
+	"06f/Ywmbdb5xKqjK3L3QB4Oqkt0mSWHVNFVZqUuLuxh07+ca3xrCQX8fv78hmLJ3YgMP2712D7LEEFNs",
+	"AAjnkGxJlzyw57OLmRxzVLK+Hs4XdviCHThdEM5GCpulAEwGmQBwF/G8WKhsbiIviKo7WV+vw8OH1n3g",
+	"RrCgeEQNu3K3RIk1Oi/TQXlNiASax1fPEPiqgB9qujIeChaTNQR21A34ZJoRTw/t7roz/epl7XeJOJVK",
+	"9reLbsyH/VcptyqFHaoNYNUZCcFuVEa7tXXpUGWVqBKFtRtVkN0wMGvfWde4AX6uHVc5F249Fpq40KO0",
+	"6oiy1KkxMxbUMH5moq6xagJqb2JjrQsbyVjwcYDBpct3+cnJsx/O4bLFDzOCaKGX45FK6Qw7BmyGmUyz",
+	"M4W5cfeo0M20DFsVB6Ohsbx7d4z/+P3Zp9ph4fNhrXKRJFefNwDYctgvP+wxt7d7t3QUh3OojqiWGGAp",
+	"Q53sHtfztzzVNtLTIn+x7vzvDS/Et09/+OHoqZDxci6PnjlUY53MVJo61UAKdhUDumeqrK1QzF87R//R",
+	"uDWloewKfYt5ZS4DQGdW8BzEMlUz/RF0UtqFABQ3zWOFVVMqwVpdXY9hsczTpbGqThtCzRLRg7nG86df",
+	"TqsAkhKHFaXyVsYiUSqyofJXPNdqt7r91+Bv21elq927RgJS0dtK+kjFyj7seJkbrMbM05r+aEOdXMfq",
+	"KOcyYzs3aXYEuTJRUTJNWFOk9uFN1PcrMbRfR0dYGKhuVOIQJHSkFkuTAbtwfkVp6aHn+6B7ed75xSmi",
+	"CGnaK546+kmtuIrVkq0SqrSkjIpYJwxUi3e8T5XNF+o9lCiCmmoNov09+/5xA+gZitr3/Ovz98L3wypV",
+	"cEvsWlbCNfQGDK0swBzeAqUBwdcTKg2tGStcJzaD2jYzE++L7Xof1LUXXdbgeAAbEW6Wydqq3c6NVbg2",
+	"mNEAWwPIwridmYpjxl0g2Bpkg8yIyDwX2KTI9Y2jlW4Dco5K+ccPatWGm6/RHjC4RPCdA2Cq6eKYMXHG",
+	"S5nNtwCpE8SnL+gvTBaHiECnodtjg/UKJhXTuTGMZuROVLD2Yj3VWbxqe7Ak0kXpHL2lAxogTIo3OuKD",
+	"TZ7EqxK6QO0C0P1bS2gCjmeddl0L4d83I2mRCnOKGY/rsmOHnIUdXUjtVmZ2yPI0Lf/G+tGC6X29upce",
+	"V2ax1PH2TsmnfN8Zk5lJw6fHRYfHZvzzSjUvITPTC7BWNI6PBXVqXCiJENLFVWxWIm4BiGuiCigKFF6Q",
+	"Gtg7L2cfI20yjCNIm96g3qyrRDl3c34NESsEJut3or6c2fobheU7iZluE5X6Nq5tIS2BsbpfEOGqU0I8",
+	"S6jkHLP9/PnCp4lOPJLtFFpGJ20hlyCQvEMjGFr1II8VgmUFQ3WbSg4PzNpCZQgriBkHwarjO8OKZiFH",
+	"bVlvXLu3fPunylrX8OMeIeemHFZWiasBxX5ndDXonI/PO/0fr8hrNfrlsjs8HfQuR+Ph2U9Uh9mHC8PR",
+	"4OoUe+uO2Z+4Y0svX9HZGZy+7r1tSPrNl9H+q1/bDCjUuzjLNVzh8mKU8s7X+X9rnwC3nfWYFJ9FIK0z",
+	"/n5xq4LPd+zi22jR49fqx7lprd4WnLIm8dWSF/teUDB+BnkTtIGRjCzmE5LRMYzBNBZUTtdAk93BbROJ",
+	"gJRxTaCpeQPgVyMkrtQp+z8FQtU4/ZfGSFX3bm6T1RjdJnskReQ6zvYVS5RkOeZY2h4Ae8mNTk2yaPRR",
+	"VlGGePdp+bpYW0E6mutZ429gUGpquwCinXAkGzCC5/lCJmNXlVQ/Fv9qfyI54M11E88TAWQkWTcY2nwG",
+	"3awbxu7bpNNtSQzrE4DPRZiEmy5UpAnuid2hjOGIkaTjVg0/6bQZGHBXmCy3SaUW+UjI/uQMGmT7XkZl",
+	"I+pYIAI+RQWQWum0draVV5Db/BN6TmPulIHwNNxbAK8y/BvwZoju8cenzzgBm7T41NzCdkseN94VyUxO",
+	"pFVNfu+1dpOkbnEbdtffPYjnDK8uEeKJf3978VPD+bWuUHsfet0p5W4Pzh+3nSXeXeODbbq/03wGebwh",
+	"p2kGqmm7BrtFoUfGpLDhGbpfjsXloHfaHY9eD7rD1xfnZ0gZ0rVgK5LMAApFRw4InGAHhRTZPFUWAGHF",
+	"yuSk870QAJz1C2Uove2cY08TjcBCAjz9OGBWo0lET5H2iFSEghpiWdH/AGX1XStVPj0Bb+2LhU7yTNl3",
+	"LRQFqc4yxYn9IL3VxyyVrmBsomLs/GLWZuxambj8f5NUZsCZ/7BeDkJwLuPZEU43XIT6js4SbdSQMM9H",
+	"rXbrHEuEfhzh/3Rrya6q0VVG3mq3ygOtfQmlmO6QpvhGJybFXMW69tybCTI09PYgyk4h28leoN0CGYX/",
+	"WBf0ddo/t4OhRh30Asb0xJO70tXPBaTpIEtWroVM4fyR/hbNZRTOZSQnCDsIQ7FmobDeCExAaAL0LrlK",
+	"PiRg2jDFhTQV+pp833ykqoW2dkny8gM1NJPYLipyZSWh28h32Se57XH+Is1I/ctlvKqhQrnUkAAc64XO",
+	"tm5R+dkFRFEDkCO7R+5FQVH1RudCxrGymVDJjYrNknFOPUmgEZ3msAHrCRU146ojUeUc6buZyShYMcan",
+	"s/2fmsEAXUBjjzVGFQEyvlielWGbTk7+eBIgNz2t7UYgP441Jjfb8VKl47nJ09Jbvv3hZMtLqgdZdUwN",
+	"H6lb9EVtSfpl57I78OkyoGvAfbTnoFd4jobWTsCXyDJBp5wgqYVxwixAY5NeQZZ/ZG6T61SCx8UxR8HX",
+	"9HrqdOIwQUmb5YGAQ9AAGDJ9lNASK9B4hNY6Ueyrpbfhu+BYY1w8bGBZDjNcdusBHyApkhjT7ik88Zib",
+	"p0qJqcJpgQyUJC2li0teDc9cRFIn4k2vfzGgErG2Oy9hmpG+1pl9TijPJ3Sc/rfvT45PTiBbJFG+zRaK",
+	"p1lspEsWSZQ/3337GGpaeSyAXiyGHhiBKrcomWXMaKhW/x1fTcc53sMGRFXzB34xVtl12QYfiaSOV2OI",
+	"rO53zhFJe9iQA56tTu/gM7b2ZTXja9dNuI4H6YvNzWQIoVlCYkXFbC5UKY8vDXFrRFB2TwT8OFnheRVQ",
+	"+9Nf60RUnmgYjNpbNjoVtDb6XtJQpzIxiZ5CnE9CTF0dXx+L4cU5VGCcoisSAVEnynf+LUE2csNDgv4l",
+	"x1at1ejLlqrKDF7AUCh/+9+vLnuj7mD908p/DBpGxJishjjrEIKhQgcGS481Q9UXMwU15EbVDG1NhLsn",
+	"fAnTOqVUnqmQTbBt7izlw7EsudoVHSM8C/k8qFUgsY84VeX8y9cRRUpGsU72A+I5qPio/nx9IxPs0wfi",
+	"g7RPOnGpFwaCCjCQ8WjQgWoS8nmx/7Z8UhEIQe2B9SCVT/sXUWZQaZ2N1cclFibvPLoDaqw2EPRIpQvb",
+	"8bgDW72guwciKmAIa9uyDY9g95XcGX+AcpkbQAgq4APhvHdYuEZhEHyu7BR39DvqDt4MxxevxsPu4G0P",
+	"i6cuB723ndNfxpcX571TACgh8KHeEFAorwZdXx4wHOPTUIDVG70+G3R+7pyH99UWUemkR2N4uqU6pDT0",
+	"xjUYOsj0OrqBpdk9FlAlxhqHsBvT7i8tg4PUvNLkmc1k4tDBKik77nuBeZ6JAk+MExtcoitieXB/HahI",
+	"wD4caOgyOZW6h2xxfzdsh22Vx1y7M54Vd+42NQIxTOfElzvSNuLQdX7s9kdb8eiu1d5tH+9yiE5Nmqo4",
+	"7Dy0LukOOmej3REa7nAiuyV+2Tn9CUB/Wm1/oA5fd84ufvaAP3jEvumNPOLPfR222Nhnj6EvY7lPcv1h",
+	"GLgHAhwoYEDdXEQV9iHY893r4YJB97SLEeya9hTdM3dsBH924YjBfwLqW5+epCperMV0SFCVqAPD4hEl",
+	"nHbPKy0oSlBytURxqKrTbrnO8PcciC9BHHolqao9FdWhVFtX2roqEEFFDtQK5ULCnnlcvR3DysWjNZWi",
+	"QR+zbat0pqbaZXog42174AJvYrbbuy466Iu3/7Nccr/rdLDmvqYtQ3mtIBRYy5hmiof4ATzfWI29S0Ya",
+	"jgdvLQ9he8Hmp9qy3YBSvkAVcplODy8+BvZf08XQNRi67WhJycHqUiQgjjZLJQdg0U1YxZF69u13x9//",
+	"0AAita0OAI+V9aFd9c5u/iB0Erh0QO0KW13luY5q35hAPOjUVyZU4nH886ZGCGuAx01owiFQbU1iKwau",
+	"j2J1o2IKb6HXG51BQUxUHS2kjl2iflss5yZxnZzbjLGXyIWCuG2EL5mJiU6z+XORobJM9ZMy5vw6rjIb",
+	"L7Uuuu3ZPJ3JqWL92fWhNNRvbL2g70ZmMh1bVZckOdQfM6USMVcfEd9MTjNsFu2yjVOVcPdoHsvUJNwb",
+	"v28iGbPujuOgD4l8GRsZVWsUTo7+JI9mv/7+9Id60jm0t+XByJ/h4OTR33+F/zk5+tP419+ftZ/9qX6Q",
+	"BRpo9enfn316dOQKMR7/77VP7wERemCSHZd5HVhO45718wyH3C7R0dZku7U2A/U99H7q9c+ABThEk/jo",
+	"hhWPXNura4O54yS0vvvh8bEAPOCLN7/AXdQp5Cg2ZskEeRq0i+H2Nlj3b1+IQbeD5VgLk0CtQkbNWtEJ",
+	"66o4X4hh780VgmlwMW1YgYDhpUgtjKCZtjmJ3ZXZUrzJVWYfiyKoA2xNQS27SkyyWlifqUA/E6OpyMWp",
+	"SGSEUSeeNaqfCPvhR1qrV75VSa7OCdlwXXRC5g0EA+vhLPHqMnX6Q22x6T6tRD6OvemDnsA9kfLu8DRX",
+	"Tm1AdmtcBLq8ZRU25NAGeLobMXS34abd+RP1SU1Jrtx/x16Z9/9w67ZGC+vrUrtFtTIhqJs4navph/qe",
+	"VNBTfwqX24L4GCKzwGmmSHvTGbeDglIXbvgMCT3ssTwW7wmc+71j4pmLMFNtGzzsUFKc66gtpLg2NyrF",
+	"jEo+7mYF24endQ0EdTMYuEv82bWmBNfmJ3iojMqw6/MOXGIbsqG7uAGghOod9tb6oRRwY91KY85jJ6gX",
+	"op2HcKXLFeSUXZdaCHJSJwADf7ZDF0ROIncLWoIELI+4GF95DXYi6p94t9cDtDM4i/CgsISBgS1qMZKI",
+	"7WIhDYGjhzRDbnmqU6ixCI+C3lm3PwJ3xtnF6dUbcvxRTUAIth8AWwwR4+uy4aAoZnAO6u366F9jX3ST",
+	"QnsfRm7nHN2JmuskYnxmPLpdc+WCgaJj0b8465yP3bCJKQm/WkUVnRl5E1fGnaouT8tQtQqcmQa43pX3",
+	"qBWWZrPLgU73F0ENKb7RVYPi4zLsExuxIBPLOCf3tJdAltJFfsttpmcrzjv2FRlUbFGeWqu9cxFqu1XH",
+	"tJtF4jfWcwVjwXEROaoyvHj0JwCnPA9mSlNxLndqFKmiIvPNXUGYfRVRhojSsMbl3JfhkB1cDRArRUtW",
+	"bvBw3juFo2nrEjQaX8A8//zHs+8EtxyBPZRoeSGd3M5lQHYghiaxtnMVtYtLicm47tSXTwqooKjab0TW",
+	"AIQuM3kfqDoAiuEovQEjESltZy/C+ilaVxpwWNlxU936tqpyTG3cs6tLQ2H65k/ZfLk0ada0lLETX7su",
+	"IMm7AI9ZXjfQn7wmVZ7yo9EMD0cm8O/oumjjHjSl5nNFRaSkAH2GCR9h5p+2lvX1vYlhECDC16w3o26B",
+	"O2XVXCwZNhVoQzaQg8cqENQxtgbMlt0q38KbTgMCbyoq9Asercpy+lp4L6zg0hCg0wthlRJPFupJ4L1l",
+	"4ByZ1VcM7KbqhE3BQ5WapdXFq1fdAbv4scvM0AkwFm7BX0FP6vDXs26/V+oOwX0RG6NCqYJ/T9d9s1tZ",
+	"aCc9i148XmveXYjp0/NuB2JarxFbb0Nf7B0qVXwKNuSdSRtKY6pVKdQ7tydNjcoPr8UOWpXv/Cw+4LuB",
+	"3LG6sbbJNgmnRoFWlkGVg2N9J0s6akV7LbH6NqV1UG5tsa58EOO6iLrne1lmepxdm9zNt9ylgVpKR4a5",
+	"vq5zTxEJd3Q5HHUGo3HYJp57r/SgMVXld+4AtQbyhrf9wg9Cz5bh1eXlxWCEaLxI5qi9/VrbNySqTQfE",
+	"Y1qAEdEG9TMcyHjYRXxe8USE+rd44jtUiSfCBea58bx4Un4FxxGP92o0tebbjlTL374RRbqOb+4LkOvQ",
+	"Ng2E9LcJwfdQ/aRRubibfRxg2eyLQLOnkdwoH/fQRHcD2aohjCagrWIEgePIrUnJvC5E1Ta3cePXa5Uy",
+	"94kjObEZxC5c/W+egE5mZkWLuJcXV/2zzuAX8c9/fNsWUQi9iOLqkhT/tsAhzNpimC9sPiF4yyzVSwS7",
+	"Icg/tNZTBYJbYPK7xA4zJgFVL4kMWJU3ZioneQwYohMFlp0Nyoy/KaEWnQ66HUomYI1iDDk92I3OCblT",
+	"EDD9H0O9pNe/vBohkDRmgfKx3W65jnroHjw97/XXkhNY1Gy1x3zyWp0rI5HJVMu4pDByXIzbFMLy//Mf",
+	"z07AVHWonKDkwW/fWAHqFsr67hn78WB9MDZWLJSQMZ5iApLTC6zLFHZAWeFfqz5O1RLOHHRRhFYvUynX",
+	"faipxmoSE65/Mbxifc8QRgFHV+xLg8FberomMaRor4hVqkN4W8Py/+zV4S8B6X9oDE7ZTCeU3cFOnDsm",
+	"rR6EFV3tf7jJ/V1OeCmaPfsP188qhKDYLMiKjeyW80/uuqeTfPpB7ZHhWQzkItXXOnmJz2+CaK32w9vb",
+	"lg5XbhseBtl3saq/OkvN31WyDxVcp8bu1StaJ+EQdn1qH6eEU+tDor5zI7Tw9MNqbvyGA0Wm5AGOhKK6",
+	"+q4FhWBooulMLHOyySzWfB2L/1CpKcru3rXAiuNILJZtRuZd6zhwIhyyZIxm1ZjyvgPa1V4mfhNNkXp5",
+	"CAMR8n49ODzJl7vzzmadb6kSD7Gxex+l4jNjrHcc23w2q+3mVtjxHt44fLxU7tlgFlbdQdYsXMGhTsk3",
+	"X2/we08QtDlNzO39NNbxlFrzASctwoX1Mmed1kuyohDEBUWt0XCDTG2il814EQ2CvNZkRw2wDypfKTJj",
+	"4sgGXnAImsRK3iihs+dwo8EXt4t/QnGoSSEwmhqTCcuo4lIwfivqgXCyQaqDsUrMTJ5ihMW5AAStoqCV",
+	"oeJ+dgfAVa4HZh+jNVw8itC7CBhCqyyuVUbhPsZUhFG8r27oe0efNl8wyfHz9vhd8oYAbWBuifsdlwDR",
+	"BBBhBuIAqwLc8j0twvtjcYVFV2dHT7/9gW4n3xZn1ZmEOh665ZuZGJRMSsiCFbYZLZRfLo/tvjA2E84B",
+	"SLCUJiVgNQDptGRUuOLM2GTi7yo1KuJ1YkBHk8F0EYuNtq1heRC7UUb0qfcV+n7vkZBg7ku5wiwu0XGZ",
+	"YKhAf1Ar2Ae/NELGMECMYQLggUnEI7cM9N8xk5CbehtJaUwX7WOHh1AHtpHYfLEkC14mH2p91ilXnPO8",
+	"LawBTyN4XmAy77E4N0A7SPJWzHRqs3ovvBvr7if1K+KHV+7B+gO7yjVFtbQjeC6fB9o8dskvwLbjSK4a",
+	"QN9p6lthy1AXIMlRPEWbs/s0y29p6s6qXcl9HlOLuhgcgQtqB/G8lu493Tp0oYQRPs2NAktTYSRB/S2X",
+	"sS2IDwIC9CUXXlCxpWUuwArxfQ404GLQ+7HXx87z7Kmh4oDzLkElsVgwM8H947m4cow2ePdsyOX4LIYY",
+	"IAC8nOB8MAkwbRnECjGKKaQvIxJQMpR9fmHIaF1wGg3UZidZm2O5gJMVSE1XW88IB4jnFTZWiWNz26SN",
+	"Hlbx8TlUJpRpY5AG90aA5JpILe7g+1DQvGfFhI4hVGphaVMF4llB2XaBeqn975ai4AgRStREzWGIWOu3",
+	"2Ee4kgDXAh4NaM8XJL487zo8Wx/Ij2/lyhM5ceh74ho+HawAeUgBFfgZJ6WVDcE37Fwv+ayXbtYwXARx",
+	"4/J/IFvaBkhv4vZ6GZ44gML87R8fH5eU26lcBpGzph7Z96AEhxtX0ySZjj7aBJg/NUkuS89a2cNdoksa",
+	"CR5dvN2BxvAN4ZoG5ykAXJFSQZhlO3FCVexWuWCzcr5ZST5YQaZJlb0dpReXVNqyTGmvn8ubldWB9+ZX",
+	"AyrsJjxyeGmOVZxcRGguPKwZCSWRC2XRoCBhz5iGgOAyRQjlY+G9o2FsBbePKokxI4XR41BP7Xf/MhLD",
+	"Ufdy6FNnIpVoGTPzMO4sJiIjqTDiHwsGK2w+nT+vezuBCcPzQYw78r22fb4NJq24CljhzgbG+kvMLffn",
+	"rzSoSqBwwhcizIo0HkiTwlejKe8+zThqTtcT5JNBXN+VyMDqmyirI1VJcapdzla71SDK0M982eFSu17f",
+	"56mGUbFxyR3aOT29uOqPyj96p32ArIyNEvu9N1dv8LNvuqOikSb+MuyORuTfBjS1MXW0xCvd887lMKjG",
+	"u8IyciwfH/f6WJ7XarfWt3CLh/Y+IS72dNTu6nG93ya1u/tJa4FJrOuHBR+llWLn/KkxHzTKM520nrem",
+	"9KfDSG6Nx6+NzY6my3GBqu4E6VL/pGDY6MmbmXU589bn3gCJic5lTzy67AxG4unJHx8fi1OzWGA6CyJs",
+	"XAxHFMGWiXhfQel/L+ZKQkSBHv/2h8cv3iV/yxWhJaVK/NjlhwmUF3oQ8Loci26ampRuew+wbizynyxT",
+	"M4nV4t9+syZ5z58WmDKh3iVrAvI9BHjfuwH84bFDyaN6Bo+Vt1YDphNEjnr0/p2r73rXev8Y05qTd0m1",
+	"5Q3bFu5hxNSCnRe86VrZFxDu+vfhRZ/LFCybzkFYCIQ4mN0+UkCzH7w6Fd9+++2fxNXoFNqISDimlaBq",
+	"F7olUtDMAlIQIRlbDIfdSqkEtNUyqc6wuONd4rbzT4+fs62KcEYqm86DgjPcfcZ4nIH2A+ucKrkQ13J5",
+	"/A5pSmdwqrZe+VmcUrMDcRnLRAHtBKAYz1tPj0+OT46wdYtrcyuXuvW89e3x0+MTqn+aI50/YT7CP67J",
+	"a0PtDrRJelHreetHlXXcPcCCdmkSS0zy7OSE7WEHPxBS0G98uhIr76yi88dq6hA/rcE6unHBJeuad/mf",
+	"EVXe66KE7ACLKa9tIEFs61d43C/Ek9/5X73o0y6L0nF347KmcqEyldpGe6G45Unx5Kdf77iyOy1o4wLC",
+	"Wn938m3Ti/zInlySUKD7v9vj/k97LfsT7PDGp8PO699xD91hH9pbbz5FEbrLned6obPPvbU0ZSoCXt9f",
+	"+B3xPPk+QRxYZRe+CPIu1mBjqRuVZOI//4//E5RKl0cKfxIsI/4zzH+Ev6Humy58VNPcPzEDgxavlxoT",
+	"Py4xIm/cBoqY5NCG52gJfrK9qOIlPniJz92NMKoeJSztCTIk8RzANtTY6tgpsvArF6hSdTE71op0FFQt",
+	"4LxeFZpFcbWgBN9ruDeEdkegGUKNVQlGqK7I6nNSYLi8NQRIlwVt295SpkSm4asQuTHPqG+UE/ATOf2g",
+	"koiVkGffP3btpqeQkoHli1maZ/P9joAnAH+RZnvRXJceuRu51VEFF6WHRMEQwq3nrd+4+TJTydTetNr0",
+	"Y13hXcMHCNageP0uIERNL8vM/q+6K62uK/eZ+pg9gcWou89/d41yaQ99CV6FGPnqbyZPE8LCS6x0YiCJ",
+	"UOpZoLjT4VvQZlEjZcI8ebav8AM/u06u7V5E+No99JWqJW58A/5A3Sb4OZRX3/1MZgnDzIIdsZDphzYY",
+	"DNpyFWaqZKz/riLf9HJP7o9VdK3SJ+EG77UL5/j8KHz8/z7qyb8TewSz36ao1DFUZfP/vY7nXOdiF1B+",
+	"JJcQOD/CfIC5tplJV4/bgHqKYMw6tdkGQogWOtnNMII7A+uosrF1QvFvrfYGMfQvp3/i1Jt2tbDP7nTy",
+	"D5VMp3O3t1Y88v34UhMrW5KmsCG121ji6iIjb2lszdZeGlveW8+DQ59N/Pl4OHDvoAvpV49h9dJEq/ve",
+	"vFKnv09lNxv4Xz99GdP0ilBG3K4fZqL+6VCSe5Uq9XclnngFH/+JZzX6aYrUlUccG3CL9kLIPNIZ/CMx",
+	"vp+yijS2U6AOONsodvsxQ7TZcJ7UiZ0CR+G/jOwp1qBZ/tQdIJeKch1AQUjVFBsvkjcNoI1wDzQCwiNA",
+	"i1/k6oa1t8uOw877h2L/YP0Q9V7Gu7H/088xhFqlAIelour+0c9ClrYN31LDjTZTy6N8uRPLPfmd/gFH",
+	"xO+u+P7TTscEPt/hp88KAJI61sQGtZ4z3Sdb1ZVv77iKDjGp9u1RMZTmtzuTkZvYtRwiJiKwgTNHNZiQ",
+	"D0fJ5ThWwlg7a0Nas/8+fXoYEdQsftipT01HC9jDBzzMOrStYIfSvlJCD/KWZxze+1T85//r/+2upruy",
+	"z7XaSVGm23Y6r8p1qofwQeWFOpnGeaTGoEpCgVW9E4VbQ6zjtXwVJ961ata1vauXFvluGjcF73gPvrH8",
+	"Uq6hxV69bR/rWrkCWy5wo2YS3K1hG808+R3/CwJ3KXOrQllb8bemGsNwCQ1mjLdb7N9X1Gi5StY1RCWC",
+	"P8sILSHJqJP/1bB71hbcIwZnxbk1bDBiD0ErlrHUlFYetuPCfD6bmeWSu1ZeLBWnc5LPN1azjJJQIW+h",
+	"6eDAVejQGlziCuxtWtDDrS8pj4Nm3wV44PfcCaq5+XclpN/Y4PuBjZJrVW+SjDz5FCKdqPazx8/uJP8v",
+	"nLmMg6X+btPcZmaBFI9TarsQP2/CJta9lpnaLu1/xLseImJ86rP/fmSohG2BYxrbmlrpGoAW6YQC58ru",
+	"JW1F2Nh26xI9+b140acnLFSCdVunrhTkjZkFAxjDm8YBRnLRT2uyEtNl9TpKO/ezQ4gM0+cx0YC6+3BJ",
+	"AvzAaWoEjUDAYpBgz0Ah3NCTstzgGe+AgZwul+gr2Ac3/GU46r4RCNYtqMru+enluHPZcz2/xz92Rt3h",
+	"izC1NOEmujIuULaoFnYDdRUb/5oXdxeFu1jcg1Xu4sP3ELI4gMZHfr93ofZRSD1QAeJdoIfE8atagoOh",
+	"EwERoogBEix/z4NwFESzLxexhfapWVFwRE/+f/cXOl4aOg+LR0ye590fO+fcvuV/MK22OYgIUH6PQ564",
+	"RrYp8Lk8/U7nEopMOE2UPsxYgJxRbTkf21JgnsvWJqvKuDiJiuoOUN8gF7creONE9Q3qRYVLOg4y/+GZ",
+	"pL3B9t3JNmWTpNUOrFTnj2sBVWKlHL7K5guyYW/MhzIcjaeHL27Pblo42DXaKpfI+Znt2OoBWn9gBlpP",
+	"VpI/D2jKOt/PE2Y3/Jfzyj4RTAXkt80XCv8BVMDiSDyKoHUZ+40K6xYLkR3rPQnEhs7WxcVGkVU0o7BP",
+	"fi/+2Cvo0Cve0QvecGDoIXzFVxR9+JJhh2JJ6mi9dDUkPhps2CCRTd5HlE4ungjo4NVFXDXxRBSZ4+KJ",
+	"eN05p3+cdc97Q+jc4v/dPdvsXvmg4/jI3upsOt9B7/5Jx/HQ3fwQqknxwd1yNsmvDudgwsefn1spT3BX",
+	"P3tlwl+ls70YYyDSH5Lkw01a3xS6QqbAHV1HHSeNH80kaHzUbNZbDI/JC0lFTY9Y/r4QQ8BF63K9mjcG",
+	"XDiGdZ7HQgrgBaaXjTzjMBe288ulv/MhmMV9zSFXbWeYYnxrRyH+LuZKxlgYEJUhEWI5UfFmJ1w5J/MJ",
+	"qfLbl2xQemzAT91jHPLePcL/SoHNutVt8vqW7xVuAz992n/Xn/xO/wBVJVXWxDdqB12llhQG/KIBv2YX",
+	"g8N9/B7CYF+HyK+ujDVxXkSKHk7y1+1QEymlESv5aTDcAxT8Z88OPT6YZIQUC20XEk4lF9P9N6FA4CVT",
+	"9UIsZKZSqIMpBupbfTaeHy8Ednub0t1A2BhDXixVYiWmZ9Skn21WzXILFPU7/GdbuQjcD42c7BXevLem",
+	"wo99/pwK+NBbrW5rFQUClBI3eP1O3iPvlbbBO8FzZBIlYEFx4yP0jeyzCU+4jLXZQzRyQEGLPCO5SdAs",
+	"NAzXwspA1bn1NfByijgv6CFHYYEP4TizuVpYFUOEySxVAgAP3VevuqejUvt6AnLJEP/DxFDMYGYzsVSp",
+	"NhHWxS6ltVBNy+nsvrOEtOJWxTH8ly9B3a2eKhqbTAp3LIDGJMahCQZjNbNyu4YGaR7Q5ymv4qFk+tXI",
+	"YZ5I0XLwgaNJ+7BUY67Ag8WKzhzlIGUDOQtXFu5o6dFUJlMI+BJpo+9EzWZqmiGf+Bmsk3kjG2/PHzg0",
+	"deBeUmr+/6kEh9uDvyDults+v/v0Q2jdN8VatRWMaOnC7ceiU849oID7iUiVpVRhkO5t8RT14cVCJRF3",
+	"DXgmlqlaYhMRdqN7qBQMVKUL2xbfYi+EI5C9UVDMphOEIUDgLNggSz1wtHWMcSzOaTDficyIH7hieBrj",
+	"5zgEhySTqWmWp6otIm2hehpLVAn0o81ZiXRmEJ4XhEyQn4qoJML8IigHmswEoTCBJg8ZlVlPlQbegyH6",
+	"rnMZluhhWqr7DaIwDh1/bbkbzokGTvxKhD0OHcf4hRwtjdkDfgUykSroDAmMda/ZlE1fpkWJ2o5/Pr/P",
+	"/k4mAA23oEiGoII36BilQCozdb1yUCTtgkWKnKQiC4nwqgj1rhxvdDKoOIKKdKTth5HLuzk4X+fXL0GF",
+	"fOEB6r0DTT9xsvyo2KE2b0/bya0cld9Y2kykOeUxzE2i6E+EYnDtJXbawB0ixSpB7IpqbphJGB+R8LrS",
+	"HHLFMwdyQ8iMEyUUAEkQX7Hb0mWT2yw18Eyezanslw4frAtEZItq7hyllqGFAaRs8mztXMLiAYlVMHQa",
+	"ZfzVysmAUS58HTUM5PQeBGaDd2QGxk5+92OXELRUcB//lbIfIIkI4oiMGp/ZFptEvfCodtoKLrEFlRC4",
+	"Uy+AZnUGDYj5fOMYnK2wp7YEN3gsWJESXK0Vwa0+tw7Hv+ksYoZqCm7vkT53twg1kRMOgPL4fCSa16HV",
+	"bvFMv+rwM67Ig8af98q44x356lLu7nTmdZF22sSCbY5eewUR8XCYR1agT0OSKq5LozS0Vm2xqOiOB0F0",
+	"gU/tFBukMVU9gtfaZtyA2CqWkS7LZqGTrO1QhVyHxpnKVsJHGtwCQXGwKlYoz+ZPABMGYAM2LlSezU/d",
+	"fTsZoNzsplli7BjxcOfd7i+qqhTfnjxbP/YGKtIpWOt8zAU7TFR/sieXPN2T6hltq/X8r7+W1ITe2alw",
+	"O/Ii6M+Fp4FKb1R6hCaYa5zh0bg8C+TZPNze2DD+7Ka9Pceb1ja2umbk+6g92sWjN686T5bS2g9q9ZjO",
+	"eGEVZsj4ErIGnA+bqeU4X9YFxEoug/Jwzs1UxgJOKmQGNi5v1QQ2k/A+szxN4F+BP4aXti3U8fWxeLI0",
+	"aTYzsTbH4k2Oc5Np5pG+KGxrY2nnL4RMVgGKbeDV5LtvZKzJxhaMG+ZQSW1mUncfms4GUSuzTC2Wmcut",
+	"U9O5cS1vsrn3NLF/Eyu5C9RqmGEAsRmpZWyoU7rv6GApo+9q9HoMwGnj8wvABLwanD8+btgGWq9xBbEi",
+	"TGZ/+qx9P+zm8et9z4ADmO77k2/vh+leKlhIZD3amkespP0dt/MIKyj+TVz+dNp9/EKkPBfbPJmN3Gjy",
+	"bEtMkRgS7ls7mb5bX1tuxMQKZrR2csCvRPuEdi8CmL71UU7JK/KEi3YbM7X73BYfSMYWvMJ98UXHV/1q",
+	"MD6NtW3hYfyx9+bfFdk3hGB65LAvA0OWUU753wupscRFc7dYhxn9rvX0j+3vvj9x/px3LREZ5TKqEQf6",
+	"XWtubsUin87Rbul53M13rXWd+keV8Zte8hI8sMP1c5rENDM3sXo3SaQzv3mTVMkPkbl96Ajo2jDMB5UI",
+	"GAi4CX17BKxq4nDPpEByTRhl5i9/CZ3tTNkVOl+mesotXWvpvIvF6sKaoK3CEnzDU5lgbRSRp8yUN1ux",
+	"exncBxVRHWHV1CRkE2LNgXTZ4eg3lanO5guV6alzj06gAEKl7NpEFLJcxvEKFeHrVAXeUFIICihc+rvo",
+	"A8JWsLYW0B43kPolr8JnJz33oQY7h3fDoT9DiwuTTlWFOkZuxb1HgiA2J/nKFm113KJMTJ5E6KiGBVnm",
+	"6XQurWokDFxw+4TQJzfpTV28cUj3bVWdMBOXoEdfUAj1Wi7DTbMqQf/J+1TZVTJ9TzvvZ8FtHhgPm+Az",
+	"C9BMd6ITBmohlc6lzY5woEeIoru71ry+9YghhYM6KhZnDzCptecRBR4H915QlZsVj97r6H1bvMf74B+R",
+	"zOR78T8IPOo9rTY983gNIYW0Y1gm2kTUQlmG2DZ7b8BQWhpsRYGa1bXLYVXiEZ4ZIXzpBpAqFgZP3Ns2",
+	"kQr3nzhztz58CO9fKfeLl2lbZM4vfJjoxbuyJWV26358NenhacaD/EKRHP76HrGcZw/xbb7kg6J4Ilab",
+	"St5RB8HVh1Nfy+woM0dXw7NTrwLwJ8QjZw0Im0+nyjpk96kPLsLB9J//6/8SBIP8Qwn3rqDWOony5Hf+",
+	"15ZQTIWaz9xDe5N18eRD8PcZ9UHesLuk5xQVda569C7Iu+Ulp7Thv29a3dd8S/2CrKUpIw2AXgco2TVW",
+	"pxuHXdlMLXgYQcHMpqEENTEP4rMMi0C2Oy7D0VX0tZQR0oN5ikdvnwq7NJlYSp3ax7TZW/yVzYVFOy5b",
+	"qQ7obkVEvz5IbU4zkxT30NLdqCSHrAybEVjkHXikuujZdsLMvlBq0r+SXgNsoGiptuk2bs3LfMTL7AOo",
+	"tJCNiI4c7tyiCzXu3VeiA+WTheZBfiEdKNi3nfQgqvxepupGm9zGq6J9jOaX3K+etG18eKUYBDrd6KDi",
+	"PiT7Rzu+2rwZIhchBZxWEbdio2UXjxYyySmxHXU4AnRYGp1kL0g9+/b7x7X8E4jBJ7/TP7aeORmdN9mh",
+	"Z032AOdMQDmbDprMHzKg0rqkXNsWy1gmbFcXiM93Onq2rfkTSrLY7ECvLP4pPXL4FhyYlVDatAdjd5pt",
+	"7GqhUGKqaH82rEQR8D1iGr780Sm0sD0fQxuqLlTwvqDkFfUxU1hBwmk7dPcK+t9YQc+cd88Ko+jZsz9s",
+	"Zjt42RF5b7bxHNx6kXIl40MrI9XmCMYqgcFa7nZLjJIZ1NKOxRllSWMc6eXVL91BY2DOxPVNEPCpVrs1",
+	"hBUdHJZQ8wCKT2ljtqk+vM+V7Dn8MYScnZj8eo5wO9bEUejNNYuFSqeqSj/cJm4nCrp09+5EQx90sns5",
+	"ZuUTP8GzX9k28dB26qfi2+81IElZF3WMV6i2Whmr+s1qSoLviCiVMw+S5F4CsXUrMpUurJgRULFJqHO+",
+	"yzVEUDttS23R8bQv4gYQb4BwpKJifNhJCuxkUGI9cZBQDWng28nla0oIr4x2L2X66ecisoZib7jknXs6",
+	"EWeDzqvRw8cgMcbkKLwYx+7C5snv/K8d1MWQki7dU3uTVPHkQ8qKDdt4J3Vwn/V9UmgIzeU0k3yFvfMQ",
+	"0S7jiCNDvt2qVGFIN4GwrbsgM5EYEZvkWqUCi3EVOfjEdyd/ohwgGYtUYq93bGAvhc3TZaotio8UGp92",
+	"ioMLxAv5iCf5itJ9XIN98iQDOhe8KYUTDl4GOcWIMmeVUDJNsOuHTJWQWZbqCbYAgpwmSu7fTVR5MmlS",
+	"lnYns68mZ/eSQ7t3EXSfSenZx2/AsxAyTpWMVmIhI3XfZTJbB+fW8i51Mg0jDZtq7rG5Xjo0Jg7407rt",
+	"UBi95LYBD3s15G7Hw8t8FZwNaB1z6sGB50MNNlZ1TzAVFLt+osZja/UXwumUmSsNOhauM1ofVSGVLnQi",
+	"4+fB6PF2EExTs6AeYnCnAwd2KQjZrcG2yUEzckyIRANGsmgFmqXuz0qnBTFz6GZP4XQg2tfXKJyGa4c8",
+	"Te4LS6cd1DCdoNsnUbcuPPMQZQeHMyazSaWOAESCyw8rKH8HVqXjdwNbDlUccxkQHNZAWhkmPNPhzn3L",
+	"SrYrpy4S9CvkkPGxjiFslbi8yQUMIjoWlP1PTAO/a39ybOanIQ/9KzVLXFEDDfMLMwINohabAK9wSdiD",
+	"I8HQEvncdaQkJiNpC+2QEx7f9nqPm2l6oTbZIG/U50z/u0x1MtVLGdeLGn/xkFqKwmTjDOele58/u3zf",
+	"LK5dBPZsSoFeKNcwa/NyucZNn3HV3qy2Ny4GqUw5DetZku6S80BS/2cqnXLRQ+6ovqr0cU2iWuSLbUuG",
+	"yDMbcGcGxNnbKkWpmp+/KW4lnEBUEloDHBPl2AqdXDrBNFGjQY+10JmHHYbPMFYHoQ4E4DHHol8UdUYq",
+	"VpmKngd90+EV2NqKxQHZYanKpE6avESeUE5jY9XXKoxxcDzQLySK9yL2tiAEEtY1iVYdjd6xVYz94Hsp",
+	"rjMMVw8jmUfiUQEvxGVA6/TpKnwkUVQVT6uZi2qCXdVEqVhPgN5UvKKqh/7FqIAAc9C+oEHgGGGxHD+z",
+	"VzQCiyk1uWXvg4PPl/YDJRpgqTPWIcPTxXQxE5kdGUrMZRo5/wfWUHH++w4ccWh4bmvI7QtRJlebcajM",
+	"h9gPRg6g9alS456yeXsr+TequXf8v1waT3v92FkqibxLYkMJC6QrY7SZ7bHoTDBxfKFkYrk5OVxpCsmt",
+	"xXx2KwLmFX6lVESRn7W0uofolA+f37Vb/gMrvHDq54meaRX5IQQ9+f/5j6c/hMIzwSz9IzU1iVmsAoKH",
+	"M3oLteMt+0qdryqhjCexdSvhJsx20cpWssXWV59kDDeBcrmrdCSwoHOdocjm+P6Z7zEvE4NecELt+MY2",
+	"F08s1BMq+KPWCI3FV8U9pJBNNRTBLlUKRIKIfoXF3Mb44FL5kg/QIbX1NYomAff/9IOimyhD21XR1hQd",
+	"yszdzl0sEAmE63FFZpZHhFvCRYb4AG6SpdDConhp0UTstzzVNiIlu41+lVDrbtchmVhvxFCppM9zx/Ji",
+	"Am5xUCQSgbOwosj/WFv39UYFa/tfqcLxZ/bxyDicYA13FDeKgBTbQn3EXmeHer4PPuZ/BvoxM8K2cIWP",
+	"DLPjCxvbSLpEs0SJt3MqfyTaBWTCf/7j6Z/a4p//ePZtKClDdvM8mJjMQ2UfLVOFXt3pZnz9N6ofPHUZ",
+	"PPQZd7XpkzX7CkBLnNmnUjzD11rfpkfws9DJkVwuRbgIIlgE8ajXH3cuL0v5AxBhSBxY0Xoj4/BdjOyX",
+	"1yWp5RuX8as0EBuGSy2qH9pU3IMegsvc7QsY5pbU9TV32zKWUxXo2t9Ylu9Fe31UGLEPWLRh52s4bA+2",
+	"sp9fMVlTkS+AvkvjJSqfyxvFFdYqEVgbEGGYp0E1zhO+uB8e6FrBLLUcJ4wFy8v+QpiFzsBvU1XUsU3v",
+	"MjaR8l9p0tvt/op7uDf1inu7ZbNVDD/MTLr4vHpfifq3KH9lAtyg7oU3iqlKslQ1VhbsQuxPgAqOZLwl",
+	"V7dC9wMlo078lXsDkAVgpHUL/xqgJsCdiukkHJGuLDy8gWmXuKW8+sw/e602vedoB7d1ab2v8LHTz+3H",
+	"Dj/TEMGfyOi6Wujv17Lkvq4QK/lg8+SQVfs9/JOaPshoL4Ltl14woDHsR7vlV9xPuvnnETZNe1eiXolB",
+	"Fn/E2jvqxcgrJlHrLCIeFYHQFwFYpU7gwxhb/aCW2ePtRMEYNBG6SNfO6mo5BPqPbAFcTEbXbxRPCN+B",
+	"aWSEYAntHlNFDR9hMpISTeFYtcrBdOCQr+HyLaSfyohA96+lU/Zl8Dqrwm8JWZQ/O1wqxsY0/AVVn6yW",
+	"CLVYZivKSa83FS9xec7C1fnqXIT35G7ZrX9RdT12KY8tLd/d4MR/RkzslclJN5MWNDJAYlUcnEBX5qN/",
+	"/uNZqZ6JqHwT4HjfRDJmZ47NDIXpJjL54H0/hO/UhjiHTKPiz0T0Xnb68HtqcnT+F3cuU2qG9UFhZqME",
+	"eozEcp5Kq44F2r3a0phxYmxvXQ4u3vbOuoNvhiJD+B/ClAuJfhnnMMKFtB8K3kjV1Fwn2irre0PoZJlz",
+	"llNszAcrYo3tECEXhMYZ4rmF7IGrAGDrEbn2S5/HjI+5vp4fAai48JzDEmHHQGen+s6JSRORJzmKl+cA",
+	"TY7j4cg1vAzy7mm/tctiJd7/pijPagduAbQGv7FN0Zhd+PtrymSv4b+HNT8bBvDAWOc7jSK4LFKPItoW",
+	"EmLqLngakE/YPe0rr/X0yTHSeUZDRmLEdH8qkgzZIBSbdYEnvwd/cSY/JQfUhGRJK0AdKBQkeD8FRZ9X",
+	"xAglayI7z6UVsZplPv1b2yD7wCVRgshwykf4oiTE5HsB+gN9kFQIEleJumU6YFnl6zrB348lFzgmvVBt",
+	"zqjQ1iGuIX41RrgRig3VDrZwKsrITE6zSlL8DAoAhTULNTERyLGFAslrCarTqhrt4wwXuU5AnYUbslNv",
+	"tajyxAM3WGv/KzvV95Y0jjyPxXuzVMmYmGqsI/s+6KA/NQnnKLszil1OVH7la7WAZRD3PTik4S6o9bbW",
+	"MzuYHMaB5kOtKVA18RXHRCKRJ5mOWdP2eO3HXx+QdgWJyCxFbkkBqRF1Owg1B3PbaNaAGdcE/ohp4baA",
+	"puXQGXfgItMLEXvQGoebi3t1ciNTLZPsaDpXU+c6FAsTOS/6Ql+zKDo5+cMfnomF1EkmdRJ8EOvKjwV6",
+	"EWIN23/5Lj85efbDOewjuyRlRkSCf0KsbSHTa8h05+IAmYn30o7N7H0g2GyGJWahpELwfhU12UJ+Jf8L",
+	"Bc2KSdV5EouLDxoQK1NjW1CsPyA0mRR04NMYMX6np3Do2SMzw3DY9xAO+26nxIFlamY63pC/2EWvHZ1l",
+	"2gqDv3NmIEaIGHnTimWq0KahA/JFYWnPZRLFSkxjJVOLIKEjZ/ckRmjfJwnOr6KKFewqQh1NkcwTI3iw",
+	"YpJnlfSgRk2fp/eVqvc8vC8TU4L+dG59atiABhW5RT8MN+XgI4C+XtllTwCPIm2xgiyRoLYRgbVFbKYS",
+	"/ouNY/5uEtWcd1iAlDWcD2cqhTZvQiWZTiHd0AtnB4WHpnKAVyr1wnrHbRl6GjMX6IxOjLBqmipCOqWS",
+	"322pC0M32M9IDe4bQ96C2sIAukVYf89aQB8XCKHexIfE3FohJ4a51S15c252425h2fsRIfrI7QH7Edze",
+	"Ce7+nJAy8K1h5vl3LVeSB+H6rJeW7Fxdy1hEZkpobe6cpgVahKsEhpJDNHKJEHCrTJUA1celxK+t4KZe",
+	"e9z1p1BQ3UgoU8fpqo7E7Vw++/4Ht33qo5xmYrLKlPVFxDhAZ2RbuVB8PbvVVOFTOLAdLFOUTxXlKtFo",
+	"2I1za5pEes3mfpWyvTLOL4XltRd5ciqvdPu4v9AvJ5bje5AYMH2goHTBooJJLETNIMOlURSU/DWblPvC",
+	"jeBODZkqCdT7z388+w4l8lSmqea+UzJTbSGpNVebewNPSIe3YqLmOonYocpJcFHQmMgKeSN1TFj/3DvY",
+	"vTwx7KgFTpeZhKnLOH4uskAJcgvDvRVmWqXACNzPC6+w3xbeDg/AbpmZmOgUlCZXYYeaE8tf8o7MZSRk",
+	"sqIKf3YN0UmETOyba5MrvLgyNRD3wcOr/lB6G27EfyHbIJzXBvUovK2sIz2YwYBdVgsyv6kZUZs8WVhb",
+	"ifB37uyg3PDIiER9pNDJCebQfReqTCVeq+XAJ1Ym0cR8PDJ5NjWLDXZER7hbM61SIWczk0YoeR51zgZH",
+	"JyfPvn3MxF10nUEuVb4jAfa7mZu4SBCUMbVvVyu0FCZwLKl0ql2bGtA9ZnKS4nCT66JLvIw9o1Y727y6",
+	"GLzsnZ11++RcWYXdZri9AJ5R0s1I0IwSLq4q+qKUbqcjkR4wiSobQZwwJHgZ4S23dJnbzYJt9BxDK3Ml",
+	"UwhqOjU0MehenEuXuYXdMuXKiqWi+oyZSRW2TShaiPhW+XkSK2tFZuJIYDLzrbbqXYt8p27lVORXjZZI",
+	"fcxSqraxx4IsxNTcwmLepjojvJBYTqg5IE/aRXR9i/PT193Tn3jp2Q+Gz8CcLwcXZ00KQMh5Q3r3BVPf",
+	"14rpSaMMB+5G/MDqQGntHGp4fY6Doy/J58HcWJV4AkWnvc6+8tL4Yad/9vLiL2LU6w7ERf/8F3EEEzFW",
+	"sQicq4CjSgKUcu/tntKQ1sxuKgctNxA6An6cGws8djU4LzVEcUHizBzz8cwx6koIyyd8kvzEYx9uuRqc",
+	"g5YBs4118oHyhqapQhVDxpThiWgBICVcoOIbWzR4QvWHSlPDRH4cWb5EtyHIvMBO4ZpTGoROZipNXZMv",
+	"KRKV3Zr0AwRqUmVt4JYExQtNIcVwHRSqUTIlJ7B7kvp9fGOhEiybqzDjxMHHoCDMxMLYDM0KLBzjjXkB",
+	"uQP4RgwQ4dzXQ1epnG6u5qvhoq+7p0I44C9kiOA4VPS2FG7dIYjcphQK2qoobHVwn6HlHUfXcazqhGNm",
+	"sI8NcSTRYWYeuITM9W1wEuGIx+i5uCTXUNV7fJhYe/I7/6uM7lbXKC1Lc+vkKxXaAqtOc5uZhUqFTLll",
+	"FGLveEkMshHFoJUrTl2fSkbocfkddPNKLKXF5tHOX7w0cVwWjSSMkmuMs4G8J6GU4dtdr8LCI/Gc7cDc",
+	"54GT4kZJbK7+fbOnrk4yDN2a7S0iiif/tcOph2kd95lUCSXuJdK4pR1eLlXiHGq0w+V28TXMwZGU7c12",
+	"+3ijb7m739Y/QDVlML6tSfV4K7firSxtP7zGVYHemUOeJIFuE2kzRG+xm8JSm5D777SgD5qwFYz0Cx23",
+	"wQi+SK7Wlu/jhQbA04PyqR4Ke2/AnoLJSvAnhZ2mSiXoWyHjmCOmZHxT3VQD0ipq9Uchd/m1aDtYhepX",
+	"HPRRrwx9VBvgLcmqJ7/jf7cgs4ZM1qH792+vz889lPhqpjCf7IXmyqrtGi16l3BCqRm0Bi5GcwcA1322",
+	"4Qkm9GTNxuKFi68jo5gU82HpoXYpAK8pjIaEcyyoJ0TGqD540jn8RHgZfv4bK2iMeurswButbp+H4EAM",
+	"eUK9RrGfUWZELPME4k4OpTqzfnTaciKTijDVsu18dnwD1BZOiw6P7jPfkGH6AQ+KpUwbzK4awqSJHk6e",
+	"DwqWuExhTpkmTggUtx0z8ILD46/h4wUIPvWU/MpOmg5JNSsuu/2zXv/H8aD7ttf9+WvPQEPKotp0z1ks",
+	"oYFbAplBjHOAVHZdp5oMKSjsXrICBvzC93MzhffWpNl79mbZot2CTq65LUW/+zP0S0WuRO7NsZ/0Ul4j",
+	"bzpnMB1XBGQBFQvkjYEDifqqc9Iawi7czlVSZLRis5mg8axbVLLe2LeTiVtpj8X7v70XVskU0aRDKUQZ",
+	"HHa1mBiKqgWLgJ5gY7PrVA3/fI4NNMKgme+7oZNIef+yT4fz9q/3R0kR5o0cv0veJaMi1UhbkSdBsQIb",
+	"l+VQHjNe8XL8KFdMJ0YQ7JRJOO/BJKoc6HOykhKqOJhX/Bhnrr2xO/dlSGs3KgUXnBh0/717OuqeudjC",
+	"kiBAVYQFJWBpn3XPe9CihJcDbgSALmqeT7EGpC0yfMDuVhFt73uygd8XiFicseWHibDNwXsT8f7H7khU",
+	"6PrJ7/QPOuiQscJERA6pyqKz5NnRyR9P2uLs6OnTk8e19jWJmjfMNw9fMd4MqkRrpupxlehiE7KSbwFY",
+	"U5Tl+p6w7Gy1W53TUe9tt9VunZ5fDLtj8Gm32q3XnfNRF/odvxpc/Ee332q33P7X9EhZK91q8C38rTSm",
+	"hfx4rpLrbN56/vTZH2sbr9TOzqRZfWl8i+RTq+1n6X94e3F+9aY7fvbda5jo607/R/fHee/PV72z3ggm",
+	"fTnonXZr5vcAWieR4DarmVmEiF8re5ifr9RNszihzrSdGnKysxR058Mjh3J9bWQs/vmPp88gsltu9bXD",
+	"uRTw73Z7gXnyDT+xN2/6Bx9s8+o2zl25c/2uylxGyTRPbwiw3PpEfbLqpipxJSmkO5z33h6+RU+mmAPZ",
+	"rE28RGgnSxZRYvjwRs2783LY7Y9KIRBIQFcIrX4r0+g5UNF3xYEgEzE3ibIZJ/jyXOn8ncUyO+LnaVCQ",
+	"E09JP/RV0igijbF+dsIdi/cQJHqPL3mfmfc4sonJ5q6wMPJ6xq1OInNLlYOg00QiM+Lp9ycnjF9ltx8e",
+	"jt5OedUOp9cGuYdceSPjjW5ZJ/ieLlrt1vfwP0/pf6GM52nU0N+q7nOwdgd7gEd6oWwmF8vm92fmXt7+",
+	"+ZmbNrRJMtNV2xbAhQUm3IPGpC9en5++FYb0UUfARNJtxFPD/iY+29irs5T/rLGVMLDjHWTFeuOYJnO7",
+	"wi4HNk8pcctXgu6E08P5fFEP7Ssdx3s0S5khTgJHutVHNc251+H9+26bRvYKRfsXanvCKhWF5JbSZmWY",
+	"lIVO9CJfCJNnyzy7I6N2aXn9qYU5A/zFitJ1OCv+LTeZspvS5vAOsso5QmVmRfaK0zGlxoIwWTRB6QWJ",
+	"asvULLRVz5lkyG1xhGVi1s/L1ywUp3lpcZepyZTP/1joZEzLLExSuB82+e4qwuTPNPX/MsIE5/NFhQmO",
+	"oI518AKpfrM8jn3/HBvrJboBIm0ZW/muzUio9FDMV0uTzVWmpzKu8E+Jzrzf7C66r//8hnRwrEbgGzFZ",
+	"EUgWXGmufrxN6BoZ3jtTiBCz0JkVGpE4pkWpT50O7/gt6IiCdZ94jm/2jjgvOa0SxXn8t/h2ctbYuUyV",
+	"MAnGsX8LwMsZWSfSVl6nSrHzSXIhKCbQ3Jg4Z5/X+8J7/H6tpg99/uDvDwDgS8U6lDkB4+JobwH2Csuq",
+	"E1Dfl2NaJPueqO69tuOVyUm9pwJBW8r0fR6uLG4LVaVwdqvSaJvcyhX4iZ4+ffp4dx3fVTTdu45fSr74",
+	"apItwjVobnJN10XEN9zJ4sUEYNpK79nlN4snvvs4EzaBNK35KL69A/uTKduckFTntV0ulUytd5dmcund",
+	"1uWTNdLRC0SzirTLFvcOcCDcb6yv0N2dJEc04s959D1YAgnOpcngGhASENktdyQzbHuH/W5puyAckIbv",
+	"L8M3ikc7kdX2NttfrL32vxI0+76truubn9MNT37H/25xPNK2XNCde7OSe+7zL0qzDMbLXMefZWqxzMhH",
+	"iOgPd8pCKK/qUmLxypZOsa7PCUpB6NG2yKdz8eai3/2FS5o5dxOx+pZyxSV0hOknV/SMTFauLSTGSazN",
+	"VVieVkTCLLwew2B09v8tlz5cF3HxNdYCpkfYU957RKiUEFQb7CBHCR3e7BmFgciiwM8n/k1jTYXZWION",
+	"RazQgBYRF0wBCNQOculRyRJ6zSI/OkJ1b2qSyOfs16VMcEO+tWODtgWUy0W92XTpNu6rTnaj7XYNVL+Q",
+	"AVQexE4eFSiqYHIYMzn47gn371TZPkB3jfoJqegFegNjxTAIjlx8kwVP0oSUU5rJl0pBl0GZ3CRfWS8L",
+	"nJnXFsvrmRgqLpv9/ugPpf59dHdFbj35nf+1Ke28I2Y5ZdyhqeSywbUtxTUwLd31dSry0pcFlCj96BPQ",
+	"C7HXkIguFiZRK0pobwDRcWx86Waxf4NX/+RnPa/2o9HsoetducEfFT6bxOM3uaa7mwgJ4aE2aBOXfMt/",
+	"VZzX7WhnLLi36XC0lh6/rKR2bAdcvXuDmzDNiLrao8V2K/3b2pzoRKkmZf2AjnWwHDDXxbe5MBObyWns",
+	"MCpIEaF8I2osXRTQ3JocYP3y2UxPVeO5XU9MXx+o6Bc6rms+/kXARDeM4LJE6C5X/YWwykkhylYj9FmM",
+	"iwdFJRYL6+8M+Enf9iB4Zsa9e2KHh4vn6hAb4faO/vKXXjMqHv9FEYeNdfrOgblM1dHULBY6w0MdXIAl",
+	"Vb44G63irD7nWIZ/Jwq04JlJFVdy4auIh12gRkOHqOhaRaLfHcH0ZkrZtrA6mRIAh7sxAr0aJYbNUrOq",
+	"QNg5pQ3OcpwfoKLpNEBEpr8Ji7wJ+ljHVLTiQiPR8xIAubDYSTvA4VimylpFs53kWWYSIcGOSTNFWXKJ",
+	"mJs8FbHMqJwXy+xxbeglGMciMTedyxTWQQbd5hEmIGjQ6lEdOW8wVtG1SsntarH0PlPJRpFEEYJ/AbkU",
+	"hDIeWio1RlFqY7JkupqswhFwHiEq0ueRW41j7PjBSO7QaQsMUGaKr7xoH3HEvMij43ZqbNZ20oQECeFM",
+	"YX5u0QLs2Xb59zv9Y4t3ifnlku89RGOnBx9Oc9t+iN3Jp7RtNbc273XQB5wqTpIs8BUVoGKxycLqX/D8",
+	"tL3dq9NARRQ6ySTZcO6g9rW72L5pePXyTW8EidDsqZqoAgf3ue+O7rEDbhQ9t5Q6KmLgqCNyyhvEoPgs",
+	"dvAuqZqaZKpjLevDAIEAdnRxYBPggqz+hWpX2i1qMllJI/7+5KTdWujE/f1tTbZbU9GLf+WXrn7ZyoF8",
+	"CcjEZ+0HBRMqvfF9EELX04G1Lg+Vi9NhhqFiNNSLU2VNfKOApSarCktgixrqH1XT6dlX2ZRtSyfudcDO",
+	"/nuNYp4Sap4sqSxnc44bZaBc8q2fR6nBb/AnvpCxhUM4CzI8mhJE7pIF0m59f3iDl75JjiZcMEv6C+9f",
+	"JWelGKB4lBh2vWFpEqLlBfz0uNUUDUHC/fums39Ad9TvSJW7ZbQKJl+NPGeYBbLamMmP7yj8ER4fCyWC",
+	"nM4xjMAlQViSxbVAMtYRmaSuD8LSpJktnJlQxJUoa4XEN0Ua/gjWhXACeVlC6KKmhQmwbj5/0yH+mMej",
+	"3d5xyA+vArKqq2mCbq7iUaQA0R0TTnRy3QAX3AR/UrTEqOvicK/wH+tK5Hd1xHhjPhxyfFScDvAWgk6a",
+	"1a9bwzJlqczUtd6Mzjss7vq/o6+Vp7/a5mYNFvNuvbMQJNKGi+637lolG521A4a8QbcWdN+6lUnW9jFT",
+	"aenHFPNTs5KnAgaoY65HLME6akt97kFyPediz4nGiAyPkmsqCaiL6g+5zZd/q0yVyG5N4aqS08wWvikY",
+	"FgZiXSM4/2CqbB57zUImnLY0xWw3zGSldtRqLuNZvSK/iYC/Jj+Ko7QvhvdFn/8izt1NHyeqPrTd+YM1",
+	"ezojzlAhX+ik0JVvgTXruLksip/87p7e4vAoyHroH9j/xCoefRApWqsF+GsPGpyEav2SAENkDE519vKH",
+	"w1B77tsTfn5blw7OInIuiRSDYTafTpW1szwWJhWJydpcvezwcPmhhYwUdbiq4t0SEJqbRIpBcBXoowoz",
+	"eGRW931S4B1q6JuLs+75+KrfedvpnXdenne9KTyTOs7RtxcpcXrx5rJ33h2Ed7ad07s3gPczcnx0LPoy",
+	"y1MZH8Uyuc7h9MwA0djX/HNpu04yE2Alg9pisBmBQwmWxSb5bYSBmduE4fdTJaNtR0LBAKe8ZXdhoa+r",
+	"MS7PaIBHaFOBjiMBjzKtM79XbaFn/sz9+gBA7iSueXHIgishWGRGSAYJQUvOUde+MoBFh33yO//r0xNC",
+	"V9uW1gdfFjZTS9ArXb71H9ueRY9FJxE4BNSD0Nc5UR6ci7Fb+aPciZe4AjhCaNpsjyjtsIkw94bbdeI7",
+	"wXGKYsIB7fmQ1fOSeIFBMMlwFQJ2vSiH8BNTwBRN/V1ktSQhli2rcoT1oQT8Srqhms7J5/xep+O5tPP3",
+	"FLBx5Uxu4aapgvLkn1lOwPTetfhzblGevWtxoGKhZFJc96CT/kacNZn6KCU5wIvZQ/ZdyxVRTz05ISo2",
+	"1ohOVHarlBucZPnN2KOpQnh3HsVEFfsxWfnlgM1jsQixTI1+c5g6fScyihEvZTad0wjdwKsg6d+d/Kmq",
+	"1rv4Iyx10QmkoBznLXfOdr+xXNuGEbUQTiVoEBH2FsEQLiGzE2oNg3ZWh9jrv+2c987Gw1Fn1B2PBp3+",
+	"sDfqXfTduzB+cJ3KJCtKUUziWkM+51RQPiSRPZiaETI/ND1o11QiJzE3oCSi534aux8ab5nH+b80zs98",
+	"hLi7+Zt9jEx/RcV1tAiVUX5ho4ZH0XgIVkTWf7GzjnakVmNyvO57dQOrN510mUoXdnvRHndvXSFm+nWi",
+	"oiOdeNBvHAp3TnzkqnLpzY/bhXKXOHFT9Lp5DqJJW52Z1INiuDoh7jrHmR3smEa90oWgnWwwSVAqy9Up",
+	"VmeKUtdRXljXBanahv7jMpY6UalroeCbwHAhErXBhhFZFbvzyIPsOaqvTTnFtj8P4qa9xDljI6szHv8u",
+	"vtpTtoyC3leMycDzotR4wmfY4DwHKonLXbTWegmVYsewi21GMVmZRNX7Mh3jbjCY33pT7k6LXA6tTnId",
+	"R+Pg62vYTWR0ocJSe10lNzo1yYI/vnadu3GMM63SGqZLcxXoJ4ElSLWtYcOTom8LEzBrAplYUDUWpU0q",
+	"K0wKoT3rDnrut0B9VK961PXDBt1dXHEgsGMKvBevgMp5LhNjYiWTtfBwee3KK1Vel/qg8Vp/HxbxzcT3",
+	"Er5YapOWmOSIawnK0RoYBSfBPytnqZSiMLdqMoeG/U9+d1GcT5tDmD/zA5d8+06toZfFzdvBaYB0lmpM",
+	"GdWNcFuHnfuHhu6rXcyg1SAmw0XiUeHciHL6trKPg0ZmFW+Rvk5klqcKiJR1UI6sYVan1LGKNhLBpYcU",
+	"p61gxHnEdbLu7UfMC1EbTy6NAP18lixTM1XcnCkoMoLsY6SXb0+aycW3QdqC5vJzcONX6rUuhriXcvfs",
+	"MwygTh4UV53VdqAL+WHxqk87l52XvfPe6Jdx/2I07lxeDi7eds8gOZ69FdeS4EVcC/PGHOSC2MQj3hWL",
+	"foWjfEmy/Ofe6PXZoPNz53wopnIpi0T/s94QnHhnYLi9fVrQ9p9KMEYhOf/6qcJ0v7c4/HhqzAetgA2B",
+	"FKlEkAg5T+PW89aTm6dIpPzW330kEY73T+3ib1L2bPibw2QNfnLZA8FPXGkU/hQOvfSNTN/A+IPfEpP5",
+	"aoLyzdFCJ+EPzOuffv30/xsA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

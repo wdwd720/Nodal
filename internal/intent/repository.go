@@ -511,20 +511,23 @@ func (r *Repository) Transition(ctx context.Context, tx pgx.Tx, intentID IntentI
 	}
 	now := r.clk.Now().UTC()
 	transitionID := id.New[id.Any]()
-	if _, err := tx.Exec(ctx, `INSERT INTO intent_transitions (id, intent_id, from_status, to_status, actor_type, actor_id, reason, evidence_ref, occurred_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)`,
-		transitionID, cur.ID, string(cur.Status), string(to), string(ev.ActorType), ev.ActorID, ev.Reason, ev.EvidenceRef, now); err != nil {
+	// The rejection code travels on the transition row since 00749, for the
+	// reason 00748 gives for orders: it is why THIS transition happened. A CHECK
+	// requires it on REJECTED and NO_VALID_PLAN and permits it on any terminal
+	// status, which is the validator's rule expressed where every writer meets
+	// it.
+	if _, err := tx.Exec(ctx, `INSERT INTO intent_transitions (id, intent_id, from_status, to_status, actor_type, actor_id, reason, evidence_ref, occurred_at, rejection_code)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''))`,
+		transitionID, cur.ID, string(cur.Status), string(to), string(ev.ActorType), ev.ActorID, ev.Reason, ev.EvidenceRef, now,
+		ev.RejectionCode); err != nil {
 		return TradeIntent{}, classifyWriteError(err, "record transition")
 	}
-	var terminalAt *time.Time
-	if to.IsTerminal() {
-		terminalAt = &now
-	}
-	updated, err := scanIntent(tx.QueryRow(ctx, `UPDATE trade_intents
-		SET status = $2, rejection_code = COALESCE(NULLIF($3, ''), rejection_code), terminal_at = COALESCE($4, terminal_at)
-		WHERE id = $1 RETURNING `+intentColumns, cur.ID, string(to), ev.RejectionCode, terminalAt))
+	// The INSERT IS the status change. 00749 revoked UPDATE on trade_intents
+	// from cp_app and granted back only the five Link identifiers, and the
+	// trigger has already written status, rejection_code and terminal_at.
+	updated, err := scanIntent(tx.QueryRow(ctx, `SELECT `+intentColumns+` FROM trade_intents WHERE id = $1`, cur.ID))
 	if err != nil {
-		return TradeIntent{}, classifyWriteError(err, "update status")
+		return TradeIntent{}, classifyWriteError(err, "read status back")
 	}
 	payload := TransitionEvent{
 		IntentID: updated.ID.String(), TransitionID: transitionID.String(), AccountID: updated.AccountID, AgentID: deref(updated.AgentID),

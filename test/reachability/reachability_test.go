@@ -77,11 +77,18 @@ var reachableFrom = []string{"internal", "cmd", "scripts"}
 // BLOCKERS.md. "Nobody has got round to it" is not a reason and must not be
 // added: that is precisely what F-26, F-28 and F-29 were.
 var unreachableOnPurpose = map[string]string{
-	// Payout destinations. Registering one means collecting bank details, and
-	// verifying one requires a payout provider to accept them (B-01, B-06).
-	// Collecting that data with nowhere to send it is worse than not offering
-	// it, so the endpoint is deliberately absent rather than merely missing.
-	"internal/payout.CreateDestination":    "B-01/B-06: no payout provider exists to verify a destination or receive value",
+	// Payout destinations. Registering one used to be exempt here on the
+	// grounds that collecting bank details with nowhere to send them is worse
+	// than not offering it. That reason stopped being true when the surface
+	// stopped collecting bank details: POST /v1/me/payout-destinations takes a
+	// PROVIDER TOKEN, refuses an input that looks like an account number, and
+	// stores a token and a mask. CreateDestination is therefore reachable and
+	// its entry is gone.
+	//
+	// SetDestinationStatus stays. Moving a destination to VERIFIED is a
+	// provider's decision arriving on a webhook nobody has a contract for; the
+	// sandbox tier reaches the same edge through TransitionDestination, which
+	// is why that one is not listed.
 	"internal/payout.SetDestinationStatus": "B-01/B-06: verification is a provider's decision, and there is no provider",
 
 	// Identity verification for a payout. The level it would record is
@@ -108,12 +115,14 @@ var reachedThroughInterface = map[string]string{
 	"internal/credit.Refund":   "credit.PurchaseService.apply, on a charge.refunded event arriving through Dispatch",
 	"internal/credit.Reverse":  "credit.PurchaseService.apply, on a chargeback arriving through Dispatch",
 
-	"internal/credit.CreateFunding":  "credit.PurchaseService.StartPurchase, through httpapi.CreditsPort at POST /v1/payments",
-	"internal/credit.AdvanceFunding": "credit.PurchaseService.apply and StartPurchase",
-	"internal/credit.SettleFunding":  "credit.PurchaseService.apply and SettleDue, the latter run by cmd/reconciliation-worker",
-	"internal/credit.DisputeFunding": "credit.PurchaseService.apply, on charge.dispute.created arriving through Dispatch",
-	"internal/credit.MintFrom":       "credit.PurchaseService.apply, on the CAPTURED edge",
-	"internal/credit.SetFinality":    "credit.Service.SettleFunding and DisputeFunding, both reached as above",
+	"internal/credit.CreateFunding":   "credit.PurchaseService.StartPurchase, through httpapi.CreditsPort at POST /v1/payments",
+	"internal/credit.AdvanceFunding":  "credit.PurchaseService.apply and StartPurchase",
+	"internal/credit.SettleFunding":   "credit.PurchaseService.apply and SettleDue, the latter run by cmd/api's runCreditSettlement ticker and by cmd/reconciliation-worker",
+	"internal/credit.DisputeFunding":  "credit.PurchaseService.apply, on charge.dispute.created arriving through Dispatch",
+	"internal/credit.UnfreezeFunding": "credit.PurchaseService.apply, on charge.dispute.closed arriving through Dispatch: the freeze lifts and the funding returns to REVERSIBLE (D-094)",
+	"internal/credit.Reconcile":       "credit.PurchaseService.ReconcileDue and ExpireInFlight, both run on cmd/api's credit ticker (cmd/api/creditsettle.go reconcileOnce and expireOnce) and by cmd/reconciliation-worker",
+	"internal/credit.MintFrom":        "credit.PurchaseService.apply, on the CAPTURED edge",
+	"internal/credit.SetFinality":     "credit.Service.SettleFunding and DisputeFunding, both reached as above",
 }
 
 var (

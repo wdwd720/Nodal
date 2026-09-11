@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -82,6 +84,9 @@ type Config[E Event] struct {
 // Handler is the HTTP endpoint of one provider's webhooks.
 type Handler[E Event] struct {
 	cfg Config[E]
+	// secEvents bounds the durable rows a rejected delivery may write. Per
+	// handler, so one provider's flood cannot silence another's (F-105).
+	secEvents securityEventBudget
 }
 
 // NewHandler validates the configuration and applies defaults.
@@ -314,7 +319,7 @@ func (h *Handler[E]) recordFailure(ctx context.Context, ident Identity, cause er
 			h.cfg.Clock.Now().UTC(), text, meta.RequestID); err != nil {
 			return err
 		}
-		return h.cfg.Inbox.MarkFailed(ctx, tx, ident.Provider, ident.EventID, h.cfg.SchemaVersion, cause)
+		return h.cfg.Inbox.MarkFailed(ctx, tx, ident.Provider, ident.EventID, h.cfg.SchemaVersion, hex.EncodeToString(hash), cause)
 	})
 	if err != nil {
 		observability.LoggerFrom(ctx).ErrorContext(ctx, "webhook: could not record failure",
@@ -322,10 +327,83 @@ func (h *Handler[E]) recordFailure(ctx context.Context, ident Identity, cause er
 	}
 }
 
+// securityEventWindow and securityEventsPerWindow bound how many rows one kind
+// of rejection may write.
+//
+// A rejected delivery leaves exactly one durable trace: a security_events row.
+// The route that produces it is UNAUTHENTICATED -- rejection is what happens
+// when the signature does not verify -- and security_events is append-only by
+// trigger with no DELETE grant to any role, so those rows can never be removed
+// by anyone. That made the row count a value an anonymous caller chose, on a
+// deployment whose database ceiling halts every financial action when it is
+// reached and whose free tier is suspended at 500 MB (F-105).
+//
+// One row per kind per window, carrying the number suppressed since the last
+// one, is strictly more informative than N identical rows and bounds growth by
+// the clock rather than by traffic.
+const (
+	securityEventWindow     = time.Minute
+	securityEventsPerWindow = 1
+)
+
+// securityEventBudget is the token bucket that bound.
+//
+// Per handler, so one provider's flood cannot silence another's; and per KIND
+// within it, so a flood of forged signatures does not hide the one stale
+// timestamp that arrived during it. The kind vocabulary is a fixed set of four
+// constants, so the map cannot grow with traffic -- which would have made the
+// bound a memory leak instead of a row-count one.
+type securityEventBudget struct {
+	mu    sync.Mutex
+	kinds map[string]*secEventWindow
+}
+
+type secEventWindow struct {
+	end        time.Time
+	written    int
+	suppressed int
+}
+
+// take reports whether a row may be written now and, if so, how many of that
+// kind were suppressed since the last one that was.
+func (b *securityEventBudget) take(now time.Time, kind string) (int, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.kinds == nil {
+		b.kinds = map[string]*secEventWindow{}
+	}
+	w := b.kinds[kind]
+	if w == nil {
+		w = &secEventWindow{}
+		b.kinds[kind] = w
+	}
+	if now.After(w.end) {
+		w.end = now.Add(securityEventWindow)
+		w.written = 0
+	}
+	if w.written >= securityEventsPerWindow {
+		w.suppressed++
+		return 0, false
+	}
+	w.written++
+	n := w.suppressed
+	w.suppressed = 0
+	return n, true
+}
+
 // securityEvent writes a security_events row outside any transaction; it
 // is the only persistence a rejected delivery leaves behind.
 func (h *Handler[E]) securityEvent(ctx context.Context, kind, severity string, meta RequestMeta, detail map[string]any) {
+	suppressed, ok := h.secEvents.take(h.cfg.Clock.Now(), kind)
+	if !ok {
+		// Counted, not written. The next row of this kind carries the total,
+		// so nothing is lost except the duplication.
+		return
+	}
 	detail["provider"] = h.cfg.Verifier.Name()
+	if suppressed > 0 {
+		detail["suppressed_since_last"] = suppressed
+	}
 	body, err := json.Marshal(detail)
 	if err != nil {
 		body = []byte(`{}`)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/prediction"
@@ -317,9 +318,21 @@ type strategyScaffold struct {
 
 func (f *fixture) newStrategyScaffold(t *testing.T) strategyScaffold {
 	t.Helper()
+	// v7, not uuid.NewString().
+	//
+	// These go into columns the application reads back through typed ids, and
+	// `id.Parse` refuses anything that is not an RFC 9562 version 7 UUID. A v4
+	// here produces a row this system can write and cannot read:
+	//
+	//   agent: scan agent: can't scan into dest[0] (col: id):
+	//   id: scan: id: not an rfc 9562 version 7 uuid: version 4
+	//
+	// Nothing caught it because `inttest` gives every package its own database,
+	// so this fixture's rows were only ever read by this package, which does not
+	// scan them as agents. It surfaced the first time two packages shared one.
 	sc := strategyScaffold{
-		strategyID: uuid.NewString(), versionID: uuid.NewString(),
-		agentID: uuid.NewString(), runID: uuid.NewString(),
+		strategyID: id.New[id.Any]().String(), versionID: id.New[id.Any]().String(),
+		agentID: id.New[id.Any]().String(), runID: id.New[id.Any]().String(),
 	}
 	var ownerUser string
 	require.NoError(t, testDB.QueryRow(f.ctx,

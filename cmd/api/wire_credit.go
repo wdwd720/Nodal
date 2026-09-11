@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/nodal/controlplane/internal/alert"
 	"github.com/nodal/controlplane/internal/archive"
 	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/clock"
@@ -35,6 +37,35 @@ type creditPurchaseWiring struct {
 	// of the endpoint Stripe is configured to call.
 	WebhookPort httpapi.WebhookPort
 	ProviderKey string
+	// DisabledReason is why a CONFIGURED provider ended up disabled, and is
+	// empty when the path is wired or when no provider was configured at all.
+	// It exists so the composition root can raise it: F-93 recorded that a
+	// key rotated to the wrong Stripe account was "a warning nobody reads plus
+	// a silently disabled capability on a service answering 200". The
+	// availability decision -- disable the path, keep serving -- stands and is
+	// explained below; what changed is that the disabled path is now a page.
+	DisabledReason string
+}
+
+// disabled returns the zero wiring carrying the reason.
+func disabled(reason string, err error) creditPurchaseWiring {
+	if err != nil {
+		reason += ": " + err.Error()
+	}
+	return creditPurchaseWiring{DisabledReason: reason}
+}
+
+// raiseIfCreditPathDisabled turns a configured-but-disabled Credit purchase
+// path into a SEV2 at the alert destination. A provider that was never
+// configured is not raised: that is the LOCAL default and a decision, not a
+// failure. A nil dispatcher is a no-op, so LOCAL and TEST are unaffected.
+func raiseIfCreditPathDisabled(d *alert.Dispatcher, cfg *config.Config, w creditPurchaseWiring, now time.Time) {
+	if w.DisabledReason == "" {
+		return
+	}
+	d.Enqueue(alert.EventFrom("credit_purchase_disabled", alert.SEV2,
+		"selling Credits is disabled on a deployment that configured a provider: "+w.DisabledReason,
+		"", nil, now, string(cfg.Env), cfg.ServiceName))
 }
 
 // wireCreditPurchase builds the Credit purchase provider, its service and its
@@ -52,6 +83,7 @@ func wireCreditPurchase(
 	clk clock.Clock,
 	credits *credit.Service,
 	gateChecker *gates.Checker,
+	capGuard *capacity.Guard,
 	log *slog.Logger,
 ) creditPurchaseWiring {
 	slot := cfg.Providers.CreditPurchase
@@ -65,7 +97,7 @@ func wireCreditPurchase(
 	if err != nil {
 		log.Warn("credit purchase provider is not configured; selling Credits is disabled",
 			"error", err.Error())
-		return creditPurchaseWiring{}
+		return disabled("the provider could not be constructed", err)
 	}
 
 	// One read-only call to confirm the key belongs to the account this
@@ -83,7 +115,7 @@ func wireCreditPurchase(
 		if verr := v.VerifyAccount(ctx); verr != nil {
 			log.Warn("credit purchase credentials do not match the configured account; selling Credits is disabled",
 				"error", verr.Error())
-			return creditPurchaseWiring{}
+			return disabled("the credentials could not be verified against the configured account", verr)
 		}
 	}
 
@@ -95,27 +127,15 @@ func wireCreditPurchase(
 	if rerr := registry.Register(prov); rerr != nil {
 		log.Warn("credit purchase provider was refused; selling Credits is disabled",
 			"provider", prov.Name(), "error", rerr.Error())
-		return creditPurchaseWiring{}
+		return disabled("the registry refused the provider", rerr)
 	}
 
-	capGuard, err := capacity.NewGuard(capacity.Budget{
-		MaxAccounts:        cfg.Capacity.MaxAccounts,
-		MaxPurchasesPerDay: cfg.Capacity.MaxPurchasesPerDay,
-		MaxAtRiskMinor:     cfg.Capacity.MaxAtRiskMinor,
-		MaxDatabaseBytes:   cfg.Capacity.MaxDatabaseBytes,
-	}, clk.Now)
-	if err != nil {
-		log.Warn("capacity ceilings could not be built; selling Credits is disabled",
-			"error", err.Error())
-		return creditPurchaseWiring{}
+	if capGuard == nil {
+		log.Warn("capacity ceilings are not available; selling Credits is disabled")
+		return disabled("no capacity ceilings are available", nil)
 	}
-	log.Info("launch-tier capacity ceilings in force",
-		"max_accounts", cfg.Capacity.MaxAccounts,
-		"max_purchases_per_day", cfg.Capacity.MaxPurchasesPerDay,
-		"max_at_risk_minor", cfg.Capacity.MaxAtRiskMinor,
-		"max_database_bytes", cfg.Capacity.MaxDatabaseBytes)
 
-	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
+	svc, err := credit.NewPurchaseService(ctx, database, credit.PurchaseServiceConfig{
 		Credits:  credits,
 		Provider: prov,
 		// The shipped policy. Changing the rate is a new version through the
@@ -129,11 +149,15 @@ func wireCreditPurchase(
 		Capacity:    capGuard,
 		Clock:       clk,
 		Environment: string(cfg.Env),
+		// The mode is recorded on every funding this service opens, so a
+		// deployment promoted from sandbox to live cannot re-label the
+		// purchases it made before (D-096).
+		ProviderMode: string(slot.Mode),
 	})
 	if err != nil {
 		log.Warn("credit purchase service could not be built; selling Credits is disabled",
 			"error", err.Error())
-		return creditPurchaseWiring{}
+		return disabled("the purchase service could not be built", err)
 	}
 
 	// Webhook ingestion. Without it a payment is taken and no Credits are ever
@@ -142,7 +166,7 @@ func wireCreditPurchase(
 	if err != nil {
 		log.Warn("credit purchase webhook ingestion could not be built; selling Credits is disabled",
 			"error", err.Error())
-		return creditPurchaseWiring{}
+		return disabled("webhook ingestion could not be built", err)
 	}
 
 	log.Info("credit purchase provider wired",

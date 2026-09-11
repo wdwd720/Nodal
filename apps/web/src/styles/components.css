@@ -1,0 +1,1764 @@
+/*
+ * NODAL — COMPONENT LAYER
+ *
+ * One block per primitive, in the order a page is built: the shell, the page,
+ * the panel, the things inside a panel, and finally the surfaces that sit above
+ * the page (dialog, sheet, toast).
+ *
+ * Class names here are load-bearing in two directions. The Playwright suite
+ * addresses `.panel`, `.panel-nested`, `.field`, `.as-of .mono-small`,
+ * `.explain`, `.explain-meta`, `.notice-good`, `.loading`, `.malformed` and
+ * `.num` as DOM hooks, and five pages already ask for `.stack`,
+ * `.inline-field`, `.notice`, `.reasons` and `.panel-nested` by name. Renaming
+ * any of them is a breaking change even though nothing imports them.
+ */
+
+/* ================================================================== shell == */
+
+/*
+ * A flex row, not a grid, and the reason is `position: sticky`.
+ *
+ * A sticky grid item can only travel inside its own grid area, so a masthead
+ * in an `auto` row has nowhere to go and simply scrolls away. In a flex row the
+ * rail's containing block is the whole shell and the masthead's is the whole
+ * content column, which is exactly the travel each of them needs.
+ */
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: stretch;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: var(--z-toast);
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: var(--space-3) var(--space-4);
+  border-radius: 0 0 var(--radius-control) 0;
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 0;
+  top: 0;
+}
+
+/* ---------------------------------------------------------------- sidebar -- */
+
+.sidebar {
+  flex: 0 0 var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-3) var(--space-6);
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  min-width: 0;
+  /* Its own scroll, so a long section list never pushes the page taller. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.nav-group > .eyebrow {
+  padding: 0 var(--space-2) var(--space-1);
+}
+
+.nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  min-height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  /* A long label wraps rather than widening the track. */
+  overflow-wrap: anywhere;
+}
+
+.nav-link:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.nav-link-active {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+  /* Not colour alone: the active item also carries a rule down its leading
+     edge, which survives forced-colors and grayscale. */
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+
+/* ------------------------------------------------------------- bottom nav -- */
+
+.bottom-nav {
+  display: none;
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-nav);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.bottom-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+.bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-1);
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+
+.bottom-nav a[aria-current="page"] {
+  color: var(--accent);
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+/* --------------------------------------------------------------- masthead -- */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-5);
+  min-height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.masthead-meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.env-tag {
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------------------ brand -- *
+ * The mark is neutral in every context. It sits above all three pots and must
+ * not adopt a temperature accent, so it draws in currentColor and is never
+ * tinted.
+ */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink);
+  text-decoration: none;
+  min-width: 0;
+}
+
+.brand:hover {
+  color: var(--ink);
+}
+
+.brand-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--ink);
+}
+
+.brand-lockup {
+  flex: none;
+  height: 22px;
+  width: auto;
+  color: var(--ink);
+}
+
+.brand-name {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  /* The lockup's own tracking. What stops a five-letter all-caps word from
+     reading as a shout. */
+  letter-spacing: var(--track-brand);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The three intents entering the node are drawn back, so the one operation
+   leaving it is the thing the eye lands on. Opacity lives here rather than on
+   the element because a decimal literal in a component is refused by the
+   source guard. */
+.mark-in {
+  opacity: 0.55;
+}
+
+.mark-in-strong {
+  opacity: 0.75;
+}
+
+.brand-large .brand-mark {
+  width: 32px;
+  height: 32px;
+}
+
+.brand-large .brand-name {
+  font-size: var(--text-lg);
+}
+
+/* ------------------------------------------------------------------- body -- */
+
+.app-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  /* Without this a long identifier or a wide table widens the column past the
+     viewport and the whole document scrolls sideways. */
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+main {
+  flex: 1 1 auto;
+  padding: var(--space-6) var(--space-5) var(--space-12);
+  min-width: 0;
+}
+
+main:focus {
+  outline: none;
+}
+
+.footer {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: var(--space-4) var(--space-5);
+  color: var(--ink-soft);
+  font-size: var(--text-xs);
+}
+
+.boot {
+  padding: var(--space-12) var(--space-5);
+  max-width: var(--page-max);
+  margin: 0 auto;
+}
+
+.boot-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  margin: 0 0 var(--space-2);
+}
+
+.boot-body {
+  margin: 0 0 var(--space-3);
+}
+
+.boot-meta {
+  color: var(--ink-faint);
+}
+
+/* =================================================================== page == */
+
+.page {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  min-width: 0;
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.page-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ================================================================== panel == */
+
+.panel {
+  background: var(--surface);
+  border: 1px var(--temp-border-style) var(--temp-border);
+  border-radius: var(--radius-panel);
+  margin-bottom: var(--space-5);
+  min-width: 0;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.panel-head > div:first-child {
+  min-width: 0;
+}
+
+.panel-description {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  max-width: var(--measure);
+}
+
+.panel-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel-body {
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.panel-body > .stack {
+  min-width: 0;
+}
+
+/*
+ * The simulated hatch, re-stated at panel specificity.
+ *
+ * `.panel` sets `background` as a shorthand, and a shorthand resets
+ * `background-image` — so the hatch that `[data-temp="simulated"]` applies in
+ * base.css is wiped at equal specificity. This puts it back where it belongs
+ * without touching the panel's own surface colour, because the texture is one
+ * of the three redundant channels and losing it silently is exactly the kind of
+ * erosion PART 5 warns about.
+ */
+.panel[data-temp="simulated"],
+.panel-nested[data-temp="simulated"] {
+  background-image: var(--hatch);
+}
+
+/* A card inside a panel. One product, one agent, one market: the unit a
+   customer acts on. It is a real container, not a bordered box around
+   everything — nesting stops here. */
+.panel-nested {
+  display: block;
+  border: 1px var(--temp-border-style) var(--temp-border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: 0 0 var(--space-4);
+  min-width: 0;
+}
+
+.panel-nested > .panel-head {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--space-4);
+}
+
+.panel-nested > *:not(.panel-head) {
+  margin-left: var(--space-4);
+  margin-right: var(--space-4);
+}
+
+.panel-nested h3 {
+  font-size: var(--text-md);
+  margin: 0;
+}
+
+/* ================================================================= fields == */
+
+.field-grid {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-3);
+  min-width: 0;
+}
+
+.field-grid:last-child {
+  margin-bottom: 0;
+}
+
+.cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+}
+
+.cols-3 {
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+}
+
+.cols-4 {
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+}
+
+/*
+ * A labelled figure, always a dt/dd pair, so a screen reader reads "buying
+ * power, twelve thousand four hundred and eighty dollars" rather than two
+ * unrelated strings.
+ */
+.field {
+  min-width: 0;
+  border-left: 2px solid var(--line);
+  padding-left: var(--space-3);
+}
+
+.field dt {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  color: var(--ink-faint);
+  line-height: var(--leading-snug);
+}
+
+.field dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-lg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* One big figure per screen. If two figures are competing to be the largest
+   thing, the screen has not decided what it is for. */
+.field-emphasis {
+  border-left-color: var(--accent);
+}
+
+.field-emphasis dd {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.015em;
+}
+
+.field-note {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-snug);
+  color: var(--ink-faint);
+  max-width: var(--measure);
+}
+
+/* ================================================================== as-of == *
+ * The instant the backend stamped on a snapshot, in mono and in UTC, with the
+ * exact ISO value beside it. A figure with no moment attached invites the
+ * reader to assume it is current.
+ *
+ * The `.mono-small` span inside must stay the first one in the container: the
+ * Playwright suite reads it and compares it to the `datetime` attribute.
+ */
+
+.as-of {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-2xs);
+  color: var(--ink-faint);
+}
+
+.as-of time {
+  font-family: var(--font-mono);
+}
+
+.as-of-normal {
+  color: var(--ink-faint);
+}
+
+/* Staleness escalates on a timer. A figure nobody is updating must stop
+   looking authoritative — but it is never blanked, because an absent number is
+   a different claim from an old one. */
+.as-of-aging {
+  color: var(--warn);
+  font-weight: var(--weight-medium);
+}
+
+.as-of-stale {
+  color: var(--neg);
+  font-weight: var(--weight-semibold);
+}
+
+.is-stale .num,
+.is-stale .figure {
+  opacity: 0.72;
+}
+
+/* ================================================================= badges == *
+ * A status is a WORD. The tone is a second channel on top of the word, never
+ * a replacement for it, so the badge survives grayscale and forced colours.
+ */
+
+.badge,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  white-space: nowrap;
+  margin: 1px var(--space-1) 1px 0;
+}
+
+.badge-neutral,
+.pill-neutral {
+  background: var(--surface-sunken);
+  color: var(--ink-soft);
+  border-color: var(--line-strong);
+}
+
+.badge-good,
+.pill-good {
+  background: var(--pos-wash);
+  color: var(--pos);
+  border-color: var(--pos-line);
+}
+
+.badge-warn,
+.pill-warn {
+  background: var(--warn-wash);
+  color: var(--warn);
+  border-color: var(--warn-line);
+}
+
+.badge-bad,
+.pill-bad {
+  background: var(--neg-wash);
+  color: var(--neg);
+  border-color: var(--neg-line);
+}
+
+.badge-info,
+.pill-info {
+  background: var(--info-wash);
+  color: var(--info);
+  border-color: var(--info-line);
+}
+
+/* The chip a simulated panel puts in its own header. There is no prop to
+   suppress it. */
+.badge-simulated {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px dashed var(--line-strong);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+
+.tally {
+  display: inline-block;
+  margin-right: var(--space-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+/* ================================================================= tables == */
+
+.table-scroll {
+  /* Horizontal overflow scrolls INSIDE this container. The page body never
+     scrolls sideways. */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  margin: var(--space-2) 0 var(--space-3);
+  max-width: 100%;
+  /*
+   * `position: relative` is load-bearing, and the reason is not obvious.
+   *
+   * `overflow-x: auto` clips descendants that are in this element's flow. It
+   * does NOT clip an absolutely positioned descendant whose containing block is
+   * an ancestor of this one — that box escapes the scroll container entirely
+   * and lands at its static position in the unscrolled table.
+   *
+   * `Figure` puts the unabbreviated value in a `.visually-hidden` span, which
+   * is `position: absolute`, and `DataTable`'s caption is another. In a table
+   * narrow enough to fit, nobody notices. In a table wider than the viewport,
+   * those 1px spans sit at the far right of the TABLE, outside the viewport,
+   * and grow `documentElement.scrollWidth` — so the page scrolls sideways on a
+   * phone even though every visible box is inside it. `document.body.scrollWidth`
+   * stays correct, which is why it hides from a casual check.
+   *
+   * Making this element positioned gives those spans a containing block that
+   * IS the scroll container, so they are clipped with everything else. The
+   * 375px reflow gate in `e2e/accessibility.spec.ts` is what caught it, on the
+   * first table wide enough to expose it.
+   */
+  position: relative;
+}
+
+/*
+ * A sticky header only sticks against something that scrolls. Without a height
+ * bound the container never scrolls vertically and the header never moves, so a
+ * table that wants a sticky header opts into a bound and gets one.
+ */
+.table-scroll-tall {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-size: var(--text-sm);
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  height: var(--temp-row-h);
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface-sunken);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  color: var(--ink-soft);
+  white-space: nowrap;
+  vertical-align: middle;
+  box-shadow: var(--shadow-sticky);
+}
+
+tbody tr:last-child th,
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.cell-prose {
+  max-width: 42ch;
+  color: var(--ink-soft);
+}
+
+.cell-num {
+  text-align: right;
+}
+
+/* A row that can be opened is focusable and says so on focus. A row that
+   cannot is not focusable, because a focus stop that does nothing is a dead
+   control with extra steps. */
+tbody tr[tabindex] {
+  cursor: pointer;
+}
+
+tbody tr[tabindex]:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: calc(var(--focus-offset) * -1);
+}
+
+th[aria-sort] .sort-glyph {
+  color: var(--accent);
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.sort-glyph {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+}
+
+/* =============================================================== messages == */
+
+.explain,
+.empty,
+.callout,
+.notice,
+.refusal {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0 var(--space-3);
+  background: var(--surface-sunken);
+  min-width: 0;
+}
+
+/*
+ * A refusal is the system working correctly and it must look like it. It uses
+ * the warning tone, never the failure tone: red is for a fault, and a boundary
+ * a customer is paying for is not a fault. It is persistent — never a toast —
+ * because it stays until the customer acts.
+ */
+.explain,
+.refusal {
+  background: var(--warn-wash);
+  border-color: var(--warn-line);
+  border-left-width: 3px;
+}
+
+.explain-flat {
+  background: var(--surface-sunken);
+  border-color: var(--line-strong);
+}
+
+.explain-title,
+.refusal-title,
+.empty-title {
+  margin: 0 0 var(--space-1);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-md);
+  color: var(--ink);
+}
+
+.explain-body,
+.empty-body,
+.refusal-body {
+  margin: 0 0 var(--space-2);
+  color: var(--ink-soft);
+  max-width: var(--measure);
+}
+
+.explain-fields {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-5);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+}
+
+.explain-meta,
+.refusal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--ink-faint);
+}
+
+.refusal-remedy {
+  margin: 0 0 var(--space-2);
+  color: var(--ink);
+  max-width: var(--measure);
+}
+
+.loading {
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+/* The lightweight inline notices five pages already use. */
+.notice {
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.notice-good {
+  background: var(--pos-wash);
+  border-color: var(--pos-line);
+  color: var(--ink);
+}
+
+.notice-warn {
+  background: var(--warn-wash);
+  border-color: var(--warn-line);
+  color: var(--ink);
+}
+
+.notice-bad {
+  background: var(--neg-wash);
+  border-color: var(--neg-line);
+  color: var(--ink);
+}
+
+.banner {
+  border-radius: var(--radius-panel);
+  padding: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-3);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+  max-width: none;
+}
+
+.banner-good {
+  background: var(--pos-wash);
+  border-color: var(--pos-line);
+}
+
+.banner-warn {
+  background: var(--warn-wash);
+  border-color: var(--warn-line);
+}
+
+.banner-bad {
+  background: var(--neg-wash);
+  border-color: var(--neg-line);
+}
+
+/* ============================================================ disclosures == *
+ * The copy that must not be a tooltip. Always visible, never behind a hover,
+ * never inside an accordion that starts closed. A disclosure a customer has to
+ * find has not been made.
+ */
+
+.disclosure {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-4) 0 0;
+  background: var(--surface-sunken);
+}
+
+.disclosure-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  color: var(--ink-faint);
+}
+
+.disclosure-body p {
+  margin: 0 0 var(--space-2);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  max-width: var(--measure);
+}
+
+.disclosure-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* ==================================================================== lists */
+
+.issues,
+.restrictions,
+.effects,
+.link-list,
+.step-refs,
+.reasons {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-5);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+}
+
+.reasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-5);
+}
+
+.reasons li {
+  color: var(--warn);
+}
+
+.effects,
+.link-list {
+  list-style: none;
+  padding-left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.issues li {
+  color: var(--neg);
+}
+
+.raw {
+  margin: var(--space-3) 0;
+}
+
+.raw summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+}
+
+.raw pre {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
+  overflow-x: auto;
+  font-size: var(--text-xs);
+  max-height: 420px;
+}
+
+/* ================================================================== forms == */
+
+.form {
+  margin: var(--space-3) 0 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.form-row,
+.inline-field {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 520px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.form-row > label,
+.form-row > legend,
+.inline-field > span,
+.inline-field > legend,
+.field-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  color: var(--ink-faint);
+  padding: 0;
+}
+
+.input,
+.inline-field input,
+.inline-field select,
+.inline-field textarea,
+.form-row input,
+.form-row select,
+.form-row textarea {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  min-height: 34px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  width: 100%;
+  min-width: 0;
+}
+
+textarea,
+textarea.input,
+.inline-field textarea {
+  font-family: var(--font-text);
+  resize: vertical;
+  line-height: var(--leading-body);
+}
+
+select,
+.inline-field select {
+  font-family: var(--font-text);
+}
+
+.input:hover,
+.inline-field input:hover,
+.inline-field select:hover {
+  border-color: var(--ink-faint);
+}
+
+.input[aria-invalid="true"],
+.inline-field input[aria-invalid="true"] {
+  border-color: var(--neg);
+  border-width: 2px;
+}
+
+.field-error {
+  color: var(--neg);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  margin: var(--space-1) 0 0;
+}
+
+.field-hint {
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+  margin: var(--space-1) 0 0;
+  max-width: var(--measure);
+}
+
+.radio,
+.checkbox {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2) 0;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+.radio input,
+.checkbox input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  width: auto;
+  min-height: 0;
+}
+
+.radio span,
+.checkbox span {
+  display: block;
+  font-size: var(--text-md);
+}
+
+.radio .field-note {
+  display: block;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin-top: var(--space-1);
+}
+
+/* ================================================================ buttons == */
+
+.btn-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 340px;
+}
+
+.btn {
+  font: inherit;
+  font-family: var(--font-text);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-4);
+  min-height: 34px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line-control);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  color: var(--ink-faint);
+  background: var(--surface-sunken);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-ink);
+}
+
+/* The default look IS the secondary look. The class is named anyway, because a
+   class in the markup with no rule behind it reads as a bug to the next person
+   who greps for it. */
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--line-control);
+  color: var(--ink);
+}
+
+.btn-danger {
+  border-color: var(--neg-line);
+  color: var(--neg);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--neg-wash);
+}
+
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* A disabled control states its reason next to itself, never in a tooltip.
+   The type of the Button component makes a control with neither an action nor
+   a reason impossible to write. */
+.btn-reason {
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: var(--leading-snug);
+}
+
+.btn-icon {
+  font: inherit;
+  font-family: var(--font-text);
+  font-size: var(--text-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.btn-icon:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.copy-ok {
+  color: var(--pos);
+  font-weight: var(--weight-semibold);
+}
+
+/* ============================================================= identifiers == */
+
+.identifier {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.identifier code {
+  overflow-wrap: anywhere;
+}
+
+.identifier-label {
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+}
+
+/* ================================================================== tabs === */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--line);
+  margin: 0 0 var(--space-4);
+  overflow-x: auto;
+}
+
+.tab {
+  font: inherit;
+  font-family: var(--font-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-3);
+  min-height: 34px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+.tab-panel {
+  min-width: 0;
+}
+
+/* ============================================================== skeletons == *
+ * Shape-accurate and per region, so a slow panel does not block a fast one.
+ * A skeleton is honest in a way a stale number is not: where the rule forbids
+ * implying a figure is current, this is what shows instead.
+ */
+
+.skeleton {
+  display: block;
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--hatch-ink) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: nodal-sweep 1400ms var(--ease) infinite;
+}
+
+@keyframes nodal-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+    background: none;
+  }
+}
+
+.skeleton-line {
+  height: 12px;
+  margin-bottom: var(--space-2);
+}
+
+.skeleton-figure {
+  height: 30px;
+  width: 8ch;
+}
+
+.skeleton-row {
+  height: var(--row-h);
+  margin-bottom: 1px;
+}
+
+.skeleton-block {
+  height: 96px;
+}
+
+.skeleton-set {
+  display: block;
+  min-width: 0;
+}
+
+/* ========================================================== segmented bar == *
+ * A single balance is four different numbers and the difference between them
+ * is the product. Solid for available, hatched for reserved — the texture says
+ * "committed" without spending a second colour — and a sparse hatch for
+ * pending. The legend carries the exact figures; the bar carries the shape.
+ */
+
+.segbar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+}
+
+.segment {
+  min-width: 2px;
+  border-right: 1px solid var(--surface);
+}
+
+.segment:last-child {
+  border-right: 0;
+}
+
+.segment-available {
+  background: var(--accent);
+}
+
+.segment-reserved {
+  background-color: var(--accent-wash);
+  background-image: var(--hatch);
+}
+
+.segment-pending {
+  background-color: var(--surface-sunken);
+  background-image: var(--hatch-sparse);
+}
+
+.segbar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.segbar-legend > li {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.segbar-wrap {
+  min-width: 0;
+}
+
+.segbar-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  margin-right: var(--space-2);
+  vertical-align: -1px;
+}
+
+/* ================================================================= dialog == */
+
+.dialog {
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-raised);
+  max-width: min(560px, calc(100vw - var(--space-8)));
+  width: 100%;
+  max-height: calc(100dvh - var(--space-12));
+  overflow: auto;
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--surface-raised);
+}
+
+.dialog-body {
+  padding: var(--space-4);
+}
+
+.dialog-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+/* A sheet is the same component docked to an edge. Under 768px both become a
+   bottom sheet, which is where a thumb is. */
+.sheet {
+  margin: 0 auto 0 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
+  max-width: min(320px, calc(100vw - var(--space-10)));
+}
+
+.sheet-end {
+  margin: 0 0 0 auto;
+  border-radius: var(--radius-panel) 0 0 var(--radius-panel);
+}
+
+/* ================================================================== toast == *
+ * Non-financial transient notices only. Never a refusal, never a fill: a
+ * refusal stays until the customer acts, and a fill is a financial fact that
+ * belongs in the record, not in a message that disappears.
+ */
+
+.toast-region {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: min(380px, calc(100vw - var(--space-8)));
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised);
+  font-size: var(--text-sm);
+}
+
+.toast-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.toast-good {
+  border-color: var(--pos-line);
+}
+
+.toast-info {
+  border-color: var(--info-line);
+}
+
+/* ================================================== the pieces pages own == */
+
+.mint {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+  background: var(--surface-sunken);
+}
+
+.mint-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+
+.mint-symbol {
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+}
+
+.mint-name {
+  color: var(--ink-soft);
+}
+
+.mint-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.mint-facts dt {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  color: var(--ink-faint);
+}
+
+.mint-facts dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.asset-line code {
+  display: block;
+}
+
+.ledger-entry {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.ledger-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.ledger-description {
+  margin: var(--space-2) 0 0;
+}
+
+.chain {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.chain-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.chain-head h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.chain-time {
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+}
+
+.timeline {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0 0 0 var(--space-2);
+}
+
+.step {
+  position: relative;
+  padding: 0 0 var(--space-3) var(--space-5);
+  border-left: 2px solid var(--line);
+}
+
+.step:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+
+.step-marker {
+  position: absolute;
+  left: -7px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.step-present > .step-marker {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* An absent stage is drawn as absent, not as empty: "no eligibility decision
+   was recorded" is information. */
+.step-absent {
+  color: var(--ink-faint);
+}
+
+.step-body {
+  min-width: 0;
+}
+
+.step-label {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+}
+
+.step-item {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-control);
+}
+
+.step-summary {
+  margin: 0;
+}
+
+.step-meta {
+  margin: var(--space-1) 0 0;
+}
+
+.step-refs {
+  margin: var(--space-2) 0 0;
+  list-style: none;
+  padding-left: 0;
+}
+
+/* =================================================================== auth == */
+
+.signin {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--ground);
+}
+
+.signin-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-8);
+  max-width: 560px;
+  width: 100%;
+}
+
+.signin-card h1 {
+  margin-top: var(--space-4);
+}
+
+.signin-target {
+  margin-top: var(--space-3);
+}
+
+/* ============================================================ narrow view == *
+ * The single breakpoint that changes the shape of the application. Below it
+ * the sidebar becomes a sheet behind a menu button and a bottom bar carries
+ * the five destinations a thumb reaches for.
+ */
+
+@media (max-width: 767px) {
+  .sidebar {
+    display: none;
+  }
+
+  .bottom-nav {
+    display: block;
+  }
+
+  .masthead {
+    padding: var(--space-2) var(--space-4);
+  }
+
+  main {
+    padding: var(--space-4) var(--space-4) var(--space-8);
+  }
+
+  .field-emphasis dd {
+    font-size: var(--text-xl);
+  }
+
+  .btn-wrap {
+    max-width: none;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .panel {
+    border-radius: var(--radius-control);
+  }
+
+  /* A dialog and a sheet are the same thing down here: a panel docked to the
+     bottom edge, where a thumb is. */
+  .dialog,
+  .sheet,
+  .sheet-end {
+    margin: auto auto 0;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 88dvh;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  }
+
+  .toast-region {
+    right: var(--space-3);
+    left: var(--space-3);
+    bottom: var(--space-3);
+    max-width: none;
+  }
+}

@@ -288,10 +288,22 @@ func TestConsumeRequest_Validate(t *testing.T) {
 		require.Error(t, err, "consumption must name the posting that moved the units")
 		require.Contains(t, err.Error(), "journal transaction")
 	})
-	t.Run("unknown allowed origin", func(t *testing.T) {
+	t.Run("lots named without a declared restriction", func(t *testing.T) {
+		// The origin filter this subtest used to check is gone: nothing set it
+		// and it read an empty set as "no restriction" (F-281). What replaces
+		// it is the ambiguity that mattered -- a caller that names lots and does
+		// not say they are the whole set is refused rather than guessed at.
 		r := base
-		r.AllowedOrigins = []valuedomain.CreditOrigin{"NOPE"}
+		r.LotIDs = []LotID{NewLotID()}
 		require.Error(t, r.Validate())
+		r.RestrictToLots = true
+		require.NoError(t, r.Validate())
+	})
+	t.Run("a declared restriction to nothing is a request, not a mistake", func(t *testing.T) {
+		r := base
+		r.RestrictToLots = true
+		require.NoError(t, r.Validate(),
+			"restricted to no lots is well formed; it takes nothing and fails for want of Credits")
 	})
 	t.Run("zero quantity", func(t *testing.T) {
 		r := base
@@ -324,6 +336,7 @@ func TestCreateFundingRequest_Validate(t *testing.T) {
 	base := CreateFundingRequest{
 		AccountID:      anAccount(),
 		Provider:       "stripe",
+		ProviderMode:   "sandbox",
 		CreditQuantity: money.QuantityFromInt64(1000),
 		PaidAmount:     money.USDFromMinor(1000),
 		IdempotencyKey: "k",
@@ -333,6 +346,19 @@ func TestCreateFundingRequest_Validate(t *testing.T) {
 	t.Run("no provider", func(t *testing.T) {
 		r := base
 		r.Provider = "  "
+		require.Error(t, r.Validate())
+	})
+	t.Run("no provider mode", func(t *testing.T) {
+		// The sandbox label on a purchase is a fact about the payment, so it
+		// has to be recorded when the payment is opened and cannot be left for
+		// a later read to recompute from the configuration (D-096).
+		r := base
+		r.ProviderMode = ""
+		require.Error(t, r.Validate())
+	})
+	t.Run("an invented provider mode", func(t *testing.T) {
+		r := base
+		r.ProviderMode = "production"
 		require.Error(t, r.Validate())
 	})
 	t.Run("no idempotency key", func(t *testing.T) {

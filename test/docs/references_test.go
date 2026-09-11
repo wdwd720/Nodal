@@ -55,6 +55,20 @@ var inScope = []string{
 	"docs/audit/INDEPENDENT_AUDIT.md",
 	"docs/build/MASTER_BUILD_STATE.md",
 	"docs/build/ADVERSARIAL_VALIDATION.md",
+	// The two a reviewer would use to score SECURITY posture, and the two that
+	// nothing checked. Empirically they were also the two that decayed furthest
+	// -- both understating the system, including a top-ten residual risk that
+	// migration 00701 had closed, and a whole section of DESIGNED tags naming
+	// packages that exist. An overstatement and an understatement are the same
+	// defect when the document's purpose is to be accurate (F-111).
+	"docs/security/SECURITY.md",
+	"docs/threat-model/THREAT_MODEL.md",
+	// The register of WHY every control is shaped the way it is -- the document
+	// a fixer opens before changing one. Its citations had never been resolved
+	// by anything, and one of them (D-024's "Test change") named a function that
+	// has never existed under that name: the F-25 shape surviving four audits by
+	// living one document outside this list (F-248).
+	"docs/build/DECISION_REGISTER.md",
 }
 
 var (
@@ -101,7 +115,185 @@ func TestDocs_EveryTestTheyNameExists(t *testing.T) {
 // absencePhrase matches a paragraph that states, in words, that what it names
 // is missing. Kept deliberately small: each phrase is one a person would write
 // on purpose, not one that appears by accident near a test name.
-var absencePhrase = regexp.MustCompile(`(?i)does not exist|do not exist|no such function|lists as absent|is absent|are absent`)
+var absencePhrase = regexp.MustCompile(`(?i)does not exist|do not exist|never existed|never has existed|no such function|lists as absent|is absent|are absent`)
+
+// pathScope is inScope plus every ADR, for the citation check below.
+//
+// An ADR's Evidence section is the list a reviewer opens to check the decision
+// against the code, and ADR-0023's named `test/integration/gates` -- a directory
+// that has never existed, for four properties a reader most needs proven. The
+// check next to this one never saw it, because it resolves Go test-function
+// NAMES and that citation is a path (F-165).
+func pathScope(t *testing.T, root string) []string {
+	t.Helper()
+	out := append([]string(nil), inScope...)
+	adrs, err := filepath.Glob(filepath.Join(root, "docs", "adr", "*.md"))
+	require(t, err == nil, "globbing docs/adr: %v", err)
+	require(t, len(adrs) > 10, "expected the ADR tree, found %d files", len(adrs))
+	for _, a := range adrs {
+		rel, rerr := filepath.Rel(root, a)
+		require(t, rerr == nil, "relative path for %s: %v", a, rerr)
+		out = append(out, filepath.ToSlash(rel))
+	}
+	return out
+}
+
+var (
+	// pathRef finds a backticked repository path. Only citations that name a Go
+	// TEST file or a directory under test/ are held to this check: those are the
+	// ones a reader follows to see a property proven, and they are cheap to
+	// resolve exactly. A partial path (`stripecredit/wire.go`), an import path
+	// (`coreos/go-oidc`) and a package selector (`internal/gates.Checker`) are
+	// deliberately outside it -- a check that guessed at those would produce
+	// noise, and noise is how a control stops being read.
+	pathRef      = regexp.MustCompile("`([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]*)`")
+	testFilePath = regexp.MustCompile(`_test\.go$`)
+	// plannedPhrase is the absence vocabulary this check adds. SECURITY.md's
+	// PART 155 matrix has a column headed "Planned (traceability)" listing the
+	// adversarial suites that are not written yet, by the path they will take.
+	// That is a document stating an absence, which is exactly what it should do,
+	// and a check that could not tell a plan from a claim would force it to stop
+	// saying so.
+	//
+	// It used to be applied to the whole PARAGRAPH, and a markdown table is one
+	// paragraph: the word "Planned" in the header excused every path in all
+	// seventeen rows, in both columns, for as long as the table existed. That is
+	// how eight rows went on calling written, passing suites planned across four
+	// audits (F-238). The excuse is now scoped to the cells of the column headed
+	// "Planned", and it excuses only an ABSENT path -- a plan for something that
+	// is already on disk is not a plan, it is a claim that went stale.
+	plannedPhrase = regexp.MustCompile(`(?i)planned|not yet written`)
+	// plannedHeader finds the column a table headed. Only a header cell counts:
+	// a body cell that happens to say "planned" excuses itself and nothing else.
+	plannedHeader = regexp.MustCompile(`(?i)^\s*(planned|required before)\b`)
+)
+
+// citationUnit is one piece of a document evaluated on its own: a paragraph, or
+// a single cell of a markdown table row. The unit is what carries the excuse,
+// which is the whole point -- an excuse that spans a table is not a rule, it is
+// a hole the size of the table.
+type citationUnit struct {
+	text    string
+	excused bool // may name a path that is not in the repository
+	planned bool // excused because it is a PLAN: the path must be absent
+}
+
+// citationUnits splits a document into the units above. A run of lines starting
+// with "|" is a table: its header decides which column index is the planned
+// one, and each body cell becomes its own unit. Everything else is a paragraph.
+func citationUnits(body string) []citationUnit {
+	var out []citationUnit
+	lines := strings.Split(body, "\n")
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		if !strings.HasPrefix(strings.TrimSpace(lines[i]), "|") {
+			// A paragraph: gather to the next blank line or table.
+			start := i
+			for i < len(lines) && strings.TrimSpace(lines[i]) != "" &&
+				!strings.HasPrefix(strings.TrimSpace(lines[i]), "|") {
+				i++
+			}
+			para := strings.Join(lines[start:i], "\n")
+			if strings.TrimSpace(para) != "" {
+				// Prose is excused by the planned vocabulary but is never held
+				// to "the path must be absent": a paragraph that DISCUSSES a
+				// planned column, or names an identifier with "planned" in it,
+				// would otherwise be blamed for every path it cites. The
+				// must-be-absent half belongs to a cell in a Planned column,
+				// where the word is a claim about that cell's own path.
+				out = append(out, citationUnit{
+					text:    para,
+					excused: absencePhrase.MatchString(para) || plannedPhrase.MatchString(para),
+				})
+			}
+			i--
+			continue
+		}
+		// A table. The first row is its header.
+		plannedCol := -1
+		for c, cell := range tableCells(lines[i]) {
+			if plannedHeader.MatchString(cell) {
+				plannedCol = c
+			}
+		}
+		i++
+		for ; i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), "|"); i++ {
+			for c, cell := range tableCells(lines[i]) {
+				isPlan := c == plannedCol && plannedCol >= 0
+				out = append(out, citationUnit{
+					text:    cell,
+					excused: isPlan || absencePhrase.MatchString(cell) || plannedPhrase.MatchString(cell),
+					planned: isPlan || (plannedPhrase.MatchString(cell) && !absencePhrase.MatchString(cell)),
+				})
+			}
+		}
+		i--
+	}
+	return out
+}
+
+// tableCells splits a markdown row into its cells, dropping the empty strings
+// the leading and trailing pipes produce.
+func tableCells(line string) []string {
+	parts := strings.Split(strings.TrimSpace(line), "|")
+	if len(parts) > 0 && strings.TrimSpace(parts[0]) == "" {
+		parts = parts[1:]
+	}
+	if len(parts) > 0 && strings.TrimSpace(parts[len(parts)-1]) == "" {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
+
+// TestDocs_EveryPathTheyNameExists resolves the path-shaped test citations.
+//
+// Same rule as the function-name check, same exemption for a paragraph that
+// states the thing is missing: a document may name an absent test only while
+// saying it is absent.
+func TestDocs_EveryPathTheyNameExists(t *testing.T) {
+	root := repoRoot(t)
+	var problems []string
+	cited := 0
+	for _, rel := range pathScope(t, root) {
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		for _, unit := range citationUnits(string(body)) {
+			for _, p := range distinct(pathRef.FindAllStringSubmatch(unit.text, -1)) {
+				p = strings.TrimSuffix(p, "/")
+				if !isTestCitation(p) {
+					continue
+				}
+				cited++
+				_, serr := os.Stat(filepath.Join(root, filepath.FromSlash(p)))
+				switch {
+				case serr != nil && !unit.excused:
+					problems = append(problems, rel+" names "+p+", which is not in the repository")
+				case serr == nil && unit.planned:
+					problems = append(problems, rel+" plans "+p+", which is already in the repository")
+				}
+			}
+		}
+	}
+	require(t, cited > 10, "only %d path-shaped test citations found; the check stopped seeing them", cited)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("a document a reviewer relies on cites %d test path(s) that do not exist:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// isTestCitation reports whether a cited path is one this check resolves: a Go
+// test file anywhere, or a path under test/ that is not a file of another kind.
+func isTestCitation(p string) bool {
+	if testFilePath.MatchString(p) {
+		return true
+	}
+	return strings.HasPrefix(p, "test/") && !strings.Contains(filepath.Base(p), ".")
+}
 
 // paragraphs splits markdown on blank lines. A markdown table row is its own
 // line but not its own paragraph, which is what makes a table cell able to say

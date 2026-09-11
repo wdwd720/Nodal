@@ -34,6 +34,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -211,11 +212,26 @@ func wire(ctx context.Context, lookup func(string) (string, bool), stderr io.Wri
 		return nil, err
 	}
 
-	out.temporal, err = client.Dial(client.Options{
+	// CP_TEMPORAL_REQUIRE_TLS is refused false in STAGING/PROD by
+	// internal/config, and until now nothing read it: the dial carried no
+	// ConnectionOptions, so a production worker connected in plaintext while
+	// the configuration check certified TLS. The other four *_REQUIRE_TLS
+	// flags are honoured by their clients; this one was a rule with no
+	// enforcement behind it (F-103).
+	temporalOpts := client.Options{
 		HostPort:  cfg.Temporal.HostPort,
 		Namespace: cfg.Temporal.Namespace,
 		Logger:    temporallog.NewStructuredLogger(log),
-	})
+	}
+	if cfg.Temporal.RequireTLS {
+		// A zero tls.Config asks for verification against the system roots,
+		// which is the point: an empty one that skipped verification would be
+		// the same rule enforcing nothing in a more convincing way.
+		temporalOpts.ConnectionOptions = client.ConnectionOptions{
+			TLS: &tls.Config{MinVersion: tls.VersionTLS12},
+		}
+	}
+	out.temporal, err = client.Dial(temporalOpts)
 	if err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("dial temporal at %s: %w", cfg.Temporal.HostPort, err)

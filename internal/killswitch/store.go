@@ -78,32 +78,34 @@ func insertActive(ctx context.Context, tx pgx.Tx, s *Switch) error {
 	return nil
 }
 
-// saveSwitch writes the mutable columns under optimistic concurrency.
-func saveSwitch(ctx context.Context, tx pgx.Tx, s *Switch) error {
-	var approvalID *string
-	if s.ReleaseApprovalID != "" {
-		v := s.ReleaseApprovalID
-		approvalID = &v
-	}
-	err := tx.QueryRow(ctx, `UPDATE kill_switches SET
-			active = $2, severity = $3, reason = $4,
-			activated_by_actor_id = nullif($5,''), activated_at = $6,
-			released_by_actor_id = nullif($7,''), released_at = $8,
-			release_approval_id = $9::uuid, release_reason = nullif($10,''),
-			version = version + 1
-		WHERE id = $1 AND version = $11
-		RETURNING version, updated_at`,
-		s.ID, s.Active, string(s.Severity), s.Reason,
-		s.ActivatedBy, s.ActivatedAt, s.ReleasedBy, s.ReleasedAt,
-		approvalID, s.ReleaseReason, s.Version).Scan(&s.Version, &s.UpdatedAt)
+// reloadSwitch refreshes s from the row the transition trigger wrote.
+//
+// The version and the timestamps are produced by the database now, so the
+// in-memory Switch a caller returns has to come back from it rather than from
+// what the caller intended -- which is the same reason 00747 stopped assigning
+// the stamps from a local clock.
+func reloadSwitch(ctx context.Context, tx pgx.Tx, s *Switch) error {
+	got, err := scanSwitch(tx.QueryRow(ctx, `SELECT `+switchColumns+` FROM kill_switches WHERE id = $1`, s.ID))
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errs.New(errs.CodeConflict, "kill switch was modified concurrently").WithField("switch", string(s.Kind))
-		}
-		return fmt.Errorf("killswitch: save %s/%s: %w", s.Kind, s.ScopeID, err)
+		return fmt.Errorf("killswitch: reload %s/%s: %w", s.Kind, s.ScopeID, err)
 	}
+	*s = got
 	return nil
 }
+
+// The statement 00753 replaced, kept here because the shape of what moved is
+// worth being able to read:
+//
+//	UPDATE kill_switches SET active = $2, severity = $3, reason = $4,
+//	    activated_by_actor_id = ..., released_by_actor_id = ...,
+//	    version = version + 1
+//	  WHERE id = $1 AND version = $11
+//	  RETURNING version, updated_at
+//
+// Every part of it is now in cp_kill_switch_apply_transition, driven by the
+// transition row: the column writes, the optimistic-concurrency check and the
+// version bump. Inserting the transition IS the change, and the check applies
+// to every writer rather than to this one statement.
 
 // Transition is a kill_switch_transitions row.
 type Transition struct {
@@ -117,6 +119,25 @@ type Transition struct {
 	Reason     string
 	ApprovalID string
 	OccurredAt time.Time
+
+	// What this transition makes true of the switch, and the version it
+	// expected to find. Since 00753 the row IS the change: the trigger performs
+	// the compare-and-swap and the version bump that saveSwitch used to carry.
+	//
+	// FromVersion nil means "do not apply" -- the birth row written straight
+	// after insertActive, where the switch is already in its destination state.
+	ToSeverity    Severity
+	FromVersion   *int64
+	ReleaseReason string
+}
+
+// nilIfEmpty maps "" to a SQL NULL, so a transition that does not restate a
+// value leaves the switch's alone rather than blanking it.
+func nilIfEmpty(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 func insertTransition(ctx context.Context, tx pgx.Tx, t Transition) error {
@@ -126,9 +147,11 @@ func insertTransition(ctx context.Context, tx pgx.Tx, t Transition) error {
 		approvalID = &v
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO kill_switch_transitions
-		(id, switch_id, kind, scope_id, to_active, actor_type, actor_id, reason, approval_id, occurred_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10)`,
-		t.ID, t.SwitchID, string(t.Kind), t.ScopeID, t.ToActive, string(t.ActorType), t.ActorID, t.Reason, approvalID, t.OccurredAt)
+		(id, switch_id, kind, scope_id, to_active, actor_type, actor_id, reason, approval_id, occurred_at,
+		 to_severity, from_version, release_reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10, $11, $12, $13)`,
+		t.ID, t.SwitchID, string(t.Kind), t.ScopeID, t.ToActive, string(t.ActorType), t.ActorID, t.Reason, approvalID, t.OccurredAt,
+		nilIfEmpty(string(t.ToSeverity)), t.FromVersion, nilIfEmpty(t.ReleaseReason))
 	if err != nil {
 		return fmt.Errorf("killswitch: insert transition: %w", err)
 	}

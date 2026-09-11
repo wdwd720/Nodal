@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/nodal/controlplane/internal/gates"
@@ -67,6 +69,18 @@ func countClaims() []countClaim {
 			pattern: regexp.MustCompile(`(?m)^(\d+), up from 42 at the baseline`),
 			want:    func(string) int { return len(security.AllPermissions()) },
 			what:    "declared permissions",
+		},
+		{
+			// Section 10 listed ten of twenty capabilities for a long time,
+			// omitting the entire internal economy including CREDIT_PURCHASE --
+			// while section 3 of the same file said "capabilities: 20" and was
+			// machine-checked and passing. The document contradicted its own
+			// verified number 1,570 lines later, and nothing noticed because
+			// only one of the two was derived (F-111).
+			doc:     "docs/build/MASTER_BUILD_STATE.md",
+			pattern: regexp.MustCompile(`\*\*This table lists (\d+) capabilities\.\*\*`),
+			want:    func(string) int { return len(gates.AllCapabilities()) },
+			what:    "capabilities in the production-capability table",
 		},
 		{
 			doc:     "docs/operations/BACKUP_RESTORE.md",
@@ -147,5 +161,82 @@ func TestDocs_CountsCheckIsNotVacuous(t *testing.T) {
 	}
 	if len(seen) < 2 {
 		t.Errorf("every derivation returns the same number (%v); they are not measuring different things", seen)
+	}
+}
+
+// The traceability summary is derived from its own rows (F-111).
+//
+// The table has now been wrong twice in the same way. Its own change log
+// records the first: "the summary table previously said 103/138; the rows
+// actually said 102/139". The second was IN_PROGRESS 59 against 60 rows and
+// VERIFIED 226 against 225, left behind when F-65 correctly lowered R-053-12
+// and nobody recomputed the tally.
+//
+// That matters more than an off-by-one, because MASTER_BUILD_STATE's stopping
+// condition 12 -- "documentation reflects reality" -- cites these counts as its
+// evidence. A tally recomputed by hand drifts from the thing it counts, and the
+// document whose whole purpose is to be accurate is the worst place for that.
+func TestDocs_TraceabilitySummaryMatchesItsRows(t *testing.T) {
+	t.Parallel()
+	const path = "docs/build/REQUIREMENTS_TRACEABILITY.md"
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), filepath.FromSlash(path)))
+	require(t, err == nil, "reading %s: %v", path, err)
+	lines := strings.Split(string(body), "\n")
+
+	states := []string{
+		"NOT_STARTED", "IN_PROGRESS", "IMPLEMENTED",
+		"VERIFIED", "BLOCKED_EXTERNAL", "DEFERRED_OUT_OF_SCOPE",
+	}
+	counted := map[string]int{}
+	rows := 0
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "| R-") {
+			continue
+		}
+		rows++
+		cells := strings.Split(line, "|")
+		for i := range cells {
+			cells[i] = strings.TrimSpace(cells[i])
+		}
+		matched := ""
+		for _, st := range states {
+			if slices.Contains(cells, st) {
+				matched = st
+				break
+			}
+		}
+		require(t, matched != "", "%s: a row has no recognised state: %s", path, line)
+		counted[matched]++
+	}
+	require(t, rows > 0, "%s: no requirement rows found; this test is looking in the wrong place", path)
+
+	// The declared table, read back out of the document.
+	declared := map[string]int{}
+	declaredRows := 0
+	for _, line := range lines {
+		cells := strings.Split(line, "|")
+		if len(cells) < 4 {
+			continue
+		}
+		name, value := strings.TrimSpace(cells[1]), strings.TrimSpace(cells[2])
+		n, convErr := strconv.Atoi(value)
+		if convErr != nil {
+			continue
+		}
+		switch {
+		case slices.Contains(states, name):
+			declared[name] = n
+		case name == "**Total rows**":
+			declaredRows = n
+		}
+	}
+
+	if declaredRows != rows {
+		t.Errorf("%s: the summary says %d rows in total; there are %d", path, declaredRows, rows)
+	}
+	for _, st := range states {
+		if declared[st] != counted[st] {
+			t.Errorf("%s: the summary says %d rows are %s; %d are", path, declared[st], st, counted[st])
+		}
 	}
 }

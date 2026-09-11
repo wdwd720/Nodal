@@ -13,7 +13,7 @@ import (
 var goldenPermissions = []string{
 	"account:freeze", "account:read", "account:read_any",
 	"admin:audit_read",
-	"credit:adjust", "credit:purchase", "credit:read",
+	"credit:adjust", "credit:purchase", "credit:read", "credit:review",
 	"agent:pause", "agent:promote", "agent:promote_approve", "agent:run",
 	"break_glass:approve", "break_glass:request",
 	"commerce:buy", "commerce:moderate", "commerce:read", "commerce:sell",
@@ -64,7 +64,7 @@ var goldenMatrix = map[string][]string{
 	"OPERATIONS": {
 		"account:read", "account:read_any", "agent:pause", "agent:promote",
 		"commerce:moderate", "commerce:read",
-		"credit:read", "funding:read", "gate:read",
+		"credit:read", "credit:review", "funding:read", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:read",
 		"native_asset:read", "native_market:halt", "native_market:surveil",
 		"payout:read", "payout:review", "provider:disable",
@@ -93,7 +93,7 @@ var goldenMatrix = map[string][]string{
 		"session:list_own", "session:revoke_own", "strategy:read", "trade:read", "withdrawal:review",
 	},
 	"FINANCE": {
-		"account:read", "account:read_any", "commerce:read", "credit:read", "funding:read", "gate:read",
+		"account:read", "account:read_any", "commerce:read", "credit:read", "credit:review", "funding:read", "gate:read",
 		"ledger:post_correction",
 		"ledger:read", "native_asset:read", "payout:read",
 		"reconciliation:read", "reconciliation:resolve", "risk:read",
@@ -114,7 +114,7 @@ var goldenMatrix = map[string][]string{
 		"account:freeze", "account:read", "account:read_any", "admin:audit_read", "agent:pause", "agent:promote",
 		"break_glass:approve", "break_glass:request",
 		"commerce:buy", "commerce:moderate", "commerce:read", "commerce:sell",
-		"credit:purchase", "credit:read",
+		"credit:purchase", "credit:read", "credit:review",
 		"envelope:authority_write", "funding:create", "funding:read", "gate:propose", "gate:read",
 		"instrument:status_write", "kill:activate", "ledger:post_correction", "ledger:read",
 		"native_asset:create", "native_asset:moderate", "native_asset:read",
@@ -188,8 +188,13 @@ func TestGoldenMatrix_PermissionListClosed(t *testing.T) {
 	// 60 after the Domain A admin workflows: native_market:resume, the approve
 	// half of restarting a halted market. Stopping stays one operator;
 	// restarting is the direction that adds exposure.
-	if len(got) != 60 {
-		t.Fatalf("expected 60 permissions, got %d", len(got))
+	//
+	// 61 after credit:review, the propose half of resolving a Credit funding
+	// parked in MANUAL_REVIEW. Its approve half is credit:adjust, which already
+	// existed: the decision can MINT, so it needed the balance-adjustment
+	// authority rather than a review-side one of its own (F-100).
+	if len(got) != 61 {
+		t.Fatalf("expected 61 permissions, got %d", len(got))
 	}
 	for _, p := range goldenPermissions {
 		if !Permission(p).Valid() {

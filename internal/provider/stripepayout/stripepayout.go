@@ -366,14 +366,18 @@ func (c *Client) Lookup(ctx context.Context, idempotencyKey string) (payout.Subm
 		// Nothing under that key. The provider never took the request, so the
 		// caller may safely submit. This is the ONLY answer that licenses a
 		// resubmission.
-		return payout.SubmitResult{Status: payout.ProviderFailed, RawStatus: "not_found",
-			FailureReason: "no transfer exists under this idempotency key"}, nil
+		return payout.SubmitResult{
+			Status: payout.ProviderFailed, RawStatus: "not_found",
+			FailureReason: "no transfer exists under this idempotency key",
+		}, nil
 	}
 	if len(list.Data) > 1 {
 		// Two objects under one key is a broken idempotency guarantee and the
 		// worst possible thing to resolve automatically.
-		return payout.SubmitResult{Status: payout.ProviderUnknown, RawStatus: "ambiguous",
-			FailureReason: "more than one transfer carries this idempotency key"}, nil
+		return payout.SubmitResult{
+			Status: payout.ProviderUnknown, RawStatus: "ambiguous",
+			FailureReason: "more than one transfer carries this idempotency key",
+		}, nil
 	}
 	return resultFrom(list.Data[0])
 }

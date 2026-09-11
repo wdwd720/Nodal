@@ -71,7 +71,8 @@ rediscovered from the code.
 | `internal/provider/stripepayout` — stablecoin payout adapter | **done**, and refuses to submit |
 | Config slots `CREDIT_PURCHASE` and `PAYOUT` | **done** |
 | PAY-001 … PAY-006 as integration tests | **done** |
-| HTTP endpoints, frontend, `cmd/api` wiring | **not started** |
+| HTTP endpoints, `cmd/api` wiring | **done** — `cmd/api/wire_credit.go` builds the adapter, `POST /payments` is declared and mounted, the webhook is mounted at `/v1/webhooks/stripe_credit`. This row read "not started" until 2026-09-10 (F-111) |
+| Customer-facing purchase UI | **not started** — `apps/web` has no purchase flow |
 | Connect connected accounts | **blocked** on B-11 |
 | Payout destination-change hold | **not built**, and blocks `PAYOUT_SETTLE` |
 
@@ -79,7 +80,10 @@ rediscovered from the code.
 
 1. The owner runs `stripe login` and decides Nodal's production webhook URL
    (`STRIPE_BROWSER_SETUP.md` §5 and §6).
-2. Wire the adapters in `cmd/api`; expose the purchase endpoints; mount the webhook handler.
+2. ~~Wire the adapters in `cmd/api`; expose the purchase endpoints; mount the webhook handler.~~
+   **Done.** All three exist and are mounted; what is missing is the customer-facing UI.
+   Corrected 2026-09-10: this was the first instruction a resuming session read, and it
+   named work that had already landed (F-111).
 3. Run Stage 2 of `STRIPE_PRODUCTION_CHECKLIST.md` against Stripe test mode.
 4. Nothing past Stage 2 without the owner: every remaining item is a business-model declaration, a
    legal attestation, or an application whose denial can affect Actorvia's live capabilities.
@@ -138,7 +142,7 @@ migration.
 
 API surface: 17 Domain A endpoints added to the OpenAPI contract, regenerated, implemented, wired
 into `cmd/api`, and covered by the existing deny-by-default authorization invariants. Permissions:
-60, up from 42 at the baseline; capabilities: 20, of which 18 are high-risk. (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
+61, up from 42 at the baseline; capabilities: 20, of which 18 are high-risk. (Was "59 … of which 9". The high-risk figure had been wrong since F-16 moved MARKETPLACE and the rest of the internal economy across, and nothing checked it — `TestDocs_CountsMatchTheCode` does now.)
 
 ### Stage 8 as built
 
@@ -250,7 +254,7 @@ sending it back to VERIFIED is how a payout gets paid twice.
 **One new permission.** `native_market:resume` is the approve half of restarting
 a market and is a dual-control permission: no standing role holds it, so it
 requires a live break-glass elevation, exactly like releasing a kill switch.
-Permissions are now 60.
+Permissions are now 61.
 
 **What the console already does.** `apps/admin`'s propose form is generated from
 `authority.json`, which now lists all nine kinds, and it carries a free-form
@@ -1415,7 +1419,7 @@ Not inherited from an earlier audit. Each row was re-checked against the reposit
 | 9 | CI/CD exists | **MET** | `ci.yml` green on `af28dd8` running all 40 integration packages, the financial core raced with the integration tag, and chaos with 0 skips. `release.yml` still unproven (tag-triggered, no tags) |
 | 10 | observability exists | **MET** | 11 files in `internal/observability`; metrics, tracing, structured logging with secret redaction incl. connection strings (D-041) |
 | 11 | operator tooling exists | **MET** | 20 runbooks, worker CLIs, admin console, `scripts/devrun`, `scripts/restoredrill` |
-| 12 | documentation reflects reality | **MET** | traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71 IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references resolving to declarations that exist |
+| 12 | documentation reflects reality | **NOT MET as stated; corrected 2026-09-10** | The evidence in this cell was invented. It read "traceability re-derived from source: 264 VERIFIED / 69 IMPLEMENTED / 71 IN_PROGRESS / 34 BLOCKED_EXTERNAL / 28 NOT_STARTED, all 609 test references". All five figures were wrong and they summed to 466 against a 389-row document; `264 VERIFIED` appears nowhere else in this repository and matches no version of the file in its history, which has never been anything but 225 or 226. The phrase "re-derived from source" named the method that would have produced the right answer. Counted 2026-09-10: **389 rows** — 225 VERIFIED, 60 IN_PROGRESS, 59 IMPLEMENTED, 18 DEFERRED_OUT_OF_SCOPE, 14 NOT_STARTED, 13 BLOCKED_EXTERNAL — and **910** distinct Go test names cited, not 609. The property that every cited name resolves to a declaration that exists IS machine-checked, by `TestDocs_EveryTestTheyNameExists`; only the numbers were hand-written, and now `TestDocs_TraceabilitySummaryMatchesItsRows` derives them (F-111). |
 | 13 | readiness report states what is authorized for live capital | **MET** | `docs/PRODUCTION_READINESS_REPORT.md`, 693 lines, opening line `Platform status: NOT_READY. Capital authority: DISABLED.` |
 
 ### Condition 3, resolved to the level that is actually available
@@ -1434,7 +1438,295 @@ The wording is "the **strongest verifiable level available**", and the earlier a
 
 ## 4. Next exact work (ordered)
 
-### RESUME HERE — checkpoint 2026-09-08, commit at the end of the F-71..F-81 batch
+### RESUME HERE — productization (product_goal.md), branch `productization` from `9906c9f`
+
+`SOFTWARE_COMPLETE` is **false for the duration** of the productization goal,
+by that goal's own rule: it was true at `024c691` for the backend as audited,
+and it returns to true only when the customer-facing surface is built,
+deployed, verified in a browser, adversarially audited and reconciled with the
+architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
+identity source of truth) is the first productization decision.
+
+**State at the last update (2026-09-11, 07:39 PDT — the end of the productization wave).**
+
+- **Done on `productization`:** deploy enablement for the web app (`df48cb4`:
+  Render static site `nodal-web`, `CP_AUTH_POST_LOGIN_URL`, same-site cookie
+  topology); `SOFTWARE_COMPLETE=false` recorded (`d3ecf3b`); the provider
+  boundary (`097e581`, `docs/product/PROVIDER_BOUNDARY.md`); the **sandbox
+  tier** (ADR-0023, D-052, migration 00755): STAGING can now exercise Credits,
+  native markets and a sandbox payout without a fabricated approval, and PROD
+  refuses every part of it.
+- **Waiting on a person:** `docs/build/HUMAN_ACTIONS_QUEUE.md` — the two Render
+  secrets, the push of `main` (`9906c9f`), and later the `app-nodal` CNAME.
+  §2's live verification happens the moment those are done; nothing else
+  waits for it.
+- **Merged since (latest):** the markets branch (`wt/markets` → positions/P&L, prints and candles, discovery, activity feed, market safety, demo seeder; ADR-0027, D-063–068, migrations 00771–00775), the verification branch (`wt/verification` → the verification state machine and sessions, evidence checks, the sandbox verification provider, eligibility, payout destinations, quotes and provenance; ADR-0025/0026, D-057–062, migrations 00761–00764), the profile branch (`wt/profile` → user profiles, terms acceptances, account closure, operator bootstrap; ADR-0024, D-053–056, migrations 00756–00760), the console's second round (`wt/admin`), the shell's phase 2 (`wt/web-shell`: onboarding against the real registry, the bell, the stream, `return_to`, the sandbox line). Orchestrator additions: `return_to` on login (`7bc6f0a`), sandbox temperature on purchases and the tier on `/v1/version` (`1a82ffb`), the gate history route (`9b7c445`), public reads of the legal registry and market discovery (`4730287`, D-080). Every merge: build, vet, full lint, unit, the touched integration suites and the restore drill green; the drill line is at 153 tables / 00786.
+- **Test matrix on the merged backend (19:00):** `make lint`, unit, `make race`, `make integration-race`, `make fuzz` (20 s per target), `make contract`, the full integration suite (57 packages, one database each), `make e2e` and `make chaos` — all green, the last two after fixing two baseline test defects (F-134, F-135) that also fail on the audited checkpoint. Frontend after the F2 and F1 merges: typecheck, 95 unit tests, build (151 kB gzipped JS, budget 180).
+- **Merged web app, end to end (20:20):** the Playwright suite of the merged tree — public site, onboarding, shell, home, Buy Credits, portfolio, activity, notifications, settings — is 112 for 112 against a sandbox-tier API on a fresh database with demo markets (scenario B reaches the provider-unavailable branch locally: no Stripe key on the E2E API). Two suite defects fixed on the way: a step-up test that revoked the suite's stored session (`internal/auth` rotates on step-up), and the E2E API's per-minute transport budgets, which a 100-case run exceeds (raised in the recipe and in CI).
+- **All product branches are merged (21:00):** F4 (`c0c5116`), F3 (`610330e`), W (`123e587`: activity kinds, notification sources, agent events, the withdrawal disclosure enforced in the domain, the verification expiry sweep, the payout submission/settlement passes, a two-minute sandbox settlement window); the CI browser recipe runs a sandbox tier (`b5aa697`). Merged web suite: 142 passed, 2 skipped (paused-market refusal; the Stripe webhook leg without a key). Bundle 179.9 kB gzipped against the 180 kB budget — code-splitting is the next lever.
+- **Fix branches merged so far (22:45):** governance (`294204c`, migration 00791), config-deploy (`95c6a3e`; its decisions renumbered D-115–D-117; `76f7efe`), accounts (`9d63b7c`, 00798–00800), credits-payments (`12601f7`, 00793–00795), platform (`4352777`, 00796), markets (`0103d5e`, 00804–00805), agents-notifications (`c09408e`, 00801–00803). The two follower rewrites (F-167 on platform, F-190 on agnot) met at the last merge and disagreed about one line; D-118 records the merged rule (a change that names nobody is signalled once, from the drain, never from the lap re-read). Each merge: build, vet, unit, the touched integration suites and the restore drill green; the drill line is at 154 tables / 00805 (`0ea3f05`). Still in flight: the web fix branch (`fix/web`, F-201–F-220, D-112–D-114). Race detector: it links on this host with `CC=C:/toolchain/mingw64/bin/gcc.exe` (F-125's claim is stale; stream/notifications/agents pass under `-race`). Bundle after the credits and markets merges: 180.47 kB gzipped, 0.47 kB over budget — the web fix branch code-splits the markets and agents areas.
+- **The wave is complete (07:39):** the last fix branch is merged (`5b2a414`, `fix/withdrawal-4`; F-278–F-283, D-140–D-141, migrations 00823–00825), the drill is at 00825 (`d66bade`), and the end-state matrix is green: lint 0 issues, unit green, the full integration suite **58 packages, all passed, 14m33s** (at `12f3a9a`), the full Playwright suite **181 passed / 11 stated skips / 0 failed** (5.8 min, at `197a5de`: the Stripe webhook legs and the Buy Credits chooser without a key, the reversed bucket, the no-compiler branch on a tier that has one, the agent sweep that `d-agent` performs, journey 10 on a seeded tier), web typecheck/unit/build green. The withdrawal area is closed at four audit rounds (13 → 11 → 6 → 6; P1s 4 → 4 → 1 → 1; round four's verdict: flat, no fifth round). One hundred and fifty findings (F-134–F-283) are registered, 149 fixed with a regression test and one residual (F-258). `docs/audit/PRODUCTIZATION_FINAL_REPORT.md` is the §65 report; `PRODUCTION_EVIDENCE_INDEX.md` indexes every claim; `LAUNCH_GATE_MATRIX.md` says what software still owes: nothing that is engineering. **`SOFTWARE_COMPLETE` stays false** for §57's "live staging matches current HEAD", which waits on `HUMAN_ACTIONS_QUEUE.md` items 1–3b (and 4, 7, 8); CI is blocked on item 7. `productization` is pushed (`origin/productization`), PR #1 is open as a draft, `main` stays at `9906c9f` unpushed for the human. **If resuming cold:** read this note, then `HUMAN_ACTIONS_QUEUE.md`; if the human has done items 1–3, verify the deployment and walk §56; otherwise the next engineering is the report's item 26.
+- **Round four reported: the area has flattened (06:10):** 6 findings (1 P1, 2 P2, 3 P3; `audit/withdrawal-verification-4` @ `851cc64`) against 13, 11 and 6; the three invariants round three repaired held under exhaustive attack (129,960 provenance combinations, a moved/foreign/DISPUTED lot, every insertion order of a cycle); all 34 earlier reproductions pass. The P1 is a seam the fix walked into — a derived lot frozen by a disputed funding is never thawed when the dispute is won — and the other five are the ordinary cost of a large change (a page not updated with its API, an unguarded reason column, an empty-set convention, two decisions describing provenance differently, a backfill's coalesce). The auditor's verdict: flat; no fifth round of this area; the next marginal finding is at its boundaries. The matrix at the round-three merge is fully green (full inttest 58/58, browser 180/11/0, lint, unit). `fix/withdrawal-4` (launched 06:10; F-278–F-283, D-140 the thaw clause, migrations 00823–00825) is running with a targeted verification of its own; after its merge: drill, matrix, and the §65 report finished. Next register numbers: F-284, D-142; migrations from 00826.
+- **Round three's fix is merged; the narrow fourth round is running (05:33):** `58d49c2` (`fix/withdrawal-3`: F-270–F-277, D-136–D-139, three dated amendments, migrations 00819–00822 — the reservation by the decision's lots with a payout-grade finality set and `origin_floor` on the allocation; the floor and `root_origins` from the provenance roots with a refusal for a parent row after a descendant; `Permits` releasing every root; the freeze clause from the frozen set plus the `UNFUNDED → DISPUTED` edge; the atomic poll claim; the pool shortfall keeping its parents; `blocked_reason` on a payout its destination no longer serves), drill at 00822 (`c8e96f0`, 160 tables), web gates green. Running: the full integration suite, lint + unit, the full Playwright suite on the merged tree; and **round four** of the withdrawal audit (`audit/withdrawal-verification-4`, scoped to `reserve`'s lot selection and the allocation record, the floor/root computation, the per-origin folds). The area is flat when round four finds no P1 and nothing in round three's own code. Next register numbers: F-278, D-140; migrations from 00823.
+- **Round three reported: flattening, not flat (04:25):** 6 findings (1 P1, 3 P2, 2 P3) against 13 and 11; every round-two fix held under re-attack; the P1 is the reservation consuming by ORIGIN while the decision is per LOT (`payout.Service.reserve` ignores `Decision.Lots`), so a payout approved on a settled purchased-floor lot could be filled from a reversible or promotional-floor one — the same invariant at a third layer. The matrix at the round-two merge is fully green (full inttest 58/58, browser 177/10 plus the fixture fix, lint, unit). `fix/withdrawal-3` (launched 04:25; F-270–F-277; D-136 the payout takes exactly the lots its decision evaluated and the allocation records the floor; D-137 the floor from the roots, always; D-138 provenance as a set of root origins the policy must release in full; the freeze predicate, the atomic poll claim, the stranded-request reason; migrations 00819–00822) is running; a **narrow fourth audit round** — `reserve`'s lot selection and the allocation record, the floor computation, the two per-origin folds — follows its merge and decides whether the area has flattened. Next register numbers: F-278, D-140; migrations from 00823.
+- **Round two's fixes are merged; round three is running (04:00):** `e27e674` (`fix/withdrawal-2`: F-259–F-269; D-131 the origin floor — `credit_lot_state.origin_floor`, trigger-maintained, `Policy.Permits` requires origin and floor; D-132 the pool drawn worst-first; D-133 a per-session poll interval; D-134 `payout_requests.sandbox` NOT NULL; D-135 empty-document redaction; D-121/D-123/D-124 amended in place; migrations 00814–00818), regenerated client (`c4781a4`), drill at 00818 (`4ce0299`, 160 tables). Web typecheck/unit/build green. Running on the merged tree: the full integration suite, lint + unit, the full Playwright suite; and **round three** of the withdrawal audit (`audit/withdrawal-verification-3`, `F-wv3-n`, base `4ce0299`), which must find fewer and lower than round two's 11 / 4 P1. Known cost of D-131 on a seeded tier: earnings carry a PROMOTIONAL floor, so the sandbox browser journey ends at an honest refusal naming the floor (scenario F asserts it) rather than at a settled rehearsal payout. Next register numbers: F-270, D-136; migrations from 00819.
+- **The matrix is green at HEAD, and the withdrawal audit's second round did not flatten (02:20):** at `460393e`/`b5fdf08` the full integration suite is 58/58 (13m31s), the full Playwright suite 180 passed / 11 stated skips / 0 failed (Scenario D runs end to end; one auditor journey corrected to read the compiler fact where it lives, `b5fdf08`), lint 0 issues, unit green. Round two of the withdrawal audit (`audit/withdrawal-verification-2` @ `a9ad0af`) raised 11 findings, **four P1 again**, six of them defects in round one's own fixes: a derived lot inherited finality but not origin (a promotional grant traded into withdrawable proceeds — §23's forbidden pattern), the pool drawn down FIFO (a reversible purchase handed a settled contributor's provenance), the promotion sweep starving after a hundred lots, 00806/00807's same-state exemption writing money and renewing a verification window, and no legal-edge table for destinations. `fix/withdrawal-2` (launched 02:15; F-259–F-269, D-131 origin floor inherited with finality, D-132 pool drawn down worst-first, D-133–D-135; migrations 00814–00818) is running; a **third** audit round follows its merge and must find fewer and lower findings. The evidence index and the launch-gate matrix say this in the same words. Next register numbers: F-270, D-136; migrations from 00819.
+- **The agents build is merged (01:55):** `4814887` (`wt/agents-compiler`: the acceptance route, `internal/provider/compilersandbox` and the `RefsLoader` in `cmd/api/compiler.go`, the review-and-accept screen, Scenario D end to end; F-255–F-257 fixed, F-258 a recorded residual; D-128–D-130; migrations 00811–00813), drill at 00813 (`f705630`). The browser tier now sandbox-activates `LIVE_AGENT_TRADING` so a level-3 grant can exist (`a1f4739`, recipe, CI and `STAGING_E2E.md`). On the merged tree: lint 0 issues, unit green, the ten integration packages the build touches green (3m24s); the full Playwright suite at the withdrawal merge 177 passed / 11 skipped / 0 failed. Running: the full integration suite (at `92280c6`) and the full Playwright suite (at `a1f4739`); round two of the withdrawal audit. Next register numbers: F-259, D-131; migrations from 00814.
+- **The withdrawal fix is merged (01:10):** `8a1b701` (F-224–F-234 plus F-249 the closure race and F-250 scenario F's stale assertion; D-119–D-125; migrations 00806–00810: legal-edge tables for the compliance and session machines, `payout_requests` state and money written only from the transition row, the recorded quote on the request, `credit_lot_parents` with derived finality and `SettleDerived`, the sandbox/environment columns), drill at 00810 (`92280c6`, 159 tables). On its branch: 14 integration packages and 81 Playwright cases green. Running now on the merged tree: the full integration suite, lint + unit, the full Playwright suite; and **round two of the withdrawal audit** (`audit/withdrawal-verification-2`, `F-wv2-n`) to show the findings flatten. Still building: `wt/agents-compiler`. Next register numbers: F-259, D-131; migrations from 00814.
+- **Wave B reported in full; the agents surface gets its missing half (00:35):** the docs-vs-reality audit (14 findings, none above P2, a 4,704-row claims ledger with 4,461 holding) → `fix/docs` running (F-235–F-248, F-253); the browser end-to-end audit (6 findings: its P1 is the same defect as the withdrawal audit's F-wv-3; five P3s) → F-251/F-252 fixed on the branch (`41c2880`: a case that cannot run is a skip with its reason; 27 passed / 8 skipped on the four changed specs), F-250 to `fix/withdrawal`, F-253 to `fix/docs`, the auditor's twelve-journey spec lands with `fix/withdrawal`. `PRODUCTION_EVIDENCE_INDEX.md`, `LAUNCH_GATE_MATRIX.md` and the draft `PRODUCTIZATION_FINAL_REPORT.md` (goal §65, 26 items, pending items named) are written and pushed. **A gap the audits exposed and no fix branch owned:** no route accepts a strategy version, so no agent could ever be created on any deployment even with a compiler (F-255), and the compiler seam has no `RefsLoader` (F-256) — Scenario D stops at COMPILER_UNAVAILABLE everywhere. `wt/agents-compiler` (launched 00:25, base `f932cfb`, migrations 00811–00813, D-128–D-130, F-255–F-258) adds the acceptance route (owner-only, step-up, the IR hash echoed), a sandbox-tier structured compiler that infers nothing from prose and is refused in PROD three times over, the review-and-accept screen, and Scenario D end to end in Playwright; the runtime stays NOT_DEPLOYED (F-65). `fix/docs` is merged (`b861be4`: F-235–F-248, F-253, D-126–D-127; the example settlement pair is devnet now; lint 0 issues and unit green on the merged tree). Still in flight: `fix/withdrawal`, `wt/agents-compiler`. Next register numbers: F-259, D-131; migrations from 00814.
+- **Matrix complete and the checkpoint pushed (00:05):** every tier is green on this machine at `a4830b9`/`60de57d` — lint 0 issues, unit, full integration (58 packages), contract, `make race` (10 packages), `make integration-race` (12), `make fuzz` (29 targets), `make e2e` (14 cases, with a provisioned database — without one the suite skips in 0.3 s and still prints `ok`, which the evidence index now says), `make chaos` (two host-specific skips), the merged Playwright suite (154 / 3 skipped / 1 now a precise skip). `docs/audit/PRODUCTION_EVIDENCE_INDEX.md` exists and names the commit of every run; `LAUNCH_GATE_MATRIX.md` is updated for the wave. The `productization` branch is pushed to `origin` (§63 safe checkpoint; Render deploys `main` only, so nothing deployed) and draft PR #1 is open for CI — which could not run: the private repository's Actions minutes are exhausted for September (queue item 7; the macOS/Windows job now runs on `main` only). `main` stays unpushed for the human (queue item 3, after the secrets). **Wave B:** withdrawal-verification reported 11 findings (4×P1: a sub-minimum payout with no quote, a provider told no amount or destination, sanctions review/restrictions unenforced on the conversion path, transition tables that constrain no edge) → `fix/withdrawal` running (F-224–F-234, D-119–D-125, 00806–00810); docs-vs-reality reported 14 (6×P2) → `fix/docs` running (F-235–F-248); the browser end-to-end auditor is running from `60de57d`. Next register numbers: F-249, D-128.
+- **All eight fix branches are merged (23:30):** the web fix landed last (`6c5a3f3`: F-201–F-220, D-112–D-114, the markets and agents areas code-split, main chunk 160 kB gzipped; the Credit scale is now declared once, in `lib/credits.ts`). Orchestrator follow-ups at the merge: F-221 (one key per destination body), F-222 (the onboarding mutations await the `/me` refetch — the merged browser run under load exposed the race), F-223 (`scripts/demodata` had no capability resolver; `internal/capresolver` is the one source now, and CI seeds demo data through the API's boot path), the CI browser job declares its operator, `STAGING_E2E.md` describes the recipe as it runs. **Matrix on the merged tree:** `go test ./...` and the full integration suite (58 packages, one database each, 15m42s) green at `6c5a3f3`; contract and the resolver-touched integration packages green at `f7328ab`; the merged Playwright suite 154 passed / 3 skipped / 1 (now a precise skip) at `f7328ab`; lint, race, integration-race, fuzz, Go e2e and chaos are running at `60de57d`.
+- **Audit wave B (23:30):** three auditors running — withdrawal-verification (`audit/withdrawal-verification` from `0ea3f05`, findings `F-wv-n`), docs-vs-reality (`audit/docs-vs-reality` from `6e620f9`, `F-docs-n`, a claims ledger), the browser end-to-end audit (`audit/e2e-browser` from `60de57d`, `F-e2e-n`, scenarios A–J proven step by step). Next register numbers from F-224; decision numbers from D-119.
+- **§54 audit — all eight areas reported (21:30):** config-deploy 15 findings (2×P1), credits-payments 9 (1×P0, 3×P1), governance 6 (1×P1), platform 8 (1×P1), accounts-auth 11 (7×P2), agents-notifications 8 (2×P1), markets 8 (1×P1), frontend 24 (4×P1). Eight fix agents are working from the auditors' failing tests on `fix/config-deploy`, `fix/credits-payments`, `fix/governance`, `fix/platform`, `fix/accounts`, `fix/agnot`, `fix/markets`, `fix/web`, each with reserved F-numbers (F-136 onward), decision numbers and migration numbers (00791–00806). Duplicated findings were routed to one branch each (the follower cursor wedge → platform; the `return_to` backslash redirect → config; the `reversed` bucket and the Credit scale → credits; `EventSource` credentials and source maps → config). Still to audit after the fixes merge: withdrawal-verification, docs-vs-reality, the browser scenarios against staging.
+- **§54 audit in progress (earlier note):** config-deploy (done: 15 findings, two P1 — the schema-owner DSN in the API container; STAGING boots without its alert/PII secrets), credits-payments (done: a P0 — the pricing policy mints Credits at one millionth of the advertised rate — plus three P1s: chargeback lot selection, the at-risk ceiling held forever by abandoned checkouts, the reconciliation sweep with no caller on this tier), governance (done: a P1 — no kill switch reaches the conversion-request path — and three P2s on the SANDBOX state's row hygiene and boot behaviour). Fix agents are working from the auditors' failing tests on `fix/config-deploy`, `fix/credits-payments`, `fix/governance`. Auditors still running: accounts-auth, platform-hardening, markets, agents-notifications, frontend. Still to audit: withdrawal-verification (after the governance fix), docs-vs-reality, the browser scenarios.
+- **In flight now (superseded above):** F3 (markets, trading, charts), F4 (withdraw, verification, destinations, agents); merged since: F2 (`92ebd30`: home, Buy Credits, portfolio, activity, notifications, settings — 109 E2E on its branch) and F1 phase 3 (`e1fc311`: the public site serves the real legal documents and a live market preview); still running: a wiring agent for the cross-domain hooks the backend agents left (activity kinds, notification sources, agent events, the withdrawal disclosure before a payout).
+- **Merged since (later):** agents management surface (`wt/agents` → `9f5fe8c`, ADR-0029, D-073–076, migration 00786), notifications + realtime + the user's audit trail (`wt/notifications` → `dac0fda`, ADR-0028, D-069–072, migrations 00781–00783), the public site and shell (`wt/web-shell` → `ffa56e3`, 73 E2E cases green on its branch); restore drill re-run at 00786 (`de7f377`); every merge's integration suites green.
+- **Merged since:** the operator console (`wt/admin` → `b6e3b5b`: SANDBOX
+  rendered as "not an approval", the §38 account view, a live break-glass
+  self-approval bug fixed, §62 clean, generated artefacts guarded; its
+  decision is D-079); the contract's `Capability` enum completed (10 → 20)
+  and the provider catalogue's two economy slots (`7b66da3`); Stripe's
+  Payment Element allowed by the static site's CSP with the publishable key
+  as build-time configuration (`d793884`, D-078).
+- **Also done:** the design-system foundation (`653fc44`, `docs/product/UI_UX_SYSTEM.md`),
+  `PRODUCT_ARCHITECTURE.md` and `USER_JOURNEY.md` (`d9c03a0`), D-077 (the
+  customer app's route map) and `STAGING_E2E.md` (`d36fa29`).
+- **In flight, each in its own git worktree under `C:/Dev/Nodal-wt/` on a
+  `wt/*` branch, all from `productization`:** backend — profile/account
+  lifecycle/operator bootstrap (P, `wt/profile`, migrations 00756–00760),
+  verification/eligibility/withdrawal (V, `wt/verification`, 00761–00770),
+  native positions/P&L/candles/discovery/activity/safety/demo data (M,
+  `wt/markets`, 00771–00780), notifications + realtime (N,
+  `wt/notifications`, 00781–00785), agents surface (A2, `wt/agents`,
+  00786–00790); frontend — public site/shell/sign-in/policies (F1,
+  `wt/web-shell`). Decision numbers are
+  reserved per agent (P D-053–056, V D-057–062, M D-063–068, N D-069–072, A2
+  D-073–076; orchestrator from D-077). Merge order: P, V, M, N, A2, then one
+  `make restore-drill` + `BACKUP_RESTORE.md`, the docs count test, `make
+  lint`, unit + integration; then X and F1; then the remaining frontend
+  agents (dashboard/Buy Credits/portfolio/activity/settings; markets/trade/
+  charts; withdraw/verify/agents) against the merged API.
+- **Then:** frontend pages (public site, onboarding, shell, dashboard, markets,
+  trade, portfolio, activity, buy Credits, withdraw, verification, settings,
+  notifications, agents), terms/policy routes, admin console, E2E scenarios
+  A–J, `docs/product/*.md`, the §54 adversarial audit, §55 test matrix, §56
+  live verification in Chrome, and only then `SOFTWARE_COMPLETE=true`.
+- **If resuming cold:** `git log --oneline -8 productization`, `git worktree
+  list` (agent branches), read `HUMAN_ACTIONS_QUEUE.md`, then continue the
+  list above from the first unfinished item. Integration tests: `go run
+  ./scripts/inttest -pkg <regex>`; parallel checkouts set
+  `CP_INTTEST_DB_SUFFIX` so their databases do not collide.
+
+### The previous checkpoint — 2026-09-10 (later), SOFTWARE_COMPLETE was true at 024c691
+
+The two items `SOFTWARE_COMPLETE` was waiting on closed in the session's last
+ten commits, each the way its own register entry said it would:
+
+- **F-118.** `internal/alert` is `Metrics.OnAlert`'s production caller: a
+  webhook destination, spoken to in Slack's, Discord's or ntfy's own shape or
+  as JSON, from a bounded queue that never blocks the transaction that raised
+  the alert and forwards only allowlisted fields. `cmd/api` runs
+  `VerifyInternal` and `SweepEscalations` every five minutes, so the pass that
+  raises the SEV1 runs on the tier that has no worker. `verification_passes`
+  is a heartbeat whose alarm breaches on missing data. STAGING and PROD refuse
+  to start without a destination. Proven end to end: a `ledger_balances` row
+  written behind the ledger's back reaches a webhook as a SEV1 naming the record.
+- **F-47.** `internal/pii` is the encryption the decision was waiting on —
+  AES-256-GCM, ciphertext bound to row, column and key version, a versioned
+  keyring in one SecretRef — and the login path stores the verified e-mail
+  sealed. With the columns ciphertext under a key the database never holds,
+  00754 does what 00010 meant. ADR-0021 records why the decision was derived
+  and not chosen. Checking what `cp_ops` did with `sessions` found F-133:
+  nothing purged them, on any tier; the purge runs now.
+- **F-93's silent half.** A configured provider that leaves the Credit path
+  disabled pages as `credit_purchase_disabled`; the availability decision
+  stands.
+
+`docs/audit/FINAL_CHECKPOINT_2026-09-10.md` §15 states the flags and §16 the
+human actions. The first three are one paste, one paste and one push: the next
+deploy of this HEAD needs `NODAL_ALERT_WEBHOOK_URL` and `NODAL_PII_KEYRING` in
+the Render dashboard and refuses to start without them, by design — which
+became true of the VALUES and not merely of the `env://` references pointing at
+them in F-137, where the config-deploy audit found that both rules were
+satisfied by a reference the blueprint always writes, so a STAGING that had
+never been given either secret booted, served, alerted nobody and stored no
+personal data. `config.Load` resolves both references now.
+
+**What is left is not launch work**, and §17 of the checkpoint orders it:
+F-84's route-pattern authorisation, F-122's residual birth controls, F-95's
+pairable CHECKs, the `test/infra` scan widening, and F-65's bridge on the day
+the agent runtime acquires a caller.
+
+### The previous checkpoint — 2026-09-10, after fourteen findings from eleven parallel audits
+
+Eleven read-only audits ran in parallel over the financial kernel, the state
+machines, the provider path, configuration, agent authority, the launch tier,
+observability, the frontends, authorization, the test suite and the
+documentation. **Their claims were re-verified here before anything was
+changed**, and that mattered: two were overstated and one was wrong. The
+capacity negative-ceiling report concluded the money-at-risk ceiling could be
+silently disabled — it could not, only its test was passing for the wrong
+reason. That correction is recorded in F-104 rather than quietly dropped.
+
+F-100 to F-113 are in §9 with what each one cost. Eight are P1. Every fix was
+observed failing first.
+
+**What to do next, in order.**
+
+1. **F-105's remaining half.** `security_events` is bounded per minute now and
+   still unprunable, so any steady rate eventually fills a 500 MB database. The
+   complete fix is ADR-0020's: partition the table and detach, never delete
+   under a disabled trigger. `login_attempts` is the same class, with a purge
+   that lives in a worker this deployment does not run.
+2. ~~**The agent resurrection.**~~ Closed as F-114 by migration 00734: a
+   transition row may not claim to leave a terminal state.
+3. ~~**Birth controls.**~~ Closed as F-121 and F-122 by migrations 00735-00737:
+   `admin_actions`, `agents`, `credit_fundings` and `payout_requests` all now
+   refuse a privileged birth state, joining `capability_gates`. What remains
+   open is `wallets`, `assets` and `instruments`, which
+   `TestIntegration_NothingIsBornFinished` names in an assertion that fails when
+   one of them is closed, so the list cannot go stale.
+4. **F-47, resolved.** `internal/pii` is the application-layer encryption
+   `identity_pii` was designed for — AES-256-GCM, each ciphertext bound to its
+   row, column and key version, a versioned keyring in one SecretRef — and the
+   login path writes the verified e-mail sealed. With the columns ciphertext
+   under a key the database never holds, migration 00754 does what 00010
+   meant: neither role reads `identity_pii`, `cp_readonly` does not read
+   `sessions`, `cp_ops` reads exactly the column its retention DELETE filters
+   by. Checking what `cp_ops` actually did with `sessions` found that nothing
+   purged them, on any tier (F-133, fixed in the same change). ADR-0021.
+5. **Nothing pages anyone about anything** (F-118, FIXED). Alerts log, both
+   composition roots construct the real instruments, and now `internal/alert`
+   delivers them to a webhook — in Slack's, Discord's or ntfy's own shape,
+   chosen from the host, or as JSON — from a bounded queue that never blocks a
+   money-moving transaction and forwards only allowlisted fields. `cmd/api`
+   runs `VerifyInternal` and `SweepEscalations` every five minutes the way
+   `runCreditSettlement` already ran, so the ledger is checked against its own
+   entries on the tier that has no worker. `verification_passes` is a heartbeat
+   and its alarm breaches on missing data, which is what the five
+   `notBreaching` counter alarms could not do. STAGING and PROD refuse to start
+   without `CP_ALERT_WEBHOOK_URL`; the URL is the one thing left, and it is a
+   dashboard secret.
+
+`docs/audit/LAUNCH_GATE_MATRIX.md` remains the honest summary of what stands
+between this repository and real money. All five launch flags are still false.
+
+### The previous checkpoint — 2026-09-09, after reconciling the provider work AND clearing §4
+
+Three commits since `80edf58`'s successor. The audit ingested the provider
+workstream, re-verified it rather than adopting it, and then cleared the §4
+queue it had been paused on.
+
+**Findings F-83 to F-99.** Fifteen fixed, one partial, one open by decision, and
+F-93 as the inventory of what was verified and deliberately left. Six were P1:
+a planted OIDC callback that signed the victim in as the attacker (F-87); every
+unauthenticated rate-limit bucket collapsed into one (F-88); a money-at-risk
+ceiling that could only rise and would have refused every purchase forever at
+$2,000 of lifetime sales (F-90); a 50-account cohort ceiling enforced nowhere
+(F-91); and the Stripe call inside the purchase transaction, which meant the row
+was not persisted before the call and eight concurrent purchases could each pass
+one ceiling (F-96).
+
+**§4 is clear.** Item 1 (F-94, migration 00731): sixteen bindings, not ten,
+and the recount changed the finding — F-78's exploit is not reachable
+elsewhere, but nothing anywhere read a transition row's ORIGIN, and 00712's
+"membership is exactly as strong as equality" was not. Item 2 (F-95): the
+inventory was exactly current, nine constraints are now compared against the
+list that declares them, three were deliberately left unpaired, and there is no
+live drift. Item 3: ADR-0020, because retention on tables that refuse DELETE is
+partition detachment and that is a decision before it is a commit.
+
+**What to do next, in order.**
+
+1. **F-85** — the request body is read into memory before the rate limiter
+   runs, on a 512 MB single instance. The fix is middleware reordering on the
+   money path, and the ordering is load-bearing in the other direction too:
+   `captureBody` is what makes the raw body available to the webhook signature
+   check. It wants its own change and its own test.
+2. **F-84** — authorization after parameter binding. Authorising on the chi
+   route pattern before the generated wrapper runs is the shape; it is a change
+   to the boundary's structure.
+3. **The rest of F-93's inventory**, each with its recorded reason: the
+   schema-owner credential in `cmd/api`, the warn-and-disable on a wrong Stripe
+   account, the replica-count assumption, the Neon pool timeouts.
+4. **F-42 and F-47**, unchanged and still open.
+5. **ADR-0020's implementation** when a retention period is actually decided.
+
+`docs/audit/LAUNCH_GATE_MATRIX.md` is new and is the honest summary of what
+stands between this repository and real money. `SOFTWARE_COMPLETE` is false for
+the reasons in item 1 to 3 above; the other four launch flags are false for
+reasons no engineering can move.
+
+### The previous checkpoint — 2026-09-09, after reconciling the provider workstream
+
+The `/goal` audit was paused at `80edf58` for a provider/deployment workstream.
+That workstream landed 58 commits, deployed the service to Render's free tier
+against Neon and Stripe's sandbox, and produced
+`docs/operations/PROVIDER_ACTIVATION_CHECKPOINT.md`. The audit has now **ingested
+and independently re-verified it** rather than adopting its conclusions.
+
+**What the reconciliation found.** Eleven findings, F-83 to F-93, four of them
+P1. Much of the checkpoint held and is credited in `AUDIT_FINDINGS.md`: the
+signature verification, the database-enforced replay dedup, exactly-once across
+all four crash boundaries, and fail-closed under database unavailability are all
+as described. What did not hold:
+
+- **F-87 (P1)** a planted OIDC callback signed the victim's browser in as the
+  attacker — `state` was a server-side lookup key and was never bound to a
+  browser. Fixed, with the exploit as a test in two suites.
+- **F-88 (P1)** every unauthenticated rate-limit bucket was one shared counter,
+  because the limiter keyed on the load balancer's address. Fixed, and a
+  production-like deployment must now declare its proxy networks.
+- **F-90 (P1)** nothing settled on a tier with no worker, so the money-at-risk
+  ceiling was a lifetime cumulative cap that would have refused every Credit
+  purchase forever at $2,000 of lifetime sales. Fixed.
+- **F-91 (P1)** the 50-account launch-cohort ceiling was configured, logged as
+  in force, and enforced nowhere. Fixed.
+- **F-83, F-86, F-89, F-92** and the partials **F-84, F-85**. See the register.
+- **F-93** is the inventory of what was verified and deliberately not fixed,
+  each with its reason.
+
+**The next thing on this surface**, and the reason two F-93 rows are joined: the
+Stripe call sits inside the purchase transaction, and the capacity ceiling is not
+authoritative under concurrency. Neither can be fixed alone — raising
+isolation while a 20-second provider call is inside the transaction makes a
+serialization retry re-call the provider, and an advisory lock instead holds one
+of eight pool connections across that call. The provider call comes out of the
+transaction first; then the ceiling can be made authoritative.
+
+**Then §4 as it stood**, with its counts recomputed from source rather than
+assumed:
+
+**§4 items 1–3 are done in this batch.** 1 and 2 are fixed (F-94, F-95);
+3 produced the ADR it needed (ADR-0020) rather than a worker, because the tables
+involved refuse DELETE and the honest scheme is partition detachment. What
+follows is the recount as it stood when the work started, kept because it is the
+evidence for what was done.
+
+1. **Transition bindings: 16, not ten.** 17 destination-only
+   `cp_require_transition` triggers were created; 00726 replaced one (`agents`).
+   The F-78 exploit is **not** reachable on the other 16:
+   `agent_lifecycle_transitions` is the only transitions table in the schema with
+   a `from_X = to_X OR ...` CHECK, and 11 of the 16 have no CHECK at all. What is
+   present on all 16 is the weaker property that the recorded ORIGIN is whatever
+   the writer said. **A separate and sharper item came out of the recount:**
+   migration 00712 `CREATE OR REPLACE`d `cp_require_transition` so the flag
+   ACCUMULATES (`current || '|' || new_state`, checked with `= ANY(string_to_
+   array(flagged,'|'))`), so two transition rows for one entity in one
+   transaction mean either destination licenses the change. That applies to all
+   16 and wants a database test to confirm reachability.
+2. **Unpaired enum CHECKs: 130** (not 131 — 00726 paired one). The
+   inventory in `test/integration/enums` is exactly current as of 00730: 00728
+   widened `credit_fundings_state_check`, which is already paired and already
+   agrees with `credit.AllFundingStates()`; 00730's two CHECKs are arithmetic,
+   not enums; 00729 added none.
+3. **Retention classes: still three unenforced**, and F-93 adds a fourth
+   problem — `CP_RETENTION_LOGIN_ATTEMPT_DAYS` is set to 90 on a table
+   designed for 2, has no validation rule, and its purge cannot run on this tier
+   at all.
+4. **F-42 and F-47** remain open and unchanged.
+
+### The previous checkpoint — 2026-09-08, at the end of the F-71..F-81 batch
 
 The `/goal` run against `gola.md` (independent adversarial audit + final
 architecture migration + production proof) was **paused deliberately** at this
@@ -1561,16 +1853,17 @@ binary).
 
 ## 7. Migrations applied
 
-00001 through **00727**, 59 files, all embedded in `migrations.FS` and
+00001 through **00754**, 86 files, all embedded in `migrations.FS` and
 checksum-verified by `internal/db/migrate`. An applied migration is never
 edited; a correction is a new file. `go run ./cmd/migrate status` is
 authoritative, and `test/docs.TestDocs_CountsMatchTheCode` fails when a document
 falls behind the schema.
 
-The current head is 00727 (one signing decision per execution attempt). 00725
-and 00726 landed in the same batch: a skip reason for a run stopped because its
-agent is no longer runnable, and the edge-binding of `agents.state` and
-`agents.stage`.
+The current head is 00754 (who may read personal data: `identity_pii` and
+`sessions` withheld from `cp_readonly` and `cp_ops`, with `cp_ops` keeping the
+one `sessions` column its retention DELETE filters by). 00740 partitioned
+`security_events`; 00741 keyed the transition tag; 00743–00753 moved every
+bound state column out of the application's reach.
 
 ## 8. External blockers
 
@@ -1578,31 +1871,125 @@ See `BLOCKERS.md`. Summary: no provider credentials (Stripe onramp, Privy, Heliu
 
 ## 9. Unresolved defects
 
-`docs/audit/AUDIT_FINDINGS.md` is the register: 81 findings, of which three are
-open.
+`docs/audit/FINAL_CHECKPOINT_2026-09-10.md` is the seventeen-item final output
+for this session: HEAD, findings, schema, every test tier with its result, live
+staging evidence, provider evidence classified, the financial invariants, the
+restore drill, the $0 tier's ceilings, AWS readiness, the capability gate, the
+external blockers, the five launch flags, the human actions and where to resume.
+Read it before this file if you want the state; read this file for how it got
+there.
+
+`docs/audit/AUDIT_FINDINGS.md` is the register: **133 findings**, of which two
+are open inventory rows (F-69, F-93) and three are partial (F-65, F-84, F-95);
+the rest are fixed. **`SOFTWARE_COMPLETE` is true** as of the session's last
+commit; the checkpoint's §15 says exactly what that does and does not claim. **F-125 closed on 2026-09-10** — the race detector links on this
+host now, so both race tiers run here and no race claim rests on CI alone.
+
+**No P1 is unfixed.** F-93 is the last P1 not marked fixed and it is an
+inventory row across six provider audits, whose constituent items are tracked
+individually. F-105 closed with 00740 and F-42 with 00741 — the latter after
+four sessions open and three fixes tried and rejected.
+
+F-100 through F-132 landed on 2026-09-10: **33 findings, 17 P1, 10 P2, 6 P3**, and F-42’s stronger remedy is **complete**: zero of its seventeen bound tables still grant the application blanket UPDATE,
+from eleven parallel read-only audits whose claims were re-verified here before
+anything was changed, plus two the fuzz tier found on its own. Every P1 was
+observed failing before it was believed:
+
+- **F-100** a funding parked for a person was un-parked by the next webhook, and
+  a refund followed by a late success minted Credits for money that was returned
+- **F-101** one transition row licensed a second, unrelated edge, because the
+  edge encoding's delimiters are in band and a state name is unconstrained text
+- **F-102** two write routes scoped through the read-grade helper, so one ADMIN
+  session could cancel any customer's intent and move any seller's product
+- **F-103** five configuration rules permitted what the deployment cannot
+  survive, including live provider credentials in DEV
+- **F-105** an unauthenticated caller chose how many permanent, undeletable rows
+  the service wrote, on a deployment whose database ceiling halts every
+  financial action (PARTIAL: the table is still unprunable)
+- **F-106** three money tables handed one account's record to another on a
+  reused idempotency key
+- **F-107** the seller set the platform's own commission, and a payout the
+  provider may have paid could be cancelled by its owner
+- **F-108** two failed RPCs were read as proof a transaction never happened
+- **F-109** the transition binding covers the state column and nothing else, so
+  the application role could rewrite an amount, a destination, or the definition
+  of what counts as money
+- **F-112** a supported configuration removed the `__Host-` prefix, re-opening
+  the takeover F-87 closed
+- **F-113** the amount a provider says it refunded was computed twice and read
+  never
+- **F-114** a revoked agent could return to live capital with no approval and no
+  evidence, because it keeps its stage and both promotion CHECKs short-circuit
+  when the stage does not move
+- **F-115** the branch whose comment says "do not resubmit" was the one that
+  resubmitted, and the provider a payout goes to was a caller argument compared
+  to nothing
+
+Three recurring shapes are worth carrying forward. **A fixture is a claim**:
+six separate suites encoded the defect they were meant to catch — fourteen
+providers on live credentials in a "valid production" config, a cookie domain in
+the same fixture, a seller-set platform fee in the HTTP journey, outcomes
+resolved before their horizons closed, an as-of price read answering with
+unreceived rows, and an agent fixture inserting an admin action born APPROVED.
+Each was found by closing the control, not by reading the fixture. **A guard
+matched on a name**: F-102's write-scope check knew one helper of four, and the
+completeness test that replaced it found a fifth on its first run. **A test can
+pass because a different guard fired**: F-108's first test did exactly that and
+was only caught by re-running it against the unfixed code, which is why that
+step is not optional.
 
 | Finding | Priority | Why it is still open |
 |---|---|---|
 | F-42 | P2 | The AU001 binding trusts a transaction-local setting any caller with the application credential can set. The remedy is privilege work on the state columns, and F-78 has now narrowed what that work has to cover for `agents`. |
-| F-47 | P2 | Two deliberate statements about who may read encrypted PII contradict each other. It is a policy decision, not a code fix, and an agent has misread the migration comment as the code twice. |
+| F-47 | P2 | ~~Two deliberate statements about who may read encrypted PII contradict each other.~~ Resolved 2026-09-10: `internal/pii` built the encryption the decision was waiting on, and 00754 made the schema say what 00010 meant. The two earlier misreadings of 00717's comment are still worth knowing about: the REVOKE now really is in the tree, in 00754, and the comment in 00717 still describes one that was taken out. |
 | F-69 | P2 | The inventory itself. It shrinks as its items are fixed; §4 names the three that are real work. |
 
 Everything else is FIXED or PART, with the evidence named in the finding.
 
 ## 10. Production-capability state
 
-| Capability | State | Notes |
-|---|---|---|
-| LIVE_FUNDING | DISABLED | no provider approval, no gate DB yet |
-| LIVE_MANUAL_TRADING | DISABLED | |
-| LIVE_AGENT_TRADING | DISABLED | |
-| WITHDRAWALS | DISABLED | |
-| SOCIAL_DATA_PERSISTENCE | DISABLED | data-licensing unknown |
-| MARKETPLACE | DISABLED | out of V1 |
-| CROSS_CHAIN | DISABLED | out of V1 |
-| PREDICTION_MARKETS | DISABLED | out of V1 |
-| SECURITIES | DISABLED | out of V1 |
-| CEX_TRADING | DISABLED | out of V1 |
+This table listed **ten** capabilities. `gates.AllCapabilities()` declares
+**twenty**, and the ten it omitted are the entire internal economy — including
+`CREDIT_PURCHASE`, the capability this deployment exists to activate. Section 3
+of this same file says "capabilities: 20, of which 18 are high-risk", and that
+sentence is machine-checked and passing, so the document contradicted its own
+verified number 1,570 lines later. Two further rows were stale in their notes:
+`LIVE_FUNDING` said "no gate DB yet" (the table has existed since migration
+00150) and `MARKETPLACE` said "out of V1" (F-16 and F-43 moved it to high risk
+because it gates internal commerce). Corrected 2026-09-10, and
+`TestDocs_CountsMatchTheCode` now derives the row count from
+`gates.AllCapabilities()` so it cannot silently fall behind again (F-111).
+
+**This table lists 20 capabilities.**
+
+| Capability | Risk | State | Notes |
+|---|---|---|---|
+| LIVE_FUNDING | high | DISABLED | provider approval outstanding (EB-003) |
+| LIVE_MANUAL_TRADING | high | DISABLED | |
+| LIVE_AGENT_TRADING | high | DISABLED | |
+| WITHDRAWALS | high | DISABLED | the gate is the best-built control in the schema (00701) |
+| SOCIAL_DATA_PERSISTENCE | low | DISABLED | data-licensing unknown |
+| MARKETPLACE | high | DISABLED | gates internal commerce; reclassified by F-16/F-43 |
+| CROSS_CHAIN | high | DISABLED | out of V1 |
+| PREDICTION_MARKETS | high | DISABLED | out of V1 |
+| SECURITIES | high | DISABLED | out of V1 |
+| CEX_TRADING | high | DISABLED | out of V1 |
+| CREDIT_PURCHASE | high | DISABLED | the one this deployment exists to activate; see `docs/audit/LAUNCH_GATE_MATRIX.md` |
+| NATIVE_ASSET_CREATION | low | DISABLED | |
+| NATIVE_MARKET_TRADING | high | DISABLED | |
+| PAYOUT_RESERVE | high | DISABLED | |
+| PAYOUT_SETTLE | high | DISABLED | |
+| HOSTED_TRADING | high | DISABLED | |
+| HOSTED_FUNDING | high | DISABLED | |
+| AGENT_BOUNDED_DISCRETION | high | DISABLED | above `agentauthority.MaxSupportedLevel` |
+| AGENT_AUTONOMOUS_SELECTION | high | DISABLED | above `agentauthority.MaxSupportedLevel` |
+| AGENT_AUTONOMOUS_PORTFOLIO | high | DISABLED | above `agentauthority.MaxSupportedLevel` |
+
+Every row reads DISABLED for the same reason rather than twenty reasons:
+`cp_gate_born_disabled` (00701) refuses any gate born in another state, and no
+activation ceremony has been performed in any environment. The ceremony needs
+three distinct principals and evidence references, and what it is waiting on is
+in `LAUNCH_GATE_MATRIX.md`.
 
 Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 
@@ -1616,29 +2003,44 @@ Platform status: **NOT_READY**. Capital authority: **DISABLED**.
 | Helius | SolanaDataProvider / ChainObserver | **CODE_COMPLETE + CONTRACT_TESTED → BLOCKED_EXTERNAL (EB-010)** | PARTIAL docs; Enhanced Transactions in maintenance mode, Parsed Events beta returns numbers (must parse exactly); webhooks retry 3× then drop → never truth, periodic reconciliation mandatory |
 | Fallback Solana RPC | ChainObserver (secondary) | **CODE_COMPLETE + CONTRACT_TESTED** (public RPC endpoints need no contract; production uses a paid fallback provider, config-driven) | verified; `maxSupportedTransactionVersion: 0` required for v0 txs; blockhash validity ~151 blocks; Token-2022 extension program ids enumerated |
 | Anthropic Claude | ModelProvider | NOT_STARTED | verified; use `claude-opus-5` with `output_config.format` JSON schema for the NL compiler (Fable 5.1 rejects forced `tool_choice`); no idempotency header; Go SDK v1.71.0 |
-| Redpanda | EventBus | NOT_STARTED |
-| Temporal | WorkflowEngine | NOT_STARTED |
-| S3 (+Object Lock) | ObjectArchive | NOT_STARTED |
-| ClickHouse | analytics store | NOT_STARTED |
+| Redpanda | EventBus | **LOCAL_STACK_VERIFIED**; no managed account (EB-014) | `internal/reality/redpandabus`, started by `docker-compose.yml`, exercised in the integration job with `CP_TEST_REQUIRE_EXTERNAL_DEPS=1` |
+| Temporal | WorkflowEngine | **LOCAL_STACK_VERIFIED**; no managed account (EB-014) | `internal/workflows` + `cmd/workflow-worker`; TLS is now applied rather than only validated (F-103) |
+| S3 (+Object Lock) | ObjectArchive | **LOCAL_STACK_VERIFIED** against MinIO; Object Lock itself is BLOCKED_EXTERNAL (EB-012) | `internal/archive`; the deployment runs `CP_ARCHIVE_BACKEND=postgres` (00730), so the Object Lock rule does not fire there |
+| ClickHouse | analytics store | **LOCAL_STACK_VERIFIED**; no managed account (EB-014) | `internal/reality/clickhouse` |
+
+The last four read NOT_STARTED until 2026-09-10 and had not been for a long
+time: all four are pinned in `go.mod`, started by `docker-compose.yml`, wired to
+named packages and exercised in CI's integration job with
+`CP_TEST_REQUIRE_EXTERNAL_DEPS=1`, which turns a skipped dependency into a
+failure. LOCAL_EXTERNAL_STACK is the honest class for them — a real broker, a
+real Temporal, a real object store and a real ClickHouse, none of them a managed
+account this project holds (F-111).
 
 ## 12. Test matrix (locally executable today)
+
+Five rows of this table asserted the opposite of what this same file establishes
+elsewhere, and had done for long enough that a reader could have taken any of
+them for current. They are corrected in place rather than deleted, with what was
+wrong named, because a table that quietly becomes right teaches nobody how it
+became wrong (F-111). Every "last recorded result" is a DATE and a claim about
+that date; none of them is a promise about now.
 
 | Tier | Command | Last recorded result |
 |---|---|---|
 | build | `go build ./...` | green 2026-09-06 (between waves; in-progress packages may transiently break it) |
-| unit + race | `go test -count=1 -race ./...` | 2026-09-06 (later run, 61 packages): 58 green; `internal/settlement` failing while its agent finishes the executor; two Jupiter timeout tests load-sensitive (pass in isolation ×3; hardening requested) |
+| unit + race | `go test ./...`; `make race`; `make integration-race` | 2026-09-10 (later): unit 99 packages with tests, 0 failures; `make race` 10 packages, 0 data races; `make integration-race` 12 packages, one database each, 6m27s, 0 data races — both race tiers with `CC=C:/toolchain/mingw64/bin/gcc.exe` (F-125) |
 | property | `make property` (rapid `TestProp_*` in money, ledger, capital, positions, buyingpower, event, risk, eligibility, killswitch, provider, fees, ratelimit, audit, intent, quote) | green with unit |
 | fuzz | `make fuzz` (`FuzzParseUSD`, `FuzzParseQuantity`, `FuzzQuantityFromDecimalString`, `FuzzParseUSDRound`, `FuzzScanQuantity`, `FuzzParse` (id), `FuzzParseSecretRef`, `FuzzEnvelopeJSON`, `FuzzCanonicalJSON`, `FuzzValidate` (intent), `FuzzRouteHash`) | 10–20 s per target clean (per-package reports) |
-| integration | isolated DB via `scripts/testdb`, `-tags=integration` over `./internal/... ./test/...` | 32/32 packages green on fresh DB (lint sweep); each wave-2 package re-verified individually on fresh DBs |
+| integration | `make integration` (`scripts/inttest`, one fresh database per package) | **52/52 packages green, 2026-09-10 (later), 12m07s.** This row said 32/32 until 2026-09-10, from a sweep predating `scripts/inttest`; section 6 of this same file already said "the 50-package sweep" (F-111) |
 | migration | `test/integration/migrations` (clean apply, checksums, tamper, guarded rollback, role privileges, transition binding) | green |
 | concurrency torture (PART 23) | `internal/capital` `CP_TORTURE_ITERATIONS=25` | 20/80 every iteration, both isolation modes |
-| restore drill (PART 141/219) | `make restore-drill` | OK, `dist/restore-drill.json` |
+| restore drill (PART 141/219) | `make restore-drill` | OK at 754 on 2026-09-10: 134 tables, 0 drift, hashes equal, a live state change on the restored database, `dist/restore-drill.json` |
 | lint | `make lint` (+ `golangci-lint --build-tags=integration ./...`) | 0 issues at last sweep |
-| contract | `make contract` (`test/contract/{stripe,jupiter}`; helius/solanarpc/privy pending) | green 2026-09-06 |
+| contract | `make contract` (`test/contract/{stripe,jupiter,helius,solanarpc,privy}` and the topic registry) | green. "helius/solanarpc/privy pending" was wrong on 2026-09-10: all three exist and pass, and section 5 of this file lists them (F-111) |
 | security | `make security` (`test/security`: authority-boundary import rules, closed agent permission set, PROD refuses fakes/seed/debug auth) | green 2026-09-06; API-level IDOR/CSRF/SSRF/webhook-forgery cases join once `cmd/api` exists |
-| load | `make load` (`test/load/*.js`, k6) | scripts valid (`k6 inspect`); **unmeasured** — no API binary yet |
-| e2e / chaos tiers | `make e2e`, `make chaos` | pending: directories not yet created (Stages 7, 14, 18) |
-| CI | `.github/workflows/ci.yml` | authored; never executed (no remote, SB-004) |
+| load | `make load` (`test/load/*.js`, k6) | scripts valid (`k6 inspect`); **unmeasured** — not for want of a binary. "no API binary yet" was wrong on 2026-09-10, and this file says so in three other places; what is missing is a run against a deployed target (F-111) |
+| e2e / chaos tiers | `make e2e`, `make chaos` | both directories exist and both are CI jobs. "directories not yet created" was wrong on 2026-09-10 (F-111) |
+| CI | `.github/workflows/ci.yml` | has run; SB-004 (no remote) is closed. "authored; never executed" was wrong on 2026-09-10, and section 3b of this file records the first green run (F-111). **Whether it is green TODAY is not asserted here**: nothing in this repository can check that, and a claim about a remote run's state is exactly the kind this file has been wrong about |
 
 ## 13. Session log
 

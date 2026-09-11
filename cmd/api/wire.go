@@ -16,7 +16,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/activity"
 	"github.com/nodal/controlplane/internal/admin"
+	"github.com/nodal/controlplane/internal/agents"
+	"github.com/nodal/controlplane/internal/alert"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/auth"
@@ -24,13 +27,16 @@ import (
 	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/auth/oidc"
 	"github.com/nodal/controlplane/internal/auth/pgstore"
+	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -45,16 +51,21 @@ import (
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/notifications"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/operatorroles"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
+	"github.com/nodal/controlplane/internal/profile"
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/verification"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
 
@@ -73,6 +84,13 @@ type buildInput struct {
 	// a process lifetime, and build has no shutdown of its own to close it in.
 	rateLimitStore    ratelimit.Store
 	rateLimitFailOpen bool
+
+	// alerts is where a raised alert goes when it leaves the process. Opened by
+	// main for the same reason as the two above: it owns a goroutine and a queue
+	// that have to be drained on shutdown, and build has no shutdown of its own.
+	// Nil is a working configuration -- LOCAL and TEST have no destination --
+	// and config.Validate refuses that in STAGING and PROD.
+	alerts *alert.Dispatcher
 }
 
 // build constructs every dependency explicitly and returns the mounted server.
@@ -102,6 +120,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 	// --- authority plane ------------------------------------------------
 	adminSvc := admin.NewService(clk, auditWriter)
+	// Built here rather than inline so the alert dispatcher can be joined to
+	// it: OnAlert is the seam F-118 recorded as having no production caller,
+	// and this is the caller.
+	reconMetrics := financialMetrics(log)
+	attachAlertDispatcher(reconMetrics, in.alerts, cfg)
 	// A resolution-shaped reconciliation engine (F-52). The worker owns
 	// detection; this owns the operator's answer to it. No observers, no
 	// adapters and no ledger: this plane clears a record, it does not post.
@@ -111,8 +134,22 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Records:   reconciliation.NewRepository(clk, outbox, auditWriter),
 		Policy:    reconciliation.DefaultPolicy(),
 		Approvals: adminSvc,
-		Metrics:   reconciliation.NoopMetrics(),
-		Logger:    log,
+		// Real instruments rather than NoopMetrics().
+		//
+		// Both composition roots passed the no-op, so the FinancialMetrics
+		// instruments the 29 designed CloudWatch alarms are bound to were never
+		// constructed at all -- three independent reasons the alarms would have
+		// read green over a system emitting nothing (F-118).
+		//
+		// otel.Meter returns the global provider's meter, which is a no-op
+		// while CP_TELEMETRY_OTLP_ENDPOINT is unset. That is the point: this
+		// removes the reason that is SOFTWARE and leaves the one that is a
+		// deployment decision, instead of leaving both.
+		//
+		// Safe to arm only because F-117 bounded the caller-chosen labels
+		// first; the order mattered.
+		Metrics: reconMetrics,
+		Logger:  log,
 	})
 	if rerr != nil {
 		return nil, fmt.Errorf("wiring: reconciliation engine: %w", rerr)
@@ -123,11 +160,23 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("kill switch controller: %w", cerr)
 	}
 	killChecker := killswitch.NewChecker(killswitch.Policy{})
+	// The boundary pre-check. POLICY_AUTHORITY §2 allows an in-process cache to
+	// serve pre-checks for at most one second, and never to be the last word:
+	// every domain service still calls killChecker inside its own transaction.
+	// What this buys is a command refused by an active switch being refused
+	// before a quote is consumed or a provider is called.
+	killPreCheck, kerr := killswitch.NewCachedChecker(killChecker, database, clk, killswitch.MaxCacheTTL)
+	if kerr != nil {
+		return nil, fmt.Errorf("kill switch pre-check: %w", kerr)
+	}
 
 	// From the configuration, not the environment: this list is condition 1 of
 	// the policy authority, and it belongs in the hash that proves which
 	// configuration a running binary loaded.
-	enabledCaps := parseCapabilities(in.cfg.API.EnabledCapabilities)
+	enabledCaps, capErr := parseCapabilities(in.cfg.API.EnabledCapabilities)
+	if capErr != nil {
+		return nil, capErr
+	}
 	gateChecker, err := gates.NewChecker(string(cfg.Env), func(c gates.Capability) bool {
 		_, ok := enabledCaps[c]
 		return ok
@@ -135,6 +184,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gate checker: %w", err)
 	}
+	// A sandbox tier reads SANDBOX rows as active; every other deployment
+	// reads them as inactive with a reason. The condition is the one config
+	// validated: the SANDBOX legal policy, never in PROD (ADR-0023).
+	gateChecker = gateChecker.WithSandbox(cfg.SandboxTier())
 	verificationResolver, err := identity.NewVerificationResolver(database)
 	if err != nil {
 		return nil, fmt.Errorf("verification resolver: %w", err)
@@ -142,6 +195,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	gateAdmin, err := gates.NewAdmin(string(cfg.Env), clk, auditAdapter.GateAudit())
 	if err != nil {
 		return nil, fmt.Errorf("gate admin: %w", err)
+	}
+	gateAdmin = gateAdmin.WithSandbox(cfg.SandboxTier())
+	if err := sandboxGatesAtBoot(ctx, database, cfg, clk, auditAdapter.GateAudit(), log); err != nil {
+		return nil, fmt.Errorf("sandbox gates: %w", err)
 	}
 
 	// --- valuation and buying power -------------------------------------
@@ -248,12 +305,90 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("identity provider: %w", err)
 	}
+	// The ceilings are built here rather than inside the Credit purchase
+	// wiring: the launch cohort is a ceiling on how many accounts exist, and a
+	// deployment with no payment provider still has accounts (F-91).
+	capGuard, err := capacity.NewGuard(capacity.Budget{
+		MaxAccounts:        cfg.Capacity.MaxAccounts,
+		MaxPurchasesPerDay: cfg.Capacity.MaxPurchasesPerDay,
+		MaxAtRiskMinor:     cfg.Capacity.MaxAtRiskMinor,
+		MaxDatabaseBytes:   cfg.Capacity.MaxDatabaseBytes,
+	}, clk.Now)
+	if err != nil {
+		return nil, fmt.Errorf("capacity ceilings: %w", err)
+	}
+	log.Info("launch-tier capacity ceilings in force",
+		"max_accounts", cfg.Capacity.MaxAccounts,
+		"max_purchases_per_day", cfg.Capacity.MaxPurchasesPerDay,
+		"max_at_risk_minor", cfg.Capacity.MaxAtRiskMinor,
+		"max_database_bytes", cfg.Capacity.MaxDatabaseBytes)
+
+	// Personal data is encrypted before it reaches identity_pii, and the
+	// login path is what writes it (F-47). Nil in LOCAL/TEST with no keyring;
+	// config.Validate requires one in STAGING and PROD.
+	piiStore, perr := newPIIStore(ctx, cfg, in.resolver, log)
+	if perr != nil {
+		return nil, fmt.Errorf("personal data keyring: %w", perr)
+	}
+
+	// ---- operator bootstrap (ADR-0024, D-056) ------------------------------
+	//
+	// Nothing else in this system writes operator_roles, so a deployment that
+	// has never had an operator cannot get one and every admin route is
+	// unreachable in it. The declaration is configuration, parsed and validated
+	// by internal/config (which refuses anything in PROD but empty or exactly
+	// one ADMIN); the row is written at the declared identity's next login, and
+	// the login then reads the directory exactly as it always did.
+	//
+	// The line below is the only visible effect at boot, and it is deliberate:
+	// a control whose effect is invisible in the logs is a control nobody can
+	// check happened.
+	bootstrapDecls, err := operatorroles.ParseDeclarations(cfg.Auth.BootstrapOperators)
+	if err != nil {
+		return nil, fmt.Errorf("operator bootstrap: %w", err)
+	}
+	operatorBootstrap, err := identity.NewOperatorBootstrap(bootstrapDecls, auditWriter)
+	if err != nil {
+		return nil, fmt.Errorf("operator bootstrap: %w", err)
+	}
+	if len(bootstrapDecls) > 0 {
+		log.Warn("operator roles declared by configuration; they are granted at the named identity's next login and are recorded in the audit trail",
+			"declarations", operatorBootstrap.LogFields(), "actor", operatorroles.ActorID)
+	}
+
 	identitySvc, err := identity.New(identity.Deps{
 		IdP: idp, DB: database, Accounts: accountRepo, Sessions: sessionMgr,
 		Audit: auditWriter, Clock: clk, AttemptTTL: identity.DefaultAttemptTTL,
+		PII: piiStore, Operators: operatorBootstrap,
+		AdmitAccount: func(ctx context.Context, tx pgx.Tx) error {
+			_, aerr := capGuard.Admit(ctx, tx, capacity.ActionOpenAccount)
+			return aerr
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("identity service: %w", err)
+	}
+
+	// ---- profile, terms and account lifecycle ------------------------------
+	//
+	// The product-level user record (PART 4), terms acceptance (PART 48) and
+	// the self-service account lifecycle (PART 4, PART 37). It holds no
+	// personal data: identity_pii keeps that, sealed, and ADR-0021 decides who
+	// may read it.
+	profileSvc, err := profile.New(profile.Deps{
+		DB: database, Repo: profile.NewRepository(), Accounts: accountRepo,
+		Audit: auditWriter, Clock: clk, Sessions: sessionMgr,
+		// The level Nodal establishes by itself, for the operator support view.
+		// A resolver that reported NONE where it does not know would be an
+		// under-report presented as a fact; a nil one is reported as "not known
+		// in this deployment".
+		Verification: func(ctx context.Context, accountID accounts.AccountID) (string, error) {
+			level, lerr := verificationResolver.Level(ctx, accountID)
+			return string(level), lerr
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("profile service: %w", err)
 	}
 
 	// --- the Nodal-native economy -------------------------------------------
@@ -265,6 +400,26 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// startup. A deployment with no Credit asset provisioned still gets the
 	// routes, and they answer NOT_FOUND with a reason rather than 404-ing as
 	// though the feature did not exist.
+
+	// THE Credit asset, on a sandbox tier that has none. Everything below reads
+	// it -- the quote's scale, credit.Service.AssetID, the demo seeder -- and
+	// `scripts/seedeconomy`, the only thing that ever wrote one, refuses to run
+	// anywhere but LOCAL, DEV and TEST, which are exactly the environments that
+	// are not the sandbox tier. See creditAssetAtBoot for why PROD is refused.
+	//
+	// It is registered HERE, above the Credit purchase path, and the order is
+	// load-bearing since F-151: a purchase service compares the scale its
+	// pricing policy prices at against the scale of the asset this deployment
+	// registered, and refuses to build when they disagree. Built before the
+	// asset existed, it would have found nothing to compare against on the one
+	// tier that actually sells.
+	if err := creditAssetAtBoot(ctx, database, cfg, assetRepo, log); err != nil {
+		return nil, err
+	}
+	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
+	if err != nil {
+		return nil, err
+	}
 	creditSvc := credit.NewService(ledgerSvc, clk)
 
 	// The Credit purchase path (pgf.md). Separate from the funding block
@@ -274,39 +429,199 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// reversible-card / irreversible-value problem the whole funding lifecycle
 	// exists to manage. One set of credentials for both would mean one mode
 	// for two products with different risk.
-	creditPurchases := wireCreditPurchase(ctx, cfg, database, in.resolver, clk, creditSvc, gateChecker, log)
+	creditPurchases := wireCreditPurchase(ctx, cfg, database, in.resolver, clk, creditSvc, gateChecker, capGuard, log)
+	// A configured provider that ended up disabled is a page, not a line in
+	// a log stream nobody watches (F-93). The path stays disabled and the
+	// service keeps serving; what must not happen is that nobody is told.
+	raiseIfCreditPathDisabled(in.alerts, cfg, creditPurchases, clk.Now())
+	// The launch tier deploys no worker, so the settlement sweep runs here or
+	// nowhere -- and nowhere turns the money-at-risk ceiling into a lifetime
+	// cumulative cap that refuses every purchase forever (F-90). See
+	// runCreditSettlement for why this is acceptable in the API process and
+	// what it deliberately does not become responsible for.
+	if creditPurchases.Service != nil {
+		go runCreditSettlement(ctx, database, creditPurchases.Service, creditSvc, cfg, log)
+	}
+	// The same answer for the same reason: this deployment has one process, so
+	// the periodic work belongs in it. Two passes, both needing cp_ops:
+	// login_attempts holds a plaintext OIDC nonce and PKCE verifier per attempt
+	// and its purge lives in cmd/audit-worker, which this deployment does not
+	// run; and security_events partitions are created and pruned there too,
+	// because a table nothing can prune is what fills the ceiling (F-105).
+	go runOpsRetention(ctx, cfg, in.lookup, log)
+	// And the pass that produces the alert F-118 is about. A destination
+	// (internal/alert) with nothing on this deployment raising into it would
+	// have been the same silence with a URL attached; see runInternalVerification
+	// for what runs here and what deliberately does not.
+	go runInternalVerification(ctx, reconEngine, log)
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
+	// ---- market safety and the risk policy at boot (product goal SS47) ----
+	// The market-safety policy in force: the newest recorded version, or the
+	// compiled-in conservative one where none has been recorded. It is a real
+	// policy either way, so a deployment that has decided nothing still refuses
+	// an order that would move a market by a quarter.
+	nativeMarketSvc.SetSafety(nativemarket.NewSafetyStore())
+	// And the GLOBAL risk policy, which internal/nativemarket requires before
+	// it will evaluate any internal trade at all. Non-PROD only; see
+	// riskPolicyAtBoot for why PROD stays manual.
+	if err := riskPolicyAtBoot(ctx, database, cfg, clk, log); err != nil {
+		return nil, fmt.Errorf("risk policy at boot: %w", err)
+	}
 
 	// Payout providers. A registry built with allowSandbox=false refuses any
 	// provider with no contract reference, which is the programmatic assertion
 	// PART LXV asks for: production cannot load a test double. Nothing is
 	// registered, so every payout answers "no provider configured" -- the
 	// honest state until a contract exists (BLOCKERS: B-PAYOUT-PROVIDER).
-	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest)
+	payoutRegistry := payout.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest || cfg.SandboxTier())
+	if err := registerSandboxPayoutProvider(cfg, payoutRegistry, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox payout provider: %w", err)
+	}
 	payoutEngine := payout.NewEngine(creditSvc)
-	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+	// The emergency controls reach the conversion-request path: Create,
+	// CompleteVerification and Submit each check the WITHDRAW class inside
+	// their own transaction, and read the account's status there too. Before
+	// D-092 this package imported no kill switch, so WITHDRAWALS_DISABLE,
+	// GLOBAL_NEW_RISK_KILL and ACCOUNT_FREEZE stopped nothing on the one
+	// withdrawal surface a deployment can actually reach (F-163).
+	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk, killChecker, accountRepo)
+	// Submit and Reconcile had no caller anywhere in cmd/, so a reserved payout
+	// sat in VERIFIED forever with the customer's Credits held in
+	// PAYOUT_RESERVED and the provider never told. See runPayoutSweeps for why
+	// these run here, why fifteen seconds, and why neither pass owns any of the
+	// crash-safety (D-085).
+	go runPayoutSweeps(ctx, database, payoutSvc, clk, log)
+
+	// ---- verification (goal PARTS 19-25) ---------------------------------
+	//
+	// The identity boundary. A deployment with no contracted identity vendor
+	// registers nothing here, and every verification route answers UNSUPPORTED
+	// -- which is the honest state of a system that cannot verify anybody, and
+	// is different from reporting that somebody failed a check.
+	//
+	// The sandbox verification provider is registered on the same one
+	// condition every other sandbox affordance keys off (ADR-0023), and it
+	// refuses PROD on its own account as well.
+	verificationRegistry := verification.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest || cfg.SandboxTier())
+	if err := registerSandboxVerificationProvider(cfg, verificationRegistry, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox verification provider: %w", err)
+	}
+	verificationRepo := verification.NewRepository()
+	complianceRepo := compliance.NewRepository(audit.NewWriter())
+	verificationSvc, err := verification.NewService(verification.Deps{
+		Repo:        verificationRepo,
+		Compliance:  complianceRepo,
+		Providers:   verificationRegistry,
+		Clock:       clk,
+		Environment: string(cfg.Env),
+		SandboxTier: cfg.SandboxTier(),
+		ReturnURL:   cfg.Auth.PostLoginURL,
+		RefreshURL:  cfg.Auth.PostLoginURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("verification service: %w", err)
+	}
+	// The other half of D-061. The resolver below already reports the base
+	// level for a profile whose validity window has elapsed, so nothing an
+	// expired verification permits can leave; what was missing was anything
+	// that moved the STATE, which left a profile reading VERIFIED while every
+	// surface treated the person as unverified, and made §20's EXPIRED -- whose
+	// next step is REVERIFY -- a state no deployment could ever reach.
+	go runVerificationExpiry(ctx, database, verificationSvc, clk, log)
+	// ---- expiry sweeps ----------------------------------------------------
+	//
+	// Four ExpireDue passes that existed, were tested, were documented as
+	// "meant for a periodic worker", and were called by nothing in any binary
+	// (F-170). Three of them only make a row agree with what every reader of it
+	// already believes; the fourth is the one a person is waiting on, because
+	// 00762 permits one open verification session per person and an expired
+	// hosted link that nothing closes is that person's verification, blocked
+	// for good. See cmd/api/expiresweeps.go.
+	go runExpirySweeps(ctx, database, expiryDeps{
+		Gates:        gateAdmin,
+		Admin:        adminSvc,
+		Capital:      capitalSvc,
+		Verification: verificationSvc,
+	}, clk, log)
+	// The composite resolver replaces the cap that internal/identity documents:
+	// NODAL_IDENTITY is what Nodal establishes by itself, and PAYOUT_KYC and
+	// ENHANCED come from a provider decision PLUS the sub-checks that justify
+	// it. It composes with the base rather than replacing it, so an account
+	// whose owner is not ACTIVE still resolves to NONE however good the KYC
+	// evidence is (BLOCKERS B-06 narrows to "no contracted vendor", not "no
+	// code").
+	compositeVerification, err := verification.NewResolver(verificationResolver, verificationRepo, database, clk)
+	if err != nil {
+		return nil, fmt.Errorf("verification resolver: %w", err)
+	}
 	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, audit.NewWriter(), clk)
 	// The marketplace gate is resolved from the database on every purchase, so
 	// pulling MARKETPLACE stops sales without a restart. Until it is ACTIVE,
 	// internal/commerce refuses every purchase on its own -- the compiler in
 	// front of it is an addition, not the only check.
-	commerceSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
+	commerceSvc.SetCapabilityResolver(newGateCapabilityResolver(gateChecker, database))
 
 	// The ledger's value-domain isolation consults the same gate checker every
 	// other capability decision uses, so turning a capability off stops the
 	// movement at the journal rather than only in a service.
-	ledgerSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
+	ledgerSvc.SetCapabilityResolver(newGateCapabilityResolver(gateChecker, database))
 
 	// --- realtime ----------------------------------------------------------
 	// The hub is mounted so the endpoint honors Last-Event-ID, heartbeats and
-	// per-client cleanup. No producer is attached: the event bus adapter lives
-	// in a package this binary does not yet depend on, so the stream carries
-	// heartbeats only until it is wired. It is never authoritative either way
-	// (PART 109).
+	// per-client cleanup. The producer is the notification follower, wired
+	// forty lines below; this comment used to say "no producer is attached ...
+	// the stream carries heartbeats only until it is wired", and it went on
+	// saying it after the wiring landed, in the file that does the wiring
+	// (F-191). The stream is never authoritative either way (PART 109).
 	hub := stream.NewHub(1024, log)
-	sse := stream.NewHandler(hub, 15*time.Second)
+	// The stream re-checks its session on every heartbeat. Without it a stolen
+	// cookie's stream kept delivering after the victim logged out, after an
+	// operator revoked the session, and past the session's own absolute expiry
+	// -- because revocation in this system is per request and a stream is one
+	// request that never ends (F-116).
+	sse := stream.NewHandler(hub, 15*time.Second, func(ctx context.Context, sessionID string) error {
+		p, ok := security.PrincipalFrom(ctx)
+		if !ok {
+			return errs.New(errs.CodeUnauthenticated, "stream: no principal to re-check")
+		}
+		return sessionMgr.StillLive(ctx, database, p.SubjectID, sessionID)
+	})
+
+	// ---- notifications ----------------------------------------------------
+	//
+	// The producer no longer missing (F-69). Two halves:
+	//
+	//   1. a follower that reads the transition tables domain services already
+	//      write -- credit fundings, payout requests, native fills and market
+	//      pauses, account status, login security events -- and turns the rows a
+	//      person needs to know about into notifications, idempotently, in one
+	//      transaction per source per pass (D-069);
+	//   2. the hub, which now carries those notifications and the "this is
+	//      stale" signals derived from the same rows, per user, so the frontend
+	//      invalidates a query instead of polling (D-071).
+	//
+	// The hub is given the clock so its event ids encode the instant they were
+	// published at: the counter used to restart with the process, and a client
+	// reconnecting after a redeploy silently resumed a stream that had lost
+	// everything. With a time-encoded id, Last-Event-ID names an instant and
+	// notificationResume replays what the table holds since it -- which is the
+	// only part of a realtime stream that survives a free instance sleeping.
+	hub.UseClock(clk.Now)
+	sse.SetResume(notificationResume(database))
+	notificationProducer := notifications.NewProducer(clk.Now, cfg.SandboxTier())
+	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer).WithLogger(log),
+		hubPublisher{hub: hub}, log)
+
+	// ---- payout: a blocked withdrawal reaches its holder ----
+	//
+	// The follower turns TRANSITION ROWS into notifications, and a payout
+	// refused at submit deliberately writes none: refusing inside the claim
+	// transaction is what leaves the request VERIFIED with its value reserved.
+	// So this one is emitted by the domain, in the transaction that records the
+	// reason, through an interface internal/payout declares (F-277).
+	payoutSvc.SetNotifier(payoutBlockedNotifier{producer: notificationProducer})
 
 	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
@@ -318,6 +633,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Clock:             clk,
 		Env:               cfg.Env,
 		Identity:          identitySvc,
+		Profile:           profileSvc,
 		Sessions:          sessionMgr,
 		Accounts:          accountRepo,
 		Assets:            assetRepo,
@@ -347,11 +663,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			Payouts:         payoutSvc,
 			PayoutEngine:    payoutEngine,
 			Commerce:        commerceSvc,
-			// No payout policy is configured, so the fail-closed default
-			// applies and no origin is withdrawable. Activating one is a
-			// policy version with evidence, not a code change here.
-			PayoutPolicy: nil,
-			Capabilities: gateCapabilityResolver{checker: gateChecker, q: database},
+			// The fail-closed default unless the deployment is a sandbox tier,
+			// whose rehearsal policy is a named, versioned policy too. A real
+			// policy is a persisted version with evidence, never a name here.
+			PayoutPolicy: payoutPolicyFor(cfg),
+			Capabilities: newGateCapabilityResolver(gateChecker, database),
+			// The emergency controls, at the boundary. Authoritative checks stay
+			// inside each domain service's transaction (D-092).
+			KillSwitches: killPreCheck,
 			// The verification level Nodal can establish BY ITSELF, and no
 			// level above it: NODAL_IDENTITY when the identity provider
 			// asserted a verified email address, otherwise NONE.
@@ -364,7 +683,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// every Domain A action -- which needs exactly that level --
 			// impossible in every deployment whatever its gates said. A
 			// control no user can ever satisfy is not a control.
-			Verification: verificationResolver,
+			Verification: compositeVerification,
 			// The Settlement Compiler's legal policy. The default is the
 			// conservative one: it permits simulation and denies every
 			// internal-economy product and every payout. CP_API_LEGAL_POLICY
@@ -377,6 +696,26 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// determination wearing a network header's clothes.
 			Jurisdiction: nil,
 			Clock:        clk,
+		},
+		// ---- the withdrawal journey (goal PARTS 19-25) ------------------
+		Withdrawal: httpapi.WithdrawalDeps{
+			Verification: verificationSvc,
+			// The base level, deliberately the NODAL_IDENTITY resolver rather
+			// than the composite one: the profile view applies the evidence
+			// rule on top, and composing the composite with itself would be
+			// circular.
+			BaseVerification: verificationResolver,
+			Compliance:       complianceRepo,
+			Accounts:         accountRepo,
+			Pricing:          creditPurchases.Service,
+			CreditDecimals:   creditDecimals,
+			// The legal registry, read at the moment somebody asks to take
+			// value out. §48 puts the withdrawal disclosure there and
+			// deliberately not at signup, so the quote and the payout ask for
+			// it and onboarding does not (D-083).
+			Terms:       profileSvc,
+			Environment: string(cfg.Env),
+			SandboxTier: cfg.SandboxTier(),
 		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.
@@ -412,14 +751,116 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				Commerce:      commerceSvc,
 				Payouts:       payoutSvc,
 				Credits:       creditSvc,
+				// The only exit from a funding parked in MANUAL_REVIEW. Nil
+				// when the Credit purchase provider is not configured, which
+				// leaves the kind unregistered rather than half-wired.
+				CreditPurchases: creditPurchases.Service,
 			}),
 		),
+		// ---- markets, charts, portfolio and activity (M) ----
+		MarketSurfaces: httpapi.MarketSurfacesDeps{
+			RiskPolicies: risk.NewStore(),
+			// On a sandbox tier no value is real by construction (ADR-0023),
+			// so every amount these surfaces return is SIMULATED and says so.
+			ActivityFeed: activity.NewFeed(cfg.SandboxTier()),
+			Simulated:    cfg.SandboxTier(),
+		},
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
 	ports.Stream = sse
+	// Scoped to the caller and to nobody else: neither port takes an account id
+	// and neither has an account:read_any mode.
+	ports.Notifications = httpapi.NewNotificationsPort(database, clk)
+	ports.MeAudit = httpapi.NewMeAuditPort(database)
+
+	// ---- agents ----
+	//
+	// The agent product surface: strategies, agents, the authority and limits
+	// their owners grant them, and the lifecycle a person can reach. Nothing
+	// here runs an agent. `agentRuntimeDeployment()` states that this
+	// deployment runs neither worker, and the API reports NOT_DEPLOYED from it
+	// rather than inferring "running" from an agent being enabled.
+	//
+	// The strategy compiler is deliberately left unconfigured (D-074,
+	// ADR-0029). Compiling needs two things this deployment does not have: a
+	// model provider credential on the `model` slot, and a validation registry
+	// (instruments, venues, tools, composed risk policy) for the compiler's
+	// TYPE and RISK_COMPAT stages. With a model and no registry the compiler
+	// would reject every instrument a user named and blame the user, which is
+	// worse than an honest refusal, so both must arrive together. Until they
+	// do, every compile attempt is recorded with outcome MODEL_UNAVAILABLE and
+	// the failure code COMPILER_UNAVAILABLE, and the API says exactly that.
+	agentSvc, err := agents.NewService(agents.Deps{
+		DB:           database,
+		Clock:        clk,
+		Capabilities: agentCapabilityChecker{checker: gateChecker, q: database},
+		Runtime:      agentRuntimeDeployment(),
+		Logger:       log,
+		BuildVersion: config.BuildVersion,
+		StepUpMaxAge: cfg.Auth.StepUpMaxAge,
+		// The publisher, which is an adapter in THIS package and not an import
+		// in internal/agents (D-073, D-082). It emits one notification, for one
+		// case: an agent somebody other than its owner stopped. It writes in a
+		// transaction of its own after the agent transaction committed, and
+		// keys on the agent_pauses row through the same exported helpers the
+		// notification follower uses, so the follower's next pass finds the row
+		// already there and tells nobody twice.
+		//
+		// The timeline needs no publisher at all: internal/activity owns no
+		// table and reads agents, agent_pauses and agent_lifecycle_transitions
+		// directly, so an agent action is on somebody's timeline because it
+		// happened rather than because a hook fired.
+		Events: agentNotifier{
+			db: database, producer: notificationProducer, hub: hubPublisher{hub: hub}, log: log,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("agents: %w", err)
+	}
+	// The compiler seam, and its registry (D-129, F-256). A sandbox tier gets
+	// the structured compiler and a RefsLoader that reads the real registry;
+	// every other deployment keeps the nil pair ADR-0029 describes, and
+	// COMPILER_UNAVAILABLE's sentence stays true there word for word.
+	if err := priceToolAtBoot(ctx, database, cfg, log); err != nil {
+		return nil, fmt.Errorf("price tool at boot: %w", err)
+	}
+	if err := sandboxVenuePolicyAtBoot(ctx, database, cfg, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox venue policy at boot: %w", err)
+	}
+	structuredCompiler, err := sandboxStrategyCompiler(cfg, clk, log)
+	if err != nil {
+		return nil, fmt.Errorf("sandbox strategy compiler: %w", err)
+	}
+	var strategyRefsLoader agents.RefsLoader
+	if structuredCompiler != nil {
+		strategyRefsLoader = newStrategyRefs()
+	}
+	strategySvc, err := agents.NewStrategyService(agents.StrategyDeps{
+		DB:              database,
+		Clock:           clk,
+		Compiler:        nil,
+		Structured:      structuredCompiler,
+		Refs:            strategyRefsLoader,
+		CompilerVersion: config.BuildVersion,
+		Environment:     string(cfg.Env),
+		Audit:           auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("strategies: %w", err)
+	}
+	ports.Agents = agentSvc
+	ports.Strategies = strategySvc
+
+	// ---- sandbox demo data (product goal SS51) ----
+	// Refused outside a sandbox tier, and refused in PROD three times over.
+	// A failure is logged, never fatal: an empty markets page is a nuisance,
+	// a deployment that will not start is an outage.
+	demoDataAtBoot(ctx, cfg, demoSeedDeps{
+		DB: database, Assets: nativeAssetSvc, Markets: nativeMarketSvc, Credits: creditSvc, Clock: clk,
+	}, log)
 
 	// Provider webhooks. The map is keyed by the provider name in the path, so
 	// POST /v1/webhooks/stripe_credit reaches the Credit purchase pipeline and
@@ -466,9 +907,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	cookieName := httpmw.EffectiveCookieName(cfg.Auth.CookieName, cfg.Auth.CookieDomain, cfg.Auth.CookieSecure)
 
 	return httpapi.New(httpapi.Options{
-		Env:               cfg.Env,
-		BuildVersion:      config.BuildVersion,
-		ConfigHash:        cfg.Hash(),
+		Env:          cfg.Env,
+		BuildVersion: config.BuildVersion,
+		ConfigHash:   cfg.Hash(),
+		SandboxTier:  cfg.SandboxTier(),
+		// There is no CreditPurchaseSandbox here any more. Whether a purchase
+		// was a rehearsal is a fact about that purchase, recorded on its row
+		// when it was opened (D-096); computing it from the mode this process
+		// booted with re-labelled every purchase a deployment had ever made on
+		// the day it changed mode.
 		PublicBaseURL:     cfg.HTTP.PublicBaseURL,
 		CORSOrigins:       cfg.HTTP.CORSOrigins,
 		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
@@ -476,7 +923,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		CookieName:        cookieName,
 		CookieDomain:      cfg.Auth.CookieDomain,
 		CookieSecure:      cfg.Auth.CookieSecure,
+		PostLoginURL:      cfg.Auth.PostLoginURL,
 		SessionTTL:        cfg.Auth.SessionTTL,
+		StepUpMaxAge:      cfg.Auth.StepUpMaxAge,
 		IdempotencyTTL:    httpapi.DefaultIdempotencyTTL,
 		Clock:             clk,
 		Logger:            log,
@@ -520,16 +969,35 @@ func resolveSettlementAsset(ctx context.Context, in buildInput, repo *assets.Rep
 	return out, nil
 }
 
-func parseCapabilities(list string) map[gates.Capability]struct{} {
+// parseCapabilities reads CP_API_ENABLED_CAPABILITIES, and refuses a name
+// internal/gates does not declare.
+//
+// It used to `continue` past one. That list is condition 1 of the policy
+// authority -- a capability absent from it is inactive whatever its gate row
+// says -- so one misspelled letter switched a capability off and said nothing:
+// a healthy service, a 200 on every probe, and the Credit purchase path dark.
+// The sibling that reads CP_API_SANDBOX_GATES already refused (sandboxGatesAtBoot),
+// so the same mistake produced two different outcomes depending on which
+// variable it was in (F-145).
+//
+// Failing closed here means failing to START, which is the loud end of closed.
+// config.Validate refuses the same names earlier, where an operator sees them
+// before a deploy; this is the second refusal, for a Config that did not come
+// through Load.
+func parseCapabilities(list string) (map[gates.Capability]struct{}, error) {
 	out := map[gates.Capability]struct{}{}
 	for _, raw := range strings.Split(list, ",") {
-		name := gates.Capability(strings.ToUpper(strings.TrimSpace(raw)))
-		if name == "" || !name.Valid() {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
 			continue
+		}
+		name := gates.Capability(strings.ToUpper(trimmed))
+		if !name.Valid() {
+			return nil, fmt.Errorf("CP_API_ENABLED_CAPABILITIES names %q, which is not a declared capability", trimmed)
 		}
 		out[name] = struct{}{}
 	}
-	return out
+	return out, nil
 }
 
 func identityProvider(ctx context.Context, cfg *config.Config, resolver config.Resolver, clk clock.Clock) (auth.IdentityProvider, error) {
@@ -587,6 +1055,13 @@ func providerCatalog(cfg *config.Config) []httpapi.ProviderDescriptor {
 		{"WorkflowEngine", cfg.Providers.Workflow},
 		{"ObjectArchive", cfg.Providers.Archive},
 		{"NotificationProvider", cfg.Providers.Notification},
+		// The two slots the product economy runs on. They were missing from
+		// this list, so the operator console could not see the Credit
+		// purchase adapter or the payout provider at all -- including the
+		// sandbox tier's sandbox_payout, which the console must render as
+		// sandbox and never as a live rail.
+		{"CreditPurchaseProvider", cfg.Providers.CreditPurchase},
+		{"PayoutProvider", cfg.Providers.Payout},
 	}
 	out := make([]httpapi.ProviderDescriptor, 0, len(slots))
 	for _, s := range slots {
@@ -817,22 +1292,42 @@ func mergeExecutors(tables ...map[admin.Kind]admin.ExecFunc) map[admin.Kind]admi
 // development policy in production has misconfigured something, and starting
 // anyway with different behaviour than they asked for is how that goes
 // unnoticed.
+//
+// The vocabulary is config.NormalizeLegalPolicy rather than a switch of its
+// own. Both halves have to agree -- config decides whether the deployment is
+// valid, this decides whether a router can be built from the same string --
+// and when they were separate, config had no list at all (F-103).
 func legalRouterFor(env config.Environment, policy string) (*legalrouter.Router, error) {
-	name := strings.ToUpper(strings.TrimSpace(policy))
+	name, ok := config.NormalizeLegalPolicy(policy)
+	if !ok {
+		return nil, fmt.Errorf("%s=%q: expected %s, %s or %s", envLegalPolicy, policy,
+			config.LegalPolicyConservative, config.LegalPolicyDevelopment, config.LegalPolicySandbox)
+	}
 	switch name {
-	case "", "CONSERVATIVE":
+	case config.LegalPolicyConservative:
 		return nil, nil
-	case "DEVELOPMENT":
+	case config.LegalPolicySandbox:
+		// A sandbox tier: not PROD, and config.Validate already refused it
+		// there. Refused here again because this is the place the router is
+		// built, and a router built for the wrong deployment is the failure
+		// that matters.
+		if env == config.EnvProd {
+			return nil, fmt.Errorf("%s=%s: a sandbox tier cannot be PROD", envLegalPolicy, config.LegalPolicySandbox)
+		}
+		r, err := legalrouter.New(legalrouter.SandboxPolicy())
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", envLegalPolicy, err)
+		}
+		return r, nil
+	default:
 		if env.IsProductionLike() {
-			return nil, fmt.Errorf("%s=DEVELOPMENT: a development legal policy may not be loaded in %s",
-				envLegalPolicy, env)
+			return nil, fmt.Errorf("%s=%s: a development legal policy may not be loaded in %s",
+				envLegalPolicy, config.LegalPolicyDevelopment, env)
 		}
 		r, err := legalrouter.New(legalrouter.DevelopmentPolicy())
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", envLegalPolicy, err)
 		}
 		return r, nil
-	default:
-		return nil, fmt.Errorf("%s=%q: expected CONSERVATIVE or DEVELOPMENT", envLegalPolicy, name)
 	}
 }

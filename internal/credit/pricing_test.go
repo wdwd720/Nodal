@@ -8,18 +8,41 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 )
 
+// The answers are BASE UNITS, which is what a money.Quantity is everywhere
+// else in this system: the column, the API field and the ledger entry all mean
+// base units, and the policy used to return a count of whole Credits into them
+// (F-151). One Credit at the shipped scale is 10^6 base units, so $100.00 at
+// 100 Credits per dollar is 10,000 Credits, which is 10^10 base units.
 func TestPricingPolicy_DefaultIsValidAndPricesTheObviousCase(t *testing.T) {
 	t.Parallel()
 	p := DefaultPricingPolicy()
 	require.NoError(t, p.Validate())
+	require.EqualValues(t, 6, p.Decimals, "the scale the CREDIT asset is registered with")
 
 	q, err := p.CreditsFor(money.USDFromMinor(10000)) // $100.00
 	require.NoError(t, err)
-	require.Equal(t, "10000", q.String(), "100 Credits per dollar")
+	require.Equal(t, "10000000000", q.String(), "10,000 Credits at six decimals")
 
 	q, err = p.CreditsFor(money.USDFromMinor(100)) // $1.00, the minimum
 	require.NoError(t, err)
-	require.Equal(t, "100", q.String())
+	require.Equal(t, "100000000", q.String(), "100 Credits at six decimals")
+}
+
+// A policy that prices a zero-decimal Credit issues whole units, and the same
+// arithmetic produces them: the scale is a field, not an assumption.
+func TestPricingPolicy_TheScaleIsTheAssetsAndNotAConstant(t *testing.T) {
+	t.Parallel()
+	p := DefaultPricingPolicy()
+	p.Decimals = 0
+	require.NoError(t, p.Validate())
+	q, err := p.CreditsFor(money.USDFromMinor(10000)) // $100.00
+	require.NoError(t, err)
+	require.Equal(t, "10000", q.String(), "an indivisible Credit: 10,000 of them")
+
+	p.Decimals = 2
+	q, err = p.CreditsFor(money.USDFromMinor(10000))
+	require.NoError(t, err)
+	require.Equal(t, "1000000", q.String(), "the same 10,000 Credits, two decimals wide")
 }
 
 func TestPricingPolicy_ClientCannotInfluenceTheAnswer(t *testing.T) {
@@ -33,7 +56,7 @@ func TestPricingPolicy_ClientCannotInfluenceTheAnswer(t *testing.T) {
 	b, err := p.CreditsFor(money.USDFromMinor(500))
 	require.NoError(t, err)
 	require.Equal(t, a.String(), b.String(), "the same amount always buys the same Credits")
-	require.Equal(t, "500", a.String())
+	require.Equal(t, "500000000", a.String(), "$5.00 buys 500 Credits, in base units")
 }
 
 func TestPricingPolicy_BoundsAreEnforced(t *testing.T) {
@@ -51,14 +74,15 @@ func TestPricingPolicy_BoundsAreEnforced(t *testing.T) {
 
 func TestPricingPolicy_APolicyThatTakesMoneyAndGivesNothingIsRefused(t *testing.T) {
 	t.Parallel()
-	// One Credit per dollar, minimum one cent, rounding down: a customer pays
-	// a cent and receives zero Credits. The failure is invisible in testing
-	// because nobody tests the bottom of the range, so it is refused at load.
+	// One INDIVISIBLE Credit per dollar (Decimals is zero), minimum one cent,
+	// rounding down: a customer pays a cent and receives zero Credits. The
+	// failure is invisible in testing because nobody tests the bottom of the
+	// range, so it is refused at load.
 	p := PricingPolicy{
 		Version: "bad", Currency: "USD",
 		CreditsPerMajorUnit: 1, MinorUnitsPerMajorUnit: 100,
 		MinAmountMinor: 1, MaxAmountMinor: 100000,
-		Rounding: money.RoundDown,
+		Rounding: money.RoundDown, Decimals: 0,
 	}
 	err := p.Validate()
 	require.Error(t, err)
@@ -82,6 +106,7 @@ func TestPricingPolicy_ValidationRejectsIncoherentPolicies(t *testing.T) {
 		"negative minimum":  func(p *PricingPolicy) { p.MinAmountMinor = -1 },
 		"negative maximum":  func(p *PricingPolicy) { p.MaxAmountMinor = -1 },
 		"no minor unit set": func(p *PricingPolicy) { p.MinorUnitsPerMajorUnit = -100 },
+		"scale too wide":    func(p *PricingPolicy) { p.Decimals = MaxCreditDecimals + 1 },
 	}
 	for name, mutate := range cases {
 		p := base
@@ -109,6 +134,7 @@ func TestPricingPolicy_HashIsStableAndCoversEveryField(t *testing.T) {
 		"minimum":     func(p *PricingPolicy) { p.MinAmountMinor = 200 },
 		"maximum":     func(p *PricingPolicy) { p.MaxAmountMinor = 2_000_000 },
 		"rounding":    func(p *PricingPolicy) { p.Rounding = money.RoundHalfUp },
+		"decimals":    func(p *PricingPolicy) { p.Decimals = 8 },
 	} {
 		p := base
 		mutate(&p)

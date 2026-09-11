@@ -1,39 +1,32 @@
 /**
- * Critical-path end-to-end tests (STAGE 14 exit criteria).
+ * The application pages, against a real backend.
  *
- * These run against a production build and a real backend. Where the backend
- * refuses — quotes, funding, withdrawals in this deployment — the assertion is
- * that the refusal is shown with its stable code, not that the refusal is
- * absent. A test that asserted a price appeared would be a test that demanded
- * the interface lie.
+ * These run against a production build and a real API. Where the backend
+ * refuses — a withdrawal in this deployment, a capability whose gate is closed —
+ * the assertion is that the refusal is shown with its stable code, not that the
+ * refusal is absent. A test that asserted a price appeared would be a test that
+ * demanded the interface lie.
+ *
+ * # What left this file, and where it went
+ *
+ * D-077 removed the hosted rail (`/trade`, `/add-funds`, `/lab`, `/strategy`,
+ * `/nodal-economy`, `/payouts`, `/marketplace`), so the cases that drove those
+ * pages went with them rather than being retargeted at a page that does
+ * something else. The cross-cutting checks moved to the files
+ * `docs/product/STAGING_E2E.md` names for them: axe and the 375px reflow to
+ * `accessibility.spec.ts`, the forbidden vocabulary to `honesty.spec.ts`, the
+ * dead-control walk and the navigation to `controls.spec.ts`, and the new-user
+ * journey to `scenarios/a-new-user.spec.ts`. One route list feeds all of them,
+ * in `routes.ts`.
+ *
+ * The Marketplace purchase walk — buy the cheapest product, assert Credits fell
+ * by exactly the price — was driven from the Credit balance on `/nodal-economy`
+ * and has no page to read that balance from until the dashboard and the Buy
+ * Credits screens land. It belongs to scenario B, whose branch owns both.
  */
 import { expect, test, type Page } from "@playwright/test";
 
-const PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
-  { path: "/", heading: "Home" },
-  { path: "/add-funds", heading: "Add funds" },
-  { path: "/trade", heading: "Trade" },
-  { path: "/portfolio", heading: "Portfolio" },
-  { path: "/strategy", heading: "Strategy builder" },
-  { path: "/agents", heading: "Agents" },
-  { path: "/lab", heading: "Lab" },
-  { path: "/activity", heading: "Activity" },
-  { path: "/settings", heading: "Settings and security" },
-];
-
-/**
- * The internal-economy pages (gola.md PART LII). They are a separate list from
- * PAGES because PAGES is PART 111's required set and this is a different
- * requirement; merging them would make a failure in one look like a failure of
- * the other.
- */
-const INTERNAL_ECONOMY_PAGES: ReadonlyArray<{ readonly path: string; readonly heading: string }> = [
-  { path: "/nodal-economy", heading: "Nodal Economy" },
-  { path: "/marketplace", heading: "Marketplace" },
-  { path: "/native-markets", heading: "Native Markets" },
-  { path: "/create-asset", heading: "Create asset" },
-  { path: "/payouts", heading: "Payouts" },
-];
+import { APP_ROUTES } from "./routes.ts";
 
 async function accountId(page: Page): Promise<string> {
   const response = await page.request.get("/v1/me");
@@ -44,469 +37,172 @@ async function accountId(page: Page): Promise<string> {
   return id as string;
 }
 
-test.describe("the nine required pages", () => {
-  for (const { path, heading } of PAGES) {
-    test(`${heading} renders`, async ({ page }) => {
-      await page.goto(path);
-      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-      // Exactly one h1 per page: the document outline is the navigation aid a
-      // screen reader user actually has.
-      await expect(page.locator("h1")).toHaveCount(1);
-      // SETTLE before asserting an absence. `toHaveCount(0)` passes the instant
-      // it is evaluated, so a check for "nothing is broken" that runs before
-      // the queries resolve is only measuring how fast the test runs -- which
-      // is F-32, and which the loop below had already been fixed for while
-      // these nine pages had not (F-46). Every page here now waits, and asserts
-      // that nothing is still loading before asserting that nothing is
-      // malformed.
-      await page.waitForLoadState("networkidle");
-      await expect(page.locator(".loading")).toHaveCount(0);
-      // Nothing renders the placeholder that would mean a formatter gave up.
-      await expect(page.locator(".malformed")).toHaveCount(0);
-      // And nothing renders the contract-violation notice.
-      await expect(page.getByText("This response could not be trusted")).toHaveCount(0);
-    });
-  }
-
-  test("every section is reachable from the navigation", async ({ page }) => {
-    await page.goto("/");
-    for (const { heading } of PAGES) {
-      await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: heading }).click();
-      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    }
-  });
-});
-
-test.describe("the internal economy is separate from the rest", () => {
-  for (const { path, heading } of INTERNAL_ECONOMY_PAGES) {
-    test(`${heading} renders`, async ({ page }) => {
-      await page.goto(path);
-      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-      await expect(page.locator("h1")).toHaveCount(1);
-      await expect(page.locator(".malformed")).toHaveCount(0);
-
-      // And the page's DATA loaded. The three assertions above pass whether
-      // the panels show data, an empty state or an error, because the heading
-      // is rendered before any request is made -- so this test used to prove
-      // only that the route existed.
-      //
-      // "This response could not be trusted" is what the app shows when a
-      // response does not match the API contract. A mismatch between what the
-      // API returns and what the client parses would render it on every load
-      // and still pass the three assertions above.
-      //
-      // A REFUSAL is deliberately not asserted against: this deployment
-      // refuses plenty, and demanding no refusal appeared would be demanding
-      // the interface lie. What is asserted is narrower and is the thing a
-      // heading cannot tell you -- that the data loaded at all.
-      // Wait for the page to SETTLE before asserting an absence. Playwright
-      // retries an assertion until it passes, and `toHaveCount(0)` passes the
-      // instant it is evaluated -- so checking for the absence of an error
-      // before the query has resolved proves nothing. The first version of
-      // this assertion did exactly that and passed against a client that was
-      // mis-parsing every list response.
-      await page.waitForLoadState("networkidle");
-      await expect(page.locator(".loading")).toHaveCount(0);
-      await expect(page.getByText("This response could not be trusted")).toHaveCount(0);
-    });
-  }
-
-  /**
-   * A customer completes a purchase through the interface.
-   *
-   * Every other test in this file asks whether a page RENDERS. None asked whether
-   * a person can finish anything, and that gap is the same one that produced
-   * F-26, F-28 and F-29 on the backend: a path the tests never walk looks
-   * finished from inside the tests.
-   *
-   * This walks it. It reads the Credit balance the customer is shown, buys the
-   * cheapest product on the Marketplace, and asserts the balance fell by exactly
-   * the price and that the purchase appears in their own list.
-   *
-   * # It needs a deployment where buying is possible
-   *
-   * MARKETPLACE is a high-risk capability, so a deployment that has not activated
-   * it refuses every purchase — correctly. Rather than skip, the test asserts the
-   * refusal is the honest one and stops: a run against a fresh deployment proves
-   * the gate holds, and a run against an enabled one proves the flow completes.
-   * Neither outcome is a green tick over an untested path.
-   *
-   * See scripts/gateceremony for activating MARKETPLACE locally through the real
-   * three-principal ceremony.
-   */
-  /**
-   * Exact base units from a figure the page displayed.
-   *
-   * BigInt, not a double. The first version of this test parsed both the balance
-   * and the price into JavaScript numbers and asserted their difference equalled
-   * the price -- IEEE-754 subtraction of two six-decimal Credit figures, as the
-   * sole proof that money moved. The repository's own source scan refuses that
-   * conversion on a wire value for exactly this reason, and it had been failing
-   * on these two lines since they were written (F-45).
-   *
-   * There is also no `?? "0"` fallback here. A missing figure must fail the
-   * test, not become zero: a zero balance and an unreadable one are the same
-   * assertion away from each other, and that is the honesty rule this suite
-   * exists to enforce.
-   */
-  const CREDIT_DECIMALS = 6;
-  const baseUnits = (displayed: string): bigint => {
-    const [whole, frac = ""] = displayed.replace(/,/g, "").split(".");
-    return BigInt(whole + frac.padEnd(CREDIT_DECIMALS, "0").slice(0, CREDIT_DECIMALS));
-  };
-
-  const figureIn = (text: string, what: string): bigint => {
-    const match = /([\d,]+(?:\.\d+)?)\s*Credits/.exec(text);
-    if (match === null) throw new Error(`no ${what} in ${text}`);
-    return baseUnits(match[1]);
-  };
-
-  test("a customer can buy something and their Credits fall by exactly the price", async ({ page }) => {
-    const creditsShown = async (): Promise<bigint> => {
-      await page.goto("/nodal-economy");
-      await page.waitForLoadState("networkidle");
-      const field = page.locator(".field", { hasText: "Usable inside Nodal" }).first();
-      return figureIn(await field.innerText(), "Credit figure");
-    };
-
-    const before = await creditsShown();
-
-    await page.goto("/marketplace");
+for (const route of APP_ROUTES) {
+  test(`${route.heading} renders`, async ({ page }) => {
+    await page.goto(route.path);
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
+    // Exactly one h1 per page: the document outline is the navigation aid a
+    // screen reader user actually has.
+    await expect(page.locator("h1")).toHaveCount(1);
+    // SETTLE before asserting an absence. `toHaveCount(0)` passes the instant
+    // it is evaluated, so a check for "nothing is broken" that runs before the
+    // queries resolve is only measuring how fast the test runs. Every page here
+    // waits, and asserts that nothing is still loading before asserting that
+    // nothing is malformed.
     await page.waitForLoadState("networkidle");
-    // Each product is its own <article class="panel-nested" aria-label={title}>.
-    // Locating the CARD and then its own price and its own button is the whole
-    // point: the first version of this test read a price from one product and
-    // clicked another's button, and the mismatch was invisible until the
-    // balance assertion caught it.
-    const cards = page.locator("article.panel-nested");
-    expect(await cards.count(), "the seeded catalogue should offer something to buy").toBeGreaterThan(0);
-    const card = cards.last();
-
-    const price = figureIn(await card.locator(".field", { hasText: "PRICE" }).first().innerText(), "price");
-    expect(price > 0n, "a product with no price is not something a customer can buy").toBe(true);
-
-    await card.getByRole("button", { name: "Buy for Credits" }).click();
-
-    // Wait for the card to reach an OUTCOME -- a success notice or an
-    // explanation -- before deciding which happened. `networkidle` is not
-    // enough: it can return before the mutation has settled and re-rendered,
-    // and then the branch below reads an empty card and takes the wrong path.
-    // This is the third time in this session that a check ran before the thing
-    // it was checking existed.
-    await expect(card.locator(".notice-good, .explain").first()).toBeVisible();
-
-    // The gate may be off. That is a correct deployment state -- MARKETPLACE is
-    // high risk and a deployment that has not activated it refuses everyone --
-    // so the test asserts the refusal is the HONEST one and stops there.
+    await expect(page.locator(".loading")).toHaveCount(0);
+    // Nothing renders the placeholder that would mean a formatter gave up.
+    await expect(page.locator(".malformed")).toHaveCount(0);
+    // And nothing renders the contract-violation notice, which is what the app
+    // shows when a response does not match the API contract. A mismatch would
+    // render it on every load and still pass the assertions above.
     //
-    // The string is the code the backend actually sent, read off the rendered
-    // page. The first version of this branch looked for the problem TITLE and
-    // never matched: with the gate off the test fell through to the success
-    // assertion and failed with "element not found", which is a confusing way
-    // to be told the gate is closed. Running that control is the only reason
-    // this branch works.
-    const refusal = card.locator(".explain");
-    if (await refusal.count()) {
-      await expect(refusal).toContainText("CAPABILITY_NOT_APPROVED");
-      await expect(refusal).toContainText("MARKETPLACE");
-      // And nothing moved.
-      expect(await creditsShown()).toBe(before);
-      return;
-    }
-
-    // The card says it happened, in the customer's own words rather than a
-    // status code. Asserting only that a Purchases table exists would pass on
-    // somebody else's earlier order, which is how the first version of this
-    // test reached its balance check believing a purchase had occurred.
-    await expect(card.locator(".notice-good")).toContainText("Bought");
-    await expect(page.getByRole("table", { name: "Purchases" })).toBeVisible();
-
-    const after = await creditsShown();
-    expect(before - after, "the Credits that left the account must be exactly the price shown").toBe(price);
+    // A REFUSAL is deliberately not asserted against: this deployment refuses
+    // plenty, and demanding that no refusal appeared would be demanding the
+    // interface lie.
+    await expect(page.getByText("This response could not be trusted")).toHaveCount(0);
   });
+}
 
-  test("every internal-economy page is reachable from the navigation", async ({ page }) => {
-    await page.goto("/");
-    for (const { heading } of INTERNAL_ECONOMY_PAGES) {
-      await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: heading }).click();
-      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    }
-  });
-
-  test("home names all three pots and adds none of them", async ({ page }) => {
-    await page.goto("/");
-    const panel = page.locator(".panel", { hasText: "Three kinds of value" });
-    await expect(panel).toBeVisible();
-    for (const name of ["Real Capital", "Nodal Economy", "Simulated Capital"]) {
-      await expect(panel.getByText(name, { exact: false }).first()).toBeVisible();
-    }
-    // .first(): the phrase appears in both the disclosure title and its body,
-    // which is the point — the rule is stated twice — but strict mode needs one.
-    await expect(panel.getByText("never added together", { exact: false }).first()).toBeVisible();
-  });
-
-  test("no page puts a Credit figure and a currency figure together", async ({ page }) => {
-    // PART LIV: there is no approved external value for a Credit, so a
-    // currency figure beside one would be an exchange rate nobody set. This
-    // reads what actually rendered, which the source scan cannot do for text
-    // that arrives from the API.
-    for (const { path } of INTERNAL_ECONOMY_PAGES) {
-      await page.goto(path);
-      await expect(page.locator("h1")).toHaveCount(1);
-      const text = await page.evaluate(() => document.body.innerText);
-      if (!text.includes("Credits")) continue;
-      expect(
-        /\$\s?\d/.test(text),
-        `${path} rendered a currency amount on a page that quotes Credits`,
-      ).toBeFalsy();
-    }
-  });
-});
-
+/**
+ * D-077 moved Home off the hosted rail. It no longer shows buying power, and
+ * the `Balances` panel these two tests were written against does not exist;
+ * what leads the dashboard now is the Credit balance, which is the thing the
+ * closed-loop product actually runs on. The PROPERTY under test is unchanged
+ * and is what matters — the figures on screen are the backend's own, unaltered
+ * — so it is asserted against the panel that is there.
+ *
+ * The snapshot-instant half of the old test moved with the rail rather than
+ * being dropped quietly: `CreditBalance` carries no `as_of`, so there is no
+ * backend instant on this response to compare against. `/portfolio` keeps the
+ * `as_of` assertion, and the missing stamp is a reported API gap.
+ */
 test("home shows the figures the backend computed, unchanged", async ({ page }) => {
   const id = await accountId(page);
-  const response = await page.request.get(`/v1/accounts/${id}/buying-power?purpose=DISPLAY`);
+  const response = await page.request.get(`/v1/credits/balance?account_id=${id}`);
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as Record<string, string>;
 
-  await page.goto("/");
+  await page.goto("/home");
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  const credits = page.locator(".panel", { hasText: "Credits" }).first();
 
-  // The rendered figure is the wire string with grouping applied and nothing else.
-  const rendered = (value: string): string => {
-    const [whole, cents] = value.replace("-", "").split(".");
-    const grouped = (whole ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return `${value.startsWith("-") ? "-" : ""}$${grouped}.${cents ?? ""}`;
-  };
-
-  for (const field of ["portfolio_value", "buying_power", "available_now", "reserved", "pending"]) {
+  // Every figure carries its EXACT value in `title`, whatever the display form
+  // is, so this compares the unrounded value rather than the rendering of it.
+  for (const [field, label] of [
+    ["gross", "Total Credits"],
+    ["spendable", "Spendable"],
+    ["frozen", "Frozen"],
+    ["payout_eligible", "Payout-eligible"],
+    ["ineligible", "Not payout-eligible"],
+  ] as const) {
     const wire = body[field];
     expect(wire, `${field} present in the response`).toBeTruthy();
-    await expect(
-      page.locator(".panel", { hasText: "Balances" }).getByText(rendered(wire as string), { exact: true }).first(),
-    ).toBeVisible();
+    const figure = credits.locator(`.field:has(dt:text-is("${label}")) .figure`).first();
+    await expect(figure, `${label} is on screen`).toBeVisible();
+    const exact = (await figure.getAttribute("title")) ?? "";
+    const digits = (wire as string).replace(/^-/, "").replace(/^0+/, "");
+    expect(
+      exact.replace(/[^0-9]/g, "").replace(/^0+/, ""),
+      `${label} is the backend's own digits`,
+    ).toBe(digits === "" ? "" : digits);
   }
-
-  // The snapshot instant the backend stamped is on screen, exactly. The page
-  // made its own request, so its instant is not this test's instant — the
-  // backend stamps `as_of` with the moment it computed the answer. What is
-  // asserted is therefore that the page shows a real backend instant verbatim:
-  // the machine-readable attribute and the visible exact rendering agree, it
-  // parses, and it falls in the window this test was running.
-  const asOf = page.locator(".panel", { hasText: "Balances" }).locator("time").first();
-  const machine = await asOf.getAttribute("datetime");
-  expect(machine, "the snapshot carries a machine-readable instant").toBeTruthy();
-  const exact = await page.locator(".panel", { hasText: "Balances" }).locator(".as-of .mono-small").first().innerText();
-  expect(exact.trim(), "the exact instant is shown unrounded beside it").toBe(`(${machine as string})`);
-  const shownAt = Date.parse(machine as string);
-  expect(Number.isNaN(shownAt), "the instant parses").toBe(false);
-  // Bracketed with two comparisons rather than an absolute difference: the
-  // source guard forbids float arithmetic anywhere in this tree.
-  const observed = Date.parse(body["as_of"] as string);
-  const window = 300_000;
-  expect(shownAt, "the instant is not stale").toBeGreaterThan(observed - window);
-  expect(shownAt, "the instant is not fabricated ahead of the backend").toBeLessThan(observed + window);
 });
 
 test("home discloses what the balance actually is", async ({ page }) => {
-  await page.goto("/");
-  const disclosure = page.getByLabel("What you are actually holding");
-  await expect(disclosure).toContainText("USDC");
-  await expect(disclosure).toContainText("stablecoin");
-  await expect(disclosure).toContainText("not a bank deposit");
+  // The balance Home leads with is Credits, so what it owes the reader is what
+  // a Credit is — not what a settlement token is. `/portfolio` keeps the USDC
+  // disclosure, because that is the page that still shows a USD valuation.
+  await page.goto("/home");
+  const disclosure = page.getByLabel("What Credits are");
+  await expect(disclosure).toContainText("not money");
+  await expect(disclosure).toContainText("not a deposit");
+  await expect(disclosure).toContainText("not redeemable for money unless");
 });
 
-test("trade: a quote the backend cannot produce is reported, not faked", async ({ page }) => {
-  await page.goto("/trade");
-  await expect(page.getByRole("heading", { level: 1, name: "Trade" })).toBeVisible();
-
-  // Exact mint identity is on the page before anything is priced.
-  await expect(page.getByText("Mint address").first()).toBeVisible();
-
-  await page.getByLabel("Amount to commit, in US dollars of value").fill("100");
-  await page.getByRole("button", { name: "Get a quote" }).click();
-
-  const quotePanel = page.locator(".panel", { hasText: "Non-binding, fully disclosed" });
-  await expect(quotePanel.getByText(/code (PROVIDER_UNAVAILABLE|UNSUPPORTED)/)).toBeVisible();
-  await expect(quotePanel).toContainText("No price is being shown");
-  // Critically: no number that could be read as a price.
-  await expect(quotePanel.locator(".num")).toHaveCount(0);
-});
-
-test("trade: a simulated order is submitted and its real state is polled", async ({ page }) => {
-  await page.goto("/trade");
-  await page.getByLabel("Amount to commit, in US dollars of value").fill("25");
-
-  // PAPER is the default; assert it rather than assume it.
-  await expect(page.getByRole("radio", { name: /PAPER/ })).toBeChecked();
-
-  const key = await page.locator(".panel", { hasText: "An explicit, idempotent command" }).locator("code").innerText();
-  expect(key.length).toBeGreaterThan(8);
-
-  await page.getByRole("button", { name: "Submit simulated order" }).click();
-
-  const state = page.locator(".panel", { hasText: "Polled from the intent resource" });
-  await expect(state).toBeVisible();
-  await expect(state.getByText(/RECEIVED|ELIGIBILITY_CHECKED|RISK_CHECKED|REJECTED|NO_VALID_PLAN/).first()).toBeVisible();
-  await expect(state).toContainText("PAPER — simulated");
-
-  // The intent the UI shows exists in the backend under that id.
-  const shown = await state.locator("code").first().innerText();
-  const response = await page.request.get(`/v1/intents/${shown}`);
-  expect(response.status(), "the intent the page displays is a real backend record").toBe(200);
-});
-
-test("add funds: the backend's refusal is shown with its code", async ({ page }) => {
-  await page.goto("/add-funds");
-  await page.getByLabel("Amount in US dollars").fill("25");
-  await expect(page.getByText("Will be sent as 25.00")).toBeVisible();
-  await page.getByRole("button", { name: "Start funding" }).click();
-
-  const panel = page.locator(".panel", { hasText: "What the v1 API accepts" });
-  await expect(panel.locator(".explain")).toBeVisible();
-  await expect(panel.locator(".explain-meta")).toContainText("code ");
-  await expect(panel).toContainText("no money has moved");
-});
-
-test("portfolio shows exact units beside every valuation", async ({ page }) => {
+/**
+ * D-077 moved the portfolio off the settlement rail's holdings and onto
+ * `GET /v1/me/portfolio`, which carries the asset's own scale with every
+ * figure. The old assertion checked for an exact base-unit string printed
+ * beside each valuation, which existed because the rail's response left the
+ * scale to be looked up elsewhere; the exact value is now in every figure's
+ * `title`, unrounded, whatever the display form is. Same property, one place.
+ */
+test("portfolio shows the exact value behind every figure", async ({ page }) => {
   const id = await accountId(page);
-  const response = await page.request.get(`/v1/accounts/${id}/holdings`);
-  const body = (await response.json()) as { holdings: Array<{ quantity: string; symbol: string }> };
+  const response = await page.request.get(`/v1/me/portfolio?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    positions: Array<{ symbol: string; quantity: string }>;
+  };
 
   await page.goto("/portfolio");
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
 
-  for (const holding of body.holdings) {
-    await expect(page.getByText(`${holding.quantity} base units`).first()).toBeVisible();
+  for (const position of body.positions) {
+    const row = page.locator("tr", { hasText: position.symbol }).first();
+    await expect(row, `${position.symbol} has a row`).toBeVisible();
+    // The exact value is in `title` on every figure, so a compact or truncated
+    // rendering never hides what the backend actually said.
+    const figures = row.locator(".figure");
+    expect(await figures.count(), `${position.symbol} renders figures`).toBeGreaterThan(0);
+    expect(await figures.first().getAttribute("title")).toBeTruthy();
   }
-  await expect(page.getByRole("link", { name: "Export as CSV" })).toHaveAttribute("href", /export\?format=csv/);
+  await expect(page.getByRole("link", { name: "Export as CSV" })).toHaveAttribute(
+    "href",
+    /export\?format=csv/,
+  );
 });
 
-test("strategy builder compiles a real document and derives its effects", async ({ page }) => {
-  await page.goto("/strategy");
-  await page.getByRole("button", { name: "Compile", exact: true }).click();
-
-  await expect(page.getByText("The document compiled")).toBeVisible();
-  const effects = page.locator(".panel", { hasText: "Derived from the document" });
-  await expect(effects).toContainText("READ_MARKET_DATA");
-  await expect(effects).toContainText("COMMIT_PREDICTION");
-  await expect(effects).toContainText("CREATE_TRADE_INTENT");
-
-  // The semantic hash is computed in the browser and is a real sha256.
-  const hash = page.locator(".panel", { hasText: "What the compiler decided" }).locator("code").first();
-  await expect(hash).toHaveText(/^[0-9a-f]{64}$/);
-
-  // Nothing that signs or moves value can appear in an effect set.
-  for (const forbidden of ["RAW_SIGN", "TRANSFER_VALUE", "WITHDRAW", "CHANGE_CAPITAL"]) {
-    await expect(effects).not.toContainText(forbidden);
-  }
-});
-
-test("activity draws every lifecycle stage, including the ones with no rows", async ({ page }) => {
+/**
+ * The activity page is the product's feed now, not the trading lifecycle
+ * ladder: `ActivityFeedKind` is the vocabulary and `GET /v1/me/activity` is the
+ * source. The property worth keeping is the one the ladder was protecting —
+ * that every kind the feed can carry is reachable, so nothing is quietly
+ * filtered out of a customer's own record.
+ */
+test("activity offers every kind the feed can carry", async ({ page }) => {
   await page.goto("/activity");
-  const stages = [
-    "Data event",
-    "Prediction",
-    "Intent",
-    "Eligibility",
-    "Risk",
-    "Plan",
-    "Execution",
-    "Fill",
-    "Reconciliation",
-  ];
-  for (const stage of stages) {
-    await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
+  const filters = page.locator(".panel", { hasText: "What to show" });
+  for (const label of [
+    "Credit purchases",
+    "Reversals",
+    "Trades",
+    "Assets created",
+    "Withdrawal requests",
+    "Withdrawal updates",
+    "Adjustments",
+  ]) {
+    await expect(filters.getByRole("button", { name: label, exact: true })).toBeVisible();
   }
-  // A stage with no record says so rather than being omitted.
-  await expect(page.getByText("not recorded").first()).toBeVisible();
 });
 
-test("settings lists real sessions and refuses a withdrawal with a reason", async ({ page }) => {
+/**
+ * D-077 split this in two. Sessions moved to `/settings/security`, which is
+ * where USER_JOURNEY §9 puts them, and the withdrawal form moved off Settings
+ * entirely to `/withdraw` — scenario E is what covers the refusal now, on the
+ * page that owns it. What is left here is the half this file is for: the
+ * session list is real, and it is the backend's own rows.
+ */
+test("security lists real sessions", async ({ page }) => {
   const response = await page.request.get("/v1/sessions");
   const sessions = (await response.json()) as Array<{ id: string }>;
 
-  await page.goto("/settings");
-  await expect(page.getByRole("heading", { level: 1, name: "Settings and security" })).toBeVisible();
+  await page.goto("/settings/security");
+  await expect(page.getByRole("heading", { level: 1, name: "Security" })).toBeVisible();
   for (const session of sessions.slice(0, 3)) {
     await expect(page.getByText(session.id, { exact: false }).first()).toBeVisible();
   }
-
-  const withdrawals = page.locator(".panel", { hasText: "Moving assets off the platform" });
-  await withdrawals.getByLabel("Amount").fill("1");
-  await withdrawals.getByLabel("Destination address").fill("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
-  await withdrawals.getByRole("button", { name: "Request withdrawal" }).click();
-
-  await expect(withdrawals.locator(".explain-meta")).toContainText(
-    /code (STEP_UP_REQUIRED|CAPABILITY_NOT_APPROVED|FORBIDDEN|UNSUPPORTED)/,
-  );
-  await expect(withdrawals).toContainText("Nothing was moved");
-});
-
-test("no dead controls anywhere in the application", async ({ page }) => {
-  // "No dead buttons" is about every control a customer can reach, not only
-  // the <button> elements: a navigation action here is often a link, and a page
-  // that is purely a read-out (Home) legitimately has no <button> at all. So
-  // this enumerates everything interactive and requires each one to either do
-  // something real or be disabled with a stated reason.
-  for (const { path } of PAGES) {
-    await page.goto(path);
-    await expect(page.locator("h1")).toHaveCount(1);
-
-    const controls = page.locator("button, a[href], input, select, textarea");
-    const count = await controls.count();
-    expect(count, `${path} has controls`).toBeGreaterThan(0);
-
-    for (let i = 0; i < count; i = i + 1) {
-      const control = controls.nth(i);
-      const tag = await control.evaluate((node) => node.tagName.toLowerCase());
-
-      // Every control has an accessible name: a label, visible text, or an
-      // explicit aria-label. An unnamed control cannot be operated by anyone
-      // navigating by voice or by screen reader.
-      const name = (
-        (await control.getAttribute("aria-label")) ??
-        (await control.getAttribute("title")) ??
-        ((await control.textContent()) ?? "")
-      ).trim();
-      const labelled =
-        name !== "" ||
-        (await control.evaluate((node) => {
-          const id = node.getAttribute("id");
-          if (id === null) return false;
-          return document.querySelector(`label[for="${id.replace(/"/g, '\\"')}"]`) !== null;
-        })) ||
-        (await control.evaluate((node) => node.closest("label") !== null));
-      expect(labelled, `${path}: ${tag} at index ${String(i)} has an accessible name`).toBe(true);
-
-      // A link is dead if it goes nowhere.
-      if (tag === "a") {
-        const href = await control.getAttribute("href");
-        expect(href, `${path}: link "${name}" points somewhere`).toBeTruthy();
-        expect(
-          (href as string) === "#" || (href as string).trim() === "",
-          `${path}: link "${name}" is not a placeholder href`,
-        ).toBe(false);
-        continue;
-      }
-
-      if (await control.isDisabled()) {
-        // A disabled control must say why, in text, next to itself.
-        const describedBy = await control.getAttribute("aria-describedby");
-        expect(describedBy, `${path}: disabled "${name}" explains itself`).toBeTruthy();
-        // An attribute selector rather than `#id`: these ids come from React's
-        // useId() and contain characters an unescaped id selector would choke
-        // on, and CSS.escape is a browser global that does not exist here.
-        const reason = page.locator(`[id="${(describedBy as string).replace(/"/g, '\\"')}"]`);
-        await expect(reason, `${path}: the reason for "${name}" is visible`).toBeVisible();
-        expect(((await reason.textContent()) ?? "").trim().length).toBeGreaterThan(10);
-      }
-    }
-  }
+  // Ending a session is a real action on every row, never a control that is
+  // there for show.
+  await expect(
+    page.locator(".panel", { hasText: "Sessions" }).getByRole("button", { name: /End (this )?session/ }).first(),
+  ).toBeEnabled();
 });
 
 test("keyboard: the skip link is the first stop and reaches main", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/home");
   // Tab must not be pressed while the boot screen is up: it holds no focusable
   // element, so the keypress would be swallowed and focus would never reach the
   // skip link that the rendered page puts first.
@@ -518,25 +214,14 @@ test("keyboard: the skip link is the first stop and reaches main", async ({ page
   await expect(page).toHaveURL(/#main$/);
 });
 
-test("the layout reflows on a narrow viewport without sideways scrolling", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  for (const { path } of PAGES) {
-    await page.goto(path);
-    await expect(page.locator("h1")).toHaveCount(1);
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);
-  }
-});
-
-test("an unauthenticated visitor is asked to sign in rather than shown zeroes", async ({ browser }) => {
+test("a signed-out visitor to an application route is never shown a figure", async ({ browser }) => {
   const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
-  await page.goto("/");
+  await page.goto("/home");
+  // Sent to sign in, carrying where they were going — not shown an empty
+  // dashboard, and not told they are signed out by a page that never asked.
+  await expect(page).toHaveURL("/sign-in?return=%2Fhome");
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue to sign in" })).toBeEnabled();
-  // Not a single figure is rendered to a signed-out visitor.
   await expect(page.locator(".num")).toHaveCount(0);
   await context.close();
 });

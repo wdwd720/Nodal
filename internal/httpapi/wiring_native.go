@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
@@ -78,6 +79,22 @@ type NativeEconomyDeps struct {
 	// Clock is used by the compiler for deadline checks. Nil falls back to
 	// the system clock.
 	Clock clock.Clock
+	// KillSwitches pre-checks the emergency controls at the boundary, before a
+	// quote is consumed or a provider is called. Nil skips the pre-check and
+	// changes nothing about the authoritative one, which every domain service
+	// makes inside its own transaction -- see preCheckKillSwitches.
+	KillSwitches KillSwitchPreChecker
+}
+
+// KillSwitchPreChecker answers whether an active switch blocks an action, from
+// an in-process snapshot at most one second old (*killswitch.CachedChecker).
+//
+// It is a PRE-check by name because POLICY_AUTHORITY §2 permits a cache to
+// serve only pre-checks: the authoritative answer is Checker.Check with the
+// authorizing transaction's own Querier, which is where internal/payout and the
+// other domain services make it.
+type KillSwitchPreChecker interface {
+	PreCheck(ctx context.Context, a killswitch.Action) error
 }
 
 // now is the compiler's notion of the present.
@@ -206,18 +223,16 @@ func (a creditsAdapter) StartPurchase(ctx context.Context, r StartCreditPurchase
 	if a.deps.CreditPurchases == nil {
 		return credit.StartedPurchase{}, errNotWired("credit purchases")
 	}
-	var out credit.StartedPurchase
-	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-		func(ctx context.Context, tx pgx.Tx) error {
-			var serr error
-			out, serr = a.deps.CreditPurchases.StartPurchase(ctx, tx, credit.StartPurchaseRequest{
-				AccountID:      r.AccountID,
-				Amount:         money.USDFromMinor(r.AmountMinor),
-				Currency:       r.Currency,
-				IdempotencyKey: r.IdempotencyKey,
-			})
-			return serr
-		})
+	// No transaction is opened here. StartPurchase needs three of them, with
+	// the provider call between the first and the third, and a caller that
+	// wrapped the whole thing would put that call back inside a transaction --
+	// which is the defect F-96 removed.
+	out, err := a.deps.CreditPurchases.StartPurchase(ctx, a.db, credit.StartPurchaseRequest{
+		AccountID:      r.AccountID,
+		Amount:         money.USDFromMinor(r.AmountMinor),
+		Currency:       r.Currency,
+		IdempotencyKey: r.IdempotencyKey,
+	})
 	if err != nil {
 		return credit.StartedPurchase{}, err
 	}
@@ -472,8 +487,11 @@ func (a nativeMarketsAdapter) recordRiskRefusal(ctx context.Context, err error) 
 
 type payoutsAdapter struct {
 	deps NativeEconomyDeps
-	db   *db.DB
-	clk  clock.Clock
+	// withdrawal carries the legal registry reader: §48's disclosure is a
+	// withdrawal-journey fact and lives with the rest of them.
+	withdrawal WithdrawalDeps
+	db         *db.DB
+	clk        clock.Clock
 }
 
 func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Request, payout.Decision, error) {
@@ -512,17 +530,29 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 	// failing later with a foreign-key error.
 	destinationVerified := false
 	providerSupports := false
+	terms, terr := a.deploymentTerms()
+	if terr != nil {
+		return payout.Request{}, payout.Decision{}, terr
+	}
 	if r.DestinationID != nil {
 		dest, derr := a.deps.Payouts.Destination(ctx, a.db, *r.DestinationID)
 		if derr != nil {
 			return payout.Request{}, payout.Decision{}, derr
 		}
 		if dest.AccountID != r.AccountID {
-			return payout.Request{}, payout.Decision{}, errs.New(errs.CodeForbidden,
-				"that payout destination belongs to another account")
+			// NOT_FOUND, not FORBIDDEN. Every sibling -- DisableDestination,
+			// conversionAdapter.Quote, GET /payouts/{id} since F-41 -- answers
+			// NOT_FOUND for somebody else's row, and a distinguishable refusal
+			// is a membership oracle: anyone could learn which destination ids
+			// exist by asking (F-233, F-41's rule).
+			return payout.Request{}, payout.Decision{}, errs.New(errs.CodeNotFound,
+				"no such payout destination")
 		}
 		destinationVerified = dest.Status.Usable()
 		providerSupports = a.providerSupports(dest)
+		if p, perr := a.deps.Payouts.Provider(dest.Provider); perr == nil {
+			terms = payout.TermsFrom(p.Capabilities())
+		}
 	}
 
 	in := payout.EligibilityInput{
@@ -539,25 +569,112 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 		decision payout.Decision
 	)
 	err = a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		// The withdrawal disclosure, read in the reserving transaction. The
+		// domain refuses without it (payout.disclosureRefusal); this is where
+		// the fact comes from, and asking here rather than on the pool means
+		// the answer cannot change between the question and the reservation.
+		accepted, aerr := a.withdrawal.disclosureAccepted(ctx, tx, r.AccountID)
+		if aerr != nil {
+			return aerr
+		}
+		// The compliance facts, read from the same repository the eligibility
+		// page reads and in the transaction that reserves the value, so an
+		// account under an open sanctions review cannot be told it may withdraw
+		// nothing and have its whole balance reserved anyway (F-226, D-120).
+		facts, ferr := a.withdrawal.complianceFacts(ctx, tx, r.AccountID)
+		if ferr != nil {
+			return ferr
+		}
+		in.SanctionsState = facts.Sanctions
+		in.AccountRestrictions = facts.Restrictions
+		in.JurisdictionSupported = facts.JurisdictionSupported
+
 		var cerr error
 		req, decision, cerr = a.deps.Payouts.Create(ctx, tx, payout.CreateRequest{
-			AccountID:      r.AccountID,
-			DestinationID:  r.DestinationID,
-			Quantity:       r.Amount,
-			IdempotencyKey: r.IdempotencyKey,
-			EffectiveAt:    a.clk.Now(),
-			CorrelationID:  r.CorrelationID,
+			AccountID:          r.AccountID,
+			DestinationID:      r.DestinationID,
+			QuoteID:            r.QuoteID,
+			Quantity:           r.Amount,
+			ProviderTerms:      terms,
+			Sandbox:            a.sandbox(),
+			Environment:        a.withdrawal.Environment,
+			DisclosureAccepted: accepted,
+			IdempotencyKey:     r.IdempotencyKey,
+			EffectiveAt:        a.clk.Now(),
+			CorrelationID:      r.CorrelationID,
 		}, in)
 		return cerr
 	})
 	return req, decision, err
 }
 
+// sandbox is whether a conversion request created now is a rehearsal: either
+// the provider is one, or the deployment is (ADR-0023). It is recorded on the
+// request rather than asked when somebody reads it (F-232).
+func (a payoutsAdapter) sandbox() bool {
+	if a.withdrawal.SandboxTier {
+		return true
+	}
+	names := a.deps.Payouts.ProviderNames()
+	if len(names) != 1 {
+		return false
+	}
+	p, err := a.deps.Payouts.Provider(names[0])
+	if err != nil {
+		return false
+	}
+	return p.Capabilities().Availability == payout.AvailabilitySandbox
+}
+
+// deploymentTerms are the published terms of the one payout provider this
+// deployment runs, for the case where the request names no destination to
+// resolve a provider from.
+//
+// A deployment with no provider has no terms, and a payout judged against no
+// terms is a payout judged against nothing: the refusal is the honest state of a
+// system with no conversion contract (BLOCKERS B-01, B-06).
+func (a payoutsAdapter) deploymentTerms() (payout.ProviderTerms, error) {
+	names := a.deps.Payouts.ProviderNames()
+	if len(names) != 1 {
+		return payout.ProviderTerms{}, errs.New(errs.CodeProviderUnavailable,
+			"this deployment has no payout provider, so there is nothing a payout could be priced against")
+	}
+	p, err := a.deps.Payouts.Provider(names[0])
+	if err != nil {
+		return payout.ProviderTerms{}, err
+	}
+	return payout.TermsFrom(p.Capabilities()), nil
+}
+
 // providerSupports asks the configured provider whether it can actually pay
 // this destination. PART LXXVI: never infer a capability from marketing copy,
 // and never from the fact that a destination row exists.
+//
+// It asks the SAME question the destination was registered against, from the
+// values the destination stored, rather than re-deriving a weaker one. It used
+// to check the kind and the currency and stop there -- so a destination in a
+// country the provider had since stopped paying, or one in an excluded
+// subdivision, was still "supported" at the moment value would leave (F-228,
+// D-122). The provider's own answer is the only one worth having, and it is
+// free to ask.
 func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
-	p, err := a.deps.Payouts.Provider(d.Provider)
+	return providerSupportsDestination(a.deps, d)
+}
+
+// providerSupportsDestination is the same question asked from anywhere that
+// holds the economy dependencies.
+//
+// It is a function rather than a method because the QUOTE asks it too, and
+// asked it as the literal `true` -- three lines under a comment promising that
+// the provenance shown beside a quote is the provenance the commit would
+// consume (F-269). Two call sites, one implementation, so they cannot drift.
+func providerSupportsDestination(deps NativeEconomyDeps, d payout.Destination) bool {
+	if deps.Payouts == nil {
+		// No payout service wired at all. Nothing supports anything, which is
+		// the answer that refuses rather than the one that proceeds.
+		return false
+	}
+	p, err := deps.Payouts.Provider(d.Provider)
 	if err != nil {
 		return false
 	}
@@ -568,7 +685,10 @@ func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
 	if d.Currency != "" && !caps.SupportsCurrency(d.Currency) {
 		return false
 	}
-	return true
+	ok, _ := caps.CanPayRecipient(payout.RecipientProfile{
+		Kind: payout.RecipientKindIndividual, Country: d.Country, Region: d.Region,
+	})
+	return ok
 }
 
 // Cancel withdraws the account's own pending request.
@@ -601,6 +721,27 @@ func (a payoutsAdapter) ListByAccount(ctx context.Context, accountID accounts.Ac
 	return a.deps.Payouts.ListByAccount(ctx, a.db, accountID, limit)
 }
 
+// Provenance is what value a payout draws on, in the order it leaves (PART 23).
+func (a payoutsAdapter) Provenance(ctx context.Context, id payout.RequestID) ([]payout.ProvenanceSlice, error) {
+	return a.deps.Payouts.Provenance(ctx, a.db, id)
+}
+
+// SandboxProvider reports whether this deployment pays through a rehearsal
+// provider. A deployment runs one payout slot, so "the provider" is
+// unambiguous; with none configured the answer is false, because a payout that
+// cannot happen is not a rehearsal of anything.
+func (a payoutsAdapter) SandboxProvider() bool {
+	names := a.deps.Payouts.ProviderNames()
+	if len(names) != 1 {
+		return false
+	}
+	p, err := a.deps.Payouts.Provider(names[0])
+	if err != nil {
+		return false
+	}
+	return p.Capabilities().Availability == payout.AvailabilitySandbox
+}
+
 // wireNativeEconomy attaches the internal-economy ports that have services
 // behind them and leaves the rest nil.
 func wireNativeEconomy(p *Ports, d WireDeps) {
@@ -620,7 +761,7 @@ func wireNativeEconomy(p *Ports, d WireDeps) {
 		p.NativeMarkets = nativeMarketsAdapter{deps: n, db: d.DB}
 	}
 	if n.Payouts != nil {
-		p.Payouts = payoutsAdapter{deps: n, db: d.DB, clk: d.Clock}
+		p.Payouts = payoutsAdapter{deps: n, withdrawal: d.Withdrawal, db: d.DB, clk: d.Clock}
 	}
 	if n.Commerce != nil {
 		p.Commerce = commerceAdapter{svc: n.Commerce, db: d.DB, clk: d.Clock, deps: n}

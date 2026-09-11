@@ -54,11 +54,14 @@ func toAPICreditBalance(accountID string, b credit.Balances) api.CreditBalance {
 
 	id := uuid.MustParse(accountID)
 	return api.CreditBalance{
-		AccountId:         id,
+		AccountId: id,
+		// The scale travels with the figures. Every consumer that assumed six
+		// was a consumer that could be a million times wrong (F-151).
+		CreditDecimals:    int(b.CreditDecimals),
 		Gross:             qtyString(b.Gross),
 		Spendable:         qtyString(b.Spendable),
 		Frozen:            qtyString(b.Frozen),
-		Reversed:          ptr(qtyString(b.Reversed)),
+		Reversed:          qtyString(b.Reversed),
 		PayoutEligible:    qtyString(b.PayoutEligible),
 		Ineligible:        qtyString(b.Ineligible),
 		ByOrigin:          &byOrigin,
@@ -97,7 +100,7 @@ func toAPINativeAsset(a nativeasset.Asset) api.NativeAsset {
 		Status:           api.NativeAssetStatus(a.Status),
 		ModerationState:  api.NativeAssetModerationState(a.Moderation),
 		ModerationNotes:  ptr(a.ModerationNotes),
-		CreatedAt:        ptr(a.CreatedAt),
+		CreatedAt:        ptr(a.CreatedAt.UTC()),
 		Supply: api.NativeSupply{
 			MaxSupply:          qtyString(a.Supply.MaxSupply),
 			CreatorAllocation:  qtyString(a.Supply.CreatorAllocation),
@@ -119,10 +122,10 @@ func toAPINativeAsset(a nativeasset.Asset) api.NativeAsset {
 		out.ImageUrl = ptr(a.ImageURL)
 	}
 	if a.EconomicsLockedAt != nil {
-		out.EconomicsLockedAt = a.EconomicsLockedAt
+		out.EconomicsLockedAt = timePtr(a.EconomicsLockedAt)
 	}
 	if a.ActivatedAt != nil {
-		out.ActivatedAt = a.ActivatedAt
+		out.ActivatedAt = timePtr(a.ActivatedAt)
 	}
 	return out
 }
@@ -260,18 +263,9 @@ func (s *Server) GetNativeMarketsMarketId(ctx context.Context, request api.GetNa
 		return nil, err
 	}
 
-	holders := make([]struct {
-		AccountId *uuid.UUID `json:"account_id,omitempty"`
-		Quantity  *string    `json:"quantity,omitempty"`
-	}, 0, len(v.Holders))
-	for _, h := range v.Holders {
-		id := uuid.MustParse(h.AccountID.String())
-		q := qtyString(h.Quantity)
-		holders = append(holders, struct {
-			AccountId *uuid.UUID `json:"account_id,omitempty"`
-			Quantity  *string    `json:"quantity,omitempty"`
-		}{AccountId: &id, Quantity: &q})
-	}
+	// Naming nobody, like the summary read: this route takes no account, so no
+	// row is marked as the caller's own either (D-111).
+	holders := toAPIHolders(v.Holders)
 
 	spot := nativemarket.SpotPrice(v.Market.Curve, v.State)
 	scale := nativemarket.PriceScale
@@ -362,7 +356,7 @@ func (s *Server) PostNativeMarketsMarketIdQuotes(ctx context.Context, request ap
 		AssetDecimals:   ptr(res.Value.AssetDecimals),
 		SlippageBps:     ptr(int(q.SlippageBPS)),
 		StateVersion:    q.StateVersion,
-		ExpiresAt:       q.ExpiresAt,
+		ExpiresAt:       q.ExpiresAt.UTC(),
 	}), nil
 }
 
@@ -476,7 +470,7 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 		SettledQuantity:   ptr(qtyString(r.SettledQuantity)),
 		PolicyVersion:     r.PolicyVersion,
 		PolicyHash:        ptr(r.PolicyHash),
-		CreatedAt:         ptr(r.CreatedAt),
+		CreatedAt:         ptr(r.CreatedAt.UTC()),
 	}
 	if r.DestinationID != nil {
 		id := uuid.MustParse(r.DestinationID.String())
@@ -484,6 +478,23 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 	}
 	if r.FailureReason != "" {
 		out.FailureReason = ptr(r.FailureReason)
+	}
+	// Why a RESERVED payout cannot be sent, which is not a failure and not a
+	// state: the value is still reserved and cancelling is what releases it
+	// (F-277). The Withdraw page renders it beside the Cancel control.
+	//
+	// `Blocked()` and not the string, because the string outlives the state it
+	// describes. The reason stays on the row after a cancellation -- why
+	// somebody's value could not be sent is part of its history -- and emitting
+	// it regardless of state put "this withdrawal cannot be sent ... its Credits
+	// are still reserved" into the same payload as REJECTED and a reserved
+	// quantity of zero (F-279). The record keeps the fact; the read reports it
+	// only while it is true.
+	if r.Blocked() {
+		out.BlockedReason = ptr(r.BlockedReason)
+		if r.BlockedAt != nil {
+			out.BlockedAt = ptr(r.BlockedAt.UTC())
+		}
 	}
 	reasons := append([]string(nil), r.EligibilityReasons...)
 	if len(d.Reasons) > 0 {
@@ -498,7 +509,58 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 		out.EligibleQuantity = ptr(qtyString(d.Eligible))
 		out.VerificationWouldSuffice = ptr(d.VerificationWouldSuffice)
 		out.RequiredVerification = ptr(string(d.RequiredVerification))
+		// What value WOULD leave, from the decision's own lot selection. On a
+		// creation the allocations may not exist yet -- a request that only
+		// needs verification reserves nothing -- so the decision is the only
+		// place this can come from (PART 23).
+		out.Provenance = ptr(toAPIProvenance(payout.DecisionProvenance(d)))
 	}
+	if r.QuoteID != nil {
+		id := uuid.MustParse(r.QuoteID.String())
+		out.QuoteId = &id
+	}
+	// The price the customer was shown, read off the request rather than
+	// recomputed: a fee schedule repriced later must not change what a payout
+	// says it sent (D-119). Zero on a row written before the quote was
+	// required, and omitted rather than rendered as a free payout.
+	if r.QuoteCurrency != "" {
+		out.QuotedGrossAmountMinor = ptr(r.QuoteGrossAmountMinor)
+		out.QuotedFeeAmountMinor = ptr(r.QuoteFeeAmountMinor)
+		out.QuotedNetAmountMinor = ptr(r.QuoteNetAmountMinor)
+		out.QuotedCurrency = ptr(r.QuoteCurrency)
+	}
+	// The tier this request was MADE on, read off the row. It used to be
+	// answered only by the by-id read, from today's provider mode, so the same
+	// payout was a rehearsal on one screen and unlabelled on two others
+	// (F-232).
+	//
+	// There is no "no recorded fact" case any more. The column was nullable and
+	// this reader treated NULL as a rehearsal while the PROD CHECK treated it as
+	// a real payout, so one of the two was wrong on every pre-00810 row and
+	// nothing could say which; 00817 made it NOT NULL and backfilled the rows
+	// that had no fact as rehearsals, on the ground that no PROD deployment of
+	// this system has ever existed (D-134).
+	out.Sandbox = ptr(r.Sandbox)
+	if r.Provider != "" {
+		out.Provider = ptr(r.Provider)
+	}
+	return out
+}
+
+// withProvenance attaches what value a payout draws on, in the order it leaves
+// (PART 23). It is a read over payout_allocations and changes no ledger
+// semantics: a payout does not take "500 Credits", it takes specific units from
+// specific provenance lots, and a person is entitled to see which.
+func (s *Server) withProvenance(ctx context.Context, out api.PayoutRequest, id payout.RequestID) api.PayoutRequest {
+	slices, err := s.opts.Ports.Payouts.Provenance(ctx, id)
+	if err == nil && len(slices) > 0 {
+		out.Provenance = ptr(toAPIProvenance(slices))
+	}
+	// The sandbox label is NOT set here any more. It used to be
+	// `s.opts.Ports.Payouts.SandboxProvider()` -- what the provider is now --
+	// which made this route the only one that answered it and made the answer a
+	// property of today's configuration rather than of the payout (F-232).
+	// toAPIPayout reads the column.
 	return out
 }
 
@@ -526,9 +588,31 @@ func (s *Server) PostPayouts(ctx context.Context, request api.PostPayoutsRequest
 		}
 		destID = &parsed
 	}
+	// The quote the customer was shown (PART 19, PART 22), and it is REQUIRED.
+	//
+	// It used to be optional, on the stated reason that "an operator resolving a
+	// stuck payout has no quote to name". That reason was false: this route is
+	// accountScopeWrite, and an operator resolves a stuck payout through
+	// ResolveManualReview, which creates nothing. What being optional bought
+	// was a payout of 50 Credits against a provider publishing a $1.00 minimum
+	// -- refused by POST /payouts/quote in as many words -- reserved and settled
+	// with the fee never taken, because the whole minimum-and-fee branch of
+	// internal/payout.Create sat inside `if r.QuoteID != nil` (F-224, D-119).
+	//
+	// It must name the same destination and the same gross amount, and
+	// internal/payout consumes it inside the reserving transaction so one quote
+	// funds exactly one payout.
+	if request.Body.QuoteId == uuid.Nil {
+		return nil, validationError("quote_id",
+			"a payout names the quote the customer was shown; ask POST /v1/payouts/quote first")
+	}
+	quoteID, perr := payout.ParseQuoteID(request.Body.QuoteId.String())
+	if perr != nil {
+		return nil, validationError("quote_id", "quote_id must be a canonical UUID")
+	}
 
 	cmd := CreatePayout{
-		AccountID: accountID, Amount: amount, DestinationID: destID,
+		AccountID: accountID, Amount: amount, DestinationID: destID, QuoteID: &quoteID,
 		IdempotencyKey: request.Params.IdempotencyKey,
 		CorrelationID:  observability.CorrelationID(ctx),
 	}
@@ -603,7 +687,9 @@ func (s *Server) GetPayoutsPayoutId(ctx context.Context, request api.GetPayoutsP
 		return nil, errs.New(errs.CodeNotFound, "no such payout").
 			WithField("payout_id", id.String())
 	}
-	return api.GetPayoutsPayoutId200JSONResponse(toAPIPayout(r, payout.Decision{})), nil
+	return api.GetPayoutsPayoutId200JSONResponse(
+		s.withProvenance(ctx, toAPIPayout(r, payout.Decision{}), id),
+	), nil
 }
 
 // securityRequireAccountOwner is security.RequireAccountOwner: ownership only,
