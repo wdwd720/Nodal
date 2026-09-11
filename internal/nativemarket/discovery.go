@@ -201,15 +201,19 @@ func decodeListCursor(s string) (listCursor, bool, error) {
 //   - NEWEST is epoch seconds with microseconds, which is exactly as precise as
 //     the timestamptz it comes from.
 //   - PRICE and CHANGE_24H recompute the marginal price the same way the Go
-//     curve does -- truncating integer division of (V+R)·10^18 by Y -- so the
-//     order the database returns is the order of the prices the response shows.
+//     curve does, through cp_native_market_price (migration 00805): truncating
+//     integer division of (V+R)·10^18 by Y, except that a positive ratio is
+//     never reported as zero. That is ratioScaled's rule, stated in SQL, so the
+//     order the database returns is the order of the prices the response shows
+//     -- including on a market priced below one unit of scale, where truncation
+//     alone would sort every such market as equally free (F-193).
 var sortKeyExpressions = map[SortBy]string{
 	SortNewest:    `extract(epoch from m.created_at)::numeric`,
 	SortVolume24h: `coalesce(v24.credit_volume, 0)::numeric`,
 	SortLiquidity: `(m.virtual_credit_reserve + st.real_credit_reserve)::numeric`,
-	SortPrice:     `div((m.virtual_credit_reserve + st.real_credit_reserve) * 1000000000000000000::numeric, st.asset_reserve)`,
+	SortPrice:     `cp_native_market_price(m.virtual_credit_reserve + st.real_credit_reserve, st.asset_reserve)`,
 	SortChange24h: `CASE WHEN coalesce(p24.reference_price, 0) = 0 THEN -1000000000::numeric ELSE
-	                  (div((m.virtual_credit_reserve + st.real_credit_reserve) * 1000000000000000000::numeric, st.asset_reserve)
+	                  (cp_native_market_price(m.virtual_credit_reserve + st.real_credit_reserve, st.asset_reserve)
 	                   - p24.reference_price) * 10000 / p24.reference_price END`,
 }
 

@@ -115,7 +115,15 @@ func TestParseSafetyPolicy_RejectsWhatItShould(t *testing.T) {
 	}
 }
 
-// TestPriceImpactBPS_IsTheMarketsMoveNotTheCallersCost.
+// TestPriceImpactBPS_IsTheMarketsMoveNotTheCallersCost, measured on the
+// RESERVES rather than on two rendered prices.
+//
+// The marginal price of this curve is K/Y^2, so the move a fill makes is
+// (Y/Y')^2 - 1 and the impact is |Y^2 - Y'^2| / Y'^2 in exact integers. Two
+// prices at PriceScale are a rendering of the same fact and can lose all of it:
+// on a market whose price truncates near zero they render identically and the
+// difference is nothing, which is how a 12,500 basis point order passed a 9,000
+// basis point ceiling (F-193).
 func TestPriceImpactBPS_IsTheMarketsMoveNotTheCallersCost(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -125,22 +133,53 @@ func TestPriceImpactBPS_IsTheMarketsMoveNotTheCallersCost(t *testing.T) {
 		want   money.BPS
 	}{
 		{"unmoved", 1_000, 1_000, 0},
-		{"up ten percent", 1_000, 1_100, 1_000},
-		{"down ten percent", 1_000, 900, 1_000},
-		{"doubled", 1_000, 2_000, 10_000},
-		{"rounds down", 1_000, 1_000 + 1, 10},
-		{"no pre-trade price", 0, 5_000, 0},
+		// A buy takes a tenth of the units: (1000/900)^2 - 1 = 23.4567%.
+		{"a buy takes a tenth of the pool", 1_000, 900, 2_345},
+		// A buy takes half of them, so the price quadruples.
+		{"a buy takes half the pool", 1_000, 500, 30_000},
+		// A sell doubles them, so the price falls to a quarter of itself. The
+		// limit is on the SIZE of the move, so this is a magnitude.
+		{"a sell doubles the pool", 1_000, 2_000, 7_500},
+		// (1000/999)^2 - 1 = 0.2003%, and the basis points truncate.
+		{"rounds down", 1_000, 999, 20},
+		// Neither of these is a fill this package produces, and neither is
+		// within limits: an impact that cannot be measured is refused.
+		{"a fill that carries no reserves", 0, 0, unmeasurableBPS},
+		{"a fill with no pool before it", 0, 5_000, unmeasurableBPS},
+		{"a fill that emptied the pool", 5_000, 0, unmeasurableBPS},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			got := PriceImpactBPS(Fill{
-				SpotBefore: money.QuantityFromInt64(c.before),
-				SpotAfter:  money.QuantityFromInt64(c.after),
+				StateBefore: State{AssetReserve: money.QuantityFromInt64(c.before)},
+				StateAfter:  State{AssetReserve: money.QuantityFromInt64(c.after)},
 			})
 			assert.Equal(t, c.want, got)
 		})
 	}
+}
+
+// TestTheSafetyReadersFailClosedOnAPriceTheyCannotMeasure.
+//
+// Three ratios divide by a price: the impact ceiling, the slippage ceiling and
+// the circuit breaker. Each used to answer ZERO when its reference was zero,
+// which reads as "this order is within limits" and "this market has not moved"
+// -- on precisely the market where neither was known (F-193). Each now
+// saturates, which refuses.
+func TestTheSafetyReadersFailClosedOnAPriceTheyCannotMeasure(t *testing.T) {
+	t.Parallel()
+	tiny := money.QuantityFromInt64(MinSpotUnits - 1)
+	ok := money.QuantityFromInt64(MinSpotUnits)
+
+	assert.Equal(t, unmeasurableBPS, Fill{SpotBefore: money.Quantity{}}.SlippageBPS())
+	assert.Equal(t, unmeasurableBPS, Fill{SpotBefore: tiny, EffectivePrice: tiny}.SlippageBPS())
+	assert.Equal(t, money.BPS(0), Fill{SpotBefore: ok, EffectivePrice: ok}.SlippageBPS(),
+		"a price at the floor is measurable, and an order that fills at it has no slippage")
+
+	assert.Equal(t, unmeasurableBPS, moveBPS(money.Quantity{}, money.QuantityFromInt64(5_000_000)))
+	assert.Equal(t, unmeasurableBPS, moveBPS(tiny, tiny))
+	assert.Equal(t, money.BPS(0), moveBPS(ok, ok))
 }
 
 // TestChangeBPS_KeepsItsSign: a market that fell 20% and one that rose 20% are
@@ -154,8 +193,12 @@ func TestChangeBPS_KeepsItsSign(t *testing.T) {
 	assert.Equal(t, money.BPS(-2_000), down)
 	assert.Equal(t, money.BPS(0), changeBPS(money.Quantity{}, money.QuantityFromInt64(5)))
 
-	// moveBPS is the same measurement without the sign.
-	assert.Equal(t, money.BPS(2_000), moveBPS(money.QuantityFromInt64(1_000), money.QuantityFromInt64(800)))
+	// moveBPS is the same measurement without the sign, on prices a market may
+	// actually have: a reference below MinSpotUnits saturates rather than
+	// reporting a move, which changeBPS does not do because it is a figure on a
+	// screen and not a control (TestTheSafetyReadersFailClosed...).
+	assert.Equal(t, money.BPS(2_000),
+		moveBPS(money.QuantityFromInt64(1_000_000), money.QuantityFromInt64(800_000)))
 }
 
 // TestCheckSafety_EachLimitAtItsBoundary: at the limit is permitted, one basis
@@ -172,39 +215,56 @@ func TestCheckSafety_EachLimitAtItsBoundary(t *testing.T) {
 	policy.MaxPriceImpactBPS = bpsPtr(1_000)
 	policy.MaxSlippageBPS = bpsPtr(10_000) // out of the way for the impact cases
 
-	// A fill that moves the spot by exactly 1000 bps, and one that moves it by
-	// 1001. EffectivePrice equals SpotBefore so slippage is zero either way.
-	at := func(after int64) Fill {
+	// One fill, read by two policies. The impact a fill makes is fixed by its
+	// reserves and the interesting mistake is in the COMPARISON, so the fill
+	// stays still and the limit moves across it by one basis point.
+	//
+	// Every price here is well above MinSpotUnits, because a price below it is
+	// refused before a limit is ever consulted (TestCheckOpeningLiquidity).
+	const onScreen = 10_000_000_000
+	at := func(before, after int64) Fill {
 		return Fill{
-			Side: Buy, SpotBefore: money.QuantityFromInt64(10_000),
-			SpotAfter: money.QuantityFromInt64(after), EffectivePrice: money.QuantityFromInt64(10_000),
+			Side:        Buy,
+			StateBefore: State{AssetReserve: money.QuantityFromInt64(before)},
+			StateAfter:  State{AssetReserve: money.QuantityFromInt64(after)},
+			SpotBefore:  money.QuantityFromInt64(onScreen),
+			SpotAfter:   money.QuantityFromInt64(onScreen),
+			// Equal to the price on screen, so slippage is zero and only the
+			// impact limit is under test.
+			EffectivePrice: money.QuantityFromInt64(onScreen),
 		}
 	}
 	r := ExecuteRequest{AccountID: trader, Side: Buy}
-	require.NoError(t, svc.checkSafety(policy, m, r, at(11_000), creator), "exactly at the limit is permitted")
+	moved := at(1_000, 900)
+	require.Equal(t, money.BPS(2_345), PriceImpactBPS(moved))
 
-	err := svc.checkSafety(policy, m, r, at(11_001), creator)
+	policy.MaxPriceImpactBPS = bpsPtr(2_345)
+	require.NoError(t, svc.checkSafety(policy, m, r, moved, creator), "exactly at the limit is permitted")
+
+	policy.MaxPriceImpactBPS = bpsPtr(2_344)
+	err := svc.checkSafety(policy, m, r, moved, creator)
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeVenueLiquidityInsufficient, errs.CodeOf(err))
 
-	// Slippage, with impact out of the way.
+	// Slippage, with impact out of the way: the reserves do not move, so the
+	// only thing this fill can be refused for is where it filled.
 	policy.MaxPriceImpactBPS = bpsPtr(10_000)
 	policy.MaxSlippageBPS = bpsPtr(500)
 	slip := func(effective int64) Fill {
-		return Fill{
-			Side: Buy, SpotBefore: money.QuantityFromInt64(10_000),
-			SpotAfter: money.QuantityFromInt64(10_000), EffectivePrice: money.QuantityFromInt64(effective),
-		}
+		f := at(1_000, 1_000)
+		f.EffectivePrice = money.QuantityFromInt64(effective)
+		return f
 	}
-	require.NoError(t, svc.checkSafety(policy, m, r, slip(10_500), creator))
-	err = svc.checkSafety(policy, m, r, slip(10_501), creator)
+	require.NoError(t, svc.checkSafety(policy, m, r, slip(10_500_000_000), creator))
+	err = svc.checkSafety(policy, m, r, slip(10_501_000_000), creator)
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeVenueLiquidityInsufficient, errs.CodeOf(err))
 
 	// A SELL is never refused by either limit. Both numbers describe the cost
 	// of the caller's own size, and refusing an exit traps a holder.
 	sell := ExecuteRequest{AccountID: trader, Side: Sell}
-	sellFill := slip(99_999)
+	sellFill := slip(99_999_000_000)
+	sellFill.StateAfter = State{AssetReserve: money.QuantityFromInt64(4_000)}
 	sellFill.Side = Sell
 	require.NoError(t, svc.checkSafety(policy, m, sell, sellFill, creator),
 		"a sell is never refused for its own price impact")
@@ -219,8 +279,14 @@ func TestCheckSafety_CreatorSelfBuyIsAPolicyChoice(t *testing.T) {
 	creator := newTestAccountID()
 	m := Market{ID: NewMarketID(), AssetID: newTestAssetID()}
 	fill := Fill{
-		Side: Buy, SpotBefore: money.QuantityFromInt64(1_000),
-		SpotAfter: money.QuantityFromInt64(1_000), EffectivePrice: money.QuantityFromInt64(1_000),
+		Side:        Buy,
+		StateBefore: State{AssetReserve: money.QuantityFromInt64(1_000)},
+		StateAfter:  State{AssetReserve: money.QuantityFromInt64(1_000)},
+		SpotBefore:  money.QuantityFromInt64(1_000_000_000),
+		SpotAfter:   money.QuantityFromInt64(1_000_000_000),
+		// Nothing moved and nothing slipped, so the only limit that can refuse
+		// this fill is the one under test.
+		EffectivePrice: money.QuantityFromInt64(1_000_000_000),
 	}
 	buy := ExecuteRequest{AccountID: creator, Side: Buy}
 	sell := ExecuteRequest{AccountID: creator, Side: Sell}
@@ -260,6 +326,46 @@ func TestCheckOpeningLiquidity_AtTheBoundary(t *testing.T) {
 	err := checkOpeningLiquidity(p, req(floor.Sub(money.QuantityFromInt64(1))))
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+}
+
+// TestCheckOpeningLiquidity_RefusesAPriceTooSmallToMeasure.
+//
+// The depth floor bounds the reserve and says nothing about the supply it is
+// spread over, so a market clearing it by a wide margin could still open at a
+// marginal price of zero and stay there for its whole life (F-193). The second
+// bound is on the price the depth produces, and it is compiled in rather than
+// policy, because a deployment may decide how deep a market must be and may not
+// decide that a price of zero is measurable.
+func TestCheckOpeningLiquidity_RefusesAPriceTooSmallToMeasure(t *testing.T) {
+	t.Parallel()
+	p := ConservativeSafetyPolicy()
+	v := *p.MinOpeningLiquidityCredits
+
+	// At the reserve floor, 10^21 units price at V*10^18/Y0 = 10^6 exactly,
+	// which is MinSpotUnits: a thousand tokens of an eighteen-decimal asset.
+	y0 := qs("1000000000000000000000")
+	require.NoError(t, checkOpeningLiquidity(p, CreateRequest{VirtualCreditReserve: v, PoolSupply: y0}),
+		"exactly the smallest measurable price is permitted")
+
+	// One more unit of supply and the price falls below it.
+	tooMany := y0.Add(money.QuantityFromInt64(1))
+	err := checkOpeningLiquidity(p, CreateRequest{VirtualCreditReserve: v, PoolSupply: tooMany})
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+
+	// The market the audit opened: ten billion units of an eighteen-decimal
+	// asset on the reserve floor, whose price truncated to zero.
+	err = checkOpeningLiquidity(p, CreateRequest{
+		VirtualCreditReserve: v, PoolSupply: qs("10000000000000000000000000000"),
+	})
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+
+	// And the ordinary six-decimal launch is nowhere near it: a billion tokens
+	// at six decimals on the same reserve opens at 10^12.
+	require.NoError(t, checkOpeningLiquidity(p, CreateRequest{
+		VirtualCreditReserve: v, PoolSupply: qs("1000000000000000"),
+	}))
 }
 
 // TestBreakerPauseStatus_LetsHoldersOut: the breaker pauses to CLOSE_ONLY, not

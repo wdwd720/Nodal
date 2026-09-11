@@ -207,8 +207,12 @@ type Fill struct {
 	PlatformFee money.Quantity
 	CreatorFee  money.Quantity
 
-	// StateBefore and StateAfter bracket the trade. StateAfter.Version is not
-	// set here; the persistence layer assigns it.
+	// StateBefore and StateAfter bracket the trade. StateAfter.Version is the
+	// version the trade PRODUCES, and the curve cannot know it: it is assigned
+	// by Execute from the state the trade was priced against, before the fill
+	// is written, because the API renders it as state_version_after and a
+	// number the customer is shown has to be the one the market moved to
+	// (F-195).
 	StateBefore State
 	StateAfter  State
 
@@ -227,6 +231,59 @@ type Fill struct {
 const PriceScale = 18
 
 var priceScaleFactor = new(big.Int).Exp(big.NewInt(10), big.NewInt(PriceScale), nil)
+
+// MinSpotUnits is the smallest marginal price a market may open at, in units of
+// 10^-PriceScale, and the smallest price anything in this package will measure
+// a basis point against.
+//
+// # Why a floor exists at all
+//
+// The marginal price is (V+R)·10^PriceScale / Y, truncated. Nothing bounds Y
+// against V -- a creator chooses the supply and the scale -- so ten billion
+// units of an eighteen-decimal asset launched on the smallest permitted virtual
+// reserve price at 10^27/10^28, which truncates to ZERO and stays zero as the
+// market trades. Every §47 control then reads that zero as its denominator and
+// concludes "no move", the portfolio marks every holder at nothing, and none of
+// it is visible as a failure (F-193).
+//
+// # Why 10^6
+//
+// Every one of those controls is a ratio quoted in basis points. One basis
+// point of a price S is S/10,000 units, so below S = 10^4 a basis point is not
+// representable AT ALL and a limit expressed in basis points is measuring
+// rounding. 10^6 leaves two further digits, so no single unit of movement can
+// flip a limit either way.
+//
+// # Why checking it once, at creation, is enough
+//
+// The price cannot fall below the one a market opened at. x = V+R never falls
+// below V, because every payout draws on R and R starts at zero; y never rises
+// above Y0, because holders in aggregate hold Y0-y. So S = x·10^18/y is at
+// every instant at least V·10^18/Y0, which is the opening price. Bounding the
+// opening price bounds the price for the life of the market.
+//
+// # What it costs a creator
+//
+// At the default six decimals, nothing anybody would notice: a billion tokens
+// on the 1,000-Credit liquidity floor open at 10^13, seven orders of magnitude
+// clear. At eighteen decimals it binds, and it is meant to -- a million tokens
+// open on that same floor, ten million need ten thousand Credits of virtual
+// reserve, and a creator who wants a billion eighteen-decimal tokens has to say
+// what pool prices them. That is the trade the price scale forces; stating it
+// at creation is better than discovering it as a market that prices at nothing.
+const MinSpotUnits = 1_000_000
+
+// minSpot is MinSpotUnits as a Quantity, for comparison against a price.
+var minSpot = money.QuantityFromInt64(MinSpotUnits)
+
+// unmeasurableBPS is what a ratio reports when its reference price is too
+// coarse to measure against: the same saturation an overflowing ratio reports.
+//
+// It is deliberately a huge number rather than zero. Every caller of these
+// ratios compares them against a ceiling, so saturating REFUSES the order or
+// trips the breaker, and zero would have said "within limits" about a
+// measurement that was never taken.
+const unmeasurableBPS money.BPS = 1_000 * money.OneHundredPercent
 
 // QuoteBuy computes the exact result of spending creditsIn on a market.
 //
@@ -436,20 +493,41 @@ func spot(c Curve, s State) money.Quantity {
 	return ratioScaled(s.Effective(c).BigInt(), s.AssetReserve.BigInt())
 }
 
+// ratioScaled is num/den at PriceScale, truncated -- except that a POSITIVE
+// ratio is never reported as zero.
+//
+// Truncation is what the database does (div() in migrations 00771 and 00804)
+// and what the ordering in discovery.go does, so the three statements of this
+// arithmetic agree to the unit. The one place they used to agree on a wrong
+// answer is a ratio below one unit of scale: zero is not a small price, it is
+// "free", and it is read as free by the impact ceiling, the slippage ceiling,
+// the circuit breaker and the portfolio mark. One unit is the smallest price
+// this scale can express, and it is the honest answer -- MinSpotUnits is what
+// stops a market that needs it from being opened at all.
 func ratioScaled(num, den *big.Int) money.Quantity {
-	if den.Sign() == 0 {
+	if den.Sign() <= 0 {
 		return money.Quantity{}
 	}
 	scaled := new(big.Int).Mul(num, priceScaleFactor)
-	return money.QuantityFromBigInt(scaled.Quo(scaled, den))
+	scaled.Quo(scaled, den)
+	if scaled.Sign() == 0 && num.Sign() > 0 {
+		scaled.SetInt64(1)
+	}
+	return money.QuantityFromBigInt(scaled)
 }
 
 // SlippageBPS is how far the effective price moved from the pre-trade spot,
 // in basis points. It is reported on every quote so a user can see the cost
 // of their own size rather than discovering it in the fill.
 func (f Fill) SlippageBPS() money.BPS {
-	if f.SpotBefore.Sign() == 0 {
-		return 0
+	if f.SpotBefore.Cmp(minSpot) < 0 {
+		// Fail closed. A reference below MinSpotUnits cannot express a basis
+		// point, so the honest report is "this cannot be measured", and the
+		// caller of this number is a ceiling that must then refuse. Reporting
+		// zero -- which is what a missing reference used to report -- told the
+		// §47 slippage ceiling that an order filling at any price whatsoever
+		// was exactly on screen (F-193).
+		return unmeasurableBPS
 	}
 	diff := new(big.Int).Sub(f.EffectivePrice.BigInt(), f.SpotBefore.BigInt())
 	diff.Abs(diff)
