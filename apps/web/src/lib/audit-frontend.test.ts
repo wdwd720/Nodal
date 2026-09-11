@@ -90,7 +90,10 @@ test("audit: a count renders the unit its caller asked for", () => {
   // `Figure` accepts `symbol` on every kind. `formatCount` ignores it, so
   // `<Figure kind="count" count={rate} symbol="Credits" />` renders a bare
   // number and the reader is left to guess the unit.
-  const rendered = figureText(formatCount("100"));
+  // The second argument did not exist when this was written — `formatCount`
+  // took the value alone — so the call could not be spelled and the assertion
+  // stood over the one-argument form. The assertion is unchanged.
+  const rendered = figureText(formatCount("100", { symbol: "Credits" }));
   assert.match(rendered, /Credits/, `formatCount drops the symbol: rendered ${rendered}`);
 });
 

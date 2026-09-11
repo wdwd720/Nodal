@@ -374,6 +374,25 @@ export function formatUnits(
   const exact = exactText(p, symbol);
   const sign = signOf(p, options.signed === true);
 
+  // The band is a property of the VALUE, not of the wire form it arrived in. A
+  // stablecoin sent as `{decimal}` and the same stablecoin sent as base units
+  // are the same holding, and a reader who can see a depeg in one and not the
+  // other is being told two different things by one design rule.
+  if (options.stablecoin === true && inStableBand(p)) {
+    const shown = p.frac.padEnd(3, "0").slice(0, 3);
+    return {
+      sign,
+      head: `${groupDigits(p.int)}.${shown}`,
+      zeroRun: undefined,
+      tail: "",
+      suffix: symbol,
+      exact,
+      abbreviated: p.frac.length > 3,
+      direction: directionOf(p),
+      absent: false,
+    };
+  }
+
   if (options.compact === true) {
     const compact = compactOf(p);
     if (compact !== undefined) {
@@ -485,7 +504,10 @@ export function formatBpsFigure(bps: number): Figure {
  * false statement about a discrete thing. "1.1K holders" cannot be checked
  * against anything; "1,104 holders" can.
  */
-export function formatCount(value: string | number): Figure {
+export function formatCount(
+  value: string | number,
+  options: { readonly symbol?: string } = {},
+): Figure {
   const text = typeof value === "number" ? String(value) : value;
   if (!QUANTITY_PATTERN.test(text)) {
     throw new MoneyFormatError(`count: ${JSON.stringify(text)} is not an integer string`);
@@ -494,13 +516,17 @@ export function formatCount(value: string | number): Figure {
   const digits = stripLeadingZeros(negative ? text.slice(1) : text);
   const grouped = groupDigits(digits);
   const zero = allZeros(digits);
+  // A count without its unit is a number the reader has to guess at: the
+  // Credits-per-dollar rate rendered as a bare "100" says nothing about what a
+  // hundred of. Every other kind honours `symbol`; so does this one.
+  const symbol = options.symbol === undefined ? "" : ` ${options.symbol}`;
   return {
     sign: zero ? "" : negative ? MINUS : "",
     head: grouped,
     zeroRun: undefined,
     tail: "",
-    suffix: "",
-    exact: `${negative && !zero ? MINUS : ""}${grouped}`,
+    suffix: symbol,
+    exact: `${negative && !zero ? MINUS : ""}${grouped}${symbol}`,
     abbreviated: false,
     direction: "flat",
     absent: false,
