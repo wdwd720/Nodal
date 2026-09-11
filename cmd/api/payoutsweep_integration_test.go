@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
@@ -88,7 +89,8 @@ func newPayoutSweepFixture(t *testing.T) *payoutSweepFixture {
 	require.NoError(t, err)
 	registry := payout.NewRegistry(true)
 	require.NoError(t, registry.Register(provider))
-	svc := payout.NewService(led, credits, payout.NewEngine(credits), registry, clk)
+	svc := payout.NewService(led, credits, payout.NewEngine(credits), registry, clk,
+		killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository())
 
 	repo := accounts.NewRepository()
 	user, err := repo.CreateUser(ctx, d, "payout-sweep-itest", "sub-"+id.New[id.Any]().String(), nil)
@@ -283,6 +285,7 @@ func TestIntegration_ASweepWithNoProviderDoesNothing(t *testing.T) {
 	empty := payout.NewService(
 		ledger.NewService(f.clk, "empty"), f.credits,
 		payout.NewEngine(f.credits), payout.NewRegistry(false), f.clk,
+		killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository(),
 	)
 	assert.Empty(t, empty.ProviderNames())
 

@@ -26,6 +26,16 @@ type assetsAssetID = assets.AssetID
 // accountsAccountID is the account identifier, aliased for the same reason.
 type accountsAccountID = accounts.AccountID
 
+// accountsAccount and the two statuses the WITHDRAW guard compares against,
+// aliased for the same reason: service.go names them in an interface and in one
+// refusal, and nothing else in this package needs the accounts package.
+type accountsAccount = accounts.Account
+
+const (
+	accountsStatusActive = accounts.StatusActive
+	accountsStatusFrozen = accounts.StatusFrozen
+)
+
 const requestColumns = `id, account_id, destination_id, credit_asset_id, state,
 	requested_quantity::text, reserved_quantity::text, settled_quantity::text,
 	policy_version, policy_hash, eligibility_reasons, verification_level,

@@ -45,6 +45,18 @@
 // to reconcile against — which is the crash test of PART XXXVIII applied to
 // this provider category.
 //
+// # The emergency controls reach it
+//
+// A conversion request is a WITHDRAW-class operation (POLICY_AUTHORITY §2), so
+// Create, CompleteVerification and Submit each call KillSwitchChecker.Check
+// inside the transaction that authorizes them, and each reads the account's
+// status in the same transaction. WITHDRAWALS_DISABLE and GLOBAL_NEW_RISK_KILL
+// stop every one of them; ACCOUNT_FREEZE stops the named account's; a FROZEN,
+// RESTRICTED or CLOSED account cannot open or advance one. None of that was here
+// until F-163: this package imported no kill switch at all, so the only
+// withdrawal surface the product can actually reach was the one surface no
+// emergency control touched.
+//
 // # What this package must never do
 //
 //   - Pay out value whose provenance the eligibility decision did not approve.

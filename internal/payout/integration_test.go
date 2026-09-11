@@ -22,6 +22,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
@@ -160,7 +161,8 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{
 		t: t, ctx: ctx, clk: clk, led: led, credits: credits,
 		provider: provider, registry: registry,
-		svc:         payout.NewService(led, credits, payout.NewEngine(credits), registry, clk),
+		svc: payout.NewService(led, credits, payout.NewEngine(credits), registry, clk,
+			killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository()),
 		account:     newAccount(t),
 		creditAsset: creditAsset(t),
 	}

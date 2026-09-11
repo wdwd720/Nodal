@@ -6,6 +6,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
@@ -72,9 +73,56 @@ type compileContext struct {
 	Provider       string
 }
 
+// killSwitchClassOf is the emergency-control class of a compiled action
+// (POLICY_AUTHORITY §2: "every guarded operation declares an ActionClass").
+//
+// Buying, creating and trading open new exposure; selling closes it, and a
+// frozen account may still close positions; a payout is the WITHDRAW class; a
+// simulation moves nothing and is OBSERVE, which is never blocked. An action
+// with no profile never reaches here -- compileRoute refuses it a few lines
+// below -- and an unknown one is treated as NEW_RISK rather than as exempt.
+func killSwitchClassOf(a settlement.ActionType) killswitch.ActionClass {
+	switch a {
+	case settlement.ActionSellNativeAsset, settlement.ActionSellHostedAsset, settlement.ActionSellOnchainAsset:
+		return killswitch.ReduceRisk
+	case settlement.ActionRequestPayout:
+		return killswitch.Withdraw
+	case settlement.ActionSimulatedTrade:
+		return killswitch.Observe
+	}
+	return killswitch.NewRisk
+}
+
+// preCheckKillSwitches is the early refusal an active switch produces at the
+// boundary, from a snapshot at most one second old.
+//
+// It is explicitly NOT the authority, and POLICY_AUTHORITY §2 says so: the
+// authoritative check runs inside the transaction that authorizes the action --
+// payout.Service does it for a conversion request, internal/ledger's capability
+// resolver and the domain services for the rest -- and sees every activation
+// committed before it. What this adds is that a command refused by a switch is
+// refused before a quote is consumed, a provider is called or a row is written,
+// and that the refusal names the switch rather than a downstream symptom.
+//
+// A nil checker skips it. That is safe because it is a pre-check and never the
+// last word; it is not an excuse to leave one nil, and cmd/api does not.
+func (d NativeEconomyDeps) preCheckKillSwitches(ctx context.Context, cc compileContext) error {
+	if d.KillSwitches == nil {
+		return nil
+	}
+	return d.KillSwitches.PreCheck(ctx, killswitch.Action{
+		Class:     killSwitchClassOf(cc.Action),
+		AccountID: cc.AccountID.String(),
+		Provider:  cc.Provider,
+	})
+}
+
 // compileRoute compiles one Domain A command and returns the route, or the
 // typed refusal routeRefusal builds from it.
 func (d NativeEconomyDeps) compileRoute(ctx context.Context, cc compileContext) (settlement.Route, error) {
+	if err := d.preCheckKillSwitches(ctx, cc); err != nil {
+		return settlement.Route{}, err
+	}
 	router := d.routerOf()
 	caps, err := d.capsOf(ctx)
 	if err != nil {

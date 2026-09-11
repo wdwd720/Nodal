@@ -111,6 +111,94 @@ func TestDocs_EveryTestTheyNameExists(t *testing.T) {
 // on purpose, not one that appears by accident near a test name.
 var absencePhrase = regexp.MustCompile(`(?i)does not exist|do not exist|no such function|lists as absent|is absent|are absent`)
 
+// pathScope is inScope plus every ADR, for the citation check below.
+//
+// An ADR's Evidence section is the list a reviewer opens to check the decision
+// against the code, and ADR-0023's named `test/integration/gates` -- a directory
+// that has never existed, for four properties a reader most needs proven. The
+// check next to this one never saw it, because it resolves Go test-function
+// NAMES and that citation is a path (F-165).
+func pathScope(t *testing.T, root string) []string {
+	t.Helper()
+	out := append([]string(nil), inScope...)
+	adrs, err := filepath.Glob(filepath.Join(root, "docs", "adr", "*.md"))
+	require(t, err == nil, "globbing docs/adr: %v", err)
+	require(t, len(adrs) > 10, "expected the ADR tree, found %d files", len(adrs))
+	for _, a := range adrs {
+		rel, rerr := filepath.Rel(root, a)
+		require(t, rerr == nil, "relative path for %s: %v", a, rerr)
+		out = append(out, filepath.ToSlash(rel))
+	}
+	return out
+}
+
+var (
+	// pathRef finds a backticked repository path. Only citations that name a Go
+	// TEST file or a directory under test/ are held to this check: those are the
+	// ones a reader follows to see a property proven, and they are cheap to
+	// resolve exactly. A partial path (`stripecredit/wire.go`), an import path
+	// (`coreos/go-oidc`) and a package selector (`internal/gates.Checker`) are
+	// deliberately outside it -- a check that guessed at those would produce
+	// noise, and noise is how a control stops being read.
+	pathRef      = regexp.MustCompile("`([A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]*)`")
+	testFilePath = regexp.MustCompile(`_test\.go$`)
+	// plannedPhrase is the absence vocabulary this check adds. SECURITY.md's
+	// PART 155 matrix has a column headed "Planned (traceability)" listing the
+	// adversarial suites that are not written yet, by the path they will take.
+	// That is a document stating an absence, which is exactly what it should do,
+	// and a check that could not tell a plan from a claim would force it to stop
+	// saying so.
+	plannedPhrase = regexp.MustCompile(`(?i)planned|not yet written`)
+)
+
+// TestDocs_EveryPathTheyNameExists resolves the path-shaped test citations.
+//
+// Same rule as the function-name check, same exemption for a paragraph that
+// states the thing is missing: a document may name an absent test only while
+// saying it is absent.
+func TestDocs_EveryPathTheyNameExists(t *testing.T) {
+	root := repoRoot(t)
+	var problems []string
+	cited := 0
+	for _, rel := range pathScope(t, root) {
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		for _, para := range paragraphs(string(body)) {
+			excused := absencePhrase.MatchString(para) || plannedPhrase.MatchString(para)
+			for _, p := range distinct(pathRef.FindAllStringSubmatch(para, -1)) {
+				p = strings.TrimSuffix(p, "/")
+				if !isTestCitation(p) {
+					continue
+				}
+				cited++
+				if excused {
+					continue
+				}
+				if _, serr := os.Stat(filepath.Join(root, filepath.FromSlash(p))); serr != nil {
+					problems = append(problems, rel+" names "+p+", which is not in the repository")
+				}
+			}
+		}
+	}
+	require(t, cited > 10, "only %d path-shaped test citations found; the check stopped seeing them", cited)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("a document a reviewer relies on cites %d test path(s) that do not exist:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// isTestCitation reports whether a cited path is one this check resolves: a Go
+// test file anywhere, or a path under test/ that is not a file of another kind.
+func isTestCitation(p string) bool {
+	if testFilePath.MatchString(p) {
+		return true
+	}
+	return strings.HasPrefix(p, "test/") && !strings.Contains(filepath.Base(p), ".")
+}
+
 // paragraphs splits markdown on blank lines. A markdown table row is its own
 // line but not its own paragraph, which is what makes a table cell able to say
 // "which does not exist" about the name in the same cell.

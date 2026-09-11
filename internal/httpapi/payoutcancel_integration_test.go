@@ -17,6 +17,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
@@ -48,7 +49,8 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 		valuedomain.CapPayoutReserve: true, valuedomain.CapPayoutSettle: true,
 	})
 	credits := credit.NewService(led, clk)
-	svc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk)
+	svc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk,
+		killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository())
 
 	owner := newPayoutAccount(t, pool)
 	stranger := newPayoutAccount(t, pool)

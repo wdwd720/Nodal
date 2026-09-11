@@ -143,7 +143,8 @@ func submitReservedPayouts(ctx context.Context, database *db.DB, svc *payout.Ser
 		log.ErrorContext(ctx, "payout submission sweep failed to read", "error", err.Error())
 		return
 	}
-	submitted := 0
+	submitted, held := 0, 0
+	heldReason := ""
 	for _, r := range pending {
 		if ctx.Err() != nil {
 			return
@@ -157,6 +158,20 @@ func submitReservedPayouts(ctx context.Context, database *db.DB, svc *payout.Ser
 			// Something moved it between the read and the call -- a cancel, or
 			// another instance's pass. Not this pass's problem.
 			continue
+		case errs.CodeOf(serr) == errs.CodeKillSwitchActive,
+			errs.CodeOf(serr) == errs.CodeAccountFrozen,
+			errs.CodeOf(serr) == errs.CodeForbidden:
+			// An operator asked for this: a kill switch is active, or the
+			// account is not in a state that may take value out (D-092). It is
+			// the requested state of the system, not a failure of this pass, and
+			// an ERROR per payout every fifteen seconds is the kind of alarm an
+			// operator learns to ignore. Counted and reported once below; the
+			// Credits stay reserved and the pass after the release submits them.
+			held++
+			if heldReason == "" {
+				heldReason = serr.Error()
+			}
+			continue
 		default:
 			// One payout's failure does not abandon the rest: each is an
 			// independent person's money, and a pass that stopped at the first
@@ -165,6 +180,11 @@ func submitReservedPayouts(ctx context.Context, database *db.DB, svc *payout.Ser
 				"payout_id", r.ID.String(), "error", serr.Error(),
 				"consequence", "the Credits stay reserved and the next pass tries again")
 		}
+	}
+	if held > 0 {
+		log.WarnContext(ctx, "payouts were held by an emergency control or an account status",
+			"held", held, "first_reason", heldReason,
+			"consequence", "the Credits stay reserved and the pass after the release submits them")
 	}
 	if submitted > 0 {
 		log.InfoContext(ctx, "payout submission sweep complete", "submitted", submitted)
