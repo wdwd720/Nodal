@@ -260,9 +260,15 @@ func (s *Service) listMarkets(ctx context.Context, q db.Querier, r ListRequest, 
 		}
 		statuses = append(statuses, string(st))
 	}
+	// A caller that asks for more than the page cap gets the cap, not the
+	// default: silently returning 25 to somebody who asked for 150 makes a
+	// client believe it has seen the end of the list.
 	limit := r.Limit
-	if limit <= 0 || limit > MaxListLimit {
+	switch {
+	case limit <= 0:
 		limit = 25
+	case limit > MaxListLimit:
+		limit = MaxListLimit
 	}
 	cursor, hasCursor, err := decodeListCursor(r.Cursor)
 	if err != nil {

@@ -244,8 +244,11 @@ const MaxPrints = 200
 
 // RecentPrints returns a market's most recent trades, newest first.
 func (s *Service) RecentPrints(ctx context.Context, q db.Querier, marketID MarketID, limit int) ([]Print, error) {
-	if limit <= 0 || limit > MaxPrints {
+	switch {
+	case limit <= 0:
 		limit = 50
+	case limit > MaxPrints:
+		limit = MaxPrints
 	}
 	rows, err := q.Query(ctx,
 		`SELECT fill_id, market_id, seq, side, price_scale,

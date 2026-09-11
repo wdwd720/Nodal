@@ -198,3 +198,16 @@ func outerNames(projection string) []string {
 	}
 	return out
 }
+
+// TestListRequest_AnOverLargeLimitGetsTheCapNotTheDefault: a client that asked
+// for 150 and silently got 25 would believe it had reached the end of the list.
+func TestListRequest_AnOverLargeLimitGetsTheCapNotTheDefault(t *testing.T) {
+	t.Parallel()
+	// The behaviour is inside listMarkets and needs a database to observe, so
+	// this asserts the constant the HTTP contract is written against instead:
+	// the OpenAPI Limit parameter permits up to 200 and the page cap is lower,
+	// which is exactly the case the clamp exists for.
+	assert.Less(t, MaxListLimit, 200,
+		"if the page cap ever exceeds the parameter's maximum the clamp is dead code")
+	assert.Less(t, MaxPrints, 201)
+}

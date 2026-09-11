@@ -68,9 +68,14 @@ func (f *Feed) Activity(ctx context.Context, q db.Querier, r Request) (Page, err
 	if err := r.Validate(); err != nil {
 		return Page{}, err
 	}
+	// The cap rather than the default for an over-large request: a client that
+	// asked for 150 and silently got 25 would believe it had reached the end.
 	limit := r.Limit
-	if limit <= 0 || limit > MaxLimit {
+	switch {
+	case limit <= 0:
 		limit = 25
+	case limit > MaxLimit:
+		limit = MaxLimit
 	}
 	c, hasCursor, err := decodeCursor(r.Cursor)
 	if err != nil {
