@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/config"
+	"github.com/nodal/controlplane/internal/gates"
 )
 
 // internal/config's requirements table is the single description of what a
@@ -253,4 +254,48 @@ func dedupe(in []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// TestConfigTable_TheCapabilityNamesAreTheOnesGatesDeclares holds
+// internal/config's restated capability list equal to internal/gates'.
+//
+// internal/config refuses a name in CP_API_ENABLED_CAPABILITIES or
+// CP_API_SANDBOX_GATES that this system does not declare, because that list is
+// condition 1 of the policy authority and a misspelled name is a capability
+// switched off in silence (F-145). It cannot ask internal/gates directly: the
+// edge would be config -> gates, and internal/gates' own integration test
+// imports internal/agent, which imports internal/config, so `go vet -tags
+// integration ./...` reports an import cycle in a test binary.
+//
+// So the list is restated, and this is the check that keeps the restatement
+// honest. This package may import both, which is the whole reason it exists.
+// A capability added, renamed or removed in internal/gates fails here rather
+// than quietly making a deployment's list unvalidatable -- which is the defect
+// class F-130 records about duplicated lists, turned on the duplication that
+// could not be avoided.
+func TestConfigTable_TheCapabilityNamesAreTheOnesGatesDeclares(t *testing.T) {
+	t.Parallel()
+
+	want := make([]string, 0, len(gates.AllCapabilities()))
+	for _, c := range gates.AllCapabilities() {
+		want = append(want, string(c))
+	}
+	sort.Strings(want)
+
+	assert.Equal(t, want, config.CapabilityNames(),
+		"internal/config's restated capability list has drifted from internal/gates.AllCapabilities(). "+
+			"A name only gates knows is refused by config.Validate on a deployment that is entitled to "+
+			"it; a name only config knows loads clean and is dropped at the composition root.")
+
+	// And the predicate agrees with gates.Capability.Valid in both directions,
+	// including about case and space, which is how the lists are actually read.
+	for _, c := range gates.AllCapabilities() {
+		assert.Truef(t, config.IsDeclaredCapability(string(c)), "config refuses %s", c)
+		assert.Truef(t, config.IsDeclaredCapability(" "+strings.ToLower(string(c))+" "), "config refuses a lower-cased %s", c)
+	}
+	for _, bad := range []string{"", "   ", "CREDIT_PURCHASEE", "credit purchase", "MARKETPLACE_", "nonsense"} {
+		assert.Falsef(t, config.IsDeclaredCapability(bad), "config accepted %q", bad)
+		assert.Falsef(t, gates.Capability(strings.ToUpper(strings.TrimSpace(bad))).Valid(),
+			"the fixture %q is a real capability, so it proves nothing", bad)
+	}
 }
