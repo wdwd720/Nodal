@@ -7919,15 +7919,25 @@ where `Environment.AllowsDefaults()`, which is LOCAL and TEST, so the variable
 this file names was simultaneously defaulted to a production hostname and
 unrequired in production.
 
-**Fix.** The default is `""`, which is what a same-origin development run
-through the Vite proxy actually wants — a relative redirect. `render.yaml` and
-`.env.example` keep the hostname, where it is a deployment's statement rather
-than a fallback, and F-146's rule requires it in STAGING and PROD. The E2E
-recipes are unaffected: `apps/web/playwright.config.ts` and the CI web-e2e job
-run same-origin.
+It was not only untidy. The CI `web-e2e` job starts the API under test with
+`CP_ENV=LOCAL` and sets no `CP_AUTH_POST_LOGIN_URL`, and LOCAL is an
+environment where defaults apply — so `apps/web/e2e/auth.setup.ts`, which
+drives the real `GET /v1/auth/login` and follows the callback, was being sent
+to `https://app-nodal.actorvia.xyz/` by a suite whose whole premise is that it
+runs same-origin behind the Vite proxy. The variable named in the finding is
+the one that sends it there.
+
+**Fix.** The default is `""`, which is what a same-origin run actually wants —
+a relative redirect that resolves to whatever origin the browser is on.
+`render.yaml` and `.env.example` keep the hostname, where it is a deployment's
+statement rather than a fallback, and F-146's rule requires it in STAGING and
+PROD. The rule is inside the `CP_AUTH_MODE=oidc` branch, so the dev-auth E2E
+recipes are not asked for one.
 
 **Evidence.** TEST_UNIT: `TestValidate_PostLoginURL`, which asserts the default
-is empty as well as the rule.
+is empty as well as the rule, and that LOCAL, TEST and DEV still accept an
+empty value. STATIC_PROOF: `.github/workflows/ci.yml` (the `web-e2e` job's
+`CP_ENV: LOCAL` and no post-login variable); `Environment.AllowsDefaults()`.
 
 ## F-150 · `Permissions-Policy: payment=()` took the wallets out of Stripe's Payment Element · PRODUCTIZATION · P2 · FIXED
 
