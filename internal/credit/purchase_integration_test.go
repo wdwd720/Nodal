@@ -40,8 +40,10 @@ type fakePurchaseProvider struct {
 	// transport failure, which is the case that decides whether a lost
 	// response can charge twice.
 	loseResponse bool
-	// failCancel, when set, is returned instead of cancelling.
+	// failCancel, when set, is returned instead of cancelling; failLookup,
+	// when set, is returned instead of answering a lookup.
 	failCancel error
+	failLookup error
 	created    int
 	canceled   int
 }
@@ -100,6 +102,9 @@ func (p *fakePurchaseProvider) CreatePurchase(_ context.Context, req CreatePurch
 func (p *fakePurchaseProvider) GetPurchase(_ context.Context, ref string) (PurchaseSnapshot, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.failLookup != nil {
+		return PurchaseSnapshot{}, p.failLookup
+	}
 	snap, ok := p.byRef[ref]
 	if !ok {
 		return PurchaseSnapshot{}, errs.New(errs.CodeNotFound, "no such payment")

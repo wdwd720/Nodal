@@ -1068,37 +1068,66 @@ func (s *PurchaseService) ExpireInFlight(
 			// authority on that, and cancelling over the top of it would strand
 			// a charge.
 			snap, gerr := s.provider.GetPurchase(ctx, f.ProviderReference)
-			if gerr != nil {
+			switch {
+			case gerr != nil && errs.CodeOf(gerr) == errs.CodeNotFound:
+				// The provider holds no such payment. It is authoritative about
+				// that, and a reference naming nothing cannot become a charge,
+				// so the funding is ended on the same footing as one that never
+				// reached the provider at all.
+				reason = "the provider holds no payment under this reference and it has expired"
+			case gerr != nil:
+				// A transport failure is not an answer. Leave it; the next pass
+				// asks again.
 				log.WarnContext(ctx, "credit: could not ask the provider about an in-flight purchase",
 					"funding_id", f.ID.String(), "error", gerr.Error())
 				continue
-			}
-			if to, ok := FundingStateFor(snap.Status); ok && to != f.State {
-				if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-					func(ctx context.Context, tx pgx.Tx) error {
-						_, rerr := s.Reconcile(ctx, tx, id)
-						return rerr
-					}); err != nil {
-					return expired, err
+			default:
+				to, ok := FundingStateFor(snap.Status)
+				if !ok {
+					// A status this binary does not understand is exactly what
+					// MANUAL_REVIEW exists for. Cancelling a payment nobody
+					// understands is the guess this package refuses everywhere
+					// else, and parking it gives an operator the resolution
+					// path that ends it.
+					if perr := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+						func(ctx context.Context, tx pgx.Tx) error {
+							_, rerr := s.review(ctx, tx, f,
+								"provider status "+snap.RawStatus+" has no mapping in this binary, "+
+									"and this purchase has been in flight past the intent lifetime", "expire")
+							return rerr
+						}); perr != nil {
+						return expired, perr
+					}
+					continue
 				}
-				continue
-			}
-			if _, cerr := s.provider.CancelPurchase(ctx, f.ProviderReference,
-				"credit_funding:"+f.ID.String()+":cancel"); cerr != nil {
-				// The provider refuses to cancel what is no longer ours to
-				// cancel. Reconcile is the path that adopts whatever it became.
-				log.WarnContext(ctx, "credit: the provider refused to cancel an abandoned purchase",
-					"funding_id", f.ID.String(), "error", cerr.Error())
-				if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-					func(ctx context.Context, tx pgx.Tx) error {
-						_, rerr := s.Reconcile(ctx, tx, id)
-						return rerr
-					}); err != nil {
-					return expired, err
+				if to != f.State {
+					if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+						func(ctx context.Context, tx pgx.Tx) error {
+							_, rerr := s.Reconcile(ctx, tx, id)
+							return rerr
+						}); err != nil {
+						return expired, err
+					}
+					continue
 				}
-				continue
+				if _, cerr := s.provider.CancelPurchase(ctx, f.ProviderReference,
+					"credit_funding:"+f.ID.String()+":cancel"); cerr != nil {
+					// The provider refuses to cancel what is no longer ours to
+					// cancel. Reconcile is the path that adopts whatever it
+					// became.
+					log.WarnContext(ctx, "credit: the provider refused to cancel an abandoned purchase",
+						"funding_id", f.ID.String(), "error", cerr.Error())
+					if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+						func(ctx context.Context, tx pgx.Tx) error {
+							_, rerr := s.Reconcile(ctx, tx, id)
+							return rerr
+						}); err != nil {
+						return expired, err
+					}
+					continue
+				}
+				reason = "the customer did not complete this payment and it was cancelled with the provider"
 			}
-			reason = "the customer did not complete this payment and it was cancelled with the provider"
 		}
 
 		if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},

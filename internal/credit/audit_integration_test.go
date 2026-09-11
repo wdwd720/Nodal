@@ -438,6 +438,81 @@ func TestAudit_AWonDisputeReturnsTheFundingToItsWindowRatherThanSettlingIt(t *te
 	assert.Equal(t, valuedomain.FinalityDisputed, lot.Finality)
 }
 
+// Expiry never guesses. A provider status this binary has no mapping for is
+// parked for a person rather than cancelled, which is the same answer Dispatch
+// gives -- and it leaves the operator resolution that ends it.
+func TestAudit_ExpiryParksAPurchaseTheProviderDescribesInWordsNobodyMapped(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "unmapped", 10_000)
+
+	f.prov.advance(p.Funding.ProviderReference, PurchaseStatus("INVENTED_TOMORROW"), "invented_tomorrow")
+	f.backdate(t, p.Funding.IdempotencyKey, 400*24*time.Hour)
+
+	expired, err := f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	assert.Zero(t, expired)
+	assert.Zero(t, f.prov.canceled, "a payment nobody understands is not a payment to cancel")
+
+	got := f.funding(t, p.Funding.ID)
+	assert.Equal(t, FundingManualReview, got.State)
+
+	// And the review has an exit, so the ceiling still has a remedy.
+	require.NoError(t, f.tx(func(tx pgx.Tx) error {
+		_, rerr := f.svcP.ResolveManualReview(f.ctx, tx, p.Funding.ID, ResolutionCanceled,
+			"the operator confirmed the payment was never taken", "approval-1")
+		return rerr
+	}))
+	assert.Equal(t, FundingCanceled, f.funding(t, p.Funding.ID).State)
+}
+
+// A reference that names nothing at the provider is ended on the same footing
+// as one that never reached a provider at all: the provider is authoritative
+// about what it holds, and a reference naming nothing cannot become a charge.
+func TestAudit_ExpiryEndsAPurchaseTheProviderHasNoRecordOf(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "vanished", 10_000)
+
+	f.prov.mu.Lock()
+	delete(f.prov.byRef, p.Funding.ProviderReference)
+	f.prov.mu.Unlock()
+	f.backdate(t, p.Funding.IdempotencyKey, 400*24*time.Hour)
+
+	expired, err := f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, expired)
+	assert.Equal(t, FundingCanceled, f.funding(t, p.Funding.ID).State)
+}
+
+// A provider that cannot be reached is not an answer, so nothing is ended on
+// the strength of a timeout. The next pass asks again.
+func TestAudit_ExpiryEndsNothingWhileTheProviderIsUnreachable(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "unreachable", 10_000)
+	f.backdate(t, p.Funding.IdempotencyKey, 400*24*time.Hour)
+
+	f.prov.mu.Lock()
+	snap := f.prov.byRef[p.Funding.ProviderReference]
+	delete(f.prov.byRef, p.Funding.ProviderReference)
+	f.prov.failLookup = errs.New(errs.CodeProviderUnavailable, "provider is unavailable")
+	f.prov.mu.Unlock()
+
+	expired, err := f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	assert.Zero(t, expired, "a transport failure is not the provider saying the payment is gone")
+	assert.Equal(t, FundingAuthorizationPending, f.funding(t, p.Funding.ID).State)
+
+	// The provider comes back; the next pass ends it.
+	f.prov.mu.Lock()
+	f.prov.failLookup = nil
+	f.prov.byRef[p.Funding.ProviderReference] = snap
+	f.prov.mu.Unlock()
+
+	expired, err = f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, expired)
+	assert.Equal(t, FundingCanceled, f.funding(t, p.Funding.ID).State)
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
