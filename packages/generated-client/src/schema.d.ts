@@ -1810,6 +1810,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The unified activity timeline (§16) */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    /** @description Repeat to include several kinds. Absent means every kind. */
+                    kind?: components["schemas"]["ActivityFeedKind"][];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of activity */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityFeedPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+         * @description The Credit balance breakdown comes from the credit service; the positions come from the invariant-checked read model that migration 00772 maintains from the fills. Unrealised P&L is marked at each market's marginal price at `as_of`, which is stated rather than implied.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Portfolio */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Portfolio"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-assets": {
         parameters: {
             query?: never;
@@ -1985,6 +2072,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/native-markets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover internal markets (product goal §12, §35)
+         * @description One page of the markets list. `sort` chooses the ordering; only NEWEST is stable under paging, because every other key is a live figure that moves when somebody trades, and the response says which it was. `q` searches the asset's name, symbol and description in PostgreSQL — there is no external index, and a market's identity is never a display name.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    creator_account_id?: components["schemas"]["UUID"];
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    q?: string;
+                    sort?: "NEWEST" | "VOLUME_24H" | "CHANGE_24H" | "LIQUIDITY" | "PRICE";
+                    /** @description Repeat to include several statuses. Absent means every status. */
+                    status?: ("PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED")[];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of market summaries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeMarketPage"];
+                    };
+                };
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-markets/{marketId}": {
         parameters: {
             query?: never;
@@ -2014,6 +2149,53 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/candles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OHLCV over a bounded window, computed from the market's own prints (§14)
+         * @description Buckets with no trades are ABSENT rather than filled forward: §14 asks for an honest empty state, and a flat-filled candle invents a trade that did not happen. `from` and `to` are both required and the window is bounded to 1500 buckets.
+         */
+        get: {
+            parameters: {
+                query: {
+                    from: components["schemas"]["Timestamp"];
+                    interval: "1m" | "5m" | "15m" | "1h" | "1d";
+                    to: components["schemas"]["Timestamp"];
+                };
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Candles, oldest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeCandlePage"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
             };
         };
         put?: never;
@@ -2131,6 +2313,92 @@ export interface paths {
                 422: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Everything the asset detail / trading screen needs (product goal §13)
+         * @description The same summary row the list returns, plus the safety limits in force and the holder concentration. It is a separate read from GET /native-markets/{marketId} so the trade screen and the markets page share one projection and cannot disagree about a price or a volume.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Market detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeMarketDetail"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/native-markets/{marketId}/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The public tape — recent prints, newest first (§13)
+         * @description No account identity appears here. A tape says what the market did; who did it is somebody else's position.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    marketId: components["parameters"]["MarketId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recent prints */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeTradePage"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2808,6 +3076,40 @@ export interface components {
             /** @enum {string} */
             to: "ACTIVE" | "RESTRICTED" | "FROZEN" | "CLOSED";
         };
+        ActivityAmount: {
+            currency?: string;
+            origin?: components["schemas"]["CreditOrigin"];
+            symbol?: string;
+            temperature: components["schemas"]["ValueTemperature"];
+            /**
+             * @description How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor units of `currency`, ASSET_UNITS is base units of `symbol`.
+             * @enum {string}
+             */
+            unit: "CREDITS" | "MONEY_MINOR" | "ASSET_UNITS";
+            value: components["schemas"]["SignedQuantity"];
+        };
+        ActivityFeedItem: {
+            amounts: components["schemas"]["ActivityAmount"][];
+            id: string;
+            kind: components["schemas"]["ActivityFeedKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            reference: {
+                id: string;
+                type: string;
+            };
+            simulated: boolean;
+            status?: string;
+            /** @description Built on the server from a fixed template per kind, never from user text. */
+            summary: string;
+        };
+        /**
+         * @description The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
+         * @enum {string}
+         */
+        ActivityFeedKind: "CREDIT_PURCHASE" | "CREDIT_REVERSAL" | "NATIVE_TRADE" | "NATIVE_ASSET_CREATED" | "PAYOUT_REQUESTED" | "PAYOUT_STATE_CHANGED" | "ADMIN_ADJUSTMENT";
+        ActivityFeedPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["ActivityFeedItem"][];
+        };
         ActivityItem: {
             correlation_id?: string;
             detail?: {
@@ -3258,6 +3560,20 @@ export interface components {
             /** @default * */
             scope_id: string;
         };
+        /** @description The limits in force on this market right now (product goal section 47), from two documents: the market-safety policy, which is about the venue, and the risk kernel's GLOBAL policy, which is about an account. */
+        MarketSafetyLimits: {
+            /** Format: int64 */
+            circuit_breaker_move_bps?: number;
+            circuit_breaker_window_seconds?: number;
+            creator_may_buy_own_asset?: boolean;
+            max_creator_concentration_bps?: components["schemas"]["BPS"];
+            max_native_market_concentration_bps?: components["schemas"]["BPS"];
+            max_price_impact_bps?: components["schemas"]["BPS"];
+            max_slippage_bps?: components["schemas"]["BPS"];
+            min_opening_liquidity_credits?: components["schemas"]["Quantity"];
+            risk_policy_version?: string;
+            safety_policy_version: string;
+        };
         NativeAsset: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_id: components["schemas"]["UUID"];
@@ -3289,6 +3605,28 @@ export interface components {
             marketing_restrictions?: string;
             minimum_age: number;
             transferable: boolean;
+        };
+        NativeCandle: {
+            asset_volume: components["schemas"]["Quantity"];
+            close: components["schemas"]["Quantity"];
+            credit_volume: components["schemas"]["Quantity"];
+            high: components["schemas"]["Quantity"];
+            low: components["schemas"]["Quantity"];
+            open: components["schemas"]["Quantity"];
+            open_time: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            trades: number;
+        };
+        NativeCandlePage: {
+            asset_decimals: number;
+            /** @description Oldest first. A bucket with no trades is absent, never filled forward. */
+            candles: components["schemas"]["NativeCandle"][];
+            from: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            interval: "1m" | "5m" | "15m" | "1h" | "1d";
+            market_id: components["schemas"]["UUID"];
+            price_scale: number;
+            to: components["schemas"]["Timestamp"];
         };
         NativeFill: {
             /** @description Surveillance findings this trade raised. They never block it. */
@@ -3343,6 +3681,73 @@ export interface components {
             }[];
             virtual_credit_reserve?: components["schemas"]["Quantity"];
         };
+        NativeMarketDetail: {
+            limits_in_force: components["schemas"]["MarketSafetyLimits"];
+            market: components["schemas"]["NativeMarketSummary"];
+            /** @description Holder concentration, which is the number a buyer most needs to see */
+            top_holders?: {
+                account_id: components["schemas"]["UUID"];
+                quantity: components["schemas"]["Quantity"];
+            }[];
+        };
+        NativeMarketPage: components["schemas"]["Page"] & {
+            markets: components["schemas"]["NativeMarketSummary"][];
+            /** @enum {string} */
+            sort: "NEWEST" | "VOLUME_24H" | "CHANGE_24H" | "LIQUIDITY" | "PRICE";
+            /** @description Whether paging this ordering sees every market exactly once. Only NEWEST does; the others rank by figures that move when somebody trades. */
+            stable: boolean;
+        };
+        /** @description One market as the markets page and the trade screen see it. Every price is an exact integer at price_scale and every quantity is base units; nothing here is a float and nothing is a display string. */
+        NativeMarketSummary: {
+            activated_at?: components["schemas"]["Timestamp"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            asset_reserve: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            asset_status: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "DELISTED" | "REJECTED";
+            /**
+             * Format: int64
+             * @description Signed move over the last 24 hours. Meaningless unless has_24h_change.
+             */
+            change_24h_bps?: number;
+            circulating_supply: components["schemas"]["Quantity"];
+            created_at: components["schemas"]["Timestamp"];
+            /** @description The creator's account id, which is the handle placeholder. A display name belongs to the profile domain and is joined later; inventing one here would be a second source for it. */
+            creator_account_id: components["schemas"]["UUID"];
+            creator_fee_bps: components["schemas"]["BPS"];
+            credit_asset_id: components["schemas"]["UUID"];
+            credit_volume_24h: components["schemas"]["Quantity"];
+            /** @description This object was created by the sandbox demo seeder. It exists only on a sandbox tier and represents nothing. */
+            demo: boolean;
+            description?: string;
+            /** @description False when the market has not traded in the window, which is a different fact from having moved nothing. */
+            has_24h_change?: boolean;
+            image_url?: string;
+            initial_asset_reserve: components["schemas"]["Quantity"];
+            /** @description The MARGINAL price -- what the next base unit costs -- at price_scale. */
+            last_price: components["schemas"]["Quantity"];
+            /** @description V + R, the depth the curve prices against. */
+            liquidity_credits: components["schemas"]["Quantity"];
+            market_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            market_status: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
+            max_supply: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            moderation_state?: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+            name: string;
+            platform_fee_bps: components["schemas"]["BPS"];
+            /** @description Decimal places every price here carries */
+            price_scale: number;
+            /** @description R -- the only Credits in this pool that could ever be paid out. */
+            real_credit_reserve: components["schemas"]["Quantity"];
+            reference_price_24h?: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            state_version?: number;
+            symbol: string;
+            /** Format: int64 */
+            trades_24h: number;
+            virtual_credit_reserve: components["schemas"]["Quantity"];
+        };
         NativeOrderRequest: {
             account_id: components["schemas"]["UUID"];
             amount: components["schemas"]["Quantity"];
@@ -3383,6 +3788,25 @@ export interface components {
             max_supply: components["schemas"]["Quantity"];
             pool_supply: components["schemas"]["Quantity"];
             treasury_allocation: components["schemas"]["Quantity"];
+        };
+        NativeTradePage: {
+            asset_decimals: number;
+            market_id: components["schemas"]["UUID"];
+            price_scale: number;
+            trades: components["schemas"]["NativeTradePrint"][];
+        };
+        /** @description One public print. It carries no account identity, by design. */
+        NativeTradePrint: {
+            asset_volume: components["schemas"]["Quantity"];
+            credit_volume: components["schemas"]["Quantity"];
+            effective_price: components["schemas"]["Quantity"];
+            printed_at: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            seq: number;
+            /** @enum {string} */
+            side: "BUY" | "SELL";
+            spot_price_after: components["schemas"]["Quantity"];
+            spot_price_before?: components["schemas"]["Quantity"];
         };
         Order: {
             account_id: components["schemas"]["UUID"];
@@ -3446,6 +3870,57 @@ export interface components {
         };
         PayoutRequestPage: {
             items: components["schemas"]["PayoutRequest"][];
+        };
+        Portfolio: {
+            account_id: components["schemas"]["UUID"];
+            /** @description The instant every mark-to-market figure here was computed at. A number on a screen that does not say when it was true is a number nobody can act on. */
+            as_of: components["schemas"]["Timestamp"];
+            credits: components["schemas"]["CreditBalance"];
+            positions: components["schemas"]["PortfolioPosition"][];
+            /** @description The temperature of this deployment's Credits as a whole. */
+            temperature: components["schemas"]["ValueTemperature"];
+            totals: components["schemas"]["PortfolioTotals"];
+        };
+        /** @description One native position. quantity, cost_basis_credits, realized_pnl_credits and fees_paid_credits are the read model migration 00772 maintains from the fills; market_value_credits and unrealized_pnl_credits are computed at as_of from the market's marginal price. */
+        PortfolioPosition: {
+            /** @description Units granted to the creator at the mint, at zero cost. */
+            allocation_units?: components["schemas"]["Quantity"];
+            asset_decimals: number;
+            asset_id: components["schemas"]["UUID"];
+            /** @description Cost of one base unit at price_scale. Absent on a closed position. */
+            average_cost_credits?: components["schemas"]["Quantity"];
+            cost_basis_credits: components["schemas"]["Quantity"];
+            demo?: boolean;
+            fees_paid_credits: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            fill_count?: number;
+            first_acquired_at?: components["schemas"]["Timestamp"];
+            last_trade_at?: components["schemas"]["Timestamp"];
+            market_id?: components["schemas"]["UUID"];
+            /** @enum {string} */
+            market_status?: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
+            market_value_credits: components["schemas"]["Quantity"];
+            name?: string;
+            price_scale: number;
+            quantity: components["schemas"]["Quantity"];
+            realized_pnl_credits: components["schemas"]["SignedQuantity"];
+            spot_price?: components["schemas"]["Quantity"];
+            symbol: string;
+            temperature: components["schemas"]["ValueTemperature"];
+            total_pnl_credits: components["schemas"]["SignedQuantity"];
+            units_bought_total?: components["schemas"]["Quantity"];
+            units_sold_total?: components["schemas"]["Quantity"];
+            unrealized_pnl_credits: components["schemas"]["SignedQuantity"];
+        };
+        PortfolioTotals: {
+            cost_basis_credits: components["schemas"]["Quantity"];
+            fees_paid_credits: components["schemas"]["Quantity"];
+            market_value_credits: components["schemas"]["Quantity"];
+            open_position_count: number;
+            position_count: number;
+            realized_pnl_credits: components["schemas"]["SignedQuantity"];
+            total_pnl_credits: components["schemas"]["SignedQuantity"];
+            unrealized_pnl_credits: components["schemas"]["SignedQuantity"];
         };
         Principal: {
             account_ids: components["schemas"]["UUID"][];
@@ -3597,6 +4072,8 @@ export interface components {
         SetInternalProductStatusRequest: {
             status: components["schemas"]["InternalProductStatus"];
         };
+        /** @description An exact base-unit amount that may be negative. A loss is a real outcome, so P&L is signed where a balance is not. */
+        SignedQuantity: string;
         StartDepositRequest: {
             account_id: components["schemas"]["UUID"];
             fiat_amount: string;
@@ -3694,6 +4171,11 @@ export interface components {
          * @description UUIDv7 in canonical form
          */
         UUID: string;
+        /**
+         * @description What KIND of value an amount is (product goal section 46). ECONOMY is closed-loop Nodal Credits and native assets; REAL is money at a payment provider; SIMULATED is a sandbox tier or a demo object, where nothing moves anywhere. The three are never synonyms and are never rendered as one number.
+         * @enum {string}
+         */
+        ValueTemperature: "ECONOMY" | "REAL" | "SIMULATED";
         VenueListing: {
             base_mint?: string;
             base_precision: number;

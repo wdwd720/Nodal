@@ -88,6 +88,25 @@ func NewSeeder(d Deps) (*Seeder, error) {
 	return &Seeder{deps: d}, nil
 }
 
+// Kind is what sort of object a seed key produced. It is the Go statement of
+// migration 00774's CHECK, which test/integration/enums holds it to.
+type Kind string
+
+// The kinds a seed row may name.
+const (
+	KindAccount      Kind = "ACCOUNT"
+	KindNativeAsset  Kind = "NATIVE_ASSET"
+	KindNativeMarket Kind = "NATIVE_MARKET"
+	KindNativeTrade  Kind = "NATIVE_TRADE"
+)
+
+var allKinds = []Kind{KindAccount, KindNativeAsset, KindNativeMarket, KindNativeTrade}
+
+// AllKinds returns every declared seed kind in declaration order (a copy).
+func AllKinds() []Kind { return append([]Kind(nil), allKinds...) }
+
+func (k Kind) String() string { return string(k) }
+
 // Result says what one run did.
 type Result struct {
 	// Created lists the seed keys this run created. Empty on a second run.
@@ -158,11 +177,11 @@ type tradeSpec struct {
 // assetSpec is one demo asset, its market and the trades that give it a price
 // history.
 //
-// The numbers are chosen to stay inside the conservative market-safety policy:
-// each buy is a small fraction of a 30,000-Credit virtual reserve, so no single
-// trade approaches the 25% price-impact limit and no sequence approaches the
-// circuit breaker's 90%. A seeder that tripped the breaker would leave STAGING
-// with a paused market and a mystery.
+// The numbers are chosen to stay well inside any market-safety policy a
+// deployment is likely to record: each buy is a small fraction of its market's
+// virtual reserve, so no single trade comes near a price-impact ceiling and no
+// sequence comes near a circuit-breaker threshold. A seeder that tripped a
+// breaker would leave STAGING with a paused market and a mystery.
 type assetSpec struct {
 	key               string
 	name              string
@@ -230,7 +249,7 @@ func Specs() []string {
 // account creates (or finds) one demo account.
 func (s *Seeder) account(ctx context.Context, res *Result, name string) (accounts.AccountID, error) {
 	key := s.key("account", name)
-	if id, found, err := s.existing(ctx, "ACCOUNT", key); err != nil {
+	if id, found, err := s.existing(ctx, KindAccount, key); err != nil {
 		return accounts.AccountID{}, err
 	} else if found {
 		res.Existing = append(res.Existing, key)
@@ -262,7 +281,7 @@ func (s *Seeder) account(ctx context.Context, res *Result, name string) (account
 			}
 			out = acct.ID
 		}
-		return s.record(ctx, tx, "ACCOUNT", key, out.String(), Prefix+" "+name)
+		return s.record(ctx, tx, KindAccount, key, out.String(), Prefix+" "+name)
 	})
 	if err != nil {
 		return accounts.AccountID{}, err
@@ -281,7 +300,7 @@ func (s *Seeder) account(ctx context.Context, res *Result, name string) (account
 // exactly what demo money should be.
 func (s *Seeder) fund(ctx context.Context, res *Result, name string, account accounts.AccountID) error {
 	key := s.key("credits", name)
-	if _, found, err := s.existing(ctx, "ACCOUNT", key); err != nil {
+	if _, found, err := s.existing(ctx, KindAccount, key); err != nil {
 		return err
 	} else if found {
 		res.Existing = append(res.Existing, key)
@@ -305,7 +324,7 @@ func (s *Seeder) fund(ctx context.Context, res *Result, name string, account acc
 		}); ierr != nil {
 			return ierr
 		}
-		return s.record(ctx, tx, "ACCOUNT", key, account.String(), Prefix+" credits for "+name)
+		return s.record(ctx, tx, KindAccount, key, account.String(), Prefix+" credits for "+name)
 	})
 	if err != nil {
 		return err
@@ -321,7 +340,7 @@ func (s *Seeder) fund(ctx context.Context, res *Result, name string, account acc
 // would exist with nowhere to trade it.
 func (s *Seeder) market(ctx context.Context, res *Result, spec assetSpec, creator accounts.AccountID) (nativemarket.MarketID, error) {
 	key := s.key("market", spec.key)
-	if id, found, err := s.existing(ctx, "NATIVE_MARKET", key); err != nil {
+	if id, found, err := s.existing(ctx, KindNativeMarket, key); err != nil {
 		return nativemarket.MarketID{}, err
 	} else if found {
 		res.Existing = append(res.Existing, key)
@@ -396,10 +415,10 @@ func (s *Seeder) market(ctx context.Context, res *Result, spec assetSpec, creato
 			return oerr
 		}
 		market = open
-		if rerr := s.record(ctx, tx, "NATIVE_ASSET", s.key("asset", spec.key), asset.AssetID.String(), spec.name); rerr != nil {
+		if rerr := s.record(ctx, tx, KindNativeAsset, s.key("asset", spec.key), asset.AssetID.String(), spec.name); rerr != nil {
 			return rerr
 		}
-		return s.record(ctx, tx, "NATIVE_MARKET", key, open.ID.String(), spec.name)
+		return s.record(ctx, tx, KindNativeMarket, key, open.ID.String(), spec.name)
 	})
 	if err != nil {
 		return nativemarket.MarketID{}, err
@@ -411,7 +430,7 @@ func (s *Seeder) market(ctx context.Context, res *Result, spec assetSpec, creato
 // trade executes one demo trade through the real engine.
 func (s *Seeder) trade(ctx context.Context, res *Result, spec assetSpec, i int, tr tradeSpec, marketID nativemarket.MarketID, traders []accounts.AccountID) error {
 	key := s.key("trade", fmt.Sprintf("%s-%d", spec.key, i))
-	if _, found, err := s.existing(ctx, "NATIVE_TRADE", key); err != nil {
+	if _, found, err := s.existing(ctx, KindNativeTrade, key); err != nil {
 		return err
 	} else if found {
 		res.Existing = append(res.Existing, key)
@@ -441,7 +460,7 @@ func (s *Seeder) trade(ctx context.Context, res *Result, spec assetSpec, i int, 
 		if eerr != nil {
 			return eerr
 		}
-		return s.record(ctx, tx, "NATIVE_TRADE", key, out.FillID.String(),
+		return s.record(ctx, tx, KindNativeTrade, key, out.FillID.String(),
 			Prefix+" "+string(tr.Side)+" on "+spec.symbol)
 	})
 	if err != nil {
@@ -459,7 +478,7 @@ func (s *Seeder) key(kind, name string) string {
 }
 
 // existing reports whether this seed key has already produced an object.
-func (s *Seeder) existing(ctx context.Context, kind, key string) (string, bool, error) {
+func (s *Seeder) existing(ctx context.Context, kind Kind, key string) (string, bool, error) {
 	var (
 		refID   string
 		gotKind string
@@ -472,7 +491,7 @@ func (s *Seeder) existing(ctx context.Context, kind, key string) (string, bool, 
 	case err != nil:
 		return "", false, errs.Wrap(err, errs.CodeInternal, "demo: the seed register could not be read")
 	}
-	if gotKind != kind {
+	if Kind(gotKind) != kind {
 		return "", false, errs.Newf(errs.CodeConflict,
 			"demo: seed key %s is registered as a %s, not a %s", key, gotKind, kind)
 	}
@@ -481,11 +500,11 @@ func (s *Seeder) existing(ctx context.Context, kind, key string) (string, bool, 
 
 // record labels one object as demo data, in the same transaction that created
 // it. A label written afterwards could be missing for an object that exists.
-func (s *Seeder) record(ctx context.Context, tx pgx.Tx, kind, key, refID, label string) error {
+func (s *Seeder) record(ctx context.Context, tx pgx.Tx, kind Kind, key, refID, label string) error {
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO demo_seed_rows (seed_key, kind, ref_id, environment, label)
 		 VALUES ($1,$2,$3::uuid,$4,$5)`,
-		key, kind, refID, s.deps.Environment, label); err != nil {
+		key, string(kind), refID, s.deps.Environment, label); err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "demo: the seed register could not be written")
 	}
 	return nil
