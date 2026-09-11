@@ -234,6 +234,46 @@ var operationPolicies = map[string]operationPolicy{
 		AnyOf: perms(security.PermReconciliationResolve), StepUp: true, Mutating: true,
 	},
 
+	// --- agents (goal §17, §18) -------------------------------------------
+	//
+	// strategy:write is the customer's authority to describe and compile a
+	// strategy and to create an agent from a compiled version of it, and
+	// strategy:read is the authority to look. They are the permissions the
+	// customer role already holds for exactly this, and no new one is minted:
+	// what an agent MAY DO is the authority level on its grant, checked by
+	// internal/agents against internal/agentauthority, and it is a different
+	// question from who may reach the route.
+	//
+	// Tenant scoping is a per-request check, as everywhere else: WHICH agent
+	// you may enable is an ownership question, answered by RequireAccount once
+	// the agent's account is known.
+	"PostStrategies":                  {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetStrategies":                   {AnyOf: perms(security.PermStrategyRead)},
+	"GetStrategiesStrategyId":         {AnyOf: perms(security.PermStrategyRead)},
+	"PostStrategiesStrategyIdCompile": {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"PostAgents":                      {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetAgents":                       {AnyOf: perms(security.PermStrategyRead)},
+	"GetAgentsAgentId":                {AnyOf: perms(security.PermStrategyRead)},
+	// Deliberately NOT StepUp at the boundary. The five actions share one
+	// operation id, and pausing must stay fast: POLICY_AUTHORITY §2's reasoning
+	// for kill-switch activation applies exactly here, and a step-up in front of
+	// an emergency stop is a control that argues with the operator during the
+	// incident. `enable` is the action that GRANTS authority, and
+	// internal/agents demands the step-up for that one action alone, the way
+	// internal/gates and internal/killswitch demand their own.
+	"PostAgentsAgentIdAction": {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetAdminAgents":          {AnyOf: perms(security.PermAccountReadAny)},
+	// The floor is kill:activate, not agent:pause, and the reason is worth
+	// stating: the CUSTOMER role holds agent:pause — it is how an owner stops
+	// their own agent — so an admin route floored on it would be reachable by
+	// every customer, which TestCustomerRoleHoldsNoAdminRoutePermission
+	// correctly refuses. kill:activate is the authority to stop risk in this
+	// deployment and is held only by Operations, Risk, Security and Admin.
+	// internal/agents then demands agent:pause AND an OPERATOR actor, so both
+	// halves must hold: the route floor says who may reach it, the domain says
+	// who may do it.
+	"PostAdminAgentsAgentIdPause": {AnyOf: perms(security.PermKillActivate), StepUp: true, Mutating: true},
+
 	// --- system -----------------------------------------------------------
 	"GetHealthz": {Public: true},
 	"GetReadyz":  {Public: true},

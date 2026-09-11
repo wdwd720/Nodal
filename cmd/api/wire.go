@@ -17,6 +17,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/admin"
+	"github.com/nodal/controlplane/internal/agents"
 	"github.com/nodal/controlplane/internal/alert"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
@@ -527,6 +528,53 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
 	ports.Stream = sse
+
+	// ---- agents ----
+	//
+	// The agent product surface: strategies, agents, the authority and limits
+	// their owners grant them, and the lifecycle a person can reach. Nothing
+	// here runs an agent. `agentRuntimeDeployment()` states that this
+	// deployment runs neither worker, and the API reports NOT_DEPLOYED from it
+	// rather than inferring "running" from an agent being enabled.
+	//
+	// The strategy compiler is deliberately left unconfigured (D-074,
+	// ADR-0029). Compiling needs two things this deployment does not have: a
+	// model provider credential on the `model` slot, and a validation registry
+	// (instruments, venues, tools, composed risk policy) for the compiler's
+	// TYPE and RISK_COMPAT stages. With a model and no registry the compiler
+	// would reject every instrument a user named and blame the user, which is
+	// worse than an honest refusal, so both must arrive together. Until they
+	// do, every compile attempt is recorded with outcome MODEL_UNAVAILABLE and
+	// the failure code COMPILER_UNAVAILABLE, and the API says exactly that.
+	agentSvc, err := agents.NewService(agents.Deps{
+		DB:           database,
+		Clock:        clk,
+		Capabilities: agentCapabilityChecker{checker: gateChecker, q: database},
+		Runtime:      agentRuntimeDeployment(),
+		Logger:       log,
+		BuildVersion: config.BuildVersion,
+		StepUpMaxAge: cfg.Auth.StepUpMaxAge,
+		// No publisher. Activity and notifications are wired by the composition
+		// root when those surfaces exist; internal/agents deliberately imports
+		// neither, so what a user is told about an agent stays those packages'
+		// decision rather than a property of the lifecycle.
+		Events: nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("agents: %w", err)
+	}
+	strategySvc, err := agents.NewStrategyService(agents.StrategyDeps{
+		DB:              database,
+		Clock:           clk,
+		Compiler:        nil,
+		Refs:            nil,
+		CompilerVersion: config.BuildVersion,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("strategies: %w", err)
+	}
+	ports.Agents = agentSvc
+	ports.Strategies = strategySvc
 
 	// Provider webhooks. The map is keyed by the provider name in the path, so
 	// POST /v1/webhooks/stripe_credit reaches the Credit purchase pipeline and

@@ -63,8 +63,18 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-	Health        HealthPort
-	Idempotency   IdempotencyPort
+
+	// ---- agents ----
+	//
+	// The agent product surface. Both are management only: nothing here runs an
+	// agent, evaluates a strategy or emits an intent, and the runtime they
+	// describe has no production caller in this build (F-65). A nil port
+	// answers UNSUPPORTED rather than an empty list.
+	Agents     AgentsPort
+	Strategies StrategiesPort
+
+	Health      HealthPort
+	Idempotency IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because
