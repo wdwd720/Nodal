@@ -38,11 +38,12 @@ func (s *stubErr) fail() error { return s.err }
 
 type fakeIdentity struct {
 	stubErr
-	begun     identity.BeginResult
-	complete  identity.Completed
-	loggedIn  bool
-	loggedOut bool
-	lastBegin identity.BeginRequest
+	begun        identity.BeginResult
+	complete     identity.Completed
+	loggedIn     bool
+	loggedOut    bool
+	lastBegin    identity.BeginRequest
+	lastComplete identity.CompleteRequest
 }
 
 func (f *fakeIdentity) Begin(_ context.Context, req identity.BeginRequest) (identity.BeginResult, error) {
@@ -53,11 +54,12 @@ func (f *fakeIdentity) Begin(_ context.Context, req identity.BeginRequest) (iden
 	return f.begun, nil
 }
 
-func (f *fakeIdentity) Complete(context.Context, identity.CompleteRequest) (identity.Completed, error) {
+func (f *fakeIdentity) Complete(_ context.Context, req identity.CompleteRequest) (identity.Completed, error) {
 	if err := f.fail(); err != nil {
 		return identity.Completed{}, err
 	}
 	f.loggedIn = true
+	f.lastComplete = req
 	return f.complete, nil
 }
 

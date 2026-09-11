@@ -2,9 +2,10 @@
 
 package identity_test
 
-// Adversarial audit (goal §54), area accounts-auth. These tests DEMONSTRATE
-// defects; they are expected to fail once the defects are fixed, at which point
-// they should be inverted into regressions by the fixer.
+// Adversarial audit (goal §54), area accounts-auth. These demonstrated defects.
+// The return_to one still does: it is fixed on another branch and is left as the
+// auditor wrote it, so it fails here and passes once both branches merge. The
+// step-up one is inverted and is the regression for F-182.
 
 import (
 	"context"
@@ -31,6 +32,10 @@ import (
 // which config.Validate permits in every environment) postLoginDestination
 // returns the stored path verbatim, so the callback answers
 // `302 Location: /\evil.test` AFTER setting the session cookie.
+//
+// The guard and postLoginDestination belong to the config-deploy fix branch;
+// this test is left exactly as the auditor wrote it so the orchestrator can see
+// it flip once that branch merges.
 func TestAudit_BeginAcceptsABackslashReturnToThatBrowsersResolveOffSite(t *testing.T) {
 	svc, _, _ := newService(t)
 	ctx := context.Background()
@@ -57,14 +62,17 @@ func TestAudit_BeginAcceptsABackslashReturnToThatBrowsersResolveOffSite(t *testi
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 }
 
-// F-accounts-auth-5. PART 192 requires session rotation on privilege change and
+// F-182. PART 192 requires session rotation on privilege change and
 // auth.Manager.Rotate is the mechanism for it -- with no caller anywhere in the
 // repository. A step-up login (`/v1/auth/login?step_up=true`) is a privilege
 // change: it raises the session's AuthTime and AMR, and it is the thing a user
 // is asked to do before closing their account or registering a payout
-// destination. identity.Complete calls Sessions.Issue, so the pre-step-up
-// session stays live, keeps its own full absolute lifetime, and is still a
-// usable credential.
+// destination. identity.Complete called Sessions.Issue, so the pre-step-up
+// session stayed live, kept its own full absolute lifetime, and was still a
+// usable credential carrying the weaker authentication.
+//
+// The callback passes the session the browser already holds now, and a step-up
+// by the same subject rotates it.
 func TestAudit_StepUpLoginLeavesThePreviousSessionLiveAndUsable(t *testing.T) {
 	svc, d, clk := newService(t)
 	ctx := context.Background()
@@ -77,33 +85,80 @@ func TestAudit_StepUpLoginLeavesThePreviousSessionLiveAndUsable(t *testing.T) {
 	require.NoError(t, err)
 
 	// The user steps up, which is what the product asks for before a closure
-	// request or a payout destination.
+	// request or a payout destination. The browser sends the cookie it already
+	// holds, and the callback hands the session it resolved to to Complete.
 	begin2, err := svc.Begin(ctx, identity.BeginRequest{StepUp: true})
 	require.NoError(t, err)
-	second, err := svc.Complete(ctx, identity.CompleteRequest{Code: "security:mfa", State: begin2.State, UserAgent: "browser-1"})
+	current := first.Issued.Session
+	second, err := svc.Complete(ctx, identity.CompleteRequest{
+		Code: "security:mfa", State: begin2.State, UserAgent: "browser-1", Current: &current,
+	})
 	require.NoError(t, err)
 	require.True(t, second.StepUp)
 	require.Equal(t, first.User.ID, second.User.ID)
 	require.NotEqual(t, first.Issued.Session.ID, second.Issued.Session.ID)
 
-	// The session the step-up replaced is not revoked and is not rotated from.
+	// The session the step-up replaced is revoked, and the replacement records
+	// what it replaced.
 	var revoked *string
 	require.NoError(t, d.Pool().QueryRow(ctx,
 		`SELECT revoked_at::text FROM sessions WHERE id = $1`, first.Issued.Session.ID).Scan(&revoked))
-	assert.Nil(t, revoked, "the pre-step-up session was not revoked")
-	assert.Empty(t, second.Issued.Session.RotatedFrom,
+	assert.NotNil(t, revoked, "the pre-step-up session was not revoked")
+	assert.Equal(t, first.Issued.Session.ID, second.Issued.Session.RotatedFrom,
 		"the new session does not record a rotation, so nothing links it to the one it replaced")
 
-	// And its token still authenticates.
-	sess, err := mgr.Authenticate(ctx, d.Pool(), first.Issued.Token)
-	require.NoError(t, err, "the old cookie still works after the step-up")
-	assert.Equal(t, first.Issued.Session.ID, sess.ID)
+	// A rotation can never extend a login: the replacement keeps the absolute
+	// expiry of the session it replaced.
+	assert.Equal(t, first.Issued.Session.ExpiresAt.UTC(), second.Issued.Session.ExpiresAt.UTC(),
+		"the rotated session was given a fresh absolute lifetime")
 
-	// Which the user's own security page counts as a second device.
+	// And the old token no longer authenticates.
+	_, err = mgr.Authenticate(ctx, d.Pool(), first.Issued.Token)
+	require.Error(t, err, "the old cookie still works after the step-up")
+	assert.ErrorIs(t, err, auth.ErrSessionRevoked)
+
+	// Which the user's own security page counts: one browser that stepped up
+	// reports one active session, not two devices.
 	var live int
 	require.NoError(t, d.Pool().QueryRow(ctx,
 		`SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`,
 		first.User.ID).Scan(&live))
-	assert.GreaterOrEqual(t, live, 2,
-		"GET /v1/me/security counts these, so one browser that stepped up reports two active sessions")
+	assert.Equal(t, 1, live,
+		"GET /v1/me/security counts these, so one browser that stepped up must report one session")
+}
+
+// The other half of the same rule: a step-up with no session behind it is a cold
+// sign-in and is issued a session rather than refused, and a step-up carrying
+// somebody ELSE's session issues too -- rotation replaces the caller's own
+// login, and must never be reachable as a way to end a stranger's.
+func TestAudit_AColdStepUpIssuesAndAStrangersSessionIsNotRotated(t *testing.T) {
+	svc, d, _ := newService(t)
+	ctx := context.Background()
+
+	begin, err := svc.Begin(ctx, identity.BeginRequest{StepUp: true})
+	require.NoError(t, err)
+	cold, err := svc.Complete(ctx, identity.CompleteRequest{Code: "security:mfa", State: begin.State})
+	require.NoError(t, err)
+	assert.Empty(t, cold.Issued.Session.RotatedFrom, "a cold step-up rotated from something")
+
+	// A different person's live session, offered as the current one.
+	other, err := svc.Begin(ctx, identity.BeginRequest{})
+	require.NoError(t, err)
+	stranger, err := svc.Complete(ctx, identity.CompleteRequest{Code: "compliance", State: other.State})
+	require.NoError(t, err)
+	require.NotEqual(t, cold.User.ID, stranger.User.ID)
+
+	begin3, err := svc.Begin(ctx, identity.BeginRequest{StepUp: true})
+	require.NoError(t, err)
+	strangerSession := stranger.Issued.Session
+	again, err := svc.Complete(ctx, identity.CompleteRequest{
+		Code: "security:mfa", State: begin3.State, Current: &strangerSession,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, again.Issued.Session.RotatedFrom)
+
+	var revoked *string
+	require.NoError(t, d.Pool().QueryRow(ctx,
+		`SELECT revoked_at::text FROM sessions WHERE id = $1`, stranger.Issued.Session.ID).Scan(&revoked))
+	assert.Nil(t, revoked, "a step-up ended a session belonging to somebody else")
 }

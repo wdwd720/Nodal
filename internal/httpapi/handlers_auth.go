@@ -78,17 +78,36 @@ func (s *Server) GetAuthCallback(ctx context.Context, request api.GetAuthCallbac
 	// This runs before Complete, so a planted callback does not consume the
 	// attacker's attempt row either -- the refusal costs the victim nothing and
 	// leaves the attacker's own flow to expire on its own.
+	//
+	// The copy names the likely cause first (D-103). The login-state cookie is
+	// one slot at Path=/, so a second sign-in -- a second tab, or a step-up
+	// begun beside a sign-in already in progress -- overwrites the first flow's
+	// digest and the older tab lands here. That is the common case by a long
+	// way, and telling somebody their sign-in "did not start in this browser"
+	// describes an attack when what happened is two tabs. The control does not
+	// change: this still refuses, and one slot is what makes the digest
+	// unguessable-from-outside rather than merely present.
 	if !httpmw.LoginStateMatches(r, request.Params.State, s.opts.CookieDomain, s.opts.CookieSecure) {
 		return nil, errs.New(errs.CodeUnauthenticated,
-			"this sign-in did not start in this browser; start again from the beginning")
+			"this sign-in did not start in this browser, or a newer sign-in replaced it; start again")
 	}
-	done, err := s.opts.Ports.Identity.Complete(ctx, identity.CompleteRequest{
+	// The session the browser already holds, when it holds one. A step-up
+	// begun from inside the product arrives here with it, and internal/identity
+	// rotates that session rather than issuing a second one beside it: a
+	// step-up is a privilege change, and leaving the weaker session live means
+	// the credential the step-up defends against still works (PART 192, F-182).
+	// A cold sign-in carries none and is issued a new session.
+	complete := identity.CompleteRequest{
 		Code:      request.Params.Code,
 		State:     request.Params.State,
 		IP:        clientIP(r, s.trusted),
 		UserAgent: userAgent(r),
 		RequestID: observability.RequestID(ctx),
-	})
+	}
+	if sess, ok := httpmw.SessionFrom(ctx); ok {
+		complete.Current = &sess
+	}
+	done, err := s.opts.Ports.Identity.Complete(ctx, complete)
 	if err != nil {
 		return nil, err
 	}

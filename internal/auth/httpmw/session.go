@@ -19,6 +19,16 @@ func SessionFrom(ctx context.Context) (auth.Session, bool) {
 	return s, ok
 }
 
+// WithSession attaches s the way the Session middleware does.
+//
+// It is exported so a test harness that stands in for the middleware can put a
+// session where the handlers look for one, rather than reaching into this
+// package's unexported key. Nothing in production calls it but the middleware
+// below.
+func WithSession(ctx context.Context, s auth.Session) context.Context {
+	return context.WithValue(ctx, sessionKey{}, s)
+}
+
 // Session loads the session named by cookieName through mgr and attaches
 // the resulting security.Principal and auth.Session to the context.
 //
@@ -54,7 +64,7 @@ func Session(mgr *auth.Manager, q auth.Querier, cookieName string) func(http.Han
 				return
 			}
 			ctx := security.WithPrincipal(r.Context(), p)
-			ctx = context.WithValue(ctx, sessionKey{}, s)
+			ctx = WithSession(ctx, s)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

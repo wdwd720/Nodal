@@ -16,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/auth/pgstore"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/identity"
 	"github.com/nodal/controlplane/internal/operatorroles"
 	"github.com/nodal/controlplane/internal/security"
@@ -106,15 +107,19 @@ func TestIntegration_Bootstrap_IsIdempotent(t *testing.T) {
 // A revoked grant stays revoked. Removing the declaration is how you stop it
 // being offered; nothing here undoes an operator's revocation.
 func TestIntegration_Bootstrap_DoesNotRestoreARevokedGrant(t *testing.T) {
-	svc, d, clk := newServiceWithBootstrap(t, devidp.Name+"|dev:risk=RISK")
+	svc, d, _ := newServiceWithBootstrap(t, devidp.Name+"|dev:risk=RISK")
 	ctx := context.Background()
 
 	first := login(t, svc, "risk:mfa")
 	require.Equal(t, []security.Role{security.RoleRisk}, first.Issued.Session.Roles)
 
+	// The revocation is a transition row, not an UPDATE: 00799 took the
+	// directory out of the application role's UPDATE reach, and the trigger
+	// behind this row is what writes revoked_at.
 	_, err := d.Pool().Exec(ctx,
-		`UPDATE operator_roles SET revoked_at = $2 WHERE user_id = $1 AND role = 'RISK'`,
-		first.User.ID, clk.Now())
+		`INSERT INTO operator_role_transitions (id, user_id, role, action, actor_type, actor_id, reason)
+		 VALUES ($1, $2, 'RISK', 'REVOKE', 'OPERATOR', 'an operator', 'no longer on the risk desk')`,
+		id.New[id.Any](), first.User.ID)
 	require.NoError(t, err)
 
 	second := login(t, svc, "risk:mfa")

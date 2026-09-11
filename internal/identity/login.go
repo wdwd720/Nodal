@@ -129,6 +129,16 @@ type CompleteRequest struct {
 	IP        string
 	UserAgent string
 	RequestID string
+	// Current is the session the browser already holds, when it holds one.
+	// The callback is a public route and the session middleware attaches
+	// whatever the cookie resolved to, so this is present for a step-up
+	// started from inside the product and absent for a cold sign-in.
+	//
+	// It is a session and not a subject id on purpose: Rotate re-reads it
+	// from the store inside the transaction and refuses a stale copy, and a
+	// caller that could only name a subject could ask for somebody else's
+	// sessions to be replaced.
+	Current *auth.Session
 }
 
 // Completed is a successful login.
@@ -289,10 +299,10 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		} else {
 			roles = []security.Role{security.RoleCustomer}
 		}
-		issued, err := s.d.Sessions.Issue(ctx, tx, auth.IssueParams{
+		issued, rotatedFrom, err := s.issueOrRotate(ctx, tx, req, auth.IssueParams{
 			SubjectID: user.ID.String(), ActorType: actor, Roles: roles, AccountIDs: accountIDs,
 			AuthTime: ident.AuthTime, AMR: ident.AMR, IP: req.IP, UserAgent: req.UserAgent,
-		})
+		}, at.stepUp)
 		if err != nil {
 			return err
 		}
@@ -303,7 +313,7 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		if len(accountIDs) > 0 {
 			stream = audit.AccountStream(accountIDs[0])
 		}
-		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created, "bootstrapped_roles": bootstrapped})
+		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created, "bootstrapped_roles": bootstrapped, "rotated_from": rotatedFrom})
 		if _, err := s.d.Audit.Append(ctx, tx, audit.Event{
 			Stream: stream, ActorType: string(actor), ActorID: user.ID.String(), Action: "auth.login",
 			ResourceType: "session", ResourceID: issued.Session.ID, RequestID: req.RequestID, SourceIP: req.IP, Device: req.UserAgent,
@@ -311,8 +321,19 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		}); err != nil {
 			return err
 		}
-		if err := insertSecurityEvent(ctx, tx, "login", "INFO", &user.ID, &issued.Session.ID, req, map[string]any{"actor_type": actor, "step_up": at.stepUp, "created": created}, now); err != nil {
+		if err := insertSecurityEvent(ctx, tx, "login", "INFO", &user.ID, &issued.Session.ID, req,
+			map[string]any{"actor_type": actor, "step_up": at.stepUp, "created": created, "rotated_from": rotatedFrom}, now); err != nil {
 			return err
+		}
+		if rotatedFrom != "" {
+			// The replaced session is revoked, and a revocation the user did
+			// not ask for belongs on the security page beside the ones they
+			// did.
+			prior := rotatedFrom
+			if err := insertSecurityEvent(ctx, tx, "session_revoked", "INFO", &user.ID, &prior, req,
+				map[string]any{"by": "step_up_rotation", "replaced_by": issued.Session.ID}, now); err != nil {
+				return err
+			}
 		}
 		out = Completed{Issued: issued, User: user, Accounts: owned, Created: created, StepUp: at.stepUp, ReturnTo: at.returnTo}
 		return nil
@@ -321,6 +342,78 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		return fail(err, "session_issue_failed")
 	}
 	return out, nil
+}
+
+// issueOrRotate creates the session a completed login hands to the browser, and
+// returns the id of the session it replaced when it replaced one.
+//
+// PART 192 requires session rotation on privilege change, and a step-up IS a
+// privilege change: it raises the session's AuthTime and AMR, and it is what a
+// person is asked to do before closing their account or registering a payout
+// destination. auth.Manager.Rotate is the mechanism for it and had no caller
+// anywhere in the repository -- identity.Complete always called Issue -- so the
+// pre-step-up session stayed live, kept its own full absolute lifetime, and was
+// still a usable credential carrying the WEAKER authentication. A stolen cookie
+// survived the step-up the product asked for to defend against it, and the
+// user's own security page counted one browser as two devices (F-182).
+//
+// Rotate is chosen only when the replacement really is the same login moving
+// forward: the same subject, the same actor type, and a session the store still
+// accepts. It revokes the old session and keeps its absolute ExpiresAt, so a
+// rotation can never extend a login -- which is why a cold step-up, where there
+// is nothing to rotate from, still Issues.
+//
+// An actor type that has changed between the two logins means the directory
+// decided something different about this person in between; that is not this
+// session moving forward, so it Issues a new one and revokes the old rather than
+// carrying an OPERATOR actor type onto a principal the directory no longer names.
+func (s *Service) issueOrRotate(ctx context.Context, tx pgx.Tx, req CompleteRequest, p auth.IssueParams, stepUp bool) (auth.Issued, string, error) {
+	cur := req.Current
+	if !stepUp || cur == nil || cur.SubjectID != p.SubjectID || cur.ActorType == security.ActorAgent {
+		issued, err := s.d.Sessions.Issue(ctx, tx, p)
+		return issued, "", err
+	}
+	if cur.ActorType != p.ActorType {
+		issued, err := s.d.Sessions.Issue(ctx, tx, p)
+		if err != nil {
+			return auth.Issued{}, "", err
+		}
+		if err := s.d.Sessions.Revoke(ctx, tx, cur.ID); err != nil {
+			return auth.Issued{}, "", err
+		}
+		return issued, cur.ID, nil
+	}
+	r := auth.Rotation{
+		Roles: append([]security.Role(nil), p.Roles...), AccountIDs: p.AccountIDs,
+		AuthTime: p.AuthTime, AMR: p.AMR,
+	}
+	// A live break-glass elevation survives the step-up, with its role, because
+	// it is bounded by the clock rather than by the session and ending an
+	// emergency because somebody re-authenticated more strongly would be the
+	// wrong way round. Both halves move together: security.Principal refuses
+	// the role without the expiry.
+	if cur.BreakGlassUntil != nil {
+		r.BreakGlassUntil = cur.BreakGlassUntil
+		for _, role := range cur.Roles {
+			if role == security.RoleBreakGlass {
+				r.Roles = append(r.Roles, security.RoleBreakGlass)
+				break
+			}
+		}
+	}
+	issued, err := s.d.Sessions.Rotate(ctx, tx, *cur, r)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidSession) {
+			// The cookie the browser sent is no longer usable -- revoked
+			// elsewhere, expired, or idled out between the redirect and the
+			// callback. There is nothing to rotate from, so this is a cold
+			// step-up and nothing is left live by treating it as one.
+			issued, ierr := s.d.Sessions.Issue(ctx, tx, p)
+			return issued, "", ierr
+		}
+		return auth.Issued{}, "", err
+	}
+	return issued, cur.ID, nil
 }
 
 // Logout revokes the session and records the security event.

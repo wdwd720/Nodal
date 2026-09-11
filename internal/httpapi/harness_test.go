@@ -14,6 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/auth"
+	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
@@ -88,6 +89,10 @@ type harness struct {
 	server  *Server
 	ports   *fixtures
 	princip *security.Principal
+	// session stands in for what httpmw.Session would have resolved from the
+	// cookie. Nil means the request carries no session, which is what most of
+	// this suite wants; withSession attaches one.
+	session *auth.Session
 }
 
 // fixtures holds every double so a test can reach in and set an error.
@@ -268,11 +273,21 @@ func newHarness(t *testing.T) *harness {
 		Clock:         clock.NewFake(testNow),
 		Authenticator: func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if h.princip == nil {
+				ctx := r.Context()
+				if h.princip != nil {
+					ctx = security.WithPrincipal(ctx, *h.princip)
+				}
+				// The real middleware attaches the session beside the
+				// principal. Only a test that asks for one gets one, so
+				// nothing that was anonymous here becomes authenticated.
+				if h.session != nil {
+					ctx = httpmw.WithSession(ctx, *h.session)
+				}
+				if ctx == r.Context() {
 					next.ServeHTTP(w, r)
 					return
 				}
-				next.ServeHTTP(w, r.WithContext(security.WithPrincipal(r.Context(), *h.princip)))
+				next.ServeHTTP(w, r.WithContext(ctx))
 			})
 		},
 		Ports: fx.ports(),
@@ -285,6 +300,14 @@ func newHarness(t *testing.T) *harness {
 // as runs the next request with the given principal (nil = anonymous).
 func (h *harness) as(p *security.Principal) *harness {
 	h.princip = p
+	return h
+}
+
+// withSession also attaches the auth.Session the session middleware would have
+// resolved, for the handlers that read one (logout, and the callback's
+// rotation decision).
+func (h *harness) withSession(s *auth.Session) *harness {
+	h.session = s
 	return h
 }
 

@@ -259,14 +259,26 @@ func grantOperatorRole(t *testing.T, subject, role string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	tag, err := testPool.Exec(ctx,
+	// DO NOTHING, not DO UPDATE: migration 00799 took the operator directory
+	// out of the application role's UPDATE reach, and "put a revoked grant
+	// back" is precisely what it exists to refuse. The insert is still
+	// idempotent, so the suite is still re-runnable; the assertion is moved to
+	// the state it was checking rather than to the row count, which said
+	// nothing about whether the grant was live.
+	_, err := testPool.Exec(ctx,
 		`INSERT INTO operator_roles (user_id, role, reason)
 		 SELECT id, $2, 'test/security adversarial suite'
 		 FROM users WHERE idp_issuer = 'devidp' AND idp_subject = $1
-		 ON CONFLICT (user_id, role) DO UPDATE SET revoked_at = NULL, expires_at = NULL`,
+		 ON CONFLICT (user_id, role) DO NOTHING`,
 		"dev:"+subject, role)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, tag.RowsAffected(), "no user row for dev:%s; log in as that identity first", subject)
+	var live int
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT count(*) FROM operator_roles r JOIN users u ON u.id = r.user_id
+		  WHERE u.idp_issuer = 'devidp' AND u.idp_subject = $1 AND r.role = $2
+		    AND r.revoked_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > now())`,
+		"dev:"+subject, role).Scan(&live))
+	require.Equal(t, 1, live, "no live %s grant for dev:%s; log in as that identity first", role, subject)
 }
 
 // operatorSession logs in once to create the user, grants the role, then logs
