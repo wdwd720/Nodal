@@ -430,33 +430,53 @@ func absenceClaims() []absenceClaim {
 // document, and a document that decayed once decays again.
 func retiredAbsenceClaims() []absenceClaim {
 	return []absenceClaim{
-		{"docs/security/SECURITY.md",
-			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/security"},
+		{
+			"docs/security/SECURITY.md",
+			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/security",
+		},
 		{"docs/security/SECURITY.md", "DESIGNED, pending Terraform (`infra/` is empty; EB-012)", "infra/terraform"},
 		{"docs/security/SECURITY.md", "compiler DESIGNED (`internal/strategy` absent)", "internal/strategy"},
 		{"docs/security/SECURITY.md", "DESIGNED (`internal/model` absent)", "internal/model"},
-		{"docs/security/SECURITY.md",
-			"`./test/contract/...` — the directory does not exist, so the step is vacuous today", "test/contract"},
-		{"docs/security/SECURITY.md",
-			"**the directory does not exist, so the security step passes vacuously**", "test/security"},
+		{
+			"docs/security/SECURITY.md",
+			"`./test/contract/...` — the directory does not exist, so the step is vacuous today", "test/contract",
+		},
+		{
+			"docs/security/SECURITY.md",
+			"**the directory does not exist, so the security step passes vacuously**", "test/security",
+		},
 		{"docs/security/SECURITY.md", "**Runbooks**: `docs/runbooks/` does not exist.", "docs/runbooks"},
-		{"docs/security/SECURITY.md",
-			"**no writer exists** — nothing on disk records a security event yet", "security_events"},
+		{
+			"docs/security/SECURITY.md",
+			"**no writer exists** — nothing on disk records a security event yet", "security_events",
+		},
 		{"docs/security/SECURITY.md", "much of it is now wrong in the UNDERSTATING direction", "docs/security/SECURITY.md"},
-		{"docs/threat-model/THREAT_MODEL.md",
-			"`make security`, `make contract` and `make iac-scan` pass on empty directories; no git remote", "test/security"},
-		{"docs/threat-model/THREAT_MODEL.md",
-			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/reconciliation"},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
+			"`make security`, `make contract` and `make iac-scan` pass on empty directories; no git remote", "test/security",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
+			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/reconciliation",
+		},
 		{"docs/threat-model/THREAT_MODEL.md", "no Terraform, IAM task roles", "infra/terraform"},
-		{"docs/threat-model/THREAT_MODEL.md",
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`internal/{signing, wallet, execution, reconciliation, settlement, quote, instruments, intent, agent, strategy, model, prediction}`, every worker binary |",
-			"internal/signing"},
-		{"docs/operations/BACKUP_RESTORE.md",
-			"`docs/operations/DISASTER_RECOVERY.md` (pending)", "docs/operations/DISASTER_RECOVERY.md"},
-		{"docs/operations/BACKUP_RESTORE.md",
-			"`docs/runbooks/database-corruption.md` (pending)", "docs/runbooks/database-corruption.md"},
-		{"docs/operations/BACKUP_RESTORE.md",
-			"## 2. Production design (AWS, pending Terraform)", "infra/terraform/modules/rds"},
+			"internal/signing",
+		},
+		{
+			"docs/operations/BACKUP_RESTORE.md",
+			"`docs/operations/DISASTER_RECOVERY.md` (pending)", "docs/operations/DISASTER_RECOVERY.md",
+		},
+		{
+			"docs/operations/BACKUP_RESTORE.md",
+			"`docs/runbooks/database-corruption.md` (pending)", "docs/runbooks/database-corruption.md",
+		},
+		{
+			"docs/operations/BACKUP_RESTORE.md",
+			"## 2. Production design (AWS, pending Terraform)", "infra/terraform/modules/rds",
+		},
 	}
 }
 
@@ -466,47 +486,79 @@ func retiredAbsenceClaims() []absenceClaim {
 // moves is a claim nobody is checking any more.
 func presenceClaims() []absenceClaim {
 	return []absenceClaim{
-		{"docs/security/SECURITY.md",
-			"go test -count=1 ./test/security/... ./test/contract/...", "test/security"},
-		{"docs/security/SECURITY.md",
-			"go test -count=1 ./test/security/... ./test/contract/...", "test/contract"},
-		{"docs/security/SECURITY.md",
-			"IMPLEMENTED in `infra/terraform/modules/ecs-service`", "infra/terraform/modules/ecs-service"},
-		{"docs/security/SECURITY.md",
-			"compiler IMPLEMENTED (`internal/strategy/compiler.go`", "internal/strategy/compiler.go"},
-		{"docs/security/SECURITY.md",
-			"IMPLEMENTED (`internal/model/prompt.go`", "internal/model/prompt.go"},
-		{"docs/security/SECURITY.md",
-			"`docs/runbooks/` holds nineteen runbooks and an index", "docs/runbooks/README.md"},
-		{"docs/threat-model/THREAT_MODEL.md",
+		{
+			"docs/security/SECURITY.md",
+			"go test -count=1 ./test/security/... ./test/contract/...", "test/security",
+		},
+		{
+			"docs/security/SECURITY.md",
+			"go test -count=1 ./test/security/... ./test/contract/...", "test/contract",
+		},
+		{
+			"docs/security/SECURITY.md",
+			"IMPLEMENTED in `infra/terraform/modules/ecs-service`", "infra/terraform/modules/ecs-service",
+		},
+		{
+			"docs/security/SECURITY.md",
+			"compiler IMPLEMENTED (`internal/strategy/compiler.go`", "internal/strategy/compiler.go",
+		},
+		{
+			"docs/security/SECURITY.md",
+			"IMPLEMENTED (`internal/model/prompt.go`", "internal/model/prompt.go",
+		},
+		{
+			"docs/security/SECURITY.md",
+			"`docs/runbooks/` holds nineteen runbooks and an index", "docs/runbooks/README.md",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`test/security` holds twenty test files and `test/contract` eight over recorded provider fixtures",
-			"test/security"},
-		{"docs/threat-model/THREAT_MODEL.md",
+			"test/security",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`test/security` holds twenty test files and `test/contract` eight over recorded provider fixtures",
-			"test/contract"},
-		{"docs/threat-model/THREAT_MODEL.md",
+			"test/contract",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`internal/reconciliation`, `internal/settlement` and `internal/execution` hold 67 Go files",
-			"internal/reconciliation"},
-		{"docs/threat-model/THREAT_MODEL.md",
+			"internal/reconciliation",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`internal/reconciliation`, `internal/settlement` and `internal/execution` hold 67 Go files",
-			"internal/settlement"},
-		{"docs/threat-model/THREAT_MODEL.md",
+			"internal/settlement",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`internal/reconciliation`, `internal/settlement` and `internal/execution` hold 67 Go files",
-			"internal/execution"},
-		{"docs/threat-model/THREAT_MODEL.md",
+			"internal/execution",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`infra/terraform` carries per-service task roles (`modules/ecs-service`)",
-			"infra/terraform/modules/ecs-service"},
-		{"docs/threat-model/THREAT_MODEL.md",
+			"infra/terraform/modules/ecs-service",
+		},
+		{
+			"docs/threat-model/THREAT_MODEL.md",
 			"`nativemarket.ConservativeSafetyPolicy()` sets `circuit_breaker_move_bps: 0`",
-			"internal/nativemarket/safety.go"},
-		{"docs/operations/BACKUP_RESTORE.md",
+			"internal/nativemarket/safety.go",
+		},
+		{
+			"docs/operations/BACKUP_RESTORE.md",
 			"`docs/operations/DISASTER_RECOVERY.md`, `docs/runbooks/database-corruption.md`, BLOCKERS EB-012.",
-			"docs/operations/DISASTER_RECOVERY.md"},
-		{"docs/operations/BACKUP_RESTORE.md",
+			"docs/operations/DISASTER_RECOVERY.md",
+		},
+		{
+			"docs/operations/BACKUP_RESTORE.md",
 			"`docs/operations/DISASTER_RECOVERY.md`, `docs/runbooks/database-corruption.md`, BLOCKERS EB-012.",
-			"docs/runbooks/database-corruption.md"},
-		{"docs/operations/BACKUP_RESTORE.md",
-			"The design above is in `infra/terraform/modules/rds`", "infra/terraform/modules/rds"},
+			"docs/runbooks/database-corruption.md",
+		},
+		{
+			"docs/operations/BACKUP_RESTORE.md",
+			"The design above is in `infra/terraform/modules/rds`", "infra/terraform/modules/rds",
+		},
 	}
 }
 
@@ -527,11 +579,15 @@ type writerClaim struct {
 
 func writerClaims() []writerClaim {
 	return []writerClaim{
-		{"docs/security/SECURITY.md",
+		{
+			"docs/security/SECURITY.md",
 			"Four packages write rows: `internal/identity/login.go`",
 			"security_events",
-			[]string{"internal/identity/login.go", "internal/funding/service.go",
-				"internal/signing/repository.go", "internal/webhook/handler.go"}},
+			[]string{
+				"internal/identity/login.go", "internal/funding/service.go",
+				"internal/signing/repository.go", "internal/webhook/handler.go",
+			},
+		},
 	}
 }
 
@@ -617,22 +673,38 @@ func TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts(t *testing.T) {
 //     disk, and say what would prove it.
 func provenNotPlanned() []struct{ item, retiredPlan, proof string } {
 	return []struct{ item, retiredPlan, proof string }{
-		{"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
-			"TestIDOR_CoversEveryAccountScopedRoute"},
-		{"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
-			"TestIDOR_CrossTenantAccountReadsAreRefused"},
-		{"Prompt injection", "test/security/prompt_injection_test.go",
-			"TestPromptInjection_UntrustedTextNeverEntersTheInstructionChannel"},
-		{"Agent withdrawal attempt", "test/security/agent_withdrawal_attempt_test.go",
-			"TestAgentPrincipalPermissionSetIsClosed"},
-		{"Admin privilege misuse", "test/security/admin_privilege_misuse_test.go",
-			"TestDualControl_AProposerCannotApproveItsOwnAction"},
-		{"Production capability bypass", "test/security/production_capability_bypass_test.go",
-			"TestProductionRefusesFakeProviders"},
-		{"Fake provider activation in production", "test/security/fake_provider_in_prod_test.go",
-			"TestLocalDefaultsAreNotProductionValid"},
-		{"Stolen session scenarios", "test/security/stolen_session_test.go",
-			"TestReplay_ForgedSessionCookiesAreRefused"},
+		{
+			"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
+			"TestIDOR_CoversEveryAccountScopedRoute",
+		},
+		{
+			"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
+			"TestIDOR_CrossTenantAccountReadsAreRefused",
+		},
+		{
+			"Prompt injection", "test/security/prompt_injection_test.go",
+			"TestPromptInjection_UntrustedTextNeverEntersTheInstructionChannel",
+		},
+		{
+			"Agent withdrawal attempt", "test/security/agent_withdrawal_attempt_test.go",
+			"TestAgentPrincipalPermissionSetIsClosed",
+		},
+		{
+			"Admin privilege misuse", "test/security/admin_privilege_misuse_test.go",
+			"TestDualControl_AProposerCannotApproveItsOwnAction",
+		},
+		{
+			"Production capability bypass", "test/security/production_capability_bypass_test.go",
+			"TestProductionRefusesFakeProviders",
+		},
+		{
+			"Fake provider activation in production", "test/security/fake_provider_in_prod_test.go",
+			"TestLocalDefaultsAreNotProductionValid",
+		},
+		{
+			"Stolen session scenarios", "test/security/stolen_session_test.go",
+			"TestReplay_ForgedSessionCookiesAreRefused",
+		},
 	}
 }
 
@@ -784,9 +856,11 @@ func TestAuditDocs_TheActivityFeedIsDescribedAsItIsBuilt(t *testing.T) {
 	const bullet = "**No security events in the activity feed.**"
 	require(t, strings.Contains(ceBody, bullet), "%s no longer carries the bullet this check reads", ce)
 	at := ce + ":" + strconv.Itoa(lineOf(ceBody, bullet))
-	for _, k := range []string{"VERIFICATION_UPDATED", "TERMS_ACCEPTED", "ACCOUNT_CLOSURE_REQUESTED",
+	for _, k := range []string{
+		"VERIFICATION_UPDATED", "TERMS_ACCEPTED", "ACCOUNT_CLOSURE_REQUESTED",
 		"ACCOUNT_CLOSURE_DECIDED", "AGENT_CREATED", "AGENT_PAUSED", "AGENT_RESUMED", "AGENT_DISABLED",
-		"PAYOUT_DESTINATION_ADDED", "PAYOUT_DESTINATION_DISABLED"} {
+		"PAYOUT_DESTINATION_ADDED", "PAYOUT_DESTINATION_DISABLED",
+	} {
 		if !have[k] {
 			problems = append(problems, at+" says only security events are missing from the feed; "+
 				k+" is not declared either")
@@ -1058,7 +1132,10 @@ func TestAuditDocs_ThePolicyAuthorityDescribesTheGateTheCodeEnforces(t *testing.
 	const machine = "State machine: `DISABLED → PENDING_APPROVAL → APPROVED → ACTIVE`"
 	require(t, strings.Contains(body, machine), "%s no longer prints the state machine this check reads", doc)
 	// The section that prints the machine, up to the next heading.
-	section := body[strings.Index(body, machine):]
+	section := body
+	if i := strings.Index(section, machine); i >= 0 {
+		section = section[i:]
+	}
 	if i := strings.Index(section, "\n## "); i > 0 {
 		section = section[:i]
 	}
@@ -1225,8 +1302,10 @@ func TestAuditDocs_EveryRoutesAddedCountMatchesItsTable(t *testing.T) {
 	body := read(t, root, doc)
 	lines := strings.Split(body, "\n")
 
-	words := map[string]int{"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-		"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+	words := map[string]int{
+		"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+		"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+	}
 	// Both spellings the document uses: "**Routes added (10).**" and
 	// "**Routes added** (nine; ...".
 	header := regexp.MustCompile(`Routes added\**\s*\(?(\d+|[a-z]+)`)
@@ -1328,14 +1407,18 @@ func TestAuditDocs_TheDecisionRegisterCitesTestsThatExist(t *testing.T) {
 // check that derives the number from the code has to be able to write it the
 // same way.
 func numberWord(n int) string {
-	words := []string{"zero", "one", "two", "three", "four", "five", "six", "seven",
+	words := []string{
+		"zero", "one", "two", "three", "four", "five", "six", "seven",
 		"eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-		"sixteen", "seventeen", "eighteen", "nineteen", "twenty"}
+		"sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+	}
 	if n >= 0 && n < len(words) {
 		return words[n]
 	}
-	tens := map[int]string{2: "twenty", 3: "thirty", 4: "forty", 5: "fifty",
-		6: "sixty", 7: "seventy", 8: "eighty", 9: "ninety"}
+	tens := map[int]string{
+		2: "twenty", 3: "thirty", 4: "forty", 5: "fifty",
+		6: "sixty", 7: "seventy", 8: "eighty", 9: "ninety",
+	}
 	if n < 100 {
 		if t, ok := tens[n/10]; ok {
 			if n%10 == 0 {
