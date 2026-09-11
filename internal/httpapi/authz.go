@@ -234,6 +234,53 @@ var operationPolicies = map[string]operationPolicy{
 		AnyOf: perms(security.PermReconciliationResolve), StepUp: true, Mutating: true,
 	},
 
+	// --- the withdrawal journey (goal PARTS 19-25) ------------------------
+	//
+	// No new permissions. The customer role already holds payout:create and
+	// payout:read, and verification exists to enable a payout: a role that may
+	// ask for one is exactly the role that may start the identity check that
+	// gates it. Inventing verification:* permissions would widen the
+	// permission set without widening what anybody can do.
+	//
+	// Reading one's own verification profile is account:read, because it is a
+	// property of the person rather than of a payout, and a customer who may
+	// not read payouts should still be able to see whether they are verified.
+	"GetMeVerification": {AnyOf: perms(security.PermAccountRead)},
+	// Starting a verification is a command with an idempotency key. It needs
+	// no step-up: the person is about to prove who they are to a provider, and
+	// demanding a second factor first would gate the remedy behind the thing
+	// it remedies.
+	"PostMeVerificationSessions": {
+		AnyOf: perms(security.PermPayoutCreate, security.PermWithdrawalCreate), Mutating: true,
+	},
+	// The poll is a GET that ingests a provider result. It is not marked
+	// mutating: it carries no Idempotency-Key because it is idempotent by
+	// construction -- a status that has not moved records nothing -- and the
+	// authority for what it writes is the provider's answer, not the caller's
+	// request.
+	"GetMeVerificationSessionsSessionId": {AnyOf: perms(security.PermAccountRead)},
+	// SANDBOX TIER ONLY, refused three times over: here by the handler, again
+	// by the service on cfg.SandboxTier(), and finally by a CHECK that will
+	// not let a sandbox row exist in PROD.
+	"PostMeVerificationSandboxOutcome": {
+		AnyOf: perms(security.PermPayoutCreate, security.PermWithdrawalCreate), Mutating: true,
+	},
+	"GetMeEligibility": {AnyOf: perms(security.PermPayoutRead, security.PermCreditRead)},
+
+	"GetMePayoutDestinations": {AnyOf: perms(security.PermPayoutRead)},
+	// PART 25: "Address changes are high-risk operations. Require recent
+	// strong auth." Both the registration and the removal do, because an
+	// attacker who can only remove a destination can still deny a person their
+	// money at the moment they need it.
+	"PostMePayoutDestinations": {AnyOf: perms(security.PermPayoutCreate), StepUp: true, Mutating: true},
+	"DeleteMePayoutDestinationsDestinationId": {
+		AnyOf: perms(security.PermPayoutCreate), StepUp: true, Mutating: true,
+	},
+	// A quote reserves nothing and moves nothing, so it needs no step-up. It
+	// is still a command: it writes what the customer was shown, which is the
+	// whole reason it exists.
+	"PostPayoutsQuote": {AnyOf: perms(security.PermPayoutCreate), Mutating: true},
+
 	// --- system -----------------------------------------------------------
 	"GetHealthz": {Public: true},
 	"GetReadyz":  {Public: true},

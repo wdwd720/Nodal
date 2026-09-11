@@ -192,7 +192,9 @@ func (s *Service) Snapshot(ctx context.Context, q db.Querier, accountID accounts
 // client renders the sentence and the server decides the facts.
 func (s *Service) missing(snap Snapshot, checks []Check, hasSession bool, now time.Time) []Requirement {
 	var out []Requirement
-	add := func(code, detail string, a Action) { out = append(out, Requirement{Code: code, Detail: detail, Action: a}) }
+	add := func(code, detail string, a Action) {
+		out = append(out, Requirement{Code: code, Detail: detail, Action: a})
+	}
 
 	if snap.Provider == "" {
 		add(RequirementProvider,

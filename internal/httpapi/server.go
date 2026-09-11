@@ -63,8 +63,14 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-	Health        HealthPort
-	Idempotency   IdempotencyPort
+	// The withdrawal journey (goal PARTS 19-25). A nil port answers
+	// UNSUPPORTED: a deployment with no identity vendor and no conversion
+	// contract says so, and does not report that somebody failed a check.
+	Verification VerificationPort
+	Eligibility  EligibilityPort
+	Conversion   ConversionPort
+	Health       HealthPort
+	Idempotency  IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because

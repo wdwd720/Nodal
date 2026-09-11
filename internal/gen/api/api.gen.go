@@ -352,6 +352,30 @@ func (e CapabilityGateState) Valid() bool {
 	}
 }
 
+// Defines values for CreatePayoutDestinationKind.
+const (
+	CreatePayoutDestinationKindBANK         CreatePayoutDestinationKind = "BANK"
+	CreatePayoutDestinationKindCARDPUSH     CreatePayoutDestinationKind = "CARD_PUSH"
+	CreatePayoutDestinationKindCRYPTOWALLET CreatePayoutDestinationKind = "CRYPTO_WALLET"
+	CreatePayoutDestinationKindFIATWALLET   CreatePayoutDestinationKind = "FIAT_WALLET"
+)
+
+// Valid indicates whether the value is a known member of the CreatePayoutDestinationKind enum.
+func (e CreatePayoutDestinationKind) Valid() bool {
+	switch e {
+	case CreatePayoutDestinationKindBANK:
+		return true
+	case CreatePayoutDestinationKindCARDPUSH:
+		return true
+	case CreatePayoutDestinationKindCRYPTOWALLET:
+		return true
+	case CreatePayoutDestinationKindFIATWALLET:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreditOrigin.
 const (
 	ADMINADJUSTMENT       CreditOrigin = "ADMIN_ADJUSTMENT"
@@ -1222,6 +1246,54 @@ func (e OrderDetailStatus) Valid() bool {
 	}
 }
 
+// Defines values for PayoutDestinationKind.
+const (
+	PayoutDestinationKindBANK         PayoutDestinationKind = "BANK"
+	PayoutDestinationKindCARDPUSH     PayoutDestinationKind = "CARD_PUSH"
+	PayoutDestinationKindCRYPTOWALLET PayoutDestinationKind = "CRYPTO_WALLET"
+	PayoutDestinationKindFIATWALLET   PayoutDestinationKind = "FIAT_WALLET"
+)
+
+// Valid indicates whether the value is a known member of the PayoutDestinationKind enum.
+func (e PayoutDestinationKind) Valid() bool {
+	switch e {
+	case PayoutDestinationKindBANK:
+		return true
+	case PayoutDestinationKindCARDPUSH:
+		return true
+	case PayoutDestinationKindCRYPTOWALLET:
+		return true
+	case PayoutDestinationKindFIATWALLET:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PayoutDestinationStatus.
+const (
+	PayoutDestinationStatusDISABLED   PayoutDestinationStatus = "DISABLED"
+	PayoutDestinationStatusREJECTED   PayoutDestinationStatus = "REJECTED"
+	PayoutDestinationStatusUNVERIFIED PayoutDestinationStatus = "UNVERIFIED"
+	PayoutDestinationStatusVERIFIED   PayoutDestinationStatus = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the PayoutDestinationStatus enum.
+func (e PayoutDestinationStatus) Valid() bool {
+	switch e {
+	case PayoutDestinationStatusDISABLED:
+		return true
+	case PayoutDestinationStatusREJECTED:
+		return true
+	case PayoutDestinationStatusUNVERIFIED:
+		return true
+	case PayoutDestinationStatusVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PayoutRequestState.
 const (
 	PayoutRequestStateDRAFT                PayoutRequestState = "DRAFT"
@@ -1468,6 +1540,33 @@ func (e ReconciliationResolutionCompensationEntriesSide) Valid() bool {
 	}
 }
 
+// Defines values for SandboxVerificationOutcomeOutcome.
+const (
+	SandboxVerificationOutcomeOutcomeNEEDSINFORMATION SandboxVerificationOutcomeOutcome = "NEEDS_INFORMATION"
+	SandboxVerificationOutcomeOutcomeREJECTED         SandboxVerificationOutcomeOutcome = "REJECTED"
+	SandboxVerificationOutcomeOutcomeSANCTIONED       SandboxVerificationOutcomeOutcome = "SANCTIONED"
+	SandboxVerificationOutcomeOutcomeUNDERAGE         SandboxVerificationOutcomeOutcome = "UNDERAGE"
+	SandboxVerificationOutcomeOutcomeVERIFIED         SandboxVerificationOutcomeOutcome = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the SandboxVerificationOutcomeOutcome enum.
+func (e SandboxVerificationOutcomeOutcome) Valid() bool {
+	switch e {
+	case SandboxVerificationOutcomeOutcomeNEEDSINFORMATION:
+		return true
+	case SandboxVerificationOutcomeOutcomeREJECTED:
+		return true
+	case SandboxVerificationOutcomeOutcomeSANCTIONED:
+		return true
+	case SandboxVerificationOutcomeOutcomeUNDERAGE:
+		return true
+	case SandboxVerificationOutcomeOutcomeVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StartDepositRequestFiatCurrency.
 const (
 	StartDepositRequestFiatCurrencyUSD StartDepositRequestFiatCurrency = "USD"
@@ -1477,6 +1576,24 @@ const (
 func (e StartDepositRequestFiatCurrency) Valid() bool {
 	switch e {
 	case StartDepositRequestFiatCurrencyUSD:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StartVerificationRequestPurpose.
+const (
+	StartVerificationRequestPurposeENHANCED  StartVerificationRequestPurpose = "ENHANCED"
+	StartVerificationRequestPurposePAYOUTKYC StartVerificationRequestPurpose = "PAYOUT_KYC"
+)
+
+// Valid indicates whether the value is a known member of the StartVerificationRequestPurpose enum.
+func (e StartVerificationRequestPurpose) Valid() bool {
+	switch e {
+	case StartVerificationRequestPurposeENHANCED:
+		return true
+	case StartVerificationRequestPurposePAYOUTKYC:
 		return true
 	default:
 		return false
@@ -1735,6 +1852,318 @@ func (e VenueListingVenueStatus) Valid() bool {
 	case VenueListingVenueStatusDEGRADED:
 		return true
 	case VenueListingVenueStatusDISABLED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationCheckKind.
+const (
+	AGE              VerificationCheckKind = "AGE"
+	IDENTITYDOCUMENT VerificationCheckKind = "IDENTITY_DOCUMENT"
+	JURISDICTION     VerificationCheckKind = "JURISDICTION"
+	PEP              VerificationCheckKind = "PEP"
+	SANCTIONS        VerificationCheckKind = "SANCTIONS"
+)
+
+// Valid indicates whether the value is a known member of the VerificationCheckKind enum.
+func (e VerificationCheckKind) Valid() bool {
+	switch e {
+	case AGE:
+		return true
+	case IDENTITYDOCUMENT:
+		return true
+	case JURISDICTION:
+		return true
+	case PEP:
+		return true
+	case SANCTIONS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationLevel.
+const (
+	VerificationLevelENHANCED      VerificationLevel = "ENHANCED"
+	VerificationLevelNODALIDENTITY VerificationLevel = "NODAL_IDENTITY"
+	VerificationLevelNONE          VerificationLevel = "NONE"
+	VerificationLevelPAYOUTKYC     VerificationLevel = "PAYOUT_KYC"
+)
+
+// Valid indicates whether the value is a known member of the VerificationLevel enum.
+func (e VerificationLevel) Valid() bool {
+	switch e {
+	case VerificationLevelENHANCED:
+		return true
+	case VerificationLevelNODALIDENTITY:
+		return true
+	case VerificationLevelNONE:
+		return true
+	case VerificationLevelPAYOUTKYC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationOutcome.
+const (
+	VerificationOutcomeFAIL             VerificationOutcome = "FAIL"
+	VerificationOutcomeNEEDSINFORMATION VerificationOutcome = "NEEDS_INFORMATION"
+	VerificationOutcomeNOTAPPLICABLE    VerificationOutcome = "NOT_APPLICABLE"
+	VerificationOutcomePASS             VerificationOutcome = "PASS"
+	VerificationOutcomeUNKNOWN          VerificationOutcome = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the VerificationOutcome enum.
+func (e VerificationOutcome) Valid() bool {
+	switch e {
+	case VerificationOutcomeFAIL:
+		return true
+	case VerificationOutcomeNEEDSINFORMATION:
+		return true
+	case VerificationOutcomeNOTAPPLICABLE:
+		return true
+	case VerificationOutcomePASS:
+		return true
+	case VerificationOutcomeUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationProfileProviderAvailability.
+const (
+	VerificationProfileProviderAvailabilityAPPLICATIONDENIED   VerificationProfileProviderAvailability = "APPLICATION_DENIED"
+	VerificationProfileProviderAvailabilityAPPLICATIONPENDING  VerificationProfileProviderAvailability = "APPLICATION_PENDING"
+	VerificationProfileProviderAvailabilityEmpty               VerificationProfileProviderAvailability = ""
+	VerificationProfileProviderAvailabilityLIVE                VerificationProfileProviderAvailability = "LIVE"
+	VerificationProfileProviderAvailabilityNOTOFFERED          VerificationProfileProviderAvailability = "NOT_OFFERED"
+	VerificationProfileProviderAvailabilityREQUIRESAPPLICATION VerificationProfileProviderAvailability = "REQUIRES_APPLICATION"
+	VerificationProfileProviderAvailabilitySANDBOXONLY         VerificationProfileProviderAvailability = "SANDBOX_ONLY"
+)
+
+// Valid indicates whether the value is a known member of the VerificationProfileProviderAvailability enum.
+func (e VerificationProfileProviderAvailability) Valid() bool {
+	switch e {
+	case VerificationProfileProviderAvailabilityAPPLICATIONDENIED:
+		return true
+	case VerificationProfileProviderAvailabilityAPPLICATIONPENDING:
+		return true
+	case VerificationProfileProviderAvailabilityEmpty:
+		return true
+	case VerificationProfileProviderAvailabilityLIVE:
+		return true
+	case VerificationProfileProviderAvailabilityNOTOFFERED:
+		return true
+	case VerificationProfileProviderAvailabilityREQUIRESAPPLICATION:
+		return true
+	case VerificationProfileProviderAvailabilitySANDBOXONLY:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationProfileSanctionsState.
+const (
+	VerificationProfileSanctionsStateCLEAR   VerificationProfileSanctionsState = "CLEAR"
+	VerificationProfileSanctionsStateHIT     VerificationProfileSanctionsState = "HIT"
+	VerificationProfileSanctionsStateREVIEW  VerificationProfileSanctionsState = "REVIEW"
+	VerificationProfileSanctionsStateUNKNOWN VerificationProfileSanctionsState = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the VerificationProfileSanctionsState enum.
+func (e VerificationProfileSanctionsState) Valid() bool {
+	switch e {
+	case VerificationProfileSanctionsStateCLEAR:
+		return true
+	case VerificationProfileSanctionsStateHIT:
+		return true
+	case VerificationProfileSanctionsStateREVIEW:
+		return true
+	case VerificationProfileSanctionsStateUNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationRequirementAction.
+const (
+	VerificationRequirementActionCONTACTSUPPORT       VerificationRequirementAction = "CONTACT_SUPPORT"
+	VerificationRequirementActionCONTINUEVERIFICATION VerificationRequirementAction = "CONTINUE_VERIFICATION"
+	VerificationRequirementActionNONE                 VerificationRequirementAction = "NONE"
+	VerificationRequirementActionPROVIDEINFORMATION   VerificationRequirementAction = "PROVIDE_INFORMATION"
+	VerificationRequirementActionREVERIFY             VerificationRequirementAction = "REVERIFY"
+	VerificationRequirementActionSTARTVERIFICATION    VerificationRequirementAction = "START_VERIFICATION"
+	VerificationRequirementActionWAIT                 VerificationRequirementAction = "WAIT"
+)
+
+// Valid indicates whether the value is a known member of the VerificationRequirementAction enum.
+func (e VerificationRequirementAction) Valid() bool {
+	switch e {
+	case VerificationRequirementActionCONTACTSUPPORT:
+		return true
+	case VerificationRequirementActionCONTINUEVERIFICATION:
+		return true
+	case VerificationRequirementActionNONE:
+		return true
+	case VerificationRequirementActionPROVIDEINFORMATION:
+		return true
+	case VerificationRequirementActionREVERIFY:
+		return true
+	case VerificationRequirementActionSTARTVERIFICATION:
+		return true
+	case VerificationRequirementActionWAIT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationSessionPurpose.
+const (
+	VerificationSessionPurposeENHANCED  VerificationSessionPurpose = "ENHANCED"
+	VerificationSessionPurposePAYOUTKYC VerificationSessionPurpose = "PAYOUT_KYC"
+)
+
+// Valid indicates whether the value is a known member of the VerificationSessionPurpose enum.
+func (e VerificationSessionPurpose) Valid() bool {
+	switch e {
+	case VerificationSessionPurposeENHANCED:
+		return true
+	case VerificationSessionPurposePAYOUTKYC:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationSessionStatus.
+const (
+	VerificationSessionStatusAPPROVED          VerificationSessionStatus = "APPROVED"
+	VerificationSessionStatusCANCELLED         VerificationSessionStatus = "CANCELLED"
+	VerificationSessionStatusCREATED           VerificationSessionStatus = "CREATED"
+	VerificationSessionStatusDECLINED          VerificationSessionStatus = "DECLINED"
+	VerificationSessionStatusEXPIRED           VerificationSessionStatus = "EXPIRED"
+	VerificationSessionStatusMANUALREVIEW      VerificationSessionStatus = "MANUAL_REVIEW"
+	VerificationSessionStatusPENDINGUSERACTION VerificationSessionStatus = "PENDING_USER_ACTION"
+	VerificationSessionStatusPROCESSING        VerificationSessionStatus = "PROCESSING"
+	VerificationSessionStatusREQUIRESINPUT     VerificationSessionStatus = "REQUIRES_INPUT"
+)
+
+// Valid indicates whether the value is a known member of the VerificationSessionStatus enum.
+func (e VerificationSessionStatus) Valid() bool {
+	switch e {
+	case VerificationSessionStatusAPPROVED:
+		return true
+	case VerificationSessionStatusCANCELLED:
+		return true
+	case VerificationSessionStatusCREATED:
+		return true
+	case VerificationSessionStatusDECLINED:
+		return true
+	case VerificationSessionStatusEXPIRED:
+		return true
+	case VerificationSessionStatusMANUALREVIEW:
+		return true
+	case VerificationSessionStatusPENDINGUSERACTION:
+		return true
+	case VerificationSessionStatusPROCESSING:
+		return true
+	case VerificationSessionStatusREQUIRESINPUT:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VerificationState.
+const (
+	VerificationStateEXPIRED          VerificationState = "EXPIRED"
+	VerificationStateNEEDSINFORMATION VerificationState = "NEEDS_INFORMATION"
+	VerificationStatePENDING          VerificationState = "PENDING"
+	VerificationStateREJECTED         VerificationState = "REJECTED"
+	VerificationStateREQUIRED         VerificationState = "REQUIRED"
+	VerificationStateRESTRICTED       VerificationState = "RESTRICTED"
+	VerificationStateSTARTED          VerificationState = "STARTED"
+	VerificationStateSUSPENDED        VerificationState = "SUSPENDED"
+	VerificationStateUNVERIFIED       VerificationState = "UNVERIFIED"
+	VerificationStateVERIFIED         VerificationState = "VERIFIED"
+)
+
+// Valid indicates whether the value is a known member of the VerificationState enum.
+func (e VerificationState) Valid() bool {
+	switch e {
+	case VerificationStateEXPIRED:
+		return true
+	case VerificationStateNEEDSINFORMATION:
+		return true
+	case VerificationStatePENDING:
+		return true
+	case VerificationStateREJECTED:
+		return true
+	case VerificationStateREQUIRED:
+		return true
+	case VerificationStateRESTRICTED:
+		return true
+	case VerificationStateSTARTED:
+		return true
+	case VerificationStateSUSPENDED:
+		return true
+	case VerificationStateUNVERIFIED:
+		return true
+	case VerificationStateVERIFIED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WithdrawalReason.
+const (
+	ACCOUNTRESTRICTED      WithdrawalReason = "ACCOUNT_RESTRICTED"
+	CAPABILITYINACTIVE     WithdrawalReason = "CAPABILITY_INACTIVE"
+	FUNDINGNOTSETTLED      WithdrawalReason = "FUNDING_NOT_SETTLED"
+	HOLDPERIODNOTELAPSED   WithdrawalReason = "HOLD_PERIOD_NOT_ELAPSED"
+	JURISDICTIONRESTRICTED WithdrawalReason = "JURISDICTION_RESTRICTED"
+	MINIMUMNOTMET          WithdrawalReason = "MINIMUM_NOT_MET"
+	NOVALUE                WithdrawalReason = "NO_VALUE"
+	ORIGINNOTWITHDRAWABLE  WithdrawalReason = "ORIGIN_NOT_WITHDRAWABLE"
+	POLICYINVALID          WithdrawalReason = "POLICY_INVALID"
+	PROVIDERUNAVAILABLE    WithdrawalReason = "PROVIDER_UNAVAILABLE"
+	REQUIRESVERIFICATION   WithdrawalReason = "REQUIRES_VERIFICATION"
+)
+
+// Valid indicates whether the value is a known member of the WithdrawalReason enum.
+func (e WithdrawalReason) Valid() bool {
+	switch e {
+	case ACCOUNTRESTRICTED:
+		return true
+	case CAPABILITYINACTIVE:
+		return true
+	case FUNDINGNOTSETTLED:
+		return true
+	case HOLDPERIODNOTELAPSED:
+		return true
+	case JURISDICTIONRESTRICTED:
+		return true
+	case MINIMUMNOTMET:
+		return true
+	case NOVALUE:
+		return true
+	case ORIGINNOTWITHDRAWABLE:
+		return true
+	case POLICYINVALID:
+		return true
+	case PROVIDERUNAVAILABLE:
+		return true
+	case REQUIRESVERIFICATION:
 		return true
 	default:
 		return false
@@ -2141,6 +2570,35 @@ type CreateNativeAssetRequest struct {
 	Symbol    string   `json:"symbol"`
 }
 
+// CreatePayoutDestination defines model for CreatePayoutDestination.
+type CreatePayoutDestination struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID                        `json:"account_id"`
+	Country       *string                     `json:"country,omitempty"`
+	Currency      *string                     `json:"currency,omitempty"`
+	DisplayLabel  *string                     `json:"display_label,omitempty"`
+	Kind          CreatePayoutDestinationKind `json:"kind"`
+	MaskedDisplay *string                     `json:"masked_display,omitempty"`
+
+	// ProviderToken The provider's token for the destination, or on a sandbox tier a sandbox handle. An input that looks like an account number, a card number, an IBAN, a private key or a seed phrase is REFUSED, not stored: Nodal never holds one.
+	ProviderToken string `json:"provider_token"`
+}
+
+// CreatePayoutDestinationKind defines model for CreatePayoutDestination.Kind.
+type CreatePayoutDestinationKind string
+
+// CreatePayoutQuote defines model for CreatePayoutQuote.
+type CreatePayoutQuote struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount The GROSS Credits the customer would give up. The fee comes out of it.
+	Amount Quantity `json:"amount"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId UUID `json:"destination_id"`
+}
+
 // CreatePayoutRequest defines model for CreatePayoutRequest.
 type CreatePayoutRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -2153,6 +2611,9 @@ type CreatePayoutRequest struct {
 
 	// DestinationId UUIDv7 in canonical form
 	DestinationId *UUID `json:"destination_id,omitempty"`
+
+	// QuoteId The quote from POST /payouts/quote that the customer was shown. When present it is consumed in the same transaction that reserves the value, so one quote funds exactly one payout, and an expired or already-used quote refuses the request before anything is decided about the money. It must name the same destination and the same gross amount.
+	QuoteId *UUID `json:"quote_id,omitempty"`
 }
 
 // CreditBalance The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
@@ -3153,6 +3614,102 @@ type Page struct {
 	NextCursor nullable.Nullable[string] `json:"next_cursor"`
 }
 
+// PayoutDestination Nodal stores the provider's token and a mask. There is no account number, card number, IBAN, routing number or key in this object, and there is none in the table behind it.
+type PayoutDestination struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID      `json:"account_id"`
+	Country   *string   `json:"country,omitempty"`
+	CreatedAt Timestamp `json:"created_at"`
+	Currency  *string   `json:"currency,omitempty"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId UUID                  `json:"destination_id"`
+	DisplayLabel  *string               `json:"display_label,omitempty"`
+	Kind          PayoutDestinationKind `json:"kind"`
+
+	// MaskedDisplay What a person recognises, such as "••••4242". Never the whole number.
+	MaskedDisplay *string `json:"masked_display,omitempty"`
+	Provider      string  `json:"provider"`
+	Sandbox       bool    `json:"sandbox"`
+
+	// Status UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing names are kept because working code and a registered enum pairing use them (D-060). REJECTED and DISABLED are terminal: a destination never comes back, and adding it again is a new registration.
+	Status PayoutDestinationStatus `json:"status"`
+
+	// Usable Whether a payout may be sent here right now.
+	Usable     *bool      `json:"usable,omitempty"`
+	VerifiedAt *Timestamp `json:"verified_at,omitempty"`
+}
+
+// PayoutDestinationKind defines model for PayoutDestination.Kind.
+type PayoutDestinationKind string
+
+// PayoutDestinationStatus UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing names are kept because working code and a registered enum pairing use them (D-060). REJECTED and DISABLED are terminal: a destination never comes back, and adding it again is a new registration.
+type PayoutDestinationStatus string
+
+// PayoutProvenanceSlice One origin's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first.
+type PayoutProvenanceSlice struct {
+	ConsumptionRank int `json:"consumption_rank"`
+
+	// Origin Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+	Origin CreditOrigin `json:"origin"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Returned True for a slice a cancellation gave back to the exact lots it came from.
+	Returned *bool `json:"returned,omitempty"`
+}
+
+// PayoutQuote What the provider said a payout would cost, before anybody committed. Both sides are exact integers; there is no rate field holding a decimal.
+type PayoutQuote struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId  UUID       `json:"account_id"`
+	ConsumedAt *Timestamp `json:"consumed_at,omitempty"`
+	CreatedAt  *Timestamp `json:"created_at,omitempty"`
+	Currency   string     `json:"currency"`
+
+	// DestinationId UUIDv7 in canonical form
+	DestinationId  UUID      `json:"destination_id"`
+	ExpiresAt      Timestamp `json:"expires_at"`
+	FeeAmountMinor int64     `json:"fee_amount_minor"`
+
+	// FeeModelVersion Which fee schedule produced these numbers. On a sandbox tier it says in words that the figures are placeholders and not a price anybody has agreed.
+	FeeModelVersion *string `json:"fee_model_version,omitempty"`
+
+	// FeeQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FeeQuantity      Quantity `json:"fee_quantity"`
+	GrossAmountMinor int64    `json:"gross_amount_minor"`
+
+	// GrossQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	GrossQuantity      Quantity `json:"gross_quantity"`
+	MinimumAmountMinor *int64   `json:"minimum_amount_minor,omitempty"`
+
+	// MinimumOk Judged NET of fees, because sub-minimum dust is destroyed rather than returned.
+	MinimumOk      bool  `json:"minimum_ok"`
+	NetAmountMinor int64 `json:"net_amount_minor"`
+
+	// NetQuantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	NetQuantity    Quantity `json:"net_quantity"`
+	PolicyVersion  *string  `json:"policy_version,omitempty"`
+	PricingVersion *string  `json:"pricing_version,omitempty"`
+
+	// Provenance What value would leave, in the order it would leave.
+	Provenance *[]PayoutProvenanceSlice `json:"provenance,omitempty"`
+	Provider   string                   `json:"provider"`
+
+	// QuoteId UUIDv7 in canonical form
+	QuoteId UUID `json:"quote_id"`
+	Sandbox bool `json:"sandbox"`
+}
+
 // PayoutRequest defines model for PayoutRequest.
 type PayoutRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -3172,6 +3729,12 @@ type PayoutRequest struct {
 	PolicyHash    *string `json:"policy_hash,omitempty"`
 	PolicyVersion string  `json:"policy_version"`
 
+	// Provenance What value is leaving, in the order it leaves (§23). A payout does not take "500 Credits"; it takes specific units from specific provenance lots, and this is which.
+	Provenance *[]PayoutProvenanceSlice `json:"provenance,omitempty"`
+
+	// QuoteId The pre-commitment quote this payout was created against, when there was one.
+	QuoteId *UUID `json:"quote_id,omitempty"`
+
 	// RequestedQuantity Exact asset base units as an integer string
 	//
 	// Examples: 1500000000
@@ -3182,6 +3745,9 @@ type PayoutRequest struct {
 	//
 	// Examples: 1500000000
 	ReservedQuantity Quantity `json:"reserved_quantity"`
+
+	// Sandbox True when this payout is a rehearsal against a sandbox provider.
+	Sandbox *bool `json:"sandbox,omitempty"`
 
 	// SettledQuantity Exact asset base units as an integer string
 	//
@@ -3440,6 +4006,18 @@ type RegisterSellerRequest struct {
 	PayoutAccountId *UUID `json:"payout_account_id,omitempty"`
 }
 
+// SandboxVerificationOutcome SANDBOX TIER ONLY. Refused with FORBIDDEN anywhere else.
+type SandboxVerificationOutcome struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Outcome There is no default. UNDERAGE and SANCTIONED are separate from REJECTED because §21 requires an age failure and a sanctions failure to be separately expressible.
+	Outcome SandboxVerificationOutcomeOutcome `json:"outcome"`
+}
+
+// SandboxVerificationOutcomeOutcome There is no default. UNDERAGE and SANCTIONED are separate from REJECTED because §21 requires an age failure and a sanctions failure to be separately expressible.
+type SandboxVerificationOutcomeOutcome string
+
 // SessionSummary defines model for SessionSummary.
 type SessionSummary struct {
 	CreatedAt   Timestamp `json:"created_at"`
@@ -3473,6 +4051,37 @@ type StartDepositRequest struct {
 
 // StartDepositRequestFiatCurrency defines model for StartDepositRequest.FiatCurrency.
 type StartDepositRequestFiatCurrency string
+
+// StartVerificationRequest defines model for StartVerificationRequest.
+type StartVerificationRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// JurisdictionCountry ISO 3166-1 alpha-2. Never inferred from a network address.
+	JurisdictionCountry string `json:"jurisdiction_country"`
+
+	// JurisdictionRegion The subdivision code without its country prefix. Required where the rules depend on it.
+	JurisdictionRegion *string `json:"jurisdiction_region,omitempty"`
+
+	// Purpose Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+	Purpose *StartVerificationRequestPurpose `json:"purpose,omitempty"`
+}
+
+// StartVerificationRequestPurpose Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+type StartVerificationRequestPurpose string
+
+// StartedVerification defines model for StartedVerification.
+type StartedVerification struct {
+	ExpiresAt *Timestamp `json:"expires_at,omitempty"`
+
+	// HostedUrl Single-use and short-lived. It is returned here and stored nowhere. On a sandbox tier it is a `sandbox:` reference rather than a page, because there is no hosted flow to visit.
+	HostedUrl *string `json:"hosted_url,omitempty"`
+	Sandbox   bool    `json:"sandbox"`
+
+	// SandboxControlPath Present only for a rehearsal session. It is where a sandbox operator chooses the outcome explicitly, and its presence is what makes a sandbox session visibly a rehearsal.
+	SandboxControlPath *string             `json:"sandbox_control_path,omitempty"`
+	Session            VerificationSession `json:"session"`
+}
 
 // StatusChange defines model for StatusChange.
 type StatusChange struct {
@@ -3688,6 +4297,116 @@ type VenueListingStatus string
 // VenueListingVenueStatus defines model for VenueListing.VenueStatus.
 type VenueListingVenueStatus string
 
+// VerificationCheck One sub-check, its answer, who produced it and under which rule version. `detail` is a safe reason code and never a document, a government identifier or a date of birth.
+type VerificationCheck struct {
+	Detail *string `json:"detail,omitempty"`
+
+	// Kind The five things §21 says must each be able to refuse on their own.
+	Kind VerificationCheckKind `json:"kind"`
+
+	// Outcome One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider that has not screened somebody has not cleared them either.
+	Outcome      VerificationOutcome `json:"outcome"`
+	Provider     string              `json:"provider"`
+	ProviderRef  *string             `json:"provider_ref,omitempty"`
+	RecordedAt   Timestamp           `json:"recorded_at"`
+	RulesVersion string              `json:"rules_version"`
+
+	// Sandbox A rehearsal answer. A database CHECK refuses one in PROD.
+	Sandbox bool `json:"sandbox"`
+}
+
+// VerificationCheckKind The five things §21 says must each be able to refuse on their own.
+type VerificationCheckKind string
+
+// VerificationLevel How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+type VerificationLevel string
+
+// VerificationOutcome One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider that has not screened somebody has not cleared them either.
+type VerificationOutcome string
+
+// VerificationProfile The §24 profile area. It says what has been established, what has not, and what to do next. It carries no personal data.
+type VerificationProfile struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId             UUID                 `json:"account_id"`
+	AgeVerified           bool                 `json:"age_verified"`
+	Checks                *[]VerificationCheck `json:"checks,omitempty"`
+	ExpiresAt             *Timestamp           `json:"expires_at,omitempty"`
+	JurisdictionCountry   *string              `json:"jurisdiction_country,omitempty"`
+	JurisdictionRefusals  *[]string            `json:"jurisdiction_refusals,omitempty"`
+	JurisdictionRegion    *string              `json:"jurisdiction_region,omitempty"`
+	JurisdictionSupported bool                 `json:"jurisdiction_supported"`
+
+	// Level How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	Level VerificationLevel `json:"level"`
+
+	// MinimumAge The age threshold this jurisdiction is judged against, from the versioned rule table.
+	MinimumAge int                        `json:"minimum_age"`
+	Missing    *[]VerificationRequirement `json:"missing,omitempty"`
+
+	// PayoutReady Whether verification, by itself, no longer stands between this person and a withdrawal. It says nothing about whether a withdrawal is possible; see /me/eligibility for that.
+	PayoutReady          bool                                     `json:"payout_ready"`
+	Provider             *string                                  `json:"provider,omitempty"`
+	ProviderAvailability *VerificationProfileProviderAvailability `json:"provider_availability,omitempty"`
+	Restrictions         *[]string                                `json:"restrictions,omitempty"`
+	RulesVersion         string                                   `json:"rules_version"`
+	SanctionsState       VerificationProfileSanctionsState        `json:"sanctions_state"`
+
+	// Sandbox True when any of this was established by a rehearsal provider.
+	Sandbox bool                 `json:"sandbox"`
+	Session *VerificationSession `json:"session,omitempty"`
+
+	// State The financial verification state machine of §20. UNVERIFIED is §20's NOT_STARTED under the name the schema already used. Nothing reaches VERIFIED except through a provider session that decided so.
+	State      VerificationState `json:"state"`
+	VerifiedAt *Timestamp        `json:"verified_at,omitempty"`
+}
+
+// VerificationProfileProviderAvailability defines model for VerificationProfile.ProviderAvailability.
+type VerificationProfileProviderAvailability string
+
+// VerificationProfileSanctionsState defines model for VerificationProfile.SanctionsState.
+type VerificationProfileSanctionsState string
+
+// VerificationRequirement One thing standing between a person and a level, with what they can do about it.
+type VerificationRequirement struct {
+	Action VerificationRequirementAction `json:"action"`
+
+	// Code A check kind, or VERIFICATION_SESSION / JURISDICTION / PROVIDER / OPERATOR_REVIEW / VERIFICATION_EXPIRED.
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
+
+// VerificationRequirementAction defines model for VerificationRequirement.Action.
+type VerificationRequirementAction string
+
+// VerificationSession defines model for VerificationSession.
+type VerificationSession struct {
+	CreatedAt           Timestamp                  `json:"created_at"`
+	ExpiresAt           *Timestamp                 `json:"expires_at,omitempty"`
+	FailureReason       *string                    `json:"failure_reason,omitempty"`
+	JurisdictionCountry *string                    `json:"jurisdiction_country,omitempty"`
+	JurisdictionRegion  *string                    `json:"jurisdiction_region,omitempty"`
+	Provider            string                     `json:"provider"`
+	ProviderRef         *string                    `json:"provider_ref,omitempty"`
+	Purpose             VerificationSessionPurpose `json:"purpose"`
+	RulesVersion        *string                    `json:"rules_version,omitempty"`
+	Sandbox             bool                       `json:"sandbox"`
+
+	// SessionId UUIDv7 in canonical form
+	SessionId UUID `json:"session_id"`
+
+	// Status The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from what Persona, Veriff, Sumsub and Stripe Identity each report so that no one vendor's vocabulary becomes the schema's.
+	Status VerificationSessionStatus `json:"status"`
+}
+
+// VerificationSessionPurpose defines model for VerificationSession.Purpose.
+type VerificationSessionPurpose string
+
+// VerificationSessionStatus The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from what Persona, Veriff, Sumsub and Stripe Identity each report so that no one vendor's vocabulary becomes the schema's.
+type VerificationSessionStatus string
+
+// VerificationState The financial verification state machine of §20. UNVERIFIED is §20's NOT_STARTED under the name the schema already used. Nothing reaches VERIFIED except through a provider session that decided so.
+type VerificationState string
+
 // Withdrawal defines model for Withdrawal.
 type Withdrawal struct {
 	// AccountId UUIDv7 in canonical form
@@ -3707,6 +4426,94 @@ type Withdrawal struct {
 	Quantity Quantity `json:"quantity"`
 	Status   string   `json:"status"`
 }
+
+// WithdrawalEligibility defines model for WithdrawalEligibility.
+type WithdrawalEligibility struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID                     `json:"account_id"`
+	Buckets   []WithdrawalOriginBucket `json:"buckets"`
+
+	// CurrentVerification How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	CurrentVerification   VerificationLevel `json:"current_verification"`
+	DestinationConfigured *bool             `json:"destination_configured,omitempty"`
+	Eligible              bool              `json:"eligible"`
+
+	// Frozen Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Frozen Quantity `json:"frozen"`
+
+	// Gross Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Gross Quantity `json:"gross"`
+
+	// Ineligible Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Ineligible            Quantity `json:"ineligible"`
+	JurisdictionSupported *bool    `json:"jurisdiction_supported,omitempty"`
+
+	// MinimumQuantity The provider's minimum expressed in Credits, or "0" when it publishes none. Zero is never "any amount will do".
+	MinimumQuantity *Quantity `json:"minimum_quantity,omitempty"`
+
+	// PayoutEligible Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PayoutEligible    Quantity           `json:"payout_eligible"`
+	PolicyHash        *string            `json:"policy_hash,omitempty"`
+	PolicyVersion     string             `json:"policy_version"`
+	Provider          *string            `json:"provider,omitempty"`
+	ProviderAvailable *bool              `json:"provider_available,omitempty"`
+	Reasons           []WithdrawalReason `json:"reasons"`
+
+	// RequiredVerification How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	RequiredVerification VerificationLevel `json:"required_verification"`
+	Sandbox              bool              `json:"sandbox"`
+
+	// Spendable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Spendable Quantity `json:"spendable"`
+
+	// VerificationWouldSuffice True when identity verification is the only thing standing between this person and some of their money.
+	VerificationWouldSuffice *bool `json:"verification_would_suffice,omitempty"`
+
+	// WithdrawableNow Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	WithdrawableNow Quantity `json:"withdrawable_now"`
+}
+
+// WithdrawalOriginBucket defines model for WithdrawalOriginBucket.
+type WithdrawalOriginBucket struct {
+	// ConsumptionRank Where this origin sits in the consumption order. Lower leaves first.
+	ConsumptionRank int  `json:"consumption_rank"`
+	MinHoldDays     *int `json:"min_hold_days,omitempty"`
+
+	// Origin Where a unit of Credits came from. This is the distinction the whole payout architecture rests on: earning a dataset sale and profiting from an internal market are different activities, and a policy that permits one must not thereby permit the other. It is closed, and never inferred from anything but the event that produced the units.
+	Origin        CreditOrigin `json:"origin"`
+	PayoutAllowed bool         `json:"payout_allowed"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity           Quantity           `json:"quantity"`
+	Reasons            []WithdrawalReason `json:"reasons"`
+	RequiredCapability *string            `json:"required_capability,omitempty"`
+
+	// RequiredVerification How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+	RequiredVerification     *VerificationLevel `json:"required_verification,omitempty"`
+	VerificationWouldSuffice *bool              `json:"verification_would_suffice,omitempty"`
+
+	// Withdrawable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Withdrawable Quantity `json:"withdrawable"`
+}
+
+// WithdrawalReason A machine-readable reason value cannot leave. Each names something that could change. REQUIRES_VERIFICATION is a NEXT STEP and not a denial, and the product must present it as one.
+type WithdrawalReason string
 
 // WithdrawalRequest defines model for WithdrawalRequest.
 type WithdrawalRequest struct {
@@ -3968,6 +4775,53 @@ type PostInternalSellersParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetMeEligibilityParams defines parameters for GetMeEligibility.
+type GetMeEligibilityParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// GetMePayoutDestinationsParams defines parameters for GetMePayoutDestinations.
+type GetMePayoutDestinationsParams struct {
+	AccountId UUID   `form:"account_id" json:"account_id"`
+	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostMePayoutDestinationsParams defines parameters for PostMePayoutDestinations.
+type PostMePayoutDestinationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// DeleteMePayoutDestinationsDestinationIdParams defines parameters for DeleteMePayoutDestinationsDestinationId.
+type DeleteMePayoutDestinationsDestinationIdParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMeVerificationParams defines parameters for GetMeVerification.
+type GetMeVerificationParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostMeVerificationSandboxOutcomeParams defines parameters for PostMeVerificationSandboxOutcome.
+type PostMeVerificationSandboxOutcomeParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostMeVerificationSessionsParams defines parameters for PostMeVerificationSessions.
+type PostMeVerificationSessionsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetMeVerificationSessionsSessionIdParams defines parameters for GetMeVerificationSessionsSessionId.
+type GetMeVerificationSessionsSessionIdParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
 // GetNativeAssetsParams defines parameters for GetNativeAssets.
 type GetNativeAssetsParams struct {
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
@@ -4024,6 +4878,12 @@ type GetPayoutsParams struct {
 
 // PostPayoutsParams defines parameters for PostPayouts.
 type PostPayoutsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostPayoutsQuoteParams defines parameters for PostPayoutsQuote.
+type PostPayoutsQuoteParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -4092,6 +4952,15 @@ type PostInternalProductsProductIdStatusJSONRequestBody = SetInternalProductStat
 // PostInternalSellersJSONRequestBody defines body for PostInternalSellers for application/json ContentType.
 type PostInternalSellersJSONRequestBody = RegisterSellerRequest
 
+// PostMePayoutDestinationsJSONRequestBody defines body for PostMePayoutDestinations for application/json ContentType.
+type PostMePayoutDestinationsJSONRequestBody = CreatePayoutDestination
+
+// PostMeVerificationSandboxOutcomeJSONRequestBody defines body for PostMeVerificationSandboxOutcome for application/json ContentType.
+type PostMeVerificationSandboxOutcomeJSONRequestBody = SandboxVerificationOutcome
+
+// PostMeVerificationSessionsJSONRequestBody defines body for PostMeVerificationSessions for application/json ContentType.
+type PostMeVerificationSessionsJSONRequestBody = StartVerificationRequest
+
 // PostNativeAssetsJSONRequestBody defines body for PostNativeAssets for application/json ContentType.
 type PostNativeAssetsJSONRequestBody = CreateNativeAssetRequest
 
@@ -4109,6 +4978,9 @@ type PostPaymentsJSONRequestBody = CreateCreditPurchaseRequest
 
 // PostPayoutsJSONRequestBody defines body for PostPayouts for application/json ContentType.
 type PostPayoutsJSONRequestBody = CreatePayoutRequest
+
+// PostPayoutsQuoteJSONRequestBody defines body for PostPayoutsQuote for application/json ContentType.
+type PostPayoutsQuoteJSONRequestBody = CreatePayoutQuote
 
 // PostPayoutsPayoutIdCancelJSONRequestBody defines body for PostPayoutsPayoutIdCancel for application/json ContentType.
 type PostPayoutsPayoutIdCancelJSONRequestBody PostPayoutsPayoutIdCancelJSONBody
@@ -4259,6 +5131,30 @@ type ServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetMeEligibility What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+	// (GET /me/eligibility)
+	GetMeEligibility(w http.ResponseWriter, r *http.Request, params GetMeEligibilityParams)
+	// GetMePayoutDestinations Where you have asked value to be sent (§25)
+	// (GET /me/payout-destinations)
+	GetMePayoutDestinations(w http.ResponseWriter, r *http.Request, params GetMePayoutDestinationsParams)
+	// PostMePayoutDestinations Register a payout destination from a provider token (§25)
+	// (POST /me/payout-destinations)
+	PostMePayoutDestinations(w http.ResponseWriter, r *http.Request, params PostMePayoutDestinationsParams)
+	// DeleteMePayoutDestinationsDestinationId Stop using a payout destination (§25)
+	// (DELETE /me/payout-destinations/{destinationId})
+	DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request, destinationId UUID, params DeleteMePayoutDestinationsDestinationIdParams)
+	// GetMeVerification Your financial verification profile, what is missing, and what to do next (§20, §24)
+	// (GET /me/verification)
+	GetMeVerification(w http.ResponseWriter, r *http.Request, params GetMeVerificationParams)
+	// PostMeVerificationSandboxOutcome SANDBOX TIER ONLY - choose what the rehearsal verification decides
+	// (POST /me/verification/sandbox-outcome)
+	PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request, params PostMeVerificationSandboxOutcomeParams)
+	// PostMeVerificationSessions Start a provider-hosted identity verification (§20)
+	// (POST /me/verification/sessions)
+	PostMeVerificationSessions(w http.ResponseWriter, r *http.Request, params PostMeVerificationSessionsParams)
+	// GetMeVerificationSessionsSessionId Ask the provider what happened, and record it
+	// (GET /me/verification/sessions/{sessionId})
+	GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetMeVerificationSessionsSessionIdParams)
 	// GetNativeAssets Native assets that currently accept at least sells
 	// (GET /native-assets)
 	GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams)
@@ -4298,6 +5194,9 @@ type ServerInterface interface {
 	// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
 	// (POST /payouts)
 	PostPayouts(w http.ResponseWriter, r *http.Request, params PostPayoutsParams)
+	// PostPayoutsQuote What a payout would cost, before committing to it (§19, §22)
+	// (POST /payouts/quote)
+	PostPayoutsQuote(w http.ResponseWriter, r *http.Request, params PostPayoutsQuoteParams)
 
 	// (GET /payouts/{payoutId})
 	GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId)
@@ -4592,6 +5491,54 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetMeEligibility What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+// (GET /me/eligibility)
+func (_ Unimplemented) GetMeEligibility(w http.ResponseWriter, r *http.Request, params GetMeEligibilityParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMePayoutDestinations Where you have asked value to be sent (§25)
+// (GET /me/payout-destinations)
+func (_ Unimplemented) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request, params GetMePayoutDestinationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMePayoutDestinations Register a payout destination from a provider token (§25)
+// (POST /me/payout-destinations)
+func (_ Unimplemented) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request, params PostMePayoutDestinationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteMePayoutDestinationsDestinationId Stop using a payout destination (§25)
+// (DELETE /me/payout-destinations/{destinationId})
+func (_ Unimplemented) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request, destinationId UUID, params DeleteMePayoutDestinationsDestinationIdParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeVerification Your financial verification profile, what is missing, and what to do next (§20, §24)
+// (GET /me/verification)
+func (_ Unimplemented) GetMeVerification(w http.ResponseWriter, r *http.Request, params GetMeVerificationParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeVerificationSandboxOutcome SANDBOX TIER ONLY - choose what the rehearsal verification decides
+// (POST /me/verification/sandbox-outcome)
+func (_ Unimplemented) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request, params PostMeVerificationSandboxOutcomeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostMeVerificationSessions Start a provider-hosted identity verification (§20)
+// (POST /me/verification/sessions)
+func (_ Unimplemented) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request, params PostMeVerificationSessionsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetMeVerificationSessionsSessionId Ask the provider what happened, and record it
+// (GET /me/verification/sessions/{sessionId})
+func (_ Unimplemented) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetMeVerificationSessionsSessionIdParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetNativeAssets Native assets that currently accept at least sells
 // (GET /native-assets)
 func (_ Unimplemented) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
@@ -4663,6 +5610,12 @@ func (_ Unimplemented) GetPayouts(w http.ResponseWriter, r *http.Request, params
 // PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
 // (POST /payouts)
 func (_ Unimplemented) PostPayouts(w http.ResponseWriter, r *http.Request, params PostPayoutsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostPayoutsQuote What a payout would cost, before committing to it (§19, §22)
+// (POST /payouts/quote)
+func (_ Unimplemented) PostPayoutsQuote(w http.ResponseWriter, r *http.Request, params PostPayoutsQuoteParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6530,6 +7483,362 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetMeEligibility operation middleware
+func (siw *ServerInterfaceWrapper) GetMeEligibility(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeEligibilityParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeEligibility(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMePayoutDestinations operation middleware
+func (siw *ServerInterfaceWrapper) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMePayoutDestinationsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMePayoutDestinations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMePayoutDestinations operation middleware
+func (siw *ServerInterfaceWrapper) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMePayoutDestinationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMePayoutDestinations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMePayoutDestinationsDestinationId operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "destinationId" -------------
+	var destinationId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "destinationId", chi.URLParam(r, "destinationId"), &destinationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "destinationId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteMePayoutDestinationsDestinationIdParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMePayoutDestinationsDestinationId(w, r, destinationId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeVerification operation middleware
+func (siw *ServerInterfaceWrapper) GetMeVerification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeVerificationParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeVerification(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeVerificationSandboxOutcome operation middleware
+func (siw *ServerInterfaceWrapper) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeVerificationSandboxOutcomeParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeVerificationSandboxOutcome(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostMeVerificationSessions operation middleware
+func (siw *ServerInterfaceWrapper) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostMeVerificationSessionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostMeVerificationSessions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMeVerificationSessionsSessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sessionId" -------------
+	var sessionId SessionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sessionId", chi.URLParam(r, "sessionId"), &sessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sessionId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeVerificationSessionsSessionIdParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMeVerificationSessionsSessionId(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetNativeAssets operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeAssets(w http.ResponseWriter, r *http.Request) {
 
@@ -7060,6 +8369,51 @@ func (siw *ServerInterfaceWrapper) PostPayouts(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostPayouts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostPayoutsQuote operation middleware
+func (siw *ServerInterfaceWrapper) PostPayoutsQuote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostPayoutsQuoteParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostPayoutsQuote(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7615,6 +8969,33 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/version", wrapper.GetVersion)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/verification", wrapper.GetMeVerification)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/verification/sessions", wrapper.PostMeVerificationSessions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/verification/sessions/{sessionId}", wrapper.GetMeVerificationSessionsSessionId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/verification/sandbox-outcome", wrapper.PostMeVerificationSandboxOutcome)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/eligibility", wrapper.GetMeEligibility)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/payout-destinations", wrapper.GetMePayoutDestinations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/me/payout-destinations", wrapper.PostMePayoutDestinations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/me/payout-destinations/{destinationId}", wrapper.DeleteMePayoutDestinationsDestinationId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/payouts/quote", wrapper.PostPayoutsQuote)
 	})
 
 	return r
@@ -9288,6 +10669,469 @@ func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w 
 	return err
 }
 
+type GetMeEligibilityRequestObject struct {
+	Params GetMeEligibilityParams
+}
+
+type GetMeEligibilityResponseObject interface {
+	VisitGetMeEligibilityResponse(w http.ResponseWriter) error
+}
+
+type GetMeEligibility200JSONResponse WithdrawalEligibility
+
+func (response GetMeEligibility200JSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeEligibility403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeEligibility403ApplicationProblemPlusJSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeEligibility404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMeEligibility404ApplicationProblemPlusJSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePayoutDestinationsRequestObject struct {
+	Params GetMePayoutDestinationsParams
+}
+
+type GetMePayoutDestinationsResponseObject interface {
+	VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error
+}
+
+type GetMePayoutDestinations200JSONResponse []PayoutDestination
+
+func (response GetMePayoutDestinations200JSONResponse) VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMePayoutDestinations403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMePayoutDestinations403ApplicationProblemPlusJSONResponse) VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinationsRequestObject struct {
+	Params PostMePayoutDestinationsParams
+	Body   *PostMePayoutDestinationsJSONRequestBody
+}
+
+type PostMePayoutDestinationsResponseObject interface {
+	VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error
+}
+
+type PostMePayoutDestinations200JSONResponse PayoutDestination
+
+func (response PostMePayoutDestinations200JSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations201JSONResponse PayoutDestination
+
+func (response PostMePayoutDestinations201JSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMePayoutDestinations403ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMePayoutDestinations409ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMePayoutDestinations422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMePayoutDestinations422ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationIdRequestObject struct {
+	DestinationId UUID `json:"destinationId"`
+	Params        DeleteMePayoutDestinationsDestinationIdParams
+}
+
+type DeleteMePayoutDestinationsDestinationIdResponseObject interface {
+	VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error
+}
+
+type DeleteMePayoutDestinationsDestinationId200JSONResponse PayoutDestination
+
+func (response DeleteMePayoutDestinationsDestinationId200JSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMePayoutDestinationsDestinationId409ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteMePayoutDestinationsDestinationId409ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerificationRequestObject struct {
+	Params GetMeVerificationParams
+}
+
+type GetMeVerificationResponseObject interface {
+	VisitGetMeVerificationResponse(w http.ResponseWriter) error
+}
+
+type GetMeVerification200JSONResponse VerificationProfile
+
+func (response GetMeVerification200JSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerification403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeVerification403ApplicationProblemPlusJSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerification404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMeVerification404ApplicationProblemPlusJSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcomeRequestObject struct {
+	Params PostMeVerificationSandboxOutcomeParams
+	Body   *PostMeVerificationSandboxOutcomeJSONRequestBody
+}
+
+type PostMeVerificationSandboxOutcomeResponseObject interface {
+	VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error
+}
+
+type PostMeVerificationSandboxOutcome200JSONResponse VerificationSession
+
+func (response PostMeVerificationSandboxOutcome200JSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSandboxOutcome422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeVerificationSandboxOutcome422ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessionsRequestObject struct {
+	Params PostMeVerificationSessionsParams
+	Body   *PostMeVerificationSessionsJSONRequestBody
+}
+
+type PostMeVerificationSessionsResponseObject interface {
+	VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error
+}
+
+type PostMeVerificationSessions200JSONResponse StartedVerification
+
+func (response PostMeVerificationSessions200JSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessions201JSONResponse StartedVerification
+
+func (response PostMeVerificationSessions201JSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessions403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostMeVerificationSessions403ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostMeVerificationSessions422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostMeVerificationSessions422ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerificationSessionsSessionIdRequestObject struct {
+	SessionId SessionId `json:"sessionId"`
+	Params    GetMeVerificationSessionsSessionIdParams
+}
+
+type GetMeVerificationSessionsSessionIdResponseObject interface {
+	VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error
+}
+
+type GetMeVerificationSessionsSessionId200JSONResponse VerificationSession
+
+func (response GetMeVerificationSessionsSessionId200JSONResponse) VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeVerificationSessionsSessionId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMeVerificationSessionsSessionId404ApplicationProblemPlusJSONResponse) VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetNativeAssetsRequestObject struct {
 	Params GetNativeAssetsParams
 }
@@ -9883,6 +11727,87 @@ func (response PostPayouts422ApplicationProblemPlusJSONResponse) VisitPostPayout
 	return err
 }
 
+type PostPayoutsQuoteRequestObject struct {
+	Params PostPayoutsQuoteParams
+	Body   *PostPayoutsQuoteJSONRequestBody
+}
+
+type PostPayoutsQuoteResponseObject interface {
+	VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error
+}
+
+type PostPayoutsQuote200JSONResponse PayoutQuote
+
+func (response PostPayoutsQuote200JSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote201JSONResponse PayoutQuote
+
+func (response PostPayoutsQuote201JSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostPayoutsQuote403ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostPayoutsQuote404ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostPayoutsQuote422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostPayoutsQuote422ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetPayoutsPayoutIdRequestObject struct {
 	PayoutId PayoutId `json:"payoutId"`
 }
@@ -10343,6 +12268,30 @@ type StrictServerInterface interface {
 	// GetMe Current principal and the accounts it may act on
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetMeEligibility What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+	// (GET /me/eligibility)
+	GetMeEligibility(ctx context.Context, request GetMeEligibilityRequestObject) (GetMeEligibilityResponseObject, error)
+	// GetMePayoutDestinations Where you have asked value to be sent (§25)
+	// (GET /me/payout-destinations)
+	GetMePayoutDestinations(ctx context.Context, request GetMePayoutDestinationsRequestObject) (GetMePayoutDestinationsResponseObject, error)
+	// PostMePayoutDestinations Register a payout destination from a provider token (§25)
+	// (POST /me/payout-destinations)
+	PostMePayoutDestinations(ctx context.Context, request PostMePayoutDestinationsRequestObject) (PostMePayoutDestinationsResponseObject, error)
+	// DeleteMePayoutDestinationsDestinationId Stop using a payout destination (§25)
+	// (DELETE /me/payout-destinations/{destinationId})
+	DeleteMePayoutDestinationsDestinationId(ctx context.Context, request DeleteMePayoutDestinationsDestinationIdRequestObject) (DeleteMePayoutDestinationsDestinationIdResponseObject, error)
+	// GetMeVerification Your financial verification profile, what is missing, and what to do next (§20, §24)
+	// (GET /me/verification)
+	GetMeVerification(ctx context.Context, request GetMeVerificationRequestObject) (GetMeVerificationResponseObject, error)
+	// PostMeVerificationSandboxOutcome SANDBOX TIER ONLY - choose what the rehearsal verification decides
+	// (POST /me/verification/sandbox-outcome)
+	PostMeVerificationSandboxOutcome(ctx context.Context, request PostMeVerificationSandboxOutcomeRequestObject) (PostMeVerificationSandboxOutcomeResponseObject, error)
+	// PostMeVerificationSessions Start a provider-hosted identity verification (§20)
+	// (POST /me/verification/sessions)
+	PostMeVerificationSessions(ctx context.Context, request PostMeVerificationSessionsRequestObject) (PostMeVerificationSessionsResponseObject, error)
+	// GetMeVerificationSessionsSessionId Ask the provider what happened, and record it
+	// (GET /me/verification/sessions/{sessionId})
+	GetMeVerificationSessionsSessionId(ctx context.Context, request GetMeVerificationSessionsSessionIdRequestObject) (GetMeVerificationSessionsSessionIdResponseObject, error)
 	// GetNativeAssets Native assets that currently accept at least sells
 	// (GET /native-assets)
 	GetNativeAssets(ctx context.Context, request GetNativeAssetsRequestObject) (GetNativeAssetsResponseObject, error)
@@ -10382,6 +12331,9 @@ type StrictServerInterface interface {
 	// PostPayouts Request a payout of eligible value (PARTS XVIII-XXI)
 	// (POST /payouts)
 	PostPayouts(ctx context.Context, request PostPayoutsRequestObject) (PostPayoutsResponseObject, error)
+	// PostPayoutsQuote What a payout would cost, before committing to it (§19, §22)
+	// (POST /payouts/quote)
+	PostPayoutsQuote(ctx context.Context, request PostPayoutsQuoteRequestObject) (PostPayoutsQuoteResponseObject, error)
 
 	// (GET /payouts/{payoutId})
 	GetPayoutsPayoutId(ctx context.Context, request GetPayoutsPayoutIdRequestObject) (GetPayoutsPayoutIdResponseObject, error)
@@ -11711,6 +13663,237 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetMeEligibility operation middleware
+func (sh *strictHandler) GetMeEligibility(w http.ResponseWriter, r *http.Request, params GetMeEligibilityParams) {
+	var request GetMeEligibilityRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeEligibility(ctx, request.(GetMeEligibilityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeEligibility")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeEligibilityResponseObject); ok {
+		if err := validResponse.VisitGetMeEligibilityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMePayoutDestinations operation middleware
+func (sh *strictHandler) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request, params GetMePayoutDestinationsParams) {
+	var request GetMePayoutDestinationsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMePayoutDestinations(ctx, request.(GetMePayoutDestinationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMePayoutDestinations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMePayoutDestinationsResponseObject); ok {
+		if err := validResponse.VisitGetMePayoutDestinationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMePayoutDestinations operation middleware
+func (sh *strictHandler) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request, params PostMePayoutDestinationsParams) {
+	var request PostMePayoutDestinationsRequestObject
+
+	request.Params = params
+
+	var body PostMePayoutDestinationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMePayoutDestinations(ctx, request.(PostMePayoutDestinationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMePayoutDestinations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMePayoutDestinationsResponseObject); ok {
+		if err := validResponse.VisitPostMePayoutDestinationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMePayoutDestinationsDestinationId operation middleware
+func (sh *strictHandler) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request, destinationId UUID, params DeleteMePayoutDestinationsDestinationIdParams) {
+	var request DeleteMePayoutDestinationsDestinationIdRequestObject
+
+	request.DestinationId = destinationId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMePayoutDestinationsDestinationId(ctx, request.(DeleteMePayoutDestinationsDestinationIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMePayoutDestinationsDestinationId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMePayoutDestinationsDestinationIdResponseObject); ok {
+		if err := validResponse.VisitDeleteMePayoutDestinationsDestinationIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeVerification operation middleware
+func (sh *strictHandler) GetMeVerification(w http.ResponseWriter, r *http.Request, params GetMeVerificationParams) {
+	var request GetMeVerificationRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeVerification(ctx, request.(GetMeVerificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeVerification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeVerificationResponseObject); ok {
+		if err := validResponse.VisitGetMeVerificationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeVerificationSandboxOutcome operation middleware
+func (sh *strictHandler) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request, params PostMeVerificationSandboxOutcomeParams) {
+	var request PostMeVerificationSandboxOutcomeRequestObject
+
+	request.Params = params
+
+	var body PostMeVerificationSandboxOutcomeJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeVerificationSandboxOutcome(ctx, request.(PostMeVerificationSandboxOutcomeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeVerificationSandboxOutcome")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeVerificationSandboxOutcomeResponseObject); ok {
+		if err := validResponse.VisitPostMeVerificationSandboxOutcomeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostMeVerificationSessions operation middleware
+func (sh *strictHandler) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request, params PostMeVerificationSessionsParams) {
+	var request PostMeVerificationSessionsRequestObject
+
+	request.Params = params
+
+	var body PostMeVerificationSessionsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostMeVerificationSessions(ctx, request.(PostMeVerificationSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostMeVerificationSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostMeVerificationSessionsResponseObject); ok {
+		if err := validResponse.VisitPostMeVerificationSessionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeVerificationSessionsSessionId operation middleware
+func (sh *strictHandler) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId, params GetMeVerificationSessionsSessionIdParams) {
+	var request GetMeVerificationSessionsSessionIdRequestObject
+
+	request.SessionId = sessionId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeVerificationSessionsSessionId(ctx, request.(GetMeVerificationSessionsSessionIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeVerificationSessionsSessionId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeVerificationSessionsSessionIdResponseObject); ok {
+		if err := validResponse.VisitGetMeVerificationSessionsSessionIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetNativeAssets operation middleware
 func (sh *strictHandler) GetNativeAssets(w http.ResponseWriter, r *http.Request, params GetNativeAssetsParams) {
 	var request GetNativeAssetsRequestObject
@@ -12094,6 +14277,39 @@ func (sh *strictHandler) PostPayouts(w http.ResponseWriter, r *http.Request, par
 	}
 }
 
+// PostPayoutsQuote operation middleware
+func (sh *strictHandler) PostPayoutsQuote(w http.ResponseWriter, r *http.Request, params PostPayoutsQuoteParams) {
+	var request PostPayoutsQuoteRequestObject
+
+	request.Params = params
+
+	var body PostPayoutsQuoteJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostPayoutsQuote(ctx, request.(PostPayoutsQuoteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostPayoutsQuote")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostPayoutsQuoteResponseObject); ok {
+		if err := validResponse.VisitPostPayoutsQuoteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPayoutsPayoutId operation middleware
 func (sh *strictHandler) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request, payoutId PayoutId) {
 	var request GetPayoutsPayoutIdRequestObject
@@ -12354,273 +14570,370 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"4VLG/gHL0p9/+fz/DQA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -151,23 +151,24 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 	require.True(t, ok, "the router must be walkable")
 
 	replacements := map[string]string{
-		"{accountId}":    testAccountID.String(),
-		"{instrumentId}": testInstrument.String(),
-		"{intentId}":     testIntentID.String(),
-		"{orderId}":      testOrderID.String(),
-		"{depositId}":    testDepositID.String(),
-		"{sessionId}":    testSessionID,
-		"{actionId}":     testSessionID,
-		"{recordId}":     testSessionID,
-		"{capability}":   "LIVE_FUNDING",
-		"{action}":       "propose",
-		"{decision}":     "approve",
-		"{provider}":     "stripe_credit",
-		"{assetId}":      testInstrument.String(),
-		"{marketId}":     testOrderID.String(),
-		"{payoutId}":     testSessionID,
-		"{paymentId}":    testSessionID,
-		"{productId}":    testOrderID.String(),
+		"{accountId}":     testAccountID.String(),
+		"{instrumentId}":  testInstrument.String(),
+		"{intentId}":      testIntentID.String(),
+		"{orderId}":       testOrderID.String(),
+		"{depositId}":     testDepositID.String(),
+		"{sessionId}":     testSessionID,
+		"{actionId}":      testSessionID,
+		"{recordId}":      testSessionID,
+		"{capability}":    "LIVE_FUNDING",
+		"{action}":        "propose",
+		"{decision}":      "approve",
+		"{provider}":      "stripe_credit",
+		"{assetId}":       testInstrument.String(),
+		"{marketId}":      testOrderID.String(),
+		"{payoutId}":      testSessionID,
+		"{paymentId}":     testSessionID,
+		"{productId}":     testOrderID.String(),
+		"{destinationId}": testOrderID.String(),
 	}
 
 	requiredQuery := map[string]string{
@@ -177,6 +178,14 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
 		"/v1/payouts":          "account_id=" + testAccountID.String(),
 		"/v1/internal-orders":  "account_id=" + testAccountID.String(),
+		// The withdrawal journey. Each of these takes the account as a
+		// required query parameter, so the probe has to carry one or it stops
+		// at VALIDATION_FAILED before reaching the authorization gate.
+		"/v1/me/verification":                        "account_id=" + testAccountID.String(),
+		"/v1/me/verification/sessions/{sessionId}":   "account_id=" + testAccountID.String(),
+		"/v1/me/eligibility":                         "account_id=" + testAccountID.String(),
+		"/v1/me/payout-destinations":                 "account_id=" + testAccountID.String(),
+		"/v1/me/payout-destinations/{destinationId}": "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe

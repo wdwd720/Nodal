@@ -328,13 +328,19 @@ func (s *Service) QuoteByIdempotencyKey(ctx context.Context, q db.Querier, key s
 	return out, nil
 }
 
-// ConsumeQuote marks a quote as spent by a payout request, refusing an expired
+// consumeQuote marks a quote as spent by a payout request, refusing an expired
 // one, a spent one and one the provider would not honour.
 //
-// The refusal is deliberately a CONFLICT rather than a silent re-quote: a
-// customer who saw a number and pressed the button a quarter of an hour later
-// is told the number has moved, not charged a different one.
-func (s *Service) ConsumeQuote(ctx context.Context, tx pgx.Tx, id QuoteID, accountID accounts.AccountID, at time.Time) (Quote, error) {
+// The refusal is deliberately a CONFLICT or QUOTE_EXPIRED rather than a silent
+// re-quote: a customer who saw a number and pressed the button a quarter of an
+// hour later is told the number has moved, not charged a different one.
+//
+// It is unexported because Create is its only legitimate caller. Consuming a
+// quote outside the transaction that reserves the value would let a quote be
+// spent by nothing, and test/reachability is right to ask who calls an exported
+// mutator: the answer here is "one function in this file", and that is what an
+// unexported method says.
+func (s *Service) consumeQuote(ctx context.Context, tx pgx.Tx, id QuoteID, accountID accounts.AccountID, at time.Time) (Quote, error) {
 	q, err := scanQuote(tx.QueryRow(ctx,
 		`SELECT `+quoteColumns+` FROM payout_quotes WHERE id = $1 FOR UPDATE`, id))
 	if errors.Is(err, pgx.ErrNoRows) {

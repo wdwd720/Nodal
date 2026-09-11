@@ -62,8 +62,8 @@ const AttestsAgeAtLeast = 18
 
 // Provider implements verification.Provider and verification.SandboxController.
 type Provider struct {
-	mu  sync.Mutex
-	now func() time.Time
+	mu    sync.Mutex
+	now   func() time.Time
 	byRef map[string]*session
 }
 

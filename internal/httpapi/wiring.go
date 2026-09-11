@@ -81,6 +81,12 @@ type WireDeps struct {
 	// leaves them nil and those routes answer UNSUPPORTED.
 	NativeEconomy NativeEconomyDeps
 
+	// Withdrawal holds the verification, eligibility and conversion-request
+	// services of goal PARTS 19-25. Every field is optional for the same
+	// reason: a deployment with no identity vendor has no verification routes,
+	// which is the honest state of one with no contract.
+	Withdrawal WithdrawalDeps
+
 	IdempotencyTTL time.Duration
 }
 
@@ -176,6 +182,7 @@ func Wire(d WireDeps) (Ports, error) {
 		p.Idempotency = idempotencyAdapter{store: d.Idempotency, db: d.DB}
 	}
 	wireNativeEconomy(&p, d)
+	wireWithdrawal(&p, d)
 	return p, nil
 }
 

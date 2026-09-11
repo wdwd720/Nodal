@@ -59,6 +59,14 @@ func NewService(poster Poster, credits Credits, engine *Engine, providers *Regis
 // actually supports rather than assuming (PART LXXVI).
 func (s *Service) Provider(name string) (Provider, error) { return s.providers.Get(name) }
 
+// ProviderNames lists the configured payout providers, sorted.
+//
+// A deployment runs one payout slot, so callers use this to find the one there
+// is rather than to choose between several. An empty list is the honest state
+// of a deployment with no conversion contract, and every surface that reads it
+// answers PROVIDER_UNAVAILABLE rather than inventing a provider.
+func (s *Service) ProviderNames() []string { return s.providers.Names() }
+
 // Create evaluates eligibility and, if the full amount is eligible, reserves
 // the exact units in one transaction.
 //
@@ -101,7 +109,7 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 	// transaction carries the reservation.
 	var quote *Quote
 	if r.QuoteID != nil && !r.QuoteID.IsZero() {
-		consumed, qerr := s.ConsumeQuote(ctx, tx, *r.QuoteID, r.AccountID, r.EffectiveAt)
+		consumed, qerr := s.consumeQuote(ctx, tx, *r.QuoteID, r.AccountID, r.EffectiveAt)
 		if qerr != nil {
 			return Request{}, Decision{}, qerr
 		}

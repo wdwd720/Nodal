@@ -966,6 +966,218 @@ paths:
                   config_hash: { type: string }
                   environment: { type: string }
 
+  # ---- verification, eligibility and the conversion request ----
+  #
+  # The withdrawal journey of goal §19-§25. Two rules run through every
+  # response below:
+  #
+  #   1. Verification changes ELIGIBILITY and never changes what Credits are.
+  #      Nothing here says a verified account's Credits became cash, because
+  #      they did not: a conversion is a request to a licensed provider, with
+  #      its own state machine (PROVIDER_BOUNDARY §2).
+  #   2. A sandbox answer says so. Every schema that can carry a rehearsal
+  #      outcome has a `sandbox` field, it is required, and a sandbox tier is
+  #      the only deployment that can produce one.
+  /me/verification:
+    get:
+      tags: [verification]
+      summary: Your financial verification profile, what is missing, and what to do next (§20, §24)
+      description: >-
+        The financial profile area of §24. It carries a state, a level, the
+        sub-checks behind that level and the actions available, and it carries
+        no personal data at all: there is no document identifier, no government
+        number and no date of birth, because this system never had any. A
+        provider holds the evidence; Nodal holds the conclusion.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Verification profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/VerificationProfile" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/verification/sessions:
+    post:
+      tags: [verification]
+      summary: Start a provider-hosted identity verification (§20)
+      description: >-
+        Returns a single-use hosted URL the browser is sent to. Nodal stores the
+        provider's reference and never the URL: those links are credentials for
+        resuming somebody's identity check. The jurisdiction is supplied by the
+        caller and is never inferred from a network address, which is a legal
+        determination wearing a network header's clothes. A person already has
+        at most one open session; asking again resumes it rather than racing it.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StartVerificationRequest" } } }
+      responses:
+        "201":
+          description: A hosted session to send the person to
+          content: { application/json: { schema: { $ref: "#/components/schemas/StartedVerification" } } }
+        "200":
+          description: Idempotent replay, or a resumed session
+          content: { application/json: { schema: { $ref: "#/components/schemas/StartedVerification" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /me/verification/sessions/{sessionId}:
+    get:
+      tags: [verification]
+      summary: Ask the provider what happened, and record it
+      description: >-
+        Never trust the redirect. A customer arriving back at the return URL
+        says they came back, not that they passed, so this polls the provider
+        and ingests whatever it says. It is idempotent: a status that has not
+        moved records nothing.
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: The session as it now stands
+          content: { application/json: { schema: { $ref: "#/components/schemas/VerificationSession" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/verification/sandbox-outcome:
+    post:
+      tags: [verification]
+      summary: SANDBOX TIER ONLY - choose what the rehearsal verification decides
+      description: >-
+        A sandbox-tier affordance (ADR-0023) and nothing else. It exists so the
+        whole withdrawal journey can be exercised without fabricating an
+        approval, and it is refused with FORBIDDEN on any deployment that is not
+        a sandbox tier and by any provider that is not the sandbox one. There is
+        no default outcome anywhere in this path: a rehearsal session nobody has
+        answered stays pending forever, because "approved unless told otherwise"
+        is a fabricated approval with extra steps. Every row it writes is
+        labelled sandbox, and a database CHECK refuses that label in PROD.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SandboxVerificationOutcome" } } }
+      responses:
+        "200":
+          description: The session as the chosen outcome left it
+          content: { application/json: { schema: { $ref: "#/components/schemas/VerificationSession" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /me/eligibility:
+    get:
+      tags: [eligibility]
+      summary: What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+      description: >-
+        Eligibility is decided per unit of provenance, not per balance. This
+        returns one bucket per credit origin with the reasons that bucket cannot
+        leave, and a top-level answer that composes them with the account's
+        jurisdiction, its restrictions, the capability gates and the payout
+        provider. It moves nothing and reserves nothing.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Withdrawal eligibility, explained
+          content: { application/json: { schema: { $ref: "#/components/schemas/WithdrawalEligibility" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/payout-destinations:
+    get:
+      tags: [payouts]
+      summary: Where you have asked value to be sent (§25)
+      description: >-
+        Includes disabled and rejected destinations. A person who removed one
+        and cannot see that it is gone will add it again, and a person whose
+        destination a provider refused needs to see the refusal rather than an
+        empty list.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Destinations
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PayoutDestination" } }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [payouts]
+      summary: Register a payout destination from a provider token (§25)
+      description: >-
+        Nodal never stores a bank account number, a card number, an IBAN, a
+        routing number, a private key or a seed phrase. What is sent here is the
+        PROVIDER'S token for a destination plus a mask a person recognises, and
+        an input that looks like a raw number is refused rather than stored.
+        Adding a destination is a high-risk operation and requires a recent
+        strong authentication. A destination is born unusable: whether it may
+        receive value is the provider's decision, not the request's.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePayoutDestination" } } }
+      responses:
+        "201":
+          description: Destination registered, awaiting the provider's verification
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
+        "200":
+          description: Idempotent replay
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /me/payout-destinations/{destinationId}:
+    delete:
+      tags: [payouts]
+      summary: Stop using a payout destination (§25)
+      description: >-
+        Disables it rather than deleting it: a destination that value has left
+        through is financial history. A disabled destination never returns;
+        adding it again is a new registration with its own creation time, which
+        is what makes a cooldown on a changed destination a fact rather than a
+        field somebody remembers to reset.
+      parameters:
+        - { in: path, name: destinationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Destination disabled
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+  /payouts/quote:
+    post:
+      tags: [payouts]
+      summary: What a payout would cost, before committing to it (§19, §22)
+      description: >-
+        A separate pre-commitment call, because the customer sees the fee and
+        the net before they commit. The minimum is judged NET of fees, since
+        sub-minimum dust is destroyed rather than returned. A quote expires, and
+        an expired one is refused rather than silently re-priced: a person who
+        saw a number and pressed the button a quarter of an hour later is told
+        the number moved, not charged a different one. Nothing is reserved and
+        no ledger row is written.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreatePayoutQuote" } } }
+      responses:
+        "201":
+          description: A quote that stands until it expires
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutQuote" } } }
+        "200":
+          description: Idempotent replay of the quote the customer was shown
+          content: { application/json: { schema: { $ref: "#/components/schemas/PayoutQuote" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1347,6 +1559,15 @@ components:
         account_id: { $ref: "#/components/schemas/UUID" }
         amount: { $ref: "#/components/schemas/Quantity" }
         destination_id: { $ref: "#/components/schemas/UUID" }
+        quote_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            The quote from POST /payouts/quote that the customer was shown.
+            When present it is consumed in the same transaction that reserves
+            the value, so one quote funds exactly one payout, and an expired or
+            already-used quote refuses the request before anything is decided
+            about the money. It must name the same destination and the same
+            gross amount.
 
     PayoutRequest:
       type: object
@@ -1378,6 +1599,19 @@ components:
         policy_version: { type: string }
         policy_hash: { type: string }
         failure_reason: { type: string }
+        quote_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: The pre-commitment quote this payout was created against, when there was one.
+        provenance:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutProvenanceSlice" }
+          description: >-
+            What value is leaving, in the order it leaves (§23). A payout does
+            not take "500 Credits"; it takes specific units from specific
+            provenance lots, and this is which.
+        sandbox:
+          type: boolean
+          description: True when this payout is a rehearsal against a sandbox provider.
         created_at: { $ref: "#/components/schemas/Timestamp" }
 
     PayoutRequestPage:
@@ -2180,3 +2414,346 @@ components:
         p95_ms: { type: integer }
         last_success_at: { $ref: "#/components/schemas/Timestamp" }
         disable_reason: { type: string }
+    # --- verification, eligibility and the conversion request ------------
+    VerificationState:
+      type: string
+      description: >-
+        The financial verification state machine of §20. UNVERIFIED is §20's
+        NOT_STARTED under the name the schema already used. Nothing reaches
+        VERIFIED except through a provider session that decided so.
+      enum: [UNVERIFIED, REQUIRED, STARTED, PENDING, NEEDS_INFORMATION,
+             VERIFIED, REJECTED, EXPIRED, RESTRICTED, SUSPENDED]
+    VerificationLevel:
+      type: string
+      description: >-
+        How thoroughly the person behind an account has been identified.
+        NODAL_IDENTITY is a verified e-mail address and says nothing about who
+        they are or whether they may receive money; PAYOUT_KYC and ENHANCED are
+        a provider's decision plus the sub-checks that justify it.
+      enum: [NONE, NODAL_IDENTITY, PAYOUT_KYC, ENHANCED]
+    VerificationSessionStatus:
+      type: string
+      description: >-
+        The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from
+        what Persona, Veriff, Sumsub and Stripe Identity each report so that no
+        one vendor's vocabulary becomes the schema's.
+      enum: [CREATED, PENDING_USER_ACTION, PROCESSING, REQUIRES_INPUT,
+             MANUAL_REVIEW, APPROVED, DECLINED, CANCELLED, EXPIRED]
+    VerificationCheckKind:
+      type: string
+      description: The five things §21 says must each be able to refuse on their own.
+      enum: [IDENTITY_DOCUMENT, AGE, JURISDICTION, SANCTIONS, PEP]
+    VerificationOutcome:
+      type: string
+      description: >-
+        One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider
+        that has not screened somebody has not cleared them either.
+      enum: [PASS, FAIL, NEEDS_INFORMATION, UNKNOWN, NOT_APPLICABLE]
+    VerificationCheck:
+      type: object
+      required: [kind, outcome, provider, rules_version, sandbox, recorded_at]
+      description: >-
+        One sub-check, its answer, who produced it and under which rule version.
+        `detail` is a safe reason code and never a document, a government
+        identifier or a date of birth.
+      properties:
+        kind: { $ref: "#/components/schemas/VerificationCheckKind" }
+        outcome: { $ref: "#/components/schemas/VerificationOutcome" }
+        provider: { type: string }
+        provider_ref: { type: string }
+        rules_version: { type: string }
+        detail: { type: string }
+        sandbox:
+          type: boolean
+          description: A rehearsal answer. A database CHECK refuses one in PROD.
+        recorded_at: { $ref: "#/components/schemas/Timestamp" }
+    VerificationRequirement:
+      type: object
+      required: [code, detail, action]
+      description: One thing standing between a person and a level, with what they can do about it.
+      properties:
+        code:
+          type: string
+          description: A check kind, or VERIFICATION_SESSION / JURISDICTION / PROVIDER / OPERATOR_REVIEW / VERIFICATION_EXPIRED.
+        detail: { type: string }
+        action:
+          type: string
+          enum: [START_VERIFICATION, CONTINUE_VERIFICATION, PROVIDE_INFORMATION,
+                 REVERIFY, CONTACT_SUPPORT, WAIT, NONE]
+    VerificationSession:
+      type: object
+      required: [session_id, status, purpose, provider, sandbox, created_at]
+      properties:
+        session_id: { $ref: "#/components/schemas/UUID" }
+        status: { $ref: "#/components/schemas/VerificationSessionStatus" }
+        purpose: { type: string, enum: [PAYOUT_KYC, ENHANCED] }
+        provider: { type: string }
+        provider_ref: { type: string }
+        jurisdiction_country: { type: string }
+        jurisdiction_region: { type: string }
+        rules_version: { type: string }
+        failure_reason: { type: string }
+        sandbox: { type: boolean }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    VerificationProfile:
+      type: object
+      required: [account_id, state, level, jurisdiction_supported, minimum_age,
+                 age_verified, sanctions_state, sandbox, rules_version, payout_ready]
+      description: >-
+        The §24 profile area. It says what has been established, what has not,
+        and what to do next. It carries no personal data.
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        state: { $ref: "#/components/schemas/VerificationState" }
+        level: { $ref: "#/components/schemas/VerificationLevel" }
+        payout_ready:
+          type: boolean
+          description: >-
+            Whether verification, by itself, no longer stands between this
+            person and a withdrawal. It says nothing about whether a withdrawal
+            is possible; see /me/eligibility for that.
+        jurisdiction_country: { type: string }
+        jurisdiction_region: { type: string }
+        jurisdiction_supported: { type: boolean }
+        jurisdiction_refusals: { type: array, items: { type: string } }
+        minimum_age:
+          type: integer
+          description: The age threshold this jurisdiction is judged against, from the versioned rule table.
+        age_verified: { type: boolean }
+        sanctions_state: { type: string, enum: [UNKNOWN, CLEAR, HIT, REVIEW] }
+        restrictions: { type: array, items: { type: string } }
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        session: { $ref: "#/components/schemas/VerificationSession" }
+        checks: { type: array, items: { $ref: "#/components/schemas/VerificationCheck" } }
+        missing: { type: array, items: { $ref: "#/components/schemas/VerificationRequirement" } }
+        sandbox:
+          type: boolean
+          description: True when any of this was established by a rehearsal provider.
+        rules_version: { type: string }
+        provider: { type: string }
+        provider_availability:
+          type: string
+          enum: ["", NOT_OFFERED, REQUIRES_APPLICATION, APPLICATION_PENDING,
+                 APPLICATION_DENIED, SANDBOX_ONLY, LIVE]
+    StartVerificationRequest:
+      type: object
+      required: [account_id, jurisdiction_country]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        purpose:
+          type: string
+          enum: [PAYOUT_KYC, ENHANCED]
+          description: Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+        jurisdiction_country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+          description: ISO 3166-1 alpha-2. Never inferred from a network address.
+        jurisdiction_region:
+          type: string
+          description: The subdivision code without its country prefix. Required where the rules depend on it.
+    StartedVerification:
+      type: object
+      required: [session, sandbox]
+      properties:
+        session: { $ref: "#/components/schemas/VerificationSession" }
+        hosted_url:
+          type: string
+          description: >-
+            Single-use and short-lived. It is returned here and stored nowhere.
+            On a sandbox tier it is a `sandbox:` reference rather than a page,
+            because there is no hosted flow to visit.
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        sandbox: { type: boolean }
+        sandbox_control_path:
+          type: string
+          description: >-
+            Present only for a rehearsal session. It is where a sandbox operator
+            chooses the outcome explicitly, and its presence is what makes a
+            sandbox session visibly a rehearsal.
+    SandboxVerificationOutcome:
+      type: object
+      required: [account_id, outcome]
+      description: SANDBOX TIER ONLY. Refused with FORBIDDEN anywhere else.
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        outcome:
+          type: string
+          enum: [VERIFIED, NEEDS_INFORMATION, REJECTED, UNDERAGE, SANCTIONED]
+          description: >-
+            There is no default. UNDERAGE and SANCTIONED are separate from
+            REJECTED because §21 requires an age failure and a sanctions failure
+            to be separately expressible.
+    WithdrawalReason:
+      type: string
+      description: >-
+        A machine-readable reason value cannot leave. Each names something that
+        could change. REQUIRES_VERIFICATION is a NEXT STEP and not a denial, and
+        the product must present it as one.
+      enum: [REQUIRES_VERIFICATION, ORIGIN_NOT_WITHDRAWABLE, CAPABILITY_INACTIVE,
+             JURISDICTION_RESTRICTED, ACCOUNT_RESTRICTED, PROVIDER_UNAVAILABLE,
+             MINIMUM_NOT_MET, FUNDING_NOT_SETTLED, HOLD_PERIOD_NOT_ELAPSED,
+             NO_VALUE, POLICY_INVALID]
+    WithdrawalOriginBucket:
+      type: object
+      required: [origin, quantity, withdrawable, reasons, payout_allowed, consumption_rank]
+      properties:
+        origin: { $ref: "#/components/schemas/CreditOrigin" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        withdrawable: { $ref: "#/components/schemas/Quantity" }
+        reasons: { type: array, items: { $ref: "#/components/schemas/WithdrawalReason" } }
+        payout_allowed: { type: boolean }
+        required_verification: { $ref: "#/components/schemas/VerificationLevel" }
+        required_capability: { type: string }
+        min_hold_days: { type: integer }
+        consumption_rank:
+          type: integer
+          description: Where this origin sits in the consumption order. Lower leaves first.
+        verification_would_suffice: { type: boolean }
+    WithdrawalEligibility:
+      type: object
+      required: [account_id, eligible, withdrawable_now, gross, spendable, frozen,
+                 payout_eligible, ineligible, buckets, reasons, policy_version,
+                 current_verification, required_verification, sandbox]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        eligible: { type: boolean }
+        withdrawable_now: { $ref: "#/components/schemas/Quantity" }
+        gross: { $ref: "#/components/schemas/Quantity" }
+        spendable: { $ref: "#/components/schemas/Quantity" }
+        frozen: { $ref: "#/components/schemas/Quantity" }
+        payout_eligible: { $ref: "#/components/schemas/Quantity" }
+        ineligible: { $ref: "#/components/schemas/Quantity" }
+        buckets: { type: array, items: { $ref: "#/components/schemas/WithdrawalOriginBucket" } }
+        reasons: { type: array, items: { $ref: "#/components/schemas/WithdrawalReason" } }
+        verification_would_suffice:
+          type: boolean
+          description: True when identity verification is the only thing standing between this person and some of their money.
+        current_verification: { $ref: "#/components/schemas/VerificationLevel" }
+        required_verification: { $ref: "#/components/schemas/VerificationLevel" }
+        minimum_quantity:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: The provider's minimum expressed in Credits, or "0" when it publishes none. Zero is never "any amount will do".
+        provider: { type: string }
+        provider_available: { type: boolean }
+        destination_configured: { type: boolean }
+        jurisdiction_supported: { type: boolean }
+        policy_version: { type: string }
+        policy_hash: { type: string }
+        sandbox: { type: boolean }
+    PayoutDestinationStatus:
+      type: string
+      description: >-
+        UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing
+        names are kept because working code and a registered enum pairing use
+        them (D-060). REJECTED and DISABLED are terminal: a destination never
+        comes back, and adding it again is a new registration.
+      enum: [UNVERIFIED, VERIFIED, REJECTED, DISABLED]
+    PayoutDestination:
+      type: object
+      required: [destination_id, account_id, kind, provider, status, sandbox, created_at]
+      description: >-
+        Nodal stores the provider's token and a mask. There is no account
+        number, card number, IBAN, routing number or key in this object, and
+        there is none in the table behind it.
+      properties:
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, enum: [BANK, CARD_PUSH, FIAT_WALLET, CRYPTO_WALLET] }
+        provider: { type: string }
+        status: { $ref: "#/components/schemas/PayoutDestinationStatus" }
+        display_label: { type: string }
+        masked_display:
+          type: string
+          description: What a person recognises, such as "••••4242". Never the whole number.
+        currency: { type: string }
+        country: { type: string }
+        usable:
+          type: boolean
+          description: Whether a payout may be sent here right now.
+        sandbox: { type: boolean }
+        verified_at: { $ref: "#/components/schemas/Timestamp" }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    CreatePayoutDestination:
+      type: object
+      required: [account_id, kind, provider_token]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        kind: { type: string, enum: [BANK, CARD_PUSH, FIAT_WALLET, CRYPTO_WALLET] }
+        provider_token:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: >-
+            The provider's token for the destination, or on a sandbox tier a
+            sandbox handle. An input that looks like an account number, a card
+            number, an IBAN, a private key or a seed phrase is REFUSED, not
+            stored: Nodal never holds one.
+        display_label: { type: string, maxLength: 64 }
+        masked_display: { type: string, maxLength: 64 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        country: { type: string, pattern: '^[A-Z]{2}$' }
+    CreatePayoutQuote:
+      type: object
+      required: [account_id, destination_id, amount]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        amount:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: The GROSS Credits the customer would give up. The fee comes out of it.
+    PayoutQuote:
+      type: object
+      required: [quote_id, account_id, destination_id, provider, gross_quantity,
+                 fee_quantity, net_quantity, currency, gross_amount_minor,
+                 fee_amount_minor, net_amount_minor, minimum_ok, expires_at, sandbox]
+      description: >-
+        What the provider said a payout would cost, before anybody committed.
+        Both sides are exact integers; there is no rate field holding a decimal.
+      properties:
+        quote_id: { $ref: "#/components/schemas/UUID" }
+        account_id: { $ref: "#/components/schemas/UUID" }
+        destination_id: { $ref: "#/components/schemas/UUID" }
+        provider: { type: string }
+        gross_quantity: { $ref: "#/components/schemas/Quantity" }
+        fee_quantity: { $ref: "#/components/schemas/Quantity" }
+        net_quantity: { $ref: "#/components/schemas/Quantity" }
+        currency: { type: string }
+        gross_amount_minor: { type: integer, format: int64 }
+        fee_amount_minor: { type: integer, format: int64 }
+        net_amount_minor: { type: integer, format: int64 }
+        minimum_amount_minor: { type: integer, format: int64 }
+        minimum_ok:
+          type: boolean
+          description: Judged NET of fees, because sub-minimum dust is destroyed rather than returned.
+        pricing_version: { type: string }
+        fee_model_version:
+          type: string
+          description: >-
+            Which fee schedule produced these numbers. On a sandbox tier it says
+            in words that the figures are placeholders and not a price anybody
+            has agreed.
+        policy_version: { type: string }
+        provenance:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutProvenanceSlice" }
+          description: What value would leave, in the order it would leave.
+        expires_at: { $ref: "#/components/schemas/Timestamp" }
+        consumed_at: { $ref: "#/components/schemas/Timestamp" }
+        sandbox: { type: boolean }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    PayoutProvenanceSlice:
+      type: object
+      required: [origin, quantity, consumption_rank]
+      description: >-
+        One origin's contribution to a payout (§23). The order is the
+        consumption order: among the origins a policy permits, the most
+        restricted permitted one leaves first.
+      properties:
+        origin: { $ref: "#/components/schemas/CreditOrigin" }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        consumption_rank: { type: integer }
+        returned:
+          type: boolean
+          description: True for a slice a cancellation gave back to the exact lots it came from.
