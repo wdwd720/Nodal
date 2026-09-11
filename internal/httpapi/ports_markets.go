@@ -25,7 +25,10 @@ import (
 // the tape.
 type MarketDataPort interface {
 	List(ctx context.Context, r nativemarket.ListRequest) (nativemarket.MarketPage, error)
-	Detail(ctx context.Context, marketID nativemarket.MarketID) (MarketDetailView, error)
+	// Detail takes the caller's account so the holder list can mark the
+	// caller's own row. A zero account is a caller who named none, and marks
+	// nothing; it never widens what the list says about anybody else (D-111).
+	Detail(ctx context.Context, marketID nativemarket.MarketID, caller accounts.AccountID) (MarketDetailView, error)
 	Candles(ctx context.Context, r nativemarket.CandleRequest) (CandleView, error)
 	Trades(ctx context.Context, marketID nativemarket.MarketID, limit int) (TradeTapeView, error)
 }

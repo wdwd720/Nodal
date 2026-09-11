@@ -56,7 +56,7 @@ func (a marketDataAdapter) List(ctx context.Context, r nativemarket.ListRequest)
 	return a.deps.Markets.ListMarkets(ctx, a.deps.DB, r)
 }
 
-func (a marketDataAdapter) Detail(ctx context.Context, marketID nativemarket.MarketID) (MarketDetailView, error) {
+func (a marketDataAdapter) Detail(ctx context.Context, marketID nativemarket.MarketID, caller accounts.AccountID) (MarketDetailView, error) {
 	summary, err := a.deps.Markets.MarketSummaryByID(ctx, a.deps.DB, marketID)
 	if err != nil {
 		return MarketDetailView{}, err
@@ -65,7 +65,7 @@ func (a marketDataAdapter) Detail(ctx context.Context, marketID nativemarket.Mar
 	if err != nil {
 		return MarketDetailView{}, err
 	}
-	holders, err := a.deps.Markets.Holders(ctx, a.deps.DB, summary.AssetID, TopHolderLimit)
+	holders, err := a.deps.Markets.HoldersFor(ctx, a.deps.DB, summary.AssetID, TopHolderLimit, caller)
 	if err != nil {
 		return MarketDetailView{}, err
 	}

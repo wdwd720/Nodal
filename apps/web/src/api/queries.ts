@@ -2244,7 +2244,8 @@ export const marketKeys = {
       [...query.status].join(","),
       query.cursor ?? "",
     ] as const,
-  summary: (marketId: string) => ["native-market", marketId, "summary"] as const,
+  summary: (marketId: string, accountId?: string) =>
+    ["native-market", marketId, "summary", accountId ?? ""] as const,
   candles: (marketId: string, interval: string, from: string, to: string) =>
     ["native-market", marketId, "candles", interval, from, to] as const,
   trades: (marketId: string) => ["native-market", marketId, "trades"] as const,
@@ -2301,9 +2302,12 @@ export interface MarketDetail {
  * they are checked here rather than waved through as "object", exactly as
  * `usePortfolio` does with `credits` and `totals`.
  */
-export function useNativeMarketDetail(marketId: string | undefined): UseQueryResult<MarketDetail> {
+export function useNativeMarketDetail(
+  marketId: string | undefined,
+  accountId?: string,
+): UseQueryResult<MarketDetail> {
   return useQuery({
-    queryKey: marketKeys.summary(marketId ?? ""),
+    queryKey: marketKeys.summary(marketId ?? "", accountId),
     enabled: marketId !== undefined && marketId !== "",
     // The state version moves on every trade and a quote priced against a stale
     // one is re-priced. Refetching is cheaper than explaining a rejection.
@@ -2315,7 +2319,12 @@ export function useNativeMarketDetail(marketId: string | undefined): UseQueryRes
     refetchInterval: 15_000,
     queryFn: async () => {
       const { data } = await api.GET("/native-markets/{marketId}/summary", {
-        params: { path: { marketId: marketId ?? "" } },
+        params: {
+          path: { marketId: marketId ?? "" },
+          // Only to mark the caller's own row in the holder list. It is not a
+          // filter and it changes nothing else the response says (D-111).
+          query: accountId === undefined ? {} : { account_id: accountId },
+        },
       });
       const detail = validated<NativeMarketDetail>(
         data,

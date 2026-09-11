@@ -64,7 +64,10 @@ func sampleMarketDetail() MarketDetailView {
 			MaxNativeMarketConcentrationBPS: func() *money.BPS { v := money.BPS(2000); return &v }(),
 			MaxCreatorConcentrationBPS:      func() *money.BPS { v := money.BPS(3000); return &v }(),
 		},
-		Holders: []nativemarket.Holding{{AccountID: testAccountID, Quantity: qty("12345")}},
+		Holders: []nativemarket.Holding{
+			{Rank: 1, Quantity: qty("12345"), ShareBPS: 6_000},
+			{Rank: 2, Quantity: qty("8000"), ShareBPS: 4_000, IsYou: true, AccountID: testAccountID},
+		},
 	}
 }
 
@@ -230,7 +233,7 @@ func TestGetNativeMarketsMarketIdSummary_ReportsTheLimitsInForce(t *testing.T) {
 	require.NotNil(t, detail.LimitsInForce.MaxNativeMarketConcentrationBps)
 	assert.Equal(t, 2000, *detail.LimitsInForce.MaxNativeMarketConcentrationBps)
 	require.NotNil(t, detail.TopHolders)
-	require.Len(t, *detail.TopHolders, 1)
+	require.Len(t, *detail.TopHolders, 2)
 	// The creator is on the gated detail read and nowhere else (D-110).
 	require.NotNil(t, detail.CreatorAccountId)
 	assert.Equal(t, testAccountID.String(), detail.CreatorAccountId.String())
@@ -306,6 +309,58 @@ func TestGetTrades_TheTapeCarriesNoAccount(t *testing.T) {
 	require.Len(t, page.Trades, 1)
 	assert.Equal(t, api.NativeTradePrintSide("SELL"), page.Trades[0].Side)
 	assert.Equal(t, "130", page.Trades[0].EffectivePrice)
+}
+
+// TestGetNativeMarketsMarketIdSummary_NamesNoHolder.
+//
+// top_holders rendered {account_id, quantity} to any caller with
+// native_asset:read, which every customer role has, so any signed-in stranger
+// could read a market's largest positions by account and watch them move trade
+// by trade (F-197). A row is now a rank, a quantity and a share; the one row a
+// caller may see marked is their own, and even that carries no id, because a
+// field that is sometimes an identity is one a client will render as one.
+func TestGetNativeMarketsMarketIdSummary_NamesNoHolder(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	res := h.do(http.MethodGet, "/v1/native-markets/"+testOrderID.String()+"/summary", nil)
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	assert.True(t, h.ports.marketData.lastCaller.IsZero(),
+		"a request that named no account marks no row")
+
+	// The rendered holder list, byte for byte: the assertion is about what goes
+	// on the wire, because a struct with an unset field still has the field.
+	var body struct {
+		TopHolders json.RawMessage `json:"top_holders"`
+	}
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body))
+	assert.NotContains(t, string(body.TopHolders), "account_id",
+		"the holder list names nobody, not even the caller")
+
+	var detail api.NativeMarketDetail
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &detail))
+	require.NotNil(t, detail.TopHolders)
+	rows := *detail.TopHolders
+	require.Len(t, rows, 2)
+	assert.Equal(t, 1, rows[0].Rank)
+	assert.Equal(t, "12345", rows[0].Quantity)
+	assert.Equal(t, 6_000, rows[0].ShareBps)
+	assert.Nil(t, rows[0].IsYou, "somebody else's row is not marked at all")
+	require.NotNil(t, rows[1].IsYou)
+	assert.True(t, *rows[1].IsYou)
+
+	// Naming an account the caller owns marks their row and nothing else.
+	res = h.do(http.MethodGet,
+		"/v1/native-markets/"+testOrderID.String()+"/summary?account_id="+testAccountID.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	assert.Equal(t, testAccountID, h.ports.marketData.lastCaller)
+
+	// Naming somebody else's account is refused, exactly as it is everywhere
+	// else: this parameter is a claim about who the caller is.
+	other := accounts.NewAccountID()
+	res = h.do(http.MethodGet,
+		"/v1/native-markets/"+testOrderID.String()+"/summary?account_id="+other.String(), nil)
+	assert.Equal(t, http.StatusForbidden, res.Code)
 }
 
 // TestGetMePortfolio_StatesItsAsOfAndItsTemperatures is §15 and §46 together:

@@ -231,3 +231,13 @@
   font-size: var(--text-xs);
   color: var(--ink-soft);
 }
+
+/* The caller's own place in the list, which is the only place the backend
+   identifies at all -- and it identifies it to the person it already belongs
+   to (D-111). */
+.holder-you {
+  font-size: var(--text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}

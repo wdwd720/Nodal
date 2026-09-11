@@ -1446,7 +1446,14 @@ export const marketSafetyLimitsSpec: Spec = {
 export const nativeMarketDetailSpec: Spec = {
   required: { market: "object", limits_in_force: "object" },
   arrays: {
-    top_holders: { spec: { required: { account_id: "uuid", quantity: "quantity" } } },
+    // No account id, on purpose: a holder list that names people is a list of
+    // other people's positions (D-111).
+    top_holders: {
+      spec: {
+        required: { rank: "integer", quantity: "quantity", share_bps: "integer" },
+        optional: { is_you: "boolean" },
+      },
+    },
   },
 };
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/nativemarket"
 )
@@ -70,20 +71,20 @@ func (s *Server) GetNativeMarketsMarketIdSummary(ctx context.Context, request ap
 	if err != nil {
 		return nil, validationError("marketId", "marketId must be a canonical UUID")
 	}
-	view, err := s.opts.Ports.MarketData.Detail(ctx, marketID)
+	// An account is optional here and must be one the caller owns: it marks the
+	// caller's own row in the holder list and changes nothing else (D-111).
+	var caller accounts.AccountID
+	if request.Params.AccountId != nil {
+		caller, err = accountScope(ctx, *request.Params.AccountId)
+		if err != nil {
+			return nil, err
+		}
+	}
+	view, err := s.opts.Ports.MarketData.Detail(ctx, marketID, caller)
 	if err != nil {
 		return nil, err
 	}
-	holders := make([]struct {
-		AccountId api.UUID     `json:"account_id"`
-		Quantity  api.Quantity `json:"quantity"`
-	}, 0, len(view.Holders))
-	for _, h := range view.Holders {
-		holders = append(holders, struct {
-			AccountId api.UUID     `json:"account_id"`
-			Quantity  api.Quantity `json:"quantity"`
-		}{AccountId: uuid.MustParse(h.AccountID.String()), Quantity: h.Quantity.String()})
-	}
+	holders := toAPIHolders(view.Holders)
 	out := api.NativeMarketDetail{
 		Market:        toAPIMarketSummary(view.Summary),
 		LimitsInForce: toAPIMarketLimits(view.Limits),
@@ -180,6 +181,28 @@ func (s *Server) GetNativeMarketsMarketIdTrades(ctx context.Context, request api
 }
 
 // --- rendering ---------------------------------------------------------------
+
+// toAPIHolders renders the concentration without naming anybody.
+//
+// There is no account id on the wire at all -- not even the caller's own, which
+// they sent -- because a field that is sometimes an identity is a field a client
+// will eventually render as one. `is_you` carries the whole of what the caller
+// is entitled to learn from this list about a person (D-111).
+func toAPIHolders(hs []nativemarket.Holding) []api.NativeAssetHolder {
+	out := make([]api.NativeAssetHolder, 0, len(hs))
+	for _, h := range hs {
+		row := api.NativeAssetHolder{
+			Rank:     h.Rank,
+			Quantity: h.Quantity.String(),
+			ShareBps: int(h.ShareBPS),
+		}
+		if h.IsYou {
+			row.IsYou = ptr(true)
+		}
+		out = append(out, row)
+	}
+	return out
+}
 
 func toAPIMarketSummary(m nativemarket.MarketSummary) api.NativeMarketSummary {
 	out := api.NativeMarketSummary{

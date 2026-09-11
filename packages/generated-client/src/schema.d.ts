@@ -3646,10 +3646,14 @@ export interface paths {
         /**
          * Everything the asset detail / trading screen needs (product goal §13)
          * @description The same summary row the list returns, plus the safety limits in force and the holder concentration. It is a separate read from GET /native-markets/{marketId} so the trade screen and the markets page share one projection and cannot disagree about a price or a volume.
+         *
+         *     `account_id` is optional and must be an account the caller owns. It marks that account's row in `top_holders` with `is_you` and changes nothing else: the holder list names nobody either way (D-111).
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    account_id?: components["schemas"]["UUID"];
+                };
                 header?: never;
                 path: {
                     marketId: components["parameters"]["MarketId"];
@@ -5444,6 +5448,17 @@ export interface components {
             supply: components["schemas"]["NativeSupply"];
             symbol: string;
         };
+        /** @description One place in an asset's holder concentration. It says how much and how large a share, and it does not say whose: `top_holders` used to render an account id to any signed-in caller, which made every market's largest positions readable by account and watchable trade by trade. The caller's own row is marked `is_you`, which tells them nothing they did not send. A named holder list is surveillance and belongs behind `native_market:surveil` on an operator route (D-111). */
+        NativeAssetHolder: {
+            /** @description This row is the calling account's own holding. Present only where the request named an account the caller owns. */
+            is_you?: boolean;
+            /** @description Base units, at the ASSET's decimals. */
+            quantity: components["schemas"]["Quantity"];
+            /** @description 1 is the largest holder of this asset. The rank is over every holder, not over the returned page, so rank 10 on a page of ten means there are more. */
+            rank: number;
+            /** @description This holding as a share of every unit accounts hold, truncated. The denominator is the sum of customer balances rather than the circulating supply, because units still in the pool are held by nobody and a creator's allocation is minted outside the curve, so a share of circulating supply can exceed 100%. This one cannot. */
+            share_bps: components["schemas"]["BPS"];
+        };
         NativeAssetPage: {
             items: components["schemas"]["NativeAsset"][];
         };
@@ -5526,11 +5541,8 @@ export interface components {
             state_version: number;
             /** @enum {string} */
             status: "PENDING" | "ACTIVE" | "CLOSE_ONLY" | "HALTED" | "FROZEN" | "DELISTED";
-            /** @description Holder concentration, which is the number a buyer most needs to see */
-            top_holders?: {
-                account_id?: components["schemas"]["UUID"];
-                quantity?: components["schemas"]["Quantity"];
-            }[];
+            /** @description Holder concentration, which is the number a buyer most needs to see. It names nobody; see NativeAssetHolder. This read takes no account, so no row is marked `is_you`. */
+            top_holders?: components["schemas"]["NativeAssetHolder"][];
             virtual_credit_reserve?: components["schemas"]["Quantity"];
         };
         NativeMarketDetail: {
@@ -5538,11 +5550,8 @@ export interface components {
             creator_account_id?: components["schemas"]["UUID"];
             limits_in_force: components["schemas"]["MarketSafetyLimits"];
             market: components["schemas"]["NativeMarketSummary"];
-            /** @description Holder concentration, which is the number a buyer most needs to see */
-            top_holders?: {
-                account_id: components["schemas"]["UUID"];
-                quantity: components["schemas"]["Quantity"];
-            }[];
+            /** @description Holder concentration, which is the number a buyer most needs to see. It names nobody; see NativeAssetHolder. */
+            top_holders?: components["schemas"]["NativeAssetHolder"][];
         };
         NativeMarketPage: components["schemas"]["Page"] & {
             markets: components["schemas"]["NativeMarketSummary"][];
