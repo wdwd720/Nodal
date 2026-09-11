@@ -356,8 +356,14 @@ func scanClosureErr(row pgx.Row) (ClosureRequest, error) {
 }
 
 // TransitionUserStatus inserts the row that moves users.status. Migration 00757
-// makes it the only way the column moves.
+// makes it the only way the column moves, and 00798 binds the edge, so an
+// illegal move is refused twice: here, with the domain's own error, and there,
+// with a constraint violation for anything that reaches the table another way.
 func (r *Repository) TransitionUserStatus(ctx context.Context, tx pgx.Tx, userID, from, to, actorType, actorID, reason, correlationID string, now time.Time) error {
+	if !CanUserStatusTransition(from, to) {
+		return errs.Newf(errs.CodeInvalidStateTransition, "a user may not go %s -> %s", from, to).
+			WithField("from", from).WithField("to", to)
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO user_status_transitions
 		(id, user_id, from_status, to_status, actor_type, actor_id, reason, correlation_id, occurred_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''),$9)`,
@@ -377,4 +383,48 @@ func (r *Repository) LockUser(ctx context.Context, tx pgx.Tx, userID string) (st
 		return "", fmt.Errorf("profile: lock user: %w", err)
 	}
 	return status, nil
+}
+
+// terminalPayoutStates are the payout states that hold nothing and wait for
+// nothing.
+//
+// It is internal/payout's list, repeated here rather than imported: the payout
+// package pulls in the ledger, the gates and the configuration, and this package
+// needs four strings. TestClosureBlockers_TheTerminalPayoutStatesAreThePayout
+// Packages holds the two lists together, so the copy cannot drift -- which is
+// the only thing that made it a copy worth having.
+var terminalPayoutStates = []string{"SETTLED", "FAILED", "REJECTED", "REVERSED"}
+
+// closureBlockersSQL reads the three financial facts a closure decision needs,
+// across every account the person owns.
+//
+// One statement rather than three because the operator is shown one answer and
+// the decision is refused on one answer: three round trips could report a
+// balance from before a payout reserved against it.
+//
+// The Credit figure is the sum of remaining lot quantities, which is what
+// credit.Balances calls Gross and what credit.VerifyProvenance pins to the
+// ledger's CREDIT_BALANCE. Gross and not spendable, because a disputed or frozen
+// lot is still value that belongs to the person whose account this is.
+const closureBlockersSQL = `SELECT
+	coalesce((SELECT sum(st.remaining_quantity)
+	            FROM credit_lots l
+	            JOIN credit_lot_state st ON st.lot_id = l.id
+	            JOIN accounts a ON a.id = l.account_id
+	           WHERE a.owner_user_id = $1 AND st.remaining_quantity > 0), 0)::text,
+	(SELECT count(*) FROM payout_requests p
+	   JOIN accounts a ON a.id = p.account_id
+	  WHERE a.owner_user_id = $1 AND p.state <> ALL($2::text[])),
+	(SELECT count(*) FROM native_positions n
+	   JOIN accounts a ON a.id = n.account_id
+	  WHERE a.owner_user_id = $1 AND n.quantity > 0)`
+
+// ClosureBlockers reads what the person's accounts still hold.
+func (r *Repository) ClosureBlockers(ctx context.Context, q db.Querier, userID string) (ClosureBlockers, error) {
+	var b ClosureBlockers
+	if err := q.QueryRow(ctx, closureBlockersSQL, userID, terminalPayoutStates).
+		Scan(&b.CreditBalance, &b.OpenPayoutRequests, &b.OpenNativePositions); err != nil {
+		return ClosureBlockers{}, fmt.Errorf("profile: closure blockers: %w", err)
+	}
+	return b, nil
 }

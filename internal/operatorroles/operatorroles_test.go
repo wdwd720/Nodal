@@ -12,29 +12,60 @@ import (
 
 const issuer = "https://nodal-az1hxe.us1.zitadel.cloud"
 
-// The directory may name every declared role except BREAK_GLASS, and it is
-// derived from the matrix rather than typed out, so a role added there cannot
-// be silently absent here.
-func TestDirectory_IsEveryRoleExceptBreakGlass(t *testing.T) {
+// The directory may name every declared role except BREAK_GLASS and CUSTOMER,
+// and it is derived from the matrix rather than typed out, so a role added there
+// cannot be silently absent here.
+func TestDirectory_IsEveryRoleExceptBreakGlassAndCustomer(t *testing.T) {
 	t.Parallel()
 	got := Directory()
-	assert.Len(t, got, len(security.AllRoles())-1)
+	assert.Len(t, got, len(security.AllRoles())-2)
 	for _, r := range got {
 		assert.NotEqual(t, security.RoleBreakGlass, r)
+		assert.NotEqual(t, security.RoleCustomer, r,
+			"CUSTOMER is what a principal this directory says nothing about already is; naming it issues an OPERATOR session with no operator permissions (F-179)")
 		assert.True(t, r.Valid(), "%s is not a declared role", r)
 	}
 	for i := 1; i < len(got); i++ {
 		assert.Less(t, string(got[i-1]), string(got[i]), "Directory is not sorted")
 	}
-	// The negative control: the matrix does still contain the role we exclude,
-	// so this is excluding something rather than agreeing with an empty set.
-	var sawBreakGlass bool
+	// The negative control: the matrix does still contain both roles we
+	// exclude, so this is excluding something rather than agreeing with an
+	// empty set.
+	var sawBreakGlass, sawCustomer bool
 	for _, r := range security.AllRoles() {
-		if r == security.RoleBreakGlass {
+		switch r {
+		case security.RoleBreakGlass:
 			sawBreakGlass = true
+		case security.RoleCustomer:
+			sawCustomer = true
 		}
 	}
 	require.True(t, sawBreakGlass)
+	require.True(t, sawCustomer)
+}
+
+// A CUSTOMER declaration is refused by name, and the message says why rather
+// than reporting "not a role the directory may name" -- which would be true and
+// would read as a typo.
+func TestParseDeclarations_RefusesCustomer(t *testing.T) {
+	t.Parallel()
+	_, err := ParseDeclarations(issuer + "|284169943049306115=CUSTOMER")
+	require.Error(t, err)
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	assert.Contains(t, err.Error(), "CUSTOMER is not an operator role")
+}
+
+// The transition actions are a closed list, paired with 00799's CHECK by
+// test/integration/enums.
+func TestTransitionActions_AreDeclaredAndValid(t *testing.T) {
+	t.Parallel()
+	got := AllTransitionActions()
+	assert.Equal(t, []TransitionAction{ActionRevoke, ActionSetExpiry}, got)
+	for _, a := range got {
+		assert.True(t, a.Valid(), "%s", a)
+	}
+	assert.False(t, TransitionAction("GRANT").Valid(),
+		"a grant is the INSERT that creates the row, not a transition on it")
 }
 
 func TestParseDeclarations_Empty(t *testing.T) {

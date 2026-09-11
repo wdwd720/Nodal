@@ -72,15 +72,35 @@ and it is refused on three independent grounds:
 3. **The write is idempotent and never revives a revocation.** `ON CONFLICT
    (user_id, role) DO NOTHING`: a grant an operator revoked does not come back at
    the grantee's next login. Removing the declaration is how a deployment stops
-   offering it.
-4. **BREAK_GLASS is not grantable this way.** `operatorroles.ParseDeclarations`
-   refuses it by name and migration 00760's CHECK refuses it in the column. A
-   standing grant of the approve side of dual control would hand one principal
-   both halves.
-5. **PROD accepts nothing but an empty declaration or exactly one ADMIN**,
-   enforced by `config.Validate` (`RuleBootstrapOperators`). The variable exists
-   to make a *first* operator possible; every grant after that is a decision a
-   person makes in a directory a person can read.
+   offering it. Until migration 00799 that promise was made about the bootstrap
+   path alone while `cp_app` held blanket UPDATE on the directory, so a
+   revocation could be undone by one statement and a `SUPPORT_READ_ONLY` row
+   could become `ADMIN` in place with its provenance columns unchanged (F-178).
+   The directory is now bound the way `accounts`, `users` and
+   `account_closure_requests` are: the application holds no UPDATE on it,
+   `operator_role_transitions` records every movement of a grant with an actor
+   and a reason, and `revoked_at` is one-way whoever writes it.
+4. **BREAK_GLASS is not grantable this way, and neither is CUSTOMER.**
+   `operatorroles.ParseDeclarations` refuses both by name, migration 00760's
+   CHECK refuses BREAK_GLASS in the column and 00800 refuses CUSTOMER. The two
+   exclusions are different facts. A standing grant of the approve side of dual
+   control would hand one principal both halves. CUSTOMER is not an operator role
+   at all: it is what `internal/identity` gives a principal the directory says
+   nothing about, so a row naming it produces a session whose `ActorType` is
+   OPERATOR carrying only customer permissions — and that person's own terms
+   acceptance is then written with `actor_type = 'OPERATOR'`, which 00759
+   documents as an acceptance recorded on somebody's behalf (F-179).
+5. **STAGING and PROD accept nothing but an empty declaration or exactly one
+   ADMIN**, enforced by `config.Validate` (`RuleBootstrapOperators`). The
+   variable exists to make a *first* operator possible; every grant after that is
+   a decision a person makes in a directory a person can read. It says STAGING as
+   well as PROD because STAGING is an internet-reachable deployment with PROD's
+   cookie topology — the three auth rules either side of this one
+   (`NO_DEBUG_AUTH`, `COOKIE_HOST_ONLY`, `COOKIE_SECURE`) have always said both —
+   and because the grant this variable writes is permanent: by §3, removing the
+   declaration stops it being re-offered and revokes nothing. Narrowing PROD
+   alone left a tier that could stand up an unbounded staff directory in an
+   environment variable (F-180).
 6. **Dual control is unaffected.** Every approval path compares subjects, not
    roles: `security.RequireDualControl` refuses `p.SubjectID ==
    proposerSubjectID`, `internal/gates` requires two distinct approvers neither
@@ -118,4 +138,12 @@ and it is refused on three independent grounds:
 `TestBootstrap_APrincipalWithEveryRoleCannotActivateAGateAlone`; migration 00760
 and `TestIntegration_OperatorDirectoryRefusesAnUnknownRoleAndBreakGlass`;
 `internal/config` (`RuleBootstrapOperators`); `test/integration/enums`
-(`operator_roles_role_check` ↔ `operatorroles.Directory()`). D-056.
+(`operator_roles_role_check` ↔ `operatorroles.Directory()`,
+`operator_role_transitions_action_check` ↔
+`operatorroles.AllTransitionActions()`). D-056, D-100.
+
+Amended 2026-09-10 by the accounts-auth audit: migrations 00799 and 00800,
+`TestAudit_TheOperatorDirectoryIsRewritableByTheApplicationRole`,
+`TestIntegration_OperatorDirectoryAuthority`,
+`TestAudit_StagingAcceptsAnUnboundedBootstrapDeclaration`,
+`TestAudit_TheOperatorDirectoryMayNameCUSTOMER`.
