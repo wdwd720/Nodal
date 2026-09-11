@@ -574,3 +574,122 @@
   color: var(--ink-faint);
   max-width: var(--measure);
 }
+
+/* ------------------------------------------------------------- onboarding -- */
+
+/*
+ * Three screens, one column, capped narrower than the site's own measure. A
+ * form that runs the full width of a desktop is a form nobody finishes.
+ */
+.onboarding {
+  max-width: 44rem;
+  padding-block: var(--space-10) var(--space-12);
+}
+
+.onboarding h1 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  margin: 0 0 var(--space-2);
+}
+
+.onboarding .lead {
+  margin: 0 0 var(--space-6);
+}
+
+.onboarding .panel {
+  margin-bottom: var(--space-5);
+}
+
+/*
+ * The step list is a list, not a progress bar. The steps are independent and
+ * can be done in either order, so a bar would draw a sequence the domain does
+ * not have.
+ */
+.onboarding-steps {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-4);
+}
+
+.onboarding-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.onboarding-step-label {
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+.onboarding-steps li[aria-current="step"] .onboarding-step-label {
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+
+/* --------------------------------------------------- a legal document, as-is */
+
+/*
+ * The document is shown in its own scroll container so a long one does not push
+ * the acceptance control off the end of the page, and so the container — not
+ * the page — is what a keyboard scrolls.
+ */
+.doc-scroll {
+  max-height: 26rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-sunken);
+  padding: var(--space-4);
+}
+
+/*
+ * `<pre>` because these are the exact bytes the acceptance hashes: nothing is
+ * parsed, transformed or re-rendered on the way to the screen. The face is the
+ * text face rather than the mono one, because a legal document set in a
+ * terminal font is a legal document nobody reads — that is typography, and it
+ * changes no character.
+ */
+.doc-source {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ sandbox line -- */
+
+/*
+ * The standing sandbox statement. It is a line of text in the document, not a
+ * dismissible banner and not a toast: a rehearsal that can be dismissed is a
+ * rehearsal somebody will forget they are in.
+ */
+.sandbox-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: var(--warn-wash);
+  border-bottom: 1px solid var(--warn-line);
+  color: var(--ink);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+.sandbox-line .sandbox-word {
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  font-size: var(--text-2xs);
+  flex: 0 0 auto;
+}

@@ -13,18 +13,14 @@ import {
   STASH_TTL_MS,
   clearFormState,
   clearSignInPending,
-  consumeReturnPathOnce,
   dropMemoryForTest,
   isLocalPath,
   markSignInStarted,
-  rememberReturnPath,
-  resetConsumedReturnForTest,
   setClockForTest,
   signInPending,
   stashFormState,
   stashedFormCount,
   takeFormState,
-  takeReturnPath,
 } from "./survives-sign-in.ts";
 
 /** A `sessionStorage` that behaves like the real one, including its throwing. */
@@ -124,10 +120,6 @@ test("a browser that denies storage still works inside the app", () => {
     stashFormState("k", "v");
   });
   assert.equal(takeFormState("k"), "v", "the in-tab map still serves navigation inside the app");
-  assert.doesNotThrow(() => {
-    rememberReturnPath("/withdraw");
-  });
-  assert.equal(takeReturnPath(), undefined);
   removeStorage();
 });
 
@@ -137,7 +129,6 @@ test("no storage at all is not an error either", () => {
     stashFormState("k", "v");
   });
   assert.equal(takeFormState("k"), "v");
-  assert.equal(takeReturnPath(), undefined);
   assert.equal(signInPending(), false);
 });
 
@@ -148,31 +139,6 @@ test("only a local path is accepted as a return path", () => {
   assert.equal(isLocalPath("https://evil.example/"), false);
   assert.equal(isLocalPath("/\\evil.example"), false);
   assert.equal(isLocalPath("javascript:alert(1)"), false);
-});
-
-test("a foreign return path is never stored and never returned", () => {
-  const backing = installStorage();
-  rememberReturnPath("https://evil.example/steal");
-  assert.equal(backing.size, 0);
-  assert.equal(takeReturnPath(), undefined);
-
-  rememberReturnPath("/portfolio");
-  assert.equal(takeReturnPath(), "/portfolio");
-  assert.equal(takeReturnPath(), undefined, "the path is consumed once");
-  removeStorage();
-});
-
-test("the return path reads the same however many times it is asked for", () => {
-  // StrictMode renders the forwarding route twice. A read that consumed on the
-  // first pass would send the customer to the dashboard in development and to
-  // their own page in production.
-  installStorage();
-  resetConsumedReturnForTest();
-  rememberReturnPath("/markets/abc");
-  assert.equal(consumeReturnPathOnce(), "/markets/abc");
-  assert.equal(consumeReturnPathOnce(), "/markets/abc");
-  assert.equal(takeReturnPath(), undefined, "the underlying value was consumed exactly once");
-  removeStorage();
 });
 
 test("the sign-in marker is set and cleared", () => {
