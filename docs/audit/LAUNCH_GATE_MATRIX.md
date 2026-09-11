@@ -6,14 +6,25 @@ work and is tracked, or something a person outside this repository has to
 produce, in which case it is BLOCKED_EXTERNAL and no amount of engineering
 changes it.
 
-Last audited: **2026-09-10**, against the working tree at migration 00739 and
-the deployment at `https://api-nodal.actorvia.xyz`.
+Last audited: **2026-09-10, late evening**, against the `productization`
+branch at migration 00805 (the working tree; see the "RESUME HERE" note in
+`docs/build/MASTER_BUILD_STATE.md` for the commit) and the deployment at
+`https://api-nodal.actorvia.xyz`, which still serves the pre-productization
+build.
 
-The five flags are unchanged and all still false. Twenty-three findings closed
-since the previous audit did not move any of them, which is the honest
-headline: **none of the four independent reasons `LIVE_READY` is false was a
-thing this audit could fix**, and the fifth flag — `SOFTWARE_COMPLETE` — has a
-shorter list behind it than it did, not an empty one.
+The five flags are all still false. The productization goal added a customer
+product on top of the audited backend — sign-up, Credits, native markets,
+portfolio, activity, agents at levels 1–3, Withdraw, verification and the
+conversion request at the governance boundary — and a sandbox tier on which a
+STAGING deployment can exercise all of it without a single fabricated
+approval. `SOFTWARE_COMPLETE` was true at `024c691` for the backend as then
+audited; the goal set it to **false for its own duration** and it returns to
+true only when the list under "What software still owes" is empty. Ninety
+findings (one P0, twelve P1) were found by the goal's own adversarial audits
+and fixed with regression tests; wave B of those audits is landing as this is
+written. **None of the four external reasons `LIVE_READY` is false moved**, by
+construction: a sandbox tier is the mechanism that makes that fact harmless
+to the product's development and impossible to hide.
 
 ## The five launch flags
 
@@ -31,10 +42,25 @@ all.
 
 ## The gate that actually holds the money path shut
 
-`CREDIT_PURCHASE` is not activated. `capability_gates` has no row for it in the
-deployed database, so `gates.Evaluate` returns `ReasonNoGateRow` and
-`PurchaseService.StartPurchase` refuses with `CAPABILITY_NOT_APPROVED` before it
-reaches pricing or the provider.
+`CREDIT_PURCHASE` is not activated, and neither is any other product gate.
+`capability_gates` has no row for it in the deployed database, so
+`gates.Evaluate` returns `ReasonNoGateRow` and `PurchaseService.StartPurchase`
+refuses with `CAPABILITY_NOT_APPROVED` before it reaches pricing or the
+provider.
+
+**What the sandbox tier adds, and does not add (ADR-0023, D-052).** A
+deployment that declares `CP_API_LEGAL_POLICY=SANDBOX` may move a gate into a
+sixth state, `SANDBOX`, at boot (`CP_API_SANDBOX_GATES`). The checker reads a
+SANDBOX row as active **only on a sandbox tier**; the row carries no approval
+version, no evidence digest and no revoke (00791, F-160–F-161); the operator
+console renders it as "not an approval"; the payout provider on such a tier is
+`sandbox_payout`, which moves nothing, and the verification provider is
+`sandbox_verification`, which decides nothing on its own. PROD refuses every
+part of it three times over: `config.Validate` refuses the policy value, the
+gate function refuses the transition, and 00755's CHECK refuses the row. So
+the ceremony below is unchanged, and the six product gates are exactly as far
+from ACTIVE as they were — a sandbox row is a way to run the product without
+lying about the gate, not a way past it.
 
 Activating it requires, in this order and by construction:
 
@@ -66,14 +92,31 @@ determined one (F-93).
 | 5 | Security approval reference | Same. | Same. |
 | 6 | Independent penetration test | A third party. | The adversarial suites in `test/security` are not a substitute and are not offered as one. |
 | 7 | A mainnet settlement mint | `CP_API_SETTLEMENT_MINT` is a Solana **devnet** USDC mint. The mainnet address is a fact about Solana, not a value to invent. | The pair is validated against the registered stablecoins in the database; nothing refuses a devnet mint in PROD, which is recorded in F-93. |
+| 8 | Two Render secrets, the push of `main`, the `app-nodal` CNAME, the first operator's subject | Dashboard, DNS and identity-provider actions a person takes; the values are secrets that must not pass through this session (`docs/build/HUMAN_ACTIONS_QUEUE.md` items 1–6). | STAGING refuses to boot without the two secrets (F-137); the blueprint declares every service, domain and header; `build_version` reports the deployed commit (F-142). The staging deployment of the productization build, and §56's browser walk of it, wait on these. |
+| 9 | GitHub Actions minutes for the private repository | Exhausted for September on the free plan; restoring CI is a billing or a publication decision (queue item 7). | Every tier CI would run has been run on this machine and is recorded in `docs/audit/PRODUCTION_EVIDENCE_INDEX.md`; the cross-platform job now runs on `main` only so a pull request costs Linux minutes alone. |
 
-Nothing in this table moved as a result of this audit, and nothing in it can be
-moved by more engineering.
+Rows 1–7 did not move as a result of this goal, and cannot be moved by more
+engineering. Rows 8 and 9 are new, and are human actions rather than
+engineering.
 
 ## What software still owes
 
-These are the reasons `SOFTWARE_COMPLETE` is false. Each is tracked with its
-evidence in `docs/audit/AUDIT_FINDINGS.md`.
+These are the reasons `SOFTWARE_COMPLETE` is false **now**, after the
+productization goal's build and its first audit round. The table after them is
+the pre-productization list, kept because its rows are still true and still
+open.
+
+| Item | Where it stands | What closes it |
+|---|---|---|
+| The wave-B audits' fixes are not yet merged | `fix/withdrawal` (F-224–F-234: four P1s on the conversion path — a payout below the provider minimum, a provider told no amount, an open sanctions review that stopped nothing, a transition table that constrained no edge) and `fix/docs` (F-235–F-248) are in progress; the browser end-to-end audit is running | Each branch merged with its gates green, a restore drill at its migration head, the full matrix re-run, and a re-audit of the withdrawal area that finds fewer and lower findings than the first (the goal's "repeat until findings flatten") |
+| The productization build has not been deployed to STAGING or seen in a browser there | `api-nodal.actorvia.xyz` serves the pre-productization build; the human queue's items 1–4 gate the deploy and the CNAME | The human's queue, then §2's `healthz`/`readyz`/`version` check and §56's browser walk, recorded in `PRODUCTION_EVIDENCE_INDEX.md` |
+| CI has not run on the productization tree | Actions minutes exhausted (BLOCKED_EXTERNAL row 9) | Queue item 7, then a green run on PR #1 |
+| Earned Credits cannot reach a payout-eligible finality on any deployment | F-wv-3 (P2): every derived lot is minted `REVERSIBLE` and nothing settles it, so five of the six origins `SandboxPolicy` calls withdrawable are unreachable | D-124 on `fix/withdrawal`: a derived lot is as final as what paid for it, and settles when its parents do |
+| The final report (§65) and the `SOFTWARE_COMPLETE` decision | Not yet written; every input to it is indexed in `PRODUCTION_EVIDENCE_INDEX.md` | Written after the above, against observed evidence, with the flag set by its own conditions |
+
+### The pre-productization list (still open)
+
+Each is tracked with its evidence in `docs/audit/AUDIT_FINDINGS.md`.
 
 | Item | Finding | Shape |
 |---|---|---|
@@ -119,6 +162,59 @@ Comparing data does not prove a database can be used.
 
 **None of these moved a launch flag**, which is the honest way to read the
 change: `SOFTWARE_COMPLETE` has a shorter list behind it and the same value.
+
+## What the productization wave (2026-09-10, afternoon to night) changed
+
+Ninety findings, F-134 to F-223, from eight adversarial audits of the goal's
+own additions — config-deploy, credits-payments, governance-sandbox-tier,
+platform-hardening, accounts-auth, agents-notifications, markets, frontend —
+each by an agent that had not written the area, each finding reproduced by a
+failing test on the auditor's own branch before a fix agent was given it, and
+every fix merged with the auditor's test inverted to hold the fixed behaviour.
+One P0 and twelve P1s. The ones that would have cost money, authority or the
+service itself:
+
+- the pricing policy minted a *count* of Credits into a field that means base
+  units, so $10 bought 0.001 Credits (F-151, P0) — found before any purchase
+  was ever made against a provider, which is the sandbox tier doing its job;
+- a chargeback destroyed whichever lots sorted first and stranded the units it
+  reversed (F-152); a failed provider call held the money-at-risk ceiling
+  forever (F-153); the sweep that recovers a swallowed provider event had no
+  caller in the deployed topology (F-154);
+- the blueprint handed the internet-facing API the schema-owner DSN under a
+  name the test that forbids it did not know (F-136), and STAGING booted with
+  no alert destination and no PII keyring because both rules were satisfied by
+  the *reference* (F-137);
+- no kill switch reached the conversion-request path, so `WITHDRAWALS_DISABLE`,
+  `GLOBAL_NEW_RISK_KILL` and `ACCOUNT_FREEZE` stopped none of it (F-163);
+- any caller behind the platform router chose its own rate-limit key and its
+  own audit address by writing one header (F-166);
+- any authenticated person could end the API process by closing a stream while
+  an event was published (F-185);
+- a market whose marginal price truncates to zero could be opened, and every
+  §47 control then failed open (F-193);
+- and in the browser: the withdrawal bar claimed more than the total (F-201),
+  a fill left the portfolio stale (F-202), and a refused order told the
+  customer about an idempotency key instead of about the trade (F-203).
+
+**Three things the wave got wrong and corrected**, in the tradition of the
+section below:
+
+1. The first merged browser run at full load failed at its own sign-in setup
+   because two onboarding mutations fired their refetch and forgot it (F-222);
+   the earlier, quieter runs had passed by timing.
+2. The demo seeder, run as a command, refused every demo trade on a database
+   whose gates were sandbox-active, because it built a ledger with no
+   capability resolver — the resolver was private to `cmd/api` (F-223).
+3. The follower's two fixes (F-167 on one branch, F-190 on another) met at the
+   merge and disagreed about one line; the merged rule is D-118, and the wedge
+   reproduction had to be inverted *and* re-stamped into the past because its
+   future-stamped fixture was moving other tests' cursors.
+
+Wave B — the withdrawal-verification area (eleven findings, four P1),
+documentation against the tree (fourteen, none above P2, from a 4,704-row
+claims ledger of which 4,461 held) and the browser end to end — is being fixed
+as this is written; its findings are F-224 onward.
 
 ## What the 2026-09-10 audit changed
 
