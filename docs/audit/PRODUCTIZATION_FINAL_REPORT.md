@@ -202,9 +202,17 @@ findings, four P1 again, six of them in round one's remediation — above all
 that a derived lot inherited finality but not origin, so a promotional grant
 could be traded into withdrawable proceeds (§23's forbidden pattern), and
 that the pool's FIFO draw-down handed a reversible purchase an earlier
-contributor's settled provenance. `fix/withdrawal-2` (an origin floor
-inherited with finality, D-131; the pool drawn down worst-first, D-132) is
-in progress and a third audit round follows it *(pending)*.
+contributor's settled provenance. `fix/withdrawal-2` is merged (`e27e674`):
+a derived lot now carries an **origin floor** — the most restricted origin
+among everything that funded it — and the payout policy must permit both the
+lot's origin and its floor (D-131), so a promotional grant's proceeds can
+never leave under any policy in this build, and the pool is drawn down
+worst-first so no seller receives provenance better than the pool's worst
+outstanding contribution (D-132). The cost, stated: on a seeded tier every
+earning carries a PROMOTIONAL floor, so the sandbox journey ends at an honest
+refusal naming that floor rather than at a settled rehearsal payout; a real
+settled purchase is what would change it. A third audit round is running
+*(pending)*.
 
 ## 13 · Conversion
 
@@ -291,9 +299,9 @@ Results: green in the full integration run (58 packages) and
 
 ## 19 · Restore
 
-`make restore-drill` after every merge: the latest at migration **00813 —
-OK, 159 tables, row counts identical, 0 accounts with balance drift, journal
-hashes equal, one live state change on the restored database, 12.7 s**
+`make restore-drill` after every merge: the latest at migration **00818 —
+OK, 160 tables, row counts identical, 0 accounts with balance drift, journal
+hashes equal, one live state change on the restored database, 12.1 s**
 (`docs/operations/BACKUP_RESTORE.md`, held to the migration head by
 `TestDocs_CountsMatchTheCode`). Class: `LIVE_OBSERVED`.
 
