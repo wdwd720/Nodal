@@ -154,17 +154,26 @@ test("example data on the public site is labelled as an example", async ({ brows
   await page.context().close();
 });
 
-test("a page showing balances discloses that they are USDC", async ({ page }) => {
-  // `/home` is not in this list any more, and that is the point rather than an
-  // omission: D-077 moved the dashboard onto Credits, which are not USDC and
-  // must not be described as though they were. What Home owes is the Credit
-  // disclosure, which the test below this one requires. `/portfolio` still
-  // shows a USD valuation of a settlement token, so it still owes this one.
-  for (const route of ["/portfolio"]) {
+test("a page showing a USD valuation says what is actually held", async ({ page }) => {
+  // The list is empty of `/home` and `/portfolio` on purpose, and it is the
+  // change D-077 made rather than an omission: both moved onto Credits, which
+  // are not a settlement token and must not be described as though they were.
+  // What they owe is the Credit disclosure, which the two tests below require.
+  //
+  // The rule this test protects is unchanged — a page that puts a dollar figure
+  // in front of somebody must say what the underlying actually is, because a
+  // "$" is the single most misread character in this product. So it is asserted
+  // wherever a USD figure still renders, which on the closed-loop product is
+  // the agent surface and its holdings.
+  for (const route of ["/agents"]) {
     await page.goto(route);
     const text = await visibleText(page);
-    expect(text, `${route} names the settlement asset`).toContain("USDC");
-    expect(text.toLowerCase(), `${route} says what USDC is`).toContain("stablecoin");
+    expect(text, `${route} says what a USD figure is`).toContain(
+      "USD figures are a valuation computed by the backend",
+    );
+    expect(text, `${route} says it is an estimate, not dollars held`).toContain(
+      "not an amount held in dollars",
+    );
   }
 });
 

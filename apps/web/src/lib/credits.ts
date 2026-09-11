@@ -28,7 +28,7 @@
  * is the only place that decides it), and a second implementation in the
  * browser would eventually disagree with the one that issues.
  */
-import { MoneyFormatError, USD_PATTERN } from "./money.ts";
+import { MoneyFormatError, QUANTITY_PATTERN, USD_PATTERN } from "./money.ts";
 
 /**
  * How many decimal places a Credit has.
@@ -92,6 +92,25 @@ export function minorToUsd(minor: number): string {
   }
   const negative = minor < 0;
   const digits = String(negative ? -minor : minor).padStart(3, "0");
+  const cut = digits.length - 2;
+  return `${negative ? "-" : ""}${digits.slice(0, cut)}.${digits.slice(cut)}`;
+}
+
+/**
+ * The same conversion for a value that arrived as an integer STRING.
+ *
+ * The activity feed carries the money side of a Credit purchase as
+ * `unit: "MONEY_MINOR"` with an exact integer string, which may be negative on
+ * a reversal. Converting it through the number form would put a wire value
+ * through a numeric parse for no reason, so this is digit shifting on the
+ * string itself and is exact at any size.
+ */
+export function minorStringToUsd(value: string): string {
+  if (!QUANTITY_PATTERN.test(value)) {
+    throw new MoneyFormatError(`minor units: ${value} is not an exact integer`);
+  }
+  const negative = value.startsWith("-");
+  const digits = (negative ? value.slice(1) : value).padStart(3, "0");
   const cut = digits.length - 2;
   return `${negative ? "-" : ""}${digits.slice(0, cut)}.${digits.slice(cut)}`;
 }

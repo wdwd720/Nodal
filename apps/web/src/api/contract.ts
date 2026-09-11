@@ -826,3 +826,144 @@ export const agentSpec: Spec = {
   },
   optional: { mode: "string", pause: "object", runs_total: "integer", last_run_at: "timestamp", last_run_status: "string" },
 };
+
+/* --------------------------------------------------------------------------
+ * Portfolio, the activity feed, and market discovery (goal §15, §16, §12).
+ *
+ * Every figure in these three responses is `quantity` — exact base units as an
+ * integer string — and not one is `usd`, with a single exception noted below.
+ * That is the contract enforcing PART LIV at the boundary: there is no approved
+ * external value for a Credit, so a response that tried to hand this app a
+ * dollar figure for a position would be refused here rather than rendered.
+ *
+ * The exception is `ActivityAmount` with `unit: "MONEY_MINOR"`, which is the
+ * money side of a Credit purchase. It arrives as minor units of `currency` in
+ * the same integer-string form, so it is `quantity` here too and is scaled by
+ * the currency's minor units where it is rendered, never here.
+ *
+ * P&L is `quantity` rather than a separate kind because `SignedQuantity` has
+ * exactly the same pattern — an optional sign and digits. A loss is a real
+ * outcome, so P&L is signed where a balance is not, and the sign is carried
+ * through to the glyph rather than being dropped into a colour.
+ */
+
+export const portfolioPositionSpec: Spec = {
+  required: {
+    asset_id: "uuid",
+    symbol: "string",
+    asset_decimals: "integer",
+    price_scale: "integer",
+    quantity: "quantity",
+    cost_basis_credits: "quantity",
+    market_value_credits: "quantity",
+    fees_paid_credits: "quantity",
+    realized_pnl_credits: "quantity",
+    unrealized_pnl_credits: "quantity",
+    total_pnl_credits: "quantity",
+    temperature: "string",
+  },
+  optional: {
+    name: "string",
+    market_id: "uuid",
+    market_status: "string",
+    average_cost_credits: "quantity",
+    spot_price: "quantity",
+    allocation_units: "quantity",
+    units_bought_total: "quantity",
+    units_sold_total: "quantity",
+    fill_count: "integer",
+    first_acquired_at: "timestamp",
+    last_trade_at: "timestamp",
+    demo: "boolean",
+  },
+};
+
+export const portfolioTotalsSpec: Spec = {
+  required: {
+    cost_basis_credits: "quantity",
+    market_value_credits: "quantity",
+    fees_paid_credits: "quantity",
+    realized_pnl_credits: "quantity",
+    unrealized_pnl_credits: "quantity",
+    total_pnl_credits: "quantity",
+    position_count: "integer",
+    open_position_count: "integer",
+  },
+};
+
+/**
+ * The portfolio envelope.
+ *
+ * `credits` and `totals` are checked as objects here and then validated against
+ * their own specs where the response is decoded: `Spec` describes arrays of
+ * objects and flat fields, and bolting a nested-object form onto it to save two
+ * lines at the call site would make every other spec in this file harder to
+ * read.
+ */
+export const portfolioSpec: Spec = {
+  required: {
+    account_id: "uuid",
+    as_of: "timestamp",
+    credits: "object",
+    totals: "object",
+    temperature: "string",
+  },
+  arrays: { positions: { required: true, spec: portfolioPositionSpec } },
+};
+
+export const activityAmountSpec: Spec = {
+  required: { unit: "string", value: "quantity", temperature: "string" },
+  optional: { currency: "string", symbol: "string", origin: "string" },
+};
+
+export const activityFeedItemSpec: Spec = {
+  required: {
+    id: "string",
+    kind: "string",
+    occurred_at: "timestamp",
+    summary: "string",
+    simulated: "boolean",
+    reference: "object",
+  },
+  optional: { status: "string" },
+  arrays: { amounts: { required: true, spec: activityAmountSpec } },
+};
+
+export const nativeMarketSummarySpec: Spec = {
+  required: {
+    market_id: "uuid",
+    asset_id: "uuid",
+    credit_asset_id: "uuid",
+    creator_account_id: "uuid",
+    symbol: "string",
+    name: "string",
+    market_status: "string",
+    asset_status: "string",
+    asset_decimals: "integer",
+    price_scale: "integer",
+    last_price: "quantity",
+    liquidity_credits: "quantity",
+    credit_volume_24h: "quantity",
+    circulating_supply: "quantity",
+    max_supply: "quantity",
+    real_credit_reserve: "quantity",
+    virtual_credit_reserve: "quantity",
+    asset_reserve: "quantity",
+    initial_asset_reserve: "quantity",
+    platform_fee_bps: "integer",
+    creator_fee_bps: "integer",
+    trades_24h: "integer",
+    created_at: "timestamp",
+    demo: "boolean",
+  },
+  optional: {
+    description: "string",
+    image_url: "string",
+    moderation_state: "string",
+    activated_at: "timestamp",
+    state_version: "integer",
+    change_24h_bps: "integer",
+    has_24h_change: "boolean",
+    reference_price_24h: "quantity",
+  },
+};

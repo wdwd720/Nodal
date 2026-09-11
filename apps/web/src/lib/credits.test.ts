@@ -5,6 +5,7 @@ import { MoneyFormatError } from "./money.ts";
 import {
   CREDIT_DECIMALS,
   PRESET_AMOUNTS_MINOR,
+  minorStringToUsd,
   minorToUsd,
   outOfBounds,
   usdToMinor,
@@ -80,4 +81,34 @@ test("a Credit's scale is stated in exactly one place", () => {
   // Credit figure in the product is rendered at this scale, and a second copy
   // of it somewhere else is how two pages come to disagree about a balance.
   assert.equal(CREDIT_DECIMALS, 6);
+});
+
+test("minor units that arrived as a string become the same USD string", () => {
+  const cases: ReadonlyArray<readonly [string, string]> = [
+    ["0", "0.00"],
+    ["1", "0.01"],
+    ["10", "0.10"],
+    ["100", "1.00"],
+    ["2500", "25.00"],
+    ["1000000", "10000.00"],
+    // A reversal is negative, and the sign survives.
+    ["-2500", "-25.00"],
+    // Bigger than a double can hold exactly. String surgery does not care.
+    ["123456789012345678901", "1234567890123456789.01"],
+  ];
+  for (const [value, usd] of cases) {
+    assert.equal(minorStringToUsd(value), usd, value);
+  }
+});
+
+test("the two minor-unit conversions agree wherever both apply", () => {
+  for (const minor of [0, 1, 10, 100, 2500, 1_000_000]) {
+    assert.equal(minorStringToUsd(String(minor)), minorToUsd(minor), String(minor));
+  }
+});
+
+test("anything that is not an exact integer of minor units is refused", () => {
+  for (const bad of ["", "25.00", "1e3", "1,000", " 100", "abc", "+100"]) {
+    assert.throws(() => minorStringToUsd(bad), MoneyFormatError, bad);
+  }
 });

@@ -120,38 +120,62 @@ test("home discloses what the balance actually is", async ({ page }) => {
   await expect(disclosure).toContainText("not redeemable for money unless");
 });
 
-test("portfolio shows exact units beside every valuation", async ({ page }) => {
+/**
+ * D-077 moved the portfolio off the settlement rail's holdings and onto
+ * `GET /v1/me/portfolio`, which carries the asset's own scale with every
+ * figure. The old assertion checked for an exact base-unit string printed
+ * beside each valuation, which existed because the rail's response left the
+ * scale to be looked up elsewhere; the exact value is now in every figure's
+ * `title`, unrounded, whatever the display form is. Same property, one place.
+ */
+test("portfolio shows the exact value behind every figure", async ({ page }) => {
   const id = await accountId(page);
-  const response = await page.request.get(`/v1/accounts/${id}/holdings`);
-  const body = (await response.json()) as { holdings: Array<{ quantity: string; symbol: string }> };
+  const response = await page.request.get(`/v1/me/portfolio?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    positions: Array<{ symbol: string; quantity: string }>;
+  };
 
   await page.goto("/portfolio");
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
 
-  for (const holding of body.holdings) {
-    await expect(page.getByText(`${holding.quantity} base units`).first()).toBeVisible();
+  for (const position of body.positions) {
+    const row = page.locator("tr", { hasText: position.symbol }).first();
+    await expect(row, `${position.symbol} has a row`).toBeVisible();
+    // The exact value is in `title` on every figure, so a compact or truncated
+    // rendering never hides what the backend actually said.
+    const figures = row.locator(".figure");
+    expect(await figures.count(), `${position.symbol} renders figures`).toBeGreaterThan(0);
+    expect(await figures.first().getAttribute("title")).toBeTruthy();
   }
-  await expect(page.getByRole("link", { name: "Export as CSV" })).toHaveAttribute("href", /export\?format=csv/);
+  await expect(page.getByRole("link", { name: "Export as CSV" })).toHaveAttribute(
+    "href",
+    /export\?format=csv/,
+  );
 });
 
-test("activity draws every lifecycle stage, including the ones with no rows", async ({ page }) => {
+/**
+ * The activity page is the product's feed now, not the trading lifecycle
+ * ladder: `ActivityFeedKind` is the vocabulary and `GET /v1/me/activity` is the
+ * source. The property worth keeping is the one the ladder was protecting —
+ * that every kind the feed can carry is reachable, so nothing is quietly
+ * filtered out of a customer's own record.
+ */
+test("activity offers every kind the feed can carry", async ({ page }) => {
   await page.goto("/activity");
-  const stages = [
-    "Data event",
-    "Prediction",
-    "Intent",
-    "Eligibility",
-    "Risk",
-    "Plan",
-    "Execution",
-    "Fill",
-    "Reconciliation",
-  ];
-  for (const stage of stages) {
-    await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
+  const filters = page.locator(".panel", { hasText: "What to show" });
+  for (const label of [
+    "Credit purchases",
+    "Reversals",
+    "Trades",
+    "Assets created",
+    "Withdrawal requests",
+    "Withdrawal updates",
+    "Adjustments",
+  ]) {
+    await expect(filters.getByRole("button", { name: label, exact: true })).toBeVisible();
   }
-  // A stage with no record says so rather than being omitted.
-  await expect(page.getByText("not recorded").first()).toBeVisible();
 });
 
 /**

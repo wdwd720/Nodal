@@ -181,3 +181,123 @@ test("the refund webhook produces a reversal the customer can see", async ({ pag
   await page.goto("/home");
   await expect(page.locator(".panel", { hasText: "Credits" }).first()).toBeVisible();
 });
+
+/* --------------------------------------------------------------------------
+ * The page G's "must not happen" is about.
+ *
+ * "Credits vanishing without an activity row" is a statement about the
+ * portfolio and the feed, so this is where those two pages are asserted: the
+ * accounting figures are the server's and are never re-derived, and every
+ * event the server recorded is on the feed with the sentence the server wrote.
+ * ------------------------------------------------------------------------ */
+
+test("the portfolio shows the accounting the server did, not accounting of its own", async ({
+  page,
+}) => {
+  const id = await accountId(page);
+  const response = await page.request.get(`/v1/me/portfolio?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    as_of: string;
+    temperature: string;
+    credits: Record<string, string>;
+    positions: Array<{ symbol: string; temperature: string; quantity: string }>;
+    totals: Record<string, string | number>;
+  };
+
+  await page.goto("/portfolio");
+  await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
+
+  // Goal §15: realised, unrealised and total are three fields the server
+  // computed, shown as three fields. A page that subtracted cost basis from
+  // market value would be a second accounting implementation.
+  const totals = page.locator('section.panel[aria-label="Totals"]');
+  await expect(totals).toBeVisible();
+  for (const [field, label] of [
+    ["market_value_credits", "Market value"],
+    ["cost_basis_credits", "Cost basis"],
+    ["unrealized_pnl_credits", "Unrealised"],
+    ["realized_pnl_credits", "Realised"],
+    ["total_pnl_credits", "Total"],
+    ["fees_paid_credits", "Fees paid"],
+  ] as const) {
+    const figure = totals.locator(`.field:has(dt:text-is("${label}")) .figure`).first();
+    await expect(figure, `${label} is on screen`).toBeVisible();
+    const exact = ((await figure.getAttribute("title")) ?? "").replace(/[^0-9]/g, "").replace(/^0+/, "");
+    const wire = String(body.totals[field] ?? "").replace(/^-/, "").replace(/^0+/, "");
+    expect(exact, `${label} is the backend's own digits`).toBe(wire);
+  }
+  await expect(totals).toContainText("This page does not add the two above");
+
+  // One instant, machine-readable and shown unrounded. Not compared against
+  // this test's own read: the page made its own request and the backend stamps
+  // the moment IT computed the answer.
+  expect(body.as_of, "the API stamps the portfolio").toBeTruthy();
+  const positions = page.locator('section.panel[aria-label="Positions"]');
+  const machine = await positions.locator("time").first().getAttribute("datetime");
+  expect(machine, "the positions carry a machine-readable instant").toBeTruthy();
+  const stamp = await positions.locator(".as-of .mono-small").first().innerText();
+  expect(stamp.trim(), "the exact instant is shown unrounded beside it").toBe(
+    `(${machine as string})`,
+  );
+  expect(Number.isNaN(Date.parse(machine as string)), "the instant parses").toBe(false);
+
+  // And a simulated position is labelled as one, per row.
+  for (const position of body.positions.filter((p) => p.temperature === "SIMULATED")) {
+    const row = page.locator("tr", { hasText: position.symbol }).first();
+    await expect(row.locator('[data-temp="simulated"]').first()).toBeVisible();
+  }
+});
+
+test("every event the server recorded is on the feed, in its own words", async ({ page }) => {
+  const id = await accountId(page);
+  const response = await page.request.get(`/v1/me/activity?account_id=${id}&limit=50`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    items: Array<{
+      summary: string;
+      kind: string;
+      simulated: boolean;
+      amounts: Array<{ unit: string; value: string; symbol?: string }>;
+    }>;
+  };
+
+  await page.goto("/activity");
+  await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
+
+  if (body.items.length === 0) {
+    await expect(page.getByText("Nothing has happened yet")).toBeVisible();
+    return;
+  }
+
+  for (const item of body.items.slice(0, 5)) {
+    const card = page.locator("article", { hasText: item.summary }).first();
+    await expect(card, `"${item.summary}" is on the feed`).toBeVisible();
+    await expect(card).toContainText(item.kind);
+    if (item.simulated) {
+      await expect(card.locator(".badge-simulated")).toBeVisible();
+    }
+    // Each amount is its own figure with its own unit. Nothing converts one
+    // into another: a row showing money paid and Credits received shows two
+    // figures, because that is two facts.
+    for (const amount of item.amounts) {
+      const figures = card.locator(".figure");
+      expect(await figures.count(), "an amount renders a figure").toBeGreaterThan(0);
+      if (amount.unit === "ASSET_UNITS") {
+        // No scale is declared for an asset amount, so the exact base units are
+        // what is shown and the page says that is what they are.
+        await expect(card).toContainText("base units");
+      }
+    }
+  }
+
+  // The kind filter narrows to what the server returns for that kind, and
+  // clearing it comes back to everything.
+  const first = body.items[0];
+  if (first !== undefined && first.kind === "NATIVE_TRADE") {
+    await page.getByRole("button", { name: "Trades", exact: true }).click();
+    await expect(page.locator("article", { hasText: first.summary }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Clear the filter" }).click();
+    await expect(page.locator(".panel", { hasText: "Everything" })).toBeVisible();
+  }
+});

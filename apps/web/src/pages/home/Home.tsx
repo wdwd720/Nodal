@@ -25,31 +25,49 @@
  * labels on one row, and the payout block says in words that it is a quantity
  * of Credits and not an amount of US dollars.
  *
- * # The modules not here yet
+ * # A module whose data does not exist does not appear
  *
- * Portfolio value, holdings, market movers and recent activity are §3 modules
- * whose routes (`GET /v1/me/portfolio`, the market collection read, and
- * `GET /v1/me/activity`) are not on this API. Their places are marked below and
- * render NOTHING — not a panel with dashes in it, not an illustration, not a
- * number. A module that is not there is absent; a module drawn from figures
- * that do not exist is a lie with a loading state.
+ * The portfolio and holdings modules render nothing at all until there is a
+ * position — §3 says "only when positions exist", and that is a condition on
+ * the data rather than a layout preference. A portfolio panel reading zero on
+ * an account that has never traded is not an empty state; it is a claim that
+ * something was lost. The invitation to start is the markets module, which is
+ * already on the page.
  */
 import type { ReactNode } from "react";
 
-import { useAgents, useCreditBalance, type Agent, type CreditBalance } from "../../api/queries.ts";
+import {
+  useAgents,
+  useCreditBalance,
+  useMarketDiscovery,
+  useMeActivity,
+  usePortfolio,
+  type ActivityFeed,
+  type Agent,
+  type CreditBalance,
+  type MarketPage,
+  type NativeMarketSummary,
+  type PortfolioPosition,
+  type PortfolioTotals,
+} from "../../api/queries.ts";
 import { LinkButton } from "../../components/Button.tsx";
 import { AsyncPanel, EmptyState } from "../../components/DataState.tsx";
 import { DataTable, type Column } from "../../components/DataTable.tsx";
 import { Field, FieldGrid } from "../../components/Field.tsx";
 import { Figure } from "../../components/Figure.tsx";
-import { Disclosure, Page, Panel } from "../../components/Layout.tsx";
+import { Disclosure, Page, Panel, PanelCard } from "../../components/Layout.tsx";
 import { SegmentedBar } from "../../components/SegmentedBar.tsx";
 import { Skeleton, SkeletonField } from "../../components/Skeleton.tsx";
 import { StatusBadge } from "../../components/StatusBadge.tsx";
+import { Temp, temperatureOf } from "../../components/Temperature.tsx";
 import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
-import { CREDITS_DISCLOSURE, PROVENANCE_NOTE } from "../../lib/honesty.ts";
+import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, PROVENANCE_NOTE } from "../../lib/honesty.ts";
+import { formatInstant } from "../../lib/time.ts";
 import { useActiveAccountId } from "../../session.tsx";
+
+/** How many holdings the dashboard shows before sending the reader to the page. */
+const TOP_HOLDINGS = 5;
 
 /**
  * The sentence goal §8 asks for, in the one place it belongs: beside the
@@ -86,6 +104,12 @@ export function Home(): ReactNode {
   const accountId = useActiveAccountId();
   const credits = useCreditBalance(accountId);
   const agents = useAgents(accountId);
+  const portfolio = usePortfolio(accountId);
+  // CHANGE_24H is the ordering §3 means by "movers": what moved, not what is
+  // newest. The server applies it and says so in the response, so this page
+  // never re-ranks what it was given.
+  const movers = useMarketDiscovery({ sort: "CHANGE_24H", limit: 5 });
+  const recent = useMeActivity({ accountId, kinds: [], limit: 5 });
 
   if (accountId === undefined) {
     return (
@@ -125,12 +149,12 @@ export function Home(): ReactNode {
         </AsyncPanel>
       </Panel>
 
-      {/* 2. Portfolio value and today's change — USER_JOURNEY §3, module 2.
-          Needs `GET /v1/me/portfolio`, which this API does not serve. The
-          module lands with that route; until then this renders nothing, on
-          purpose. */}
-
-      {/* 3. Holdings — USER_JOURNEY §3, module 3. Same route, same rule. */}
+      {/* 2 and 3. Portfolio value, today's change and the top holdings.
+          USER_JOURNEY §3 says "only when positions exist", and that is a
+          condition on the DATA rather than a layout preference: a portfolio
+          panel reading zero on an account that has never traded teaches
+          somebody that they lost something. */}
+      <PortfolioModules query={portfolio} />
 
       {/* 4. Active agents. */}
       <Panel
@@ -152,19 +176,324 @@ export function Home(): ReactNode {
         </AsyncPanel>
       </Panel>
 
-      {/* 5. Markets — USER_JOURNEY §3, module 5. The movers come from the
-          market COLLECTION route, which this API does not serve: only the
-          single-market read exists. Renders nothing until the list lands, and
-          it will carry the user-created-asset risk statement when it does. */}
+      {/* 5. Markets: the movers. */}
+      <Panel
+        title="Markets"
+        description="The biggest moves over the last 24 hours, in the ordering the backend applied."
+        temp="economy"
+      >
+        <AsyncPanel
+          query={movers}
+          loadingLabel="Asking the backend which markets moved…"
+          skeleton={<Skeleton shape="rows" count={5} label="The market list is loading" />}
+          empty={{
+            isEmpty: (page: MarketPage) => page.markets.length === 0,
+            title: EMPTY_STATES.markets.title,
+            body: EMPTY_STATES.markets.body,
+          }}
+        >
+          {(page: MarketPage) => <Movers page={page} />}
+        </AsyncPanel>
+      </Panel>
 
-      {/* 6. Recent activity — USER_JOURNEY §3, module 6. Needs
-          `GET /v1/me/activity?limit=5`. Renders nothing until it does. */}
+      {/* 6. Recent activity. */}
+      <Panel
+        title="Recent activity"
+        description="The last few things that happened, each as the backend summarised it."
+        temp="economy"
+      >
+        <AsyncPanel
+          query={recent}
+          loadingLabel="Asking the backend what has happened…"
+          skeleton={<Skeleton shape="rows" count={5} label="Recent activity is loading" />}
+          empty={{
+            isEmpty: (page: ActivityFeed) => page.items.length === 0,
+            title: EMPTY_STATES.activity.title,
+            body: EMPTY_STATES.activity.body,
+          }}
+        >
+          {(page: ActivityFeed) => <Recent page={page} />}
+        </AsyncPanel>
+      </Panel>
 
       <Disclosure title="What Credits are">
         <p>{CREDITS_DISCLOSURE}</p>
         <p>{PROVENANCE_NOTE}</p>
       </Disclosure>
+      <Disclosure title="What a Nodal-native asset is">
+        <p>{NATIVE_ASSET_RISK}</p>
+      </Disclosure>
     </Page>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Portfolio value, the change since the position was opened, and the top
+ * holdings — rendered ONLY when there are positions.
+ *
+ * USER_JOURNEY §3 makes that conditional and it is the honest reading: a
+ * portfolio panel showing zero on an account that has never traded is not an
+ * empty state, it is a claim that something was lost. The invitation to trade
+ * belongs on the markets module below, which is already there.
+ *
+ * "Today's change" is not what is shown, and the difference matters. The API
+ * carries unrealised P&L against cost basis, which is the change since each
+ * position was OPENED, and there is no since-midnight figure anywhere in the
+ * response. Labelling the one as the other would be the interface renaming a
+ * number to match a heading somebody wanted.
+ */
+function PortfolioModules(props: {
+  readonly query: ReturnType<typeof usePortfolio>;
+}): ReactNode {
+  const data = props.query.data;
+  // Nothing at all while it loads: a panel that appears and then vanishes is
+  // worse than one that arrives late, and this panel's whole point is that its
+  // presence means something.
+  if (data === undefined || data.positions.length === 0) return null;
+
+  const totals = data.totals as PortfolioTotals;
+  const top = [...data.positions]
+    .filter((position) => /[1-9]/.test(position.quantity))
+    .slice(0, TOP_HOLDINGS);
+
+  return (
+    <>
+      <Panel
+        title="Portfolio value"
+        description="What the markets would pay for these positions at the instant below. Not Credits, and never added to them."
+        temp={temperatureOf(data.temperature)}
+        asOf={data.as_of}
+        actions={
+          <LinkButton to="/portfolio" variant="secondary">
+            Open portfolio
+          </LinkButton>
+        }
+      >
+        <FieldGrid columns={3}>
+          <Field label="Market value" note="Marked at each market's marginal price." emphasis>
+            <Figure
+              kind="units"
+              value={{ base: totals.market_value_credits, scale: CREDIT_DECIMALS }}
+              symbol="Credits"
+              big
+            />
+          </Field>
+          <Field
+            label="Change since opened"
+            note="Unrealised, against what these positions cost. It is not a since-midnight figure; the API reports no such thing."
+          >
+            <Figure
+              kind="units"
+              value={{ base: totals.unrealized_pnl_credits, scale: CREDIT_DECIMALS }}
+              symbol="Credits"
+              signed
+            />
+          </Field>
+          <Field label="Realised" note="Locked in by trades that have already happened.">
+            <Figure
+              kind="units"
+              value={{ base: totals.realized_pnl_credits, scale: CREDIT_DECIMALS }}
+              symbol="Credits"
+              signed
+            />
+          </Field>
+        </FieldGrid>
+      </Panel>
+
+      <Panel
+        title="Holdings"
+        description="The largest positions by market value, as the backend ordered them."
+        temp="economy"
+        asOf={data.as_of}
+      >
+        <DataTable<PortfolioPosition>
+          caption="Top positions, with quantity and what the market would pay for them"
+          rows={top}
+          rowKey={(row) => row.asset_id}
+          columns={[
+            {
+              key: "asset",
+              header: "Asset",
+              cell: (row) => (
+                <span>
+                  <strong>{row.symbol}</strong>
+                  {row.name === undefined ? "" : ` · ${row.name}`}
+                </span>
+              ),
+            },
+            {
+              key: "quantity",
+              header: "Quantity",
+              numeric: true,
+              cell: (row) => (
+                <Temp value={row.temperature}>
+                  <Figure
+                    kind="units"
+                    value={{ base: row.quantity, scale: row.asset_decimals }}
+                    symbol={row.symbol}
+                  />
+                </Temp>
+              ),
+            },
+            {
+              key: "value",
+              header: "Market value",
+              numeric: true,
+              cell: (row) => (
+                <Temp value={row.temperature}>
+                  <Figure
+                    kind="units"
+                    value={{ base: row.market_value_credits, scale: CREDIT_DECIMALS }}
+                    symbol="Credits"
+                  />
+                </Temp>
+              ),
+            },
+            {
+              key: "unrealised",
+              header: "Unrealised",
+              numeric: true,
+              riskMeasure: true,
+              cell: (row) => (
+                <Temp value={row.temperature}>
+                  <Figure
+                    kind="units"
+                    value={{ base: row.unrealized_pnl_credits, scale: CREDIT_DECIMALS }}
+                    symbol="Credits"
+                    signed
+                  />
+                </Temp>
+              ),
+            },
+          ]}
+        />
+      </Panel>
+    </>
+  );
+}
+
+/** The movers, in the ordering the server applied and said it applied. */
+function Movers(props: { readonly page: MarketPage }): ReactNode {
+  return (
+    <div className="stack">
+      <DataTable<NativeMarketSummary>
+        caption="Markets that moved in the last 24 hours, with price, change, volume and liquidity"
+        rows={props.page.markets}
+        rowKey={(row) => row.market_id}
+        columns={[
+          {
+            key: "market",
+            header: "Market",
+            cell: (row) => (
+              <span>
+                <strong>{row.symbol}</strong> · {row.name}
+                {row.demo && (
+                  <>
+                    {" "}
+                    <StatusBadge
+                      tone="warn"
+                      title="Created by the sandbox demo seeder. It represents nothing."
+                    >
+                      Demo
+                    </StatusBadge>
+                  </>
+                )}
+              </span>
+            ),
+          },
+          {
+            key: "price",
+            header: "Price",
+            numeric: true,
+            cell: (row) => (
+              <Figure
+                kind="units"
+                value={{ base: row.last_price, scale: row.price_scale }}
+                symbol="Credits"
+              />
+            ),
+          },
+          {
+            key: "change",
+            header: "24h change",
+            numeric: true,
+            riskMeasure: true,
+            cell: (row) =>
+              row.has_24h_change === true && row.change_24h_bps !== undefined ? (
+                <Figure kind="bps" bps={row.change_24h_bps} signed />
+              ) : (
+                // Not traded in the window is a different fact from not having
+                // moved, and a zero here would state the second.
+                <span className="absent">no trade in the window</span>
+              ),
+          },
+          {
+            key: "volume",
+            header: "24h volume",
+            numeric: true,
+            cell: (row) => (
+              <Figure
+                kind="units"
+                value={{ base: row.credit_volume_24h, scale: CREDIT_DECIMALS }}
+                symbol="Credits"
+              />
+            ),
+          },
+          {
+            key: "liquidity",
+            header: "Liquidity",
+            numeric: true,
+            cell: (row) => (
+              <Figure
+                kind="units"
+                value={{ base: row.liquidity_credits, scale: CREDIT_DECIMALS }}
+                symbol="Credits"
+              />
+            ),
+          },
+        ]}
+      />
+      <p className="field-note">
+        Ordered by <span className="mono-small">{props.page.sort}</span>, which the backend applied
+        and reported.{" "}
+        {props.page.stable
+          ? "Paging this ordering sees every market exactly once."
+          : "This ordering ranks by figures that move when somebody trades, so paging it can show the same market twice."}
+      </p>
+      <div className="form-actions">
+        <LinkButton to="/markets" variant="secondary">
+          Explore markets
+        </LinkButton>
+      </div>
+    </div>
+  );
+}
+
+/** The last few events, each at the temperature the backend gave it. */
+function Recent(props: { readonly page: ActivityFeed }): ReactNode {
+  return (
+    <div className="stack">
+      {props.page.items.map((item) => (
+        <PanelCard
+          key={item.id}
+          title={item.summary}
+          {...(item.simulated ? ({ temp: "simulated" } as const) : {})}
+          headingLevel={3}
+          actions={item.status === undefined ? undefined : <StatusBadge>{item.status}</StatusBadge>}
+        >
+          <p className="field-note">
+            <span className="mono-small">{item.kind}</span> · {formatInstant(item.occurred_at)}
+          </p>
+        </PanelCard>
+      ))}
+      <div className="form-actions">
+        <LinkButton to="/activity" variant="secondary">
+          Open activity
+        </LinkButton>
+      </div>
+    </div>
   );
 }
 

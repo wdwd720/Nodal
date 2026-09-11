@@ -55,6 +55,7 @@ import {
   itemsSpec,
   validated,
   validatedList,
+  activityFeedItemSpec,
   agentSpec,
   creditPricingSpec,
   creditPurchaseSpec,
@@ -63,6 +64,9 @@ import {
   myAccountSpec,
   notificationPreferenceSpec,
   notificationSpec,
+  nativeMarketSummarySpec,
+  portfolioSpec,
+  portfolioTotalsSpec,
   securitySummarySpec,
 } from "./contract.ts";
 
@@ -1326,6 +1330,155 @@ export function useMeAudit(cursor: string | undefined): UseQueryResult<AuditPage
         "/me/audit",
       );
       return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Portfolio, the activity feed and market discovery (goal §15, §16, §12).
+ *
+ * Three reads, one rule between them: the SERVER computes and this file
+ * checks. Nothing here sums a position into a total, derives a P&L from a
+ * balance difference, or ranks a market — `/v1/me/portfolio` carries its own
+ * `totals` marked at an explicit `as_of`, and `/v1/native-markets` carries the
+ * `sort` it applied and whether paging that ordering is stable. A browser that
+ * re-derived any of those would eventually disagree with the ledger, and the
+ * ledger is the one that is right.
+ * ------------------------------------------------------------------------ */
+
+export type Portfolio = Schemas["Portfolio"];
+export type PortfolioPosition = Schemas["PortfolioPosition"];
+export type PortfolioTotals = Schemas["PortfolioTotals"];
+export type ValueTemperature = Schemas["ValueTemperature"];
+export type ActivityFeedItem = Schemas["ActivityFeedItem"];
+export type ActivityFeedKind = Schemas["ActivityFeedKind"];
+export type ActivityAmount = Schemas["ActivityFeedItem"]["amounts"][number];
+export type NativeMarketSummary = Schemas["NativeMarketSummary"];
+export type MarketSort = NonNullable<Schemas["NativeMarketPage"]["sort"]>;
+
+export const portfolioKeys = {
+  portfolio: (accountId: string) => ["me", "portfolio", accountId] as const,
+  activity: (accountId: string, kinds: string, cursor: string) =>
+    ["me", "activity", accountId, kinds, cursor] as const,
+  markets: (sort: string, limit: number) => ["native-markets", sort, limit] as const,
+};
+
+/**
+ * The Credit balance, every open position and the totals, all marked at one
+ * instant the server states.
+ *
+ * `staleTime: 0` because this is a balance: a figure nobody is refreshing must
+ * not be shown as current, and the stream invalidates this key rather than
+ * patching it.
+ */
+export function usePortfolio(accountId: string | undefined): UseQueryResult<Portfolio> {
+  return useQuery({
+    queryKey: portfolioKeys.portfolio(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/portfolio", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      const portfolio = validated<Portfolio>(data, portfolioSpec, "/me/portfolio");
+      // The two nested objects, checked against their own specs rather than
+      // waved through as `object`: they are where every figure on the page
+      // comes from, and a malformed one must be an error and not a blank.
+      validated<CreditBalance>(portfolio.credits, creditBalanceSpec, "/me/portfolio.credits");
+      validated<PortfolioTotals>(portfolio.totals, portfolioTotalsSpec, "/me/portfolio.totals");
+      return portfolio;
+    },
+  });
+}
+
+export interface ActivityFeed {
+  readonly items: ActivityFeedItem[];
+  readonly nextCursor: string | null;
+}
+
+/**
+ * The unified timeline.
+ *
+ * `kind` repeats in the query string rather than being comma-joined, which is
+ * what the contract declares. An empty filter is omitted entirely, because
+ * "every kind" and "none of them" are different requests and only one of them
+ * is what an unfiltered feed means.
+ */
+export function useMeActivity(options: {
+  readonly accountId: string | undefined;
+  readonly kinds: readonly ActivityFeedKind[];
+  readonly cursor?: string;
+  readonly limit?: number;
+}): UseQueryResult<ActivityFeed> {
+  const { accountId, kinds, cursor } = options;
+  const limit = options.limit ?? 50;
+  return useQuery({
+    queryKey: portfolioKeys.activity(accountId ?? "", kinds.join(","), cursor ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/activity", {
+        params: {
+          query: {
+            account_id: accountId ?? "",
+            limit,
+            ...(kinds.length === 0 ? {} : { kind: [...kinds] }),
+            ...(cursor === undefined || cursor === "" ? {} : { cursor }),
+          },
+        },
+      });
+      const page = validated<Schemas["ActivityFeedPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: activityFeedItemSpec } } },
+        "/me/activity",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+export interface MarketPage {
+  readonly markets: NativeMarketSummary[];
+  readonly sort: MarketSort;
+  /** Whether paging this ordering sees every market exactly once. */
+  readonly stable: boolean;
+  readonly nextCursor: string | null;
+}
+
+/**
+ * One page of market discovery, in the ordering the server applied.
+ *
+ * `sort` and `stable` come back from the response rather than being assumed
+ * from the request: only NEWEST is stable under paging, because every other key
+ * ranks by a figure that moves when somebody trades, and a page that claimed
+ * otherwise would show a reader the same market twice and call it two.
+ */
+export function useMarketDiscovery(options: {
+  readonly sort: MarketSort;
+  readonly limit?: number;
+  readonly enabled?: boolean;
+}): UseQueryResult<MarketPage> {
+  const limit = options.limit ?? 50;
+  return useQuery({
+    queryKey: portfolioKeys.markets(options.sort, limit),
+    enabled: options.enabled !== false,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets", {
+        params: { query: { sort: options.sort, limit } },
+      });
+      const page = validated<Schemas["NativeMarketPage"]>(
+        data,
+        {
+          required: { sort: "string", stable: "boolean" },
+          arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
+        },
+        "/native-markets",
+      );
+      return {
+        markets: page.markets,
+        sort: page.sort,
+        stable: page.stable,
+        nextCursor: page.next_cursor,
+      };
     },
   });
 }

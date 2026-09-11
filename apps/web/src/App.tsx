@@ -45,14 +45,14 @@ import { Explanation, Loading } from "./components/DataState.tsx";
 import { clearSignInPending, signInPending } from "./lib/survives-sign-in.ts";
 import { signInPathFor, useSession } from "./session.tsx";
 
-import { Activity } from "./pages/Activity.tsx";
+import { Activity } from "./pages/activity/Activity.tsx";
 import { Agents } from "./pages/Agents.tsx";
 import { CreateAsset } from "./pages/CreateAsset.tsx";
 import { Home } from "./pages/home/Home.tsx";
 import { Marketplace } from "./pages/Marketplace.tsx";
 import { NativeMarkets } from "./pages/NativeMarkets.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
-import { Portfolio } from "./pages/Portfolio.tsx";
+import { Portfolio } from "./pages/portfolio/Portfolio.tsx";
 import { BuyCredits } from "./pages/credits/BuyCredits.tsx";
 import { Notifications } from "./pages/notifications/Notifications.tsx";
 import { AccountStanding } from "./pages/settings/AccountStanding.tsx";

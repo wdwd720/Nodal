@@ -316,3 +316,136 @@ function exactPrefix(baseUnits: string): string {
   const digits = baseUnits.replace(/^-/, "").replace(/^0+/, "");
   return digits === "" ? "0" : digits.split("").join("[,.]?");
 }
+
+/* --------------------------------------------------------------------------
+ * The last leg of scenario B: the dashboard the purchase feeds.
+ *
+ * STAGING_E2E's B ends "balance updates via the stream", and its "must not
+ * happen" is a balance changed by arithmetic in the browser. The assertion
+ * above covers the Credit figures; these cover the modules around them, which
+ * are where a dashboard is most tempted to invent one.
+ * ------------------------------------------------------------------------ */
+
+test("the portfolio module appears only when there is something in it", async ({ page }) => {
+  // USER_JOURNEY §3 makes this conditional, and the condition is on the DATA.
+  // A portfolio panel reading zero on an account that has never traded is not
+  // an empty state; it is a claim that something was lost.
+  const id = await accountId(page);
+  const response = await page.request.get(`/v1/me/portfolio?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    positions: Array<{ symbol: string; temperature: string }>;
+    totals: { market_value_credits: string };
+    as_of: string;
+  };
+
+  await page.goto("/home");
+  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  // Located by accessible name rather than by text: "Markets" and "Portfolio"
+  // both appear inside other panels' descriptions, and a `hasText` locator
+  // would happily assert against the wrong panel.
+  const value = page.locator('section.panel[aria-label="Portfolio value"]');
+  const holdings = page.locator('section.panel[aria-label="Holdings"]');
+
+  if (body.positions.length === 0) {
+    await expect(value, "no positions, so no portfolio panel").toHaveCount(0);
+    await expect(holdings, "and no holdings panel either").toHaveCount(0);
+    return;
+  }
+
+  await expect(value).toBeVisible();
+  await expect(holdings).toBeVisible();
+
+  // The change is labelled for what the API actually reports — unrealised
+  // against cost basis — and never as "today", which no field here carries.
+  await expect(value).toContainText("Change since opened");
+  await expect(value).toContainText("not a since-midnight figure");
+
+  // One instant, machine-readable, and shown unrounded beside itself. It is
+  // NOT compared against this test's own read: the backend stamps `as_of` with
+  // the moment it computed the answer, and the page made its own request. What
+  // is asserted is that the page shows a real backend instant verbatim.
+  expect(body.as_of, "the API stamps the portfolio").toBeTruthy();
+  const machine = await value.locator("time").first().getAttribute("datetime");
+  expect(machine, "the portfolio module carries a machine-readable instant").toBeTruthy();
+  const exact = await value.locator(".as-of .mono-small").first().innerText();
+  expect(exact.trim(), "the exact instant is shown unrounded beside it").toBe(
+    `(${machine as string})`,
+  );
+  expect(Number.isNaN(Date.parse(machine as string)), "the instant parses").toBe(false);
+
+  // A simulated position renders at the simulated temperature, per row.
+  const simulated = body.positions.filter((p) => p.temperature === "SIMULATED");
+  if (simulated.length > 0) {
+    const row = holdings.locator("tr", { hasText: simulated[0]?.symbol ?? "" }).first();
+    await expect(row.locator('[data-temp="simulated"]').first()).toBeVisible();
+  }
+});
+
+test("the movers module shows the ordering the backend applied, and says so", async ({ page }) => {
+  const response = await page.request.get("/v1/native-markets?sort=CHANGE_24H&limit=5");
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    markets: Array<{ symbol: string; has_24h_change?: boolean; demo: boolean }>;
+    sort: string;
+    stable: boolean;
+  };
+
+  await page.goto("/home");
+  const markets = page.locator('section.panel[aria-label="Markets"]');
+  await expect(markets).toBeVisible();
+
+  if (body.markets.length === 0) {
+    await expect(markets).toContainText("No markets yet");
+    return;
+  }
+
+  // The page never re-ranks what it was given, and it names the ordering and
+  // whether paging it is stable — because on every key but NEWEST it is not.
+  await expect(markets).toContainText(body.sort);
+  await expect(markets).toContainText(
+    body.stable ? "sees every market exactly once" : "can show the same market twice",
+  );
+
+  for (const market of body.markets) {
+    const row = markets.locator("tr", { hasText: market.symbol }).first();
+    await expect(row, `${market.symbol} is on the dashboard`).toBeVisible();
+    if (market.has_24h_change !== true) {
+      // Not traded in the window is a different fact from not having moved.
+      await expect(row).toContainText("no trade in the window");
+    }
+    if (market.demo) {
+      await expect(row, "demo data says so on the row").toContainText("Demo");
+    }
+  }
+});
+
+test("recent activity is the server's own summary, and a rehearsal says so", async ({ page }) => {
+  const id = await accountId(page);
+  const response = await page.request.get(`/v1/me/activity?account_id=${id}&limit=5`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    items: Array<{ summary: string; kind: string; simulated: boolean }>;
+  };
+
+  await page.goto("/home");
+  const recent = page.locator('section.panel[aria-label="Recent activity"]');
+  await expect(recent).toBeVisible();
+
+  if (body.items.length === 0) {
+    await expect(recent).toContainText("Nothing has happened yet");
+    return;
+  }
+
+  for (const item of body.items) {
+    // Rendered as it was written. The summary is built on the server from a
+    // fixed template per kind, and a client that reformatted it would turn a
+    // sentence into a data format nobody wrote down.
+    const card = recent.locator("article", { hasText: item.summary }).first();
+    await expect(card, `"${item.summary}" is on the dashboard`).toBeVisible();
+    await expect(card).toContainText(item.kind);
+    if (item.simulated) {
+      await expect(card.locator(".badge-simulated")).toBeVisible();
+    }
+  }
+});
