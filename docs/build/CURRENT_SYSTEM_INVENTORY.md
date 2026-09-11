@@ -184,3 +184,57 @@ capital) only.
 | `InternalCommerce` / creator economy | 0 |
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
+## Addendum — 2026-09-10: the Nodal-native market's product surface (M)
+
+This section is an addendum rather than an edit: §§1–8 above are a dated
+snapshot of a baseline audit and stay as they were written. What follows is what
+the productization wave added for goal §§11–16, §35, §46, §47 and §51.
+
+### Migrations added (schema is now at 775)
+
+| Migration | Table / function | Who may write it | Why it exists |
+|---|---|---|---|
+| `00771` | `native_market_prints` | `cp_app` INSERT + SELECT; a BEFORE INSERT trigger recomputes every price from the fill and refuses a disagreement (NM001); `forbid_mutation` on UPDATE/DELETE | the price series a chart reads: one print per fill with both spot prices, the effective price and both volumes |
+| `00772` | `native_positions` | **nobody but the triggers**: `cp_app` has SELECT only | per (account, asset) quantity, average cost basis, realised P&L and fees, maintained from the fills and the creator allocation. A table CHECK states `quantity = allocation + bought - sold` |
+| `00772` | `cp_native_positions_unreconciled()` | read-only function, EXECUTE to `cp_app`/`cp_readonly`/`cp_ops` | compares every position to `ledger_balances`, the source the triggers do not write. It reports; it never repairs |
+| `00773` | `native_market_safety_policies` | `cp_app` INSERT + SELECT; immutable | the versioned, hashed market-safety document (§47) |
+| `00773` | `native_market_breaker_events` | `cp_app` INSERT + SELECT; immutable | the evidence behind a circuit-breaker pause: policy, window, both prices, the move |
+| `00774` | `demo_seed_rows` | `cp_app` INSERT + SELECT; immutable; a CHECK refuses `environment = 'PROD'` | the idempotence key and the label for sandbox demo data |
+| `00775` | indexes | — | discovery: a `simple` tsvector GIN over name+symbol+description, a `text_pattern_ops` btree on `upper(symbol)`, and `native_markets (created_at DESC, id DESC)` |
+
+No table above holds a fact that is not derivable from a table that already
+existed, which is why every one of them is either database-maintained or
+database-validated.
+
+### Routes added
+
+| Method + path | Permission | Notes |
+|---|---|---|
+| `GET /v1/native-markets` | `native_asset:read` | the markets page: cursor pagination, status/creator/`q` filters, five sorts. The response says which orderings are stable under paging (only `NEWEST` is) |
+| `GET /v1/native-markets/{marketId}/summary` | `native_asset:read` | the asset detail / trading screen: the same summary row the list returns, the **limits in force** (both the market-safety policy and the risk kernel's GLOBAL concentration limits), and holder concentration |
+| `GET /v1/native-markets/{marketId}/candles` | `native_asset:read` | OHLCV over a bounded window (`1m`, `5m`, `15m`, `1h`, `1d`; ≤ 1,500 buckets). Empty buckets are absent, never filled forward |
+| `GET /v1/native-markets/{marketId}/trades` | `native_asset:read` | the public tape. It carries **no account identity**, asserted over the type |
+| `GET /v1/me/portfolio` | `credit:read` (+ per-request tenant scope) | the Credit balance breakdown from `internal/credit` unchanged, the native positions, the totals, an explicit `as_of` and a value temperature |
+| `GET /v1/me/activity` | `account:read` / `account:read_any` (+ tenant scope) | the §16 timeline: seven kinds, each amount with its unit, origin and temperature, a reference and a server-built summary |
+
+`GET /v1/accounts/{accountId}/activity` is unchanged and remains the hosted
+rail's operational timeline (D-066).
+
+### Packages added
+
+- `internal/activity` — the unified timeline. Owns no table; the union is one
+  compiled-in constant and the kind filter is a bound parameter.
+- `internal/demo` — the sandbox demo seeder. Drives the domain services; refuses
+  PROD in Go, in `cmd/api` and in SQL.
+- `scripts/demodata` — the same seeder as a command.
+- `scripts/marketsafety` — records a market-safety policy, and prints the
+  compiled-in one.
+
+### State machines
+
+No new state column. The circuit breaker moves a market through the status
+machine migration 00712 already enforces — `ACTIVE → CLOSE_ONLY` (and
+`CLOSE_ONLY → ACTIVE` when an operator resumes) — by writing a
+`native_market_transitions` row as the SYSTEM actor `market:circuit-breaker`,
+so a pause is a recorded transition like any other and a second state column
+cannot disagree with the first.

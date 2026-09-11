@@ -303,15 +303,26 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	for _, o := range origins {
 		origin := valuedomain.CreditOrigin(o)
 		// A demo trader holds what the seeder granted and whatever a sale gave
-		// back. Neither may ever be withdrawn.
+		// back, and nothing else: the seeder must not have minted an origin a
+		// payout policy is more willing to release.
 		assert.Contains(t, []valuedomain.CreditOrigin{
 			valuedomain.OriginPromotional, valuedomain.OriginMarketTradingProceeds,
 		}, origin, "the seeder minted an origin it should not have")
-		assert.False(t, valuedomain.SandboxPolicy().Rule(origin).PayoutAllowed,
-			"%s must not be withdrawable even on a sandbox tier", origin)
 		assert.False(t, valuedomain.DefaultPolicy().Rule(origin).PayoutAllowed,
 			"%s must not be withdrawable under the fail-closed default", origin)
 	}
+
+	// The grant specifically. valuedomain.SandboxPolicy -- the one a sandbox
+	// tier runs -- releases purchased and EARNED value once verified, and
+	// refuses granted, refunded, adjusted and provider-settled value outright.
+	// That is what makes a promotional Credit demo money: spendable inside the
+	// product, and unable to leave it under any policy in this build.
+	require.Contains(t, origins, string(valuedomain.OriginPromotional),
+		"the seeder must fund its traders with a grant, not a purchase")
+	assert.False(t, valuedomain.SandboxPolicy().Rule(valuedomain.OriginPromotional).PayoutAllowed,
+		"a promotional Credit must not be withdrawable even on a sandbox tier")
+	assert.True(t, valuedomain.FinalityUnfunded.Spendable(),
+		"and the finality it is issued at must still be spendable, or the demo economy does not work")
 
 	// And they bought something: the demo trader holds a position with a real
 	// cost basis, and it reconciles against the ledger.
