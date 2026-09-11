@@ -210,6 +210,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-247 | P3 | PRODUCTIZATION | fixed | CURRENT_SYSTEM_INVENTORY said the agent wave added nine routes over a table of ten rows |
 | F-248 | P3 | PRODUCTIZATION | fixed | The decision register cited a test that has never existed under that name, one document outside the citation check's scope |
 | F-253 | P3 | PRODUCTIZATION | fixed | USER_JOURNEY told a caller to read onboarding.state on GET /v1/me; the contract declares timestamps and no such property |
+| F-254 | P3 | PRODUCTIZATION | fixed | `/welcome/done` was in no route list, so no cross-cutting sweep had ever visited the screen every new customer sees |
 | F-251 | P3 | PRODUCTIZATION | fixed | The agent-detail sweep skipped with a reason that was not the reason, on the route its own finding was about |
 | F-252 | P3 | PRODUCTIZATION | fixed | Two webhook-driven scenarios counted as passes while proving only that an unsigned delivery is refused, and four purchase tests were never registered |
 | F-255 | P2 | PRODUCTIZATION | fixed | A strategy version could never be accepted, so no agent could be created on any deployment even with a working compiler |
@@ -8551,6 +8552,25 @@ lands.
 `TestAuditDocs_EveryOnboardingFieldADocumentNamesIsDeclared`, which reads the
 property names out of the contract so renaming one fails here rather than in
 somebody's client.
+
+## F-254 · `/welcome/done` was in no route list · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the browser end-to-end audit (F-e2e-6).
+
+`apps/web/e2e/routes.ts` excluded `/welcome/done` from every list because its
+heading greets the customer by display name and is not a fixed string, so the
+axe, reflow and honesty sweeps had never visited the screen every new customer
+sees on arrival. The screen itself passed when finally checked; the defect was
+the absence of the check.
+
+**Fix.** The audit's own `audit-surface.spec.ts` case "/welcome/done passes axe
+and reflows at 375px" runs in the merged suite (it landed with the withdrawal
+fix, which merged `audit/e2e-browser`), so the screen is swept on every run
+without a fixed heading being invented for it.
+
+**Evidence.** `apps/web/e2e/audit-surface.spec.ts`; the merged Playwright
+runs from `8a1b701` onward.
+
 ## F-251 · The agent-detail sweep skipped with a reason that was not the reason · PRODUCTIZATION · P3 · FIXED
 
 **Found by** the browser end-to-end audit (F-e2e-3).
