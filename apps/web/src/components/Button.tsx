@@ -195,34 +195,3 @@ export function SortButton(props: {
   );
 }
 
-/**
- * One tab in a tablist. Selection is a real action, and the roving tabindex
- * means exactly one tab is in the tab order at a time — arrow keys move between
- * them, which is what a tablist is supposed to do.
- */
-export function TabButton(props: {
-  readonly id: string;
-  readonly controls: string;
-  readonly selected: boolean;
-  readonly onSelect: () => void;
-  readonly onKeyDown: (key: string) => void;
-  readonly children: ReactNode;
-}): ReactNode {
-  return (
-    <button
-      type="button"
-      className="tab"
-      role="tab"
-      id={props.id}
-      aria-controls={props.controls}
-      aria-selected={props.selected}
-      tabIndex={props.selected ? 0 : -1}
-      onClick={props.onSelect}
-      onKeyDown={(event) => {
-        props.onKeyDown(event.key);
-      }}
-    >
-      {props.children}
-    </button>
-  );
-}

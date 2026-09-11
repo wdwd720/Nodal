@@ -3,7 +3,7 @@
  *
  * The other half of "things other people made, priced in Credits". Its logic is
  * unchanged from the screen it replaces; what changed is that every figure now
- * goes through `Figure` rather than through `Money.tsx`, the listings sit on
+ * goes through `Figure` — the one formatter the application has — the listings sit on
  * `PanelCard`, the two order histories are `DataTable`, and a refused purchase
  * is rendered as a refusal rather than as a fault.
  *

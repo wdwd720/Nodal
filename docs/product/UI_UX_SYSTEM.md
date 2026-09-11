@@ -541,11 +541,17 @@ financial event — what happened to somebody's money belongs in the record, not
 that deletes itself. Never a celebration. The region is `aria-live="polite"` and never steals
 focus.
 
-### `Tabs`
+### `Tabs` — built, never used, deleted (D-113)
 
-WAI-ARIA tablist: roving tabindex, arrow keys wrap, Home/End jump, each panel labelled by
-its tab. Tabs are not for hiding a disclosure, a refusal, or a figure a customer needs in
-order to decide.
+A WAI-ARIA tablist was built here: roving tabindex, arrow keys wrapping, Home/End jumping,
+each panel labelled by its tab. No screen in the product ever rendered it. The one surface
+that looks like tabs — the markets navigation — is deliberately a `<nav>` of links instead,
+because its two views are two addresses and a tab that changes the URL is a link wearing a
+tab's clothes. So the primitive and its `TabButton` were deleted rather than kept as a
+component with no caller, which is the state the frontend audit found them in.
+
+The rule survives the primitive, for whoever builds the next one: tabs are not for hiding a
+disclosure, a refusal, or a figure a customer needs in order to decide.
 
 ### `Field` / `FieldGrid` / `FormField`
 
@@ -752,8 +758,8 @@ untouched.
 
 Still to do, per screen, against the definition of done in PART 26:
 
-- render every figure through `Figure` rather than through `Money.tsx`, which formats
-  correctly but predates the ladder in §6;
+- render every figure through `Figure`. `Money.tsx` — a second formatter that predated the
+  ladder in §6 — and `MintIdentity.tsx` were deleted unused with `Tabs` (D-113);
 - replace one-line loading labels with shape-accurate `Skeleton` regions;
 - replace the generic `Explanation` with `Refusal` wherever the backend's answer is a
   refusal rather than a fault, and delete the disabled-form pattern where one survives;

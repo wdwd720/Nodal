@@ -15,8 +15,9 @@
  * confirmation mints its idempotency key at the moment of confirming, so a
  * double-click cannot publish two assets.
  *
- * What changed in the restyle: every figure goes through `Figure` rather than
- * `Money.tsx`, the inputs are `FormField` so an error is tied to its control
+ * What changed in the restyle: every figure goes through `Figure` — the one
+ * formatter, now that the earlier one is deleted — the inputs are `FormField`
+ * so an error is tied to its control
  * with `aria-describedby` rather than sitting in a list above the form, and a
  * refused creation is rendered as a refusal rather than as a fault.
  *
