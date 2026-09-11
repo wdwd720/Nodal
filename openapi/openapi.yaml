@@ -3580,7 +3580,7 @@ components:
     Agent:
       type: object
       required: [id, account_id, strategy_id, strategy_version_id, name, stage, state, status,
-                 authority, limits, budget, runtime, archived, created_at]
+                 authority, limits, budget, runtime, archived, sandbox, created_at]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         account_id: { $ref: "#/components/schemas/UUID" }
@@ -3613,6 +3613,13 @@ components:
         last_run_at: { $ref: "#/components/schemas/Timestamp" }
         last_run_status: { type: string }
         archived: { type: boolean }
+        sandbox:
+          type: boolean
+          description: >-
+            True when the strategy version this agent deploys was compiled by a
+            compiler that exists only on a sandbox tier. Everything about the
+            agent is then a rehearsal: it is labelled one wherever it is shown,
+            and no real capital can move through it on any deployment.
         granted_by_user_id: { $ref: "#/components/schemas/UUID" }
         granted_at: { $ref: "#/components/schemas/Timestamp" }
         created_at: { $ref: "#/components/schemas/Timestamp" }

@@ -161,6 +161,10 @@ type View struct {
 	Pause      agent.Pause
 	PauseOpen  bool
 	StrategyID string
+	// Sandbox is true when the strategy version this agent deploys was compiled
+	// by a compiler that exists only on a sandbox tier. Everything about this
+	// agent is then a rehearsal, and the API and the page say so.
+	Sandbox bool
 }
 
 // Sources of BudgetUsedCredits.
@@ -192,7 +196,13 @@ const viewColumns = `
     (SELECT count(*) FROM agent_runs r WHERE r.agent_id = a.id AND r.intent_id IS NOT NULL),
     coalesce((SELECT sum(i.quantity) FROM agent_runs r
                 JOIN trade_intents i ON i.id = r.intent_id
-               WHERE r.agent_id = a.id AND i.status = ANY($1::text[])), 0)::text`
+               WHERE r.agent_id = a.id AND i.status = ANY($1::text[])), 0)::text,
+    -- Whether the strategy version this agent deploys was compiled by a sandbox
+    -- compiler. It is read from the VERSION rather than kept on the agent,
+    -- because it is a fact about the document and an agent that could carry a
+    -- different answer from its own strategy would be the mislabelling the
+    -- temperature rule exists to prevent (D-129).
+    coalesce((SELECT sv.sandbox FROM strategy_versions sv WHERE sv.id = a.strategy_version_id), false)`
 
 // committedIntentStatuses are the intent states in which value is actually
 // committed. RECEIVED, ELIGIBILITY_CHECKED and RISK_CHECKED are not among them:
@@ -230,7 +240,7 @@ func scanView(row pgx.Row) (View, error) {
 		&v.Grant.ID, &v.Grant.StrategyVersionID, &level,
 		&budget, &perTrade, &loss,
 		&shareBPS, &assetIDs, &schedKind, &schedInterval, &v.Grant.GrantedByUserID, &v.Grant.GrantedAt, &archivedAt,
-		&totalRuns, &openRuns, &lastRunAt, &lastRunStatus, &runsWithIntent, &committed,
+		&totalRuns, &openRuns, &lastRunAt, &lastRunStatus, &runsWithIntent, &committed, &v.Sandbox,
 	)
 	if err != nil {
 		return View{}, err

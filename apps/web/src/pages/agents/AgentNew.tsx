@@ -1,5 +1,5 @@
 /**
- * `/agents/new` — describe, compile, review, then grant.
+ * `/agents/new` — state, compile, review, accept, then grant.
  *
  * Goal §18 states the rule this screen exists to enforce:
  *
@@ -7,40 +7,53 @@
  *   authority. Show a human-understandable compiled strategy before
  *   activation.
  *
- * So the four steps are four separate acts with four separate confirmations,
+ * So the five steps are five separate acts with five separate confirmations,
  * and each one stays on the page after it is done. A wizard that discards the
  * step behind it is a wizard in which nobody can check what they agreed to.
  *
- *   1. DESCRIBE — `POST /v1/strategies` records the words, exactly as written.
- *      Nothing is compiled and nothing is activated.
+ *   1. STATE — `POST /v1/strategies`. On a deployment whose compiler reads a
+ *      DECLARED strategy the form below is the strategy: an instrument, a
+ *      venue, an entry rule, an exit rule, three limits, a capital floor, a
+ *      cadence, a mode. The description box is kept beside it and is recorded
+ *      exactly as written — and, on such a deployment, never interpreted.
  *   2. COMPILE — `POST /v1/strategies/{id}/compile`. Every attempt is recorded,
- *      including one on a deployment with no compiler backend, which comes back
- *      with outcome MODEL_UNAVAILABLE and the failure code COMPILER_UNAVAILABLE.
- *      That code is rendered as exactly that. Nothing is inferred in its place.
- *   3. REVIEW — the compiled version's effects, its hash and the compiler's own
- *      words. This screen never writes that text itself.
- *   4. GRANT — `POST /v1/agents` with an authority level, a Credit budget, a
+ *      including one on a deployment with no compiler backend
+ *      (COMPILER_UNAVAILABLE) and one whose declared strategy is incomplete
+ *      (STRUCTURED_CONSTRAINTS_REQUIRED, with every missing field named). Those
+ *      codes are rendered as exactly that. Nothing is inferred in their place.
+ *   3. REVIEW — the compiled strategy in words, the compiler's own rationale
+ *      for each element, its effects and its hash. This screen never writes
+ *      that text itself.
+ *   4. ACCEPT — `POST /v1/strategies/{id}/versions/{n}/accept`, echoing the
+ *      hash that was on screen. This is the act goal §18 requires and the only
+ *      thing that makes an agent possible; no compiler can perform it.
+ *   5. GRANT — `POST /v1/agents` with an authority level, a Credit budget, a
  *      per-trade cap, a daily loss stop and the assets the agent may touch.
  *
- * WITHOUT A COMPILED VERSION THERE IS NO STEP 4. The agent resource is created
- * from a strategy VERSION, so an account on a tier with no compiler cannot make
- * an agent at all — and the button says so, with the reason, rather than being
- * absent or, worse, present and lying.
+ * WITHOUT AN ACCEPTED VERSION THERE IS NO STEP 5. The agent resource is created
+ * from a strategy VERSION the owner accepted, so an account on a tier with no
+ * compiler cannot make an agent at all — and the button says so, with the
+ * reason, rather than being absent or, worse, present and lying.
  */
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import {
+  useAcceptStrategyVersion,
   useCompileStrategy,
   useCreateAgent,
   useCreateStrategy,
   useAgents,
   useAssets,
+  useInstrument,
+  useInstruments,
   useStrategies,
   type AgentLimits,
   type CompileResult,
   type Asset,
+  type Instrument,
   type Strategy,
+  type StructuredStrategy,
   type StrategyVersion,
 } from "../../api/queries.ts";
 import { Button, LinkButton } from "../../components/Button.tsx";
@@ -58,6 +71,7 @@ import {
 } from "../../components/Layout.tsx";
 import { Refusal } from "../../components/Refusal.tsx";
 import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK } from "../../lib/honesty.ts";
+import { fromBaseUnits } from "../../lib/format.ts";
 import { parseQuantityInput } from "../../lib/money.ts";
 import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import { useSurvivesSignIn } from "../../lib/survives-sign-in.ts";
@@ -76,6 +90,172 @@ interface Description {
 }
 
 const NO_DESCRIPTION: Description = { name: "", text: "" };
+
+/**
+ * The strategy a person states, field by field.
+ *
+ * Every amount is held as the customer typed it and converted to exact USD
+ * MINOR UNITS at the moment of submission, by `parseQuantityInput(raw, 2)` —
+ * the same parser every other amount on this site goes through. Nothing here
+ * is ever a number: a threshold typed as one hundred and thirty five dollars
+ * leaves this screen as the digit string of its cents, and no step in between
+ * is a float.
+ *
+ * The two integers — the cadence and the hourly intent ceiling — are chosen
+ * from fixed lists rather than typed, so there is nothing to parse and no
+ * rounding to get wrong.
+ */
+interface StructuredDraft {
+  readonly instrumentId: string;
+  readonly venue: string;
+  readonly entryKind: RuleKind;
+  readonly entryComparator: Comparator;
+  readonly entryPrice: string;
+  readonly exitKind: RuleKind;
+  readonly exitComparator: Comparator;
+  readonly exitPrice: string;
+  readonly maxSingleTrade: string;
+  readonly maxPosition: string;
+  readonly maxDailyLoss: string;
+  readonly minAllocation: string;
+  readonly intervalMinutes: number;
+  readonly maxIntentsPerHour: number;
+}
+
+type RuleKind = "PRICE_THRESHOLD" | "EVERY_INTERVAL";
+type Comparator = "LT" | "LTE" | "GT" | "GTE";
+
+const RULE_KINDS: readonly RuleKind[] = ["PRICE_THRESHOLD", "EVERY_INTERVAL"];
+const COMPARATORS: readonly Comparator[] = ["LT", "LTE", "GT", "GTE"];
+
+/** USD amounts are exact to the cent, and the API takes them in minor units. */
+const USD_DECIMALS = 2;
+
+/** How often the strategy evaluates, in whole minutes. */
+const EVALUATE_CHOICES: readonly number[] = [1, 5, 15, 60, 240, 1_440];
+/** The most trade intents it may create in an hour. */
+const INTENTS_PER_HOUR_CHOICES: readonly number[] = [1, 2, 4, 6, 12, 30];
+
+const NO_STRUCTURED: StructuredDraft = {
+  instrumentId: "",
+  venue: "",
+  entryKind: "PRICE_THRESHOLD",
+  entryComparator: "LTE",
+  entryPrice: "",
+  exitKind: "PRICE_THRESHOLD",
+  exitComparator: "GTE",
+  exitPrice: "",
+  maxSingleTrade: "",
+  maxPosition: "",
+  maxDailyLoss: "",
+  minAllocation: "",
+  intervalMinutes: 15,
+  maxIntentsPerHour: 2,
+};
+
+function comparatorLabel(c: Comparator): string {
+  if (c === "LT") return "is below";
+  if (c === "LTE") return "is at or below";
+  if (c === "GT") return "is above";
+  return "is at or above";
+}
+
+function ruleKindLabel(k: RuleKind): string {
+  return k === "PRICE_THRESHOLD" ? "When the price crosses a threshold I set" : "On every evaluation";
+}
+
+function evaluateLabel(minutes: number): string {
+  if (minutes === 1) return "Every minute";
+  if (minutes === 60) return "Every hour";
+  if (minutes === 1_440) return "Once a day";
+  return `Every ${String(minutes)} minutes`;
+}
+
+/** Picks the chosen member back out of a select without parsing anything. */
+function chosenOf<T extends string>(choices: readonly T[], raw: string, fallback: T): T {
+  return choices.find((value) => value === raw) ?? fallback;
+}
+
+/**
+ * What the declared strategy is missing, in this screen's own words.
+ *
+ * It duplicates nothing the API decides: the API refuses an incomplete document
+ * by naming the fields, and that refusal is rendered verbatim when it comes
+ * back. This exists so the button can say why it is disabled BEFORE a request
+ * is sent, which is the same courtesy every other form on this site extends.
+ */
+function structuredGaps(draft: StructuredDraft, instruments: readonly Instrument[]): string[] {
+  const gaps: string[] = [];
+  const named = instruments.find((i) => i.id === draft.instrumentId);
+  if (named === undefined) gaps.push("Choose the one instrument this strategy may touch.");
+  if (draft.venue === "") gaps.push("Choose the venue it trades on.");
+  if (draft.entryKind === "PRICE_THRESHOLD" && !parseQuantityInput(draft.entryPrice, USD_DECIMALS).ok) {
+    gaps.push("State the entry price, exactly.");
+  }
+  if (draft.exitKind === "PRICE_THRESHOLD" && !parseQuantityInput(draft.exitPrice, USD_DECIMALS).ok) {
+    gaps.push("State the exit price, exactly.");
+  }
+  for (const limit of [
+    { value: draft.maxSingleTrade, what: "the most it may put into one trade" },
+    { value: draft.maxPosition, what: "the largest position it may hold" },
+    { value: draft.maxDailyLoss, what: "the loss that stops it for the day" },
+    { value: draft.minAllocation, what: "the smallest allocation it needs to run" },
+  ]) {
+    if (!parseQuantityInput(limit.value, USD_DECIMALS).ok) gaps.push(`State ${limit.what}.`);
+  }
+  return gaps;
+}
+
+/** Turns the draft into the document the API takes, or undefined when it cannot. */
+function toStructuredStrategy(
+  draft: StructuredDraft,
+  instruments: readonly Instrument[],
+): StructuredStrategy | undefined {
+  const named = instruments.find((i) => i.id === draft.instrumentId);
+  if (named === undefined || draft.venue === "") return undefined;
+  const amounts = {
+    entry: parseQuantityInput(draft.entryPrice, USD_DECIMALS),
+    exit: parseQuantityInput(draft.exitPrice, USD_DECIMALS),
+    maxSingleTrade: parseQuantityInput(draft.maxSingleTrade, USD_DECIMALS),
+    maxPosition: parseQuantityInput(draft.maxPosition, USD_DECIMALS),
+    maxDailyLoss: parseQuantityInput(draft.maxDailyLoss, USD_DECIMALS),
+    minAllocation: parseQuantityInput(draft.minAllocation, USD_DECIMALS),
+  };
+  if (
+    !amounts.maxSingleTrade.ok ||
+    !amounts.maxPosition.ok ||
+    !amounts.maxDailyLoss.ok ||
+    !amounts.minAllocation.ok
+  ) {
+    return undefined;
+  }
+  const rule = (kind: RuleKind, comparator: Comparator, price: { ok: boolean; value: string }) =>
+    kind === "EVERY_INTERVAL"
+      ? { kind: "EVERY_INTERVAL" as const }
+      : { kind: "PRICE_THRESHOLD" as const, comparator, price_usd: price.value };
+  if (draft.entryKind === "PRICE_THRESHOLD" && !amounts.entry.ok) return undefined;
+  if (draft.exitKind === "PRICE_THRESHOLD" && !amounts.exit.ok) return undefined;
+
+  return {
+    schema_version: 1,
+    universe: { instrument: named.canonical_name, venue: draft.venue },
+    entry: rule(draft.entryKind, draft.entryComparator, amounts.entry),
+    exit: rule(draft.exitKind, draft.exitComparator, amounts.exit),
+    risk_limits: {
+      max_single_trade_usd: amounts.maxSingleTrade.value,
+      max_position_usd: amounts.maxPosition.value,
+      max_daily_loss_usd: amounts.maxDailyLoss.value,
+    },
+    capital_limit: { min_allocation_usd: amounts.minAllocation.value },
+    frequency: {
+      interval_minutes: draft.intervalMinutes,
+      max_intents_per_hour: draft.maxIntentsPerHour,
+    },
+    // The only mode this build compiles. It is shown, not chosen: a control
+    // offering a mode the backend refuses would be an offer nobody can take.
+    mode: "PAPER",
+  };
+}
 
 interface GrantDraft {
   readonly agentName: string;
@@ -210,10 +390,25 @@ function CompileAnswer(props: { readonly result: CompileResult }): ReactNode {
 }
 
 /** The compiled strategy, as a person reads it before approving it. */
-function CompiledVersion(props: { readonly version: StrategyVersion }): ReactNode {
+function CompiledVersion(props: {
+  readonly version: StrategyVersion;
+  readonly rationale: CompileResult["rationale"];
+}): ReactNode {
   const { version } = props;
+  const details = props.rationale?.details ?? [];
   return (
     <>
+      <p className="note">
+        This is the compiled strategy, in full, before anything acts on your behalf. Read it. An
+        agent can only be created from a version you have accepted, and accepting it is the next
+        step.
+      </p>
+      {version.sandbox && (
+        <p className="note" data-temp="simulated">
+          This strategy was compiled by a sandbox compiler. Everything built from it is a rehearsal:
+          no real capital can move, and this version cannot exist on a production deployment.
+        </p>
+      )}
       <FieldGrid columns={2}>
         <Field label="Version">
           <Figure kind="count" count={version.version} />
@@ -253,13 +448,142 @@ function CompiledVersion(props: { readonly version: StrategyVersion }): ReactNod
       )}
 
       <h4>What it says, in words</h4>
-      <p className="cell-prose">{version.human_readable}</p>
+      <pre className="raw-block">{version.human_readable}</pre>
+
+      {props.rationale !== undefined && (
+        <>
+          <h4>Where each part of it came from</h4>
+          <p className="cell-prose">{props.rationale.summary}</p>
+          {details.length > 0 && (
+            <ul className="explain-fields">
+              {details.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
 
       {version.ir !== undefined && (
         <details className="raw">
           <summary>The compiled document itself</summary>
           <pre>{JSON.stringify(version.ir, null, 2)}</pre>
         </details>
+      )}
+    </>
+  );
+}
+
+/** One entry or exit rule, stated. */
+function RuleFields(props: {
+  readonly legend: string;
+  readonly kind: RuleKind;
+  readonly comparator: Comparator;
+  readonly price: string;
+  readonly onKind: (kind: RuleKind) => void;
+  readonly onComparator: (comparator: Comparator) => void;
+  readonly onPrice: (price: string) => void;
+}): ReactNode {
+  return (
+    <fieldset className="form-row">
+      <legend>{props.legend}</legend>
+      <FormField label="The rule">
+        {(field) => (
+          <select
+            className="input"
+            value={props.kind}
+            onChange={(event) => {
+              props.onKind(chosenOf(RULE_KINDS, event.target.value, props.kind));
+            }}
+            {...field}
+          >
+            {RULE_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {ruleKindLabel(kind)}
+              </option>
+            ))}
+          </select>
+        )}
+      </FormField>
+      {props.kind === "PRICE_THRESHOLD" && (
+        <>
+          <FormField label="When the price">
+            {(field) => (
+              <select
+                className="input"
+                value={props.comparator}
+                onChange={(event) => {
+                  props.onComparator(chosenOf(COMPARATORS, event.target.value, props.comparator));
+                }}
+                {...field}
+              >
+                {COMPARATORS.map((comparator) => (
+                  <option key={comparator} value={comparator}>
+                    {comparatorLabel(comparator)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+          <UsdField
+            label="This price"
+            hint="Exact, to the cent. The compiler compares the instrument's mid price against it."
+            value={props.price}
+            onChange={props.onPrice}
+          />
+        </>
+      )}
+      {props.kind === "EVERY_INTERVAL" && (
+        <p className="field-note">
+          No condition: the rule applies on every evaluation, at the cadence you set below.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
+/**
+ * An exact US dollar amount.
+ *
+ * The typed text goes through `parseQuantityInput(raw, 2)` — the same parser
+ * every other amount on this site uses — and what leaves this screen is the
+ * integer string of cents. Nothing here is ever a number.
+ */
+function UsdField(props: {
+  readonly label: string;
+  readonly hint?: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}): ReactNode {
+  const parsed = parseQuantityInput(props.value, USD_DECIMALS);
+  const hint = props.hint === undefined ? {} : { hint: props.hint };
+  const error = props.value === "" || parsed.ok ? {} : { error: parsed.error };
+  return (
+    <>
+      <FormField label={props.label} {...hint} {...error}>
+        {(field) => (
+          <input
+            className="input"
+            type="text"
+            inputMode="decimal"
+            value={props.value}
+            onChange={(event) => {
+              props.onChange(event.target.value);
+            }}
+            {...field}
+          />
+        )}
+      </FormField>
+      {parsed.ok && (
+        <p className="field-note">
+          Recorded as{" "}
+          <Figure
+            kind="money"
+            value={{ base: parsed.value, scale: USD_DECIMALS }}
+            symbol="USD"
+          />{" "}
+          — exactly {fromBaseUnits(parsed.value, USD_DECIMALS)} US dollars.
+        </p>
       )}
     </>
   );
@@ -272,14 +596,23 @@ function CompiledVersion(props: { readonly version: StrategyVersion }): ReactNod
 export function AgentNew(): ReactNode {
   const accountId = useActiveAccountId();
   const description = useSurvivesSignIn<Description>("agents.description", NO_DESCRIPTION);
+  const declared = useSurvivesSignIn<StructuredDraft>("agents.structured", NO_STRUCTURED);
   const grant = useSurvivesSignIn<GrantDraft>("agents.grant", NO_GRANT);
   const [strategy, setStrategy] = useState<Strategy | undefined>(undefined);
+  const [accepted, setAccepted] = useState<StrategyVersion | undefined>(undefined);
 
   const strategies = useStrategies(accountId);
   const agents = useAgents(accountId);
   const assets = useAssets();
+  const instruments = useInstruments();
+  // The venues come from the instrument's own listings, so the choice offered
+  // is the set the backend would accept and not a list this page keeps.
+  const instrumentDetail = useInstrument(
+    declared.value.instrumentId === "" ? undefined : declared.value.instrumentId,
+  );
   const createStrategy = useCreateStrategy();
   const compile = useCompileStrategy();
+  const acceptVersion = useAcceptStrategyVersion();
   const createAgent = useCreateAgent();
 
   // Three commands, three keys, each minted at its own confirmation and kept
@@ -289,6 +622,7 @@ export function AgentNew(): ReactNode {
   // to a second strategy or a second agent.
   const strategyKey = useIdempotencyKey("agents.new.strategy.key");
   const compileKey = useIdempotencyKey("agents.new.compile.key");
+  const acceptKey = useIdempotencyKey("agents.new.accept.key");
   const agentKey = useIdempotencyKey("agents.new.agent.key");
 
   if (accountId === undefined) {
@@ -336,7 +670,22 @@ export function AgentNew(): ReactNode {
   }
 
   const compilerConfigured = strategies.data?.compilerConfigured;
-  const version = strategy?.current_version ?? compile.data?.version;
+  const compiler = strategies.data?.compiler;
+  const structuredCompiler = compiler?.structured === true;
+  const instrumentList = instruments.data ?? [];
+  const venuesForInstrument = (instrumentDetail.data?.listings ?? [])
+    .filter((listing) => listing.venue_status !== "DISABLED" && listing.status !== "DISABLED")
+    .map((listing) => listing.venue);
+  const gaps = structuredCompiler ? structuredGaps(declared.value, instrumentList) : [];
+  const declaredStrategy = structuredCompiler
+    ? toStructuredStrategy(declared.value, instrumentList)
+    : undefined;
+
+  const compiledVersion = accepted ?? compile.data?.version ?? strategy?.current_version;
+  // Step 5 needs an ACCEPTED version, which is the whole point of step 4: an
+  // agent is created from a version its owner read and approved, and the
+  // backend refuses one that is merely COMPILED.
+  const version = compiledVersion?.status === "ACCEPTED" ? compiledVersion : undefined;
   const levels = agents.data?.authorityLevels ?? [];
   const enabledLevels = levels.filter((level) => level.enabled);
   const parsedBudget = parseQuantityInput(grant.value.budget, CREDIT_DECIMALS);
@@ -369,8 +718,12 @@ export function AgentNew(): ReactNode {
 
       {/* ---------------------------------------------------------------- */}
       <Panel
-        title="1 · Describe what you want"
-        description="In your own words. This records the text and nothing else."
+        title="1 · State the strategy"
+        description={
+          structuredCompiler
+            ? "Field by field. This deployment's compiler builds exactly what you state here and reads nothing else."
+            : "In your own words. This records the text and nothing else."
+        }
       >
         {strategy === undefined ? (
           <form
@@ -382,16 +735,19 @@ export function AgentNew(): ReactNode {
                   accountId,
                   name: description.value.name.trim(),
                   description: description.value.text.trim(),
+                  ...(declaredStrategy === undefined ? {} : { constraints: declaredStrategy }),
                   // Minted at the moment of confirmation and reused for a retry
-                  // of this same text, so a double submit records one strategy
+                  // of this same body, so a double submit records one strategy
                   // and a retry after a sign-in records the same one. Editing
-                  // the name or the description is a different strategy, and a
-                  // different strategy gets its own key.
+                  // the name, the description or any stated field is a
+                  // different strategy, and a different strategy gets its own
+                  // key.
                   idempotencyKey: strategyKey.forRequest(
                     requestSignature([
                       accountId,
                       description.value.name.trim(),
                       description.value.text.trim(),
+                      declaredStrategy === undefined ? "" : JSON.stringify(declaredStrategy),
                     ]),
                   ),
                 },
@@ -419,9 +775,222 @@ export function AgentNew(): ReactNode {
                 />
               )}
             </FormField>
+            {structuredCompiler && (
+              <>
+                <fieldset className="form-row">
+                  <legend>The universe — what it may touch</legend>
+                  <p className="field-note">
+                    One instrument, on one venue. Both come from this deployment's registry: a
+                    strategy cannot name a market the backend does not list.
+                  </p>
+                  {instruments.isError && (
+                    <Explanation
+                      error={instruments.error}
+                      onRetry={() => {
+                        void instruments.refetch();
+                      }}
+                    />
+                  )}
+                  {instruments.data !== undefined && instruments.data.length === 0 && (
+                    <p className="note">
+                      The backend lists no instruments at all, so there is nothing to name and no
+                      strategy can be stated. That is the registry being empty rather than a
+                      universe of nothing.
+                    </p>
+                  )}
+                  <FormField label="Instrument">
+                    {(field) => (
+                      <select
+                        className="input"
+                        value={declared.value.instrumentId}
+                        onChange={(event) => {
+                          declared.set({
+                            ...declared.value,
+                            instrumentId: event.target.value,
+                            venue: "",
+                          });
+                        }}
+                        {...field}
+                      >
+                        <option value="">Choose an instrument</option>
+                        {instrumentList.map((instrument: Instrument) => (
+                          <option key={instrument.id} value={instrument.id}>
+                            {instrument.canonical_name} · {instrument.status}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </FormField>
+                  <FormField
+                    label="Venue"
+                    hint="Only the venues that list this instrument and may take new actions."
+                  >
+                    {(field) => (
+                      <select
+                        className="input"
+                        value={declared.value.venue}
+                        onChange={(event) => {
+                          declared.set({ ...declared.value, venue: event.target.value });
+                        }}
+                        {...field}
+                      >
+                        <option value="">Choose a venue</option>
+                        {venuesForInstrument.map((venue) => (
+                          <option key={venue} value={venue}>
+                            {venue}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </FormField>
+                  {declared.value.instrumentId !== "" && venuesForInstrument.length === 0 && (
+                    <p className="note">
+                      No venue lists this instrument in a status that can take new actions, so no
+                      strategy can trade it here.
+                    </p>
+                  )}
+                </fieldset>
+
+                <RuleFields
+                  legend="Entry — when it may buy"
+                  kind={declared.value.entryKind}
+                  comparator={declared.value.entryComparator}
+                  price={declared.value.entryPrice}
+                  onKind={(kind) => {
+                    declared.set({ ...declared.value, entryKind: kind });
+                  }}
+                  onComparator={(comparator) => {
+                    declared.set({ ...declared.value, entryComparator: comparator });
+                  }}
+                  onPrice={(price) => {
+                    declared.set({ ...declared.value, entryPrice: price });
+                  }}
+                />
+                <RuleFields
+                  legend="Exit — when it may close"
+                  kind={declared.value.exitKind}
+                  comparator={declared.value.exitComparator}
+                  price={declared.value.exitPrice}
+                  onKind={(kind) => {
+                    declared.set({ ...declared.value, exitKind: kind });
+                  }}
+                  onComparator={(comparator) => {
+                    declared.set({ ...declared.value, exitComparator: comparator });
+                  }}
+                  onPrice={(price) => {
+                    declared.set({ ...declared.value, exitPrice: price });
+                  }}
+                />
+
+                <fieldset className="form-row">
+                  <legend>Limits — the ceilings you set</legend>
+                  <p className="field-note">
+                    Exact amounts in US dollars, to the cent. They are checked against this
+                    deployment's risk policy: a limit looser than the policy's is refused, never
+                    quietly tightened.
+                  </p>
+                  <UsdField
+                    label="Most in one trade"
+                    hint="Also the size of every trade this strategy proposes."
+                    value={declared.value.maxSingleTrade}
+                    onChange={(value) => {
+                      declared.set({ ...declared.value, maxSingleTrade: value });
+                    }}
+                  />
+                  <UsdField
+                    label="Largest position"
+                    value={declared.value.maxPosition}
+                    onChange={(value) => {
+                      declared.set({ ...declared.value, maxPosition: value });
+                    }}
+                  />
+                  <UsdField
+                    label="Daily loss stop"
+                    hint="It stops for the day once losses reach this."
+                    value={declared.value.maxDailyLoss}
+                    onChange={(value) => {
+                      declared.set({ ...declared.value, maxDailyLoss: value });
+                    }}
+                  />
+                  <UsdField
+                    label="Smallest allocation it needs"
+                    hint="Below this the strategy will not run at all."
+                    value={declared.value.minAllocation}
+                    onChange={(value) => {
+                      declared.set({ ...declared.value, minAllocation: value });
+                    }}
+                  />
+                </fieldset>
+
+                <fieldset className="form-row">
+                  <legend>Cadence and mode</legend>
+                  <FormField label="How often it evaluates">
+                    {(field) => (
+                      <select
+                        className="input"
+                        value={String(declared.value.intervalMinutes)}
+                        onChange={(event) => {
+                          declared.set({
+                            ...declared.value,
+                            intervalMinutes: chosen(
+                              EVALUATE_CHOICES,
+                              event.target.value,
+                              declared.value.intervalMinutes,
+                            ),
+                          });
+                        }}
+                        {...field}
+                      >
+                        {EVALUATE_CHOICES.map((minutes) => (
+                          <option key={minutes} value={String(minutes)}>
+                            {evaluateLabel(minutes)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </FormField>
+                  <FormField label="Most trade proposals in an hour">
+                    {(field) => (
+                      <select
+                        className="input"
+                        value={String(declared.value.maxIntentsPerHour)}
+                        onChange={(event) => {
+                          declared.set({
+                            ...declared.value,
+                            maxIntentsPerHour: chosen(
+                              INTENTS_PER_HOUR_CHOICES,
+                              event.target.value,
+                              declared.value.maxIntentsPerHour,
+                            ),
+                          });
+                        }}
+                        {...field}
+                      >
+                        {INTENTS_PER_HOUR_CHOICES.map((n) => (
+                          <option key={n} value={String(n)}>
+                            {String(n)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </FormField>
+                  <Field
+                    label="Mode"
+                    note="The only mode this build compiles. Anything that moves value is refused with the reason, never downgraded to this one quietly."
+                  >
+                    <StatusBadge tone="neutral">PAPER</StatusBadge>
+                  </Field>
+                </fieldset>
+              </>
+            )}
+
             <FormField
-              label="What should it do?"
-              hint="What it should watch, when it should act and what it must never do. The compiler does not guess: anything you leave out comes back as a question."
+              label={structuredCompiler ? "Anything else you want recorded" : "What should it do?"}
+              hint={
+                structuredCompiler
+                  ? "Recorded, never interpreted. This deployment's compiler builds the strategy from the fields above and does not read these words — nothing you write here changes what is compiled."
+                  : "What it should watch, when it should act and what it must never do. The compiler does not guess: anything you leave out comes back as a question."
+              }
             >
               {(field) => (
                 <textarea
@@ -440,19 +1009,27 @@ export function AgentNew(): ReactNode {
               <Explanation error={createStrategy.error} onRetry={createStrategy.reset} />
             )}
             <div className="panel-actions">
-              {description.value.name.trim() === "" || description.value.text.trim() === "" ? (
-                <Button disabledReason="Give the strategy a name and say what it should do before recording it.">
-                  Record this description
+              {description.value.name.trim() === "" ||
+              description.value.text.trim() === "" ||
+              gaps.length > 0 ? (
+                <Button
+                  disabledReason={
+                    gaps.length > 0
+                      ? `The strategy is not stated yet. ${gaps.join(" ")}`
+                      : "Give the strategy a name and say what it should do before recording it."
+                  }
+                >
+                  Record this strategy
                 </Button>
               ) : (
                 <Button variant="primary" submit busy={createStrategy.isPending} busyLabel="Recording…">
-                  Record this description
+                  Record this strategy
                 </Button>
               )}
             </div>
             <p className="note">
-              Recording a description grants nothing. It is kept exactly as you wrote it, and it is
-              never read as an instruction by anything that can act.
+              Recording a strategy grants nothing. The words are kept exactly as you wrote them, and
+              they are never read as an instruction by anything that can act.
             </p>
           </form>
         ) : (
@@ -557,20 +1134,94 @@ export function AgentNew(): ReactNode {
       <Panel
         title="3 · Review what was compiled"
         description="The compiled strategy in words and in effects, as the compiler produced it."
+        {...(compiledVersion?.sandbox === true ? { temp: "simulated" as const } : {})}
       >
-        {version === undefined ? (
+        {compiledVersion === undefined ? (
           <EmptyState
             title="There is nothing to review"
             body="No compiled version exists for this strategy. This page will not show you a strategy that was never produced, and an agent cannot be created without one."
           />
         ) : (
-          <CompiledVersion version={version} />
+          <CompiledVersion version={compiledVersion} rationale={compile.data?.rationale} />
         )}
       </Panel>
 
       {/* ---------------------------------------------------------------- */}
       <Panel
-        title="4 · Grant authority and limits"
+        title="4 · Accept this strategy"
+        description="Your approval of the exact document above. Nothing can act on your behalf until you give it."
+      >
+        {compiledVersion === undefined ? (
+          <EmptyState
+            title="There is nothing to accept"
+            body="Accepting a strategy means approving a compiled document, and none exists yet."
+          />
+        ) : compiledVersion.status === "ACCEPTED" ? (
+          <>
+            <FieldGrid columns={2}>
+              <Field label="Status">
+                <StatusBadge tone="good">ACCEPTED</StatusBadge>
+              </Field>
+              <Field label="Accepted">
+                {compiledVersion.accepted_at === undefined ? (
+                  <span className="absent">not reported</span>
+                ) : (
+                  formatInstant(compiledVersion.accepted_at)
+                )}
+              </Field>
+            </FieldGrid>
+            <p className="note">
+              You accepted this exact document. An agent created below is bound to it and to nothing
+              else — not to whatever this strategy compiles to next.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="note">
+              Accepting records that you read the strategy above and approve it. It is sent with the
+              hash shown in step 3, so what is approved is the document on this screen and not
+              whatever may have been compiled since. Accepting grants nothing on its own.
+            </p>
+            {acceptVersion.isError && (
+              <Explanation error={acceptVersion.error} onRetry={acceptVersion.reset} />
+            )}
+            <div className="panel-actions">
+              <Button
+                variant="primary"
+                busy={acceptVersion.isPending}
+                busyLabel="Accepting…"
+                onClick={() => {
+                  if (strategy === undefined) return;
+                  acceptVersion.mutate(
+                    {
+                      strategyId: strategy.id,
+                      version: compiledVersion.version,
+                      // The hash this screen DISPLAYED, which is what makes the
+                      // approval an approval of this document.
+                      irHash: compiledVersion.ir_hash,
+                      idempotencyKey: acceptKey.forRequest(
+                        requestSignature([strategy.id, compiledVersion.ir_hash]),
+                      ),
+                    },
+                    {
+                      onSuccess: (v) => {
+                        setAccepted(v);
+                        acceptKey.clear();
+                      },
+                    },
+                  );
+                }}
+              >
+                I have read this strategy and accept it
+              </Button>
+            </div>
+          </>
+        )}
+      </Panel>
+
+      {/* ---------------------------------------------------------------- */}
+      <Panel
+        title="5 · Grant authority and limits"
         description="What the agent may do, with how much, and over which assets."
       >
         <form
@@ -852,7 +1503,9 @@ export function AgentNew(): ReactNode {
               <Button
                 disabledReason={
                   version === undefined
-                    ? "An agent is created from a compiled strategy version, and there is not one. Nothing on this form can substitute for it."
+                    ? compiledVersion === undefined
+                      ? "An agent is created from a compiled strategy version, and there is not one. Nothing on this form can substitute for it."
+                      : "An agent is created from a compiled strategy version you have ACCEPTED. Read the strategy in step 3 and accept it in step 4."
                     : !nameOk
                       ? "Give the agent a name first."
                       : !assetsOk

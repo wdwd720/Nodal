@@ -1141,6 +1141,10 @@ export const agentSpec: Spec = {
     budget: "object",
     runtime: "object",
     archived: "boolean",
+    // Whether this agent deploys a sandbox-compiled strategy. Required for the
+    // reason StrategyVersion.sandbox is: a page that could not tell a rehearsal
+    // from the product would render the first as the second.
+    sandbox: "boolean",
     created_at: "timestamp",
   },
   optional: {

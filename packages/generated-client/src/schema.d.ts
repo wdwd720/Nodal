@@ -4875,6 +4875,8 @@ export interface components {
             pause?: components["schemas"]["AgentPause"];
             runs_total?: number;
             runtime: components["schemas"]["AgentRuntime"];
+            /** @description True when the strategy version this agent deploys was compiled by a compiler that exists only on a sandbox tier. Everything about the agent is then a rehearsal: it is labelled one wherever it is shown, and no real capital can move through it on any deployment. */
+            sandbox: boolean;
             /**
              * @description The furthest rung of the promotion ladder this agent has reached.
              * @enum {string}

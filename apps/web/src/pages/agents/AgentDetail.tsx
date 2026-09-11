@@ -246,7 +246,26 @@ export function AgentDetail(): ReactNode {
       lead="What this agent may do, what it has been granted, and what is actually evaluating it."
       actions={<LinkButton to="/agents">Back to the list</LinkButton>}
     >
-      <Panel title="Status and authority" description="Permission first; machinery below it.">
+      {data.sandbox && (
+        <Panel
+          title="This agent is a rehearsal"
+          description="The strategy it deploys was compiled by a sandbox compiler."
+          temp="simulated"
+        >
+          <p className="note">
+            Everything about this agent is a rehearsal. Its strategy exists only on a sandbox tier —
+            the database refuses such a version in production — and no real capital can move through
+            it on any deployment. The limits, the authority and the lifecycle below are all real
+            records of what you granted; what they would govern is not.
+          </p>
+        </Panel>
+      )}
+
+      <Panel
+        title="Status and authority"
+        description="Permission first; machinery below it."
+        {...(data.sandbox ? { temp: "simulated" as const } : {})}
+      >
         <FieldGrid columns={2}>
           <Field label="Status" note="What you granted. It is not a claim that anything is running.">
             <AgentStatus agent={data} />
