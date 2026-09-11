@@ -103,9 +103,14 @@ db_bootstrap_image = "public.ecr.aws/docker/library/postgres:16-alpine@sha256:cf
 
 # cmd/api refuses to start without both, and the variable's own default fails
 # its own validation, so every deployment states them.
+# The example pair is devnet, the one scripts/seed registers: an example file
+# that carries the MAINNET USDC mint claims a settlement path no deployment of
+# this repository has yet, and render.yaml refuses exactly that claim in as many
+# words. A deployment that really settles on mainnet states the mainnet pair here
+# and has the providers and the licences to back it.
 api = {
-  settlement_chain = "solana"
-  settlement_mint  = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  settlement_chain = "solana-devnet"
+  settlement_mint  = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 }
 
 # --- observability and paging -----------------------------------------------
