@@ -81,11 +81,12 @@ func TestAUDIT_ASandboxTierCanRecoverAGateItRevoked(t *testing.T) {
 		StateSandbox:         {StateDisabled, StateRevoked},
 	}
 	// What each destination does to revoked_at: `propose` clears it, `revoke`
-	// sets it, everything else (including both sandbox operations) leaves it
-	// exactly as it found it.
+	// sets it, entering SANDBOX clears it (migration 00791 -- the fix for this
+	// finding; before it, both sandbox operations left the column exactly as
+	// they found it and this search had no answer), and nothing else touches it.
 	revokedAfter := func(before bool, to GateState) bool {
 		switch to {
-		case StatePendingApproval:
+		case StatePendingApproval, StateSandbox:
 			return false
 		case StateRevoked:
 			return true

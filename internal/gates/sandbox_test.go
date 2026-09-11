@@ -39,9 +39,23 @@ func TestEvaluateWith_SandboxRowIsActiveOnlyOnASandboxTier(t *testing.T) {
 	v = EvaluateWith(row(nil), false, true, now)
 	assert.Equal(t, ReasonConfigDisabled, v.Reason, "configuration is still condition 1")
 
+	// A revoke is a STATE. Revoking a gate moves it to REVOKED, which is
+	// refused by the state check above; `revoked_at` on a SANDBOX row is
+	// residue of an earlier life, which cp_gate_sandbox clears on the way in
+	// (migration 00791). Reading the residue as a refusal is what made every
+	// gate sandbox-activated out of REVOKED -- a documented source -- report
+	// success and stay permanently inert (F-160).
 	revoked := now.Add(-time.Second)
 	v = EvaluateWith(row(func(g *Gate) { g.RevokedAt = &revoked }), true, true, now)
-	assert.Equal(t, ReasonRevoked, v.Reason)
+	assert.True(t, v.Active, "a SANDBOX row is judged by the sandbox conditions, not by a stale revoke")
+	assert.True(t, v.Sandbox)
+	v = EvaluateWith(&Gate{
+		Capability: NativeMarketTrading, Environment: "STAGING", State: StateRevoked,
+		EffectiveAt: &effective, RevokedAt: &revoked,
+	}, true, true, now)
+	assert.False(t, v.Active, "and a gate that IS revoked is in REVOKED, where no sandbox tier makes it active")
+	assert.Equal(t, ReasonStateNotActive, v.Reason)
+
 	v = EvaluateWith(row(func(g *Gate) { g.EffectiveAt = nil }), true, true, now)
 	assert.Equal(t, ReasonNoEffectiveAt, v.Reason)
 	future := now.Add(time.Hour)
