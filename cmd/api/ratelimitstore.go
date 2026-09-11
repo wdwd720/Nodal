@@ -77,7 +77,15 @@ func newRateLimitStore(ctx context.Context, cfg *config.Config, resolver config.
 			"env", string(cfg.Env),
 			"declared_replicas", cfg.RateLimit.Replicas,
 			"note", "correct for exactly one process; the platform must agree")
-		return ratelimit.NewMemoryStore(), true, noop, nil
+		memory := ratelimit.NewMemoryStore()
+		// Nothing called Sweep (F-169). The lazy drop inside Incr only ever
+		// helps a key that comes back, so a key seen once was held for the
+		// life of the process. The store now caps itself as well, but a cap
+		// reached is a degradation and a sweep is what keeps it from being
+		// reached in the first place.
+		stop := make(chan struct{})
+		go sweepRateLimitCounters(memory, rateLimitSweepInterval(cfg.RateLimit, log), time.Now, log, stop)
+		return memory, true, func() { close(stop) }, nil
 
 	case config.RateLimitRedis:
 		client, err := redisClient(ctx, cfg, resolver)
@@ -147,4 +155,81 @@ func redisClient(ctx context.Context, cfg *config.Config, resolver config.Resolv
 		opts.TLSConfig.MinVersion = tls.VersionTLS12
 	}
 	return redis.NewClient(opts), nil
+}
+
+// rateLimitSweepInterval is the largest window any configured limit uses.
+//
+// A fixed window's counter is dead the moment the window ends, so sweeping at
+// the largest of them removes every expired counter of every limit on each
+// pass, and a pass never runs more often than the slowest counter can turn
+// over. Sweep decides per entry using the window that entry was written with,
+// so a one-minute counter is not kept alive by a ten-minute ticker.
+//
+// A specification that will not parse is not this function's business to
+// refuse -- rateLimits does that, at startup, before any of this runs -- so an
+// unparseable one contributes nothing here and the default stands.
+func rateLimitSweepInterval(cfg config.RateLimitConfig, log *slog.Logger) time.Duration {
+	longest := time.Duration(0)
+	for name, spec := range map[string]string{
+		envRateLimitGeneral: cfg.General,
+		envRateLimitAuth:    cfg.Auth,
+		envRateLimitQuote:   cfg.Quote,
+		envRateLimitCommand: cfg.Command,
+	} {
+		limit, enabled, err := ratelimit.ParseLimit(spec, defaultRateLimits[name])
+		if err != nil || !enabled {
+			continue
+		}
+		if limit.Window > longest {
+			longest = limit.Window
+		}
+	}
+	if longest <= 0 {
+		// Every limit switched off, which only a development environment can
+		// do (rateLimits refuses it anywhere production-like). There is
+		// nothing to count and therefore nothing to sweep, but the ticker
+		// still wants a period it will not spin on.
+		longest = time.Minute
+	}
+	log.Info("rate limit counters are swept in this process",
+		"interval", longest, "max_keys", ratelimit.DefaultMaxKeys)
+	return longest
+}
+
+// sweepRateLimitCounters drops expired counters for as long as the process is
+// up, and says so when the store had to stop counting keys one at a time.
+//
+// It returns when stop is closed, which the store's cleanup does -- the same
+// lifetime as the store itself, rather than the request context's.
+func sweepRateLimitCounters(store *ratelimit.MemoryStore, every time.Duration, now func() time.Time, log *slog.Logger, stop <-chan struct{}) {
+	if store == nil || every <= 0 {
+		return
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	reported := 0
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+		}
+		at := now()
+		removed := store.Sweep(at, every)
+		stats := store.Stats(at)
+		// Overflow is the thing worth waking somebody for: it means callers
+		// shared a budget, which is a refusal somebody did not earn. Reported
+		// once per overflow rather than once per pass, because a store that
+		// stays saturated would otherwise repeat the line every window.
+		if stats.Overflows > reported {
+			log.Warn("the rate limiter ran out of counters and shared one budget for a window",
+				"overflows", stats.Overflows, "max_keys", stats.Max, "saturated_now", stats.Saturated,
+				"consequence", "callers in that window were counted together, so some were refused "+
+					"for traffic that was not theirs; the next window counts them separately again")
+			reported = stats.Overflows
+		}
+		if removed > 0 {
+			log.Debug("rate limit counters swept", "removed", removed, "held", stats.Keys)
+		}
+	}
 }
