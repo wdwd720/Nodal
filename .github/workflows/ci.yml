@@ -157,6 +157,13 @@ jobs:
 
   # The dev host is Windows; scripts must behave identically everywhere (D-013).
   scripts-crossplatform:
+    # On pushes to main only. A macOS runner bills at ten times a Linux minute
+    # and Windows at two, so this one job costs more than the rest of the
+    # matrix together; on a private repository's included minutes it is what
+    # exhausted September's allowance and stopped every job of the first
+    # productization PR from starting. The scripts it checks change rarely and
+    # a pull request's Linux run already vets and tests them.
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
