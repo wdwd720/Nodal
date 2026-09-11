@@ -526,3 +526,59 @@ test("no dead control on a market screen, which no route list can reach", async 
   }
   expect(faults, "every control on a market screen does something or says why not").toEqual([]);
 });
+
+/* ==========================================================================
+ * THE RESYNC PATH
+ * ========================================================================== */
+
+test("a resync the server sends drops every cached read rather than one of them", async ({
+  page,
+}) => {
+  // `resync` is what `internal/stream` sends when a reconnecting client's
+  // cursor is too old to replay, so it means "you have missed something and I
+  // cannot tell you what". `StreamStatus.tsx` answers it in the `default:`
+  // branch by invalidating every query, and that branch has no test at any
+  // level — the one stream case that is exercised elsewhere is `data.changed`,
+  // whose scope map is the thing F-202 found wrong.
+  await page.addInitScript(() => {
+    const opened: EventSource[] = [];
+    (window as unknown as { __resyncSources: EventSource[] }).__resyncSources = opened;
+    const Original = window.EventSource;
+    class Recorded extends Original {
+      constructor(url: string | URL, init?: EventSourceInit) {
+        super(url, init);
+        opened.push(this);
+      }
+    }
+    window.EventSource = Recorded as unknown as typeof EventSource;
+  });
+
+  await page.goto("/portfolio");
+  await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+
+  const reads = new Set<string>();
+  page.on("request", (request) => {
+    const url = request.url();
+    for (const read of ["/v1/me/portfolio", "/v1/credits/balance", "/v1/me/activity"]) {
+      if (url.includes(read)) reads.add(read);
+    }
+  });
+
+  const delivered = await page.evaluate(() => {
+    const opened = (window as unknown as { __resyncSources?: EventSource[] }).__resyncSources ?? [];
+    for (const source of opened) {
+      source.dispatchEvent(
+        new MessageEvent("message", { data: JSON.stringify({ type: "resync" }) }),
+      );
+    }
+    return opened.length;
+  });
+  expect(delivered > 0, "the shell opened a stream for the resync to arrive on").toBe(true);
+
+  await page.waitForTimeout(2500);
+  expect(
+    [...reads].sort(),
+    "a resync re-reads the portfolio the customer is looking at, and the balance beside it",
+  ).toContain("/v1/me/portfolio");
+});
