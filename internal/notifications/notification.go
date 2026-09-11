@@ -62,6 +62,13 @@ type Notification struct {
 	Data          json.RawMessage
 	CorrelationID string
 	OccurredAt    time.Time
+	// InsertedAt is when the ROW was written, which is not when the thing it
+	// describes happened. The two differ by however long the follower took to
+	// see the source row -- a tick, a lap, or a whole sleep of a free instance
+	// -- and conflating them is what made Last-Event-ID skip notifications
+	// (D-104). A resume filters on this one; the notification centre still
+	// orders and shows OccurredAt, because that is what happened to the person.
+	InsertedAt time.Time
 	// Sandbox labels a notification produced on a sandbox tier. ADR-0023
 	// requires a sandbox outcome to be labelled sandbox everywhere it is
 	// stored and shown; Producer refuses to set it off a sandbox tier and
@@ -232,13 +239,13 @@ func (p *Producer) Emit(ctx context.Context, tx pgx.Tx, n Notification) (Emitted
 }
 
 const columns = `id, user_id, account_id, kind, severity, title, body, coalesce(resource_type,''), coalesce(resource_id,''),
-	data, coalesce(correlation_id,''), created_at, read_at, sandbox`
+	data, coalesce(correlation_id,''), created_at, inserted_at, read_at, sandbox`
 
 func scan(row pgx.Row) (Notification, error) {
 	var n Notification
 	var data []byte
 	if err := row.Scan(&n.ID, &n.UserID, &n.AccountID, &n.Kind, &n.Severity, &n.Title, &n.Body,
-		&n.Ref.Type, &n.Ref.ID, &data, &n.CorrelationID, &n.OccurredAt, &n.ReadAt, &n.Sandbox); err != nil {
+		&n.Ref.Type, &n.Ref.ID, &data, &n.CorrelationID, &n.OccurredAt, &n.InsertedAt, &n.ReadAt, &n.Sandbox); err != nil {
 		return Notification{}, err
 	}
 	n.Data = data

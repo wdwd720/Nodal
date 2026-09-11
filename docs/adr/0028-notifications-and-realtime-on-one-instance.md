@@ -108,8 +108,19 @@ restart with the process, and the resume comparison did not treat a client's
 higher position as a gap — so a browser reconnecting after a redeploy was
 silently told it was up to date. With a time-encoded id, ids are monotonic across
 restarts, `Last-Event-ID` names an instant, and the handler replays from the
-`notifications` table what was written since it. **The table is the durable
-resume cursor; the buffer is a nicety.**
+`notifications` table what was written since it.
+
+**The table is the durable resume cursor, and it is filtered by the instant the
+ROW was written** — `notifications.inserted_at`, added by 00801 — **not by the
+instant the thing it describes happened.** Those are two clocks and treating
+them as one was F-186: `created_at` is copied from the source row, so a capture
+from five minutes ago that the follower wrote thirty seconds ago was stamped
+five minutes ago, and every client whose cursor stood between the two was told
+about none of it. The live id is a third clock, the publish instant, which is
+always at or after the insert. The gap between them is why the handler replays
+the buffer's notifications as well as the table's rather than trimming the two
+to meet: a notification delivered twice costs one query invalidation, and one
+skipped is a person never told. See D-104.
 
 Streams are capped at four per person. One process, one free instance, and a
 stream is one request that never ends.
@@ -173,7 +184,10 @@ worker.
 - `internal/stream` — per-user visibility (an operator with `account:read_any`
   is refused another person's notification), ids monotonic across a restart,
   resync whenever continuity cannot be proven, the concurrency cap, durable
-  resume, and an event delivered to a connected client after a publish.
+  resume, an event delivered to a connected client after a publish, and (F-185)
+  a publish that survives the subscriber disconnecting mid-send: the hub never
+  closes a channel it also sends on, and reports a departure on a second
+  channel instead.
 - `internal/httpapi` — the routes, their authorization, the nil-port refusals,
   and the `me/audit` reader against the real `security_events` and
   `audit_events` schema.

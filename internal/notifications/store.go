@@ -121,10 +121,17 @@ func List(ctx context.Context, q db.Querier, userID accounts.UserID, f Filter, c
 	return page, nil
 }
 
-// Since returns the caller's notifications created strictly after at, oldest
+// Since returns the caller's notifications WRITTEN strictly after at, oldest
 // first, and reports whether there were more than limit of them. It is the
 // durable half of Last-Event-ID resume: the realtime hub is one process's
 // memory, and this is the table that outlives it.
+//
+// The filter is inserted_at, not created_at. created_at is the instant the
+// thing happened, which the follower copies from the source row, so a capture
+// from five minutes ago written thirty seconds ago is stamped five minutes ago
+// -- and a client asking "what have I missed since I left" was told nothing
+// about it, forever. What a reconnecting client is asking about is when the ROW
+// appeared, and that is a separate column now (D-104, F-186).
 func Since(ctx context.Context, q db.Querier, userID accounts.UserID, at time.Time, limit int) ([]Notification, bool, error) {
 	if err := requireSelf(ctx, userID); err != nil {
 		return nil, false, err
@@ -133,8 +140,8 @@ func Since(ctx context.Context, q db.Querier, userID accounts.UserID, at time.Ti
 		limit = DefaultPageLimit
 	}
 	rows, err := q.Query(ctx, `SELECT `+columns+` FROM notifications
-		WHERE user_id = $1 AND created_at > $2
-		ORDER BY created_at, id LIMIT $3`, userID, at.UTC(), limit+1)
+		WHERE user_id = $1 AND inserted_at > $2
+		ORDER BY inserted_at, id LIMIT $3`, userID, at.UTC(), limit+1)
 	if err != nil {
 		return nil, false, fmt.Errorf("notification: since: %w", err)
 	}

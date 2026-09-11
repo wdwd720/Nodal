@@ -270,23 +270,41 @@ func TestIntegration_SinceIsOldestFirstAndReportsTruncation(t *testing.T) {
 	uid := newUser(t, d)
 	p := producer()
 	base := time.Now().UTC().Add(-time.Hour)
+	written := make([]notifications.Notification, 0, 4)
 	for i := 0; i < 4; i++ {
-		emit(t, d, p, notifications.Notification{
+		out := emit(t, d, p, notifications.Notification{
 			UserID: uid, Kind: notifications.KindSystem, Title: "t", Body: "b",
 			Occurrence: string(rune('a' + i)), OccurredAt: base.Add(time.Duration(i) * time.Minute),
 		})
+		require.True(t, out.Created)
+		written = append(written, out.Notification)
 	}
 	ctx := asUser(uid)
-	got, truncated, err := notifications.Since(ctx, d, uid, base, 10)
+
+	// The instant given is an INSERT instant, because that is the question a
+	// reconnecting client is asking: what has been written since I left. Every
+	// one of these four describes something that happened an hour ago, and
+	// filtering on that clock told the caller about none of them (D-104).
+	got, truncated, err := notifications.Since(ctx, d, uid, written[0].InsertedAt, 10)
 	require.NoError(t, err)
 	assert.False(t, truncated)
 	require.Len(t, got, 3, "strictly after the instant given")
 	for i := 1; i < len(got); i++ {
-		assert.False(t, got[i].OccurredAt.Before(got[i-1].OccurredAt), "oldest first")
+		assert.False(t, got[i].InsertedAt.Before(got[i-1].InsertedAt), "oldest first")
 	}
 
-	got, truncated, err = notifications.Since(ctx, d, uid, base, 2)
+	got, truncated, err = notifications.Since(ctx, d, uid, written[0].InsertedAt, 2)
 	require.NoError(t, err)
 	assert.True(t, truncated, "more than the caller asked for is reported, not silently dropped")
 	assert.Len(t, got, 2)
+
+	// And the occurrence clock decides nothing: a cursor past all four
+	// occurrences, but before any of them was written, misses none of them.
+	got, _, err = notifications.Since(ctx, d, uid, base.Add(4*time.Minute), 10)
+	require.NoError(t, err)
+	assert.Len(t, got, 4, "a row written after the cursor is returned however old its occurrence is")
+	for _, n := range got {
+		assert.True(t, n.InsertedAt.After(n.OccurredAt),
+			"these were written an hour after they happened, and the two instants are recorded separately")
+	}
 }

@@ -183,7 +183,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The durable half of resume. A time-encoded Last-Event-ID names an
 	// instant, and the notifications written since it are in a table that
 	// outlived whatever ended the last connection.
-	replayedDurably := false
 	if since, ok := EventTime(after); ok {
 		if hook := h.resumeHook(); hook != nil {
 			missed, truncated, err := hook(r.Context(), p, since)
@@ -198,14 +197,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// cheap; sending a partial backlog and calling it complete is
 				// neither.
 				_ = writeEvent(w, Event{ID: after, Type: TypeResync, OccurredAt: time.Now().UTC()})
-				replayedDurably = true
 			default:
 				for _, e := range missed {
 					if err := writeEvent(w, e); err != nil {
 						return
 					}
 				}
-				replayedDurably = true
 			}
 		}
 	}
@@ -213,14 +210,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sub, replay := h.hub.Subscribe(p, after, 256)
 	defer h.hub.Unsubscribe(sub)
 	for _, e := range replay {
-		// The table is authoritative for notifications, so when it has just
-		// been read the buffer's copies of the same rows are skipped rather
-		// than sent twice. Everything else the buffer holds -- data.changed,
-		// order and deposit transitions, resync -- has no durable record and
-		// is replayed as before.
-		if replayedDurably && e.Type == TypeNotification {
-			continue
-		}
+		// The buffer's notifications are sent even when the durable hook has
+		// just answered. The two are filtered by different clocks -- the hook by
+		// the row's insert instant, the buffer by the publish instant the id
+		// encodes -- and skipping the buffer's copies assumed the two agree.
+		// They do not: every notification published after the client's last
+		// event but written before it falls in the gap, which is most of a
+		// follower pass (D-104, F-186). A notification delivered twice costs one
+		// query invalidation; one skipped is a person never told.
 		if err := writeEvent(w, e); err != nil {
 			return
 		}

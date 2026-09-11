@@ -104,6 +104,22 @@ func followOnce(ctx context.Context, database *db.DB, f *notifications.Follower,
 type hubPublisher struct{ hub *stream.Hub }
 
 // Notify publishes one notification to its recipient.
+//
+// # Which clock the event id carries, and why the two replays overlap
+//
+// The id is the hub's, and the hub's clock is real time: the instant this
+// process published. That instant is always at or after the row's own
+// `inserted_at`, because the row was committed before this call could be made.
+// The durable resume filters on `inserted_at` (D-104), so a client's cursor can
+// stand slightly AHEAD of the insert instant of a notification it has not been
+// sent yet -- every other notification in the same follower pass, published a
+// few microseconds later, is exactly that.
+//
+// Those rows are covered by the hub's own replay buffer, which Handler no
+// longer suppresses for notifications, and a buffer that cannot reach back far
+// enough answers `resync` instead. A notification delivered twice costs a
+// client one query invalidation; one skipped is a person never told. So the
+// two replays deliberately overlap rather than being trimmed to meet.
 func (h hubPublisher) Notify(n notifications.Notification) {
 	if h.hub == nil {
 		return
@@ -181,10 +197,14 @@ func notificationResume(database *db.DB) stream.Resume {
 				continue
 			}
 			out = append(out, stream.Event{
-				// The id encodes the notification's own instant, so a client
-				// that disconnects again mid-replay resumes from where it got
-				// to rather than from where it started.
-				ID:         stream.EventIDAt(n.OccurredAt),
+				// The id encodes the instant the ROW was written, which is the
+				// same clock Since filtered on: a client that disconnects again
+				// mid-replay resumes from where it got to rather than from where
+				// it started, and cannot be sent backwards past rows it has
+				// already seen. Stamping it with OccurredAt did both -- a
+				// notification about something five minutes old moved the
+				// client's cursor five minutes into the past (D-104).
+				ID:         stream.EventIDAt(n.InsertedAt),
 				Type:       stream.TypeNotification,
 				OccurredAt: n.OccurredAt.UTC(),
 				ResourceID: n.ID.String(),
