@@ -90,7 +90,7 @@ They agree, and `test/integration/enums` keeps them agreeing.
 | `UNFUNDED` | yes | yes | nothing was ever at risk of reversal — a grant, or an earning funded by value already inside |
 | `REVERSIBLE` | yes | **no** | a card issuer can still reclaim the funding. Spending it is the ordinary product experience and the platform carries that risk knowingly; paying it out would turn a chargeback into an uncollateralised loss |
 | `SETTLED` | yes | yes | the funding is final |
-| `DISPUTED` | **no** | no | frozen while the dispute runs. If it closes without taking the money — a won dispute, reinstated funds, or an early-fraud-warning inquiry that closed — the freeze lifts and the funding returns to `REVERSIBLE`, to the window it was already in. It does **not** settle: settlement is a clock closing, not a card network agreeing (D-094) |
+| `DISPUTED` | **no** | no | frozen while the dispute runs. If it closes without taking the money — a won dispute, reinstated funds, or an early-fraud-warning inquiry that closed — the freeze lifts and the funding returns to `REVERSIBLE`, to the window it was already in. It does **not** settle: settlement is a clock closing, not a card network agreeing (D-094). A lot DERIVED from it froze with it and thaws with it, one sweep pass per level, to what its parents say then (D-140) |
 | `REVERSED` | **no** | no | the funding was clawed back |
 
 `FundingFinality.Spendable()` and `.PayoutEligible()` are the two functions;
@@ -238,6 +238,22 @@ carried, and two lots of one origin are one origin: a decision approving a settl
 purchase was filled from a reversible one, and a decision approving trading
 proceeds out of a purchase was filled from proceeds out of a grant (D-136, F-270).
 "Reservation by lot" is a property of the code, not a description of it.
+
+The restriction is **declared** rather than inferred from the set's length. An
+empty set used to mean "no restriction" — both in the statement, which carried a
+`cardinality(...) = 0` escape, and in the assertion behind it, which was guarded
+by the same emptiness — so a reservation whose decision approved NOTHING took
+whichever lot sorted first in consumption order, which is a promotional grant
+every time. `ConsumeRequest.RestrictToLots` says that the named lots are the
+whole of what may be drawn on, empty included: restricted to nothing takes
+nothing and fails for want of Credits (D-136 as amended, F-281). The coarse
+origin filter is gone; a payout is restricted by lot or not at all.
+
+`payout_allocations` records the lot, its origin, its origin FLOOR and its whole
+ROOT SET, so what the record says on its own is what the policy actually read.
+Two provenances that share a floor — {CREATOR_EARNING} and {CREATOR_EARNING,
+PURCHASED} both floor at CREATOR_EARNING — are two rows and two lines of the
+provenance breakdown, not one (D-141, F-282).
 
 Four independent things must all say yes:
 

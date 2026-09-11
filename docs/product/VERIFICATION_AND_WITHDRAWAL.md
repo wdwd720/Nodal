@@ -323,10 +323,22 @@ approving a SETTLED purchase was filled from a REVERSIBLE one of the same origin
 and a decision approving trading proceeds out of a settled purchase was filled
 from proceeds out of a promotional grant (D-136, F-270).
 
-`payout_allocations` records the lot, the origin, the ORIGIN FLOOR and the
-quantity, so a settled payout can be told afterwards from one drawn on value a
-grant funded, and the provenance breakdown reports the two separately rather than
-summing them into one line of `MARKET_TRADING_PROCEEDS`.
+The restriction is DECLARED and not inferred from the set's length. An empty set
+read as "no restriction" in the statement — it carried a `cardinality(...) = 0`
+escape — and the assertion that would have caught that was guarded by the same
+emptiness, so a reservation whose decision approved nothing would have taken
+whichever lot sorts first, which is a promotional grant.
+`ConsumeRequest.RestrictToLots` now says that the named lots are the whole of
+what may be drawn on, empty included (D-136 as amended, F-281).
+
+`payout_allocations` records the lot, the origin, the ORIGIN FLOOR, the whole
+ROOT SET and the quantity, so a settled payout can be told afterwards from one
+drawn on value a grant funded, and the provenance breakdown reports them
+separately rather than summing them into one line of
+`MARKET_TRADING_PROCEEDS`. The set is there because the floor is only its most
+restricted member: two provenances that share a minimum share a floor, and under
+one of B-02's possible answers one of them may leave and the other may not
+(D-141, F-282).
 
 The order is `credit.ConsumptionRank`, which runs from the **most restricted**
 origin to the least:
@@ -406,6 +418,15 @@ page reported `eligible: false` and `withdrawable_now: 0` beside a positive
 (F-272). The two figures are now equal by construction under no account-level
 block, and `eligibility.ExplainWithdrawal` refuses the request rather than
 rendering a response that contradicts itself.
+
+**And the page says which bucket is which.** Splitting the buckets left the table
+with two rows reading `MARKET_TRADING_PROCEEDS`, one saying value may leave and
+one saying none may, and no column that could tell them apart — the sentence D-131
+wrote the floor for, missing from the one screen it was written for. The bucket
+table carries a "Came from" column naming what funded the value and marking the
+root this policy refuses, the ORIGIN_NOT_WITHDRAWABLE sentence names that origin
+in words, and the list is keyed on the whole provenance rather than on the origin,
+which stopped being unique when the buckets became finer (F-280).
 
 The pooled reserve of a native market is drawn down WORST FIRST (D-132) for the
 same reason: a pool is fungible, so "whose Credits left" is a choice, and any
@@ -489,6 +510,19 @@ that payment, which is what `FUNDING_NOT_SETTLED` has always claimed; and a
 seller drawn against another trader's reversible contribution waits for THAT
 payment (D-132), which is the same reason one person further away.
 
+**And waiting really does fix it, including through a dispute.** When the card
+behind an earning is disputed, the earning freezes with it, one sweep pass per
+level of provenance; when the dispute is resolved in the platform's favour it
+thaws with it, to what its parents say then — SETTLED once they are all
+payout-eligible, REVERSIBLE while one of them is still inside a window. Until
+D-140 nothing thawed: `SettleDerived` had no clause that could select a frozen
+lot, and no other writer can reach a lot with no `credit_fundings` row, so a
+dispute the platform WON left the earning neither spendable nor payout-eligible
+for ever while this page told its holder to wait (F-278). What does not come back
+is value that was actually taken back: a REVERSED funding is terminal, so the
+lots derived from it stay frozen, which is D-124's recorded residual and not an
+oversight.
+
 **What is still genuinely blocked here.** Nothing in this section: the
 provenance model and the draw-down order are code, and they are built. B-02
 remains what decides whether any `PayoutAllowed: true` rule exists in a persisted
@@ -506,10 +540,15 @@ funded under exactly that policy; the root SET is judged against whatever policy
 is in force, so a later policy is conservative for every shape of answer and not
 only for the permissive one (D-138, F-275).
 
-**A refused payout says why.** A reserved request whose destination stopped being
-usable stays VERIFIED with its value reserved — failing it would return the
-reservation on the strength of a fact the person can undo — and it now carries
-`blocked_reason`, which the Withdraw page renders beside the Cancel control.
+**A refused payout says why, while that is still true.** A reserved request whose
+destination stopped being usable stays VERIFIED with its value reserved — failing
+it would return the reservation on the strength of a fact the person can undo —
+and it now carries `blocked_reason`, which the Withdraw page renders beside the
+Cancel control. The reason stays on the request after it is cancelled, because
+why somebody's value could not be sent is part of its history; the READ is scoped
+to VERIFIED, the one state in which "its Credits are still reserved" is a true
+sentence, and the database refuses a new reason written onto a payout that has
+finished moving (00823, D-139 as amended, F-279).
 There is no route that re-points a payout at a different destination: the
 destination is what the quote, the fee and the provider idempotency key were all
 computed against, so a new destination is a new request (D-139, F-277).
