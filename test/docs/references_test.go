@@ -115,7 +115,7 @@ func TestDocs_EveryTestTheyNameExists(t *testing.T) {
 // absencePhrase matches a paragraph that states, in words, that what it names
 // is missing. Kept deliberately small: each phrase is one a person would write
 // on purpose, not one that appears by accident near a test name.
-var absencePhrase = regexp.MustCompile(`(?i)does not exist|do not exist|no such function|lists as absent|is absent|are absent`)
+var absencePhrase = regexp.MustCompile(`(?i)does not exist|do not exist|never existed|never has existed|no such function|lists as absent|is absent|are absent`)
 
 // pathScope is inScope plus every ADR, for the citation check below.
 //
@@ -154,8 +154,93 @@ var (
 	// That is a document stating an absence, which is exactly what it should do,
 	// and a check that could not tell a plan from a claim would force it to stop
 	// saying so.
+	//
+	// It used to be applied to the whole PARAGRAPH, and a markdown table is one
+	// paragraph: the word "Planned" in the header excused every path in all
+	// seventeen rows, in both columns, for as long as the table existed. That is
+	// how eight rows went on calling written, passing suites planned across four
+	// audits (F-238). The excuse is now scoped to the cells of the column headed
+	// "Planned", and it excuses only an ABSENT path -- a plan for something that
+	// is already on disk is not a plan, it is a claim that went stale.
 	plannedPhrase = regexp.MustCompile(`(?i)planned|not yet written`)
+	// plannedHeader finds the column a table headed. Only a header cell counts:
+	// a body cell that happens to say "planned" excuses itself and nothing else.
+	plannedHeader = regexp.MustCompile(`(?i)^\s*(planned|required before)\b`)
 )
+
+// citationUnit is one piece of a document evaluated on its own: a paragraph, or
+// a single cell of a markdown table row. The unit is what carries the excuse,
+// which is the whole point -- an excuse that spans a table is not a rule, it is
+// a hole the size of the table.
+type citationUnit struct {
+	text    string
+	excused bool // may name a path that is not in the repository
+	planned bool // excused because it is a PLAN: the path must be absent
+}
+
+// citationUnits splits a document into the units above. A run of lines starting
+// with "|" is a table: its header decides which column index is the planned
+// one, and each body cell becomes its own unit. Everything else is a paragraph.
+func citationUnits(body string) []citationUnit {
+	var out []citationUnit
+	lines := strings.Split(body, "\n")
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		if !strings.HasPrefix(strings.TrimSpace(lines[i]), "|") {
+			// A paragraph: gather to the next blank line or table.
+			start := i
+			for i < len(lines) && strings.TrimSpace(lines[i]) != "" &&
+				!strings.HasPrefix(strings.TrimSpace(lines[i]), "|") {
+				i++
+			}
+			para := strings.Join(lines[start:i], "\n")
+			if strings.TrimSpace(para) != "" {
+				out = append(out, citationUnit{
+					text:    para,
+					excused: absencePhrase.MatchString(para) || plannedPhrase.MatchString(para),
+					planned: plannedPhrase.MatchString(para) && !absencePhrase.MatchString(para),
+				})
+			}
+			i--
+			continue
+		}
+		// A table. The first row is its header.
+		plannedCol := -1
+		for c, cell := range tableCells(lines[i]) {
+			if plannedHeader.MatchString(cell) {
+				plannedCol = c
+			}
+		}
+		i++
+		for ; i < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i]), "|"); i++ {
+			for c, cell := range tableCells(lines[i]) {
+				isPlan := c == plannedCol && plannedCol >= 0
+				out = append(out, citationUnit{
+					text:    cell,
+					excused: isPlan || absencePhrase.MatchString(cell) || plannedPhrase.MatchString(cell),
+					planned: isPlan || (plannedPhrase.MatchString(cell) && !absencePhrase.MatchString(cell)),
+				})
+			}
+		}
+		i--
+	}
+	return out
+}
+
+// tableCells splits a markdown row into its cells, dropping the empty strings
+// the leading and trailing pipes produce.
+func tableCells(line string) []string {
+	parts := strings.Split(strings.TrimSpace(line), "|")
+	if len(parts) > 0 && strings.TrimSpace(parts[0]) == "" {
+		parts = parts[1:]
+	}
+	if len(parts) > 0 && strings.TrimSpace(parts[len(parts)-1]) == "" {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
 
 // TestDocs_EveryPathTheyNameExists resolves the path-shaped test citations.
 //
@@ -171,19 +256,19 @@ func TestDocs_EveryPathTheyNameExists(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
-		for _, para := range paragraphs(string(body)) {
-			excused := absencePhrase.MatchString(para) || plannedPhrase.MatchString(para)
-			for _, p := range distinct(pathRef.FindAllStringSubmatch(para, -1)) {
+		for _, unit := range citationUnits(string(body)) {
+			for _, p := range distinct(pathRef.FindAllStringSubmatch(unit.text, -1)) {
 				p = strings.TrimSuffix(p, "/")
 				if !isTestCitation(p) {
 					continue
 				}
 				cited++
-				if excused {
-					continue
-				}
-				if _, serr := os.Stat(filepath.Join(root, filepath.FromSlash(p))); serr != nil {
+				_, serr := os.Stat(filepath.Join(root, filepath.FromSlash(p)))
+				switch {
+				case serr != nil && !unit.excused:
 					problems = append(problems, rel+" names "+p+", which is not in the repository")
+				case serr == nil && unit.planned:
+					problems = append(problems, rel+" plans "+p+", which is already in the repository")
 				}
 			}
 		}

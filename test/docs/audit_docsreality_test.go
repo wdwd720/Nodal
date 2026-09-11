@@ -353,22 +353,6 @@ type absenceClaim struct {
 
 func absenceClaims() []absenceClaim {
 	return []absenceClaim{
-		{"docs/security/SECURITY.md",
-			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/security"},
-		{"docs/security/SECURITY.md",
-			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/contract"},
-		{"docs/security/SECURITY.md",
-			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "infra/terraform"},
-		{"docs/security/SECURITY.md",
-			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "docs/runbooks"},
-		{"docs/security/SECURITY.md", "DESIGNED, pending Terraform (`infra/` is empty; EB-012)", "infra/terraform"},
-		{"docs/security/SECURITY.md", "compiler DESIGNED (`internal/strategy` absent)", "internal/strategy"},
-		{"docs/security/SECURITY.md", "DESIGNED (`internal/model` absent)", "internal/model"},
-		{"docs/security/SECURITY.md",
-			"`./test/contract/...` — the directory does not exist, so the step is vacuous today", "test/contract"},
-		{"docs/security/SECURITY.md",
-			"**the directory does not exist, so the security step passes vacuously**", "test/security"},
-		{"docs/security/SECURITY.md", "**Runbooks**: `docs/runbooks/` does not exist.", "docs/runbooks"},
 		{"docs/threat-model/THREAT_MODEL.md",
 			"`make security`, `make contract` and `make iac-scan` pass on empty directories; no git remote", "test/security"},
 		{"docs/threat-model/THREAT_MODEL.md",
@@ -385,12 +369,59 @@ func absenceClaims() []absenceClaim {
 	}
 }
 
-// writerClaims are absences about CODE rather than about a directory. Same
-// defect, and the sharpest instance of it: SECURITY.md §12 says in bold that
+// retiredAbsenceClaims are the sentences above that have been FIXED. A fixed
+// claim leaves this file as a row saying it may not come back: the check that
+// caught it is worth more than the one afternoon it took to correct the
+// document, and a document that decayed once decays again.
+func retiredAbsenceClaims() []absenceClaim {
+	return []absenceClaim{
+		{"docs/security/SECURITY.md",
+			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/security"},
+		{"docs/security/SECURITY.md", "DESIGNED, pending Terraform (`infra/` is empty; EB-012)", "infra/terraform"},
+		{"docs/security/SECURITY.md", "compiler DESIGNED (`internal/strategy` absent)", "internal/strategy"},
+		{"docs/security/SECURITY.md", "DESIGNED (`internal/model` absent)", "internal/model"},
+		{"docs/security/SECURITY.md",
+			"`./test/contract/...` — the directory does not exist, so the step is vacuous today", "test/contract"},
+		{"docs/security/SECURITY.md",
+			"**the directory does not exist, so the security step passes vacuously**", "test/security"},
+		{"docs/security/SECURITY.md", "**Runbooks**: `docs/runbooks/` does not exist.", "docs/runbooks"},
+		{"docs/security/SECURITY.md",
+			"**no writer exists** — nothing on disk records a security event yet", "security_events"},
+		{"docs/security/SECURITY.md", "much of it is now wrong in the UNDERSTATING direction", "docs/security/SECURITY.md"},
+	}
+}
+
+// presenceClaims are the corrected sentences: each names something as PRESENT,
+// and each is now the thing that would go stale if the tree lost it. Same
+// discipline in the other direction -- the sentence is pinned, so a claim that
+// moves is a claim nobody is checking any more.
+func presenceClaims() []absenceClaim {
+	return []absenceClaim{
+		{"docs/security/SECURITY.md",
+			"go test -count=1 ./test/security/... ./test/contract/...", "test/security"},
+		{"docs/security/SECURITY.md",
+			"go test -count=1 ./test/security/... ./test/contract/...", "test/contract"},
+		{"docs/security/SECURITY.md",
+			"IMPLEMENTED in `infra/terraform/modules/ecs-service`", "infra/terraform/modules/ecs-service"},
+		{"docs/security/SECURITY.md",
+			"compiler IMPLEMENTED (`internal/strategy/compiler.go`", "internal/strategy/compiler.go"},
+		{"docs/security/SECURITY.md",
+			"IMPLEMENTED (`internal/model/prompt.go`", "internal/model/prompt.go"},
+		{"docs/security/SECURITY.md",
+			"`docs/runbooks/` holds nineteen runbooks and an index", "docs/runbooks/README.md"},
+	}
+}
+
+// writerClaims are claims about CODE rather than about a directory. The defect
+// was the sharpest instance of the one above: SECURITY.md §12 said in bold that
 // nothing on disk records a security event, while REQUIREMENTS_TRACEABILITY's
-// R-130-1 -- IN_PROGRESS, in the other document a reviewer reads -- lists the
+// R-130-1 -- IN_PROGRESS, in the other document a reviewer reads -- listed the
 // four packages that do. Two documents in the same tree, opposite answers, and
 // the security one is the one somebody scores posture from.
+//
+// Corrected, the row runs the other way: §12 now names the four writers, and
+// each named file has to still contain the INSERT. A document that lists its
+// evidence is only better than one that does not if the evidence is checked.
 type writerClaim struct {
 	doc, sentence, what string
 	writers             []string // files that must contain `INSERT INTO <what>`
@@ -399,7 +430,7 @@ type writerClaim struct {
 func writerClaims() []writerClaim {
 	return []writerClaim{
 		{"docs/security/SECURITY.md",
-			"**no writer exists** — nothing on disk records a security event yet",
+			"Four packages write rows: `internal/identity/login.go`",
 			"security_events",
 			[]string{"internal/identity/login.go", "internal/funding/service.go",
 				"internal/signing/repository.go", "internal/webhook/handler.go"}},
@@ -417,19 +448,12 @@ func TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts(t *testing.T) {
 				strconv.Quote(c.sentence))
 			continue
 		}
-		var found []string
 		for _, f := range c.writers {
 			src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f)))
-			if err != nil {
-				continue
+			if err != nil || !strings.Contains(string(src), "INSERT INTO "+c.what) {
+				problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
+					" names "+f+" as a writer of "+c.what+"; it does not write one")
 			}
-			if strings.Contains(string(src), "INSERT INTO "+c.what) {
-				found = append(found, f)
-			}
-		}
-		if len(found) > 0 {
-			problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
-				" says nothing writes "+c.what+"; "+strings.Join(found, ", ")+" do")
 		}
 	}
 	for _, c := range absenceClaims() {
@@ -447,6 +471,25 @@ func TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts(t *testing.T) {
 		problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
 			" says "+c.path+" is absent; it is in the repository")
 	}
+	for _, c := range retiredAbsenceClaims() {
+		body := read(t, root, c.doc)
+		if strings.Contains(body, c.sentence) {
+			problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
+				" states again that "+c.path+" is absent: "+strconv.Quote(c.sentence))
+		}
+	}
+	for _, c := range presenceClaims() {
+		body := read(t, root, c.doc)
+		if !strings.Contains(body, c.sentence) {
+			problems = append(problems, c.doc+" no longer contains the sentence this check reads: "+
+				strconv.Quote(c.sentence))
+			continue
+		}
+		if !exists(root, c.path) {
+			problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
+				" names "+c.path+" as present; it is not in the repository")
+		}
+	}
 	sort.Strings(problems)
 	if len(problems) > 0 {
 		t.Fatalf("%d stated absence(s) the tree contradicts:\n  %s",
@@ -458,18 +501,24 @@ func TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts(t *testing.T) {
 // brief asks about SECURITY.md's PART 155 matrix directly: is the "Planned
 // (traceability)" column honest, or is it F-111's claim-dressed-as-a-plan?
 //
-// It is honest in FORM and false in SUBSTANCE. The column names the suites by
+// It was honest in FORM and false in SUBSTANCE. The column named eight suites by
 // the filename they were going to take; the suites landed under different
-// filenames in the same directory and pass today. And because
-// references_test.go exempts any paragraph containing the word "planned" from
-// its path check, the whole table is invisible to the control that would
-// otherwise have caught the left-hand column going stale with it -- which is
-// how "IDOR ... (primitive only; no HTTP handlers exist)" survived cmd/api.
+// filenames in the same directory and pass today. And because references_test.go
+// exempted any PARAGRAPH containing the word "planned" from its path check, and a
+// markdown table is one paragraph, the whole matrix was invisible to the control
+// that would otherwise have caught the left-hand column going stale with it --
+// which is how "IDOR ... (primitive only; no HTTP handlers exist)" survived
+// cmd/api. That exemption is now per-cell and scoped to the planned COLUMN
+// (F-238), and this check holds the rows themselves.
 //
-// Each row is a PART 155 item, the suite the matrix calls planned, and a test
-// function that proves the work is done.
-func plannedButWritten() []struct{ item, planned, proof string } {
-	return []struct{ item, planned, proof string }{
+// The rule, in both directions:
+//
+//   - a row whose subject already has a passing proof must NAME that proof in
+//     the "Exists today" column and plan nothing;
+//   - a row whose Planned cell is still honest must name a suite that is not on
+//     disk, and say what would prove it.
+func provenNotPlanned() []struct{ item, retiredPlan, proof string } {
+	return []struct{ item, retiredPlan, proof string }{
 		{"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
 			"TestIDOR_CoversEveryAccountScopedRoute"},
 		{"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
@@ -489,28 +538,107 @@ func plannedButWritten() []struct{ item, planned, proof string } {
 	}
 }
 
+// genuinelyPlanned are the four rows whose Planned cell is still true. Each must
+// name a suite that is NOT on disk -- the day one of them lands, this check is
+// what says the matrix is now out of date.
+func genuinelyPlanned() []struct{ item, plan string } {
+	return []struct{ item, plan string }{
+		{"CSRF", "test/security/csrf_test.go"},
+		{"SSRF", "test/security/ssrf_test.go"},
+		{"Webhook forgery", "test/security/webhook_forgery_test.go"},
+		{"Dependency compromise", "test/security/dependency_compromise_test.go"},
+	}
+}
+
+// part155Row is one row of the matrix, split into the two columns that carry a
+// claim.
+type part155Row struct{ exists, planned string }
+
+// part155Rows reads the matrix out of the document. Reading the table rather
+// than searching the whole file is the point: a proof named in the Planned
+// column and a proof named in the Exists column are opposite claims, and a check
+// that only asked "does this string appear somewhere" could not tell them apart.
+func part155Rows(t *testing.T, body string) map[string]part155Row {
+	t.Helper()
+	const header = "| PART 155 item | Exists today (file → test) | Planned (traceability) |"
+	idx := strings.Index(body, header)
+	require(t, idx >= 0, "SECURITY.md no longer carries the PART 155 matrix this check reads")
+	out := map[string]part155Row{}
+	for _, line := range strings.Split(body[idx:], "\n") {
+		if !strings.HasPrefix(line, "|") {
+			break
+		}
+		cells := tableCells(line)
+		if len(cells) != 3 || strings.HasPrefix(strings.TrimSpace(cells[0]), "---") {
+			continue
+		}
+		out[strings.TrimSpace(cells[0])] = part155Row{
+			exists:  strings.TrimSpace(cells[1]),
+			planned: strings.TrimSpace(cells[2]),
+		}
+	}
+	require(t, len(out) > 12, "only %d PART 155 rows parsed; this check stopped seeing the matrix", len(out))
+	return out
+}
+
 func TestAuditDocs_NothingListedAsPlannedIsAlreadyWritten(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	const doc = "docs/security/SECURITY.md"
 	body := read(t, root, doc)
-	require(t, strings.Contains(body, "| PART 155 item | Exists today (file → test) | Planned (traceability) |"),
-		"%s no longer carries the PART 155 matrix this check reads", doc)
-
+	rows := part155Rows(t, body)
 	declared := declaredTests(t, root)
+
 	var problems []string
-	for _, r := range plannedButWritten() {
-		require(t, strings.Contains(body, r.planned),
-			"%s no longer lists %q as planned; the claim moved", doc, r.planned)
-		if !declared[r.proof] {
-			continue // still genuinely unwritten
+	for _, r := range provenNotPlanned() {
+		row, ok := rows[r.item]
+		if !ok {
+			problems = append(problems, doc+" no longer has a PART 155 row for "+strconv.Quote(r.item))
+			continue
 		}
-		problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, r.planned))+
-			" lists "+r.item+" as planned ("+r.planned+"); "+r.proof+" is written and passes")
+		if !declared[r.proof] {
+			problems = append(problems, doc+" row "+strconv.Quote(r.item)+" is held to "+r.proof+
+				", which is not declared anywhere: either the proof was renamed or it was deleted")
+			continue
+		}
+		if !strings.Contains(row.exists, r.proof) {
+			problems = append(problems, doc+" row "+strconv.Quote(r.item)+
+				" does not name its passing proof "+r.proof+" in the Exists column")
+		}
+		if strings.Contains(row.planned, r.retiredPlan) {
+			problems = append(problems, doc+" row "+strconv.Quote(r.item)+" still plans "+r.retiredPlan+
+				"; "+r.proof+" is written and passes")
+		}
+	}
+	for _, r := range genuinelyPlanned() {
+		row, ok := rows[r.item]
+		if !ok {
+			problems = append(problems, doc+" no longer has a PART 155 row for "+strconv.Quote(r.item))
+			continue
+		}
+		if !strings.Contains(row.planned, r.plan) {
+			problems = append(problems, doc+" row "+strconv.Quote(r.item)+
+				" no longer names "+r.plan+" as the suite it plans")
+			continue
+		}
+		if exists(root, r.plan) {
+			problems = append(problems, doc+" row "+strconv.Quote(r.item)+" plans "+r.plan+
+				", which is already in the repository")
+		}
+	}
+	// The other half of the rule, over every row rather than a list: a Planned
+	// cell may not name a path that is on disk.
+	for item, row := range rows {
+		for _, m := range pathRef.FindAllStringSubmatch(row.planned, -1) {
+			if isTestCitation(m[1]) && exists(root, m[1]) {
+				problems = append(problems, doc+" row "+strconv.Quote(item)+" plans "+m[1]+
+					", which is already in the repository")
+			}
+		}
 	}
 	sort.Strings(problems)
 	if len(problems) > 0 {
-		t.Fatalf("%d PART 155 row(s) call written work planned:\n  %s",
+		t.Fatalf("%d PART 155 row(s) the matrix describes wrongly:\n  %s",
 			len(problems), strings.Join(problems, "\n  "))
 	}
 }
