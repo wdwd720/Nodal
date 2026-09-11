@@ -411,7 +411,14 @@ test("Scenario D: state a strategy, compile it, review it, accept it, then creat
   await expect(accept).toBeVisible();
   await accept.click();
 
+  // The press resolves to one of two screens, and the refusal renders after the
+  // backend has answered. Counting the confirm button on the instant after the
+  // click read the page mid-request, saw no button, skipped the round trip and
+  // then waited for an acceptance that could never come. Wait for whichever of
+  // the two outcomes arrives, then branch on it.
   const confirm = page.getByRole("button", { name: "Confirm it's you" });
+  const accepted = page.getByText("ACCEPTED", { exact: true }).first();
+  await expect(confirm.or(accepted)).toBeVisible();
   if ((await confirm.count()) > 0) {
     await confirm.first().click();
     await chooseIdentity(page, { mfa: true, waitFor: /\/agents\/new/ });
