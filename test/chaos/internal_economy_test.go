@@ -168,6 +168,12 @@ func newInternalWorld(t *testing.T, fundBuyer int64) *internalWorld {
 	led.SetCapabilityResolver(caps)
 	credits := credit.NewService(led, clk)
 	com := commerce.NewService(led, credits, audit.NewWriter(), clk)
+	// The platform fee is the service's policy (DefaultPlatformFeeBPS is 0 and
+	// CreateProduct overwrites whatever a product literal says), so the ten
+	// percent this world's expectations are written against is set here.
+	if err := com.SetPlatformFeeBPS(1_000); err != nil {
+		panic(err)
+	}
 	com.SetCapabilityResolver(caps)
 
 	_, buyer := newAccount(t)

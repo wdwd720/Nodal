@@ -58,7 +58,6 @@ func TestE2E_ErrorContract(t *testing.T) {
 
 	customerA := c.signIn(ctx, "customer-a:mfa")
 	customerB := c.signIn(ctx, "customer-b:mfa")
-	admin := c.signIn(ctx, "admin:mfa")
 
 	// The cross-tenant caller is customer-b reaching for customer-a's
 	// account. Under the negative control it is customer-a reaching for her
@@ -133,13 +132,11 @@ func TestE2E_ErrorContract(t *testing.T) {
 		{
 			name: "unwired_capability_is_422",
 			exchange: func(ctx context.Context) response {
-				// The reconciliation engine is owned by its own binary; the
-				// API exposes no resolution path, and says so rather than
-				// pretending.
-				return c.postJSON(ctx,
-					"/v1/admin/reconciliation/records/"+zeroUUID+"/resolve",
-					map[string]string{"resolution": "CORRECTED", "reason": "e2e error contract probe"},
-					asSession(admin), idempotency(idemKey("recon")))
+				// This API child runs with no Credit purchase provider, so
+				// the pricing port is unwired and the route says so rather
+				// than pretending (the reconciliation resolution this probe
+				// used to aim at has since been wired).
+				return c.get(ctx, "/v1/credits/pricing", asSession(customerA))
 			},
 			wantStatus: http.StatusUnprocessableEntity,
 			wantCode:   errs.CodeUnsupported,
@@ -162,13 +159,15 @@ func TestE2E_ErrorContract(t *testing.T) {
 			wantCode:   errs.CodeValidationFailed,
 		},
 		{
-			name: "oversized_body_is_400",
+			name: "oversized_body_is_413",
 			exchange: func(ctx context.Context) response {
+				// The transport budget refuses the body before any handler
+				// reads it, with its own code and the limit in the detail.
 				return c.postRaw(ctx, "/v1/intents", oversized,
 					asSession(customerA), idempotency(idemKey("oversize")))
 			},
-			wantStatus: http.StatusBadRequest,
-			wantCode:   errs.CodeValidationFailed,
+			wantStatus: http.StatusRequestEntityTooLarge,
+			wantCode:   errs.CodeBodyTooLarge,
 		},
 		{
 			name: "missing_idempotency_key_is_400",
