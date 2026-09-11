@@ -388,6 +388,20 @@ func TestAuditWV_TheProviderIsToldTheAmountAndTheDestination(t *testing.T) {
 	require.True(t, quote.MinimumOK)
 	require.Positive(t, quote.NetAmountMinor)
 
+	// Read BEFORE this payout settles anything. The assertion at the end is a
+	// DELTA, not an absolute.
+	//
+	// It used to compare the PLATFORM-scoped PAYOUT_SETTLED balance to this
+	// payout's own quantity, which is true only while no other test in the
+	// package settles one -- and scripts/inttest gives a package a single
+	// database, so the assertion coupled this test to every test written
+	// beside it and to the order they run in. The second withdrawal audit's
+	// F-263 reproduction settles a payout, and a red run caused by that
+	// coupling would be read as a defect in the product rather than in the
+	// assertion (the auditor named this, and it is fixed here rather than
+	// worked around there).
+	before := platformSettledBalance(t, f)
+
 	var req payout.Request
 	dest := f.destination
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
@@ -430,13 +444,28 @@ func TestAuditWV_TheProviderIsToldTheAmountAndTheDestination(t *testing.T) {
 
 	// The ledger recorded the value as having left, which is what makes the
 	// instruction above the thing that had to be right.
-	var external string
+	after := platformSettledBalance(t, f)
+	assert.Equal(t, "500000000", after.Sub(before).String(),
+		"F-225: the platform's settled-payout balance did not move by exactly what this payout sent")
+}
+
+// platformSettledBalance is the PLATFORM-scoped PAYOUT_SETTLED balance for the
+// fixture's Credit asset.
+//
+// It is read twice and subtracted rather than compared to a constant, because
+// the balance is package-wide: scripts/inttest gives a package one database and
+// every test in it that settles a payout adds to this number.
+func platformSettledBalance(t *testing.T, f *auditFixture) money.Quantity {
+	t.Helper()
+	var raw string
 	require.NoError(t, testDB.QueryRow(f.ctx,
 		`SELECT coalesce((SELECT b.balance FROM ledger_accounts la
 		    JOIN ledger_balances b ON b.ledger_account_id = la.id
 		   WHERE la.owner_type='PLATFORM' AND la.code=$1 AND la.asset_id=$2), 0)::text`,
-		string(ledger.CodePayoutSettled), f.creditAsset).Scan(&external))
-	assert.Equal(t, "500000000", external)
+		string(ledger.CodePayoutSettled), f.creditAsset).Scan(&raw))
+	q, err := money.ParseQuantity(raw)
+	require.NoError(t, err)
+	return q
 }
 
 // ---------------------------------------------------------------------------
@@ -453,20 +482,33 @@ func TestAuditWV_TheProviderIsToldTheAmountAndTheDestination(t *testing.T) {
 func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 	f := newAuditFixture(t)
 
-	// The money behind the earning: a promotional grant, UNFUNDED, which is
-	// what every Credit on a seeded sandbox deployment is. UNFUNDED is terminal
-	// -- nothing external backs it, so nothing external can take it back -- and
-	// it is payout-eligible.
-	grant := f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 2_000_000_000)
+	// The money behind the earning: a purchase whose card payment has cleared.
+	//
+	// It was a PROMOTIONAL grant, on the reasoning that a grant is what every
+	// Credit on a seeded sandbox deployment is. D-131 makes that exact shape
+	// unwithdrawable and deliberately so: a derived lot inherits the most
+	// restricted ORIGIN among its parents as well as their finality, so an
+	// earning funded by a grant is still a grant and goal §23's forbidden round
+	// trip -- nonwithdrawable source, transformation, payout-eligible balance --
+	// has no way through. TestAuditWV2_AGrantThePolicyForbidsCannotBeTraded-
+	// IntoWithdrawableValue asserts that directly, in the package where the
+	// trade happens.
+	//
+	// What F-230 is about is untouched by the change and is what this test is
+	// for: an earning funded by value the policy DOES permit must be able to
+	// reach a payout, and before D-124 none could, because every earning was
+	// minted REVERSIBLE and nothing could promote it. So the parent is a
+	// settled purchase.
+	grant := f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 2_000_000_000)
 
 	// The earning, minted the way internal/commerce and internal/nativemarket
 	// now mint one: naming the lots that funded it. Its finality is NOT the
 	// caller's to state -- REVERSIBLE is asked for below and the least final
-	// parent wins (D-124).
+	// parent wins (D-124) -- and neither is its origin floor (D-131).
 	earned := f.derive(valuedomain.OriginCreatorEarning, 1_000_000_000,
 		[]credit.LotParent{{
 			LotID: grant.ID, Quantity: money.QuantityFromInt64(1_000_000_000),
-			Finality: valuedomain.FinalityUnfunded,
+			Finality: valuedomain.FinalitySettled,
 		}})
 
 	parents, err := f.credits.ParentsOf(f.ctx, testDB, earned.ID)
@@ -475,7 +517,7 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 		"F-230: an earned lot recorded nothing about what funded it, so nothing could ever "+
 			"promote it: SettleFunding keys on credit_fundings.lot_id and an earning has no funding row")
 	assert.Equal(t, grant.ID, parents[0].LotID)
-	assert.Equal(t, valuedomain.FinalityUnfunded, f.finalityOf(earned.ID),
+	assert.Equal(t, valuedomain.FinalitySettled, f.finalityOf(earned.ID),
 		"proceeds are as final as what paid for them")
 	assert.True(t, f.finalityOf(earned.ID).PayoutEligible())
 
@@ -508,8 +550,9 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 		"F-230: a fully verified account holding an origin the policy permits could not withdraw it, "+
 			"because the finality it was minted with had no path to SETTLED: %v", dec.Reasons)
 	for _, lot := range dec.Lots {
-		assert.NotEqual(t, valuedomain.OriginPromotional, lot.Origin,
-			"the grant itself still never leaves; it is the PROCEEDS that do")
+		assert.Truef(t, policy.Rule(lot.OriginFloor).PayoutAllowed,
+			"a lot with origin floor %s reached the decision and the policy forbids that floor (D-131)",
+			lot.OriginFloor)
 	}
 
 	// And the explanation no longer tells the person to wait for something that
