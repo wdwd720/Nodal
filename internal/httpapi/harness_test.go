@@ -313,7 +313,7 @@ func (h *harness) do(method, path string, body any, headers ...string) *response
 	}
 	rec := httptest.NewRecorder()
 	h.server.Router().ServeHTTP(rec, req)
-	return &response{ResponseRecorder: rec, t: h.t}
+	return checkedResponse(h.t, rec)
 }
 
 // doWithCookies is do with cookies attached, for a flow whose second request
@@ -333,7 +333,7 @@ func (h *harness) doWithCookies(method, path string, body any, cookies []*http.C
 	}
 	rec := httptest.NewRecorder()
 	h.server.Router().ServeHTTP(rec, req)
-	return &response{ResponseRecorder: rec, t: h.t}
+	return checkedResponse(h.t, rec)
 }
 
 // problem decodes the body as an RFC 9457 document and asserts the media type.

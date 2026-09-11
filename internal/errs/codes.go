@@ -323,6 +323,7 @@ var registry = map[Code]codeInfo{
 // exhaustiveness tests. Keep in sync with the constants above.
 var allCodes = []Code{
 	CodeValidationFailed,
+	CodeBodyTooLarge,
 	CodeUnauthenticated,
 	CodeForbidden,
 	CodeStepUpRequired,

@@ -172,6 +172,18 @@ export function explain(error: unknown): Explanation {
         needsSignIn: false,
         needsStepUp: false,
       };
+    case "BODY_TOO_LARGE":
+      return {
+        ...base,
+        title: "That request was too big",
+        body: joinDetail(
+          "The backend refused the request before reading it: the body is larger than the route accepts. Send less, rather than sending it again.",
+          error.detail,
+        ),
+        retryable: false,
+        needsSignIn: false,
+        needsStepUp: false,
+      };
     case "VALIDATION_FAILED":
       return {
         ...base,

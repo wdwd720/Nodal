@@ -68,16 +68,26 @@ func rawBody(ctx context.Context) []byte {
 // and one number has to be large enough for the most demanding route -- so
 // every other route inherited it (F-85).
 //
-// The largest field any request schema declares is 5,000 characters, so 64 KiB
-// is generous for an ordinary command. Provider deliveries get more, because
-// they are somebody else's payload and the webhook package documents 256 KiB
-// for exactly that reason.
+// The largest field any schema in the published contract declares is
+// largestSchemaFieldChars, so 64 KiB is generous for an ordinary command --
+// eight times the largest single field, which leaves room for the rest of the
+// document and for multi-byte characters in it. Provider deliveries get more,
+// because they are somebody else's payload and the webhook package documents
+// 256 KiB for exactly that reason.
 //
 // The configured maximum is a CEILING, never a floor: an operator may lower it
 // and may not raise a route past its own limit.
 const (
 	defaultMaxBodyBytes = 64 << 10
 	webhookMaxBodyBytes = 256 << 10
+	// largestSchemaFieldChars is the largest `maxLength` in openapi.yaml:
+	// CreateStrategyRequest.description. This comment used to say 5,000, which
+	// was the largest when it was written and stopped being true when the
+	// strategy schemas landed -- so the sentence justifying the body limit was
+	// justifying it with the wrong number (F-173). It is derived rather than
+	// restated: TestBodyLimit_IsDerivedFromTheLargestFieldTheContractDeclares
+	// reads the spec and fails when a larger field is added.
+	largestSchemaFieldChars = 8_000
 )
 
 // bodyLimitFor returns the smaller of the route's limit and the configured

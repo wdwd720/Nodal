@@ -4,6 +4,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -133,4 +137,42 @@ func TestBodyLimit_AnOrdinaryBodyStillArrivesExactly(t *testing.T) {
 	// depends on.
 	res := h.do(http.MethodGet, "/v1/me", nil)
 	assert.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+}
+
+// TestBodyLimit_IsDerivedFromTheLargestFieldTheContractDeclares.
+//
+// The comment beside defaultMaxBodyBytes justifies 64 KiB with the size of the
+// largest field any request schema declares. It said 5,000 characters, which
+// was true when it was written; `CreateStrategyRequest.description` has been
+// 8,000 since the strategy schemas landed, and nothing noticed, because a
+// sentence is not checked by anything (F-173).
+//
+// So the number is derived from the spec rather than remembered. A schema that
+// declares a larger field fails here, and whoever adds it has to decide whether
+// the limit still holds instead of finding out from a 413 in production.
+func TestBodyLimit_IsDerivedFromTheLargestFieldTheContractDeclares(t *testing.T) {
+	t.Parallel()
+	spec, err := os.ReadFile(filepath.Join("..", "..", "openapi", "openapi.yaml"))
+	require.NoError(t, err, "the published contract is the authority for this number")
+
+	maxLength := regexp.MustCompile(`maxLength:\s*([0-9_]+)`)
+	largest, where := 0, ""
+	for _, m := range maxLength.FindAllStringSubmatch(string(spec), -1) {
+		n, cerr := strconv.Atoi(strings.ReplaceAll(m[1], "_", ""))
+		require.NoError(t, cerr)
+		if n > largest {
+			largest, where = n, m[0]
+		}
+	}
+	require.Greater(t, largest, 0, "no maxLength found in openapi.yaml; this scan has stopped seeing the spec")
+
+	assert.Equal(t, largestSchemaFieldChars, largest,
+		"the largest field the contract declares is %q; the constant the body limit is justified by says %d",
+		where, largestSchemaFieldChars)
+
+	// And the justification itself: the ordinary route's limit is comfortably
+	// larger than the largest single field, in bytes, allowing for multi-byte
+	// characters in it.
+	assert.Greater(t, int64(defaultMaxBodyBytes), int64(largestSchemaFieldChars)*4,
+		"64 KiB is no longer generous for a document whose largest field is %d characters", largest)
 }

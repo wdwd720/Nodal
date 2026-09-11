@@ -1527,7 +1527,16 @@ func TestClientIPIsAPlainAddress(t *testing.T) {
 		{"forwarded ignored without trust", "203.0.113.9:80", "198.51.100.7", nil, "203.0.113.9"},
 		{"forwarded ignored from an untrusted peer", "203.0.113.9:80", "198.51.100.7", []*net.IPNet{loopback}, "203.0.113.9"},
 		{"forwarded honored from a trusted peer", "127.0.0.1:80", "198.51.100.7", []*net.IPNet{loopback}, "198.51.100.7"},
-		{"leftmost forwarded entry wins", "127.0.0.1:80", "198.51.100.7, 10.0.0.1", []*net.IPNet{loopback}, "198.51.100.7"},
+		// The RIGHT-most entry no trusted hop added is the answer: a proxy
+		// APPENDS to whatever the client sent, so everything to the left of
+		// its own entry is text the caller wrote (F-166). Here 10.0.0.1 is
+		// not a trusted network, so it is the closest address the loopback
+		// proxy vouched for, and 198.51.100.7 is the caller's own claim.
+		{"the rightmost untrusted entry wins", "127.0.0.1:80", "198.51.100.7, 10.0.0.1", []*net.IPNet{loopback}, "10.0.0.1"},
+		{"trusted hops at the right are skipped", "127.0.0.1:80", "198.51.100.7, 127.0.0.9", []*net.IPNet{loopback}, "198.51.100.7"},
+		{"a list of nothing but trusted hops falls back to the peer", "127.0.0.1:80", "127.0.0.8, 127.0.0.9", []*net.IPNet{loopback}, "127.0.0.1"},
+		{"an unparsable entry is skipped rather than trusted", "127.0.0.1:80", "198.51.100.7, junk", []*net.IPNet{loopback}, "198.51.100.7"},
+		{"a forwarded port is stripped like any other", "127.0.0.1:80", "198.51.100.7:9999", []*net.IPNet{loopback}, "198.51.100.7"},
 		{"malformed forwarded falls back", "127.0.0.1:80", "nonsense", []*net.IPNet{loopback}, "127.0.0.1"},
 	}
 	for _, tc := range cases {
