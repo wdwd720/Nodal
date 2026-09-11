@@ -2,14 +2,26 @@
  * Accounts: search, and one account's whole read-side picture (goal §38).
  *
  * What an operator may see here is everything the admin plane will tell them
- * about one account: its status and what is restricting it, the Credit balance
- * broken into the buckets that answer "how much of this may leave", the open
- * reconciliation records against it, the controlled actions that have named it,
- * the gates and kill switches that decide what it may do, and the activity
- * timeline. What an operator may *do* here is exactly one thing: move the
- * account through the status machine of `internal/accounts`
- * (ACTIVE / RESTRICTED / FROZEN / CLOSED), with `account:freeze`, a recent
- * multi-factor sign-in and a recorded reason.
+ * about one account: the person who owns it, its status and what is restricting
+ * it, the Credit balance broken into the buckets that answer "how much of this
+ * may leave", the open reconciliation records against it, the controlled
+ * actions that have named it, the gates and kill switches that decide what it
+ * may do, the agents acting for it, and the activity timeline.
+ *
+ * What an operator may *do* here is three things, and each one is a reaction
+ * rather than an initiative:
+ *
+ *   - move the account through the status machine of `internal/accounts`
+ *     (ACTIVE / RESTRICTED / FROZEN / CLOSED), with `account:freeze`, a recent
+ *     multi-factor sign-in and a recorded reason;
+ *   - decide a closure request **the user themselves opened** — cancel, refuse,
+ *     or effect it once the cooling-off period has passed. There is no route
+ *     that closes an account nobody asked to close, so there is no control here
+ *     that could start one;
+ *   - pause one agent, which stops it acting again and unwinds nothing.
+ *
+ * Nothing on this surface creates a financial position, moves value, or decides
+ * anything on a customer's behalf that the customer did not ask for.
  *
  * **There is no balance-editing command in this system and this surface does
  * not imply one.** That is not achieved by hiding figures — an operator who
@@ -31,21 +43,37 @@
  */
 import {
   changeAccountStatus,
+  decideClosure,
   getAccount,
   getAccountActivity,
+  getAdminUser,
   getCreditBalance,
   listActions,
+  listAgents,
   listGates,
   listKillSwitches,
   listReconciliationRecords,
+  pauseAgent,
   searchAccounts,
 } from "../api.ts";
-import type { Account, ActivityItem, AdminAction, CapabilityGate, CreditBalance, KillSwitch, ReconciliationRecord } from "../api.ts";
+import type {
+  Account,
+  ActivityItem,
+  AdminAction,
+  AdminUserView,
+  Agent,
+  AgentPage,
+  CapabilityGate,
+  ClosureDecisionName,
+  CreditBalance,
+  KillSwitch,
+  ReconciliationRecord,
+} from "../api.ts";
 import type { ViewContext } from "../context.ts";
-import { allowedWrites } from "../decide.ts";
-import { append, clear, el, emptyState, field, fields, notice, panel, pill, table } from "../dom.ts";
+import { allowedWrites, holds, steppedUp } from "../decide.ts";
+import { actionButton, append, clear, el, emptyState, field, fields, notice, panel, pill, table } from "../dom.ts";
 import { commandForm, refusedCommand } from "../forms.ts";
-import { formatInstant, reasonText } from "../format.ts";
+import { formatDuration, formatInstant, reasonText, relativeInstant } from "../format.ts";
 import { groupDigits, isQuantity } from "../money.ts";
 import { describeProblem, problemNotice } from "../problem.ts";
 
@@ -59,6 +87,24 @@ const ACCOUNT_SCOPED_KILL = "ACCOUNT_FREEZE";
 
 /** The scope id that means "the whole platform" on a kill switch. */
 const GLOBAL_SCOPE = "*";
+
+/**
+ * The two permissions `POST /v1/admin/agents/{agentId}/pause` needs, and it
+ * needs both.
+ *
+ * `internal/httpapi/authz.go` floors the route on `kill:activate` rather than
+ * on `agent:pause`, and says why: the CUSTOMER role holds `agent:pause` — it is
+ * how an owner stops their own agent — so a route floored on it would be
+ * reachable by every customer. `internal/agents` then demands `agent:pause` and
+ * an OPERATOR actor. The route says who may reach it; the domain says who may
+ * do it. A console that checked only the first would offer the control to
+ * RISK and SECURITY, who hold `kill:activate` and not `agent:pause`, and the
+ * server would refuse them.
+ */
+const AGENT_PAUSE_PERMISSIONS: readonly string[] = ["kill:activate", "agent:pause"];
+
+/** Agent states that a pause can still act on. */
+const PAUSABLE_STATUSES: readonly string[] = ["ENABLED", "STOPPED"];
 
 export async function renderAccounts(ctx: ViewContext, root: HTMLElement): Promise<void> {
   const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
@@ -161,13 +207,14 @@ async function renderOneAccount(ctx: ViewContext, root: HTMLElement, accountId: 
     return;
   }
 
-  append(root, identityPanel(account), ownerPanel(account));
+  append(root, identityPanel(account));
+  await renderOwner(ctx, root, account);
   await renderRestrictions(ctx, root, account);
   await renderCreditBalance(root, account.id);
   await renderOpenReconciliation(ctx, root, account.id);
   await renderRecentAdminActions(ctx, root, account.id);
   await renderCapabilities(ctx, root);
-  append(root, agentsPanel());
+  await renderAgents(ctx, root, account.id);
   append(root, statusPanel(ctx, account));
   await renderActivity(root, accountId);
 }
@@ -178,6 +225,7 @@ function identityPanel(account: Account): HTMLElement {
     "Identity and status, as the admin plane reports them.",
     fields(
       field("Account", el("code", {}, account.id)),
+      field("Owner", account.owner_user_id ? el("code", {}, account.owner_user_id) : "not reported"),
       field("Kind", account.kind),
       field("Status", pill(account.status, account.status.toLowerCase())),
       field("Status reason", account.status_reason ?? "—"),
@@ -187,33 +235,382 @@ function identityPanel(account: Account): HTMLElement {
 }
 
 /**
- * The user behind the account.
+ * The person behind the account: `GET /v1/admin/users/{userId}`, reached
+ * through the `owner_user_id` that `Account` now carries.
  *
- * **Slot for `GET /v1/admin/users/{userId}` (in flight on another branch).**
- * When it lands, this function is the only place that changes: fetch the
- * profile summary and render it here in place of the notice.
+ * The view is read-only by construction. It carries no e-mail address, legal
+ * name, phone number or date of birth — those stay sealed in `identity_pii`,
+ * which this surface has no route to — and it points at the audit stream rather
+ * than restating it. `email_verified` says the identity provider asserted a
+ * verified address; the address itself is not reachable from here and this
+ * console does not pretend otherwise.
  *
- * It needs one thing this console cannot get today. The `Account` schema
- * carries `id`, `kind`, `status`, `status_reason` and `created_at` — and no
- * owner. No admin route maps an account to its user, so there is no `userId`
- * to pass. Either `Account` grows an owner field or `GET /v1/admin/accounts`
- * grows a lookup; until one of them exists this section states the gap rather
- * than guessing at an identity.
+ * The one mutation is deciding a closure request **the user themselves
+ * opened**. There is no operator route that closes an account nobody asked to
+ * close, and this console therefore has no control that could originate one.
  */
-function ownerPanel(account: Account): HTMLElement {
+async function renderOwner(ctx: ViewContext, root: HTMLElement, account: Account): Promise<void> {
+  const userId = account.owner_user_id;
+  if (!userId) {
+    append(
+      root,
+      panel(
+        "Person behind this account",
+        "The account record did not name an owner.",
+        notice(
+          "warn",
+          el("strong", {}, "This account reported no owner_user_id."),
+          el(
+            "p",
+            {},
+            `An account of kind ${account.kind} is expected to name the user who owns it. PLATFORM and CANARY accounts belong to Nodal rather than to a person, which is the ordinary reason for this; for a CUSTOMER account it is a gap worth reporting.`,
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+
+  let view: AdminUserView;
+  try {
+    view = await getAdminUser(userId);
+  } catch (err) {
+    append(
+      root,
+      panel(
+        "Person behind this account",
+        "The support view could not be read.",
+        problemNotice(err, "the user support view"),
+      ),
+    );
+    return;
+  }
+
+  append(
+    root,
+    panel(
+      "Person behind this account",
+      "Read-only. No field here is writable, and no personal data reaches this surface: the e-mail address, name and date of birth are sealed and have no route to this console.",
+      fields(
+        field("User", el("code", {}, view.user_id)),
+        field("User status", pill(view.user_status, view.user_status.toLowerCase())),
+        field(
+          "E-mail verified",
+          view.email_verified
+            ? "yes — the identity provider asserted it; the address itself is sealed"
+            : "no — the identity provider has not asserted a verified address",
+        ),
+        field("Identity", el("code", {}, `${view.idp_issuer} / ${view.idp_subject}`)),
+        field("Signed up", formatInstant(view.created_at)),
+        field("Active sessions", String(view.active_sessions)),
+        field("Verification", verificationValue(view)),
+        field("Audit stream", el("code", {}, view.audit_stream)),
+      ),
+      profilePanel(view),
+      onboardingPanel(view),
+      restrictionsPanel(view),
+      acceptancesPanel(view),
+      otherAccountsPanel(ctx, view, account.id),
+      closurePanel(ctx, view),
+    ),
+  );
+}
+
+/**
+ * The verification level Nodal established. `known: false` means this
+ * deployment wired no resolver, which is reported as "not established" and
+ * never as NONE — the two are different facts.
+ */
+function verificationValue(view: AdminUserView): string {
+  if (!view.verification.known) {
+    return "not established — this deployment wired no verification resolver. That is not the same as “no verification”.";
+  }
+  return view.verification.level ?? "known, but the level was not reported";
+}
+
+function profilePanel(view: AdminUserView): HTMLElement {
+  const profile = view.profile;
+  if (!profile) {
+    return panel(
+      "Profile",
+      "No profile row exists for this user.",
+      emptyState("The user has not completed the profile step of onboarding."),
+    );
+  }
   return panel(
-    "Person behind this account",
-    "Not resolvable from the admin plane as it stands.",
-    notice(
-      "info",
-      el("strong", {}, "No admin route maps an account to its owner."),
-      el(
-        "p",
-        {},
-        `The account record (${account.kind}) carries no owner field, so this console has no user id to look up. The profile summary belongs here the moment GET /v1/admin/users/{userId} exists and something reports which user owns an account.`,
+    "Profile",
+    "Product-level state only: what the person chose to be called and how they want dates and numbers rendered.",
+    fields(
+      field("Display name", profile.display_name ?? "not set"),
+      field("Handle", profile.handle ? el("code", {}, profile.handle) : "not set"),
+      field("Locale", profile.locale),
+      field("Time zone", profile.time_zone),
+      field("Avatar seed", el("code", {}, profile.avatar_seed)),
+      field("Created", formatInstant(profile.created_at)),
+      field("Updated", profile.updated_at ? formatInstant(profile.updated_at) : "never"),
+    ),
+  );
+}
+
+/**
+ * Onboarding is timestamps, not a state machine: the steps are independent,
+ * may be done in any order and cannot be undone (D-053). The view says which
+ * are done and when, and never implies an order that does not exist.
+ */
+function onboardingPanel(view: AdminUserView): HTMLElement {
+  const onboarding = view.onboarding;
+  if (!onboarding) {
+    return panel("Onboarding", "Not reported for this user.", emptyState("The support view carried no onboarding record."));
+  }
+  return panel(
+    "Onboarding",
+    onboarding.complete
+      ? `Complete${onboarding.completed_at ? ` at ${formatInstant(onboarding.completed_at)}` : ""}.`
+      : `Incomplete${onboarding.next_step ? `; the next step the product would offer is ${onboarding.next_step}` : ""}.`,
+    table(
+      ["Step", "Done", "When"],
+      onboarding.steps.map((step) =>
+        el(
+          "tr",
+          {},
+          el("td", {}, el("code", {}, step.key)),
+          el("td", {}, step.complete ? pill("done", "approved") : pill("not yet", "inactive")),
+          el("td", { class: "muted" }, step.completed_at ? formatInstant(step.completed_at) : "—"),
+        ),
+      ),
+    ),
+    el(
+      "p",
+      { class: "muted" },
+      `Started ${formatInstant(onboarding.started_at)}. The steps are independent and cannot be undone; this is a record of what happened, not a position in a queue.`,
+    ),
+  );
+}
+
+/**
+ * The restrictions as the *customer* is told them. The free text an operator
+ * wrote on a status change is deliberately not in this list — it was written
+ * for other operators and appears under the account's own status above.
+ */
+function restrictionsPanel(view: AdminUserView): HTMLElement {
+  if (view.restrictions.length === 0) {
+    return panel(
+      "What this person is told",
+      "Nothing is restricting them.",
+      emptyState("The support view reported no restriction."),
+    );
+  }
+  return panel(
+    "What this person is told",
+    "The restriction messages the customer sees, in their own words. The operator-facing reason is on the account status above.",
+    table(
+      ["Code", "Account", "Message"],
+      view.restrictions.map((r) =>
+        el(
+          "tr",
+          { class: "blocking" },
+          el("td", {}, el("code", {}, r.code)),
+          el("td", {}, r.account_id ? el("code", {}, r.account_id) : el("span", { class: "muted" }, "the user, not one account")),
+          el("td", {}, r.message),
+        ),
       ),
     ),
   );
+}
+
+function acceptancesPanel(view: AdminUserView): HTMLElement {
+  const acceptances = view.acceptances ?? [];
+  if (acceptances.length === 0) {
+    return panel(
+      "Terms accepted",
+      "No acceptance is on record.",
+      emptyState("Nothing here is a claim that the person refused anything: it is that no acceptance row exists."),
+    );
+  }
+  return panel(
+    "Terms accepted",
+    "Each acceptance names the exact document version and its content hash, so what was agreed to can be reproduced.",
+    table(
+      ["Document", "Version", "Content hash", "Accepted"],
+      acceptances.map((a) =>
+        el(
+          "tr",
+          {},
+          el("td", {}, el("code", {}, a.document_id)),
+          el("td", {}, a.version),
+          el("td", { class: "muted" }, el("code", {}, a.content_hash)),
+          el("td", { class: "muted" }, formatInstant(a.accepted_at)),
+        ),
+      ),
+    ),
+  );
+}
+
+/** The person's other accounts, so an operator sees the whole relationship. */
+function otherAccountsPanel(ctx: ViewContext, view: AdminUserView, currentId: string): HTMLElement {
+  const others = view.accounts.filter((a) => a.id !== currentId);
+  if (others.length === 0) {
+    return panel("Other accounts", "This is the only account this person holds.", emptyState("No other account."));
+  }
+  return panel(
+    "Other accounts",
+    `${others.length} further account(s) belong to the same person.`,
+    table(
+      ["Account", "Kind", "Status", "Reason", ""],
+      others.map((a) =>
+        el(
+          "tr",
+          {},
+          el("td", {}, el("code", {}, a.id)),
+          el("td", {}, a.kind),
+          el("td", {}, pill(a.status, a.status.toLowerCase())),
+          el("td", { class: "muted" }, a.status_reason ?? "—"),
+          el(
+            "td",
+            {},
+            el(
+              "button",
+              { type: "button", class: "button quiet", onclick: () => ctx.navigate(`accounts?id=${a.id}`) },
+              "Inspect",
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * The closure request, and the operator's decision on it.
+ *
+ * Three properties the console must not blur, each enforced by the server and
+ * each stated here before the form is offered:
+ *
+ *   - the request is the **user's**. An operator decides one; none of them can
+ *     start one, and no control here could;
+ *   - EFFECT is refused until the cooling-off period has passed, by the service
+ *     and again by the database. The console does not offer it before then, and
+ *     says how long is left rather than leaving the button mysteriously absent;
+ *   - an operator may not decide a request of their own, which is the same rule
+ *     dual control applies everywhere else on this console.
+ */
+function closurePanel(ctx: ViewContext, view: AdminUserView): HTMLElement {
+  const request = view.closure_request;
+  if (!request) {
+    return panel(
+      "Closure request",
+      "This person has not asked to close their account.",
+      emptyState("There is no request to decide. An operator cannot open one: closure is the customer's to request."),
+    );
+  }
+  const now = ctx.now();
+  const summary = fields(
+    field("Request", el("code", {}, request.id)),
+    field("State", pill(request.state, request.state.toLowerCase())),
+    field("Requested", formatInstant(request.requested_at)),
+    field(
+      "Cooling-off ends",
+      `${formatInstant(request.cooling_off_until)} (${relativeInstant(request.cooling_off_until, now)})`,
+    ),
+    field("Decided", request.decided_at ? formatInstant(request.decided_at) : "not yet"),
+    field("Decision reason", request.decided_reason ?? "—"),
+  );
+
+  if (request.state !== "PENDING") {
+    return panel(
+      "Closure request",
+      `Already ${request.state.toLowerCase()}. There is nothing left to decide.`,
+      summary,
+    );
+  }
+
+  const decisions = availableDecisions(request);
+  const refusal = closureRefusal(ctx, view, request);
+  if (refusal) {
+    return panel("Closure request", "Open, and not yours to decide.", summary, notice("info", refusal));
+  }
+
+  return panel(
+    "Closure request",
+    "Open. Cancelling withdraws it on the person's behalf; refusing declines it with a reason they will see; effecting it closes the account.",
+    summary,
+    request.effectable
+      ? null
+      : notice(
+          "info",
+          `EFFECT is not offered yet: the cooling-off period runs until ${formatInstant(request.cooling_off_until)} (${formatDuration(Math.max(0, Math.floor((new Date(request.cooling_off_until).getTime() - now.getTime()) / 1000)))} left). The service and the database both refuse it before then.`,
+        ),
+    commandForm({
+      title: "Decide this closure request",
+      description:
+        "Recorded on the request and in the audit stream, with your subject id as the decider. The person is told the reason for a refusal.",
+      submitLabel: "Record the decision",
+      variant: "danger",
+      warning:
+        "EFFECT closes the account. It is not a status change you can walk back from this console: reopening is a new relationship, not an undo.",
+      fields: [
+        { name: "decision", label: "Decision", options: decisions, ...(decisions[0] ? { value: decisions[0] } : {}) },
+        {
+          name: "reason",
+          label: "Reason",
+          multiline: true,
+          minLength: ctx.authority.doc.min_reason_length,
+          hint: `At least ${ctx.authority.doc.min_reason_length} characters. Recorded on the request; a refusal's reason is shown to the person.`,
+        },
+      ],
+      onSubmit: async (values, key) => {
+        const decision = values["decision"] ?? "";
+        if (!isClosureDecision(decision)) {
+          throw new Error(`${decision} is not a decision this route accepts.`);
+        }
+        try {
+          const updated = await decideClosure(view.user_id, { decision, reason: values["reason"] ?? "" }, key);
+          ctx.report(
+            notice(
+              "info",
+              `The closure request for ${updated.user_id} is now ${updated.closure_request?.state ?? "decided"}; the user is ${updated.user_status}.`,
+            ),
+          );
+          ctx.refresh();
+        } catch (err) {
+          throw new Error(describeProblem(err));
+        }
+      },
+    }),
+  );
+}
+
+/** CANCEL and REFUSE always; EFFECT only once the cooling-off period passed. */
+function availableDecisions(request: NonNullable<AdminUserView["closure_request"]>): string[] {
+  return request.effectable ? ["CANCEL", "REFUSE", "EFFECT"] : ["CANCEL", "REFUSE"];
+}
+
+function isClosureDecision(value: string): value is ClosureDecisionName {
+  return value === "CANCEL" || value === "REFUSE" || value === "EFFECT";
+}
+
+/**
+ * Why this operator may not decide this request, or null when they may.
+ *
+ * `POST /v1/admin/users/{userId}/closure` takes `account:freeze` and a step-up
+ * — the same permission and window as the account status change, because that
+ * is what EFFECT ends up performing — and the service refuses an operator
+ * deciding their own request.
+ */
+function closureRefusal(
+  ctx: ViewContext,
+  view: AdminUserView,
+  request: NonNullable<AdminUserView["closure_request"]>,
+): string | null {
+  void request;
+  if (view.user_id.toLowerCase() === ctx.session.principal.subjectId.toLowerCase()) {
+    return "This is your own closure request. The service refuses an operator deciding their own, for the same reason dual control refuses a self-approval; ask a different operator.";
+  }
+  const permitted = allowedWrites(ctx.session.principal, "accounts", ctx.now(), ctx.authority);
+  if (!permitted.includes("account.status")) {
+    return `${reasonText("MISSING_PERMISSION")} Deciding a closure request needs account:freeze and a recent multi-factor sign-in — the same as an account status change, because effecting one performs exactly that.`;
+  }
+  return null;
 }
 
 /**
@@ -575,30 +972,249 @@ async function renderCapabilities(ctx: ViewContext, root: HTMLElement): Promise<
 }
 
 /**
- * The agents acting for this account.
+ * The agents acting for this account: `GET /v1/admin/agents?account_id=`.
  *
- * **Slot for `GET /v1/admin/agents` (in flight on another branch).** When it
- * lands, this function is the only place that changes: list the agents whose
- * account is this one, with their ladder rung and their pause state, and drop
- * the notice.
+ * Three things this panel keeps apart, because conflating any two of them
+ * produces a wrong conclusion about whether anything is happening:
  *
- * Nothing is rendered in its place today, because there is no route that lists
- * agents to an operator and a page that showed "no agents" would be asserting
- * something the console cannot know.
+ *   - **status** is the product's word for the lifecycle — STOPPED means
+ *     created and never enabled, ENABLED means the owner granted it the right
+ *     to be evaluated;
+ *   - **runtime** is what is actually evaluating and executing. NOT_DEPLOYED
+ *     means this deployment runs no such worker, so an agent can be ENABLED,
+ *     correct, and evaluated by nothing at all;
+ *   - **authority** is how far it may go on its own, from the ladder the code
+ *     enforces. A level this build does not permit is shown with the capability
+ *     it would need rather than hidden.
+ *
+ * Budgets are exact base-unit Credit strings and `budget.source` is rendered,
+ * so a zero that was never measured is never read as a zero that was.
  */
-function agentsPanel(): HTMLElement {
-  return panel(
-    "Agents acting for this account",
-    "Not readable from the admin plane as it stands.",
-    notice(
-      "info",
-      el("strong", {}, "No route lists an account's agents to an operator."),
-      el(
-        "p",
-        {},
-        "This is not “this account has no agents”: it is “nothing here can tell”. GET /v1/admin/agents belongs in this panel when it exists; an agent's pause state is meanwhile visible as an AGENT_PAUSE kill switch on the kill switches page.",
+async function renderAgents(ctx: ViewContext, root: HTMLElement, accountId: string): Promise<void> {
+  let page: AgentPage;
+  try {
+    page = await listAgents({ accountId, includeArchived: false, limit: 100 });
+  } catch (err) {
+    append(
+      root,
+      panel(
+        "Agents acting for this account",
+        "The agents could not be read.",
+        problemNotice(err, "this account's agents"),
+      ),
+    );
+    return;
+  }
+
+  append(
+    root,
+    panel(
+      "Agents acting for this account",
+      `${page.items.length} live agent(s). Archived agents are not listed.`,
+      page.items.length === 0
+        ? emptyState("This account has no agent. The server returned an empty list; this is not a failure to read one.")
+        : table(
+            ["Agent", "Status", "Stage", "Authority", "Runtime", "Budget", ""],
+            page.items.flatMap((a) => agentRows(ctx, a)),
+          ),
+      authorityLadder(page),
+    ),
+  );
+}
+
+function agentRows(ctx: ViewContext, agent: Agent): HTMLElement[] {
+  const row = el(
+    "tr",
+    { class: agent.status === "PAUSED" || agent.status === "FAILED" ? "blocking" : "" },
+    el("td", {}, agent.name, el("br"), el("code", { class: "muted" }, agent.id)),
+    el("td", {}, pill(agent.status, agent.status.toLowerCase())),
+    el("td", {}, agent.stage, agent.mode ? el("span", { class: "muted" }, ` / ${agent.mode}`) : null),
+    el(
+      "td",
+      {},
+      agent.authority.name,
+      agent.authority.enabled
+        ? null
+        : pill("not permitted here", "inactive", `Needs ${agent.authority.required_capability ?? "a capability this build does not have"}.`),
+    ),
+    el(
+      "td",
+      { class: "muted" },
+      `evaluator ${agent.runtime.evaluator}, executor ${agent.runtime.executor}`,
+      el("br"),
+      agent.runtime.detail,
+    ),
+    el("td", { class: "muted" }, budgetText(agent)),
+    el("td", {}, pauseControl(ctx, agent)),
+  );
+
+  const detail = el("tr", { class: "detail" });
+  const cell = el("td", { colspan: "7" });
+  append(
+    cell,
+    fields(
+      field("Strategy", el("code", {}, `${agent.strategy_id} @ ${agent.strategy_version_id}`)),
+      field("Per-trade cap", `${quantityText(agent.limits.per_trade_cap_credits)} Credit base units`),
+      field("Daily loss stop", `${quantityText(agent.limits.daily_loss_stop_credits)} Credit base units`),
+      field("Maximum position share", `${String(agent.limits.max_position_share_bps)} bps`),
+      field(
+        "Schedule",
+        agent.limits.schedule.kind === "MANUAL"
+          ? "MANUAL — it evaluates only when the owner runs it"
+          : `INTERVAL — every ${String(agent.limits.schedule.interval_minutes ?? 0)} minutes`,
+      ),
+      field("Allowed assets", String(agent.limits.allowed_asset_ids.length)),
+      field("Runs", `${String(agent.runs_total ?? 0)}${agent.last_run_at ? `, last ${formatInstant(agent.last_run_at)} (${agent.last_run_status ?? "status not reported"})` : ", none recorded"}`),
+      field("Last heartbeat", agent.runtime.last_heartbeat ? formatInstant(agent.runtime.last_heartbeat) : "never"),
+      agent.pause ? field("Paused", pauseText(agent)) : null,
+    ),
+  );
+  append(detail, cell);
+  return [row, detail];
+}
+
+/** The ceiling and what has been used, with where the used figure came from. */
+function budgetText(agent: Agent): string {
+  const granted = quantityText(agent.budget.granted_credits);
+  const used = quantityText(agent.budget.used_credits);
+  switch (agent.budget.source) {
+    case "NO_RUNS_RECORDED":
+      return `${used} of ${granted} — the agent has never run, so nothing was measured`;
+    case "NO_INTENTS_CREATED":
+      return `${used} of ${granted} — it ran and created no intent, so nothing was committed`;
+    default:
+      return `${used} of ${granted}, from committed intents`;
+  }
+}
+
+function pauseText(agent: Agent): string {
+  const p = agent.pause;
+  if (!p) return "—";
+  const orders =
+    p.open_orders_policy === "CANCEL_CANCELABLE"
+      ? "cancelable open orders were cancelled"
+      : "open orders were left alone";
+  return `${formatInstant(p.paused_at)} by a ${p.paused_by_actor_type} actor (${p.reason_code}): ${p.reason}. ${orders}.`;
+}
+
+function quantityText(value: string): string {
+  return isQuantity(value) ? groupDigits(value) : value;
+}
+
+/**
+ * The authority ladder this build permits, returned whole rather than filtered,
+ * so an operator sees which rungs exist and which are switched off here.
+ */
+function authorityLadder(page: AgentPage): HTMLElement {
+  const disabled = page.authority_levels.filter((l) => !l.enabled);
+  if (disabled.length === 0) {
+    return el("p", { class: "muted" }, "Every rung of the authority ladder is permitted in this deployment.");
+  }
+  return notice(
+    "info",
+    el("strong", {}, `${disabled.length} rung(s) of the authority ladder are not permitted in this deployment.`),
+    el(
+      "ul",
+      { class: "reasons" },
+      ...disabled.map((l) =>
+        el("li", {}, `${l.name} — needs ${l.required_capability ?? "a capability this build does not declare"}`),
       ),
     ),
+    el(
+      "p",
+      { class: "muted" },
+      "A rung is off because its capability gate is not active, which is the gates surface's answer and not a property of any agent.",
+    ),
+  );
+}
+
+/**
+ * The operator pause.
+ *
+ * It stops new risk from one agent; it does not unwind what the agent already
+ * did, and the API leaves open orders alone. Both permissions are required (see
+ * AGENT_PAUSE_PERMISSIONS) and so is a step-up, which the route demands even
+ * though the `kill.activate` write it borrows its permission from does not —
+ * activating a kill switch is the fast path, and pausing one customer's agent
+ * deliberately is not the same act.
+ */
+function pauseControl(ctx: ViewContext, agent: Agent): HTMLElement {
+  if (!PAUSABLE_STATUSES.includes(agent.status)) {
+    return actionButton({
+      label: "Pause",
+      onClick: () => undefined,
+      allowed: false,
+      reason: `This agent is ${agent.status}. A pause acts on an agent that could still be evaluated.`,
+    });
+  }
+  const refusal = pauseRefusal(ctx);
+  return actionButton({
+    label: "Pause",
+    variant: "danger",
+    allowed: refusal === null,
+    ...(refusal === null ? {} : { reason: refusal }),
+    onClick: () => openPauseForm(ctx, agent),
+  });
+}
+
+function pauseRefusal(ctx: ViewContext): string | null {
+  const now = ctx.now();
+  const missing = AGENT_PAUSE_PERMISSIONS.filter((p) => !holds(ctx.session.principal, p, now, ctx.authority));
+  if (missing.length > 0) {
+    return `${reasonText("MISSING_PERMISSION")} An operator pause needs both ${AGENT_PAUSE_PERMISSIONS.join(" and ")}; you are missing ${missing.join(" and ")}. The route is floored on kill:activate and internal/agents then demands agent:pause and an OPERATOR actor.`;
+  }
+  if (!steppedUp(ctx.session.principal, stepUpWindowSeconds(ctx), now)) {
+    return `${reasonText("STEP_UP_REQUIRED")} Pausing someone else's agent needs a recent multi-factor sign-in, even though activating a kill switch does not: stopping all new risk is the fast path, and stopping one customer's agent is a deliberate act.`;
+  }
+  return null;
+}
+
+/**
+ * The step-up window the API boundary enforces, read from the document rather
+ * than written down again.
+ *
+ * `internal/httpapi.stepUpMaxAge` is the ceiling for every route marked
+ * `StepUp: true`, and `account.status` is the declared write that carries it
+ * (`PostAdminAccountsAccountIdStatus` is the route `authz.go` names when it
+ * explains the closure route's requirement). A deployment may tighten the
+ * window through CP_AUTH_STEP_UP_MAX_AGE and can never widen it, so treating
+ * this as the window is never more permissive than the server — and the server
+ * checks again regardless.
+ */
+function stepUpWindowSeconds(ctx: ViewContext): number {
+  const write = ctx.authority.surface("accounts")?.writes?.find((w) => w.id === "account.status");
+  return write?.step_up_max_age_seconds ?? 0;
+}
+
+function openPauseForm(ctx: ViewContext, agent: Agent): void {
+  ctx.report(
+    commandForm({
+      title: `Pause ${agent.name}`,
+      description:
+        "Writes an agent_pauses row under the OPERATOR reason code and moves the agent to PAUSED, so the owner's own history shows plainly that somebody else stopped it.",
+      submitLabel: "Pause this agent",
+      variant: "danger",
+      warning:
+        "Open orders are left alone. This stops the agent from acting again; it does not unwind anything it has already done, and the owner can see that an operator did it.",
+      fields: [
+        {
+          name: "reason",
+          label: "Reason",
+          multiline: true,
+          minLength: ctx.authority.doc.min_reason_length,
+          hint: `At least ${ctx.authority.doc.min_reason_length} characters. Recorded on the pause and visible to the agent's owner.`,
+        },
+      ],
+      onSubmit: async (values, key) => {
+        try {
+          const updated = await pauseAgent(agent.id, values["reason"] ?? "", key);
+          ctx.report(notice("warn", `${updated.name} is now ${updated.status}. Its owner can see that an operator paused it.`));
+          ctx.refresh();
+        } catch (err) {
+          throw new Error(describeProblem(err));
+        }
+      },
+    }),
   );
 }
 
