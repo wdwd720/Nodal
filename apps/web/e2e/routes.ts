@@ -1,0 +1,68 @@
+/**
+ * Every route the built application answers, in one place.
+ *
+ * The cross-cutting suites — accessibility, honesty, no-dead-controls — each
+ * used to keep their own copy of the route list, and each copy drifted at a
+ * different speed. A route that exists but is missing from one of those lists
+ * is a route nobody checks, which is the failure mode those suites exist to
+ * prevent. One list, imported three times.
+ *
+ * Adding a page is one entry here, and then it is covered by axe, by the
+ * forbidden-vocabulary scan, by the 375px reflow check and by the dead-control
+ * walk without touching any of them.
+ */
+
+export interface RouteUnderTest {
+  readonly path: string;
+  /** The page's one `<h1>`. */
+  readonly heading: string;
+  /** The label of the navigation link that reaches it, where one exists. */
+  readonly nav?: string;
+}
+
+/** D-077's public site. Rendered with no session at all. */
+export const PUBLIC_ROUTES: readonly RouteUnderTest[] = [
+  { path: "/", heading: "A control plane between your capital and markets." },
+  { path: "/product", heading: "The product", nav: "Product" },
+  { path: "/product/markets", heading: "Markets", nav: "Markets" },
+  { path: "/product/agents", heading: "Agents", nav: "Agents" },
+  { path: "/how-it-works", heading: "How it works", nav: "How it works" },
+  { path: "/security", heading: "Security", nav: "Security" },
+  { path: "/learn", heading: "Learn", nav: "Learn" },
+  { path: "/get-started", heading: "Get started" },
+  { path: "/sign-in", heading: "Sign in" },
+  { path: "/terms", heading: "Product terms" },
+  { path: "/privacy", heading: "Privacy" },
+  { path: "/risk", heading: "Risk disclosure" },
+];
+
+/**
+ * The application. Every one of these needs a session, and a signed-out visitor
+ * is sent to `/sign-in?return=` rather than shown an empty page.
+ *
+ * The hosted rail of the previous product — `/trade`, `/add-funds`, `/lab`,
+ * `/strategy`, `/nodal-economy`, `/payouts`, `/marketplace` — was removed by
+ * D-077 and is deliberately absent. The pages other branches own —
+ * `/buy-credits`, `/withdraw`, `/verify`, `/notifications`, `/markets/:id`,
+ * `/agents/new`, `/settings/security`, `/settings/account` — are added here as
+ * they land.
+ */
+export const APP_ROUTES: readonly RouteUnderTest[] = [
+  { path: "/home", heading: "Home", nav: "Home" },
+  { path: "/markets", heading: "Native Markets", nav: "Markets" },
+  { path: "/markets/products", heading: "Marketplace", nav: "Products" },
+  { path: "/create-asset", heading: "Create asset", nav: "Create asset" },
+  { path: "/agents", heading: "Agents", nav: "Agents" },
+  { path: "/portfolio", heading: "Portfolio", nav: "Portfolio" },
+  { path: "/activity", heading: "Activity", nav: "Activity" },
+  // No `nav`: Settings is reached from the account menu rather than the rail,
+  // which is where USER_JOURNEY §2 puts it.
+  { path: "/settings", heading: "Settings and security" },
+];
+
+/** Everything, for a check that genuinely applies to every page. */
+export const ALL_ROUTES: readonly RouteUnderTest[] = [...PUBLIC_ROUTES, ...APP_ROUTES];
+
+/** The widths the design system claims to work at (UI_UX_SYSTEM §8). */
+export const NARROW_WIDTH = 375;
+export const NARROW_HEIGHT = 812;

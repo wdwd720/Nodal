@@ -31,6 +31,7 @@ import { Button } from "../components/Button.tsx";
 import { Disclosure, Field, FieldGrid, Identifier, Page, Panel, Pill } from "../components/Layout.tsx";
 import { BaseUnits, Qty } from "../components/Money.tsx";
 import { CREATE_ASSET_IMMUTABILITY, NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../lib/honesty.ts";
+import { useSurvivesSignIn } from "../lib/survives-sign-in.ts";
 import { useActiveAccountId } from "../session.tsx";
 
 /** Nodal-native assets are held at six decimal places, like Credits. */
@@ -84,7 +85,17 @@ function problems(draft: Draft): readonly string[] {
 
 export function CreateAsset(): ReactNode {
   const accountId = useActiveAccountId();
-  const [draft, setDraft] = useState<Draft>(EMPTY);
+  /**
+   * The draft survives a sign-in.
+   *
+   * This form is the longest one in the product and a session can expire at any
+   * keystroke in it. `useSurvivesSignIn` keeps what was typed across the
+   * full-page trip to the identity provider and puts it back on return, which
+   * is what USER_JOURNEY §10 promises and what §11's "anything you had typed is
+   * kept" says out loud to the customer.
+   */
+  const kept = useSurvivesSignIn<Draft>("create-asset.draft", EMPTY);
+  const draft = kept.value;
   const [reviewing, setReviewing] = useState(false);
   const create = useCreateNativeAsset();
 
@@ -115,23 +126,29 @@ export function CreateAsset(): ReactNode {
           draft={draft}
           onBack={() => setReviewing(false)}
           onConfirm={() => {
-            create.mutate({
-              accountId,
-              name: draft.name.trim(),
-              symbol: draft.symbol,
-              description: draft.description.trim(),
-              maxSupply: draft.maxSupply,
-              creatorAllocation: draft.creatorAllocation === "" ? "0" : draft.creatorAllocation,
-              decimals: ASSET_DECIMALS,
-              idempotencyKey: newIdempotencyKey(),
-            });
+            create.mutate(
+              {
+                accountId,
+                name: draft.name.trim(),
+                symbol: draft.symbol,
+                description: draft.description.trim(),
+                maxSupply: draft.maxSupply,
+                creatorAllocation: draft.creatorAllocation === "" ? "0" : draft.creatorAllocation,
+                decimals: ASSET_DECIMALS,
+                idempotencyKey: newIdempotencyKey(),
+              },
+              // Only a draft that was actually created is forgotten. A failed
+              // attempt keeps everything, because the customer is about to try
+              // again with it.
+              { onSuccess: () => { kept.clear(); } },
+            );
           }}
           pending={create.isPending}
           error={create.isError ? create.error : undefined}
           onReset={() => create.reset()}
         />
       ) : (
-        <Form draft={draft} onChange={setDraft} problems={found} onReview={() => setReviewing(true)} />
+        <Form draft={draft} onChange={kept.set} problems={found} onReview={() => setReviewing(true)} />
       )}
     </Page>
   );

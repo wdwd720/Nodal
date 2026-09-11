@@ -1,5 +1,5 @@
 /**
- * PART 112 enforced against what actually renders.
+ * The vocabulary rules enforced against what actually renders.
  *
  * `src/lib/honesty.test.ts` scans the source. This scans the pixels: it visits
  * every route, takes the text the browser would read aloud, and refuses the
@@ -7,27 +7,16 @@
  * arrive from the API, which no source scan can see.
  *
  * It additionally checks the positive obligations — that the settlement asset
- * is disclosed where a balance appears, that simulated results are labelled,
- * and that a model score never appears without its denial.
+ * is disclosed where a balance appears, that Credits are explained where a
+ * Credit figure appears, that simulated surfaces are labelled, that a model
+ * score never appears without its denial, and that the public site states what
+ * the product is not.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
-const ROUTES = [
-  "/",
-  "/add-funds",
-  "/nodal-economy",
-  "/marketplace",
-  "/native-markets",
-  "/create-asset",
-  "/payouts",
-  "/trade",
-  "/portfolio",
-  "/strategy",
-  "/agents",
-  "/lab",
-  "/activity",
-  "/settings",
-] as const;
+import { APP_ROUTES, PUBLIC_ROUTES } from "./routes.ts";
+
+const SIGNED_OUT = { cookies: [], origins: [] };
 
 /** The vocabulary this product may not use, and why. */
 const FORBIDDEN: ReadonlyArray<readonly [RegExp, string]> = [
@@ -43,6 +32,16 @@ const FORBIDDEN: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bexpected profit\b/i, "implies a probability of profit"],
 ];
 
+/** The marketing filler goal §28 bans by name. */
+const FILLER: readonly RegExp[] = [
+  /\brevolutioni[sz]e/i,
+  /\bunlock the future\b/i,
+  /\bseamlessly\b/i,
+  /\bAI-powered ecosystem\b/i,
+  /\bnext-generation\b/i,
+  /\bcutting-edge\b/i,
+];
+
 async function visibleText(page: Page): Promise<string> {
   // The application gates itself behind a boot screen until the backend has
   // answered who is signed in, so the text must not be read until a page has
@@ -54,19 +53,92 @@ async function visibleText(page: Page): Promise<string> {
   return page.evaluate(() => document.body.innerText);
 }
 
-for (const route of ROUTES) {
-  test(`rendered text of ${route} uses no forbidden phrasing`, async ({ page }) => {
-    await page.goto(route);
-    await expect(page.locator("h1")).toHaveCount(1);
+async function signedOutPage(browser: Browser): Promise<Page> {
+  const context = await browser.newContext({ storageState: SIGNED_OUT });
+  return context.newPage();
+}
+
+for (const route of APP_ROUTES) {
+  test(`rendered text of ${route.path} uses no forbidden phrasing`, async ({ page }) => {
+    await page.goto(route.path);
     const text = await visibleText(page);
     for (const [pattern, why] of FORBIDDEN) {
-      expect(pattern.test(text), `${route}: ${String(pattern)} — ${why}`).toBe(false);
+      expect(pattern.test(text), `${route.path}: ${String(pattern)} — ${why}`).toBe(false);
     }
   });
 }
 
+test("no public page uses forbidden phrasing or marketing filler", async ({ browser }) => {
+  const page = await signedOutPage(browser);
+  for (const route of PUBLIC_ROUTES) {
+    await page.goto(route.path);
+    const text = await visibleText(page);
+    for (const [pattern, why] of FORBIDDEN) {
+      expect(pattern.test(text), `${route.path}: ${String(pattern)} — ${why}`).toBe(false);
+    }
+    for (const pattern of FILLER) {
+      expect(pattern.test(text), `${route.path}: ${String(pattern)} is banned by goal §28`).toBe(
+        false,
+      );
+    }
+  }
+  await page.context().close();
+});
+
+test("the landing page says what the product is not", async ({ browser }) => {
+  // Goal §5's forbidden claims, stated as denials on the first page a visitor
+  // sees. This is the copy a growth-minded edit removes first, so it is the
+  // copy with a test on it.
+  const page = await signedOutPage(browser);
+  await page.goto("/");
+  const text = await visibleText(page);
+  for (const phrase of [
+    "Not an exchange, a broker, a bank or a custodian.",
+    "Not regulated, licensed or approved by anybody, anywhere.",
+    "Not insured.",
+    "You can lose everything you put in.",
+  ]) {
+    expect(text, `the landing page states: ${phrase}`).toContain(phrase);
+  }
+  await page.context().close();
+});
+
+test("every policy document says it is a draft and names its version", async ({ browser }) => {
+  const page = await signedOutPage(browser);
+  for (const [path, version] of [
+    ["/terms", "terms-v1"],
+    ["/privacy", "privacy-v1"],
+    ["/risk", "risk-v1"],
+  ] as const) {
+    await page.goto(path);
+    const text = await visibleText(page);
+    expect(text, `${path} names its version`).toContain(version);
+    expect(text, `${path} says it is a draft`).toContain("Draft pending legal review");
+    expect(text, `${path} does not claim counsel approved it`).toContain(
+      "no counsel has approved them",
+    );
+    // §60: the architecture is never self-certified as lawful.
+    expect(/\bapproved by (a )?regulator\b/i.test(text), `${path} claims no approval`).toBe(false);
+  }
+  await page.context().close();
+});
+
+test("example data on the public site is labelled as an example", async ({ browser }) => {
+  const page = await signedOutPage(browser);
+  for (const path of ["/", "/product", "/product/markets", "/product/agents"]) {
+    await page.goto(path);
+    const text = await visibleText(page);
+    if (!text.includes("Credits")) continue;
+    expect(text, `${path} labels its example figures`).toContain("Example data, not a live account");
+    // The chip the design system renders on any simulated surface, which takes
+    // no prop to suppress it.
+    await expect(page.locator(".badge-simulated").first()).toBeVisible();
+  }
+  await page.context().close();
+});
+
 test("a page showing balances discloses that they are USDC", async ({ page }) => {
-  for (const route of ["/", "/portfolio", "/add-funds"]) {
+  for (const route of ["/home", "/portfolio"]) {
     await page.goto(route);
     const text = await visibleText(page);
     expect(text, `${route} names the settlement asset`).toContain("USDC");
@@ -74,48 +146,71 @@ test("a page showing balances discloses that they are USDC", async ({ page }) =>
   }
 });
 
-test("simulated output is labelled wherever it appears", async ({ page }) => {
-  await page.goto("/lab");
-  const text = await visibleText(page);
-  expect(text).toContain("No real capital was committed");
-  // Every mode badge states whether capital is real.
-  expect(text).toMatch(/simulated|real capital/);
+test("a page showing Credits says what a Credit is", async ({ page }) => {
+  for (const path of ["/markets", "/markets/products"]) {
+    await page.goto(path);
+    const text = await visibleText(page);
+    if (!text.includes("Credits")) continue;
+    expect(text.toLowerCase(), `${path} says what Credits are`).toMatch(
+      /not money|quoted in credits|internal platform value/,
+    );
+  }
 });
 
 test("a model score never appears without the denial beside it", async ({ page }) => {
-  for (const route of ROUTES) {
-    await page.goto(route);
+  for (const route of APP_ROUTES) {
+    await page.goto(route.path);
     const text = await visibleText(page);
     if (!/confidence/i.test(text)) continue;
-    expect(text, `${route}: confidence appears, so the denial must too`).toContain(
+    expect(text, `${route.path}: confidence appears, so the denial must too`).toContain(
       "It is not the chance of making money",
     );
   }
 });
 
 test("pending settlement is never hidden", async ({ page }) => {
-  await page.goto("/add-funds");
+  await page.goto("/settings");
   const text = await visibleText(page);
   expect(text).toContain("not spendable until the backend marks them available");
 });
 
-test("the risk statement is on every page", async ({ page }) => {
-  for (const route of ROUTES) {
-    await page.goto(route);
+test("the risk statement is on every page", async ({ browser, page }) => {
+  for (const route of APP_ROUTES) {
+    await page.goto(route.path);
     const text = await visibleText(page);
-    expect(text, `${route} carries the risk statement`).toContain("can lose money");
+    expect(text, `${route.path} carries the risk statement`).toContain("can lose money");
   }
+  const publicPage = await signedOutPage(browser);
+  for (const route of PUBLIC_ROUTES) {
+    await publicPage.goto(route.path);
+    const text = await visibleText(publicPage);
+    expect(text, `${route.path} carries the risk statement`).toContain("can lose money");
+  }
+  await publicPage.context().close();
 });
 
-test("no capability that is off is shown as a zero", async ({ page }) => {
-  // The quote endpoint is unavailable in this deployment. The trade page must
-  // say so and must not put a figure where the price would be.
-  await page.goto("/trade");
-  await page.getByLabel("Amount to commit, in US dollars of value").fill("100");
-  await page.getByRole("button", { name: "Get a quote" }).click();
-  const panel = page.locator(".panel", { hasText: "Non-binding, fully disclosed" });
-  await expect(panel.getByText(/code [A-Z_]+/)).toBeVisible();
-  const text = await panel.innerText();
-  expect(text).not.toMatch(/\$\s?0\.00/);
-  expect(text).not.toMatch(/(^|\s)—(\s|$)/);
+/**
+ * The Credit-denominated pages.
+ *
+ * Kept as its own list rather than derived from `APP_ROUTES`, because the rule
+ * below is about pages that quote Credits and a page that shows a USD funding
+ * record is not one of them. Deriving it would turn a real rule into a rule
+ * about whichever pages happen to mention the word.
+ */
+const CREDIT_ROUTES: readonly string[] = ["/markets", "/markets/products", "/create-asset"];
+
+test("no page puts a Credit figure and a currency figure together", async ({ page }) => {
+  // There is no approved external value for a Credit, so a currency figure
+  // beside one would be an exchange rate nobody set. This reads what actually
+  // rendered, which the source scan cannot do for text that arrives from the
+  // API.
+  for (const path of CREDIT_ROUTES) {
+    await page.goto(path);
+    const text = await visibleText(page);
+    if (!text.includes("Credits")) continue;
+    expect(
+      /\$\s?\d/.test(text),
+      `${path} rendered a currency amount on a page that quotes Credits`,
+    ).toBeFalsy();
+  }
 });
