@@ -3846,7 +3846,11 @@ components:
       type: string
       enum:
         [CREDIT_PURCHASE, CREDIT_REVERSAL, NATIVE_TRADE, NATIVE_ASSET_CREATED,
-         PAYOUT_REQUESTED, PAYOUT_STATE_CHANGED, ADMIN_ADJUSTMENT]
+         PAYOUT_REQUESTED, PAYOUT_STATE_CHANGED, ADMIN_ADJUSTMENT,
+         VERIFICATION_UPDATED, PAYOUT_DESTINATION_ADDED, PAYOUT_DESTINATION_DISABLED,
+         TERMS_ACCEPTED, ACCOUNT_CLOSURE_REQUESTED, ACCOUNT_CLOSURE_DECIDED,
+         AGENT_CREATED, AGENT_PAUSED, AGENT_RESUMED, AGENT_DISABLED,
+         NATIVE_MARKET_PAUSED]
       description: >-
         The closed set of activity kinds. A domain joins the feed by adding a
         Source and a summary template in internal/activity; see that package's
