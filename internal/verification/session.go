@@ -199,6 +199,88 @@ func SessionTransitionsFrom(s SessionStatus) []SessionStatus {
 	return append([]SessionStatus(nil), sessionTransitions[s]...)
 }
 
+// SessionPath is the shortest legal sequence of statuses from `from` to `to`,
+// excluding `from` and including `to`. It returns nil when there is none.
+//
+// It exists because a provider does not report every step. A person completes a
+// hosted flow and the provider decides before Nodal next asks, so a poll that
+// last saw PENDING_USER_ACTION is answered APPROVED -- a jump the machine has
+// no single edge for. Refusing that would be a state machine that cannot ingest
+// reality; writing one transition row per inferred step keeps the edges
+// meaningful AND keeps the trail honest, because each row says it was inferred.
+//
+// The path is the shortest one, and the table has no ambiguous shortest paths
+// today (TestSessionPath_IsUnambiguous asserts it), so "the shortest" is also
+// "the only sensible" one.
+func SessionPath(from, to SessionStatus) []SessionStatus {
+	if from == to {
+		return nil
+	}
+	prev := map[SessionStatus]SessionStatus{}
+	seen := map[SessionStatus]bool{from: true}
+	queue := []SessionStatus{from}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, next := range sessionTransitions[cur] {
+			if seen[next] {
+				continue
+			}
+			seen[next] = true
+			prev[next] = cur
+			if next == to {
+				return reverseWalk(prev, from, to)
+			}
+			queue = append(queue, next)
+		}
+	}
+	return nil
+}
+
+// Path is the same shortest-path walk over the verification state machine, for
+// the same reason: a provider result implies a standing that may be more than
+// one edge away from where the profile currently stands.
+func Path(from, to State) []State {
+	if from == to {
+		return nil
+	}
+	prev := map[State]State{}
+	seen := map[State]bool{from: true}
+	queue := []State{from}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, next := range stateTransitions[cur] {
+			if seen[next] {
+				continue
+			}
+			seen[next] = true
+			prev[next] = cur
+			if next == to {
+				return reverseWalkState(prev, from, to)
+			}
+			queue = append(queue, next)
+		}
+	}
+	return nil
+}
+
+func reverseWalk(prev map[SessionStatus]SessionStatus, from, to SessionStatus) []SessionStatus {
+	var out []SessionStatus
+	for at := to; at != from; at = prev[at] {
+		out = append([]SessionStatus{at}, out...)
+	}
+	return out
+}
+
+func reverseWalkState(prev map[State]State, from, to State) []State {
+	var out []State
+	for at := to; at != from; at = prev[at] {
+		out = append([]State{at}, out...)
+	}
+	return out
+}
+
 // Session mirrors a verification_sessions row.
 //
 // It carries no hosted URL. Those links are single-use credentials for

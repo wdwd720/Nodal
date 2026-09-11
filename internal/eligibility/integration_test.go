@@ -318,10 +318,16 @@ func TestIntegration_LoadInputFromProfile(t *testing.T) {
 	assert.Equal(t, at, in.Now)
 
 	expires := at.Add(24 * time.Hour)
+	// A profile is born UNVERIFIED and reaches VERIFIED through transition rows
+	// (migration 00761): identity_state, verified_at and expires_at are written
+	// by a trigger and cp_app has no UPDATE privilege on any of them. So the
+	// fixture inserts the attribute half and then walks the state machine, which
+	// is also the only path a real verification takes.
 	_, err = testDB.Exec(ctx, `INSERT INTO compliance_profiles
-		(user_id, identity_state, age_verified, jurisdiction_country, jurisdiction_region, residency_country, sanctions_state, restrictions, verified_at, expires_at)
-		VALUES ($1,'VERIFIED',true,'us','ny','US','CLEAR','["NO_WITHDRAWALS","NO_TRADING"]',$2,$3)`, userID, at.Add(-time.Hour), expires)
+		(user_id, identity_state, age_verified, jurisdiction_country, jurisdiction_region, residency_country, sanctions_state, restrictions)
+		VALUES ($1,'UNVERIFIED',true,'us','ny','US','CLEAR','["NO_WITHDRAWALS","NO_TRADING"]')`, userID)
 	require.NoError(t, err)
+	verifyProfile(t, userID, at.Add(-time.Hour), expires)
 
 	in, err = s.LoadInputFromProfile(ctx, testDB, accountID, at)
 	require.NoError(t, err)
@@ -349,4 +355,32 @@ func TestIntegration_LoadInputFromProfile(t *testing.T) {
 	d := Evaluate(loadPolicyFixture(t, "us_baseline"), in)
 	assert.True(t, errors.Is(nil, nil))
 	assert.Equal(t, []string{ReasonAccountRestriction, ReasonIdentityState, ReasonRegionBlocked}, d.ReasonCodes)
+}
+
+// verifyProfile walks a profile from UNVERIFIED to VERIFIED the way the
+// verification service does: one transition row per edge, in one transaction,
+// with the trigger writing the state each time.
+func verifyProfile(t *testing.T, userID accounts.UserID, verifiedAt, expiresAt time.Time) {
+	t.Helper()
+	require.NoError(t, inTx(t, func(ctx context.Context, tx pgx.Tx) error {
+		edges := [][2]string{
+			{"UNVERIFIED", "REQUIRED"},
+			{"REQUIRED", "STARTED"},
+			{"STARTED", "PENDING"},
+			{"PENDING", "VERIFIED"},
+		}
+		for _, e := range edges {
+			var verified, expires any
+			if e[1] == "VERIFIED" {
+				verified, expires = verifiedAt, expiresAt
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO compliance_profile_transitions
+				(id, user_id, from_state, to_state, actor_type, actor_id, reason, verified_at, expires_at, occurred_at)
+				VALUES ($1,$2,$3,$4,'SYSTEM','eligibility-itest','fixture',$5,$6,now())`,
+				uuid.New(), userID, e[0], e[1], verified, expires); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
 }

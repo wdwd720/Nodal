@@ -77,25 +77,56 @@ type DestinationChange struct {
 }
 
 var (
-	// digitRun matches seven or more consecutive digits. A United States
-	// routing number is nine, an account number is eight to seventeen, and a
-	// card number is thirteen to nineteen; nothing a provider issues as a
-	// token is a bare run of that length, because a token has to be
-	// distinguishable from the thing it replaces.
+	// bareNumber matches a stripped string that is NOTHING BUT digits, at the
+	// length a financial account identifier has. A United States routing number
+	// is nine, an account number eight to seventeen, a card number thirteen to
+	// nineteen; no provider issues a token that is a bare run of digits,
+	// because a token has to be distinguishable from the thing it replaces.
+	//
+	// It is deliberately a WHOLE-STRING match rather than a search for a long
+	// digit run. A search would refuse a legitimate token that happened to
+	// contain one -- a UUID's last group is twelve characters and is all digits
+	// about once in three hundred -- and a validator that rejects valid input
+	// at random is a validator somebody turns off.
+	bareNumber = regexp.MustCompile(`^[0-9]{6,34}$`)
+	// ibanLike matches the IBAN shape over the whole stripped string: two
+	// letters, two check digits, then eleven to thirty alphanumerics.
+	ibanLike = regexp.MustCompile(`^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$`)
+	// cardRun finds a thirteen-to-nineteen digit run ANYWHERE, which is then
+	// Luhn-checked. That combination is specific enough to be safe: a run that
+	// long AND passing the checksum is a card number about one time in ten by
+	// chance, and the two together are vanishingly unlikely in a token.
+	cardRun = regexp.MustCompile(`[0-9]{13,19}`)
+	// digitRun is the mask rule: a masked display shows the last few
+	// characters, so seven consecutive digits in one is the whole number.
 	digitRun = regexp.MustCompile(`[0-9]{7,}`)
-	// ibanLike matches the IBAN shape: two letters, two check digits, then at
-	// least eleven alphanumerics.
-	ibanLike = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,}\b`)
 	// maskShape is what a masked display may be: mask characters, digits,
 	// letters, spaces and a few separators. It is bounded so a "display label"
 	// cannot become a place to smuggle a document.
-	maskShape = regexp.MustCompile(`^[\p{L}\p{N} •*·\-_.()#/]{1,64}$`)
-	// seedPhraseWords are the give-away words of a wallet secret. §25 is
+	maskShape = regexp.MustCompile(`^[\p{L}\p{N} \x{2022}*\x{00B7}\-_.()#/]{1,64}$`)
+	// seedPhraseWords are the give-away words of a wallet secret. Section 25 is
 	// explicit: never request a private key or a seed phrase. Refusing them on
 	// input is what makes that true even when a person pastes one into the
 	// wrong box.
 	seedPhraseWords = []string{"seed phrase", "mnemonic", "private key", "secret key", "xprv", "-----begin"}
 )
+
+// luhn reports whether a run of digits satisfies the Luhn checksum, which every
+// payment card number does and an arbitrary run of digits does one time in ten.
+func luhn(digits string) bool {
+	sum, double := 0, false
+	for i := len(digits) - 1; i >= 0; i-- {
+		d := int(digits[i] - '0')
+		if double {
+			if d *= 2; d > 9 {
+				d -= 9
+			}
+		}
+		sum += d
+		double = !double
+	}
+	return sum%10 == 0
+}
 
 // ValidateDestinationToken refuses an input that is a raw account number rather
 // than a provider token.
@@ -131,14 +162,21 @@ func ValidateDestinationToken(token string) error {
 		}
 		return r
 	}, t)
-	if ibanLike.MatchString(stripped) {
+	if ibanLike.MatchString(strings.ToUpper(stripped)) {
 		return errs.New(errs.CodeValidationFailed,
 			"that looks like an IBAN; Nodal stores the provider's token for a destination, never the account itself")
 	}
-	if digitRun.MatchString(stripped) {
+	if bareNumber.MatchString(stripped) {
 		return errs.New(errs.CodeValidationFailed,
-			"that looks like an account or card number; Nodal stores the provider's token for a destination, never the account itself").
+			"that looks like an account, routing or card number; Nodal stores the provider's token for a destination, never the account itself").
 			WithField("expected", "a provider-issued token or, on a sandbox tier, a sandbox handle")
+	}
+	for _, run := range cardRun.FindAllString(stripped, -1) {
+		if luhn(run) {
+			return errs.New(errs.CodeValidationFailed,
+				"that contains what looks like a payment card number; Nodal stores the provider's token for a destination, never the card").
+				WithField("expected", "a provider-issued token or, on a sandbox tier, a sandbox handle")
+		}
 	}
 	return nil
 }

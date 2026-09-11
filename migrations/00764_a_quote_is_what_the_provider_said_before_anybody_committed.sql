@@ -79,11 +79,17 @@ CREATE TABLE payout_quotes (
     environment        text NOT NULL CHECK (environment IN ('LOCAL','TEST','DEV','STAGING','PROD')),
     sandbox            boolean NOT NULL DEFAULT false,
 
-    idempotency_key    text NOT NULL UNIQUE,
+    -- Scoped by account rather than globally unique, which is the strongest
+    -- form of the control test/integration/migrations asks for: a caller
+    -- reusing another account's key cannot collide with their row at all,
+    -- rather than colliding and being refused by a comparison in Go.
+    -- trade_intents does the same.
+    idempotency_key    text NOT NULL,
     expires_at         timestamptz NOT NULL,
     consumed_at        timestamptz,
     created_at         timestamptz NOT NULL DEFAULT now(),
 
+    UNIQUE (account_id, idempotency_key),
     CHECK (net_quantity + fee_quantity = gross_quantity),
     CHECK (net_amount_minor + fee_amount_minor = gross_amount_minor),
     CHECK (expires_at > created_at),

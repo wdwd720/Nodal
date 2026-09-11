@@ -378,16 +378,35 @@ func (s *Service) Ingest(ctx context.Context, database *db.DB, session Session, 
 				return err
 			}
 		}
-		moved, err := s.deps.Repo.TransitionSession(ctx, tx, session.ID, result.Status, SessionChange{
-			ActorType:     security.ActorSystem,
-			ActorID:       "verification:" + session.Provider,
-			Reason:        reason,
-			ProviderEvent: providerEvent,
-			FailureReason: result.FailureReason,
-			OccurredAt:    now,
-		})
-		if err != nil {
-			return err
+		// A provider does not report every step: a person completes a hosted
+		// flow and the provider decides before the next poll, so a session
+		// last seen PENDING_USER_ACTION is answered APPROVED. Each inferred
+		// step gets its own transition row saying it was inferred, so the edges
+		// stay meaningful and the trail stays honest.
+		moved := session
+		for i, step := range SessionPath(session.Status, result.Status) {
+			stepReason := reason
+			if i < len(SessionPath(session.Status, result.Status))-1 {
+				stepReason = "inferred from the provider's later status " + string(result.Status) + ": " + reason
+			}
+			var terr error
+			moved, terr = s.deps.Repo.TransitionSession(ctx, tx, session.ID, step, SessionChange{
+				ActorType:     security.ActorSystem,
+				ActorID:       "verification:" + session.Provider,
+				Reason:        stepReason,
+				ProviderEvent: providerEvent,
+				FailureReason: result.FailureReason,
+				OccurredAt:    now,
+			})
+			if terr != nil {
+				return terr
+			}
+		}
+		if moved.Status != result.Status && session.Status != result.Status {
+			return errs.Newf(errs.CodeInvalidStateTransition,
+				"a verification session cannot reach %s from %s by any sequence of legal steps",
+				result.Status, session.Status).
+				WithField("session_id", session.ID.String())
 		}
 		out = moved
 		checks, err := s.deps.Repo.ChecksForSession(ctx, tx, session.ID)
@@ -451,34 +470,50 @@ func (s *Service) applyToProfile(ctx context.Context, tx pgx.Tx, session Session
 	if err != nil {
 		return err
 	}
-	if current == target || !CanTransition(current, target) {
-		// Not an error. A provider redelivering a webhook, or a poll racing
-		// one, arrives at a state the profile already reached; and a session
-		// whose verdict does not license a move (an expired hosted link on an
-		// already-VERIFIED person, say) leaves the standing alone rather than
-		// downgrading it.
+	// An abandoned or expired SESSION does not undo a standing some other
+	// session established. A person who verified in March and let an April
+	// re-verification link expire is still verified; downgrading them on the
+	// strength of an unfinished attempt would be the product taking something
+	// away that nothing decided to take.
+	if (current == StateVerified || current == StateRestricted) &&
+		(session.Status == SessionCancelled || session.Status == SessionExpired) {
 		return nil
 	}
-	t := ProfileTransition{
-		UserID:      session.UserID,
-		To:          target,
-		ActorType:   security.ActorSystem,
-		ActorID:     "verification:" + session.Provider,
-		Reason:      "provider session " + string(session.Status),
-		Provider:    session.Provider,
-		ProviderRef: result.ProviderRef,
-		OccurredAt:  now,
+	path := Path(current, target)
+	if current == target || path == nil {
+		// Not an error. A provider redelivering a webhook, or a poll racing
+		// one, arrives at a state the profile already reached; and a verdict
+		// whose standing is unreachable from here leaves the standing alone
+		// rather than forcing it.
+		return nil
 	}
 	id := session.ID
-	t.SessionID = &id
-	if target == StateVerified {
-		verified := now
-		expires := now.Add(ValidityWindow)
-		t.VerifiedAt = &verified
-		t.ExpiresAt = &expires
+	for i, step := range path {
+		t := ProfileTransition{
+			UserID:      session.UserID,
+			To:          step,
+			ActorType:   security.ActorSystem,
+			ActorID:     "verification:" + session.Provider,
+			Reason:      "provider session " + string(session.Status),
+			Provider:    session.Provider,
+			ProviderRef: result.ProviderRef,
+			SessionID:   &id,
+			OccurredAt:  now,
+		}
+		if i < len(path)-1 {
+			t.Reason = "inferred on the way to " + string(target) + ": " + t.Reason
+		}
+		if step == StateVerified {
+			verified := now
+			expires := now.Add(ValidityWindow)
+			t.VerifiedAt = &verified
+			t.ExpiresAt = &expires
+		}
+		if _, err := s.deps.Repo.TransitionProfile(ctx, tx, t); err != nil {
+			return err
+		}
 	}
-	_, err = s.deps.Repo.TransitionProfile(ctx, tx, t)
-	return err
+	return nil
 }
 
 // profileStateFor maps a session status onto the verification state it implies,

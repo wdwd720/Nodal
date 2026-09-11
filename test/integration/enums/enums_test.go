@@ -37,6 +37,7 @@ import (
 	"github.com/nodal/controlplane/internal/agent"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
@@ -52,6 +53,7 @@ import (
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/reality"
 	"github.com/nodal/controlplane/internal/reconciliation"
+	"github.com/nodal/controlplane/internal/verification"
 )
 
 var (
@@ -158,6 +160,21 @@ func registry() []pair {
 		{table: "reconciliation_records", constraint: "reconciliation_records_status_check", source: "reconciliation.AllStatuses()", values: str(reconciliation.AllStatuses())},
 		{table: "data_sources", constraint: "data_sources_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
 		{table: "raw_archive_objects", constraint: "raw_archive_objects_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
+
+		// Paired 2026-09-10 with the withdrawal journey (migrations 00761-00763).
+		// The verification state machine is the one that matters most here: it
+		// is declared in TWO Go packages -- internal/compliance owns the column
+		// and internal/verification owns the edges -- so a value added to one
+		// and not the other is a state the database accepts that no transition
+		// table licenses. TestVerificationStatesAgreeAcrossPackages holds those
+		// two lists together; this holds both against the schema.
+		{table: "compliance_profiles", constraint: "compliance_profiles_identity_state_check", source: "compliance.AllIdentityStates()", values: str(compliance.AllIdentityStates())},
+		{table: "compliance_profiles", constraint: "compliance_profiles_sanctions_state_check", source: "compliance.AllSanctionsStates()", values: str(compliance.AllSanctionsStates())},
+		{table: "verification_sessions", constraint: "verification_sessions_status_check", source: "verification.AllSessionStatuses()", values: str(verification.AllSessionStatuses())},
+		{table: "verification_sessions", constraint: "verification_sessions_purpose_check", source: "verification.AllPurposes()", values: str(verification.AllPurposes())},
+		{table: "verification_checks", constraint: "verification_checks_kind_check", source: "verification.AllCheckKinds()", values: str(verification.AllCheckKinds())},
+		{table: "verification_checks", constraint: "verification_checks_outcome_check", source: "verification.AllOutcomes()", values: str(verification.AllOutcomes())},
+		{table: "payout_destinations", constraint: "payout_destinations_status_check", source: "payout.AllDestinationStatuses()", values: str(payout.AllDestinationStatuses())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
@@ -206,6 +223,23 @@ func TestIntegration_EveryDeclaredEnumMatchesItsCheck(t *testing.T) {
 				p.source, p.table, p.constraint)
 		})
 	}
+}
+
+// TestVerificationStatesAgreeAcrossPackages: the financial verification state
+// machine is declared twice on purpose -- internal/compliance owns the column
+// on compliance_profiles and internal/verification owns the edges between its
+// values -- and the two must be one list.
+//
+// Comparing each against the schema separately would not catch them drifting
+// together, which is the failure that leaves a state the database accepts and
+// no transition table licenses.
+func TestVerificationStatesAgreeAcrossPackages(t *testing.T) {
+	c, v := str(compliance.AllIdentityStates()), str(verification.AllStates())
+	sort.Strings(c)
+	sort.Strings(v)
+	assert.Equal(t, c, v,
+		"compliance.AllIdentityStates and verification.AllStates have diverged; "+
+			"one of them declares a state the other has no edges for")
 }
 
 // TestTheThreeModeListsAgreeWithEachOther: agent.Modes, intent.Modes and
@@ -404,6 +438,13 @@ func TestIntegration_NoEnumCheckAppearsUnnoticed(t *testing.T) {
 // The rule is asserted from the outside instead, by
 // internal/intent's own tests driving a rejection code onto a non-terminal
 // transition and watching it refused (00749).
+// The four environment CHECKs (capability_gates, payout_quotes,
+// verification_sessions, verification_checks) repeat the deployment
+// environment list. They are unpaired for the reason the first one already was:
+// config.Environment has no exported all-values list, and adding one purely so
+// a test could read it would be a Go change made by a test rather than by a
+// need. The property they enforce -- a sandbox row cannot exist in PROD -- is
+// asserted directly in internal/verification's integration suite.
 var unpaired = []string{
 	"accounts.accounts_kind_check",
 	"accounts.accounts_status_check",
@@ -433,8 +474,7 @@ var unpaired = []string{
 	"compile_attempts.compile_attempts_parse_result_check",
 	"compile_attempts.compile_attempts_source_kind_check",
 	"compile_attempts.compile_attempts_stage_reached_check",
-	"compliance_profiles.compliance_profiles_identity_state_check",
-	"compliance_profiles.compliance_profiles_sanctions_state_check",
+	"compliance_profile_transitions.compliance_profile_transitions_actor_type_check",
 	"cost_accounting.cost_accounting_kind_check",
 	"counterfactuals.counterfactuals_branch_check",
 	"counterfactuals.counterfactuals_subject_kind_check",
@@ -490,8 +530,9 @@ var unpaired = []string{
 	"notifications.notifications_kind_check",
 	"notifications.notifications_severity_check",
 	"orders.orders_side_check",
-	"payout_destinations.payout_destinations_status_check",
+	"payout_destination_transitions.payout_destination_transitions_actor_type_check",
 	"payout_provider_events.payout_provider_events_direction_check",
+	"payout_quotes.payout_quotes_environment_check",
 	"performance_snapshots.performance_snapshots_scope_kind_check",
 	"position_lots.position_lots_status_check",
 	"prediction_outcomes.prediction_outcomes_realized_direction_check",
@@ -524,6 +565,9 @@ var unpaired = []string{
 	"venue_listings.venue_listings_status_check",
 	"venues.venues_kind_check",
 	"venues.venues_status_check",
+	"verification_checks.verification_checks_environment_check",
+	"verification_session_transitions.verification_session_transitions_actor_type_check",
+	"verification_sessions.verification_sessions_environment_check",
 	"wallet_status_transitions.wallet_status_transitions_to_status_check",
 	"wallets.wallets_status_check",
 	"withdrawals.withdrawals_status_check",

@@ -55,8 +55,19 @@ func TestIntegration_Compliance_UpsertAuditsAndRejectsSelfAttestation(t *testing
 		}, compliance.Change{ActorType: security.ActorSystem, ActorID: "kyc-webhook", Reason: "provider verification completed", CorrelationID: "corr-1"})
 		return err
 	}))
-	assert.Equal(t, compliance.IdentityVerified, p.IdentityState)
+	// Migration 00761 took the state half of the profile out of this package's
+	// reach: a profile is born UNVERIFIED and reaches every other state through
+	// a transition row, written by internal/verification. Upsert therefore
+	// IGNORES the IdentityState and VerifiedAt asked for above and returns what
+	// the row actually says, which is the stronger property -- an application
+	// statement can no longer make somebody verified.
+	assert.Equal(t, compliance.IdentityUnverified, p.IdentityState,
+		"Upsert writes the attribute half of the profile and never its state")
+	assert.Nil(t, p.VerifiedAt)
 	assert.Equal(t, []string{"no_leverage"}, p.Restrictions)
+	assert.Equal(t, "US", p.JurisdictionCountry, "the attributes it does own are written")
+	assert.True(t, p.AgeVerified)
+	assert.Equal(t, compliance.SanctionsClear, p.SanctionsState)
 
 	// Update by an operator; audit trail grows with before/after hashes.
 	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
@@ -91,6 +102,14 @@ func TestIntegration_Compliance_UpsertAuditsAndRejectsSelfAttestation(t *testing
 	bad.JurisdictionCountry = "usa"
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(bad.Validate()))
 	bad = p
+	bad.IdentityState = compliance.IdentityVerified
 	bad.VerifiedAt = nil
-	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(bad.Validate()))
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(bad.Validate()),
+		"a VERIFIED profile read back without a verified_at is internally inconsistent")
+
+	// And the privilege the migration revoked is genuinely gone: the
+	// application role cannot write the state column by any statement.
+	_, err = d.Pool().Exec(ctx,
+		`UPDATE compliance_profiles SET identity_state = 'VERIFIED' WHERE user_id = $1`, u.ID)
+	require.Error(t, err, "cp_app must not be able to write a verification state")
 }

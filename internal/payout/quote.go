@@ -273,7 +273,7 @@ func scanQuote(row pgx.Row) (Quote, error) {
 func (s *Service) insertQuote(ctx context.Context, tx pgx.Tx, q *Quote) error {
 	row := tx.QueryRow(ctx, `INSERT INTO payout_quotes (`+quoteColumns+`)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-		ON CONFLICT (idempotency_key) DO NOTHING
+		ON CONFLICT (account_id, idempotency_key) DO NOTHING
 		RETURNING `+quoteColumns,
 		q.ID, q.AccountID, q.DestinationID, q.Provider,
 		q.GrossQuantity, q.FeeQuantity, q.NetQuantity,
@@ -283,15 +283,13 @@ func (s *Service) insertQuote(ctx context.Context, tx pgx.Tx, q *Quote) error {
 		q.IdempotencyKey, q.ExpiresAt, q.ConsumedAt, q.CreatedAt)
 	out, err := scanQuote(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// The same key already produced a quote. Replaying it returns what the
+		// This account already used the key. Replaying it returns what the
 		// customer was actually shown, which is the whole point of storing it.
-		existing, gerr := s.QuoteByIdempotencyKey(ctx, tx, q.IdempotencyKey)
+		// Another account's identical key is a different row and never collides
+		// here, because the uniqueness is (account_id, idempotency_key).
+		existing, gerr := s.QuoteByIdempotencyKey(ctx, tx, q.AccountID, q.IdempotencyKey)
 		if gerr != nil {
 			return gerr
-		}
-		if existing.AccountID != q.AccountID {
-			return errs.New(errs.CodeInvalidIdempotencyReuse,
-				"that idempotency key belongs to another account's quote")
 		}
 		*q = existing
 		return nil
@@ -315,10 +313,12 @@ func (s *Service) QuoteByID(ctx context.Context, q db.Querier, id QuoteID) (Quot
 	return out, nil
 }
 
-// QuoteByIdempotencyKey reads the quote a key produced.
-func (s *Service) QuoteByIdempotencyKey(ctx context.Context, q db.Querier, key string) (Quote, error) {
+// QuoteByIdempotencyKey reads the quote an account's key produced. The account
+// is part of the lookup, not a check after it: the uniqueness is scoped by
+// account, so there is no row another caller's identical key could return.
+func (s *Service) QuoteByIdempotencyKey(ctx context.Context, q db.Querier, accountID accounts.AccountID, key string) (Quote, error) {
 	out, err := scanQuote(q.QueryRow(ctx,
-		`SELECT `+quoteColumns+` FROM payout_quotes WHERE idempotency_key = $1`, key))
+		`SELECT `+quoteColumns+` FROM payout_quotes WHERE account_id = $1 AND idempotency_key = $2`, accountID, key))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Quote{}, errs.New(errs.CodeNotFound, "no such payout quote")
 	}
