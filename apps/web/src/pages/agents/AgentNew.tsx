@@ -36,11 +36,11 @@ import {
   useCreateAgent,
   useCreateStrategy,
   useAgents,
-  useNativeAssets,
+  useAssets,
   useStrategies,
   type AgentLimits,
   type CompileResult,
-  type NativeAsset,
+  type Asset,
   type Strategy,
   type StrategyVersion,
 } from "../../api/queries.ts";
@@ -276,7 +276,7 @@ export function AgentNew(): ReactNode {
 
   const strategies = useStrategies(accountId);
   const agents = useAgents(accountId);
-  const assets = useNativeAssets();
+  const assets = useAssets();
   const createStrategy = useCreateStrategy();
   const compile = useCompileStrategy();
   const createAgent = useCreateAgent();
@@ -738,32 +738,49 @@ export function AgentNew(): ReactNode {
             <legend>Assets it may touch</legend>
             <p className="field-note">
               The universe is never empty and never implied. An agent may only ever touch an asset
-              you named here.
+              you named here, and it can never add one to this list itself.
             </p>
-            {assets.isError && <Explanation error={assets.error} onRetry={assets.refetch} />}
+            {assets.isError && (
+              <Explanation
+                error={assets.error}
+                onRetry={() => {
+                  void assets.refetch();
+                }}
+              />
+            )}
             {assets.data !== undefined && assets.data.length === 0 && (
               <p className="note">
-                The backend returned no internal assets, so there is nothing to name. An agent
-                cannot be created until at least one exists.
+                The backend returned no assets at all, so there is nothing to name and no agent can
+                be created. That is the registry being empty rather than a universe of nothing.
               </p>
             )}
-            {(assets.data ?? []).map((asset: NativeAsset) => (
-              <label className="checkbox" key={asset.asset_id}>
+            {(assets.data ?? []).map((asset: Asset) => (
+              <label className="checkbox" key={asset.id}>
                 <input
                   type="checkbox"
-                  checked={grant.value.assets.includes(asset.asset_id)}
+                  checked={grant.value.assets.includes(asset.id)}
                   onChange={(event) => {
                     const next = event.target.checked
-                      ? [...grant.value.assets, asset.asset_id]
-                      : grant.value.assets.filter((id) => id !== asset.asset_id);
+                      ? [...grant.value.assets, asset.id]
+                      : grant.value.assets.filter((id) => id !== asset.id);
                     grant.set({ ...grant.value, assets: next });
                   }}
                 />
                 <span>
                   {asset.name} <span className="mono-small">{asset.symbol}</span>
+                  <span className="field-note">
+                    {asset.kind} · {asset.status}
+                    {asset.status === "ACTIVE"
+                      ? ""
+                      : " — the backend restricts this asset, so naming it here does not make it tradable."}
+                  </span>
                 </span>
               </label>
             ))}
+            <p className="field-note">
+              This is the asset registry the backend checks a grant against. A Nodal-native asset
+              somebody creates is a row in that same registry, so one appears here once it exists.
+            </p>
             <p className="field-note">{NATIVE_ASSET_RISK}</p>
           </fieldset>
 

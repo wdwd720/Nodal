@@ -18,19 +18,20 @@
  * disabled with the reason the backend would have given. Hiding an action the
  * backend would refuse hides the rule; offering one that dies in a toast hides
  * it just as well.
+ *
+ * Every panel reads the same query, so the loading state and the failure state
+ * belong to the page and not to each panel. The first version let each region
+ * handle the shared query itself, and a single 404 then rendered the same
+ * explanation five times down the screen: regions hydrate independently when
+ * they have independent sources, and these do not.
  */
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { newIdempotencyKey } from "@controlplane/generated-client";
 
-import {
-  useAgent,
-  useAgentAction,
-  type Agent,
-  type AgentAction,
-} from "../../api/queries.ts";
+import { useAgent, useAgentAction, type Agent, type AgentAction } from "../../api/queries.ts";
 import { Button, LinkButton } from "../../components/Button.tsx";
-import { AsyncPanel, EmptyState, Explanation } from "../../components/DataState.tsx";
+import { EmptyState, Explanation } from "../../components/DataState.tsx";
 import { Figure } from "../../components/Figure.tsx";
 import {
   Disclosure,
@@ -52,10 +53,10 @@ import { AgentStatus, AuthorityLine, LimitsGrid, RuntimeState } from "./parts.ts
 /**
  * Why an action cannot be taken, in the backend's own terms.
  *
- * Returning `undefined` means "offer it". Everything else is the sentence
- * rendered beside the disabled control, and each one mirrors the refusal the
- * service would produce, so a customer who presses ahead anyway is not told
- * something different from what this said.
+ * `undefined` means "offer it". Everything else is the sentence rendered beside
+ * the disabled control, and each one mirrors the refusal the service would
+ * produce, so somebody who presses ahead anyway is not told something different
+ * from what this said.
  */
 function refusalFor(action: AgentAction, agent: Agent): string | undefined {
   const status = agent.status;
@@ -63,15 +64,21 @@ function refusalFor(action: AgentAction, agent: Agent): string | undefined {
     case "enable":
       if (status === "PAUSED") return "This agent is paused. Resume it rather than enabling it.";
       if (status === "ENABLED") return "This agent is already enabled.";
-      if (status === "DISABLED") return "Disabling an agent is final. A disabled agent cannot be enabled again.";
+      if (status === "DISABLED") {
+        return "Disabling an agent is final. A disabled agent cannot be enabled again.";
+      }
       if (status === "FAILED") return "This agent has failed, and a failed agent cannot be enabled.";
       return undefined;
     case "pause":
       if (status === "PAUSED") return "This agent is already paused.";
-      if (status !== "ENABLED") return "Only an enabled agent can be paused; this one is not running.";
+      if (status !== "ENABLED") {
+        return "Only an enabled agent can be paused, and this one is not running.";
+      }
       return undefined;
     case "resume":
-      if (status !== "PAUSED") return `This agent is ${status.toLowerCase()}, not paused, so there is nothing to resume.`;
+      if (status !== "PAUSED") {
+        return `This agent is ${status.toLowerCase()} rather than paused, so there is nothing to resume.`;
+      }
       return undefined;
     case "disable":
       if (status === "DISABLED") return "This agent is already disabled, and disabling is final.";
@@ -96,9 +103,11 @@ const ACTION_LABELS: Readonly<Record<AgentAction, string>> = {
 const ACTION_NOTES: Readonly<Record<AgentAction, string>> = {
   enable:
     "Grants this agent the right to be evaluated at the first rung of the ladder. It needs a recent strong sign-in, and a level that acts without you confirming each action also needs the capability gate for agent trading to be active.",
-  pause: "Opens a pause record. Open orders are left exactly as they are; nothing is cancelled implicitly.",
+  pause:
+    "Opens a pause record. Open orders are left exactly as they are; nothing is cancelled implicitly.",
   resume: "Closes the pause and returns the agent to the rung it was on.",
-  disable: "Revokes the authority you granted. This is final: a disabled agent cannot be enabled again.",
+  disable:
+    "Revokes the authority you granted. This is final: a disabled agent cannot be enabled again.",
   archive: "Hides an agent that is already finished. It changes no authority and no limit.",
 };
 
@@ -115,7 +124,7 @@ function Lifecycle(props: { readonly agent: Agent; readonly accountId: string })
       {act.isError && <Explanation error={act.error} onRetry={act.reset} />}
       <FormField
         label="Why (optional)"
-        hint="Recorded against the agent's own history, so you can read later why it stopped."
+        hint="Recorded against this agent's own history, so you can read later why it stopped."
       >
         {(field) => (
           <input
@@ -143,7 +152,9 @@ function Lifecycle(props: { readonly agent: Agent; readonly accountId: string })
           return (
             <Button
               key={action}
-              variant={action === "disable" ? "danger" : action === "enable" ? "primary" : "secondary"}
+              variant={
+                action === "disable" ? "danger" : action === "enable" ? "primary" : "secondary"
+              }
               busy={act.isPending && pending === action}
               busyLabel="Working…"
               onClick={() => {
@@ -154,8 +165,8 @@ function Lifecycle(props: { readonly agent: Agent; readonly accountId: string })
                   action,
                   ...(reason.trim() === "" ? {} : { reason: reason.trim() }),
                   // Minted here, at the confirmation, so a retry after a
-                  // stronger sign-in replays this decision instead of making
-                  // a second one.
+                  // stronger sign-in replays this decision instead of making a
+                  // second one.
                   idempotencyKey: newIdempotencyKey(),
                 });
               }}
@@ -183,155 +194,144 @@ export function AgentDetail(): ReactNode {
   const accountId = useActiveAccountId();
   const agent = useAgent(agentId);
 
+  if (agent.isPending) {
+    return (
+      <Page title="Agent" actions={<LinkButton to="/agents">Back to the list</LinkButton>}>
+        <Panel title="Reading this agent" description="From the backend, which is the only source.">
+          <Skeleton shape="rows" count={4} label="This agent is loading" />
+        </Panel>
+      </Page>
+    );
+  }
+
+  const data = agent.data;
+  if (agent.isError || data === undefined) {
+    return (
+      <Page title="Agent" actions={<LinkButton to="/agents">Back to the list</LinkButton>}>
+        <Panel
+          title="This agent could not be read"
+          description="Nothing about it is shown, because nothing about it is known."
+        >
+          <Explanation
+            error={agent.error}
+            onRetry={() => {
+              void agent.refetch();
+            }}
+          />
+        </Panel>
+      </Page>
+    );
+  }
+
   return (
     <Page
-      title={agent.data?.name ?? "Agent"}
+      title={data.name}
       lead="What this agent may do, what it has been granted, and what is actually evaluating it."
       actions={<LinkButton to="/agents">Back to the list</LinkButton>}
     >
       <Panel title="Status and authority" description="Permission first; machinery below it.">
-        <AsyncPanel
-          query={agent}
-          loadingLabel="Loading this agent…"
-          skeleton={<Skeleton shape="rows" count={3} label="This agent is loading" />}
-        >
-          {(data: Agent) => (
-            <>
-              <FieldGrid columns={2}>
-                <Field
-                  label="Status"
-                  note="What you granted. It is not a claim that anything is running."
-                >
-                  <AgentStatus agent={data} />
-                </Field>
-                <Field label="Mode" note="What kind of capital a run of this agent would use.">
-                  {data.mode === undefined ? (
-                    <span className="absent">no mode yet</span>
-                  ) : (
-                    <StatusBadge tone="neutral">{modeBadge(data.mode)}</StatusBadge>
-                  )}
-                </Field>
-                <Field label="Lifecycle state" note="The internal rung, shown so the status is checkable.">
-                  <span className="mono-small">
-                    {data.state} · stage {data.stage}
-                  </span>
-                </Field>
-                <Field label="Created">{formatInstant(data.created_at)}</Field>
-              </FieldGrid>
-              <AuthorityLine authority={data.authority} />
-              {data.pause !== undefined && (
-                <Disclosure title="This agent is paused">
-                  <p>
-                    {data.pause.reason} — opened by{" "}
-                    {data.pause.paused_by_actor_type.toLowerCase()} at{" "}
-                    {formatInstant(data.pause.paused_at)}.
-                  </p>
-                  <p className="mono-small">{data.pause.reason_code}</p>
-                  <p>
-                    Open orders were left alone. Nothing is cancelled when an agent is paused,
-                    because cancelling is a separate decision with its own consequences.
-                  </p>
-                </Disclosure>
-              )}
-            </>
-          )}
-        </AsyncPanel>
+        <FieldGrid columns={2}>
+          <Field label="Status" note="What you granted. It is not a claim that anything is running.">
+            <AgentStatus agent={data} />
+          </Field>
+          <Field label="Mode" note="What kind of capital a run of this agent would use.">
+            {data.mode === undefined ? (
+              <span className="absent">no mode yet</span>
+            ) : (
+              <StatusBadge tone="neutral">{modeBadge(data.mode)}</StatusBadge>
+            )}
+          </Field>
+          <Field label="Lifecycle state" note="The internal rung, shown so the status is checkable.">
+            <span className="mono-small">
+              {data.state} · stage {data.stage}
+            </span>
+          </Field>
+          <Field label="Created">{formatInstant(data.created_at)}</Field>
+        </FieldGrid>
+        <AuthorityLine authority={data.authority} />
+        {data.pause !== undefined && (
+          <Disclosure title="This agent is paused">
+            <p>
+              {data.pause.reason} — opened by {data.pause.paused_by_actor_type.toLowerCase()} at{" "}
+              {formatInstant(data.pause.paused_at)}.
+            </p>
+            <p className="mono-small">{data.pause.reason_code}</p>
+            <p>
+              Open orders were left alone. Nothing is cancelled when an agent is paused, because
+              cancelling is a separate decision with its own consequences.
+            </p>
+          </Disclosure>
+        )}
       </Panel>
 
       <Panel title="Limits and budget" description="The bounds you granted, and how much has been used.">
-        <AsyncPanel
-          query={agent}
-          loadingLabel="Loading the grant…"
-          skeleton={<Skeleton shape="rows" count={3} label="The grant is loading" />}
-        >
-          {(data: Agent) => (
-            <>
-              <LimitsGrid agent={data} />
-              <Disclosure title="Which assets it may touch">
-                {data.limits.allowed_asset_ids.length === 0 ? (
-                  <p>
-                    The backend returned an empty universe for this agent, which it should never
-                    do: an agent whose universe is empty has authority over nothing and should not
-                    exist. Treat this as a fault rather than as a permission.
-                  </p>
-                ) : (
-                  <ul className="explain-fields">
-                    {data.limits.allowed_asset_ids.map((id) => (
-                      <li key={id}>
-                        <Identifier value={id} label="asset" copyable={false} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Disclosure>
-            </>
+        <LimitsGrid agent={data} />
+        <Disclosure title="Which assets it may touch">
+          {data.limits.allowed_asset_ids.length === 0 ? (
+            <p>
+              The backend returned an empty universe for this agent, which it should never do: an
+              agent whose universe is empty has authority over nothing and should not exist. Treat
+              this as a fault rather than as a permission.
+            </p>
+          ) : (
+            <ul className="explain-fields">
+              {data.limits.allowed_asset_ids.map((id) => (
+                <li key={id}>
+                  <Identifier value={id} label="asset" copyable={false} />
+                </li>
+              ))}
+            </ul>
           )}
-        </AsyncPanel>
+        </Disclosure>
       </Panel>
 
       <Panel
         title="What is evaluating it"
         description="Derived from agent runs and from which worker processes this deployment runs."
       >
-        <AsyncPanel
-          query={agent}
-          loadingLabel="Loading the runtime state…"
-          skeleton={<Skeleton shape="rows" count={2} label="The runtime state is loading" />}
-        >
-          {(data: Agent) => <RuntimeState agent={data} />}
-        </AsyncPanel>
+        <RuntimeState agent={data} />
       </Panel>
 
       <Panel title="Runs" description="What this agent has actually done.">
-        <AsyncPanel
-          query={agent}
-          loadingLabel="Loading runs…"
-          skeleton={<Skeleton shape="rows" count={2} label="Runs are loading" />}
-        >
-          {(data: Agent) => (
-            <>
-              <FieldGrid columns={3}>
-                <Field label="Runs recorded">
-                  <Figure kind="count" count={data.runs_total ?? null} absent="not reported" />
-                </Field>
-                <Field label="Last run">
-                  {data.last_run_at === undefined ? (
-                    <span className="absent">never run</span>
-                  ) : (
-                    formatInstant(data.last_run_at)
-                  )}
-                </Field>
-                <Field label="Last run status">
-                  {data.last_run_status === undefined ? (
-                    <span className="absent">not reported</span>
-                  ) : (
-                    <StatusBadge tone="neutral">{data.last_run_status}</StatusBadge>
-                  )}
-                </Field>
-              </FieldGrid>
-              {(data.runs_total ?? 0) === 0 && (
-                <EmptyState
-                  title="This agent has not run"
-                  body="No run has been recorded for it. That is a statement about activity, not a score: nothing has evaluated this agent, so there is nothing to report and nothing is being inferred."
-                />
-              )}
-              <NoEndpoint
-                what="The per-run decision history is not on the customer API."
-                detail="An agent run records what it observed, what it decided and why, and the API exposes the run counters above but no route that lists those decisions. Rather than draw a decision log out of the counters, this page says which part is missing."
-              />
-            </>
-          )}
-        </AsyncPanel>
+        <FieldGrid columns={3}>
+          <Field label="Runs recorded">
+            <Figure kind="count" count={data.runs_total ?? null} absent="not reported" />
+          </Field>
+          <Field label="Last run">
+            {data.last_run_at === undefined ? (
+              <span className="absent">never run</span>
+            ) : (
+              formatInstant(data.last_run_at)
+            )}
+          </Field>
+          <Field label="Last run status">
+            {data.last_run_status === undefined ? (
+              <span className="absent">not reported</span>
+            ) : (
+              <StatusBadge tone="neutral">{data.last_run_status}</StatusBadge>
+            )}
+          </Field>
+        </FieldGrid>
+        {(data.runs_total ?? 0) === 0 && (
+          <EmptyState
+            title="This agent has not run"
+            body="No run has been recorded for it. That is a statement about activity rather than a score: nothing has evaluated this agent, so there is nothing to report and nothing is being inferred."
+          />
+        )}
+        <NoEndpoint
+          what="The per-run decision history is not on the customer API."
+          detail="An agent run records what it observed, what it decided and why. The API exposes the counters above and no route that lists those decisions, so rather than draw a decision log out of counters, this page names the part that is missing."
+        />
       </Panel>
 
       <Panel title="Lifecycle" description="Enable, pause, resume, disable, archive.">
-        {accountId === undefined || agent.data === undefined ? (
+        {accountId === undefined ? (
           <EmptyState
             title="Nothing to act on yet"
-            body="The agent and the account it belongs to have to be read from the backend before an action can be taken on either."
+            body="The account this agent belongs to has to be read from the backend before an action can be taken on it."
           />
         ) : (
-          <Lifecycle agent={agent.data} accountId={accountId} />
+          <Lifecycle agent={data} accountId={accountId} />
         )}
       </Panel>
     </Page>
