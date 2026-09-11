@@ -677,3 +677,201 @@ export const termsStateSpec: Spec = {
 export const unreadCountSpec: Spec = {
   required: { count: "integer" },
 };
+
+/* --------------------------------------------------------------------------
+ * The markets surfaces: discovery, the trade screen, charts and the tape
+ * (product goal §12–§14, §47).
+ *
+ * Every price here is `quantity` — an exact integer at the market's own
+ * `price_scale` — and every amount is base units. None of them is `usd` and
+ * none of them is `decimal`: PART LIV forbids an external value for a Credit,
+ * so a response that tried to hand this app a currency figure for a native
+ * market would be refused at this boundary rather than rendered.
+ *
+ * `price_scale` and `asset_decimals` are REQUIRED on every one of these,
+ * because they are how the digits are read. A response that carried a price
+ * without saying what scale it is on is not a price, it is a number, and the
+ * markets page would draw it a factor of ten to the twelve wrong (F-44).
+ * ------------------------------------------------------------------------ */
+
+export const nativeMarketSummarySpec: Spec = {
+  required: {
+    market_id: "uuid",
+    asset_id: "uuid",
+    credit_asset_id: "uuid",
+    name: "string",
+    symbol: "string",
+    market_status: "string",
+    asset_status: "string",
+    creator_account_id: "uuid",
+    last_price: "quantity",
+    price_scale: "integer",
+    asset_decimals: "integer",
+    virtual_credit_reserve: "quantity",
+    initial_asset_reserve: "quantity",
+    real_credit_reserve: "quantity",
+    asset_reserve: "quantity",
+    liquidity_credits: "quantity",
+    circulating_supply: "quantity",
+    max_supply: "quantity",
+    credit_volume_24h: "quantity",
+    trades_24h: "integer",
+    platform_fee_bps: "integer",
+    creator_fee_bps: "integer",
+    // Required, and required for a reason: a demo market that arrived without
+    // its label would render as an ordinary one. The absence of a flag is not
+    // "not a demo" — it is a response this app cannot label honestly.
+    demo: "boolean",
+    created_at: "timestamp",
+  },
+  optional: {
+    description: "string",
+    image_url: "string",
+    moderation_state: "string",
+    reference_price_24h: "quantity",
+    // A signed integer: it is the 24-hour move, and a fall is a real outcome.
+    change_24h_bps: "integer",
+    has_24h_change: "boolean",
+    state_version: "integer",
+    activated_at: "timestamp",
+  },
+};
+
+export const nativeMarketPageSpec: Spec = {
+  required: { sort: "string", stable: "boolean" },
+  arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
+};
+
+/**
+ * The limits in force on one market (goal §47).
+ *
+ * Only the policy version is required, and that is the contract's own answer
+ * rather than a convenience: the compiled-in safety policy ships with the
+ * circuit breaker DISARMED (D-065), and a disarmed breaker has no move
+ * threshold to report. Rendering a zero there would state a limit of nothing —
+ * the strictest possible breaker — where the truth is that there is no breaker.
+ * So every limit is optional here and the panel renders each one's absence as
+ * an absence.
+ */
+export const marketSafetyLimitsSpec: Spec = {
+  required: { safety_policy_version: "string" },
+  optional: {
+    max_price_impact_bps: "integer",
+    max_slippage_bps: "integer",
+    circuit_breaker_move_bps: "integer",
+    circuit_breaker_window_seconds: "integer",
+    min_opening_liquidity_credits: "quantity",
+    creator_may_buy_own_asset: "boolean",
+    risk_policy_version: "string",
+    max_native_market_concentration_bps: "integer",
+    max_creator_concentration_bps: "integer",
+  },
+};
+
+export const nativeMarketDetailSpec: Spec = {
+  required: { market: "object", limits_in_force: "object" },
+  arrays: {
+    top_holders: { spec: { required: { account_id: "uuid", quantity: "quantity" } } },
+  },
+};
+
+export const nativeCandlePageSpec: Spec = {
+  required: {
+    market_id: "uuid",
+    interval: "string",
+    from: "timestamp",
+    to: "timestamp",
+    price_scale: "integer",
+    asset_decimals: "integer",
+  },
+  arrays: {
+    candles: {
+      required: true,
+      spec: {
+        required: {
+          open_time: "timestamp",
+          open: "quantity",
+          high: "quantity",
+          low: "quantity",
+          close: "quantity",
+          credit_volume: "quantity",
+          asset_volume: "quantity",
+          trades: "integer",
+        },
+      },
+    },
+  },
+};
+
+export const nativeTradePageSpec: Spec = {
+  required: { market_id: "uuid", price_scale: "integer", asset_decimals: "integer" },
+  arrays: {
+    trades: {
+      required: true,
+      spec: {
+        required: {
+          seq: "integer",
+          side: "string",
+          effective_price: "quantity",
+          spot_price_after: "quantity",
+          credit_volume: "quantity",
+          asset_volume: "quantity",
+          printed_at: "timestamp",
+        },
+        optional: { spot_price_before: "quantity" },
+      },
+    },
+  },
+};
+
+/**
+ * The portfolio, read by the trade screen for one market's position.
+ *
+ * The whole document is validated even though the ticket needs one position:
+ * a response whose totals or Credit breakdown are malformed is a response this
+ * app cannot trust for the position either, and validating the part it reads
+ * while ignoring the rest would be choosing which half of a broken answer to
+ * believe.
+ *
+ * `temperature` is required on the document and on every position, because it
+ * is what says whether a figure is closed-loop Credits, money at a provider or
+ * a sandbox rehearsal. A position without one cannot be rendered honestly.
+ */
+export const nativePortfolioSpec: Spec = {
+  required: { account_id: "uuid", as_of: "timestamp", temperature: "string", credits: "object", totals: "object" },
+  arrays: {
+    positions: {
+      required: true,
+      spec: {
+        required: {
+          asset_id: "uuid",
+          symbol: "string",
+          quantity: "quantity",
+          cost_basis_credits: "quantity",
+          realized_pnl_credits: "quantity",
+          fees_paid_credits: "quantity",
+          market_value_credits: "quantity",
+          unrealized_pnl_credits: "quantity",
+          total_pnl_credits: "quantity",
+          price_scale: "integer",
+          asset_decimals: "integer",
+          temperature: "string",
+        },
+        optional: {
+          market_id: "uuid",
+          name: "string",
+          market_status: "string",
+          average_cost_credits: "quantity",
+          spot_price: "quantity",
+          units_bought_total: "quantity",
+          units_sold_total: "quantity",
+          allocation_units: "quantity",
+          fill_count: "integer",
+          demo: "boolean",
+          first_acquired_at: "timestamp",
+          last_trade_at: "timestamp",
+        },
+      },
+    },
+  },
+};

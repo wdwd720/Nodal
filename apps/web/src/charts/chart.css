@@ -1,0 +1,159 @@
+/*
+ * The candlestick chart, styled from the token layer and nothing else.
+ *
+ * It declares no colour of its own: `--pos`, `--neg`, `--line` and `--ink-faint`
+ * are the same tokens every other surface reads, so the chart inherits both
+ * themes and the forced-colours behaviour without a second opinion about what
+ * a rise looks like.
+ *
+ * Direction is carried by TWO channels, as everywhere else in this product: a
+ * rise is drawn hollow in `--pos`, a fall solid in `--neg`. Hue alone fails a
+ * colourblind reader; fill survives it, and both survive `forced-colors`, where
+ * the OS discards the hues and leaves the stroke and the fill.
+ */
+
+.chart-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.chart-frame {
+  /* The plot scales to the column rather than scrolling: a chart a reader has
+     to scroll sideways to see the end of is a chart that hides the last price,
+     which on a phone is the one price they came for. */
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding: var(--space-2);
+}
+
+.chart-frame:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.chart-svg {
+  /* Uniform scaling: the viewBox keeps its aspect ratio, so a wick is one pixel
+     wide at every width. `min-height` gives a phone a plot tall enough to read
+     without distorting the drawing to get it. */
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 200px;
+  overflow: visible;
+}
+
+.chart-grid-line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  fill: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.chart-wick {
+  stroke-width: 1;
+}
+
+.chart-up .chart-wick,
+.chart-up .chart-body {
+  stroke: var(--pos);
+}
+
+.chart-up .chart-body {
+  fill: var(--surface);
+}
+
+.chart-down .chart-wick,
+.chart-down .chart-body {
+  stroke: var(--neg);
+}
+
+.chart-down .chart-body {
+  fill: var(--neg);
+}
+
+.chart-body {
+  stroke-width: 1;
+}
+
+.chart-up .chart-volume {
+  fill: var(--pos-line);
+}
+
+.chart-down .chart-volume {
+  fill: var(--neg-line);
+}
+
+.chart-selected .chart-body,
+.chart-selected .chart-volume {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.chart-crosshair {
+  stroke: var(--ink-soft);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.chart-separator {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.chart-readout {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+  min-height: 1.4em;
+}
+
+.chart-caption {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+  line-height: var(--leading-body);
+}
+
+.chart-hint {
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--ink-faint);
+}
+
+/*
+ * A simulated surface is desaturated, not dimmed (UI_UX_SYSTEM §3). The chart
+ * obeys the same rule as every figure inside a simulated panel, so a demo
+ * market's chart cannot be mistaken for a real one in a screenshot.
+ */
+[data-temp="simulated"] .chart-svg {
+  filter: grayscale(1);
+}
+
+@media (forced-colors: active) {
+  [data-temp="simulated"] .chart-svg {
+    filter: none;
+  }
+}
+
+/*
+ * Nothing in the chart animates: a price moving on screen is motion that does
+ * not carry information a static drawing lacks, and the one animation this
+ * design allows — a value that changed just now — belongs to a figure, not to a
+ * plot. The rule is stated rather than implied so that a later edit has to
+ * argue with it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .chart-svg * {
+    animation: none;
+    transition: none;
+  }
+}

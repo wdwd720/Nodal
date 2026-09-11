@@ -43,13 +43,14 @@ export const PUBLIC_ROUTES: readonly RouteUnderTest[] = [
  * The hosted rail of the previous product — `/trade`, `/add-funds`, `/lab`,
  * `/strategy`, `/nodal-economy`, `/payouts`, `/marketplace` — was removed by
  * D-077 and is deliberately absent. The pages other branches own —
- * `/buy-credits`, `/withdraw`, `/verify`, `/notifications`, `/markets/:id`,
- * `/agents/new`, `/settings/security`, `/settings/account` — are added here as
- * they land.
+ * `/buy-credits`, `/withdraw`, `/verify`, `/notifications`, `/agents/new`,
+ * `/settings/security`, `/settings/account` — are added here as they land.
+ * `/markets/:marketId` has landed and is in `DYNAMIC_APP_ROUTES` below, because
+ * it needs an identifier that only a scenario can supply.
  */
 export const APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/home", heading: "Home", nav: "Home" },
-  { path: "/markets", heading: "Native Markets", nav: "Markets" },
+  { path: "/markets", heading: "Markets", nav: "Markets" },
   { path: "/markets/products", heading: "Marketplace", nav: "Products" },
   { path: "/create-asset", heading: "Create asset", nav: "Create asset" },
   { path: "/agents", heading: "Agents", nav: "Agents" },
@@ -58,6 +59,20 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   // No `nav`: Settings is reached from the account menu rather than the rail,
   // which is where USER_JOURNEY §2 puts it.
   { path: "/settings", heading: "Settings and security" },
+];
+
+/**
+ * The application routes whose address carries an identifier.
+ *
+ * They are listed apart from `APP_ROUTES` because the cross-cutting sweeps walk
+ * that list by navigating to each `path`, and `/markets/:marketId` is not an
+ * address — a sweep would ask the API for a market called ":marketId" and check
+ * the 404 page. Each of these is covered instead by the scenario that owns it,
+ * which has a real identifier to put in the gap: `scenarios/c-trade.spec.ts`
+ * runs axe and the 375px reflow check against the market it opened.
+ */
+export const DYNAMIC_APP_ROUTES: readonly RouteUnderTest[] = [
+  { path: "/markets/:marketId", heading: "the market symbol and name" },
 ];
 
 /**

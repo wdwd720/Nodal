@@ -18,7 +18,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import type { Schemas } from "@controlplane/generated-client";
+import type { Paths, Schemas } from "@controlplane/generated-client";
 import { idempotent, newIdempotencyKey } from "@controlplane/generated-client";
 
 import { api } from "./client.ts";
@@ -51,6 +51,13 @@ import {
   nativeFillSpec,
   nativeMarketSpec,
   nativeQuoteSpec,
+  nativeCandlePageSpec,
+  nativeMarketDetailSpec,
+  nativeMarketPageSpec,
+  nativeMarketSummarySpec,
+  nativeTradePageSpec,
+  nativePortfolioSpec,
+  marketSafetyLimitsSpec,
   payoutRequestSpec,
   itemsSpec,
   validated,
@@ -981,3 +988,249 @@ export function useUnreadCount(enabled: boolean): UseQueryResult<number> {
 
 /** Re-exported so a page can validate a document it received on its own. */
 export { legalDocumentSpec };
+
+/* --------------------------------------------------------------------------
+ * Markets: discovery, the trade screen, charts and the tape (§12–§14, §35)
+ *
+ * The query keys begin with `native-markets` and `native-market` on purpose:
+ * those are the prefixes `StreamStatus.tsx` invalidates when the stream reports
+ * a `market` or `position` scope. A key shaped any other way would be a screen
+ * the stream cannot refresh, which on a trading screen means a price that stops
+ * moving without saying so.
+ *
+ * Nothing here derives a figure. `liquidity_credits` is V + R as the backend
+ * computed it, `change_24h_bps` is the backend's signed move, and neither is
+ * recomputed from the parts that are also on the row — two answers to the same
+ * question is one answer too many.
+ * ------------------------------------------------------------------------ */
+
+export type NativeMarketSummary = Schemas["NativeMarketSummary"];
+export type NativeMarketDetail = Schemas["NativeMarketDetail"];
+export type MarketSafetyLimits = Schemas["MarketSafetyLimits"];
+export type NativeCandlePage = Schemas["NativeCandlePage"];
+export type NativeCandle = Schemas["NativeCandle"];
+export type NativeTradePage = Schemas["NativeTradePage"];
+export type NativeTradePrint = Schemas["NativeTradePrint"];
+export type MarketSort = NonNullable<
+  NonNullable<Paths["/native-markets"]["get"]["parameters"]["query"]>["sort"]
+>;
+export type MarketStatus = NonNullable<
+  NonNullable<Paths["/native-markets"]["get"]["parameters"]["query"]>["status"]
+>[number];
+export type CandleInterval = NonNullable<
+  Paths["/native-markets/{marketId}/candles"]["get"]["parameters"]["query"]
+>["interval"];
+
+export interface MarketQuery {
+  readonly q: string;
+  readonly sort: MarketSort;
+  readonly status: readonly MarketStatus[];
+  readonly creatorAccountId?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+}
+
+export interface MarketsPage {
+  readonly markets: readonly NativeMarketSummary[];
+  readonly nextCursor: string | null;
+  readonly sort: MarketSort;
+  /**
+   * Whether paging this ordering sees every market exactly once. Only NEWEST
+   * does; the rest rank by figures that move when somebody trades, and the
+   * page says so rather than letting a reader assume otherwise.
+   */
+  readonly stable: boolean;
+}
+
+export const marketKeys = {
+  list: (query: MarketQuery) =>
+    [
+      "native-markets",
+      query.q,
+      query.sort,
+      [...query.status].join(","),
+      query.creatorAccountId ?? "",
+      query.cursor ?? "",
+    ] as const,
+  summary: (marketId: string) => ["native-market", marketId, "summary"] as const,
+  candles: (marketId: string, interval: string, from: string, to: string) =>
+    ["native-market", marketId, "candles", interval, from, to] as const,
+  trades: (marketId: string) => ["native-market", marketId, "trades"] as const,
+};
+
+export function useNativeMarkets(query: MarketQuery): UseQueryResult<MarketsPage> {
+  return useQuery({
+    queryKey: marketKeys.list(query),
+    // Every figure on this list is live. A cached page would show a price that
+    // somebody else has already traded through.
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets", {
+        params: {
+          query: {
+            sort: query.sort,
+            limit: query.limit ?? 50,
+            ...(query.q === "" ? {} : { q: query.q }),
+            ...(query.status.length === 0 ? {} : { status: [...query.status] }),
+            ...(query.creatorAccountId === undefined
+              ? {}
+              : { creator_account_id: query.creatorAccountId }),
+            ...(query.cursor === undefined || query.cursor === ""
+              ? {}
+              : { cursor: query.cursor }),
+          },
+        },
+      });
+      const page = validated<Schemas["NativeMarketPage"]>(
+        data,
+        nativeMarketPageSpec,
+        "/native-markets",
+      );
+      return {
+        markets: page.markets,
+        nextCursor: page.next_cursor ?? null,
+        sort: page.sort,
+        stable: page.stable,
+      };
+    },
+  });
+}
+
+export interface MarketDetail {
+  readonly market: NativeMarketSummary;
+  readonly limits: MarketSafetyLimits;
+  readonly topHolders: NonNullable<NativeMarketDetail["top_holders"]>;
+}
+
+/**
+ * Everything the trade screen needs, from the one projection the markets page
+ * also reads. The nested market object is validated with the same spec the
+ * list uses — `Spec` describes arrays of objects but not a single nested one,
+ * so it is checked here explicitly rather than waved through as "object".
+ */
+export function useNativeMarketDetail(marketId: string | undefined): UseQueryResult<MarketDetail> {
+  return useQuery({
+    queryKey: marketKeys.summary(marketId ?? ""),
+    enabled: marketId !== undefined && marketId !== "",
+    // The state version moves on every trade and a quote priced against a stale
+    // one is refused. Refetching is cheaper than explaining a rejection.
+    staleTime: 0,
+    // The stream invalidates this on every print, but a trading screen must not
+    // depend on a connection staying up to keep its `as of` honest: without a
+    // poll the stamp escalates to stale after thirty seconds and every figure
+    // on the screen correctly goes faint. Fifteen seconds keeps it fresh.
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets/{marketId}/summary", {
+        params: { path: { marketId: marketId ?? "" } },
+      });
+      const detail = validated<NativeMarketDetail>(
+        data,
+        nativeMarketDetailSpec,
+        "/native-markets/{id}/summary",
+      );
+      return {
+        market: validated<NativeMarketSummary>(
+          detail.market,
+          nativeMarketSummarySpec,
+          "/native-markets/{id}/summary.market",
+        ),
+        limits: validated<MarketSafetyLimits>(
+          detail.limits_in_force,
+          marketSafetyLimitsSpec,
+          "/native-markets/{id}/summary.limits_in_force",
+        ),
+        topHolders: detail.top_holders ?? [],
+      };
+    },
+  });
+}
+
+/**
+ * OHLCV over a bounded window.
+ *
+ * `from` and `to` are the caller's, not this hook's: a window computed inside
+ * the hook would move on every render and make the query key a cache miss
+ * forever. The page computes the window once per interval choice and holds it.
+ */
+export function useNativeCandles(
+  marketId: string | undefined,
+  interval: CandleInterval,
+  from: string,
+  to: string,
+): UseQueryResult<NativeCandlePage> {
+  return useQuery({
+    queryKey: marketKeys.candles(marketId ?? "", interval, from, to),
+    enabled: marketId !== undefined && marketId !== "",
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets/{marketId}/candles", {
+        params: { path: { marketId: marketId ?? "" }, query: { interval, from, to } },
+      });
+      return validated<NativeCandlePage>(
+        data,
+        nativeCandlePageSpec,
+        "/native-markets/{id}/candles",
+      );
+    },
+  });
+}
+
+/** The public tape. It carries no account identity, by the API's design. */
+export function useNativeTrades(
+  marketId: string | undefined,
+  limit = 25,
+): UseQueryResult<NativeTradePage> {
+  return useQuery({
+    queryKey: marketKeys.trades(marketId ?? ""),
+    enabled: marketId !== undefined && marketId !== "",
+    staleTime: 0,
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets/{marketId}/trades", {
+        params: { path: { marketId: marketId ?? "" }, query: { limit } },
+      });
+      return validated<NativeTradePage>(data, nativeTradePageSpec, "/native-markets/{id}/trades");
+    },
+  });
+}
+
+/**
+ * The caller's own position in one market, read from the portfolio projection.
+ *
+ * It is keyed under `native-market` rather than under a `portfolio` prefix on
+ * purpose. `StreamStatus.tsx` invalidates `credits`, `buying-power`, `holdings`,
+ * `native-market`, `native-asset`, `payouts`, `accounts`, `me` and `activity` —
+ * there is no `portfolio` prefix in that map, so a hook keyed that way would not
+ * refresh when a fill lands, which on a trade screen means a position that
+ * stops moving while the price does not. Keyed here it is refreshed by both the
+ * `position` and the `market` scopes.
+ *
+ * It returns the whole document, not just the one position: `as_of` is the
+ * instant every mark-to-market figure was computed at, and a position shown
+ * without it is a number nobody can act on.
+ */
+export type Portfolio = Schemas["Portfolio"];
+export type PortfolioPosition = Schemas["PortfolioPosition"];
+
+export function useMarketPortfolio(accountId: string | undefined): UseQueryResult<Portfolio> {
+  return useQuery({
+    queryKey: ["native-market", "portfolio", accountId ?? ""] as const,
+    enabled: accountId !== undefined && accountId !== "",
+    // A position is marked at a price that moves. It is never served from cache.
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/portfolio", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validated<Portfolio>(data, nativePortfolioSpec, "/me/portfolio");
+    },
+  });
+}
+
+/** The position in one market, or undefined when the account holds none. */
+export function positionIn(
+  portfolio: Portfolio | undefined,
+  marketId: string,
+): PortfolioPosition | undefined {
+  return portfolio?.positions.find((position) => position.market_id === marketId);
+}
