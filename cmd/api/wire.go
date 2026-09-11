@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/activity"
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/agents"
 	"github.com/nodal/controlplane/internal/alert"
@@ -31,6 +32,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
@@ -63,6 +65,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/verification"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
 
@@ -419,6 +422,18 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
+	// ---- market safety and the risk policy at boot (product goal SS47) ----
+	// The market-safety policy in force: the newest recorded version, or the
+	// compiled-in conservative one where none has been recorded. It is a real
+	// policy either way, so a deployment that has decided nothing still refuses
+	// an order that would move a market by a quarter.
+	nativeMarketSvc.SetSafety(nativemarket.NewSafetyStore())
+	// And the GLOBAL risk policy, which internal/nativemarket requires before
+	// it will evaluate any internal trade at all. Non-PROD only; see
+	// riskPolicyAtBoot for why PROD stays manual.
+	if err := riskPolicyAtBoot(ctx, database, cfg, clk, log); err != nil {
+		return nil, fmt.Errorf("risk policy at boot: %w", err)
+	}
 
 	// Payout providers. A registry built with allowSandbox=false refuses any
 	// provider with no contract reference, which is the programmatic assertion
@@ -431,6 +446,51 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+
+	// ---- verification (goal PARTS 19-25) ---------------------------------
+	//
+	// The identity boundary. A deployment with no contracted identity vendor
+	// registers nothing here, and every verification route answers UNSUPPORTED
+	// -- which is the honest state of a system that cannot verify anybody, and
+	// is different from reporting that somebody failed a check.
+	//
+	// The sandbox verification provider is registered on the same one
+	// condition every other sandbox affordance keys off (ADR-0023), and it
+	// refuses PROD on its own account as well.
+	verificationRegistry := verification.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest || cfg.SandboxTier())
+	if err := registerSandboxVerificationProvider(cfg, verificationRegistry, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox verification provider: %w", err)
+	}
+	verificationRepo := verification.NewRepository()
+	complianceRepo := compliance.NewRepository(audit.NewWriter())
+	verificationSvc, err := verification.NewService(verification.Deps{
+		Repo:        verificationRepo,
+		Compliance:  complianceRepo,
+		Providers:   verificationRegistry,
+		Clock:       clk,
+		Environment: string(cfg.Env),
+		SandboxTier: cfg.SandboxTier(),
+		ReturnURL:   cfg.Auth.PostLoginURL,
+		RefreshURL:  cfg.Auth.PostLoginURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("verification service: %w", err)
+	}
+	// The composite resolver replaces the cap that internal/identity documents:
+	// NODAL_IDENTITY is what Nodal establishes by itself, and PAYOUT_KYC and
+	// ENHANCED come from a provider decision PLUS the sub-checks that justify
+	// it. It composes with the base rather than replacing it, so an account
+	// whose owner is not ACTIVE still resolves to NONE however good the KYC
+	// evidence is (BLOCKERS B-06 narrows to "no contracted vendor", not "no
+	// code").
+	compositeVerification, err := verification.NewResolver(verificationResolver, verificationRepo, database, clk)
+	if err != nil {
+		return nil, fmt.Errorf("verification resolver: %w", err)
+	}
+	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
+	if err != nil {
+		return nil, err
+	}
 	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, audit.NewWriter(), clk)
 	// The marketplace gate is resolved from the database on every purchase, so
 	// pulling MARKETPLACE stops sales without a restart. Until it is ACTIVE,
@@ -546,7 +606,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// every Domain A action -- which needs exactly that level --
 			// impossible in every deployment whatever its gates said. A
 			// control no user can ever satisfy is not a control.
-			Verification: verificationResolver,
+			Verification: compositeVerification,
 			// The Settlement Compiler's legal policy. The default is the
 			// conservative one: it permits simulation and denies every
 			// internal-economy product and every payout. CP_API_LEGAL_POLICY
@@ -559,6 +619,21 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// determination wearing a network header's clothes.
 			Jurisdiction: nil,
 			Clock:        clk,
+		},
+		// ---- the withdrawal journey (goal PARTS 19-25) ------------------
+		Withdrawal: httpapi.WithdrawalDeps{
+			Verification: verificationSvc,
+			// The base level, deliberately the NODAL_IDENTITY resolver rather
+			// than the composite one: the profile view applies the evidence
+			// rule on top, and composing the composite with itself would be
+			// circular.
+			BaseVerification: verificationResolver,
+			Compliance:       complianceRepo,
+			Accounts:         accountRepo,
+			Pricing:          creditPurchases.Service,
+			CreditDecimals:   creditDecimals,
+			Environment:      string(cfg.Env),
+			SandboxTier:      cfg.SandboxTier(),
 		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.
@@ -600,6 +675,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				CreditPurchases: creditPurchases.Service,
 			}),
 		),
+		// ---- markets, charts, portfolio and activity (M) ----
+		MarketSurfaces: httpapi.MarketSurfacesDeps{
+			RiskPolicies: risk.NewStore(),
+			// On a sandbox tier no value is real by construction (ADR-0023),
+			// so every amount these surfaces return is SIMULATED and says so.
+			ActivityFeed: activity.NewFeed(cfg.SandboxTier()),
+			Simulated:    cfg.SandboxTier(),
+		},
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,
 	})
 	if err != nil {
@@ -658,6 +741,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	ports.Agents = agentSvc
 	ports.Strategies = strategySvc
 
+	// ---- sandbox demo data (product goal SS51) ----
+	// Refused outside a sandbox tier, and refused in PROD three times over.
+	// A failure is logged, never fatal: an empty markets page is a nuisance,
+	// a deployment that will not start is an outage.
+	demoDataAtBoot(ctx, cfg, demoSeedDeps{
+		DB: database, Assets: nativeAssetSvc, Markets: nativeMarketSvc, Credits: creditSvc, Clock: clk,
+	}, log)
+
 	// Provider webhooks. The map is keyed by the provider name in the path, so
 	// POST /v1/webhooks/stripe_credit reaches the Credit purchase pipeline and
 	// nothing else does. An unconfigured provider leaves no key, and the
@@ -703,27 +794,30 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	cookieName := httpmw.EffectiveCookieName(cfg.Auth.CookieName, cfg.Auth.CookieDomain, cfg.Auth.CookieSecure)
 
 	return httpapi.New(httpapi.Options{
-		Env:               cfg.Env,
-		BuildVersion:      config.BuildVersion,
-		ConfigHash:        cfg.Hash(),
-		PublicBaseURL:     cfg.HTTP.PublicBaseURL,
-		CORSOrigins:       cfg.HTTP.CORSOrigins,
-		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
-		MaxBodyBytes:      cfg.HTTP.MaxBodyBytes,
-		CookieName:        cookieName,
-		CookieDomain:      cfg.Auth.CookieDomain,
-		CookieSecure:      cfg.Auth.CookieSecure,
-		PostLoginURL:      cfg.Auth.PostLoginURL,
-		SessionTTL:        cfg.Auth.SessionTTL,
-		StepUpMaxAge:      cfg.Auth.StepUpMaxAge,
-		IdempotencyTTL:    httpapi.DefaultIdempotencyTTL,
-		Clock:             clk,
-		Logger:            log,
-		Meter:             meter,
-		Limits:            limits,
-		Authenticator:     httpmw.Session(sessionMgr, database, cookieName),
-		NonSpecRoutes:     nonSpecRoutes,
-		Ports:             ports,
+		Env:          cfg.Env,
+		BuildVersion: config.BuildVersion,
+		ConfigHash:   cfg.Hash(),
+		SandboxTier:  cfg.SandboxTier(),
+		// Anything but live is a rehearsal: test cards, sandbox Credits.
+		CreditPurchaseSandbox: cfg.Providers.CreditPurchase.Mode != config.ProviderModeLive,
+		PublicBaseURL:         cfg.HTTP.PublicBaseURL,
+		CORSOrigins:           cfg.HTTP.CORSOrigins,
+		TrustedProxyCIDRs:     cfg.HTTP.TrustedProxyCIDRs,
+		MaxBodyBytes:          cfg.HTTP.MaxBodyBytes,
+		CookieName:            cookieName,
+		CookieDomain:          cfg.Auth.CookieDomain,
+		CookieSecure:          cfg.Auth.CookieSecure,
+		PostLoginURL:          cfg.Auth.PostLoginURL,
+		SessionTTL:            cfg.Auth.SessionTTL,
+		StepUpMaxAge:          cfg.Auth.StepUpMaxAge,
+		IdempotencyTTL:        httpapi.DefaultIdempotencyTTL,
+		Clock:                 clk,
+		Logger:                log,
+		Meter:                 meter,
+		Limits:                limits,
+		Authenticator:         httpmw.Session(sessionMgr, database, cookieName),
+		NonSpecRoutes:         nonSpecRoutes,
+		Ports:                 ports,
 	})
 }
 

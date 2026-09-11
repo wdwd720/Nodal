@@ -15,12 +15,33 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
 import { LOGIN_PATH } from "./api/client.ts";
-import { useAccounts, useMe, type Account, type Principal } from "./api/queries.ts";
+import {
+  useAccounts,
+  useMe,
+  type Account,
+  type Onboarding,
+  type Principal,
+  type UserProfile,
+} from "./api/queries.ts";
 import { isUnauthenticated } from "./api/problem.ts";
-import { isLocalPath, markSignInStarted, rememberReturnPath } from "./lib/survives-sign-in.ts";
+import { isLocalPath, markSignInStarted } from "./lib/survives-sign-in.ts";
 
 export interface SessionValue {
   readonly principal: Principal | undefined;
+  /**
+   * The caller's product profile, absent until they have made one.
+   *
+   * It is read off the principal rather than fetched separately because `/me`
+   * carries it: a second request would give the shell two answers about the
+   * same person that could disagree for a tick.
+   */
+  readonly profile: UserProfile | undefined;
+  /**
+   * Onboarding as timestamps, not a state machine (D-053). Absent for a
+   * principal with no profile row at all, which is itself the signal that
+   * nothing has been started.
+   */
+  readonly onboarding: Onboarding | undefined;
   readonly accounts: readonly Account[];
   readonly activeAccountId: string | undefined;
   readonly setActiveAccountId: (id: string) => void;
@@ -54,6 +75,8 @@ export function SessionProvider(props: { readonly children: ReactNode }): ReactN
     const active = chosen !== undefined && list.some((a) => a.id === chosen) ? chosen : list[0]?.id;
     return {
       principal: me.data,
+      profile: me.data?.profile,
+      onboarding: me.data?.onboarding,
       accounts: list,
       activeAccountId: active,
       setActiveAccountId: setChosen,
@@ -91,38 +114,47 @@ export function useActiveAccountId(): string | undefined {
  * Leaves for the identity provider.
  *
  * This is a full navigation rather than a request, because the flow ends in a
- * redirect that sets a cookie — an XHR could not receive it. Everything the app
- * wants to survive the trip is written to the tab first:
+ * redirect that sets a cookie — an XHR could not receive it.
  *
- *   - the return path, validated as a local path, so the app can forward the
- *     customer back to what they were doing. The API's login endpoint takes no
- *     `return_to` parameter today, so the browser holds it;
- *   - a marker saying a sign-in is in flight, so the callback landing on `/`
- *     shows "signing you in" rather than flashing the public landing page at
- *     somebody who has just signed in.
+ * The return path goes to the API as `return_to`, not into this tab. The
+ * backend stores it with the login attempt, never echoes it from the request,
+ * refuses anything that is not a local path, and appends it to the app origin
+ * the deployment configures. That is one fewer place a redirect target can be
+ * tampered with than holding it in the browser was, which is what this branch
+ * did before the parameter existed.
  *
- * `stepUp` asks the provider for a stronger authentication. It is the same
- * endpoint with `?step_up=true`, which is what `STEP_UP_REQUIRED` needs.
+ * What stays in the tab is only what the customer typed
+ * (`lib/survives-sign-in.ts`) and a marker saying a sign-in is in flight, so
+ * that a callback landing on `/` shows "signing you in" rather than flashing
+ * the public landing page at somebody who has just signed in.
+ *
+ * `stepUp` asks the provider for a stronger authentication. The backend checks
+ * the provider's `amr` on the way back and refuses a callback that did not
+ * actually get one, so asking is not the same as receiving.
  */
 export function beginSignIn(options?: {
   readonly returnTo?: string;
   readonly stepUp?: boolean;
 }): void {
+  const params = new URLSearchParams();
   const returnTo = options?.returnTo;
   if (returnTo !== undefined && isLocalPath(returnTo)) {
-    rememberReturnPath(returnTo);
+    params.set("return_to", returnTo);
+  }
+  if (options?.stepUp === true) {
+    params.set("step_up", "true");
   }
   markSignInStarted();
-  const target = options?.stepUp === true ? `${LOGIN_PATH}?step_up=true` : LOGIN_PATH;
-  window.location.assign(target);
+  const query = params.toString();
+  window.location.assign(query === "" ? LOGIN_PATH : `${LOGIN_PATH}?${query}`);
 }
 
 /**
  * The path to send a signed-out visitor to, carrying where they were going.
  *
  * `?return=` is read back by the sign-in page and by nothing else, and it is
- * re-validated there, so a hand-edited value cannot become a redirect to
- * another origin.
+ * re-validated there before it is handed to the API, so a hand-edited value
+ * cannot become a redirect to another origin.
  */
 export function signInPathFor(location: { readonly pathname: string; readonly search: string }): string {
   const target = `${location.pathname}${location.search}`;

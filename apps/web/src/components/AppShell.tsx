@@ -30,8 +30,11 @@
  * nothing is a defect. So:
  *
  *   - **Search** is absent: the markets search does not exist yet.
- *   - **Notifications** is absent: `GET /v1/me/notifications/unread-count` is
- *     not in this build's client.
+ *   - **Notifications** is here now that `GET /v1/me/notifications/unread-count`
+ *     exists. The bell shows the count and nothing else: a notification carries
+ *     identifiers and state names, never a balance, and the page it opens is
+ *     another branch's — so until that page lands the bell is a read-out rather
+ *     than a link, which is the honest shape for a control with nowhere to go.
  *   - **Buy Credits** and **Withdraw** are declared below and rendered only
  *     when their pages exist. `USER_JOURNEY.md` §2 requires them to be always
  *     visible — and they will be — but a primary action that navigates to a
@@ -43,12 +46,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 
-import { useSignOut } from "../api/queries.ts";
+import { useSignOut, useUnreadCount } from "../api/queries.ts";
 import { RISK_FOOTER } from "../lib/honesty.ts";
 import { useSession } from "../session.tsx";
 import { useVersion } from "../api/queries.ts";
 import { BrandLockup } from "./Brand.tsx";
 import { Button, IconButton, LinkButton } from "./Button.tsx";
+import { StatusBadge } from "./StatusBadge.tsx";
 import { Dialog, Sheet } from "./Dialog.tsx";
 import { Field, FieldGrid } from "./Field.tsx";
 import { StreamBadge, useEventStream } from "./StreamStatus.tsx";
@@ -238,6 +242,72 @@ function AccountMenu(props: { readonly open: boolean; readonly onClose: () => vo
   );
 }
 
+
+/**
+ * How many notifications are unread.
+ *
+ * A count is not money, so it may be rendered as a plain number. Everything a
+ * notification is ABOUT is refetched from its own resource before it is shown
+ * as a figure, which is the rule the whole realtime layer is built on.
+ *
+ * While the count is loading it renders nothing at all rather than a zero: "no
+ * unread notifications" and "I have not asked yet" are different facts, and a
+ * zero that turns into a seven is the small dishonesty this codebase spends its
+ * effort refusing.
+ */
+function NotificationBell(props: { readonly enabled: boolean }): ReactNode {
+  const unread = useUnreadCount(props.enabled);
+  const page = ACCOUNT_LINKS.find((item) => item.to === "/notifications");
+  const count = unread.data;
+
+  if (count === undefined) return null;
+
+  const label =
+    count === 0
+      ? "Notifications: none unread"
+      : `Notifications: ${String(count)} unread`;
+
+  // A link once the page exists; until then a labelled read-out, because a
+  // control that navigates nowhere is the defect this file exists to prevent.
+  if (page?.present === true) {
+    return (
+      <LinkButton to={page.to} variant="quiet">
+        {count === 0 ? "Notifications" : `Notifications (${String(count)})`}
+      </LinkButton>
+    );
+  }
+
+  return (
+    <StatusBadge tone={count === 0 ? "neutral" : "info"} title="The notifications page is not part of this build yet.">
+      {label}
+    </StatusBadge>
+  );
+}
+
+/**
+ * The standing sandbox statement.
+ *
+ * `GET /v1/version` says whether this deployment is a sandbox tier; the client
+ * never infers it from the environment name, because a build that guessed would
+ * label the wrong deployment — and the only thing worse than an unlabelled
+ * rehearsal is a real deployment labelled as one. An absent flag means the API
+ * did not say, and that is not "sandbox" either.
+ *
+ * It is part of the document rather than a dismissible banner. A rehearsal a
+ * customer can dismiss is a rehearsal they will forget they are in.
+ */
+function SandboxLine(props: { readonly sandbox: boolean | undefined }): ReactNode {
+  if (props.sandbox !== true) return null;
+  return (
+    <p className="sandbox-line" role="note">
+      <span className="sandbox-word">Sandbox</span>
+      <span>
+        Credits, verification and payouts here are rehearsals; nothing moves real value.
+      </span>
+    </p>
+  );
+}
+
 export function AppShell(props: { readonly children: ReactNode }): ReactNode {
   const session = useSession();
   const version = useVersion();
@@ -262,6 +332,7 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
         )}
 
         <div className="app-body">
+          <SandboxLine sandbox={version.data?.sandbox_tier} />
           <header className="masthead">
             {wide ? (
               <div className="masthead-meta">
@@ -288,6 +359,7 @@ export function AppShell(props: { readonly children: ReactNode }): ReactNode {
             )}
             <div className="masthead-meta">
               {!wide && <StreamBadge status={stream} />}
+              <NotificationBell enabled={session.signedIn} />
               {actions.map((action, index) => (
                 <LinkButton
                   key={action.to}

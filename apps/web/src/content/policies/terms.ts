@@ -18,6 +18,7 @@ import type { PolicyDocument } from "./types.ts";
 export const TERMS_V1: PolicyDocument = {
   id: "terms-v1",
   slug: "terms",
+  explains: "TERMS_OF_SERVICE",
   title: "Product terms",
   summary:
     "What Nodal is, what Credits are, what the software will and will not do with them, and where " +

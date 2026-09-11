@@ -170,6 +170,15 @@ const (
 	Sell Side = "SELL"
 )
 
+var allSides = []Side{Buy, Sell}
+
+// AllSides returns every declared side in declaration order (a copy).
+//
+// It exists so the SQL CHECK on a side column can be compared against the list
+// that DECLARES the values rather than against a literal repeated in a test.
+// test/integration/enums does that comparison.
+func AllSides() []Side { return append([]Side(nil), allSides...) }
+
 // Valid reports whether s is a declared side.
 func (s Side) Valid() bool { return s == Buy || s == Sell }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/activity"
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/auth"
@@ -29,6 +30,7 @@ import (
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/positions"
 	"github.com/nodal/controlplane/internal/provider"
+	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -85,7 +87,33 @@ type WireDeps struct {
 	// leaves them nil and those routes answer UNSUPPORTED.
 	NativeEconomy NativeEconomyDeps
 
+	// Withdrawal holds the verification, eligibility and conversion-request
+	// services of goal PARTS 19-25. Every field is optional for the same
+	// reason: a deployment with no identity vendor has no verification routes,
+	// which is the honest state of one with no contract.
+	Withdrawal WithdrawalDeps
+	// MarketSurfaces holds what the discovery, portfolio and activity reads
+	// need beyond the native-economy services themselves. It is optional in
+	// the same way: nil parts leave their ports nil and their routes
+	// UNSUPPORTED.
+	MarketSurfaces MarketSurfacesDeps
+
 	IdempotencyTTL time.Duration
+}
+
+// MarketSurfacesDeps are the extra inputs the product read surfaces need
+// (product goal SS12-16, 35, 47).
+type MarketSurfacesDeps struct {
+	// RiskPolicies reports the GLOBAL risk limits a market's detail page
+	// discloses as "in force". Nil means they are not reported, which is not
+	// the same as their being absent.
+	RiskPolicies *risk.Store
+	// ActivityFeed is the unified timeline. Nil leaves GET /me/activity
+	// UNSUPPORTED.
+	ActivityFeed *activity.Feed
+	// Simulated is cfg.SandboxTier(): on a sandbox tier no value is real, and
+	// every figure these surfaces return says so.
+	Simulated bool
 }
 
 // FundingSettlement is the deposit destination the platform accepts.
@@ -181,6 +209,25 @@ func Wire(d WireDeps) (Ports, error) {
 		p.Idempotency = idempotencyAdapter{store: d.Idempotency, db: d.DB}
 	}
 	wireNativeEconomy(&p, d)
+	wireWithdrawal(&p, d)
+	// After wireNativeEconomy: the portfolio reads its Credit balance through
+	// the SAME port GET /credits/balance uses, so it cannot be attached before
+	// that port exists.
+	WireMarketData(&p,
+		MarketDataDeps{
+			Markets:      d.NativeEconomy.NativeMarkets,
+			DB:           d.DB,
+			Clock:        d.Clock,
+			RiskPolicies: d.MarketSurfaces.RiskPolicies,
+		},
+		PortfolioDeps{
+			Markets:   d.NativeEconomy.NativeMarkets,
+			Credits:   p.Credits,
+			DB:        d.DB,
+			Clock:     d.Clock,
+			Simulated: d.MarketSurfaces.Simulated,
+		},
+		d.MarketSurfaces.ActivityFeed, d.DB)
 	return p, nil
 }
 
@@ -742,6 +789,14 @@ func (g gatesAdapter) List(ctx context.Context) ([]GateView, error) {
 		out = append(out, GateView{Gate: row, Verdict: v})
 	}
 	return out, nil
+}
+
+func (g gatesAdapter) History(ctx context.Context, capability gates.Capability) ([]gates.Transition, error) {
+	gate, err := gates.Get(ctx, g.q, capability, g.env)
+	if err != nil {
+		return nil, err
+	}
+	return gates.Transitions(ctx, g.q, gate.ID)
 }
 
 func (g gatesAdapter) Act(ctx context.Context, capability gates.Capability, action GateAction, req gates.Proposal, note string) (GateView, error) {

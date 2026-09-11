@@ -88,17 +88,24 @@ func (r *RiskRefusal) Unwrap() error { return r.err }
 // somebody's exit because they hold too much would trap them in the position
 // the limit exists to discourage. PART XXXII says a kill switch stops new risk
 // and must not stop a required unwind; the same reasoning governs a limit.
-func (s *Service) checkRisk(ctx context.Context, tx pgx.Tx, m Market, r ExecuteRequest, fill Fill, creator accounts.AccountID) error {
+//
+// The bool it returns is whether the account can pay for this fill at all. The
+// caller uses it to decide whether the MARKET's own limits are worth evaluating
+// (see safety.go): an order larger than the balance fails either way, and
+// telling somebody their order moved the market too far when what happened is
+// "you do not have that many Credits" is the same wrong answer in a second
+// vocabulary.
+func (s *Service) checkRisk(ctx context.Context, tx pgx.Tx, m Market, r ExecuteRequest, fill Fill, creator accounts.AccountID) (bool, error) {
 	if r.Side == Sell {
-		return nil
+		return true, nil
 	}
 	policy, err := s.risk.NativeTradePolicy(ctx, tx, r.AccountID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	snap, afford, err := s.riskSnapshot(ctx, tx, m, r, fill, creator)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !afford {
 		// The account cannot pay for this fill, so the posting below is about
@@ -111,7 +118,7 @@ func (s *Service) checkRisk(ctx context.Context, tx pgx.Tx, m Market, r ExecuteR
 		// concentration policy when what happened is "you do not have that
 		// many Credits" is a worse answer, and it is not a bypass -- the trade
 		// fails either way and nothing commits.
-		return nil
+		return false, nil
 	}
 	in := risk.NativeTradeInput(r.AccountID.String(), snap, s.clk.Now())
 	decision := risk.EvaluateNativeTrade(policy, in)
@@ -119,9 +126,9 @@ func (s *Service) checkRisk(ctx context.Context, tx pgx.Tx, m Market, r ExecuteR
 		// Recorded inside the trade's own transaction: an ALLOW is part of why
 		// the trade happened, and a decision that could commit without its
 		// trade would be a record that disagrees with the ledger.
-		return s.risk.RecordDecision(ctx, tx, in, decision, r.CorrelationID)
+		return true, s.risk.RecordDecision(ctx, tx, in, decision, r.CorrelationID)
 	}
-	return &RiskRefusal{
+	return true, &RiskRefusal{
 		Input:         in,
 		Decision:      decision,
 		CorrelationID: r.CorrelationID,

@@ -30,6 +30,11 @@ export type ActivityItem = Schemas["ActivityItem"];
 export type ActivityPage = Schemas["ActivityPage"];
 export type Principal = Schemas["Principal"];
 export type CreditBalance = Schemas["CreditBalance"];
+export type AdminUserView = Schemas["AdminUserView"];
+export type ClosureDecisionName = Schemas["ClosureDecision"]["decision"];
+export type Agent = Schemas["Agent"];
+export type AgentPage = Schemas["AgentPage"];
+export type CapabilityGateTransition = Schemas["CapabilityGateTransition"];
 
 const client = createApiClient({ baseUrl: "/v1" });
 
@@ -124,6 +129,83 @@ export async function getCreditBalance(accountId: string): Promise<CreditBalance
   );
 }
 
+// --- the person behind an account -------------------------------------------
+
+/**
+ * The operator support view of one user (§38).
+ *
+ * Read-only by construction: `AdminUserView` has no field an operator can
+ * write, it carries no e-mail address, legal name or date of birth (those stay
+ * sealed in `identity_pii`, which this surface has no route to), and it points
+ * at the audit stream rather than restating it. `account:read_any` is the
+ * permission, the same one that lets the accounts surface exist.
+ */
+export async function getAdminUser(userId: string): Promise<AdminUserView> {
+  return must(
+    await client.GET("/admin/users/{userId}", { params: { path: { userId } } }),
+    "the user support view",
+  );
+}
+
+/**
+ * Decides a closure request **the user themselves opened**. It is the only
+ * mutation the support surface offers, and the console never originates one:
+ * there is no operator route that closes an account nobody asked to close.
+ *
+ * `account:freeze` and a step-up, which is what the account status change
+ * takes, because that is what EFFECT ends up performing. EFFECT is refused
+ * before the cooling-off period has passed by the service and again by the
+ * database, and an operator may not decide their own request.
+ */
+export async function decideClosure(
+  userId: string,
+  body: { decision: ClosureDecisionName; reason: string },
+  key: string,
+): Promise<AdminUserView> {
+  return must(
+    await client.POST("/admin/users/{userId}/closure", {
+      ...idempotent(key, { path: { userId } }),
+      body,
+    }),
+    "the closure decision",
+  );
+}
+
+// --- agents ------------------------------------------------------------------
+
+/** Every agent, or one account's, with the authority ladder this build permits. */
+export async function listAgents(
+  params: { accountId?: string; includeArchived?: boolean; limit?: number } = {},
+): Promise<AgentPage> {
+  const query: Record<string, unknown> = {};
+  if (params.accountId) query["account_id"] = params.accountId;
+  if (params.includeArchived !== undefined) query["include_archived"] = params.includeArchived;
+  if (params.limit !== undefined) query["limit"] = params.limit;
+  return must(await client.GET("/admin/agents", { params: { query } }), "the agents");
+}
+
+/**
+ * Operator pause of a customer's agent.
+ *
+ * It writes the same `agent_pauses` row an owner pause does, under the OPERATOR
+ * reason code, so the owner's own history shows plainly that somebody else
+ * stopped it. Open orders are left alone: stopping an agent is stopping new
+ * risk, not unwinding what it already did.
+ *
+ * The route floor is `kill:activate` with a step-up, and `internal/agents` then
+ * demands `agent:pause` and an OPERATOR actor — both halves must hold, which is
+ * why the console checks both.
+ */
+export async function pauseAgent(agentId: string, reason: string, key: string): Promise<Agent> {
+  return must(
+    await client.POST("/admin/agents/{agentId}/pause", {
+      ...idempotent(key, { path: { agentId } }),
+      body: { reason },
+    }),
+    "the agent pause",
+  );
+}
+
 // --- controlled administrative actions --------------------------------------
 
 export async function listActions(status: string, params: PageParams = {}): Promise<AdminActionPage> {
@@ -179,6 +261,23 @@ export async function listGates(): Promise<CapabilityGate[]> {
 }
 
 /**
+ * Every recorded transition of one gate, oldest first.
+ *
+ * These are the `capability_gate_transitions` rows, written by
+ * `cp_gate_transition` and `cp_gate_sandbox` in the same statement as the state
+ * change they record — so the history cannot disagree with the row, and a
+ * transition cannot exist without one. It reads under `gate:read`, the same
+ * permission the gates surface itself takes, so anyone who can see a gate can
+ * see who moved it.
+ */
+export async function listGateTransitions(capability: Capability): Promise<CapabilityGateTransition[]> {
+  return must(
+    await client.GET("/admin/gates/{capability}/history", { params: { path: { capability } } }),
+    "the gate's transition history",
+  );
+}
+
+/**
  * Every step of the gate path, including the two that exist only on a sandbox
  * tier. `sandbox` and `unsandbox` are ordinary path segments on the same
  * route; what makes them sandbox-only is the server, which answers 403
@@ -201,28 +300,23 @@ export type GateActionName =
 export const SANDBOX_GATE_ACTIONS: readonly GateActionName[] = ["sandbox", "unsandbox"];
 
 /**
- * The capability names the *OpenAPI contract* lists on the gate path.
+ * The capability names the contract accepts on the gate path.
  *
  * Typed as `Record<Capability, true>`, so the compiler requires an entry for
- * every member of the generated enum: adding a capability to
- * `openapi/openapi.yaml` breaks this file rather than leaving the console
- * quietly out of step.
+ * every member of the generated enum: a capability added to
+ * `openapi/openapi.yaml` breaks this file rather than producing a console that
+ * silently omits a live-money gate.
  *
- * The contract is not the authority here, and this predicate is no longer a
- * gate on what the console will address. `internal/gates.Capability.Valid` is
- * what the server actually checks, `internal/adminplane` exports that same list
- * into the authority document, and the OpenAPI enum is a hand-written
- * restatement that has fallen behind it: the contract lists ten capabilities
- * while Go declares twenty, and the six a sandbox tier activates
- * (CREDIT_PURCHASE, NATIVE_ASSET_CREATION, NATIVE_MARKET_TRADING, MARKETPLACE,
- * PAYOUT_RESERVE, PAYOUT_SETTLE) include five the enum has never heard of.
- *
- * Nothing validates the enum on the wire — the generated server binds the path
- * segment as a plain string and hands it to `Capability.Valid` — so refusing to
- * address a gate the authority document declares would leave an operator unable
- * to suspend or revoke a live capability for no reason but a stale document.
- * The console therefore addresses every declared capability and *reports* the
- * drift where it is visible (`views/gates.ts`), rather than acting on it.
+ * The console's own capability list comes from the generated authority
+ * document, which `internal/adminplane` exports from `internal/gates`, so the
+ * two are separately generated from the same Go source and can in principle
+ * disagree. They did: the contract's enum was a hand-written restatement and
+ * listed ten of the twenty Go declares, including five of the six a sandbox
+ * tier activates, and D-079 records what the console did about it. The enum has
+ * since been regenerated and the two now agree; `isCapability` is how any
+ * future disagreement surfaces — as a failing test in `scan.test.ts`, which
+ * holds the two lists equal, and as a visible refusal rather than a 400 on
+ * submit.
  */
 const CAPABILITY_SET: Readonly<Record<Capability, true>> = {
   LIVE_FUNDING: true,
@@ -235,20 +329,30 @@ const CAPABILITY_SET: Readonly<Record<Capability, true>> = {
   PREDICTION_MARKETS: true,
   SECURITIES: true,
   CEX_TRADING: true,
+  CREDIT_PURCHASE: true,
+  NATIVE_ASSET_CREATION: true,
+  NATIVE_MARKET_TRADING: true,
+  PAYOUT_RESERVE: true,
+  PAYOUT_SETTLE: true,
+  HOSTED_TRADING: true,
+  HOSTED_FUNDING: true,
+  AGENT_BOUNDED_DISCRETION: true,
+  AGENT_AUTONOMOUS_SELECTION: true,
+  AGENT_AUTONOMOUS_PORTFOLIO: true,
 };
 
-/** True when the OpenAPI contract's Capability enum also lists this name. */
-export function inApiContract(name: string): name is Capability {
+/** True when the contract lists this name as an addressable capability. */
+export function isCapability(name: string): name is Capability {
   return Object.hasOwn(CAPABILITY_SET, name);
 }
 
-/** The capability names the OpenAPI contract knows, for a drift report. */
+/** The capability names the contract knows, for the parity test. */
 export function contractCapabilities(): readonly string[] {
   return Object.keys(CAPABILITY_SET);
 }
 
 export async function actOnGate(
-  capability: string,
+  capability: Capability,
   action: GateActionName,
   body: {
     reason: string;
@@ -262,12 +366,7 @@ export async function actOnGate(
 ): Promise<CapabilityGate> {
   return must(
     await client.POST("/admin/gates/{capability}/{action}", {
-      // The path parameter is typed from the OpenAPI enum, which is narrower
-      // than the capability list the server validates against (see
-      // CAPABILITY_SET). The cast is the drift, made visible in one place
-      // instead of silently narrowing the console's reach; remove it when the
-      // contract's enum is regenerated from internal/gates.
-      ...idempotent(key, { path: { capability: capability as Capability, action } }),
+      ...idempotent(key, { path: { capability, action } }),
       body,
     }),
     "the gate transition",

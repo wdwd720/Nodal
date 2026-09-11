@@ -26,6 +26,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
 )
 
@@ -83,6 +84,21 @@ func (p *Provider) Capabilities() payout.Capabilities {
 		RecipientKinds:         []string{"individual"},
 		SupportedCountries:     []string{"US"},
 		Availability:           payout.AvailabilitySandbox,
+		// A fee model so the quote step has something to quote FROM. The
+		// numbers are placeholders and the version name says so in words: they
+		// are not a price anybody has agreed, and nothing may present them as
+		// one. They are shaped like a real payout fee — a flat part plus a
+		// proportional part, which is what every provider in
+		// PROVIDER_BOUNDARY §5 charges — so the arithmetic, the rounding and
+		// the "net is below the minimum" branch are all exercised.
+		FeeModelPublished: true,
+		FeeFlat:           money.USDFromMinor(25),
+		FeeBasisPoints:    money.BPS(25),
+		FeeModelVersion:   "SANDBOX-PLACEHOLDER-NOT-A-PRICE",
+		// A minimum, so the journey can rehearse a payout the provider refuses
+		// for being too small — which is a real refusal a customer meets and
+		// which is judged NET of fees.
+		MinimumAmount: money.USDFromMinor(100),
 	}
 }
 

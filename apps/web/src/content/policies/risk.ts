@@ -11,6 +11,7 @@ import type { PolicyDocument } from "./types.ts";
 export const RISK_V1: PolicyDocument = {
   id: "risk-v1",
   slug: "risk",
+  explains: "RISK_DISCLOSURE",
   title: "Risk disclosure",
   summary:
     "What can go wrong, in the order you would meet it: buying Credits, trading them, delegating " +

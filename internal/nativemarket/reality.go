@@ -69,10 +69,13 @@ const PriceSource = "nodal-native-market"
 //
 // raw_ref carries the fill id, so every price can be traced back to the exact
 // trade that set it, and a price with no fill behind it is visible as such.
-func (s *Service) publishPrice(ctx context.Context, tx pgx.Tx, m Market, spot money.Quantity, at time.Time, ref string) error {
+// It returns the instant it stamped, because the trade's public print carries
+// the same one: they are the same observation, and two instants for it would
+// let a chart and a price series disagree about when the market moved.
+func (s *Service) publishPrice(ctx context.Context, tx pgx.Tx, m Market, spot money.Quantity, at time.Time, ref string) (time.Time, error) {
 	at, err := s.priceInstant(ctx, tx, m, at)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	_, err = s.prices.RecordPrice(ctx, tx, valuation.PriceObservation{
 		AssetID:      m.AssetID,
@@ -85,10 +88,10 @@ func (s *Service) publishPrice(ctx context.Context, tx pgx.Tx, m Market, spot mo
 		RawRef:       ref,
 	})
 	if err != nil {
-		return errs.Wrap(err, errs.CodeOf(err),
+		return time.Time{}, errs.Wrap(err, errs.CodeOf(err),
 			"nativemarket: the market's new price could not be recorded")
 	}
-	return nil
+	return at, nil
 }
 
 // priceInstant returns the instant to stamp this market's next price with.

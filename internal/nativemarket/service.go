@@ -74,7 +74,11 @@ type Service struct {
 	auditor     Audit
 	instruments Instruments
 	risk        Risk
-	clk         clock.Clock
+	// safety is the market-safety policy source (safety.go). A nil one means
+	// the compiled-in conservative policy, which is a real policy rather than
+	// an absence -- see SetSafety.
+	safety Safety
+	clk    clock.Clock
 }
 
 // NewService returns a Service. No argument may be nil.
@@ -104,6 +108,16 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest) (Marke
 	}
 	if tx == nil {
 		return Market{}, errs.New(errs.CodeInternal, "nativemarket: Create requires a transaction")
+	}
+	// The minimum liquidity a market may open with (§47). It is checked before
+	// the mint because a market refused after its supply exists would leave
+	// units of an asset nobody can trade.
+	safetyPolicy, err := s.safetyPolicy(ctx, tx)
+	if err != nil {
+		return Market{}, err
+	}
+	if err := checkOpeningLiquidity(safetyPolicy, r); err != nil {
+		return Market{}, err
 	}
 
 	// The mint. Every unit that will ever exist is created in one posting:
@@ -187,7 +201,7 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest) (Marke
 		RealCreditReserve: money.Quantity{},
 		AssetReserve:      m.Curve.InitialAssetReserve,
 	})
-	if err := s.publishPrice(ctx, tx, m, opening, r.EffectiveAt, "native_market:"+m.ID.String()); err != nil {
+	if _, err := s.publishPrice(ctx, tx, m, opening, r.EffectiveAt, "native_market:"+m.ID.String()); err != nil {
 		return Market{}, err
 	}
 	if err := s.registerInstrument(ctx, tx, m, r); err != nil {
@@ -375,8 +389,24 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	// The risk kernel, before anything is posted (see risk.go). The settlement
 	// compiler has already recorded that this route requires an evaluation;
 	// this is the evaluation.
-	if err := s.checkRisk(ctx, tx, m, r, fill, creatorID); err != nil {
+	afford, err := s.checkRisk(ctx, tx, m, r, fill, creatorID)
+	if err != nil {
 		return ExecuteResult{}, err
+	}
+
+	// Then the market's own safety limits (see safety.go) -- but only for an
+	// order the account can actually pay for. An order larger than the balance
+	// is about to be refused by the ledger's negative-balance guard with the
+	// reason that is true, and "this order would move the market too far" is
+	// the same wrong answer risk.go already declined to give.
+	safetyPolicy, err := s.safetyPolicy(ctx, tx)
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	if afford {
+		if err := s.checkSafety(safetyPolicy, m, r, fill, creatorID); err != nil {
+			return ExecuteResult{}, err
+		}
 	}
 
 	post, err := s.postTrade(ctx, tx, m, r, fill, creatorID)
@@ -409,10 +439,23 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 
 	// Reality and proof, in this transaction with the trade (see reality.go).
 	at := s.clk.Now()
-	if err := s.publishPrice(ctx, tx, m, fill.SpotAfter, at, "native_market_fill:"+fillID.String()); err != nil {
+	printedAt, err := s.publishPrice(ctx, tx, m, fill.SpotAfter, at, "native_market_fill:"+fillID.String())
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+	// The public print, stamped with the SAME instant as the price observation
+	// above, because they are the same observation (see prints.go).
+	if err := s.recordPrint(ctx, tx, m, fill, fillID, st.Version+1, printedAt); err != nil {
 		return ExecuteResult{}, err
 	}
 	if err := s.recordFill(ctx, tx, m, r, fill, fillID, post.TransactionID.String(), at); err != nil {
+		return ExecuteResult{}, err
+	}
+
+	// The circuit breaker, after the fill: this trade stands, and what the
+	// breaker stops is the next one (see safety.go).
+	trip, err := s.applyBreaker(ctx, tx, safetyPolicy, m, fill, fillID, printedAt)
+	if err != nil {
 		return ExecuteResult{}, err
 	}
 
@@ -420,7 +463,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	if err != nil {
 		return ExecuteResult{}, err
 	}
-	return ExecuteResult{FillID: fillID, MarketID: m.ID, Fill: fill, Alerts: alerts}, nil
+	return ExecuteResult{FillID: fillID, MarketID: m.ID, Fill: fill, Alerts: alerts, Breaker: trip}, nil
 }
 
 // postTrade writes the journal transaction for a fill.

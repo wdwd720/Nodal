@@ -39,8 +39,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Namespace, so nothing else in the origin can collide with a draft. */
 const PREFIX = "nodal.form.";
-/** Where the app was when the session went away. */
-const RETURN_KEY = "nodal.return-path";
 /** Set while a sign-in navigation is in flight, so `/` knows not to flash. */
 const PENDING_KEY = "nodal.sign-in-pending";
 
@@ -158,68 +156,26 @@ export function stashedFormCount(): number {
 }
 
 /* --------------------------------------------------------------------------
- * The return path
+ * Where the app was, and whether a sign-in is in flight
  * ------------------------------------------------------------------------ */
 
 /**
- * Records where to come back to, and refuses anything that is not a local path.
+ * True for a path that stays inside this app.
  *
  * The value ends up in a redirect, so an absolute URL or a protocol-relative
  * `//host` would be an open redirect wearing a return path's clothes. The
- * backend applies the same rule to its own `return_to` (`internal/identity`);
- * this is the browser-side half of it.
+ * backend applies the same rule to the `return_to` it is handed
+ * (`internal/identity`) and refuses anything else with a validation problem;
+ * this is the browser-side half, so a bad value never leaves the page.
+ *
+ * The return path itself is NOT stored here any more. `GET /v1/auth/login`
+ * takes `return_to`, the backend stores it with the login attempt and never
+ * echoes it from the request, and a path the server holds is one fewer place a
+ * redirect target can be tampered with. What this module keeps is only what the
+ * customer typed.
  */
 export function isLocalPath(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("//") && !path.includes("\\");
-}
-
-export function rememberReturnPath(path: string): void {
-  if (!isLocalPath(path)) return;
-  const store = session();
-  if (store === undefined) return;
-  try {
-    store.setItem(RETURN_KEY, path);
-  } catch {
-    /* the customer lands on the dashboard instead; nothing is lost */
-  }
-}
-
-/** The remembered path, forgotten as it is read. Never returns a foreign URL. */
-export function takeReturnPath(): string | undefined {
-  const store = session();
-  if (store === undefined) return undefined;
-  try {
-    const raw = store.getItem(RETURN_KEY);
-    store.removeItem(RETURN_KEY);
-    if (raw === null || !isLocalPath(raw)) return undefined;
-    return raw;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The remembered path, read once per page load however many times it is asked
- * for.
- *
- * The route that forwards a returning customer runs inside `StrictMode`, which
- * renders a component twice in development to surface exactly this class of
- * bug. A plain `takeReturnPath()` in a render would consume the path on the
- * first pass and hand `undefined` to the second, so the customer would land on
- * the dashboard in development and on their own page in production — the worst
- * kind of difference between the two. Caching the first answer for the lifetime
- * of the page makes the read idempotent and the behaviour identical.
- */
-let consumedReturn: { readonly value: string | undefined } | undefined;
-
-export function consumeReturnPathOnce(): string | undefined {
-  consumedReturn ??= { value: takeReturnPath() };
-  return consumedReturn.value;
-}
-
-/** Test seam: forgets that the path was already consumed. */
-export function resetConsumedReturnForTest(): void {
-  consumedReturn = undefined;
 }
 
 /**

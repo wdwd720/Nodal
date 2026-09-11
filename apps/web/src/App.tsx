@@ -1,5 +1,5 @@
 /**
- * Every route in the application, and the one decision that separates them.
+ * Every route in the application, and the two decisions that separate them.
  *
  * D-077 divides the product into a public site that renders with no session at
  * all and an application that requires one. The division is structural rather
@@ -21,23 +21,28 @@
  *     not a claim about the session, so `Boot` waits for readiness and then
  *     reports what actually happened.
  *
+ * # And the fourth: "have they finished arriving?"
+ *
+ * A session is not the same as a usable account. `OnboardingGate` sits between
+ * the session and the application shell and sends anybody with an incomplete
+ * profile, or an unaccepted document that is currently required, to the step
+ * that fixes it — before any screen that could move value.
+ *
  * # `/` belongs to both
  *
- * Signed out it is the landing page. Signed in it forwards to `/home` — or to
- * wherever the customer was going when their session expired, because the OIDC
- * callback lands here and the return path is held in the tab.
+ * Signed out it is the landing page. Signed in it forwards to `/home`. The
+ * return path after a sign-in is the API's now (`return_to` on
+ * `GET /v1/auth/login`), so the callback usually lands on the page the customer
+ * asked for and never passes through here at all.
  */
 import { useEffect, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
+import { useTermsState } from "./api/queries.ts";
 import { AppShell } from "./components/AppShell.tsx";
 import { Boot } from "./components/Boot.tsx";
 import { Explanation, Loading } from "./components/DataState.tsx";
-import {
-  clearSignInPending,
-  consumeReturnPathOnce,
-  signInPending,
-} from "./lib/survives-sign-in.ts";
+import { clearSignInPending, signInPending } from "./lib/survives-sign-in.ts";
 import { signInPathFor, useSession } from "./session.tsx";
 
 import { Activity } from "./pages/Activity.tsx";
@@ -54,6 +59,10 @@ import { AccountStanding } from "./pages/settings/AccountStanding.tsx";
 import { Security as SecuritySettings } from "./pages/settings/Security.tsx";
 import { Settings } from "./pages/settings/Settings.tsx";
 
+import { Welcome } from "./pages/onboarding/Welcome.tsx";
+import { WelcomeDone } from "./pages/onboarding/WelcomeDone.tsx";
+import { WelcomeTerms } from "./pages/onboarding/WelcomeTerms.tsx";
+
 import { GetStarted } from "./pages/public/GetStarted.tsx";
 import { HowItWorks } from "./pages/public/HowItWorks.tsx";
 import { Landing } from "./pages/public/Landing.tsx";
@@ -69,6 +78,17 @@ import { SiteFrame } from "./pages/public/SiteChrome.tsx";
 /** Where a signed-in visitor to `/` ends up when nothing else was requested. */
 const HOME = "/home";
 
+/**
+ * The one application route the onboarding gate lets through.
+ *
+ * USER_JOURNEY §1 says an unaccepted document routes to the terms step "before
+ * anything financial". Settings is not financial: it is where somebody reads
+ * their own audit trail, revokes a session they do not recognise, or asks for
+ * their account to be closed, and locking those behind an acceptance would be
+ * using the law as a hostage. Everything else waits.
+ */
+const UNGATED = "/settings";
+
 /** The public shell. Every signed-out page is a child of this route. */
 function PublicLayout(): ReactNode {
   return (
@@ -79,13 +99,12 @@ function PublicLayout(): ReactNode {
 }
 
 /**
- * The application shell, and the gate in front of it.
+ * Establishes a session, or says honestly why it could not.
  *
- * The gate is a layout route rather than a wrapper per page so that there is
- * exactly one place where "this needs a session" is decided. A page that has to
- * remember to check is a page that will one day forget.
+ * It is a component rather than a hook so that the three answers are three
+ * returns rather than three flags a caller has to remember to check.
  */
-function RequireSession(): ReactNode {
+function SessionBoundary(props: { readonly children: ReactNode }): ReactNode {
   const session = useSession();
   const location = useLocation();
 
@@ -109,23 +128,94 @@ function RequireSession(): ReactNode {
     return <Boot error={session.error} onReady={session.refetch} />;
   }
 
+  return <>{props.children}</>;
+}
+
+/**
+ * Sends anybody who has not finished arriving to the step that finishes it.
+ *
+ * Two different facts are checked, because the API reports them separately and
+ * only one of them can change after onboarding is done:
+ *
+ *   - `onboarding` on `/me` is timestamps (D-053). A missing profile or an
+ *     incomplete step means the person never finished, and `next_step` says
+ *     which one to show.
+ *   - `outstanding` on `/me/terms-acceptances` is the server comparing what was
+ *     accepted against the sha256 of the bytes it serves TODAY. A re-issued
+ *     document makes it non-empty again while the onboarding timestamp stays
+ *     set, so a client that only read `onboarding.complete` would let somebody
+ *     trade under a document they never saw.
+ *
+ * The terms read is deliberately never served from cache, and this gate is a
+ * layout route: it mounts once per page load rather than once per navigation,
+ * so being strict costs one request rather than one per click.
+ */
+function OnboardingGate(props: { readonly children: ReactNode }): ReactNode {
+  const session = useSession();
+  const location = useLocation();
+  const terms = useTermsState(session.signedIn);
+
+  if (location.pathname.startsWith(UNGATED)) return <>{props.children}</>;
+
+  const onboarding = session.onboarding;
+  if (onboarding === undefined || !onboarding.complete) {
+    const next = onboarding?.next_step;
+    return <Navigate to={next === "TERMS" ? "/welcome/terms" : "/welcome"} replace />;
+  }
+
+  // A failure to READ the terms state is not a reason to lock somebody out of
+  // their own account: it is a fact about the request, and the pages behind
+  // this gate report their own failures honestly. Only a definite "these are
+  // outstanding" diverts.
+  if (terms.isSuccess && terms.data.outstanding.length > 0) {
+    return <Navigate to="/welcome/terms" replace />;
+  }
+
+  return <>{props.children}</>;
+}
+
+/** Onboarding: a session, its own frame, and no gate — this IS the gate's exit. */
+function OnboardingLayout(): ReactNode {
   return (
-    <AppShell>
-      {session.error !== undefined && session.error !== null && (
-        <Explanation error={session.error} onRetry={session.refetch} />
-      )}
+    <SessionBoundary>
       <Outlet />
-    </AppShell>
+    </SessionBoundary>
+  );
+}
+
+/**
+ * The application shell, and everything in front of it.
+ *
+ * The gate is a layout route rather than a check per page so that there is
+ * exactly one place where "this needs a session, and a finished one" is
+ * decided. A page that has to remember to check is a page that will one day
+ * forget.
+ */
+function RequireSession(): ReactNode {
+  const session = useSession();
+  return (
+    <SessionBoundary>
+      <OnboardingGate>
+        <AppShell>
+          {session.error !== undefined && session.error !== null && (
+            <Explanation error={session.error} onRetry={session.refetch} />
+          )}
+          <Outlet />
+        </AppShell>
+      </OnboardingGate>
+    </SessionBoundary>
   );
 }
 
 /**
  * `/`.
  *
- * The OIDC callback lands here, so a marker set before the browser left says
- * whether somebody is mid-sign-in. Without it this route would paint the
- * marketing page for the fraction of a second `GET /v1/me` takes to answer, at
- * exactly the person who has just finished signing in.
+ * The sign-in return path is server-held now, so a callback normally lands on
+ * the page the customer asked for. It still lands here when nothing was asked
+ * for, and a marker set before the browser left says whether somebody is
+ * mid-sign-in — without it this route would paint the marketing page for the
+ * fraction of a second `GET /v1/me` takes to answer, at exactly the person who
+ * has just finished signing in.
  */
 function Root(): ReactNode {
   const session = useSession();
@@ -136,7 +226,7 @@ function Root(): ReactNode {
   }, [session.signedIn, session.signedOut]);
 
   if (session.signedIn) {
-    return <Navigate to={consumeReturnPathOnce() ?? HOME} replace />;
+    return <Navigate to={HOME} replace />;
   }
 
   if (session.loading && returning) {
@@ -192,15 +282,24 @@ export function App(): ReactNode {
         <Route path="/learn" element={<Learn />} />
         <Route path="/get-started" element={<GetStarted />} />
         <Route path="/sign-in" element={<SignIn />} />
-        {/* The policy documents are public because somebody must be able to
-            read what they are being asked to accept before they have an
-            account to accept it with. */}
+        {/* The policy pages are public because somebody must be able to read
+            what the product does before they have an account to accept
+            anything with. The documents an acceptance RECORDS are the API's,
+            and they are shown in full at `/welcome/terms`. */}
         <Route path="/terms" element={<PolicyPage slug="terms" />} />
         <Route path="/privacy" element={<PolicyPage slug="privacy" />} />
         <Route path="/risk" element={<PolicyPage slug="risk" />} />
       </Route>
 
-      {/* The application. Everything below here has a session. */}
+      {/* Onboarding: a session, but not the shell and not the gate. */}
+      <Route element={<OnboardingLayout />}>
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/welcome/terms" element={<WelcomeTerms />} />
+        <Route path="/welcome/done" element={<WelcomeDone />} />
+      </Route>
+
+      {/* The application. Everything below here has a session and a finished
+          onboarding. */}
       <Route element={<RequireSession />}>
         <Route path="/home" element={<Home />} />
         <Route path="/markets" element={<NativeMarkets />} />

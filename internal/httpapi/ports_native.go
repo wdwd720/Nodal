@@ -139,13 +139,27 @@ type PayoutsPort interface {
 	// tests, so only an operator could free them, and only by running their own
 	// tool.
 	Cancel(ctx context.Context, accountID accounts.AccountID, id payout.RequestID, reason string) (payout.Request, error)
+	// Provenance is what value a payout draws on, in the order it leaves
+	// (goal PART 23). It is a read model over payout_allocations -- the
+	// engine's own record of which lots were reserved -- and computes no
+	// eligibility of its own.
+	Provenance(ctx context.Context, id payout.RequestID) ([]payout.ProvenanceSlice, error)
+	// SandboxProvider reports whether this deployment's payout provider is a
+	// rehearsal one, so a payout can be labelled as such without loading its
+	// destination row.
+	SandboxProvider() bool
 }
 
 // CreatePayout is the command behind POST /payouts.
 type CreatePayout struct {
-	AccountID      accounts.AccountID
-	Amount         money.Quantity
-	DestinationID  *payout.DestinationID
+	AccountID     accounts.AccountID
+	Amount        money.Quantity
+	DestinationID *payout.DestinationID
+	// QuoteID is the pre-commitment quote the customer was shown. It is
+	// consumed in the same transaction that reserves the value, so one quote
+	// funds exactly one payout and an expired one refuses the request before
+	// anything is decided about the money.
+	QuoteID        *payout.QuoteID
 	IdempotencyKey string
 	CorrelationID  string
 }

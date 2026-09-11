@@ -168,6 +168,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{payoutId}":       testSessionID,
 		"{paymentId}":      testSessionID,
 		"{productId}":      testOrderID.String(),
+		"{destinationId}":  testOrderID.String(),
 		"{userId}":         testUserID.String(),
 		"{notificationId}": testOrderID.String(),
 		// The agent surface. `{action}` is shared with the gate route above and
@@ -185,8 +186,23 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
 		"/v1/payouts":          "account_id=" + testAccountID.String(),
 		"/v1/internal-orders":  "account_id=" + testAccountID.String(),
-		"/v1/agents":           "account_id=" + testAccountID.String(),
-		"/v1/strategies":       "account_id=" + testAccountID.String(),
+		// The withdrawal journey. Each of these takes the account as a
+		// required query parameter, so the probe has to carry one or it stops
+		// at VALIDATION_FAILED before reaching the authorization gate.
+		"/v1/me/verification":                        "account_id=" + testAccountID.String(),
+		"/v1/me/verification/sessions/{sessionId}":   "account_id=" + testAccountID.String(),
+		"/v1/me/eligibility":                         "account_id=" + testAccountID.String(),
+		"/v1/me/payout-destinations":                 "account_id=" + testAccountID.String(),
+		"/v1/me/payout-destinations/{destinationId}": "account_id=" + testAccountID.String(),
+		"/v1/me/portfolio":                           "account_id=" + testAccountID.String(),
+		"/v1/me/activity":                            "account_id=" + testAccountID.String(),
+		// The candle window is bounded, so from/to are required and there is
+		// no default worth guessing: a chart that asks for "everything" on a
+		// market with a year of prints is a table scan a client can request by
+		// typing a date.
+		"/v1/native-markets/{marketId}/candles": "interval=1m&from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z",
+		"/v1/agents":                            "account_id=" + testAccountID.String(),
+		"/v1/strategies":                        "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe
