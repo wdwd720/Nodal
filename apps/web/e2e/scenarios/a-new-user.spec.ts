@@ -111,12 +111,21 @@ test("a foreign return path is not followed", async ({ browser }) => {
   await page.context().close();
 });
 
-test("a step-up round trip brings back what was typed", async ({ page }) => {
+test("a step-up round trip brings back what was typed", async ({ browser }) => {
   // §10 again, from the other side: a sensitive action that needs a stronger
   // sign-in keeps the form state, goes through the provider, and comes back to
   // the same page with the same form. The round trip destroys every value in
   // the tab, so this is the only way to prove the claim.
+  //
+  // In its own signed-in context, not the suite's stored one: a step-up
+  // rotates the session and revokes the one it replaced (internal/auth), and a
+  // stored state whose session was revoked here would fail every later test
+  // that starts from it.
+  const page = await signedOutPage(browser);
   await page.goto("/create-asset");
+  await expect(page).toHaveURL("/sign-in?return=%2Fcreate-asset");
+  await page.getByRole("button", { name: "Continue to sign in" }).click();
+  await chooseIdentity(page, { waitFor: /\/create-asset$/ });
   await expect(page.getByRole("heading", { level: 1, name: "Create asset" })).toBeVisible();
 
   const NAME = "Round trip asset";
@@ -130,6 +139,7 @@ test("a step-up round trip brings back what was typed", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Create asset" })).toBeVisible();
   await expect(page).toHaveURL(/\/create-asset$/);
   await expect(page.getByLabel("Name")).toHaveValue(NAME);
+  await page.context().close();
 });
 
 test("the landing page names the boundary before it names the product", async ({ browser }) => {
