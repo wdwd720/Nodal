@@ -494,6 +494,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("verification resolver: %w", err)
 	}
+	// THE Credit asset, on a sandbox tier that has none. Everything below reads
+	// it -- the quote's scale, credit.Service.AssetID, the demo seeder -- and
+	// `scripts/seedeconomy`, the only thing that ever wrote one, refuses to run
+	// anywhere but LOCAL, DEV and TEST, which are exactly the environments that
+	// are not the sandbox tier. See creditAssetAtBoot for why PROD is refused.
+	if err := creditAssetAtBoot(ctx, database, cfg, assetRepo, log); err != nil {
+		return nil, err
+	}
 	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
 	if err != nil {
 		return nil, err
