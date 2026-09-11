@@ -11,10 +11,11 @@
  *   1. **Nothing is left as an unexplained stub (goal §62).** The markers a
  *      §62 sweep looks for — TODO, FIXME, "not implemented", "coming soon",
  *      "stub", "temporary" — are refused outright in this app's sources. Where
- *      something genuinely is not reachable (Investigate and Escalate have no
- *      HTTP route; GET /v1/admin/users/{userId} does not exist yet) the console
- *      states it to the operator on screen, which is a decision that has been
- *      made and written down, not a note to self left in a comment.
+ *      something genuinely is not reachable — Investigate and Escalate exist in
+ *      `reconciliation.Resolver` and have no HTTP route; the action queue has no
+ *      account filter — the console states it to the operator on screen, which
+ *      is a decision that has been made and written down, not a note to self
+ *      left in a comment.
  *
  *   2. **The generated documents are the ones this console understands.**
  *      `src/generated/authority.json` and `decisions.json` are produced by
@@ -188,7 +189,7 @@ test("the contract's capability enum and the authority document agree", () => {
   // console by different routes: the authority document through
   // internal/adminplane, the enum through openapi/openapi.yaml. They disagreed
   // — ten names against twenty, missing five of the six a sandbox tier
-  // activates — and the console could only report it (D-078). Now that the enum
+  // activates — and the console could only report it (D-079). Now that the enum
   // is regenerated, holding them equal here is what keeps the report
   // unnecessary: a future divergence fails this test instead of appearing as a
   // notice an operator has to act on.

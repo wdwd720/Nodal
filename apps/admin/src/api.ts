@@ -31,10 +31,7 @@ export type ActivityPage = Schemas["ActivityPage"];
 export type Principal = Schemas["Principal"];
 export type CreditBalance = Schemas["CreditBalance"];
 export type AdminUserView = Schemas["AdminUserView"];
-export type ClosureRequest = Schemas["ClosureRequest"];
 export type ClosureDecisionName = Schemas["ClosureDecision"]["decision"];
-export type AccountRestriction = Schemas["AccountRestriction"];
-export type TermsAcceptance = Schemas["TermsAcceptance"];
 export type Agent = Schemas["Agent"];
 export type AgentPage = Schemas["AgentPage"];
 export type CapabilityGateTransition = Schemas["CapabilityGateTransition"];
@@ -315,7 +312,7 @@ export const SANDBOX_GATE_ACTIONS: readonly GateActionName[] = ["sandbox", "unsa
  * two are separately generated from the same Go source and can in principle
  * disagree. They did: the contract's enum was a hand-written restatement and
  * listed ten of the twenty Go declares, including five of the six a sandbox
- * tier activates, and D-078 records what the console did about it. The enum has
+ * tier activates, and D-079 records what the console did about it. The enum has
  * since been regenerated and the two now agree; `isCapability` is how any
  * future disagreement surfaces — as a failing test in `scan.test.ts`, which
  * holds the two lists equal, and as a visible refusal rather than a 400 on
