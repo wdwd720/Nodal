@@ -1,0 +1,305 @@
+package notifications
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/security"
+)
+
+// Scopes a data-changed signal can name. They are query invalidations, not
+// values: a client that receives one refetches the REST resource it names and
+// believes that, because the stream is never authoritative (PART 109).
+const (
+	ScopeBalance  = "balance"
+	ScopePosition = "position"
+	ScopeMarket   = "market"
+	ScopePayout   = "payout"
+	ScopeAccount  = "account"
+)
+
+// Signal tells a client that something it may be displaying is now stale.
+type Signal struct {
+	// UserID is the person the signal is addressed to. Empty with Broadcast
+	// set means everyone.
+	UserID string
+	Scope  string
+	Ref    string
+	// Broadcast marks a signal about public data -- a market's price -- which
+	// every connected client may see because every client may already read it
+	// over REST.
+	Broadcast bool
+}
+
+// Publisher receives what a follower pass produced, AFTER the transaction that
+// wrote it committed. It is deliberately not an error-returning interface: a
+// realtime hub is a hint, and a hint that fails must not roll back a fact.
+type Publisher interface {
+	Notify(n Notification)
+	Signal(s Signal)
+}
+
+// Change is one source row's consequences.
+type Change struct {
+	At     time.Time
+	RowID  string
+	Notify []Notification
+	Signal []Signal
+}
+
+// source is one table the follower reads.
+type source struct {
+	name string
+	read func(ctx context.Context, q db.Querier, at time.Time, rowID string, limit int) ([]Change, error)
+}
+
+// Follower turns rows that already exist into notifications.
+//
+// It reads transition tables and fills -- rows written by domain services in
+// their own transactions -- and emits a notification for each one a person
+// needs to know about. It writes nothing but notifications and its own cursor,
+// and it edits no domain package, which is why it can exist while those
+// packages are being changed by somebody else (D-069).
+//
+// # Why a cursor is not the correctness argument
+//
+// Every table it follows orders by a timestamp defaulting to now() and a
+// UUIDv7 primary key. now() is the transaction's START time, so a transaction
+// that began before the cursor passed and committed after it writes a row the
+// cursor has already gone past. No ordering fixes that. So the follower reads a
+// lap behind its own cursor on every pass, and every notification carries a
+// dedup key derived from the source row's id: the lap finds late rows, and the
+// unique index on (user_id, dedup_key) refuses the ones the lap sees twice. The
+// cursor stops the follower rescanning history; it is not what makes the result
+// correct.
+type Follower struct {
+	producer *Producer
+	sources  []source
+	lap      time.Duration
+	batch    int
+}
+
+// DefaultLap is how far behind its own cursor each pass re-reads. Two minutes
+// is longer than any transaction in this system is permitted to hold open --
+// the pool's statement timeout is well below it -- so a row cannot commit
+// behind a cursor that has moved a full lap past its start time.
+const DefaultLap = 2 * time.Minute
+
+// DefaultBatch bounds one source's pass. A backlog drains over several passes
+// rather than in one long transaction holding a pool connection.
+const DefaultBatch = 200
+
+// NewFollower returns a follower over every source this commit has domain rows
+// for.
+func NewFollower(producer *Producer) *Follower {
+	return &Follower{
+		producer: producer,
+		lap:      DefaultLap,
+		batch:    DefaultBatch,
+		sources: []source{
+			{name: "credit_funding_transitions", read: readCreditFundings},
+			{name: "payout_request_transitions", read: readPayoutRequests},
+			{name: "native_market_fills", read: readNativeFills},
+			{name: "native_market_transitions", read: readMarketPauses},
+			{name: "account_status_transitions", read: readAccountStatus},
+			{name: "security_events_login", read: readNewSessions},
+		},
+	}
+}
+
+// SourceNames lists the tables the follower reads, for a log line and for the
+// inventory.
+func (f *Follower) SourceNames() []string {
+	out := make([]string, 0, len(f.sources))
+	for _, s := range f.sources {
+		out = append(out, s.name)
+	}
+	return out
+}
+
+// followerLockKey namespaces the advisory lock each source takes, so two
+// instances of this process (or a worker tier added later) never run the same
+// source's pass at once. It is a try-lock: the loser skips the pass rather than
+// queueing behind it.
+const followerLockKey int64 = 0x6e6f7469 // "noti"
+
+// RunOnce runs one pass over every source and returns how many notifications it
+// wrote. Each source's pass is one transaction containing both its emits and
+// its cursor advance, so the two can never disagree: either the batch and the
+// position commit together or neither does.
+//
+// Publishing happens after the commit and outside it. A hub is memory; a
+// failure to publish loses a live update and nothing else, because the client
+// reconnects and resumes from the table.
+func (f *Follower) RunOnce(ctx context.Context, database *db.DB, pub Publisher) (int, error) {
+	total := 0
+	var firstErr error
+	for _, s := range f.sources {
+		n, err := f.runSource(ctx, database, s, pub)
+		total += n
+		if err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("%s: %w", s.name, err)
+		}
+	}
+	return total, firstErr
+}
+
+func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub Publisher) (int, error) {
+	// The follower runs as the system: it reads rows belonging to every user
+	// and writes notifications addressed to them, which no customer principal
+	// may do and no operator principal should.
+	ctx = security.WithPrincipal(ctx, security.Principal{
+		SubjectID: "notification-follower",
+		ActorType: security.ActorSystem,
+	})
+
+	var published []Notification
+	var signals []Signal
+	err := database.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		var locked bool
+		if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1, hashtext($2))`,
+			followerLockKey, s.name).Scan(&locked); err != nil {
+			return fmt.Errorf("claim the pass: %w", err)
+		}
+		if !locked {
+			return nil // somebody else is on this source; the next tick tries again
+		}
+		at, rowID, err := loadCursor(ctx, tx, s.name)
+		if err != nil {
+			return err
+		}
+		readFrom := at.Add(-f.lap)
+		readID := rowID
+		if !readFrom.Equal(at) {
+			// A lap back is a different instant, so the row id that tied-break
+			// that instant no longer applies.
+			readID = ""
+		}
+		changes, err := s.read(ctx, tx, readFrom, readID, f.batch)
+		if err != nil {
+			return err
+		}
+		if len(changes) == 0 {
+			return nil
+		}
+		last := changes[len(changes)-1]
+		if err := markPending(ctx, tx, s.name, last.At); err != nil {
+			return err
+		}
+		written := 0
+		for _, c := range changes {
+			for _, n := range c.Notify {
+				em, err := f.producer.Emit(ctx, tx, n)
+				if err != nil {
+					return fmt.Errorf("emit %s for %s: %w", n.Kind, c.RowID, err)
+				}
+				if em.Created {
+					written++
+					published = append(published, em.Notification)
+				}
+			}
+			signals = append(signals, c.Signal...)
+		}
+		return saveCursor(ctx, tx, s.name, last.At, last.RowID, written)
+	})
+	if err != nil {
+		return 0, err
+	}
+	if pub != nil {
+		for _, n := range published {
+			pub.Notify(n)
+		}
+		for _, sig := range signals {
+			pub.Signal(sig)
+		}
+	}
+	return len(published), nil
+}
+
+func loadCursor(ctx context.Context, q db.Querier, name string) (time.Time, string, error) {
+	var at time.Time
+	var rowID string
+	err := q.QueryRow(ctx,
+		`SELECT last_at, last_id::text FROM notification_follower_cursors WHERE source = $1`, name).Scan(&at, &rowID)
+	switch {
+	case err == nil:
+		return at.UTC(), rowID, nil
+	case isNoRows(err):
+		// A source with no cursor starts NOW, not at the beginning of history.
+		// The alternative would notify every user about every fill and every
+		// login since the database was created, the first time this code ran.
+		var now time.Time
+		if err := q.QueryRow(ctx, `SELECT now()`).Scan(&now); err != nil {
+			return time.Time{}, "", fmt.Errorf("start the cursor: %w", err)
+		}
+		if _, err := q.Exec(ctx,
+			`INSERT INTO notification_follower_cursors (source, last_at, last_id)
+			 VALUES ($1, $2, '00000000-0000-0000-0000-000000000000')
+			 ON CONFLICT (source) DO NOTHING`, name, now); err != nil {
+			return time.Time{}, "", fmt.Errorf("start the cursor: %w", err)
+		}
+		return now.UTC(), "", nil
+	default:
+		return time.Time{}, "", fmt.Errorf("read the cursor: %w", err)
+	}
+}
+
+func markPending(ctx context.Context, q db.Querier, name string, at time.Time) error {
+	_, err := q.Exec(ctx,
+		`UPDATE notification_follower_cursors SET pending_at = $2 WHERE source = $1`, name, at.UTC())
+	if err != nil {
+		return fmt.Errorf("record the pass in flight: %w", err)
+	}
+	return nil
+}
+
+func saveCursor(ctx context.Context, q db.Querier, name string, at time.Time, rowID string, written int) error {
+	_, err := q.Exec(ctx,
+		`UPDATE notification_follower_cursors
+		    SET last_at = $2, last_id = $3::uuid, pending_at = NULL, emitted = emitted + $4
+		  WHERE source = $1`, name, at.UTC(), rowID, written)
+	if err != nil {
+		return fmt.Errorf("advance the cursor: %w", err)
+	}
+	return nil
+}
+
+// keysetOn builds the predicate every source query shares: $1 is the instant
+// the cursor stands at and $2 the row id that broke the tie at that instant, or
+// NULL to take the whole instant -- which is what a lap back needs, because a
+// lap lands on an instant no row id was recorded for.
+func keysetOn(atCol, idCol string) string {
+	return fmt.Sprintf(
+		`(%[1]s > $1::timestamptz OR ($2::text IS NOT NULL AND %[1]s = $1::timestamptz AND %[2]s::text > $2::text))`,
+		atCol, idCol,
+	)
+}
+
+// nullable turns an empty row id into a SQL NULL for the keyset predicate.
+func nullable(rowID string) any {
+	if rowID == "" {
+		return nil
+	}
+	return rowID
+}
+
+func mustJSON(v map[string]any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+func accountPtr(a accounts.AccountID) *accounts.AccountID {
+	if a.IsZero() {
+		return nil
+	}
+	return &a
+}

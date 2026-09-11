@@ -49,6 +49,7 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/notifications"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/reality"
@@ -158,6 +159,17 @@ func registry() []pair {
 		{table: "reconciliation_records", constraint: "reconciliation_records_kind_check", source: "reconciliation.AllKinds()", values: str(reconciliation.AllKinds())},
 		{table: "reconciliation_records", constraint: "reconciliation_records_status_check", source: "reconciliation.AllStatuses()", values: str(reconciliation.AllStatuses())},
 		{table: "data_sources", constraint: "data_sources_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
+
+		// Paired 2026-09-10, when the notifications table acquired a producer.
+		// AllKinds is deliberately the UNION of the product vocabulary and the
+		// nine names migration 00640 declared: internal/notification still
+		// declares those nine and its integration test still writes them, so
+		// the CHECK must still admit them, and this test's own rule -- a value
+		// the database accepts that no Go list names is a value no switch
+		// handles -- is what makes that union explicit rather than accidental.
+		// The list shrinks when that package goes; see D-070.
+		{table: "notifications", constraint: "notifications_kind_check", source: "notifications.AllKinds()", values: str(notifications.AllKinds())},
+		{table: "notifications", constraint: "notifications_severity_check", source: "notifications.AllSeverities()", values: str(notifications.AllSeverities())},
 		{table: "raw_archive_objects", constraint: "raw_archive_objects_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
 
 		// The agent management surface (00786). agent_grants.authority_level is
@@ -495,8 +507,6 @@ var unpaired = []string{
 	"native_market_alerts.native_market_alerts_severity_check",
 	"native_market_fills.native_market_fills_side_check",
 	"native_market_quotes.native_market_quotes_side_check",
-	"notifications.notifications_kind_check",
-	"notifications.notifications_severity_check",
 	"orders.orders_side_check",
 	"payout_destinations.payout_destinations_status_check",
 	"payout_provider_events.payout_provider_events_direction_check",

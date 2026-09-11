@@ -185,7 +185,60 @@ capital) only.
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
 
+---
 
+## Productization wave — notifications, realtime and the customer's own audit trail (2026-09-10)
+
+Appended rather than rewritten: the document above is a frozen baseline, and
+this section records what the notification/realtime work added to it. See
+ADR-0028 and D-069..D-072.
+
+### Routes added (all under `/v1`, all `sessionCookie`, all `account:read`)
+
+| Method + path | Operation | Permission | Mutating | Port | Scope |
+|---|---|---|---|---|---|
+| GET `/me/notifications` | `GetMeNotifications` | `account:read` | | `Notifications` | the caller's own; cursor, `unread`, `kinds` |
+| GET `/me/notifications/unread-count` | `GetMeNotificationsUnreadCount` | `account:read` | | `Notifications` | the caller's own |
+| POST `/me/notifications/{notificationId}/read` | `PostMeNotificationsNotificationIdRead` | `account:read` | M | `Notifications` | the caller's own |
+| POST `/me/notifications/read-all` | `PostMeNotificationsReadAll` | `account:read` | M | `Notifications` | the caller's own |
+| GET `/me/notification-preferences` | `GetMeNotificationPreferences` | `account:read` | | `Notifications` | the caller's own |
+| PUT `/me/notification-preferences` | `PutMeNotificationPreferences` | `account:read` | M | `Notifications` | the caller's own |
+| GET `/me/audit` | `GetMeAudit` | `account:read` | | `MeAudit` | the caller's own security + account history |
+
+`account:read_any` appears on none of them, deliberately: an operator reads the
+audit trail, not somebody's inbox (D-070). PUT is the surface's first, so PUT
+joined the CORS preflight's allowed methods — the deployed topology is
+cross-origin, and a method the router mounts and the preflight does not name is
+a route that works from curl and fails from the browser the product ships.
+
+`GET /v1/events/stream` is unchanged as a route and **changed as a fact**: it
+carried heartbeats only since it was built, and now carries `notification.created`
+and `data.changed` (D-071).
+
+### Tables and migrations added
+
+| Migration | Change |
+|---|---|
+| `00781_a_notification_is_a_fact_of_the_transaction_that_caused_it.sql` | `notifications`: kind CHECK widened to 21 values (13 product + 8 inherited from 00640), `sandbox boolean` added, `notifications_user_kind_idx`, the immutability guard widened to `severity`, `sandbox`, `resource_type`, `resource_id` |
+| `00782_a_user_may_decline_a_kind_of_notification.sql` | `notification_preferences (user_id, kind, channel, enabled, updated_at)`, PK `(user_id, kind, channel)`, `channel` CHECK admits `IN_APP` and nothing else |
+| `00783_a_follower_remembers_where_it_stopped.sql` | `notification_follower_cursors (source, last_at, last_id, pending_at, emitted, updated_at)` — the in-process follower's position per source |
+
+Schema is at migration **783** after this batch.
+
+### Packages
+
+| Package | What it is |
+|---|---|
+| `internal/notifications` (new) | the product notification centre: `Producer.Emit` (in the caller's transaction, idempotent on user/kind/ref/occurrence), the read side, preferences, and the six-source `Follower` |
+| `internal/stream` (extended) | `notification.created` and `data.changed`, per-user addressing, a Broadcast flag, time-encoded event ids, durable resume, a per-user stream cap |
+| `internal/notification` (unchanged) | the 2026-09 package. Still has no production caller; kept because deleting it deletes its tests (D-070) |
+| `cmd/api/notifications.go` (new) | the follower's ticker, the hub publisher, the durable resume hook |
+
+### State machines
+
+None added. The follower READS six existing transition tables and adds no state
+column of its own; `read_at` is a nullable timestamp, not a state, and
+`notification_preferences.enabled` is a person's answer rather than a machine's.
 ## 9. Addendum — the agent product surface (2026-09-10, productization)
 
 §6 above said "**Not exposed over HTTP:** agents, strategies, backtests,

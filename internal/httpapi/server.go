@@ -63,7 +63,16 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-
+	Health        HealthPort
+	Idempotency   IdempotencyPort
+	// ---- notifications, realtime and the customer's own audit trail ----
+	//
+	// Notifications is the customer's notification centre; MeAudit is their own
+	// security and account history. Both are scoped to the caller and to nobody
+	// else -- neither has an account:read_any mode -- so neither takes an
+	// account id from a path.
+	Notifications NotificationsPort
+	MeAudit       MeAuditPort
 	// ---- agents ----
 	//
 	// The agent product surface. Both are management only: nothing here runs an
@@ -73,8 +82,6 @@ type Ports struct {
 	Agents     AgentsPort
 	Strategies StrategiesPort
 
-	Health      HealthPort
-	Idempotency IdempotencyPort
 	// Webhooks is keyed by the provider name in the path.
 	Webhooks map[string]WebhookPort
 	// Stream serves GET /v1/events/stream. It is an http.Handler because

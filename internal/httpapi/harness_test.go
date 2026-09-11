@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/notifications"
 	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/quote"
 	"github.com/nodal/controlplane/internal/security"
@@ -44,7 +45,10 @@ var (
 	testDepositID  = funding.NewDepositID()
 	testAssetID    = assets.NewAssetID()
 	testSessionID  = "0193b2e0-0000-7000-8000-000000000001"
-	testNow        = time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	// A notification id, typed as the notifications package's own so a test
+	// cannot pass an order id where a notification id belongs.
+	testNotificationID = notifications.NewID()
+	testNow            = time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 )
 
 // customerPrincipal is an ordinary customer who owns testAccountID and has a
@@ -111,6 +115,8 @@ type fixtures struct {
 	webhook     *fakeWebhook
 	idem        *fakeIdempotency
 	stream      http.Handler
+	notifs      *fakeNotifications
+	meAudit     *fakeMeAudit
 }
 
 func newFixtures() *fixtures {
@@ -191,6 +197,8 @@ func newFixtures() *fixtures {
 		webhook:   &fakeWebhook{status: http.StatusOK},
 		idem:      newFakeIdempotency(),
 		stream:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, ": keepalive\n\n") }),
+		notifs:    &fakeNotifications{},
+		meAudit:   &fakeMeAudit{},
 	}
 }
 
@@ -211,6 +219,10 @@ func (f *fixtures) ports() Ports {
 		// satisfied its "not 401" assertion while measuring nothing (F-132).
 		Webhooks: map[string]WebhookPort{stripecredit.ProviderName: f.webhook},
 		Stream:   f.stream,
+		// Scoped to the caller: neither port takes an account id, so neither
+		// fake is given one to hand back.
+		Notifications: f.notifs,
+		MeAudit:       f.meAudit,
 	}
 }
 

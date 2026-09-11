@@ -19,6 +19,7 @@ tags:
   - name: funding
   - name: withdrawals
   - name: activity
+  - name: notifications
   - name: admin
   - name: system
 
@@ -966,6 +967,92 @@ paths:
                   config_hash: { type: string }
                   environment: { type: string }
 
+  # ---- notifications, realtime and the customer's own audit trail ----
+  /me/notifications:
+    get:
+      tags: [notifications]
+      summary: The caller's notification centre, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - in: query
+          name: unread
+          schema: { type: boolean, default: false }
+          description: Only notifications that have not been marked read
+        - in: query
+          name: kinds
+          schema: { type: array, items: { $ref: "#/components/schemas/NotificationKind" } }
+          style: form
+          explode: false
+          description: Restrict to these kinds; omitted means every kind
+      responses:
+        "200":
+          description: Page of notifications
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPage" } } }
+  /me/notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: How many of the caller's notifications are unread
+      responses:
+        "200":
+          description: The badge
+          content: { application/json: { schema: { $ref: "#/components/schemas/UnreadCount" } } }
+  /me/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark every unread notification read
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: How many were changed
+          content: { application/json: { schema: { $ref: "#/components/schemas/MarkedRead" } } }
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      summary: Mark one notification read (idempotent; the first instant is kept)
+      parameters:
+        - { $ref: "#/components/parameters/NotificationId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The notification as it now stands
+          content: { application/json: { schema: { $ref: "#/components/schemas/Notification" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /me/notification-preferences:
+    get:
+      tags: [notifications]
+      summary: Per-kind in-app notification preferences (IN_APP is the only channel that exists)
+      responses:
+        "200":
+          description: One entry per kind
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPreferences" } } }
+    put:
+      tags: [notifications]
+      summary: Replace the caller's answers for the kinds named
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/NotificationPreferencesUpdate" } }
+      responses:
+        "200":
+          description: Preferences as they now stand
+          content: { application/json: { schema: { $ref: "#/components/schemas/NotificationPreferences" } } }
+  /me/audit:
+    get:
+      tags: [activity]
+      summary: The caller's own security and account history (PART 52); never another person's
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Page of audit entries, newest first
+          content: { application/json: { schema: { $ref: "#/components/schemas/MeAuditPage" } } }
+
+
   # ---- agents ----
   /strategies:
     post:
@@ -1155,7 +1242,6 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
-
 components:
   securitySchemes:
     sessionCookie:
@@ -1200,6 +1286,7 @@ components:
     PayoutId: { in: path, name: payoutId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     PaymentId: { in: path, name: paymentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     ProductId: { in: path, name: productId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    NotificationId: { in: path, name: notificationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     StrategyId: { in: path, name: strategyId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     AgentId: { in: path, name: agentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
@@ -2208,7 +2295,7 @@ components:
       required: [id, type, occurred_at]
       properties:
         id: { type: string, description: "cursor; monotonically increasing per connection" }
-        type: { type: string, enum: [buying_power.changed, order.transitioned, intent.transitioned, deposit.transitioned, agent.state, resync] }
+        type: { type: string, enum: [buying_power.changed, order.transitioned, intent.transitioned, deposit.transitioned, agent.state, resync, notification.created, data.changed] }
         occurred_at: { $ref: "#/components/schemas/Timestamp" }
         resource_id: { type: string }
         data: { type: object, additionalProperties: true }
@@ -2372,6 +2459,112 @@ components:
         p95_ms: { type: integer }
         last_success_at: { $ref: "#/components/schemas/Timestamp" }
         disable_reason: { type: string }
+    NotificationKind:
+      type: string
+      description: >-
+        What a notification is about. The list is the product vocabulary; the
+        nine names migration 00640 declared and nothing produces are not
+        accepted here.
+      enum: [CREDIT_PURCHASE_CAPTURED, CREDIT_PURCHASE_REVERSED, NATIVE_TRADE_FILLED, NATIVE_MARKET_PAUSED,
+             PAYOUT_ACCEPTED, PAYOUT_SETTLED, PAYOUT_FAILED, PAYOUT_NEEDS_REVIEW, VERIFICATION_UPDATED,
+             ACCOUNT_RESTRICTED, SECURITY_NEW_SESSION, AGENT_PAUSED, SYSTEM]
+    Notification:
+      type: object
+      required: [id, kind, severity, title, body, occurred_at, sandbox]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        kind: { $ref: "#/components/schemas/NotificationKind" }
+        severity: { type: string, enum: [INFO, WARN, CRITICAL] }
+        title: { type: string }
+        body: { type: string }
+        account_id: { type: [string, "null"], format: uuid }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        data:
+          type: object
+          additionalProperties: true
+          description: Identifiers and state names only; never a balance. Canonical figures come from REST.
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        read_at: { type: [string, "null"], format: date-time }
+        sandbox:
+          type: boolean
+          description: True when this notification was produced on a sandbox tier and describes nothing of real value (ADR-0023).
+    NotificationPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+        next_cursor: { type: [string, "null"] }
+    UnreadCount:
+      type: object
+      required: [count]
+      properties:
+        count: { type: integer, minimum: 0 }
+    MarkedRead:
+      type: object
+      required: [updated]
+      properties:
+        updated: { type: integer, minimum: 0 }
+    NotificationPreference:
+      type: object
+      required: [kind, channel, enabled, enforced]
+      properties:
+        kind: { $ref: "#/components/schemas/NotificationKind" }
+        channel:
+          type: string
+          enum: [IN_APP]
+          description: The only delivery channel that exists. No e-mail, SMS or push provider is configured anywhere in this system.
+        enabled: { type: boolean }
+        enforced:
+          type: boolean
+          description: >-
+            False where the kind cannot be switched off -- a new sign-in, an
+            account restriction, a reversed purchase, a failed payout, a system
+            message. The stored answer is kept and ignored, and a settings page
+            should show the switch as fixed rather than one that does nothing.
+    NotificationPreferences:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/NotificationPreference" } }
+    NotificationPreferencesUpdate:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [kind, enabled]
+            properties:
+              kind: { $ref: "#/components/schemas/NotificationKind" }
+              enabled: { type: boolean }
+    MeAuditEntry:
+      type: object
+      required: [id, source, action, occurred_at]
+      properties:
+        id: { type: string }
+        source:
+          type: string
+          enum: [SECURITY, ACCOUNT]
+          description: SECURITY is the sign-in and session trail; ACCOUNT is what was done to the caller's own accounts.
+        action: { type: string }
+        severity: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }
+        actor_type:
+          type: string
+          description: Who acted, by category. The operator's identity is never exposed to a customer.
+        ip: { type: string }
+        user_agent: { type: string }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+    MeAuditPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MeAuditEntry" } }
+        next_cursor: { type: [string, "null"] }
     # ---- agents ----
     AuthorityLevel:
       type: object
