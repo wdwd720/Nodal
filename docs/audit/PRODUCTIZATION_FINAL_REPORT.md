@@ -131,8 +131,13 @@ portfolio). This build supports up to level 3; levels 4–6 are disabled by
 policy, each naming the capability gate it would need, and the product shows
 them disabled with that sentence. An agent binds only to a strategy version
 its owner owns and accepted (F-187, D-105); the runtime evaluator is
-deliberately without a caller (F-65) and the agent page says so. Class:
-`STATIC_PROOF`.
+deliberately without a caller (F-65) and the agent page says so. **What the
+audits exposed:** no route accepted a version and no deployment had a
+compiler, so "Create Agent" could not complete anywhere (F-255, F-256) — the
+acceptance route and a sandbox-tier structured compiler (no prose is
+interpreted; refused in PROD) are on `wt/agents-compiler` *(pending merge)*;
+"inspect decisions" stays the honest empty state on every tier of this build
+because the runtime is not deployed. Class: `STATIC_PROOF`.
 
 ## 10 · Purchases — Stripe sandbox evidence
 
