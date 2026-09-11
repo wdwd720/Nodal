@@ -256,7 +256,7 @@ database-validated.
 | `GET /v1/native-markets/{marketId}/candles` | `native_asset:read` | OHLCV over a bounded window (`1m`, `5m`, `15m`, `1h`, `1d`; ≤ 1,500 buckets). Empty buckets are absent, never filled forward |
 | `GET /v1/native-markets/{marketId}/trades` | `native_asset:read` | the public tape. It carries **no account identity**, asserted over the type |
 | `GET /v1/me/portfolio` | `credit:read` (+ per-request tenant scope) | the Credit balance breakdown from `internal/credit` unchanged, the native positions, the totals, an explicit `as_of` and a value temperature |
-| `GET /v1/me/activity` | `account:read` / `account:read_any` (+ tenant scope) | the §16 timeline: seven kinds, each amount with its unit, origin and temperature, a reference and a server-built summary |
+| `GET /v1/me/activity` | `account:read` / `account:read_any` (+ tenant scope) | the §16 timeline: eighteen kinds, each amount with its unit, origin and temperature, a reference and a server-built summary |
 
 `GET /v1/accounts/{accountId}/activity` is unchanged and remains the hosted
 rail's operational timeline (D-066).
@@ -427,7 +427,7 @@ column of its own; `read_at` is a nullable timestamp, not a state, and
 §6 above said "**Not exposed over HTTP:** agents, strategies, backtests,
 predictions". Half of that is no longer true and the half that is has not moved.
 
-**Routes added** (nine; permission is the boundary floor, and tenant scoping is a
+**Routes added** (ten; permission is the boundary floor, and tenant scoping is a
 separate per-request check):
 
 | Method + path | Permission | Notes |

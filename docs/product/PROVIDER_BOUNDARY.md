@@ -104,7 +104,8 @@ a payout engine with eligibility, provenance consumption, destinations, a
 (`internal/payout`, `internal/eligibility`, `internal/valuedomain`,
 `internal/legalrouter`), a compliance profile with identity states
 (`compliance_profiles`), and the `WITHDRAWALS`, `PAYOUT_RESERVE`,
-`PAYOUT_SETTLE` and `PAYOUT_KYC` capabilities, all DISABLED. The productization
+`PAYOUT_SETTLE` capabilities, all DISABLED. `PAYOUT_KYC` is not a capability: it
+is the verification level `valuedomain.SandboxPolicy` requires. The productization
 work builds the Role B and conversion-request surfaces onto these rather than
 beside them; the exact mapping (which existing table is the ConversionRequest,
 which state machine carries verification) is recorded in

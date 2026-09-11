@@ -41,10 +41,17 @@ var (
 	// RISK_RECONCILIATION_PENDING is a risk reason code, not a marker. Same
 	// rule as the citation check next door: a document may name the thing it
 	// is talking about, so long as it is quoting rather than asserting.
-	markerRe = regexp.MustCompile("(^|[^`_A-Z])PENDING([^`_A-Z]|$)")
+	//
+	// The lowercase parenthesised form is a marker too. BACKUP_RESTORE §4
+	// listed two documents as "`docs/...` (pending)" for months after both
+	// were written, and this check could not see it: it read only the bare
+	// uppercase word (F-246).
+	markerRe = regexp.MustCompile("(^|[^`_A-Z])PENDING([^`_A-Z]|$)|\\(pending\\)")
 
-	// Tokens inside a marker's clause that name something checkable.
-	pathRe = regexp.MustCompile("`(cmd/[a-z0-9-]+|internal/[a-z0-9/]+|make [a-z0-9-]+)`")
+	// Tokens inside a marker's clause that name something checkable. A
+	// document path is one: "see X (pending)" is the commonest way a runbook
+	// promises a page that is already written.
+	pathRe = regexp.MustCompile("`(cmd/[a-z0-9-]+|internal/[a-z0-9/]+|make [a-z0-9-]+|docs/[A-Za-z0-9/_.-]+\\.md)`")
 
 	// A path this document tells an operator to call.
 	routeRe = regexp.MustCompile(`\b(GET|POST|PUT|PATCH|DELETE) (/[A-Za-z0-9_{}/:.-]*)`)
@@ -154,7 +161,13 @@ func existsInRepo(root, token string) (string, bool) {
 		return "", false
 	}
 	info, err := os.Stat(filepath.Join(root, filepath.FromSlash(token)))
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		return "", false
+	}
+	if !info.IsDir() {
+		if strings.HasSuffix(token, ".md") {
+			return "the document is in the repository", true
+		}
 		return "", false
 	}
 	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(token)))

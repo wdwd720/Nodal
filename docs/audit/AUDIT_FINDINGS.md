@@ -182,6 +182,21 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-221 | P3 | PRODUCTIZATION | fixed | Adding a payout destination minted an idempotency key per press, so a retry registered it twice |
 | F-222 | P2 | PRODUCTIZATION | fixed | Finishing onboarding raced the profile refetch, so a slow connection sent a new customer back to a terms page with nothing left to accept |
 | F-223 | P3 | PRODUCTIZATION | fixed | The demodata command gave its ledger no capability resolver, so it refused every demo trade on a database whose gates were sandbox-active |
+| F-235 | P2 | PRODUCTIZATION | fixed | POLICY_AUTHORITY scoped the four evidence references to LIVE_* and WITHDRAWALS; the predicate the gate code consults is true for eighteen of twenty, and §1's state machine had no SANDBOX |
+| F-236 | P2 | PRODUCTIZATION | fixed | VERIFICATION_AND_WITHDRAWAL sent a caller to POST /v1/me/terms/accept; no route matches that path |
+| F-237 | P2 | PRODUCTIZATION | fixed | USER_JOURNEY's onboarding row said PUT /v1/me/profile; the path is served, but only with POST |
+| F-238 | P2 | PRODUCTIZATION | fixed | SECURITY.md reported nine present controls as missing and called eight written, passing adversarial suites "Planned", behind a path check that exempted the whole table |
+| F-239 | P2 | PRODUCTIZATION | fixed | Two of THREAT_MODEL's top-ten residual risks were closed by the tree, and the §2 boundary every STRIDE row is scored against listed twelve live packages as absent |
+| F-240 | P2 | PRODUCTIZATION | fixed | .env.example set the settlement pair to mainnet USDC while the seed registers devnet, so a developer following the README got a service that refuses to start |
+| F-241 | P3 | PRODUCTIZATION | fixed | PROVIDER_BOUNDARY called PAYOUT_KYC a capability; it is a verification level, and no such gate exists for an operator to find |
+| F-242 | P3 | PRODUCTIZATION | fixed | Three documents described an activity feed of seven kinds that has carried eighteen since D-081, one of them holding a traceability row open on it |
+| F-243 | P3 | PRODUCTIZATION | fixed | UI_UX_SYSTEM described a shell the app does not ship and told a copywriter to use "Add funds", the one phrase USER_JOURNEY forbids by name |
+| F-244 | P3 | PRODUCTIZATION | fixed | PRODUCT_ARCHITECTURE's domain table and ADR-0027 sent a reader to internal/credits and internal/payments; neither package exists |
+| F-245 | P3 | PRODUCTIZATION | fixed | The README called apps/web a Next.js app, reported three running test tiers as pending, and described a V1 that predates the product the tree builds |
+| F-246 | P3 | PRODUCTIZATION | fixed | BACKUP_RESTORE marked DISASTER_RECOVERY.md and the database-corruption runbook "(pending)"; both exist, and the check read only the uppercase marker |
+| F-247 | P3 | PRODUCTIZATION | fixed | CURRENT_SYSTEM_INVENTORY said the agent wave added nine routes over a table of ten rows |
+| F-248 | P3 | PRODUCTIZATION | fixed | The decision register cited a test that has never existed under that name, one document outside the citation check's scope |
+| F-253 | P3 | PRODUCTIZATION | fixed | USER_JOURNEY told a caller to read onboarding.state on GET /v1/me; the contract declares timestamps and no such property |
 | F-251 | P3 | PRODUCTIZATION | fixed | The agent-detail sweep skipped with a reason that was not the reason, on the route its own finding was about |
 | F-252 | P3 | PRODUCTIZATION | fixed | Two webhook-driven scenarios counted as passes while proving only that an unsigned delivery is refused, and four purchase tests were never registered |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
@@ -8065,6 +8080,435 @@ surfaces the command's exit code instead of piping it into `tail`.
 `TestCapabilities_EveryAnsweredKeyIsADeclaredGate`; the merged Playwright run's
 `DEMODATA_EXIT=0`.
 
+## F-235 · Condition 4 named four capabilities and the gate code enforces it for eighteen · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the docs-vs-reality audit (goal §54), reproduced on
+`audit/docs-vs-reality` @ `d4c43e6`.
+
+`POLICY_AUTHORITY.md` §1 is the contract for who may do what, and its condition 4
+parenthesised the capabilities that need all four evidence references as
+"LIVE_* and WITHDRAWALS". The predicate `Propose` and `cp_gate_is_high_risk`
+actually consult is `gates.IsHighRisk`, which is true for **eighteen of the
+twenty** declared capabilities: the whole internal economy (`CREDIT_PURCHASE`,
+`NATIVE_MARKET_TRADING`, `MARKETPLACE`, `PAYOUT_RESERVE`, `PAYOUT_SETTLE`,
+`HOSTED_TRADING`, `HOSTED_FUNDING`) and agent authority levels 4–6. A reviewer
+scoping the activation ceremony from this document would under-plan every one of
+them, and `CREDIT_PURCHASE` is the gate `LAUNCH_GATE_MATRIX.md` says holds the
+money path shut.
+
+The same section printed a seven-state machine. `SANDBOX` has been the eighth
+since migration 00755, ADR-0023 cites this section as the thing it constrains,
+and migration 00701 cites §1 as its own authority — so the document a reader
+would check the sandbox tier against did not know the state existed.
+
+**Fix.** Condition 4 now names the predicate, states the count, and names the
+**exceptions** — `NATIVE_ASSET_CREATION` and `SOCIAL_DATA_PERSISTENCE`, each with
+the reason `internal/gates/capability.go` gives — because a list that changes
+when a capability is added is a list that has to be written by its complement.
+The state machine gains `DISABLED|REVOKED|EXPIRED → SANDBOX` and
+`SANDBOX → DISABLED`, and says that a sandbox row carries no approval chain, no
+approval version, no evidence references and no validity window, is refused in
+PROD by a table CHECK, and is never a step towards ACTIVE. `SUSPENDED → ACTIVE`
+is corrected to `SUSPENDED → APPROVED` in the same sentence: the transition
+table has always required a distinct principal to activate a resumed gate.
+
+**Evidence.** `docs/architecture/POLICY_AUTHORITY.md` §1;
+`internal/gates/capability.go`, migrations 00701/00714/00716/00755/00791;
+`TestAuditDocs_ThePolicyAuthorityDescribesTheGateTheCodeEnforces`, which derives
+the count and the exception set from `gates.IsHighRisk` rather than reading them.
+
+## F-236 · A documented call that no route answers · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, by matching every `/v1/...` a product document names
+against the route table the generated chi server mounts.
+
+`VERIFICATION_AND_WITHDRAWAL.md` §2's diagram sent a caller to
+`POST /v1/me/terms/accept`. No route matches that path with any method; the route
+is `POST /v1/me/terms-acceptances`. It is the call the withdrawal-disclosure step
+makes, so a client written from the diagram fails on its first attempt at the one
+step that gates a payout.
+
+**Fix.** The diagram names the served path, with the ASCII art's column alignment
+preserved.
+
+**Evidence.** `docs/product/VERIFICATION_AND_WITHDRAWAL.md:75`;
+`internal/gen/api/api.gen.go`;
+`TestAuditDocs_EveryRouteAProductDocumentNamesIsServed`.
+
+## F-237 · The onboarding row named a method the path is not served with · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same check. `USER_JOURNEY.md` §1's first onboarding step said
+`PUT /v1/me/profile`. The path is mounted, but only for POST — so the failure is
+a 405 on the first call a new customer's client makes, which is worse than a 404
+because the path resolving looks like the route is right.
+
+**Fix.** The row says POST.
+
+**Evidence.** `docs/product/USER_JOURNEY.md:40`;
+`TestAuditDocs_EveryRouteAProductDocumentNamesIsServed`.
+
+## F-238 · The security architecture reported nine present controls as missing, and called eight passing suites planned · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reading `SECURITY.md` against the tree.
+
+`SECURITY.md` is one of the two documents a reviewer scores security posture
+from. It told that reviewer that `test/security`, `test/contract`, `infra/` and
+`docs/runbooks/` do not exist (20 test files, 8 test files, 66 `.tf`, 19 runbooks
+and an index); that `internal/strategy` and `internal/model` are absent; that the
+CI contract step is vacuous and **"the security step passes vacuously"**; and, in
+bold, that **"no writer exists"** for `security_events` — while
+`REQUIREMENTS_TRACEABILITY`'s R-130-1, in the other document a reviewer reads,
+listed the four packages that write them. §14 then handed an operator incident
+fallbacks "until they exist" with nineteen runbooks sitting in the directory it
+said was missing.
+
+For five days the document carried a blanket caveat at the top saying much of it
+was now wrong in the understating direction. A warning is not a correction: a
+reviewer reads the sentences.
+
+The **PART 155 matrix** was the sharpest instance. Eight of its rows named an
+adversarial suite in the "Planned (traceability)" column by the filename it was
+going to take; the suite had landed in the same directory under a different name
+and passes today — `TestIDOR_CoversEveryAccountScopedRoute`,
+`TestIDOR_CrossTenantAccountReadsAreRefused`,
+`TestPromptInjection_UntrustedTextNeverEntersTheInstructionChannel`,
+`TestAgentPrincipalPermissionSetIsClosed`,
+`TestDualControl_AProposerCannotApproveItsOwnAction`,
+`TestProductionRefusesFakeProviders`, `TestLocalDefaultsAreNotProductionValid`,
+`TestReplay_ForgedSessionCookiesAreRefused`. The control that should have caught
+the left-hand column going stale could not see the table at all:
+`references_test.go` exempted any **paragraph** containing the word "planned"
+from its path check, and a markdown table is one paragraph, so the header cell
+excused every path in all seventeen rows in both columns. That is how
+"IDOR … (primitive only; no HTTP handlers exist)" survived `cmd/api`.
+
+**Fix.** Every false absence is replaced by what is there, with the path. The
+matrix is rewritten: the eight rows name their passing proof in "Exists today"
+and plan nothing; the four rows that are genuinely unwritten — CSRF end-to-end,
+SSRF, webhook forgery, dependency compromise — keep their planned suite and each
+gains a sentence saying what would prove it. `test/security/doc.go`'s comment,
+which still said API-level tests "join this package once `cmd/api` exists",
+says what joined and what has not.
+
+The control is narrowed rather than trusted. `plannedPhrase`'s blanket exemption
+is gone: the excuse is now evaluated per **cell**, scoped to the column a table
+headed "Planned" (or "Required before …"), and it excuses only an **absent**
+path — a plan for something already on disk is a claim that went stale, and now
+fails. `absencePhrase` gains "never existed", which a cell has to be able to say
+about itself once the paragraph no longer says it for it.
+
+§5's import-rule cell also stated plainly what the audit's notes raised: the
+`internal/risk/policy` deny in `.golangci.yml` and `scripts/lintfin` names a
+package that has never existed, so that one entry can never fire. It is **not**
+removed — see the residual note below — and the cell now names what does hold the
+line: the `risk_policies.created_by_actor_type` CHECK (00152), `risk:policy_write`
+outside the agent permission set, and the two authority-boundary tests.
+
+*Residual:* the dead depguard entry stays. Pointing it at `internal/risk` would
+deny `internal/strategy/validate.go` an import it legitimately makes — reading the
+kernel's limits to validate a strategy is not mutating a policy, and depguard
+cannot express the difference — and deleting it would leave
+`MASTER_BUILD_STATE.md:1216`, `REQUIREMENTS_TRACEABILITY.md` R-009-1 and
+`PRODUCTION_READINESS_REPORT.md:158–159` citing a rule that no longer exists,
+one of which this brief forbids editing. The honest move was to say so where a
+reviewer reads it.
+
+**Evidence.** `docs/security/SECURITY.md` §§0, 2, 5, 11, 12, 13, 14;
+`test/security/doc.go`; `test/docs/references_test.go` (`citationUnits`,
+`plannedHeader`); `TestAuditDocs_NothingListedAsPlannedIsAlreadyWritten`, which
+now reads the matrix as rows and holds both halves of the rule;
+`TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts`;
+`TestDocs_EveryPathTheyNameExists`.
+
+## F-239 · Two closed residual risks kept at the top of the list, and a boundary table that predates twelve packages · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit.
+
+`THREAT_MODEL.md` §8's residual risk 9 said `make security`, `make contract` and
+`make iac-scan` "pass on empty directories" and that there is "no git remote";
+risk 10 said "the reconciliation, settlement and execution code that must keep
+running does not exist; no Terraform, IAM task roles, private network, WAF …".
+The tree closed both: 20 files in `test/security`, 8 in `test/contract`, 66 `.tf`
+across three environments, an `origin` remote, ten CI jobs, 67 Go files across
+`internal/{reconciliation,settlement,execution}` with both worker binaries, and
+per-service task roles in `infra/terraform/modules/ecs-service`. The document's
+own risk 8 states the rule this breaks: "Listing a closed control among the top
+ten residual risks understates the system in a document a reviewer uses to score
+its posture, which is a truthfulness defect in the same way an overstatement is."
+
+§2 — "the boundary every table below is scored against" — was worse, because
+every STRIDE row below is scored against it. It listed `cmd/api`, the Terraform,
+`internal/risk`, `internal/admin`, `internal/funding`, the withdrawal domain, the
+buying-power engine, `cmd/audit-worker`, both adversarial test trees and
+`internal/{signing, wallet, execution, reconciliation, settlement, quote,
+instruments, intent, agent, strategy, model, prediction}` plus every worker
+binary as **absent**.
+
+**Fix.** 9 and 10 are struck in place, the way F-111 struck 8, each with the
+evidence that closed it and with the narrower part that genuinely remains: no
+workflow run has ever applied the Terraform, and the `aws-sm://` resolver is
+still missing. Two real risks are promoted into slots 11 and 12, both already
+named elsewhere in the tree and neither on this list: the native-market **circuit
+breaker is built, enforced, tested and disarmed** in the compiled-in conservative
+policy (`circuit_breaker_move_bps: 0`, D-065, ADR-0027), so markets never pause
+automatically; and **authentication has no per-identity rate limit and raises no
+`login_anomaly` event** — `httpapi.RateLimits.Auth` is a transport class keyed by
+principal-or-address, so credential stuffing spread across addresses meets no
+ceiling and nothing records that it happened. The section states the numbering
+convention it now follows, because runbooks cite these risks by number.
+
+§2's eight rows are re-derived from the tree in the same pass.
+
+**Evidence.** `docs/threat-model/THREAT_MODEL.md` §2 and §8;
+`internal/nativemarket/safety.go`, `internal/httpapi/middleware.go`;
+`TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts`, whose rows for
+this document are now presence claims — the corrected sentence is pinned and the
+tree has to keep bearing it out.
+
+## F-240 · The example environment named a settlement pair the seed does not register · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, by resolving `.env.example` against `scripts/seed`.
+
+`.env.example` is the file README tells a developer to copy. It set
+`CP_API_SETTLEMENT_CHAIN=solana` and `CP_API_SETTLEMENT_MINT` to the **mainnet**
+USDC mint `EPjFWdd5…`. `scripts/seed` is the only thing that registers a
+settlement asset locally, and it registers `solana-devnet` with the devnet mint
+`4zMMC9srt…`; `cmd/api`'s composition calls `repo.GetByMint` on the configured
+pair and returns an error when it does not resolve. Following the documented
+setup produced a service that refuses to start, with
+`settlement asset solana/EPjF…: not found`.
+
+It is also the claim `render.yaml` refuses in as many words — "Devnet, not
+mainnet … pointing at mainnet USDC would claim a settlement path this deployment
+does not have" — and the same mainnet pair sat in
+`infra/terraform/environments/prod/terraform.tfvars.pathb.example`.
+
+**Fix.** The defect is in the CODE that generates the file: the two `Example`
+strings in `internal/config/load.go` now carry the devnet pair and say why, and
+`.env.example` is regenerated from them
+(`go test ./internal/config -run TestExampleEnv -update`). The Path B tfvars
+example carries the devnet pair with the same note.
+
+**Evidence.** `internal/config/load.go`, `.env.example:176–183`,
+`infra/terraform/environments/prod/terraform.tfvars.pathb.example`;
+`TestAuditDocs_TheExampleEnvironmentNamesTheSettlementAssetTheSeedRegisters`,
+which derives both sides from the two files; `TestExampleEnv`; `test/infra`.
+
+## F-241 · A verification level reported as a capability gate · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, matching every name a document calls a capability
+against `gates.AllCapabilities()`.
+
+`PROVIDER_BOUNDARY.md` §4 listed `WITHDRAWALS`, `PAYOUT_RESERVE`, `PAYOUT_SETTLE`
+and `PAYOUT_KYC` as "capabilities, all DISABLED". `internal/gates` declares
+twenty and `PAYOUT_KYC` is not one of them: it is a verification **level**, the
+one `valuedomain.SandboxPolicy` requires before reserved value may be released.
+A capability name is what an operator types into
+`POST /v1/admin/gates/{capability}/{action}` and what a reviewer looks for in
+`capability_gates`, so the sentence described a control that is not there.
+
+**Fix.** `PAYOUT_KYC` is out of the capability list and named as the verification
+level it is.
+
+**Evidence.** `docs/product/PROVIDER_BOUNDARY.md:106–107`;
+`internal/gates/capability.go`, `internal/valuedomain/sandboxpolicy.go`;
+`TestAuditDocs_EveryCapabilityADocumentNamesIsDeclared`.
+
+## F-242 · Three documents described an activity feed of seven kinds that has carried eighteen since D-081 · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, deriving the kind list from `internal/activity`.
+
+`CREDIT_ECONOMY.md` §7 exists to say what is not built "so nobody has to discover
+it", and one of its five bullets read "**No verification, profile, security or
+agent events in the activity feed**", citing `internal/activity/doc.go` as the
+extension point for them. `doc.go` says the opposite in as many words: those
+kinds "have landed (D-081)". `CURRENT_SYSTEM_INVENTORY.md` said the §16 timeline
+has seven kinds; there are eighteen. And R-PG-016-1 was held at `IN_PROGRESS` by
+an evidence cell saying those kinds "are not declared yet" when ten of them are —
+a row kept open by a stale sentence, in a table whose summary counts are computed
+from statuses.
+
+**Fix.** The bullet states the one absence that is real — security events — and
+says why it is deliberate: `internal/notifications` already tells a person about
+a new sign-in, and a page over `security_events` is a different surface with a
+different retention policy from a timeline of what happened to an account's
+value. The inventory says eighteen. R-PG-016-1 moves to `VERIFIED` on the tests
+it already named, and the summary counts move with it (IN_PROGRESS 61 → 60,
+VERIFIED 269 → 270).
+
+**Evidence.** `docs/product/CREDIT_ECONOMY.md:335`,
+`docs/build/CURRENT_SYSTEM_INVENTORY.md:259`,
+`docs/build/REQUIREMENTS_TRACEABILITY.md` R-PG-016-1 and the summary table;
+`internal/activity/{activity,doc}.go`;
+`TestAuditDocs_TheActivityFeedIsDescribedAsItIsBuilt`, which derives the count
+from the package on both sides rather than pinning the word "seven";
+`TestDocs_TraceabilitySummaryMatchesItsRows`.
+
+## F-243 · The design system described a shell the app does not ship, and taught the forbidden word · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, reading `UI_UX_SYSTEM.md` §§10–11 against
+`apps/web`.
+
+§10.8 said search and notifications are not in the shell; `AppShell.tsx` declares
+a Notifications destination and renders its unread count. §10.9 said "No endpoint
+in this deployment sells Credits — that is a decision, not a bug — so the shell
+offers **'Add funds'**". `POST /v1/payments` is mounted, `GET /v1/credits/pricing`
+publishes the rate, `AppShell.tsx` labels the action "Buy Credits", and
+`USER_JOURNEY.md` forbids "add funds" **by name**. This is the document a
+copywriter opens to look the product's vocabulary up, so the defect taught the
+banned phrase from the place that exists to prevent it. §11 opened by saying the
+sixteen existing screens were not rewritten — `apps/web/src/pages` holds
+forty-one page modules over thirty-one routes — and its remaining-work list still
+asked for two things that are done: `Refusal` replaced the generic `Explanation`,
+and `Home.tsx` renders a `SegmentedBar`.
+
+**Fix.** §10.8 and §10.9 describe the shell that shipped, with the reason each
+control is or is not there. §11's premise is corrected and the two done items are
+struck. `USER_JOURNEY.md`'s vocabulary sentence is reflowed so the forbidden
+phrase sits on one line — a phrase forbidden by name that no grep can find is not
+enforceable — and the reproduction walks `docs/product/` for it.
+
+**Evidence.** `docs/product/UI_UX_SYSTEM.md` §§10.8, 10.9, 11;
+`docs/product/USER_JOURNEY.md:9–15`; `apps/web/src/components/AppShell.tsx`,
+`Refusal.tsx`, `apps/web/src/pages/home/Home.tsx`;
+`TestAuditDocs_TheDesignSystemDescribesTheShellThatShipped`.
+
+## F-244 · A domain table pointing at two packages that do not exist · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit. The existing path check resolves citations that name
+a Go **test** file or something under `test/`; a domain table that points a
+reader at the package owning a domain is the other citation a reader follows, and
+nothing resolved it.
+
+`PRODUCT_ARCHITECTURE.md`'s domain table sent a reader to `internal/credits` for
+Credits and `internal/payments` for Payments, and ADR-0027 to `internal/credits`.
+The package is `internal/credit`, and there is no payments package at all: a
+PaymentIntent lives beside the mint it causes, in `credit_fundings`, with
+`internal/provider/stripecredit` for the provider half.
+
+**Fix.** Both documents name the packages that exist, and the Payments row says
+there is no separate package rather than leaving a reader to go looking.
+
+**Evidence.** `docs/product/PRODUCT_ARCHITECTURE.md:79–80`,
+`docs/adr/0027-a-position-is-the-sum-of-its-fills.md:14`;
+`TestAuditDocs_EveryPackageAProductDocumentNamesExists`.
+
+## F-245 · The first document anybody reads described a different repository · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+`README.md` called `apps/web` a Next.js app; it is React 19 on Vite with
+react-router and has no `next` dependency. Its test-strategy paragraph reported
+the API e2e, Playwright UI e2e and chaos tiers as **pending** while
+`.github/workflows/ci.yml` declares a job for each and all three directories are
+on disk, and it explained the unmeasured load tier by "until an API binary
+exists" — `cmd/api` has existed and been deployed for days. A true claim with a
+false reason is one nobody can act on.
+
+"What V1 is" listed the hosted real-capital rail and said nothing about the
+product the tree now builds: Credits, native assets and their markets, the
+marketplace, the activity timeline, the customer web app, agents at authority
+levels 0–3 with 4–6 visible and disabled, and the sandbox tier. "What V1 is not"
+still listed the marketplace, which `internal/commerce` builds behind the
+`MARKETPLACE` gate — a gate that is high risk precisely because it moves Credits
+between users and mints the creator-earning provenance a payout policy may one
+day permit to be withdrawn.
+
+**Fix.** All four passages are corrected. The "is not" list keeps every entry
+that is still true and says, for the two that moved, what exists and which gate
+holds it closed.
+
+**Evidence.** `README.md` §§"What V1 is", "What V1 is not", "Architecture",
+"Test strategy"; `apps/web/package.json`, `.github/workflows/ci.yml`,
+`internal/commerce`, `internal/agentauthority/authority.go`;
+`TestAuditDocs_TheReadmeDescribesTheTreeItShipsWith`.
+
+## F-246 · Two written documents marked "(pending)", under a check that could not see the marker · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+`BACKUP_RESTORE.md` §4 listed `docs/operations/DISASTER_RECOVERY.md` and
+`docs/runbooks/database-corruption.md` as "(pending)". Both are in the
+repository, and the second is the runbook an operator opens during the incident
+this document describes — reading "(pending)" beside it costs minutes nobody has
+during a database corruption.
+
+`test/docs/runbooks_test.go` exists to catch exactly this and could not:
+`markerRe` matched only the bare uppercase `PENDING`, so the lowercase
+parenthesised form was invisible, and `pathRe` resolved only Go packages, `cmd/`
+binaries and make targets, so a document path was never looked up at all.
+
+**Fix.** Both markers are gone. `markerRe` matches `(pending)` as well, `pathRe`
+resolves a `docs/**.md` citation, and `existsInRepo` answers for a file as well
+as a directory. §2's heading said "pending Terraform" for the same reason; the
+Terraform is written and has never been applied, which is a different claim and
+now the one the heading makes.
+
+**Evidence.** `docs/operations/BACKUP_RESTORE.md:44,53,69`;
+`test/docs/runbooks_test.go`; `TestDocs_NothingMarkedPendingAlreadyExists`,
+`TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts`.
+
+## F-247 · A count of nine over a table of ten rows · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, counting the rows under each "Routes added" header.
+
+`CURRENT_SYSTEM_INVENTORY.md` said the agent wave added nine routes and then
+listed ten; the admin pause route was written into the table and not into the
+count. Same defect as F-111's "this table lists N capabilities": a number
+recalled beside the rows that would have produced it.
+
+**Fix.** The count says ten, and the reproduction derives it from the rows.
+
+**Evidence.** `docs/build/CURRENT_SYSTEM_INVENTORY.md:430`;
+`TestAuditDocs_EveryRoutesAddedCountMatchesItsTable`.
+
+## F-248 · The decision register's citations were checked by nothing, and one pointed at nothing · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit.
+
+`references_test.go`'s `inScope` list is "the documents a reviewer would use to
+decide whether the system is ready". `docs/build/DECISION_REGISTER.md` was not on
+it — and it is the document that records **why** every control is shaped the way
+it is, the one a fixer opens before changing one. Its test citations had
+therefore never been resolved by anything, and D-024's "Test change (PART 235)"
+line named `TestIntegration_RelayRetriesWithBackoff`, which has never existed
+under that name. The test is
+`TestIntegration_RelayFailedPublishBacksOffAndRetries` in `internal/event`. This
+is the F-25 shape — a citation pointing at nothing — surviving four audits by
+living one document outside the check's scope.
+
+**Fix.** The citation names the test and the file it is in, and the register
+joins `inScope`. Adding it surfaced no other broken citation: every other test
+name in the register resolves.
+
+**Evidence.** `docs/build/DECISION_REGISTER.md:151`;
+`internal/event/relay_integration_test.go`; `test/docs/references_test.go`
+(`inScope`); `TestDocs_EveryTestTheyNameExists`,
+`TestAuditDocs_TheDecisionRegisterCitesTestsThatExist`.
+
+## F-253 · The journey told a caller to read a field the contract does not declare · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the browser end-to-end audit.
+
+`USER_JOURNEY.md` §1 said `GET /v1/me` answers `onboarding.state: NEW` at the
+callback and `onboarding.state: ONBOARDED` at the end of the welcome flow. There
+is no such property and there never was: D-053 settled the question in the other
+direction — onboarding is **timestamps**, the steps are independent, may be done
+in any order and cannot be undone — and `openapi.yaml`'s `Onboarding` schema is
+`started_at`, `complete`, `completed_at`, `next_step` and `steps[]`. A client
+written from that table branches on a field that is always undefined, which reads
+as "not onboarded" forever, on the two rows that decide where a new customer
+lands.
+
+**Fix.** The callback row says `onboarding.complete: false` with
+`next_step: PROFILE`; the done row says `onboarding.complete: true` with a
+`completed_at`, every entry in `onboarding.steps` complete, and no `next_step`.
+
+**Evidence.** `docs/product/USER_JOURNEY.md:41,44`; `openapi/openapi.yaml`
+`Onboarding`; D-053;
+`TestAuditDocs_EveryOnboardingFieldADocumentNamesIsDeclared`, which reads the
+property names out of the contract so renaming one fails here rather than in
+somebody's client.
 ## F-251 · The agent-detail sweep skipped with a reason that was not the reason · PRODUCTIZATION · P3 · FIXED
 
 **Found by** the browser end-to-end audit (F-e2e-3).
