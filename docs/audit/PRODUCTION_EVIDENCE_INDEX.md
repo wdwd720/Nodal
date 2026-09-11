@@ -56,7 +56,9 @@ written into the object it hashes is wrong the moment anything lands after it.
 | `make lint` (fmtcheck, vet, staticcheck, golangci-lint, lintfin) | **0 issues** | `a4830b9` (main tree) | `LIVE_OBSERVED` |
 | `go test ./...` | pass, 0 failures | `60de57d` | `LIVE_OBSERVED` |
 | `make integration-race` (the financial core under the race detector, integration-tagged, one database each) | **12 packages, all passed, 8m02s** (capital, buyingpower, commerce, credit, event, execution, ledger, nativemarket, payout, reconciliation, settlement, signing) | `60de57d`, with the `C:/toolchain/mingw64` GCC | `LIVE_OBSERVED` |
-| `make race`, `make fuzz`, `make e2e`, `make chaos` | *(re-running in the main tree with exit codes captured and, for e2e and chaos, a provisioned database — the first pass in the verification worktree ran e2e and chaos in 0.2 s, which is the suite skipping for want of `CP_TEST_DATABASE_URL`, not passing)* | `a4830b9` | *(pending)* |
+| `make e2e` (the API binary driven end to end over HTTP, own database) | **14 passed, 0 skipped, 18.5 s** with a provisioned database (`go run ./scripts/testdb -name e2ehead -export`). Note: without `CP_TEST_DATABASE_URL` the suite skips every case in 0.3 s and reports `ok`; a green `make e2e` is evidence only with the database — CI provisions one, the verification worktree's first pass did not | `a4830b9` | `LIVE_OBSERVED` |
+| `make chaos` (fault injection, own database) | pass, 5.2 s; two cases skip by design on this host — the archive-refused case (`CP_TEST_ARCHIVE_ENDPOINT` unset) and the broker-stall case (`CP_TEST_REDPANDA_BROKERS` unset) — each naming its reason in the spec | `a4830b9` | `LIVE_OBSERVED` |
+| `make race`, `make fuzz` | *(re-running in the main tree with exit codes captured)* | `a4830b9` | *(pending)* |
 | The pre-audit matrix (before the fix wave) | lint, unit, race, integration-race, fuzz, contract, full inttest (57 packages), e2e and chaos all green at 19:00 PDT, the last two after fixing two baseline test defects that also fail on the audited checkpoint (F-134, F-135) | `ef5d9ae`-era tree | `LIVE_OBSERVED` |
 
 ## 4 · Browser evidence
