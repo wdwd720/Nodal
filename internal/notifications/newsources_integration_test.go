@@ -164,15 +164,24 @@ func TestIntegration_AVerificationDecisionTellsThePersonItIsAbout(t *testing.T) 
 	require.NoError(t, err)
 
 	mustExec(t, d, `INSERT INTO compliance_profiles (user_id, identity_state) VALUES ($1, 'UNVERIFIED')`, uid)
+	// Every step, because migration 00806 holds the schema to the §20 edge set:
+	// nothing reaches VERIFIED except from PENDING (F-227). Only the last row is
+	// news, which is what the assertion below is about.
+	for _, edge := range [][2]string{{"UNVERIFIED", "STARTED"}, {"STARTED", "PENDING"}} {
+		mustExec(t, d, `INSERT INTO compliance_profile_transitions
+			(id, user_id, from_state, to_state, actor_type, actor_id, reason, occurred_at)
+			VALUES ($1::uuid, $2, $3, $4, 'SYSTEM', 'verify_sandbox', 'the session moved', now())`,
+			uuidText(), uid, edge[0], edge[1])
+	}
 	mustExec(t, d, `INSERT INTO compliance_profile_transitions
 		(id, user_id, from_state, to_state, actor_type, actor_id, reason, occurred_at)
-		VALUES ($1::uuid, $2, 'UNVERIFIED', 'VERIFIED', 'SYSTEM', 'verify_sandbox', 'the provider decided', now())`,
+		VALUES ($1::uuid, $2, 'PENDING', 'VERIFIED', 'SYSTEM', 'verify_sandbox', 'the provider decided', now())`,
 		uuidText(), uid)
 
 	rec := &recorder{}
 	n, err := f.RunOnce(ctx, d, rec)
 	require.NoError(t, err)
-	require.Equal(t, 1, n)
+	require.Equal(t, 1, n, "a session in flight is not news; the decision is")
 	got := rec.notified[0]
 	assert.Equal(t, notifications.KindVerificationUpdated, got.Kind)
 	assert.Equal(t, uid, got.UserID)
@@ -252,9 +261,15 @@ func TestIntegration_ASandboxVerificationSaysItIsARehearsal(t *testing.T) {
 	mustExec(t, d, `INSERT INTO verification_sessions
 		(id, user_id, purpose, provider, status, rules_version, environment, sandbox)
 		VALUES ($1::uuid, $2, 'PAYOUT_KYC', 'verify_sandbox', 'CREATED', 'v1', 'TEST', true)`, sessionID, uid)
+	for _, edge := range [][2]string{{"UNVERIFIED", "STARTED"}, {"STARTED", "PENDING"}} {
+		mustExec(t, d, `INSERT INTO compliance_profile_transitions
+			(id, user_id, from_state, to_state, actor_type, actor_id, reason, session_id, occurred_at)
+			VALUES ($1::uuid, $2, $3, $4, 'SYSTEM', 'verify_sandbox', 'a rehearsal', $5::uuid, now())`,
+			uuidText(), uid, edge[0], edge[1], sessionID)
+	}
 	mustExec(t, d, `INSERT INTO compliance_profile_transitions
 		(id, user_id, from_state, to_state, actor_type, actor_id, reason, session_id, occurred_at)
-		VALUES ($1::uuid, $2, 'UNVERIFIED', 'VERIFIED', 'SYSTEM', 'verify_sandbox', 'a rehearsal', $3::uuid, now())`,
+		VALUES ($1::uuid, $2, 'PENDING', 'VERIFIED', 'SYSTEM', 'verify_sandbox', 'a rehearsal', $3::uuid, now())`,
 		uuidText(), uid, sessionID)
 
 	rec := &recorder{}

@@ -179,6 +179,53 @@ func (f FundingFinality) PayoutEligible() bool {
 	return f == FinalitySettled || f == FinalityUnfunded
 }
 
+// finalityRank orders finalities from least final to most, so "the least final
+// of these" is a minimum.
+//
+// It is here rather than in each caller because three of them had their own
+// copy of this ordering and a fourth needed one: internal/httpapi folds an
+// account's lots into per-origin buckets by it, and internal/credit mints a
+// derived lot at the least final finality among the lots that funded it
+// (D-124). An ordering copied four times is an ordering that eventually
+// disagrees with itself about whether DISPUTED is worse than REVERSIBLE.
+//
+// An undeclared finality is worse than every declared one: Policy.Permits reads
+// it as UNKNOWN_FUNDING_FINALITY and refuses.
+func finalityRank(f FundingFinality) int {
+	switch f {
+	case FinalityReversed:
+		return 1
+	case FinalityDisputed:
+		return 2
+	case FinalityReversible:
+		return 3
+	case FinalityUnfunded:
+		return 4
+	case FinalitySettled:
+		return 5
+	}
+	return 0
+}
+
+// LessFinal reports whether a is less final than b.
+func LessFinal(a, b FundingFinality) bool { return finalityRank(a) < finalityRank(b) }
+
+// LeastFinal is the least final of the given finalities, or the zero value when
+// there are none. A caller with no finalities to compare has established
+// nothing and must not read the answer as permission.
+func LeastFinal(in ...FundingFinality) FundingFinality {
+	if len(in) == 0 {
+		return ""
+	}
+	worst := in[0]
+	for _, f := range in[1:] {
+		if LessFinal(f, worst) {
+			worst = f
+		}
+	}
+	return worst
+}
+
 // ParseFundingFinality parses the canonical uppercase string form.
 func ParseFundingFinality(s string) (FundingFinality, error) {
 	f := FundingFinality(strings.ToUpper(strings.TrimSpace(s)))

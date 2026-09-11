@@ -354,6 +354,49 @@ func TestPostMePayoutDestinations_RefusesRawAccountNumbers(t *testing.T) {
 		"the provider token is a credential for moving money and is never echoed")
 }
 
+// A destination says where it pays into, and the route refuses one that does
+// not (F-228, D-122).
+//
+// The provider is asked `CanPayRecipient` before a destination is registered,
+// and it cannot be asked about a recipient whose country nobody stated. The
+// version of this route that let the field be omitted skipped the question
+// entirely: the same body with "country":"FR" was refused 503
+// RECIPIENT_COUNTRY_UNSUPPORTED, and without it the destination was accepted
+// AND marked VERIFIED.
+func TestPostMePayoutDestinations_RequiresTheCountryItPaysInto(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	before := h.ports.conversion.added.ProviderToken
+
+	for _, country := range []any{nil, "", "usa", "U1"} {
+		payload := map[string]any{
+			"account_id": testAccountID.String(), "kind": "BANK",
+			"provider_token": "sandbox-handle-nocountry",
+		}
+		if country != nil {
+			payload["country"] = country
+		}
+		res := h.do(http.MethodPost, "/v1/me/payout-destinations", payload,
+			"Idempotency-Key", "dest-country-0001")
+		require.Equalf(t, http.StatusBadRequest, res.Code, "%v: %s", country, res.Body.String())
+		assert.Equal(t, errs.CodeValidationFailed, res.problem().Code)
+		assert.Contains(t, res.Body.String(), "country")
+		assert.Equal(t, before, h.ports.conversion.added.ProviderToken,
+			"a destination with no answerable country reached the domain")
+	}
+
+	// The region rides along when the caller gives one, so a provider that
+	// excludes subdivisions has something to refuse on.
+	res := h.do(http.MethodPost, "/v1/me/payout-destinations",
+		map[string]any{
+			"account_id": testAccountID.String(), "kind": "BANK",
+			"provider_token": "sandbox-handle-with-region", "country": "us", "region": "ca",
+		}, "Idempotency-Key", "dest-country-0002")
+	require.Equal(t, http.StatusCreated, res.Code, res.Body.String())
+	assert.Equal(t, "US", h.ports.conversion.added.Country, "a country is normalised before the domain sees it")
+	assert.Equal(t, "CA", h.ports.conversion.added.Region)
+}
+
 // A quote carries both sides, the minimum judged net of fees, an expiry and the
 // provenance that would leave — before anybody commits.
 func TestPostPayoutsQuote_ShowsTheFeeTheNetAndWhatWouldLeave(t *testing.T) {

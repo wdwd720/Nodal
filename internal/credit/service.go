@@ -147,6 +147,7 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 		Quantity:         r.Quantity,
 		Origin:           r.Origin,
 		Finality:         r.Finality,
+		Parents:          r.Parents,
 		Reference:        r.Reference,
 		FundingReference: r.FundingReference,
 		JournalTxID:      res.TransactionID,
@@ -169,6 +170,20 @@ func (s *Service) Issue(ctx context.Context, tx pgx.Tx, r IssueRequest) (Lot, er
 // account and asset (SQLSTATE CR004), so RecordLot cannot be used to invent
 // provenance for units nobody moved.
 func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) (Lot, error) {
+	// The parents decide the finality before the request is validated against
+	// it, because a DERIVED lot's finality is not the caller's to state: it is
+	// the least final finality among the lots that funded it, and a caller that
+	// declared proceeds SETTLED on the strength of a reversible purchase would
+	// be the defect F-230 was (D-124).
+	if len(r.Parents) > 0 {
+		// The parents decide outright. A caller's Finality is the fallback for
+		// a mint with no parents -- a grant, or a sale out of a pool whose
+		// record could not account for what left it -- and taking the LESS
+		// final of the two would be wrong in the direction that matters:
+		// UNFUNDED is more final than REVERSIBLE, so proceeds funded by a
+		// promotional grant would stay stranded exactly as they were (F-230).
+		r.Finality = DerivedFinality(r.Parents)
+	}
 	if err := r.Validate(); err != nil {
 		return Lot{}, err
 	}
@@ -215,6 +230,9 @@ func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) 
 	}
 	lot.CreatedAt = lot.CreatedAt.UTC()
 	lot.Version = 1
+	if err := s.recordParents(ctx, tx, lot.ID, r.Parents); err != nil {
+		return Lot{}, err
+	}
 	return lot, nil
 }
 

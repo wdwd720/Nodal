@@ -150,6 +150,23 @@ var stateTransitions = map[State][]State{
 	StateReversed:     {},
 }
 
+// StateEdges returns every legal edge as a flat from,to sequence, in
+// declaration order.
+//
+// Migration 00807 populates `payout_request_state_edges` from it and
+// cp_payout_apply_state_transition consults it, so an edge this table does not
+// have cannot be written by inserting a transition row that claims it. The
+// enum parity suite holds the two identical.
+func StateEdges() []string {
+	out := make([]string, 0, 48)
+	for _, from := range allStates {
+		for _, to := range stateTransitions[from] {
+			out = append(out, string(from), string(to))
+		}
+	}
+	return out
+}
+
 // CanTransition reports whether from → to is legal.
 //
 // Note what is absent: PAYOUT_STATUS_UNKNOWN cannot go back to VERIFIED or
@@ -239,6 +256,16 @@ type Destination struct {
 	// into. `Capabilities` carries SupportedCountries and ExcludedRegions and
 	// nothing could feed them until the destination knew (00763).
 	Country string
+	// Region is the subdivision within Country, without its country prefix.
+	//
+	// 00763 fed half the question. `CanPayRecipient` has answered
+	// RECIPIENT_REGION_EXCLUDED and RECIPIENT_REGION_UNKNOWN since it was
+	// written and nothing ever set a region, so a provider that pays the United
+	// States but not New York had no way to refuse a New York recipient
+	// (F-228, D-122). It is required whenever the provider publishes excluded
+	// regions for the country, because "we do not know which state" is not
+	// "any state".
+	Region string
 	// MaskedDisplay is what a person recognises without Nodal holding the
 	// number: "••••4242". It is validated to be a mask rather than a number.
 	MaskedDisplay string
@@ -275,12 +302,28 @@ type Request struct {
 
 	IdempotencyKey string
 	QuoteID        *QuoteID
-	ReservedAt     *time.Time
-	SubmittedAt    *time.Time
-	SettledAt      *time.Time
-	FailureReason  string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+
+	// The price the customer was shown, recorded on the request rather than
+	// left to be re-derived from a fee schedule that may since have been
+	// repriced (00808, D-119). Zero when the row predates the quote becoming
+	// required.
+	QuoteGrossAmountMinor int64
+	QuoteFeeAmountMinor   int64
+	QuoteNetAmountMinor   int64
+	QuoteCurrency         string
+
+	// Sandbox is whether this was a rehearsal, as recorded at creation. A row
+	// written before 00810 has no recorded fact and reads as a rehearsal,
+	// because an unrecorded mode cannot be asserted to be real.
+	Sandbox     bool
+	Environment string
+
+	ReservedAt    *time.Time
+	SubmittedAt   *time.Time
+	SettledAt     *time.Time
+	FailureReason string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Allocation is one lot slice a payout reserved.
@@ -294,19 +337,85 @@ type Allocation struct {
 	CreatedAt time.Time
 }
 
+// ProviderTerms are the published numbers a payout has to be judged against:
+// what the provider will charge, and the smallest payout it will send.
+//
+// They are an input rather than a lookup for the reason everything else in this
+// package is one -- the caller already has the provider's capabilities, a second
+// lookup could disagree with the first, and a decision made in March has to be
+// replayable in June against the inputs it was made with.
+//
+// There is no permissive zero value. `FeeModelPublished` false is not a fee of
+// zero; it is the absence of an answer, and `CreateRequest.Validate` refuses it,
+// so a caller that forgets to supply the terms stops a payout rather than
+// letting one through unpriced.
+type ProviderTerms struct {
+	// FeeModelPublished is whether the adapter read a fee schedule out of a
+	// real contract or a published price list.
+	FeeModelPublished bool
+	// FeeFlat and FeeBasisPoints are the two halves of one payout's fee.
+	FeeFlat        money.USD
+	FeeBasisPoints money.BPS
+	// FeeModelVersion identifies the schedule those numbers came from.
+	FeeModelVersion string
+	// MinimumAmount is the smallest payout the provider will send, judged NET
+	// of fees because sub-minimum dust is destroyed rather than returned
+	// (PROVIDER_BOUNDARY §3). A zero minimum is "the provider publishes none".
+	MinimumAmount money.USD
+}
+
+// TermsFrom reads the terms out of a provider's published capabilities, so no
+// caller assembles them field by field and none can assemble a wrong one.
+func TermsFrom(c Capabilities) ProviderTerms {
+	return ProviderTerms{
+		FeeModelPublished: c.FeeModelPublished,
+		FeeFlat:           c.FeeFlat,
+		FeeBasisPoints:    c.FeeBasisPoints,
+		FeeModelVersion:   c.FeeModelVersion,
+		MinimumAmount:     c.MinimumAmount,
+	}
+}
+
 // CreateRequest asks for a payout.
 type CreateRequest struct {
 	AccountID     accounts.AccountID
 	DestinationID *DestinationID
 	Quantity      money.Quantity
 
-	// QuoteID names the pre-commitment quote the customer was shown. It is
-	// optional in this type and required by the HTTP surface, and the reason
-	// for the difference is that an operator resolving a stuck payout has no
-	// quote to name while a person pressing a button in a browser always does.
-	// When it is present the quote is consumed inside the same transaction, so
-	// a quote can fund exactly one payout.
+	// QuoteID names the pre-commitment quote the customer was shown, and it is
+	// REQUIRED.
+	//
+	// It used to be optional here and optional on POST /v1/payouts, with a
+	// comment saying an operator resolving a stuck payout has no quote to name.
+	// That was false: the route is accountScopeWrite, and an operator resolves
+	// through ResolveManualReview, which creates nothing. What it bought
+	// instead was a payout below the provider's published minimum, reserved and
+	// settled with the fee never taken, because the whole minimum-and-fee branch
+	// of Create sat inside `if r.QuoteID != nil` (F-224, D-119).
+	//
+	// The quote is consumed inside the same transaction that reserves the value,
+	// so one quote funds exactly one payout.
 	QuoteID *QuoteID
+
+	// ProviderTerms are what the provider publishes TODAY. The quote records
+	// what it published when the customer was shown a number; Create judges the
+	// minimum against both, so a minimum raised between the quote and the
+	// commit refuses rather than sending something the provider will bounce.
+	ProviderTerms ProviderTerms
+
+	// Sandbox and Environment are the deployment facts this request was made
+	// under, recorded at creation rather than read from today's provider mode.
+	//
+	// The by-id read used to answer `"sandbox": true` by asking the port what
+	// the provider is NOW, and the list and the create response did not answer
+	// it at all -- so one payout was a rehearsal on one screen, unlabelled on
+	// two others, and would silently become a real payout in the record the day
+	// a deployment swapped its provider (F-232). Environment has no default:
+	// Validate refuses a request without one, because a row that cannot say
+	// where it was made cannot be checked against the rule that a rehearsal
+	// never exists in PROD.
+	Sandbox     bool
+	Environment string
 
 	// DisclosureAccepted says whether the person has accepted the current
 	// WITHDRAWAL_DISCLOSURE. It is an input rather than a lookup, like every
@@ -337,6 +446,29 @@ func (r CreateRequest) Validate() error {
 	}
 	if r.EffectiveAt.IsZero() {
 		return errs.New(errs.CodeValidationFailed, "a payout needs effective_at")
+	}
+	if r.QuoteID == nil || r.QuoteID.IsZero() {
+		return errs.New(errs.CodeValidationFailed,
+			"a payout names the quote the customer was shown").
+			WithField("field", "quote_id")
+	}
+	if strings.TrimSpace(r.Environment) == "" {
+		return errs.New(errs.CodeValidationFailed,
+			"a payout records the environment it was created in").
+			WithField("field", "environment")
+	}
+	if r.Sandbox && r.Environment == "PROD" {
+		return errs.New(errs.CodeForbidden,
+			"a rehearsal payout cannot exist in PROD").
+			WithField("environment", r.Environment)
+	}
+	if !r.ProviderTerms.FeeModelPublished {
+		// Not a fee of zero. A caller that has not read a fee schedule out of a
+		// real contract cannot say what would reach the customer, and promising
+		// a net amount nobody agreed is worse than refusing.
+		return errs.New(errs.CodeProviderUnavailable,
+			"this payout provider has not published a fee model, so no payout can be judged against it").
+			WithField("fee_model", "UNPUBLISHED")
 	}
 	return nil
 }

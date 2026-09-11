@@ -502,6 +502,25 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 		id := uuid.MustParse(r.QuoteID.String())
 		out.QuoteId = &id
 	}
+	// The price the customer was shown, read off the request rather than
+	// recomputed: a fee schedule repriced later must not change what a payout
+	// says it sent (D-119). Zero on a row written before the quote was
+	// required, and omitted rather than rendered as a free payout.
+	if r.QuoteCurrency != "" {
+		out.QuotedGrossAmountMinor = ptr(r.QuoteGrossAmountMinor)
+		out.QuotedFeeAmountMinor = ptr(r.QuoteFeeAmountMinor)
+		out.QuotedNetAmountMinor = ptr(r.QuoteNetAmountMinor)
+		out.QuotedCurrency = ptr(r.QuoteCurrency)
+	}
+	// The tier this request was MADE on, read off the row. It used to be
+	// answered only by the by-id read, from today's provider mode, so the same
+	// payout was a rehearsal on one screen and unlabelled on two others
+	// (F-232). A row with no recorded fact reads as a rehearsal, because an
+	// unrecorded mode cannot be asserted to be real.
+	out.Sandbox = ptr(r.Sandbox)
+	if r.Provider != "" {
+		out.Provider = ptr(r.Provider)
+	}
 	return out
 }
 
@@ -514,7 +533,11 @@ func (s *Server) withProvenance(ctx context.Context, out api.PayoutRequest, id p
 	if err == nil && len(slices) > 0 {
 		out.Provenance = ptr(toAPIProvenance(slices))
 	}
-	out.Sandbox = ptr(s.opts.Ports.Payouts.SandboxProvider())
+	// The sandbox label is NOT set here any more. It used to be
+	// `s.opts.Ports.Payouts.SandboxProvider()` -- what the provider is now --
+	// which made this route the only one that answered it and made the answer a
+	// property of today's configuration rather than of the payout (F-232).
+	// toAPIPayout reads the column.
 	return out
 }
 
@@ -542,23 +565,31 @@ func (s *Server) PostPayouts(ctx context.Context, request api.PostPayoutsRequest
 		}
 		destID = &parsed
 	}
-	// The quote the customer was shown (PART 19, PART 22). It is optional
-	// here and required by nothing above: an operator resolving a stuck payout
-	// has no quote to name, while a person pressing a button in a browser
-	// always does. When present it must name the same destination and the same
-	// gross amount, and internal/payout consumes it inside the reserving
-	// transaction so one quote funds exactly one payout.
-	var quoteID *payout.QuoteID
-	if request.Body.QuoteId != nil {
-		parsed, perr := payout.ParseQuoteID(request.Body.QuoteId.String())
-		if perr != nil {
-			return nil, validationError("quote_id", "quote_id must be a canonical UUID")
-		}
-		quoteID = &parsed
+	// The quote the customer was shown (PART 19, PART 22), and it is REQUIRED.
+	//
+	// It used to be optional, on the stated reason that "an operator resolving a
+	// stuck payout has no quote to name". That reason was false: this route is
+	// accountScopeWrite, and an operator resolves a stuck payout through
+	// ResolveManualReview, which creates nothing. What being optional bought
+	// was a payout of 50 Credits against a provider publishing a $1.00 minimum
+	// -- refused by POST /payouts/quote in as many words -- reserved and settled
+	// with the fee never taken, because the whole minimum-and-fee branch of
+	// internal/payout.Create sat inside `if r.QuoteID != nil` (F-224, D-119).
+	//
+	// It must name the same destination and the same gross amount, and
+	// internal/payout consumes it inside the reserving transaction so one quote
+	// funds exactly one payout.
+	if request.Body.QuoteId == uuid.Nil {
+		return nil, validationError("quote_id",
+			"a payout names the quote the customer was shown; ask POST /v1/payouts/quote first")
+	}
+	quoteID, perr := payout.ParseQuoteID(request.Body.QuoteId.String())
+	if perr != nil {
+		return nil, validationError("quote_id", "quote_id must be a canonical UUID")
 	}
 
 	cmd := CreatePayout{
-		AccountID: accountID, Amount: amount, DestinationID: destID, QuoteID: quoteID,
+		AccountID: accountID, Amount: amount, DestinationID: destID, QuoteID: &quoteID,
 		IdempotencyKey: request.Params.IdempotencyKey,
 		CorrelationID:  observability.CorrelationID(ctx),
 	}

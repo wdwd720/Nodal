@@ -971,6 +971,321 @@ Two defects in `scripts/seed`, both of which hid behind a misleading error.
 - **What is still not covered:** a change that names nobody AND committed late, behind the cursor (found only by the lap), is never signalled — the lap cannot distinguish a late commit from a re-read without a notification row to ask. A late-committed pause of a market nobody holds is the only case, and the next fill on that market carries its own signal.
 - **Evidence:** `internal/notifications/follower.go` (`runSource`); `TestAuditAgnot_TheLapRepublishesTheSameSignalsEveryPass`, `TestAudit_FollowerStallsForeverAfterABatchSizedBurst`, `TestIntegration_TheFollowerNotifiesOnceForACapturedPurchase`; F-167, F-190, D-107.
 
+## D-119 — A payout names the quote the customer was shown, and the minimum lives in the domain (2026-09-11, product goal §54, F-224)
+
+**Problem.** `quote_id` was optional on `POST /v1/payouts` and optional in
+`payout.CreateRequest`, and the whole minimum-and-fee branch of
+`payout.Service.Create` sat inside `if r.QuoteID != nil`. `payout.Engine.Evaluate`
+had no minimum and no fee input at all. So 50 Credits against a provider
+publishing a $1.00 minimum and a 25c + 25bp fee — which `POST /v1/payouts/quote`
+refuses in as many words — reached VERIFIED with the whole gross reserved and
+then SETTLED, with the fee never taken (F-224).
+
+**Chosen.** The quote is REQUIRED: `required` in the schema, refused
+`VALIDATION_FAILED` naming `quote_id` in the handler, refused by
+`CreateRequest.Validate` in the domain. `CreateRequest` carries `ProviderTerms`
+— the provider's published fee model and minimum, read through `TermsFrom(caps)`
+so no caller assembles them by hand — the way it carries `DisclosureAccepted`,
+with no permissive zero value: an unpublished fee model is refused rather than
+read as a fee of zero. `Create` refuses `MINIMUM_NOT_MET` (as a `refusal` field
+on a VALIDATION_FAILED, alongside the net and the minimum) when the quote's net
+is under what the provider publishes TODAY. The request row records the quote's
+gross, fee and net and the currency they were in (00808). The reservation is the
+GROSS.
+
+**Why derived rather than chosen.** The handler's reason for the option — "an
+operator resolving a stuck payout has no quote to name" — was checkable and
+false: the route is `accountScopeWrite`, and an operator resolves through
+`ResolveManualReview`, which creates nothing. With that gone there is no caller
+that legitimately has no quote, and a required field is the only way the domain
+can see the fee and the minimum at all. Reserving the gross follows from the fee
+coming out of what leaves: reserving the net would leave the fee spendable and
+the account short at settlement. Judging the minimum against TODAY'S terms rather
+than the number copied onto the quote follows from what a minimum IS — a
+statement by the provider about what it will send, now.
+
+**Consequences.** Every payout has a price somebody was shown, and that price is
+on the request rather than re-derivable from a schedule that may have moved. A
+deployment whose provider publishes no fee model can create no payout, which is
+the honest state of a system that cannot say what would reach the customer.
+`internal/payout`'s fixtures, `cmd/api`'s sweep fixture and two `internal/httpapi`
+fixtures all had to produce a real quote, which is the cost of the API being
+honest and is paid once.
+
+**Evidence.** F-224. `internal/payout/payout.go`, `internal/payout/service.go`,
+`internal/httpapi/handlers_native.go`, `migrations/00808_*.sql`;
+`TestCreateRequest_Validate`,
+`TestAuditWV_APayoutBelowTheProviderMinimumIsReservedAndSettledWithoutAQuote`.
+
+## D-120 — The compliance facts the eligibility page refuses on reach the conversion path, from one reader (2026-09-11, product goal §54, F-226)
+
+**Problem.** An open sanctions review, a restriction recorded against the account
+and an unsupported jurisdiction stopped `GET /v1/me/eligibility` and stopped
+nothing on the conversion path: `payout.EligibilityInput` had a field for none of
+them, and `payoutsAdapter.Create` read no compliance column. A person could be
+told ACCOUNT_RESTRICTED and 0 withdrawable while `Create` reserved their whole
+balance and `Submit` settled it (F-226).
+
+**Chosen.** `payout.EligibilityInput` gains `SanctionsState`,
+`AccountRestrictions` and `JurisdictionSupported`; `Engine.Evaluate` adds them to
+the absolute blocks beside `ReasonAccountFrozen`, with the reasons
+`ACCOUNT_RESTRICTED` and `JURISDICTION_RESTRICTED` — `eligibility.ExplainWithdrawal`'s
+own words. One reader answers them, `httpapi.WithdrawalDeps.complianceFacts`, and
+the eligibility page, `conversionAdapter.Quote` and `payoutsAdapter.Create` all
+call it; the last two inside their own transaction, so the answer belongs to the
+snapshot the decision is made in. None of the three has a permissive zero value:
+an empty sanctions state is nobody having answered, and nobody having answered is
+not a clearance. UNKNOWN is a supplied answer — nobody has screened this person
+yet — and is read exactly as the eligibility page reads it.
+
+**Why derived rather than chosen.** The shape is `DisclosureAccepted`'s, already
+in this type and already argued for: the caller knows the fact, a second lookup
+could disagree with the first, and a decision made in March has to be replayable
+in June against the inputs it was made with. The words are the eligibility
+engine's because two surfaces answering one question in two vocabularies is how
+this defect survived — a person reading ACCOUNT_RESTRICTED on one screen and
+nothing on the other cannot tell which is wrong.
+
+**`internal/eligibility`'s own engine has no production caller.** `eligibility.Evaluate`,
+`eligibility.Policy` and the whole `Input`/`Decision` machine are unreachable:
+`settlement.PlanInput.Eligibility` is filled only by `settlementtest/world.go`.
+They are LEFT in place rather than deleted — they are the policy shape §19
+describes and what a second consumer would use — and recorded here so the next
+person does not assume a caller exists. F-168's entry, which said
+`evaluate.go` reads the sanctions screen as one of the allowlists deciding a
+payout, is corrected in F-226.
+
+**Consequences.** A deployment with no compliance repository wired establishes
+nothing, and nothing established blocks: `JurisdictionSupported` false is
+`JURISDICTION_RESTRICTED`. That is the same direction `applyAccountFacts` already
+fell in, and it means a person who has never begun verification is refused for
+their jurisdiction as well as for their level — which is what the eligibility
+page has always said.
+
+**Evidence.** F-226. `internal/payout/eligibility.go`,
+`internal/httpapi/wiring_verification.go`, `internal/httpapi/wiring_native.go`;
+`TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest`.
+
+## D-121 — A state machine's edges live in the schema, not only in Go (2026-09-11, product goal §54, F-227)
+
+**Problem.** The edge bindings of 00731 and 00741 make a state change require a
+transition row that names the state the entity is really in. Neither asks whether
+the edge that row describes is one the state machine HAS. So one INSERT as
+`cp_app` moved a compliance profile from UNVERIFIED to VERIFIED — writing a
+verified standing, a `verified_at`, an expiry and a CLEAR sanctions screen — and
+one more moved a verification session from CREATED to APPROVED for a session the
+provider had never been called for (F-227).
+
+**Chosen.** The edge set becomes a table the database reads.
+`compliance_profile_state_edges` and `verification_session_status_edges` (00806),
+and `payout_request_state_edges` (00807, D-123), are populated by the migration
+from the Go transition tables and held identical to them by
+`test/integration/enums` — the same pairing `AllStates()` has with the CHECK. Each
+apply function refuses an edge that is not in its table with AD001. No role but
+`cp_migrate` may write them. Evidence gets the same treatment at a different
+level: a `verification_checks` row must name its session's own provider, and the
+session must be in a status only a provider ANSWER produces.
+
+**Why derived rather than chosen.** The Go tables stay authoritative because they
+are what the code walks, and a second copy that nothing compares is worse than
+one copy; the enum-parity suite already exists for exactly this shape of
+duplication. Holding the EDGE rather than the destination follows from what the
+attack was: the destination was already bound, and the hole was the origin.
+
+**Residuals, recorded rather than hidden.**
+1. A session that HAS been answered can still be given further check rows by
+   `cp_app`. Closing it is the `capability_gates` treatment — `REVOKE INSERT ON
+   verification_checks FROM cp_app` and a SECURITY DEFINER
+   `cp_verification_record_check()` behind `Repository.RecordCheck`, one call
+   site — and it wants its own migration and its own exploit test, because a
+   privilege change to evidence rows is not a line to slip into a wave.
+2. A transition row whose endpoints are the same state is left legal, because
+   00796's birth screen writes exactly one. Such a row can still carry a
+   sanctions screening decision, since the screen has no edge table in either
+   language yet.
+
+**Evidence.** F-227. `migrations/00806_*.sql`, `internal/verification/state.go`,
+`internal/verification/session.go`; `TestIntegration_EveryLegalEdgeTableMatchesItsGoTable`,
+`TestIntegration_NobodyButTheMigrationRoleWritesAnEdgeTable`.
+
+## D-122 — A destination says where it pays into, and the provider is asked about the whole recipient (2026-09-11, product goal §54, F-228)
+
+**Problem.** `country` was optional on `POST /v1/me/payout-destinations`, and
+`CanPayRecipient` was asked only when the client supplied one. The same body with
+`"country":"FR"` was refused RECIPIENT_COUNTRY_UNSUPPORTED; without the field it
+was accepted and marked VERIFIED. Nothing ever set `RecipientProfile.Region`, so
+two of the six refusals could not fire at all (F-228).
+
+**Chosen.** `country` is required — schema, handler and domain — and
+`CanPayRecipient` is asked unconditionally, about the whole profile. `region` is
+accepted and stored (00810), and required wherever the provider publishes
+`ExcludedRegions` for that country, refused `VALIDATION_FAILED` rather than
+`PROVIDER_UNAVAILABLE` because it is something the caller can supply.
+`providerSupports` at payout re-asks `CanPayRecipient` from the stored country
+and region instead of re-deriving a kind-and-currency check.
+
+**Why derived rather than chosen.** `RecipientProfile.Validate` has refused an
+empty country since it was written; the adapter's conditional was the only thing
+standing between that refusal and the caller. Asking early is the stated reason
+`CanPayRecipient` exists — telling somebody "this cannot work for you" before
+they hand over a passport — and a question skipped when the answer is missing is
+not asking early, it is not asking.
+
+**Consequences.** A provider that publishes no `SupportedCountries` can now
+register no destination at all, which is the correct reading of an adapter nobody
+has verified and is why the test fixtures had to publish what they pay. Every
+destination row carries a country, so `providerSupports` has something to ask
+with at the moment value would leave rather than only at registration.
+
+**Evidence.** F-228. `internal/httpapi/wiring_verification.go`,
+`internal/httpapi/handlers_payout_destinations.go`, `migrations/00810_*.sql`,
+`apps/web/src/pages/withdraw/Destinations.tsx`;
+`TestPostMePayoutDestinations_RequiresTheCountryItPaysInto`.
+
+## D-123 — A conversion request's state and the money beside it are written by the transition row (2026-09-11, product goal §54, F-229)
+
+**Problem.** `payout_requests` — the row that says whether somebody's money left
+— kept a column grant that included `state`, `reserved_quantity`,
+`settled_quantity`, `reserved_at` and `settled_at`, with only the edge binding in
+front of it. One transaction as `cp_app` moved a REJECTED request to SETTLED with
+the whole amount settled and a forged provider reference, and the holder was
+shown it (F-229).
+
+**Chosen.** 00761's treatment, applied here. A legal-edge table populated from
+`payout.StateEdges()`; a SECURITY DEFINER `cp_payout_apply_state_transition()`
+that writes the state and refuses an edge that is not in the table; the money
+moved onto the transition row — the two quantities, their instants, and the
+provider's reference and status — and written by the same trigger; `REVOKE UPDATE
+ON payout_requests FROM cp_app` with a column grant back for the provider slot it
+claims before it calls (`provider`, `provider_idempotency_key`, `submitted_at`),
+the decision it records (`verification_level`, `policy_version`, `policy_hash`,
+`eligibility_reasons`) and `failure_reason`. Every new definer pins
+`pg_catalog, public, pg_temp`.
+
+**Why derived rather than chosen.** The money columns move onto the row rather
+than staying granted because every place this package wrote one of them it was
+ALSO moving the state — reserving is the VERIFIED step, settling is the SETTLED
+step, returning a reservation is the FAILED or REJECTED step — so they were
+already one event and writing them as two was what let a quantity be rewritten
+beside a lawful move. That is 00733's own header describing a defect it could not
+close for the columns it left granted. `provider_reference` and `provider_status`
+come with them because they were written in the same breath in both places that
+set them, and leaving them granted would have left `provider_reference =
+'forged-by-cp_app'` reachable.
+
+**Consequences.** `CompleteVerification` now records the reasons it re-decided,
+which is why `eligibility_reasons` is on the grant: it was previously left at
+whatever `Create` wrote, so a request that became eligible on verification still
+rendered a shortfall it no longer had. A test fixture can no longer force a state
+by hand; the one that did now produces the crash it was simulating
+(`payouttest.Sandbox.CrashNext`), which is a better test than the forgery was.
+
+**Evidence.** F-229. `migrations/00807_*.sql`, `internal/payout/service.go`;
+`TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach`,
+`TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase`.
+
+## D-124 — Proceeds are as final as what paid for them (2026-09-11, product goal §54, F-230, F-e2e-1)
+
+**Problem.** `internal/nativemarket` and `internal/commerce` minted every earning
+at `FinalityReversible` unconditionally. The only writer that promotes a lot out
+of REVERSIBLE is `SettleFunding`, which keys on `credit_fundings.lot_id` — a row
+an earning never has. So five of the six origins `SandboxPolicy` marks
+withdrawable could never be withdrawn on any deployment, and the eligibility page
+reported FUNDING_NOT_SETTLED — a reason it documents as one that waiting fixes —
+on value whose finality nothing could move (F-230, and F-e2e-1 from the browser
+audit).
+
+**Chosen.** A derived lot records the lots consumed to fund it
+(`credit_lot_parents`, written at mint in the same transaction) and is minted at
+the LEAST final finality among them. `credit.Service.SettleDerived` promotes a
+REVERSIBLE derived lot to SETTLED once EVERY parent is payout-eligible, and moves
+one whose parent is DISPUTED or REVERSED to DISPUTED; it runs from the existing
+settlement ticker in `cmd/api`, immediately after `settleOnce` because it reads
+what that pass writes, batch-bounded, each lot taken under the advisory lock
+`SetFinality` already uses and tried rather than waited for.
+
+The AMM pool is fungible, so it keeps the same kind of record:
+`native_market_credit_sources` holds one row per lot paid into a market's reserve
+and the sell side draws them down in arrival order, so a sale's proceeds name
+real parents rather than an average. A draw-down the record cannot cover mints
+REVERSIBLE.
+
+**Why derived rather than chosen.** A default in either direction is wrong, and
+that is what forces the parent record. REVERSIBLE for ever is the defect renamed.
+Payout-eligible by default is the laundering route the whole finality model
+exists to close: buy with card-funded Credits, sell them into a market and out
+again, withdraw, charge back. The only honest answer is the one the lots
+themselves give, so the lots have to be named. Drawing the pool down in arrival
+order rather than averaging keeps the record bounded by the reserve rather than
+by the market's whole history, and makes a promotion possible later when those
+contributions settle.
+
+**What a chargeback on a spent purchase does, and the residual.**
+`credit.Service.Reverse` unwinds the funding's OWN lot and posts a deficit
+against the payer. Taking value back from a third party who earned it is a
+posting kind this ledger does not have, and the earner may have spent it or had
+it paid out. What is expressible is applied: a derived lot whose parent is
+disputed or reversed is moved to DISPUTED — neither spendable nor payout-eligible
+— and is never promoted. What is not expressible is recorded rather than
+invented: a derived lot promoted on a SETTLED parent that is disputed months
+later cannot be clawed back from the earner, and value already spent or already
+paid out cannot be recovered at all.
+
+**Consequences.** `TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` held
+seeded earnings by their FINALITY, and that floor was this defect rather than a
+control. Its claim is narrowed to what is now load-bearing and is stronger for
+it: the GRANT never leaves by ORIGIN on every policy in this build, and every
+other seeded lot is proved to be derived from the grant and from nothing a person
+paid. The residual there: a sandbox tier deliberately configured with a LIVE
+payout adapter could pay a seeded earning out for real. No such adapter exists
+(BLOCKERS B-01, B-06) and `payoutPolicyFor` returns `SandboxPolicy` only on a
+sandbox tier, so the combination is unreachable today; what would close it is
+`cmd/api` refusing to boot with `CP_API_DEMO_DATA` set and a payout slot that is
+not the rehearsal one.
+
+**Evidence.** F-230. `migrations/00809_*.sql`, `internal/credit/derived.go`,
+`internal/nativemarket/poolprovenance.go`, `cmd/api/creditsettle.go`;
+`TestIntegration_ASandboxTraderEarnsProceedsThatCanReachAPayout`,
+`TestIntegration_ProceedsOfAReversiblePurchaseAreReversible`,
+`TestAuditWV_AProceedsLotSettlesWhenItsFundingDoesAndNotBefore`.
+
+## D-125 — The idempotency record keeps what may be kept, not the whole answer (2026-09-11, product goal §54, F-231)
+
+**Problem.** `runCommand` marshals a command's whole response into
+`idempotency_keys.response_body`. `POST /v1/me/verification/sessions` returns the
+hosted verification link, which ADR-0025 §3 says is "handed to the browser that
+asked for it and written down nowhere" — and it was in a row `cp_readonly` and
+`cp_ops` may SELECT and `cp_app` may not DELETE, for the whole 24-hour TTL,
+for every session anybody started (F-231).
+
+**Chosen.** `CommandResult` gains a `StoredBody`. The caller gets the whole
+answer; the record gets the answer minus the fields the route declares
+never-stored, plus a `resume` sentence saying why. A replay therefore answers
+with the session, without the link, and with something for the client to do.
+`neverStored` is keyed by operation AND field, and `hosted_url` is its only
+entry.
+
+**Why derived rather than chosen.** "Do not make that route idempotent" was the
+other option and is wrong: idempotency on a command route is what stops a retry
+starting a second identity check. A `Redacted()` method on the result was the
+shape the brief offered first; the generated API types live in
+`internal/gen/api` and cannot carry one, so the declaration lives beside the
+route. Per field rather than a global deny-list of names because the same field
+name means different things on different routes — the session's `expires_at` is a
+link's life and a quote's `expires_at` is a price's, and the second MUST be
+recorded. A replay says something rather than omitting the field silently,
+because a browser waiting for a field that is never coming is a worse answer than
+a refusal.
+
+**Consequences.** A route in this area that starts returning a credential has to
+declare it, and `TestNoNeverStoredFieldReachesTheIdempotencyRecord` drives every
+command route in the journey and reads what landed, so forgetting fails a test
+rather than an audit.
+
+**Evidence.** F-231. `internal/httpapi/neverstored.go`,
+`internal/httpapi/command.go`, `internal/httpapi/ports.go`;
+`TestNoNeverStoredFieldReachesTheIdempotencyRecord`,
+`TestAuditWV_TheHostedVerificationURLIsWrittenDownNowhere`.
 ## D-126 — A closed residual risk is struck in its slot, and a promotion takes the next number (2026-09-11, goal §54, F-239)
 
 - **Problem:** THREAT_MODEL §8's "top ten residual risks" carried two entries the tree had closed. Correcting them is not a matter of deleting two lines: runbooks cite these by number (`unknown-transaction.md` and `wallet-provider-compromise.md` both say "re-score residual risk #1"), and the list is also the place the *current* top risks are supposed to be visible. Deleting an entry renumbers everything below it and silently redirects those citations; leaving the slot empty makes the list shorter than its own heading; and simply striking two entries without promoting anything leaves the document saying nothing about the risks that replaced them.

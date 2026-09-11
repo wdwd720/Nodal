@@ -35,11 +35,23 @@ func verifiedProfile(t *testing.T, d *db.DB, expiresAt time.Time) accounts.UserI
 	require.NoError(t, err)
 	_, err = d.Exec(ctx, `INSERT INTO compliance_profiles (user_id, identity_state) VALUES ($1, 'UNVERIFIED')`, user.ID)
 	require.NoError(t, err)
-	_, err = d.Exec(ctx, `INSERT INTO compliance_profile_transitions
-		(id, user_id, from_state, to_state, actor_type, actor_id, reason, verified_at, expires_at)
-		VALUES ($1::uuid, $2, 'UNVERIFIED', 'VERIFIED', 'SYSTEM', 'itest', 'the provider decided', $3, $4)`,
-		uuid.NewString(), user.ID, expiresAt.Add(-verification.ValidityWindow), expiresAt)
-	require.NoError(t, err)
+	// Every step of the way, because migration 00806 now holds the schema to
+	// the same edge set internal/verification has: a fixture that jumped
+	// straight to VERIFIED was writing an edge §20 does not have, which is the
+	// thing F-227 was about.
+	from := verification.StateUnverified
+	for _, step := range verification.Path(verification.StateUnverified, verification.StateVerified) {
+		var verified, expires any
+		if step == verification.StateVerified {
+			verified, expires = expiresAt.Add(-verification.ValidityWindow), expiresAt
+		}
+		_, err = d.Exec(ctx, `INSERT INTO compliance_profile_transitions
+			(id, user_id, from_state, to_state, actor_type, actor_id, reason, verified_at, expires_at)
+			VALUES ($1::uuid, $2, $3, $4, 'SYSTEM', 'itest', 'the provider decided', $5, $6)`,
+			uuid.NewString(), user.ID, string(from), string(step), verified, expires)
+		require.NoError(t, err)
+		from = step
+	}
 	return user.ID
 }
 
@@ -195,12 +207,17 @@ func openSession(t *testing.T, d *db.DB, user accounts.UserID, status, providerR
 		VALUES ($1,$2,'PAYOUT_KYC','expiry-itest','CREATED','v1','LOCAL',false,NULLIF($3,''),$4, now() - $5::interval)`,
 		sid, user, providerRef, expiresAt, age.String())
 	require.NoError(t, err)
-	if status != "CREATED" {
+	// One row per step, for the reason verifiedProfile walks its path: 00806
+	// holds the schema to verification.SessionEdges(), so CREATED -> PROCESSING
+	// in one row is an edge the session machine does not have.
+	from := verification.SessionCreated
+	for _, step := range verification.SessionPath(verification.SessionCreated, verification.SessionStatus(status)) {
 		_, err = d.Exec(context.Background(), `INSERT INTO verification_session_transitions
 			(id, session_id, from_status, to_status, actor_type, actor_id, reason, occurred_at)
-			VALUES ($1,$2,'CREATED',$3,'SYSTEM','expiry-itest','fixture',now())`,
-			verification.NewTransitionID(), sid, status)
+			VALUES ($1,$2,$3,$4,'SYSTEM','expiry-itest','fixture',now())`,
+			verification.NewTransitionID(), sid, string(from), string(step))
 		require.NoError(t, err)
+		from = step
 	}
 	return sid
 }

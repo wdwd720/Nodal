@@ -182,6 +182,19 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-221 | P3 | PRODUCTIZATION | fixed | Adding a payout destination minted an idempotency key per press, so a retry registered it twice |
 | F-222 | P2 | PRODUCTIZATION | fixed | Finishing onboarding raced the profile refetch, so a slow connection sent a new customer back to a terms page with nothing left to accept |
 | F-223 | P3 | PRODUCTIZATION | fixed | The demodata command gave its ledger no capability resolver, so it refused every demo trade on a database whose gates were sandbox-active |
+| F-224 | P1 | PRODUCTIZATION | fixed | A payout below the provider's published minimum was created, reserved, submitted and settled because quote_id was optional, and the fee was never taken |
+| F-225 | P1 | PRODUCTIZATION | fixed | The provider was instructed to pay no amount, to nobody, in no currency, and the request still reached SETTLED |
+| F-226 | P1 | PRODUCTIZATION | fixed | An open sanctions review, an account restriction and an unsupported jurisdiction stopped the eligibility page and stopped nothing on the conversion path |
+| F-227 | P1 | PRODUCTIZATION | fixed | The compliance and verification transition tables recorded edges and constrained none, so one INSERT reached VERIFIED and four more reached PAYOUT_KYC |
+| F-228 | P2 | PRODUCTIZATION | fixed | A payout destination the provider had said it cannot pay was accepted and marked VERIFIED whenever the client omitted country |
+| F-229 | P2 | PRODUCTIZATION | fixed | payout_requests.state and its money columns were freely writable by cp_app, so a REJECTED request was moved to SETTLED with a forged provider reference |
+| F-230 | P2 | PRODUCTIZATION | fixed | No earned Credit could ever reach a payout-eligible funding finality, and the explanation said waiting would fix it |
+| F-231 | P2 | PRODUCTIZATION | fixed | The single-use hosted verification link was written to idempotency_keys.response_body, which two read-only roles may SELECT |
+| F-232 | P3 | PRODUCTIZATION | fixed | The conversion request recorded no sandbox fact, so one payout was a rehearsal on one screen and unlabelled on two others |
+| F-233 | P3 | PRODUCTIZATION | fixed | POST /v1/payouts answered 403 for another account's destination where every sibling answers 404 |
+| F-234 | P3 | PRODUCTIZATION | fixed | PROVIDER_BOUNDARY §3 described nine methods and an error taxonomy the shipped interfaces do not have, and §2 named a route that does not exist |
+| F-249 | P2 | PRODUCTIZATION | fixed | The closure decision read its financial blockers as an aggregate, so a conversion request committing beside it left a reservation on a CLOSED account |
+| F-250 | P3 | PRODUCTIZATION | fixed | A browser scenario asserted that a reserved payout stops at VERIFIED, which the sweep had made false; it passed by reading the state before the first tick |
 | F-235 | P2 | PRODUCTIZATION | fixed | POLICY_AUTHORITY scoped the four evidence references to LIVE_* and WITHDRAWALS; the predicate the gate code consults is true for eighteen of twenty, and §1's state machine had no SANDBOX |
 | F-236 | P2 | PRODUCTIZATION | fixed | VERIFICATION_AND_WITHDRAWAL sent a caller to POST /v1/me/terms/accept; no route matches that path |
 | F-237 | P2 | PRODUCTIZATION | fixed | USER_JOURNEY's onboarding row said PUT /v1/me/profile; the path is served, but only with POST |
@@ -9234,10 +9247,16 @@ profile from UNVERIFIED to VERIFIED with no recorded edge, no actor and no
 provider reference, and the trail a regulator would read was whatever the last
 writer said." It fixes that for `identity_state` and then grants
 `UPDATE (… sanctions_state …)` back in the very next statement.
-`sanctions_state` is not an attribute: `internal/eligibility/evaluate.go` reads
-it as one of the allowlists that decides whether a payout may proceed, and
+`sanctions_state` is not an attribute: `httpapi.WithdrawalDeps.complianceFacts`
+reads it into both the eligibility explanation and `payout.EligibilityInput`, so
+a screen that is not clear blocks a conversion request outright, and
 `verification.sanctionsStateFrom` derives it from the provider's sanctions and
-PEP checks. The reproduction cleared a screening HIT as `cp_app` in one
+PEP checks. (This sentence used to name `internal/eligibility/evaluate.go` as
+the reader. That was wrong when it was written and is recorded in F-226:
+`eligibility.Evaluate`, `eligibility.Policy` and the whole `Input`/`Decision`
+engine have no production caller on any reachable path, and the surface that
+does read the screen is `eligibility.ExplainWithdrawal`. D-120 gave the
+conversion path the same reader, which is what makes this sentence true.) The reproduction cleared a screening HIT as `cp_app` in one
 statement, in the same session in which the state beside it was refused.
 
 **Fix.** Migration 00796 carries the screen on the transition row that already
@@ -10550,3 +10569,458 @@ read.
 
 **Evidence.** TEST_UNIT: `TestDocs_EveryPathTheyNameExists`. STATIC_PROOF:
 `docs/adr/0023-the-sandbox-tier.md` Consequences and Evidence sections.
+
+## F-224 · A payout below the provider's published minimum was created, reserved, submitted and settled, and the fee was never taken, because `quote_id` was optional · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the withdrawal-verification audit (goal §54), reproduced as
+`TestAuditWV_APayoutBelowTheProviderMinimumIsReservedAndSettledWithoutAQuote`.
+50 Credits — $0.50 gross — against a provider publishing a $1.00 minimum and a
+25c + 25bp fee. `POST /v1/payouts/quote` refuses it in as many words
+(`minimum_ok=false`, `net_amount_minor=25`); the same amount requested without
+naming the quote reached VERIFIED with 50 000 000 base units reserved and then
+SETTLED. Corroborated on a live sandbox tier, where the quote route answered
+`422 UNSUPPORTED` and `POST /v1/payouts` answered `201`.
+
+`quote_id` was optional in the schema, optional in `payout.CreateRequest`, and
+the WHOLE minimum-and-fee branch of `payout.Service.Create` sat inside
+`if r.QuoteID != nil`. `payout.Engine.Evaluate` had no minimum and no fee input
+at all, so a request that named no quote met neither. The handler's stated reason
+for the option — "an operator resolving a stuck payout has no quote to name" —
+was false: the route is `accountScopeWrite`, and an operator resolves through
+`ResolveManualReview`, which creates nothing.
+
+**Fix.** D-119. `quote_id` is `required` in the schema and the handler refuses
+`VALIDATION_FAILED` naming it; the false comment is gone. The minimum moves into
+the domain: `payout.CreateRequest` carries `ProviderTerms` — the provider's
+published fee model and minimum — the way it carries `DisclosureAccepted`, with
+no permissive zero value, so a caller that forgets them stops a payout rather
+than letting one through unpriced. `Create` refuses when the quote's net is under
+the minimum the provider publishes TODAY, which is the case a value copied onto
+the quote row cannot catch. Migration 00808 records the gross, the fee and the
+net the customer was shown, because a payout that settles is explained by one row
+rather than by a fee schedule that has since been repriced. What is reserved is
+the GROSS: the fee comes out of what leaves rather than being added to it, so the
+units the customer gives up are the units they asked to convert.
+
+**Evidence.** STATIC_PROOF: `internal/payout/payout.go`,
+`internal/payout/service.go`, `internal/httpapi/handlers_native.go`,
+`openapi/openapi.yaml`,
+`migrations/00808_a_conversion_request_records_the_price_the_customer_was_shown.sql`.
+TEST_INT: `TestAuditWV_APayoutBelowTheProviderMinimumIsReservedAndSettledWithoutAQuote`
+(inverted), `TestIntegration_APayoutIsRefusedUntilTheDisclosureIsAccepted`.
+TEST_UNIT: `TestCreateRequest_Validate`.
+
+## F-225 · The provider was instructed to pay no amount, to no destination, in no currency — and the request still reached SETTLED · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAuditWV_TheProviderIsToldTheAmountAndTheDestination`: a recording provider
+captured `Amount.Minor()==0`, an empty destination reference, an empty
+destination kind and an empty currency for a payout of 500 000 000 Credits, which
+then reached SETTLED with the platform's `PAYOUT_SETTLED` balance reading
+550000000.
+
+`payout.Service.Submit` built a `SubmitRequest` carrying the idempotency key, the
+reference and `money.USD{}`, and left everything else at its zero value. It took
+no quote, no destination and no amount, and read neither
+`payout_requests.quote_id` nor `destination_id`. The sandbox provider settled
+anyway, because nothing asked it to check what it had been told.
+
+**Fix.** `Submit` assembles the instruction inside the transaction that claims the
+request, from the destination and the recorded quote: the amount is the quote's
+NET in the quote's currency — what the customer was told would reach them — plus
+the destination's provider reference and kind. It is built BEFORE the claim and
+refused there, so a request that cannot be described to a provider stays in
+VERIFIED with its value reserved rather than being claimed under a committed key
+nobody can act on. `SubmitRequest.Validate()` refuses a zero amount, an empty
+currency, an empty destination reference and an undeclared kind, on the type every
+adapter is handed, so no adapter can receive one whichever caller assembled it;
+`payouttest.Sandbox` validates what it is given and records it.
+
+**Evidence.** STATIC_PROOF: `internal/payout/service.go` (`submitRequestFor`),
+`internal/payout/provider.go` (`SubmitRequest.Validate`),
+`internal/payout/payouttest/sandbox.go`. TEST_INT:
+`TestAuditWV_TheProviderIsToldTheAmountAndTheDestination` (inverted).
+
+## F-226 · An open sanctions review, an account restriction and an unsupported jurisdiction stopped `GET /v1/me/eligibility` and stopped nothing on the conversion path · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest`. A provider answer of
+the shape ADR-0025 names — document, age, jurisdiction and sanctions PASS,
+political exposure FAIL — is ingested; the profile reaches
+`identity_state=VERIFIED`, `sanctions_state=REVIEW`; the resolver reports
+PAYOUT_KYC; `eligibility.ExplainWithdrawal` reports `ACCOUNT_RESTRICTED`,
+`eligible=false`, `withdrawable=0`. `payout.Service.Create` then reserved the
+whole balance and `Submit` settled it.
+
+`payout.EligibilityInput` had no field for the sanctions state, the account
+restrictions or the jurisdiction verdict; `guardWithdraw` read only the kill
+switches and the account's status; `payoutsAdapter.Create` read no compliance
+column at all. Two surfaces answering one question from two readers, and only one
+of them reading.
+
+**Fix.** D-120. `payout.EligibilityInput` gains `SanctionsState`,
+`AccountRestrictions` and `JurisdictionSupported`, none with a permissive zero
+value, and `Engine.Evaluate` adds them to the absolute blocks beside
+`ACCOUNT_FROZEN` with the words `eligibility.ExplainWithdrawal` already uses:
+`ACCOUNT_RESTRICTED` and `JURISDICTION_RESTRICTED`. One reader answers them —
+`httpapi.WithdrawalDeps.complianceFacts` — and the eligibility page, the quote and
+the reserving transaction all call it, the last two inside their own transaction
+so the answer belongs to the snapshot the decision is made in. The sanctions
+screen is read the way the eligibility page reads it (HIT and REVIEW restrict,
+CLEAR and UNKNOWN do not); an empty value is nobody having answered, and nobody
+having answered is not a clearance.
+
+**The correction this finding also makes.** F-168's entry said
+`internal/eligibility/evaluate.go` reads `sanctions_state` "as one of the
+allowlists that decides whether a payout may proceed". It does not:
+`eligibility.Evaluate`, `eligibility.Policy` and the whole `Input`/`Decision`
+engine have no production caller on any reachable path —
+`settlement.PlanInput.Eligibility` is filled only by `settlementtest/world.go`.
+The surface that reads the screen is `eligibility.ExplainWithdrawal`, and D-120 is
+what puts the same fact on the conversion path. The unreachable engine is LEFT
+where it is rather than deleted: it is the policy shape §19 describes and what a
+second consumer would use. D-120 records that it has no caller so the next person
+does not assume one.
+
+**Evidence.** STATIC_PROOF: `internal/payout/eligibility.go`,
+`internal/httpapi/wiring_verification.go`, `internal/httpapi/wiring_native.go`.
+TEST_INT: `TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest` (inverted,
+with a sub-case per fact).
+
+## F-227 · The compliance transition table recorded edges and constrained none · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAuditWV_TheProfileTransitionTableConstrainsWhichEdgesAreLegal` and by hand
+as `cp_app` on the live database. Three INSERTs, no code path: one moved a
+compliance profile from UNVERIFIED to VERIFIED and the SECURITY DEFINER trigger
+wrote the state, the `verified_at`, the expiry and a CLEAR sanctions screen from
+it; one moved a verification session from CREATED to APPROVED for a session the
+provider was never called for; four `verification_checks` rows with `outcome`
+PASS then made `verification.Resolver.Level` report PAYOUT_KYC.
+
+`VERIFICATION_AND_WITHDRAWAL.md` §4 says nothing reaches VERIFIED except from
+PENDING, RESTRICTED or SUSPENDED, and that this "is a property of the transition
+table rather than of the code that reads it". It was a property of
+`internal/verification.CanTransition` and of nothing else: the edge bindings of
+00731 and 00741 ask whether a transition row names the state the entity is really
+in, never whether the edge that row describes exists.
+
+**Fix.** D-121, migration 00806. `compliance_profile_state_edges` and
+`verification_session_status_edges` are populated from
+`verification.StateEdges()` and `verification.SessionEdges()`, held identical to
+them by `test/integration/enums` the same way `AllStates()` is held to the CHECK,
+and both apply functions raise AD001 for an edge that is not in them. Nothing but
+`cp_migrate` may write the tables. `verification_checks` gains a BEFORE INSERT
+trigger: a check must name its session's own provider, and the session must be in
+a status only a provider ANSWER produces — PROCESSING, REQUIRES_INPUT,
+MANUAL_REVIEW, APPROVED, DECLINED — so a forged session has nothing to attach to.
+`Ingest` records the evidence after the status it belongs to rather than before
+it, which is now load-bearing rather than incidental.
+
+**The residual, stated.** A session that HAS been answered can still be given
+further check rows by `cp_app`, and on a sandbox tier a rehearsal reaches
+APPROVED legitimately. Closing that is the `capability_gates` treatment —
+revoking INSERT on `verification_checks` from `cp_app` and routing
+`Repository.RecordCheck` through a SECURITY DEFINER function — which is a change
+to one call site and is recorded in D-121 as the next step rather than done here,
+because a privilege change to evidence rows wants its own migration and its own
+exploit test. A same-state transition row can also still carry a sanctions
+screening decision, because the screen has no edge table of its own in either
+language yet.
+
+**Evidence.** STATIC_PROOF:
+`migrations/00806_a_transition_table_that_records_edges_constrains_none.sql`,
+`internal/verification/state.go`, `internal/verification/session.go`,
+`internal/verification/service.go`. TEST_INT:
+`TestAuditWV_TheProfileTransitionTableConstrainsWhichEdgesAreLegal` (all three
+assertions inverted, with a positive control),
+`TestIntegration_EveryLegalEdgeTableMatchesItsGoTable`,
+`TestIntegration_NobodyButTheMigrationRoleWritesAnEdgeTable`.
+
+## F-228 · A payout destination the provider had said it cannot pay was accepted and marked VERIFIED whenever the client omitted `country` · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, on a sandbox tier as `customer-a` with a fresh
+step-up: a BANK destination with `"country":"FR"` answered
+`503 PROVIDER_UNAVAILABLE RECIPIENT_COUNTRY_UNSUPPORTED`; the same body WITHOUT
+`country` answered `201` with status VERIFIED and usable true.
+
+`wiring_verification.go` asked `CanPayRecipient` only when the client supplied a
+country AND the provider published some, and `country` was optional in the
+schema. `payout.RecipientProfile.Validate` has always refused an empty country
+with `RECIPIENT_PROFILE_INCOMPLETE`; the adapter simply never asked it. Nothing
+ever set `RecipientProfile.Region`, so `RefusalRegionExcluded` and
+`RefusalRegionUnknown` could not fire at all, and `providerSupports` at payout
+checked only the kind and the currency.
+
+**Fix.** D-122. `country` is required in the schema, in the handler and in the
+domain; `CanPayRecipient` is asked unconditionally and about the whole profile;
+`region` is accepted, stored (00810) and required wherever the provider publishes
+excluded subdivisions for that country, refused `VALIDATION_FAILED` rather than
+`PROVIDER_UNAVAILABLE` because it is something the caller can supply;
+`providerSupports` at payout re-asks `CanPayRecipient` from the stored values
+rather than re-deriving a weaker check at the moment value would leave. The web's
+destination form makes the country a required field and asks for the region, with
+the provider's refusal rendered where the person is.
+
+**Evidence.** STATIC_PROOF: `internal/httpapi/wiring_verification.go`,
+`internal/httpapi/wiring_native.go`,
+`internal/httpapi/handlers_payout_destinations.go`,
+`internal/payout/repository.go`, `openapi/openapi.yaml`,
+`migrations/00810_a_conversion_request_says_whether_it_was_a_rehearsal.sql`,
+`apps/web/src/pages/withdraw/Destinations.tsx`. TEST_UNIT:
+`TestPostMePayoutDestinations_RequiresTheCountryItPaysInto`. TEST_E2E:
+`apps/web/e2e/scenarios/f-verified-sandbox.spec.ts` step 2b.
+
+## F-229 · `payout_requests.state` and its money columns were freely writable by `cp_app` · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase`. One
+transaction as `cp_app`: an honest transition row REJECTED to SETTLED — an edge
+`payout.CanTransition` does not have — plus an UPDATE setting the state, the
+reserved and settled quantities, the settled instant, the provider and a forged
+provider reference. It committed, and was rendered to the holder as a SETTLED
+payout of the whole amount with no ledger posting, no allocation, and its
+eligibility reasons still naming the shortfall that rejected it.
+
+Every neighbouring state column in this area got the F-42 treatment in this
+goal's wave — 00761, 00762, 00763 — and this one, the row that says whether
+somebody's money left, kept a column grant that included `state` and all four
+money columns (00713, narrowed but not removed by 00733).
+
+**Fix.** D-123, migration 00807. `payout_request_state_edges` is populated from
+`payout.StateEdges()` and enum-paired like the others;
+`cp_payout_apply_state_transition()` writes the state from the transition row and
+refuses an edge that is not in the table. The money moves ONTO the transition row
+— the two quantities and their instants — with `provider_reference` and
+`provider_status`, because every place this package wrote one of them it was also
+moving the state, so the two become one event and a quantity can no longer be
+rewritten beside a lawful move. UPDATE on `payout_requests` is revoked from
+`cp_app`, with a column grant back for the provider slot it claims before it
+calls, the decision it records, and `failure_reason`. The DEFERRED edge binding
+from 00731 stays as belt and braces: it still catches a write by a role that HAS
+the privilege with no transition row at all.
+
+**Evidence.** STATIC_PROOF:
+`migrations/00807_a_conversion_requests_state_and_its_money_are_not_the_applications_to_write.sql`,
+`internal/payout/payout.go` (`StateEdges`), `internal/payout/service.go`
+(`stateChange`, `transitionWith`). TEST_INT:
+`TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase` (with five
+privilege probes and a positive control),
+`TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach`,
+`TestIntegration_EveryLegalEdgeTableMatchesItsGoTable`.
+
+## F-230 · No earned Credit could ever reach a payout-eligible funding finality, and the explanation said waiting would fix it · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality`, and independently by
+the browser audit as **F-e2e-1** (`apps/web/e2e/audit-surface.spec.ts`, "an
+earning of a permitted origin can reach the payout path"): a verified customer
+with a tokenised sandbox destination, holding `DATA_SALE_EARNING` and
+`MARKET_TRADING_PROCEEDS`, told `FUNDING_NOT_SETTLED` with nothing able to settle
+it.
+
+`internal/nativemarket` and `internal/commerce` minted every earning at
+`FinalityReversible` unconditionally, both with a comment saying an earning
+cannot be more final than the money behind it and neither looking at the money
+behind it. The only writer that promotes a lot out of REVERSIBLE is
+`credit.Service.SettleFunding`, which keys on `credit_fundings.lot_id` — a row
+`RecordLot` never creates. `FundingFinality.PayoutEligible()` admits only SETTLED
+and UNFUNDED, so five of the six origins `valuedomain.SandboxPolicy` marks
+withdrawable could never be withdrawn on any deployment, and
+`VERIFICATION_AND_WITHDRAWAL.md` §9's "reachable end to end on a sandbox tier"
+was false for every value a sandbox tier can produce.
+
+**Fix.** D-124, migration 00809. A derived lot — trading proceeds, a creator
+earning, marketplace proceeds and the fees on them — records the lots consumed to
+fund it in `credit_lot_parents`, written at mint in the same transaction, and is
+minted at the LEAST final finality among them: UNFUNDED or SETTLED parents give a
+payout-eligible lot at birth, a REVERSIBLE parent gives a REVERSIBLE lot.
+`credit.Service.SettleDerived` promotes it once EVERY parent is payout-eligible,
+run from the settlement ticker in `cmd/api` immediately after `settleOnce`,
+batch-bounded, each lot taken under the advisory lock `SetFinality` already uses
+and tried rather than waited for. A parent that is DISPUTED or REVERSED freezes
+what was derived from it.
+
+The pool is fungible, so the pool keeps the same kind of record:
+`native_market_credit_sources` holds the lots paid into a market's reserve and
+the sell side draws them down in arrival order, so a sale's proceeds name real
+parents. A default either way would be wrong — REVERSIBLE for ever is the defect
+renamed, and payout-eligible by default is buy with a card, sell back, withdraw,
+charge back — and a draw-down the record cannot cover mints REVERSIBLE, because
+"we do not know what funded this" is not "it was settled".
+
+**What a chargeback on a spent purchase does, precisely.**
+`credit.Service.Reverse` unwinds the FUNDING'S OWN lot and posts a deficit
+against the payer. Taking value back from a third party who earned it is a
+posting kind this ledger does not have, and the earner may have spent it or had
+it paid out. What IS expressible is applied: `SettleDerived` moves a derived lot
+whose parent is DISPUTED or REVERSED to DISPUTED, which is neither spendable nor
+payout-eligible, and never promotes it. What is not expressible is the residual:
+a derived lot promoted on a SETTLED parent that is disputed months later cannot
+be clawed back from the earner, and value already spent or already paid out
+cannot be recovered at all. D-124 records that rather than inventing a posting
+for it.
+
+**Evidence.** STATIC_PROOF:
+`migrations/00809_proceeds_are_as_final_as_what_paid_for_them.sql`,
+`internal/credit/derived.go`, `internal/nativemarket/poolprovenance.go`,
+`internal/nativemarket/service.go`, `internal/commerce/service.go`,
+`cmd/api/creditsettle.go`, `internal/eligibility/withdrawal.go`. TEST_INT:
+`TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality` (inverted),
+`TestAuditWV_AProceedsLotSettlesWhenItsFundingDoesAndNotBefore`,
+`TestIntegration_ASandboxTraderEarnsProceedsThatCanReachAPayout`,
+`TestIntegration_ProceedsOfAReversiblePurchaseAreReversible`,
+`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` (narrowed to the claim
+that is now load-bearing: the GRANT never leaves by ORIGIN, and every other
+seeded lot is proved derived from it).
+
+## F-231 · The single-use hosted verification link was written to `idempotency_keys.response_body` · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAuditWV_TheHostedVerificationURLIsWrittenDownNowhere` and live: starting a
+verification session under an Idempotency-Key returned a hosted URL, and reading
+`idempotency_keys.response_body` for that key returned the body with the link in
+it, expiring twenty-four hours later.
+
+ADR-0025 §3 says the hosted URL "is handed to the browser that asked for it and
+written down nowhere", and `VERIFICATION_AND_WITHDRAWAL.md` §5 lists it under
+"Never stored". The route is Mutating, so `runCommand` marshalled the whole
+response into a row `cp_readonly` and `cp_ops` may SELECT and `cp_app` may not
+DELETE.
+
+**Fix.** D-125. `CommandResult` gains a `StoredBody`: the caller gets the whole
+answer, the record gets the answer minus the fields the route declares
+never-stored. `neverStored` is per operation and per field, because the same
+field name on a quote is a price's expiry that MUST be recorded. A replay answers
+with the session, without the link, and with a `resume` sentence telling the
+client to start a new session — saying nothing would leave a browser waiting for
+a field that is never coming. `hosted_url` stays optional in the schema, `resume`
+is added, and the Verify page renders it.
+
+**Evidence.** STATIC_PROOF: `internal/httpapi/neverstored.go`,
+`internal/httpapi/command.go`, `internal/httpapi/ports.go`,
+`internal/httpapi/wiring.go`, `openapi/openapi.yaml`,
+`apps/web/src/pages/verify/Verify.tsx`. TEST_INT:
+`TestAuditWV_TheHostedVerificationURLIsWrittenDownNowhere` (inverted, plus the
+replay). TEST_UNIT: `TestNoNeverStoredFieldReachesTheIdempotencyRecord`, which
+drives every command route in the area and reads what landed.
+
+## F-232 · The conversion request recorded no sandbox fact · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit: the payout list returned items with no `sandbox`
+field, the by-id read returned `"sandbox":true`, and the create response returned
+201 without it. The by-id read answered from
+`s.opts.Ports.Payouts.SandboxProvider()` — what the provider is NOW — and
+`payout_requests` had no column.
+
+**Fix.** Migration 00810 adds `sandbox` and `environment`, written at Create from
+the provider's availability and `cfg.SandboxTier()` as `AddDestination` already
+does, with 00762's CHECK that a rehearsal cannot exist in PROD, and `toAPIPayout`
+reads the column so the list, the create response and the by-id read agree
+(D-096 and F-158's treatment). The columns are nullable and NULL renders as a
+rehearsal: a row written before the migration has no recorded fact, and a NOT
+NULL default of false would assert about every one of them that it was real,
+which is the one direction this label must never be wrong in.
+`CreateRequest.Validate` refuses a request with no environment, so nothing in
+this binary writes another NULL.
+
+**Evidence.** STATIC_PROOF:
+`migrations/00810_a_conversion_request_says_whether_it_was_a_rehearsal.sql`,
+`internal/payout/payout.go`, `internal/payout/service.go`,
+`internal/httpapi/handlers_native.go`, `internal/httpapi/wiring_native.go`.
+TEST_UNIT: `TestCreateRequest_Validate`. TEST_E2E:
+`apps/web/e2e/scenarios/f-verified-sandbox.spec.ts` step 7.
+
+## F-233 · `POST /v1/payouts` answered 403 for another account's destination where every sibling answers 404 · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit: `customer-a` naming `customer-b`'s destination got
+403 FORBIDDEN with "that payout destination belongs to another account", and a
+non-existent id got 404. A distinguishable refusal is a membership oracle:
+anybody could learn which destination ids exist by asking.
+
+**Fix.** NOT_FOUND, "no such payout destination", in both places —
+`payoutsAdapter.Create` and `payout.Service.Quote` — which is F-41's rule and
+what `DisableDestination`, `conversionAdapter.Quote` and the by-id read already
+answer.
+
+**Evidence.** STATIC_PROOF: `internal/httpapi/wiring_native.go`,
+`internal/payout/quote.go`.
+
+## F-234 · `PROVIDER_BOUNDARY.md` §3 described a contract the shipped interfaces do not have, and §2's journey named a route that does not exist · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, by reading the document against the code: nine
+methods and an error taxonomy that are not there (a `Capabilities` that takes a
+jurisdiction, `QuotePayout`, `GetPayout`, `ListPayouts`, `ParsePayoutWebhook`,
+`RedactVerification`, retryable and terminal error classes, and a provider name
+and request id on every response), `POST /v1/me/terms/accept` where the route is
+`POST /v1/me/terms-acceptances`, and an ACCOUNT_RESTRICTED clause naming a
+restriction nothing writes.
+
+**Fix.** §3 is split into "what a Role C contract must be able to express" — the
+union of what Persona, Veriff, Sumsub, Stripe, Tilia and Thunes each require,
+kept, because it is what an adapter is designed against — and "what the shipped
+interfaces are", which lists `payout.Provider`'s three methods and
+`verification.Provider`'s, with the gap recorded as what a real adapter will add.
+The route name is corrected. `compliance_profiles.restrictions` is stated as read
+by two surfaces and written by nothing, with what would write it: a
+dual-controlled operator action on the compliance profile, which is an admin kind
+with an approval, an executor and a transition row rather than one line, so it is
+named rather than wired.
+
+**Evidence.** STATIC_PROOF: `docs/product/PROVIDER_BOUNDARY.md` §3,
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §2, §3. TEST_UNIT:
+`TestDocs_EveryPathTheyNameExists`, `TestDocs_CountsMatchTheCode`.
+
+## F-249 · The closure decision read its financial blockers as an aggregate, so a conversion request committing beside it left a reservation on a CLOSED account · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the withdrawal-verification audit's notes, against D-102.
+`profile.Repository.ClosureBlockers` reads the Credit balance, the open payout
+requests and the open native positions in one aggregate statement, and an
+aggregate read sees a snapshot. Under READ COMMITTED a `payout.Service.Create`
+committing between that read and the closure's own commit is invisible to both:
+the closure sees no open request, the payout sees an ACTIVE account, and the
+reservation lands on an account that is CLOSED a moment later — value held out of
+the balance of somebody who can no longer sign in to cancel it, recoverable only
+by an operator, and refused by `Submit` in the meantime.
+
+**Fix.** PostgreSQL will not take a row lock through an aggregate, so it is a
+second statement rather than a clause: the EFFECT path locks the person's
+`accounts` rows FOR UPDATE before it reads the blockers, and
+`payout.Service.guardWithdraw` takes FOR SHARE on the same row before it reads
+the account's status. One of the two now waits and then sees what the other did —
+either the request commits first and blocks the closure with a reason the
+operator can give the person, or the closure commits first and the request meets
+the CLOSED status in its own guard. `cp_app` may take the lock because 00744 left
+a column grant on `accounts`, which is what a row lock needs. FOR SHARE rather
+than FOR UPDATE on the payout side, so two concurrent conversion requests on one
+account do not queue behind each other there; they are already serialised on the
+lots they consume.
+
+**Evidence.** STATIC_PROOF: `internal/profile/repo.go` (`LockHoldings`),
+`internal/profile/account.go`, `internal/payout/service.go`. TEST_INT:
+`TestIntegration_ACreateWaitsForAnAccountLockTheClosureWouldHold`.
+
+## F-250 · A browser scenario asserted that a reserved payout stops at VERIFIED, which the sweep had made false · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the browser audit (F-e2e-4).
+`apps/web/e2e/scenarios/f-verified-sandbox.spec.ts` asserted that a reserved
+request stays in VERIFIED and said in as many words that "nothing in this build
+hands a reserved request to a provider, so it never reaches PROVIDER_PENDING".
+`cmd/api/payoutsweep.go` (D-085) submits reserved requests on a fifteen-second
+ticker and the sandbox provider settles five seconds after it accepts; the
+assertion passed only because it read the state immediately, before the first
+tick. The same spec explained FUNDING_NOT_SETTLED with "every Credit on a seeded
+deployment is UNFUNDED… an earning inherits that", which was not the mechanism —
+earnings were minted REVERSIBLE unconditionally, which is F-230.
+
+**Fix.** The scenario follows the request through the sweep with a bounded poll
+of the by-id read and asserts the states the deployment actually reaches, that
+the payout is labelled a rehearsal on the row rather than by asking what the
+provider is today, and that the page shows the state the request is in. The
+comment says what D-124 makes true, and the eligibility branch stops asserting
+FUNDING_NOT_SETTLED specifically: it asserts that a permitted origin which cannot
+leave says why.
+
+**Evidence.** STATIC_PROOF: `apps/web/e2e/scenarios/f-verified-sandbox.spec.ts`
+steps 3 and 7. TEST_E2E: the withdraw and verification specs against a
+sandbox-tier API on ports 18230 and 18231.

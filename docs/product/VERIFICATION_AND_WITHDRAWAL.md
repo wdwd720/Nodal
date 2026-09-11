@@ -107,14 +107,30 @@ substitute for another, and the product tells a person which one is refusing.
 | Will a provider actually send it? | `payout.Provider.Capabilities` — rails, currencies, countries, minimums, fees | `PROVIDER_UNAVAILABLE`, `MINIMUM_NOT_MET` |
 
 Plus three facts about the person that are not about the money:
-`JURISDICTION_RESTRICTED` (the versioned rule table), `ACCOUNT_RESTRICTED` (a
-freeze, a compliance hold, a sanctions review), and `TERMS_NOT_ACCEPTED` — the
-withdrawal disclosure, below.
+`JURISDICTION_RESTRICTED` (the versioned rule table), `ACCOUNT_RESTRICTED`, and
+`TERMS_NOT_ACCEPTED` — the withdrawal disclosure, below.
+
+`ACCOUNT_RESTRICTED` is a freeze, a sanctions screen that is not clear, or a
+restriction recorded against the compliance profile. Two of those three are
+written by something today: the account status is written by the account state
+machine, and `compliance_profiles.sanctions_state` is derived from the provider's
+sanctions and political-exposure checks. `compliance_profiles.restrictions` is
+read by both surfaces and **written by nothing** — the operator action that would
+write one is a dual-controlled admin kind with an approval, an executor and a
+transition row, and it does not exist yet (F-234). The clause is kept because the
+column is read and the refusal is composed from it the moment anything writes
+one.
 
 `GET /v1/me/eligibility` composes all seven and reports them per origin bucket,
 because eligibility is decided per unit of provenance and not per balance. Two
 people holding "18,450 Credits" can have entirely different withdrawable
 amounts, and that is correct.
+
+The conversion request composes the same seven, from the same reader
+(`httpapi.WithdrawalDeps.complianceFacts`), inside the transaction that reserves
+the value. Until F-226 it composed four: an open sanctions review, a restriction
+and an unsupported jurisdiction stopped this page and stopped nothing on the path
+that actually moves money.
 
 ### The withdrawal disclosure (§48, D-084)
 
@@ -251,6 +267,14 @@ hosted session URL** — those links are single-use credentials for resuming
 somebody else's identity check, so one is handed to the browser that asked for
 it and written down nowhere.
 
+"Nowhere" includes the idempotency record. `POST /v1/me/verification/sessions`
+is a command route, so its whole response used to be written to
+`idempotency_keys.response_body` — a row `cp_readonly` and `cp_ops` may SELECT
+and `cp_app` may not DELETE — and sat there for the key's whole lifetime
+(F-231). The record now keeps the response minus the fields this list names, and
+a replay of the same key answers with the session, no link, and a `resume`
+sentence telling the client to start another (D-125).
+
 A payout destination is a provider TOKEN plus a mask ("••••4242"). The request
 schema has no field for an account number, `payout.ValidateDestinationToken`
 refuses an input that looks like one (a bare number, an IBAN shape, a Luhn-valid
@@ -359,6 +383,21 @@ verification state machine, and the conversion-request surface. Both are built,
 tested against a real database, and reachable end to end on a sandbox tier.
 BLOCKED_EXTERNAL is for software that is complete and an external item that is
 genuinely unavailable (goal PART 167); it is never for missing code.
+
+**"Reachable end to end on a sandbox tier" was false when it was written, and is
+true now.** Every earning this system minted — trading proceeds, a creator
+earning, marketplace proceeds and the fees on them — was created at REVERSIBLE
+unconditionally, and the only writer that promotes a lot out of REVERSIBLE keys
+on a `credit_fundings` row an earning never has. So five of the six origins the
+sandbox payout policy marks withdrawable could not be withdrawn on any
+deployment, and this page's `FUNDING_NOT_SETTLED` — which `internal/eligibility`
+documents as a reason waiting fixes — was shown on value whose finality nothing
+could move (F-230). D-124 makes a derived lot record the lots that funded it and
+take the least final finality among them, and `credit.Service.SettleDerived`
+promotes it when they settle. An earning funded by a sandbox tier's UNFUNDED
+grants is payout-eligible at birth; one funded by a card payment inside its
+dispute window waits for that payment, which is what the reason has always
+claimed.
 
 ---
 

@@ -36,6 +36,7 @@ import (
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/payout"
+	"github.com/nodal/controlplane/internal/payout/payouttest"
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/valuation"
@@ -62,6 +63,7 @@ type domainAHarness struct {
 	commerce      *commerce.Service
 	credits       *credit.Service
 	payouts       *payout.Service
+	payoutProv    *payouttest.Sandbox
 
 	creator accounts.AccountID
 	buyer   accounts.AccountID
@@ -132,7 +134,23 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	// because DomainAExecutors registers PAYOUT_MANUAL_REVIEW_RESOLVE only when
 	// it is given one. It was built after, so the executor was never registered
 	// on this harness and the kind had no test of any kind (F-80).
-	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk,
+	// A provider that can be quoted against: a payout names the quote the
+	// customer was shown (D-119), and a quote is computed from a provider's
+	// published fee model.
+	payoutProvider := payouttest.NewSandbox("sandbox").WithCapabilities(payout.Capabilities{
+		SupportsBankPayout: true, SupportsLookup: true,
+		Currencies:         []string{"USD"},
+		SupportedCountries: []string{"US"},
+		RecipientKinds:     []string{"individual"},
+		Availability:       payout.AvailabilitySandbox,
+		FeeModelPublished:  true,
+		FeeFlat:            money.USDFromMinor(25),
+		FeeBasisPoints:     money.BPS(25),
+		FeeModelVersion:    "ITEST-PLACEHOLDER-NOT-A-PRICE",
+	})
+	payoutRegistry := payout.NewRegistry(true)
+	require.NoError(t, payoutRegistry.Register(payoutProvider))
+	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payoutRegistry, clk,
 		killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository())
 
 	fx := newFixtures()
@@ -193,7 +211,7 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	dh := &domainAHarness{
 		harness: h, db: d, clk: clk,
 		nativeAssets: assetSvc, nativeMarkets: marketSvc, commerce: commerceSvc, credits: credits,
-		payouts: payoutSvc,
+		payouts: payoutSvc, payoutProv: payoutProvider,
 		creator: seedCustomerAccount(t, d), buyer: seedCustomerAccount(t, d),
 	}
 	dh.launchMarket(t, commerceCreditAsset(t, d))

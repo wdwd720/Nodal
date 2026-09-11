@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -553,6 +554,30 @@ func newFakeIdempotency() *fakeIdempotency {
 	return &fakeIdempotency{records: map[string]fakeIdemRecord{}}
 }
 
+// storedBodies is what the store ended up holding, by operation. It is what a
+// test asserting the never-stored contract reads (F-231).
+func (f *fakeIdempotency) storedBodies() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]string{}
+	for key, rec := range f.records {
+		parts := strings.SplitN(key, "|", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		out[parts[1]] = string(rec.result.Body)
+	}
+	return out
+}
+
+// recorded is what the store keeps: the body minus anything the route has
+// declared never-stored.
+func recorded(res CommandResult) CommandResult {
+	res.Body = res.stored()
+	res.StoredBody = nil
+	return res
+}
+
 func (f *fakeIdempotency) Run(ctx context.Context, cmd IdempotentCommand, fn func(context.Context) (CommandResult, error)) (CommandResult, error) {
 	f.mu.Lock()
 	key := cmd.ActorID + "|" + cmd.Endpoint + "|" + cmd.Key
@@ -576,13 +601,16 @@ func (f *fakeIdempotency) Run(ctx context.Context, cmd IdempotentCommand, fn fun
 	if err != nil {
 		if idempotencyOutcomeIsConclusion(res.Status, errs.CodeOf(err)) {
 			f.mu.Lock()
-			f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: res}
+			f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: recorded(res)}
 			f.mu.Unlock()
 		}
 		return CommandResult{}, err
 	}
 	f.mu.Lock()
-	f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: res}
+	// The record keeps what may be kept, exactly as the real adapter does: a
+	// fake that stored the whole body would make the never-stored contract
+	// untestable in this package (F-231, D-125).
+	f.records[key] = fakeIdemRecord{hash: cmd.RequestHash, result: recorded(res)}
 	f.mu.Unlock()
 	return res, nil
 }

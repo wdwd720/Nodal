@@ -426,9 +426,18 @@ func TestIntegration_CreatorFeeCarriesItsOwnProvenance(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, lots, 1)
 	require.Equal(t, valuedomain.OriginMarketCreatorEarning, lots[0].Origin)
-	require.Equal(t, valuedomain.FinalityReversible, lots[0].Finality,
-		"value leaving the pool is funded by buyers whose own funding may still reverse")
-	require.False(t, lots[0].Finality.PayoutEligible())
+	// The fee is as final as the Credits the buyer paid it with, and it names
+	// them. The fixture funds the trader with SETTLED purchased Credits, so the
+	// creator's fee is payout-eligible; a trader spending REVERSIBLE Credits
+	// produces a REVERSIBLE fee that credit.Service.SettleDerived promotes when
+	// their purchase settles. Before D-124 this was REVERSIBLE unconditionally
+	// with nothing able to move it, which is F-230.
+	require.Equal(t, valuedomain.FinalitySettled, lots[0].Finality,
+		"a creator fee is as final as the money that paid it")
+	require.True(t, lots[0].Finality.PayoutEligible())
+	parents, perr := f.credits.ParentsOf(f.ctx, testDB, lots[0].ID)
+	require.NoError(t, perr)
+	require.NotEmpty(t, parents, "a creator fee names the trader lots that funded it")
 }
 
 func TestIntegration_SellReturnsCreditsWithTradingProceedsProvenance(t *testing.T) {

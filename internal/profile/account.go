@@ -309,6 +309,15 @@ func (s *Service) Decide(ctx context.Context, op Actor, targetUserID string, d C
 			// The refusal names the blocker rather than saying "not now": the
 			// operator has to be able to tell the person what to do about it,
 			// and REFUSE is the decision that carries that reason to them.
+			// The lock first, then the read. The blockers are an aggregate and
+			// an aggregate sees a snapshot: without this, a payout Create
+			// committing between the two is invisible to both and leaves a
+			// reservation on an account that is CLOSED a moment later, held out
+			// of the balance of somebody who can no longer sign in to cancel it
+			// (F-249).
+			if lerr := s.d.Repo.LockHoldings(ctx, tx, targetUserID); lerr != nil {
+				return lerr
+			}
 			blockers, berr := s.d.Repo.ClosureBlockers(ctx, tx, targetUserID)
 			if berr != nil {
 				return berr

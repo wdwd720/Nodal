@@ -459,30 +459,45 @@ func (s *Service) Purchase(ctx context.Context, tx pgx.Tx, r PurchaseRequest) (O
 
 	// The buyer's lots. Ordinary spending rules apply: value whose funding is
 	// disputed or reversed cannot buy anything.
-	if _, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
+	//
+	// The allocations are kept, because they are what paid for the seller's
+	// earning: proceeds cannot be more final than the money behind them, and
+	// until D-124 this package asserted that in a comment while minting
+	// REVERSIBLE unconditionally (F-230).
+	spent, err := s.credits.Consume(ctx, tx, credit.ConsumeRequest{
 		AccountID:                r.BuyerAccountID,
 		Quantity:                 p.Price,
 		JournalTxID:              post.TransactionID,
 		Reference:                credit.Reference{Type: "internal_commerce_order", ID: r.IdempotencyKey},
 		Reason:                   "internal commerce purchase",
 		RequireSpendableFinality: true,
-	}); err != nil {
+	})
+	if err != nil {
 		return Order{}, err
 	}
 
-	// The seller's earning, with the provenance the product kind dictates.
+	// The seller's earning, with the provenance the product kind dictates and
+	// the finality of the money that paid for it.
 	//
-	// Finality is REVERSIBLE, not SETTLED: the Credits that paid for this may
-	// themselves be backed by a card payment still inside its dispute window,
-	// and an earning cannot be more final than the money behind it. It is
-	// spendable, which is what the product needs, and not payout-eligible,
-	// which is the conservative half.
+	// The Credits the buyer spent may be backed by a card payment still inside
+	// its dispute window, and an earning cannot be more final than the money
+	// behind it -- so the lots that were just consumed become this lot's
+	// PARENTS and credit.RecordLot mints it at the least final finality among
+	// them. Purchased-and-settled Credits therefore produce an earning that is
+	// payout-eligible at birth; a reversible purchase produces a REVERSIBLE
+	// earning that credit.Service.SettleDerived promotes when that purchase
+	// settles, and not before (D-124).
 	if proceeds.IsPositive() {
+		parents, perr := credit.ParentsOfAllocations(spent, proceeds)
+		if perr != nil {
+			return Order{}, perr
+		}
 		if _, err := s.credits.RecordLot(ctx, tx, credit.RecordLotRequest{
 			AccountID:        earner,
 			Quantity:         proceeds,
 			Origin:           origin,
 			Finality:         valuedomain.FinalityReversible,
+			Parents:          parents,
 			Reference:        credit.Reference{Type: "internal_commerce_order", ID: r.IdempotencyKey},
 			FundingReference: &credit.Reference{Type: "internal_product", ID: p.ID.String()},
 			JournalTxID:      post.TransactionID,

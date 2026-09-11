@@ -5,6 +5,7 @@ package payout_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -32,12 +33,24 @@ func TestIntegration_APayoutIsRefusedUntilTheDisclosureIsAccepted(t *testing.T) 
 
 	before := payoutRowCount(t, f)
 
+	// A quote the person really was given, so the refusal under test is the
+	// disclosure's and not the missing-quote one D-119 added above it. The two
+	// are separate refusals and the test says so by meeting both.
+	var quote payout.Quote
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var qerr error
+			quote, qerr = f.quoteThrough(ctx, tx, 400)
+			return qerr
+		}))
+
 	var err error
 	require.Error(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			dest := f.destination
 			_, _, err = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, Quantity: q(400),
+				QuoteID: &quote.ID, ProviderTerms: f.terms(), Environment: "TEST",
 				// Not accepted. This is the state of everybody who has never
 				// withdrawn: §48 puts the document at the moment value leaves
 				// and deliberately not at signup.
@@ -49,10 +62,34 @@ func TestIntegration_APayoutIsRefusedUntilTheDisclosureIsAccepted(t *testing.T) 
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeTermsAcceptanceRequired, errs.CodeOf(err))
 
+	// And a request that names no quote at all is refused too, before anything
+	// about the person is consulted (D-119).
+	require.Error(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			dest := f.destination
+			_, _, err = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest, Quantity: q(400),
+				ProviderTerms:      f.terms(),
+				Environment:        "TEST",
+				DisclosureAccepted: true,
+				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
+			}, f.input())
+			return err
+		}))
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	assert.Contains(t, err.Error(), "quote")
+
 	assert.Equal(t, before, payoutRowCount(t, f),
 		"a refused payout leaves no request row; an ask that was never permitted is not a record")
 	assert.Equal(t, "1000", f.balance(ledger.CodeCreditBalance).String(),
 		"and nothing was reserved")
+
+	// The quote the refused commit named was not burned by it, either: a
+	// refusal that spent the quote would charge somebody for being told no.
+	var consumed *time.Time
+	require.NoError(t, testDB.QueryRow(f.ctx,
+		`SELECT consumed_at FROM payout_quotes WHERE id = $1`, quote.ID).Scan(&consumed))
+	assert.Nil(t, consumed)
 
 	// Accepted, and the same request goes through on the same inputs. That is
 	// what makes this a step rather than a denial.

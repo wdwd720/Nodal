@@ -325,12 +325,16 @@ func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
 		// A live instrument's settlement asset is not repointable.
 		"instruments": {"status"},
 		// The account, the requested quantity, the destination and both
-		// idempotency keys are not the application's to change.
+		// idempotency keys are not the application's to change -- and since
+		// 00807 neither are the state, the money beside it, or the provider's
+		// words about it. Those seven are written by
+		// cp_payout_apply_state_transition from the transition row, because a
+		// column grant on `state` plus an edge binding that never asked whether
+		// the edge exists let cp_app move a REJECTED request to SETTLED with a
+		// forged provider reference (F-229).
 		"payout_requests": {
-			"failure_reason", "policy_hash", "policy_version", "provider",
-			"provider_idempotency_key", "provider_reference", "provider_status",
-			"reserved_at", "reserved_quantity", "settled_at", "settled_quantity",
-			"state", "submitted_at", "verification_level",
+			"eligibility_reasons", "failure_reason", "policy_hash", "policy_version",
+			"provider", "provider_idempotency_key", "submitted_at", "verification_level",
 		},
 	} {
 		assert.Equal(t, want, granted(table),

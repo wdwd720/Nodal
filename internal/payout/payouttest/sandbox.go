@@ -42,8 +42,16 @@ type Sandbox struct {
 	// lookupDown makes Lookup fail, so a reconciliation attempt leaves the
 	// request unresolved rather than resolving it wrongly.
 	lookupDown bool
+	// crashNext makes the next submission record the payout and then panic,
+	// which is the process dying with the request committed in SUBMITTED.
+	crashNext bool
 
 	submits int
+
+	// last is the request the provider was actually handed. A fake that does
+	// not keep it cannot demonstrate what it was told, and "what was the
+	// provider told" turned out to be the question worth asking (F-225).
+	last payout.SubmitRequest
 }
 
 // NewSandbox returns a sandbox provider with no contract reference, which is
@@ -95,6 +103,22 @@ func (s *Sandbox) TimeoutNext() {
 	s.timeoutNext = true
 }
 
+// CrashNext makes the next submission record the payout at the provider and
+// then panic, which is what a process dying between Submit's phase-one commit
+// and applyProviderResult looks like from inside this process.
+//
+// It exists because that crash window leaves a request in SUBMITTED with a
+// committed idempotency key, and SUBMITTED is precisely the state F-115's
+// "do not resubmit" branch got wrong. The only other way to produce it was for
+// a test to write the state by hand, which migration 00807 rightly refuses:
+// PAYOUT_STATUS_UNKNOWN -> SUBMITTED is an edge the state machine does not have
+// and a fixture should not have been able to forge (F-225).
+func (s *Sandbox) CrashNext() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.crashNext = true
+}
+
 // SetLookupDown controls whether Lookup works.
 func (s *Sandbox) SetLookupDown(down bool) {
 	s.mu.Lock()
@@ -120,11 +144,26 @@ func (s *Sandbox) Attempts() int {
 	return s.submits
 }
 
+// LastRequest is the SubmitRequest this provider was last handed.
+func (s *Sandbox) LastRequest() payout.SubmitRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.last
+}
+
 // Submit sends a payout, idempotently.
+//
+// It validates what it was given first, and returns the refusal rather than
+// paying. A real provider does the same thing in its own words; a fake that
+// accepted an empty instruction would hide exactly the defect F-225 was.
 func (s *Sandbox) Submit(_ context.Context, req payout.SubmitRequest) (payout.SubmitResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.last = req
 	s.submits++
+	if err := req.Validate(); err != nil {
+		return payout.SubmitResult{}, err
+	}
 
 	if existing, ok := s.byKey[req.IdempotencyKey]; ok {
 		// The defining behaviour: the same key is the same payout, always.
@@ -154,6 +193,12 @@ func (s *Sandbox) Submit(_ context.Context, req payout.SubmitRequest) (payout.Su
 		// Recorded, then lost. The caller learns nothing; the provider has
 		// paid.
 		return payout.SubmitResult{}, payout.ErrProviderUnavailable
+	}
+	if s.crashNext {
+		s.crashNext = false
+		// Recorded, and then this process stops existing. The request stays in
+		// SUBMITTED, committed, with the key on disk.
+		panic("payouttest: the process died after the provider took the payout")
 	}
 	return res, nil
 }

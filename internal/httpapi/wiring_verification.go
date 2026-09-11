@@ -107,6 +107,64 @@ func (w WithdrawalDeps) disclosureAccepted(ctx context.Context, q db.Querier, ac
 	return len(outstanding) == 0, nil
 }
 
+// accountFacts are the compliance facts every decision on the withdrawal
+// journey is made against.
+//
+// One reader, because there used to be none: GET /v1/me/eligibility read the
+// restrictions, the jurisdiction verdict and the sanctions screen and refused on
+// them, and the conversion path read no compliance column at all -- so an
+// account under an open sanctions review was told it could withdraw nothing
+// while payout.Service.Create reserved its whole balance and Submit settled it
+// (F-226, D-120). Two surfaces answering one question from two readers is the
+// defect; this is the one reader.
+type accountFacts struct {
+	// Restrictions are the codes recorded against the compliance profile, plus
+	// the sanctions screen when it is not clear, in the form
+	// eligibility.ExplainWithdrawal expects.
+	Restrictions []string
+	// Sanctions is the screening decision itself, passed on unflattened so the
+	// payout engine can read it the way this adapter does.
+	Sanctions compliance.SanctionsState
+	// JurisdictionSupported is the verification rule table's verdict.
+	JurisdictionSupported bool
+}
+
+// complianceFacts reads them, on the caller's querier so the answer belongs to
+// the same snapshot the decision is made in.
+//
+// A deployment with no compliance repository establishes nothing, and nothing
+// established is not permission: the zero value blocks in both engines, which is
+// the direction a mistake here has to fall.
+func (w WithdrawalDeps) complianceFacts(ctx context.Context, q db.Querier, accountID accounts.AccountID) (accountFacts, error) {
+	var out accountFacts
+	if w.Compliance == nil {
+		return out, nil
+	}
+	var owner accounts.UserID
+	if err := q.QueryRow(ctx, `SELECT owner_user_id FROM accounts WHERE id = $1`, accountID).Scan(&owner); err != nil {
+		// An absent account is answered NOT_FOUND by the account read that
+		// every caller makes first; anything here is an infrastructure failure
+		// and must not be reported as "no restrictions".
+		return accountFacts{}, errs.Wrap(err, errs.CodeInternal, "compliance: read account owner")
+	}
+	profile, err := w.Compliance.Get(ctx, q, owner)
+	if err != nil && errs.CodeOf(err) != errs.CodeNotFound {
+		return accountFacts{}, err
+	}
+	out.Restrictions = append([]string(nil), profile.Restrictions...)
+	out.Sanctions = profile.SanctionsState
+	out.JurisdictionSupported, _ = rules.CheckJurisdiction(rules.Jurisdiction{
+		Country: profile.JurisdictionCountry, Region: profile.JurisdictionRegion,
+	})
+	if profile.SanctionsState == compliance.SanctionsHit || profile.SanctionsState == compliance.SanctionsReview {
+		// A sanctions hit or an open review is an account-level restriction in
+		// every sense that matters here, and reporting it as one is what makes
+		// the explanation match what the payout engine will actually do.
+		out.Restrictions = append(out.Restrictions, "SANCTIONS_"+string(profile.SanctionsState))
+	}
+	return out, nil
+}
+
 // wireWithdrawal attaches the verification, eligibility and conversion ports
 // that have services behind them and leaves the rest nil.
 func wireWithdrawal(p *Ports, d WireDeps) {
@@ -260,31 +318,12 @@ func (a eligibilityAdapter) applyAccountFacts(ctx context.Context, accountID acc
 		}
 		in.AccountFrozen = acct.Status != accounts.StatusActive
 	}
-	if a.withdrawal.Compliance == nil {
-		return nil
-	}
-	var owner accounts.UserID
-	if err := a.db.QueryRow(ctx, `SELECT owner_user_id FROM accounts WHERE id = $1`, accountID).Scan(&owner); err != nil {
-		// The account read above already answered NOT_FOUND for an absent
-		// account; anything here is an infrastructure failure and must not be
-		// reported as "no restrictions".
-		return errs.Wrap(err, errs.CodeInternal, "eligibility: read account owner")
-	}
-	profile, err := a.withdrawal.Compliance.Get(ctx, a.db, owner)
-	if err != nil && errs.CodeOf(err) != errs.CodeNotFound {
+	facts, err := a.withdrawal.complianceFacts(ctx, a.db, accountID)
+	if err != nil {
 		return err
 	}
-	in.AccountRestrictions = append([]string(nil), profile.Restrictions...)
-	ok, _ := rules.CheckJurisdiction(rules.Jurisdiction{
-		Country: profile.JurisdictionCountry, Region: profile.JurisdictionRegion,
-	})
-	in.JurisdictionSupported = ok
-	if profile.SanctionsState == compliance.SanctionsHit || profile.SanctionsState == compliance.SanctionsReview {
-		// A sanctions hit or an open review is an account-level restriction in
-		// every sense that matters here, and reporting it as one is what makes
-		// the explanation match what the payout engine will actually do.
-		in.AccountRestrictions = append(in.AccountRestrictions, "SANCTIONS_"+string(profile.SanctionsState))
-	}
+	in.AccountRestrictions = facts.Restrictions
+	in.JurisdictionSupported = facts.JurisdictionSupported
 	return nil
 }
 
@@ -454,14 +493,38 @@ func (a conversionAdapter) AddDestination(ctx context.Context, r AddPayoutDestin
 		return payout.Destination{}, errs.Newf(errs.CodeProviderUnavailable,
 			"the payout provider %q does not pay in %s", provider.Name(), r.Currency)
 	}
-	if r.Country != "" && len(caps.SupportedCountries) > 0 {
-		if ok, refusals := caps.CanPayRecipient(payout.RecipientProfile{
-			Kind: "individual", Country: r.Country,
-		}); !ok {
-			return payout.Destination{}, errs.Newf(errs.CodeProviderUnavailable,
-				"the payout provider %q does not pay recipients in %s", provider.Name(), r.Country).
-				WithField("refusals", refusalCodes(refusals))
+	// Asked unconditionally, and about the whole profile.
+	//
+	// It used to be `if r.Country != "" && len(caps.SupportedCountries) > 0`,
+	// so a client that simply omitted `country` skipped the question entirely
+	// and the destination was accepted and marked VERIFIED -- the same body with
+	// `"country":"FR"` was refused 503 RECIPIENT_COUNTRY_UNSUPPORTED. And
+	// nothing ever set a region, so RECIPIENT_REGION_EXCLUDED and
+	// RECIPIENT_REGION_UNKNOWN could not fire at all and a provider that pays
+	// the United States but not New York had no way to say so (F-228, D-122).
+	//
+	// `country` is required by the schema and by the domain now, so the profile
+	// is answerable; the region is required exactly where the provider
+	// publishes exclusions for that country, because "we do not know which
+	// state" is not "any state".
+	if ok, refusals := caps.CanPayRecipient(payout.RecipientProfile{
+		Kind: "individual", Country: r.Country, Region: r.Region,
+	}); !ok {
+		code := errs.CodeProviderUnavailable
+		detail := "the payout provider " + provider.Name() + " does not pay recipients in " + r.Country
+		for _, refusal := range refusals {
+			switch refusal {
+			case payout.RefusalProfileIncomplete, payout.RefusalRegionUnknown:
+				// Not the provider's fault and not a refusal of this person:
+				// something the caller can supply is missing.
+				code = errs.CodeValidationFailed
+				detail = "this payout provider excludes some subdivisions of " + r.Country +
+					", so a destination there has to say which one it pays into"
+			}
 		}
+		return payout.Destination{}, errs.New(code, detail).
+			WithField("refusals", refusalCodes(refusals)).
+			WithField("provider", provider.Name())
 	}
 
 	var out payout.Destination
@@ -476,6 +539,7 @@ func (a conversionAdapter) AddDestination(ctx context.Context, r AddPayoutDestin
 			MaskedDisplay:     r.MaskedDisplay,
 			Currency:          r.Currency,
 			Country:           r.Country,
+			Region:            r.Region,
 			Sandbox:           caps.Availability == payout.AvailabilitySandbox || a.withdrawal.SandboxTier,
 		})
 		if cerr != nil {
@@ -587,15 +651,27 @@ func (a conversionAdapter) Quote(ctx context.Context, r CreatePayoutQuote) (payo
 		// What value WOULD leave, computed from the same engine the payout
 		// itself will use, with nothing reserved. A person is entitled to know
 		// what is leaving before they commit to it (§23).
+		//
+		// The compliance facts are read in this transaction and handed to the
+		// engine, so the provenance shown beside a quote is the provenance the
+		// commit would actually consume rather than an optimistic one computed
+		// without them (D-120).
+		facts, ferr := a.withdrawal.complianceFacts(ctx, tx, r.AccountID)
+		if ferr != nil {
+			return ferr
+		}
 		decision, eerr := a.deps.PayoutEngine.Evaluate(ctx, tx, payout.EligibilityInput{
-			AccountID:           r.AccountID,
-			Requested:           r.Amount,
-			Policy:              policy,
-			Verified:            level,
-			ActiveCaps:          caps,
-			Now:                 a.clk.Now().UTC(),
-			DestinationVerified: dest.Status.Usable(),
-			ProviderSupports:    true,
+			AccountID:             r.AccountID,
+			Requested:             r.Amount,
+			Policy:                policy,
+			Verified:              level,
+			ActiveCaps:            caps,
+			Now:                   a.clk.Now().UTC(),
+			DestinationVerified:   dest.Status.Usable(),
+			ProviderSupports:      true,
+			SanctionsState:        facts.Sanctions,
+			AccountRestrictions:   facts.Restrictions,
+			JurisdictionSupported: facts.JurisdictionSupported,
 		})
 		if eerr != nil {
 			return eerr

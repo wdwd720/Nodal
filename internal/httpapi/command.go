@@ -88,6 +88,11 @@ func runCommand[T any](ctx context.Context, s *Server, key string, fn func(conte
 			ResourceType: meta.ResourceType,
 			ResourceID:   meta.ResourceID,
 			Body:         body,
+			// What the RECORD may keep, which is not always the whole answer:
+			// a response carrying something the product documents as never
+			// stored is stripped of it before it reaches idempotency_keys
+			// (F-231, D-125). This caller still gets `body`.
+			StoredBody: redactForStorage(cmd.Endpoint, body),
 		}, nil
 	})
 	if err != nil {

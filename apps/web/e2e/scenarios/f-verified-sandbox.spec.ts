@@ -36,6 +36,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
+import { chooseIdentity } from "../onboarding.ts";
 import {
   SAME_ORIGIN,
   accountIdOf,
@@ -56,6 +57,7 @@ async function eligibilityOf(page: Page, accountId: string): Promise<{
   readonly minimum_quantity?: string;
   readonly destination_configured?: boolean;
   readonly jurisdiction_supported?: boolean;
+  readonly reasons: readonly string[];
   readonly buckets: ReadonlyArray<{
     readonly origin: string;
     readonly quantity: string;
@@ -74,7 +76,7 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   browser,
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
 
   // --- the earning -------------------------------------------------------
   // The buyer is the suite's own session. The purchase is this scenario's
@@ -138,6 +140,52 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   expect(usable?.provider, "the provider is the rehearsal one").toBe("sandbox_payout");
   expect(usable?.sandbox, "the destination is labelled a rehearsal").toBe(true);
 
+  // 2b · And the provider is asked about the recipient, always (D-122).
+  //
+  // `country` used to be optional, and the provider was asked only when the
+  // client supplied one -- so the same form with FR came back
+  // RECIPIENT_COUNTRY_UNSUPPORTED and a blank country came back 201 with status
+  // VERIFIED. Both halves are driven through the page rather than the API,
+  // because registering a destination needs a recent strong sign-in and a bare
+  // request would be answered STEP_UP_REQUIRED before it reached the question.
+  await seller.goto("/withdraw");
+  await seller.waitForLoadState("networkidle");
+  const where = seller.getByRole("region", { name: "Where value would be sent" });
+  await where.getByRole("button", { name: "Add a destination" }).click();
+  await seller.getByLabel("The provider's token").fill("sbx_tok_country_probe");
+
+  // With no country the page will not submit, and says why rather than leaving
+  // a dead button.
+  await expect(
+    seller.getByRole("button", { name: "Register this destination" }),
+  ).toBeDisabled();
+
+  // With a country this provider does not pay, the refusal is the provider's
+  // and it is rendered where the person is. A second registration may ask for
+  // the step-up again, which is the control working; the round trip is walked
+  // rather than avoided.
+  await seller.getByLabel("Country").fill("FR");
+  await seller.getByRole("button", { name: "Register this destination" }).click();
+  const stepUp = seller.getByRole("button", { name: "Confirm it's you" });
+  const refusal = seller.locator(".explain").filter({ hasText: /FR|recipient|provider/i });
+  await expect(stepUp.or(refusal).first()).toBeVisible();
+  if ((await stepUp.count()) > 0) {
+    await stepUp.first().click();
+    await chooseIdentity(seller, { identity: "customer-b", mfa: true, waitFor: /\/withdraw/ });
+    await seller.waitForLoadState("networkidle");
+    await seller.getByRole("button", { name: "Register this destination" }).click();
+  }
+  await expect(refusal.first()).toBeVisible();
+
+  const after = await seller.request.get(`/v1/me/payout-destinations?account_id=${sellerId}`);
+  const afterRows = (await after.json()) as ReadonlyArray<{ readonly country?: string }>;
+  expect(
+    afterRows.some((row) => row.country === "FR"),
+    "a destination the provider said it cannot pay is not registered",
+  ).toBe(false);
+  await seller.goto("/withdraw");
+  await seller.waitForLoadState("networkidle");
+
   const balanceBefore = await creditBalance(seller, sellerId);
   const payoutsBefore = await seller.request.get(`/v1/payouts?account_id=${sellerId}`);
   const countBefore = ((await payoutsBefore.json()) as { readonly items: readonly unknown[] }).items
@@ -170,29 +218,44 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   expect(promotional?.payout_allowed, "a promotional grant never leaves").toBe(false);
   expect(BigInt(promotional?.withdrawable ?? "1")).toBe(0n);
 
-  // # Why nothing is withdrawable here even so
+  // # What holds value back here, and what no longer does
   //
   // Every Credit on a seeded deployment is UNFUNDED: `scripts/seedeconomy`
   // grants them PROMOTIONAL and unfunded on purpose, because nobody paid for
-  // them. An earning derived from spending them inherits that, so the permitted
-  // origin above is held by FUNDING_NOT_SETTLED — the engine refusing to let
-  // value leave that nothing ever funded. It is the correct answer and it is
-  // the second half of the same rule: the policy permits the ORIGIN and the
-  // finality still refuses.
+  // them. This spec used to explain the refusal by saying an earning "inherits
+  // that" — it did not. internal/commerce and internal/nativemarket minted
+  // every earning REVERSIBLE unconditionally, and the only writer that promotes
+  // a lot out of REVERSIBLE reads `credit_fundings.lot_id`, which an earning has
+  // never had. So the refusal was not the finality model working; it was F-230,
+  // and no earning on any deployment could ever be withdrawn.
   //
-  // Making this branch fall the other way needs a real Credit purchase (the
-  // provider path scenario B owns) and a settlement window that has closed. The
-  // spec follows whichever answer the tier gives rather than asserting one it
-  // cannot produce.
-  const holdsUnfunded = eligible.buckets.some((bucket) =>
-    bucket.reasons.includes("FUNDING_NOT_SETTLED"),
-  );
-  if (!eligible.eligible) {
+  // D-124 makes an earning as final as what paid for it: it records the lots it
+  // was funded from and is minted at the least final finality among them. An
+  // earning funded by an UNFUNDED grant is therefore UNFUNDED and
+  // payout-eligible, and one funded by a card payment inside its dispute window
+  // is REVERSIBLE until `credit.Service.SettleDerived` promotes it — which is
+  // what FUNDING_NOT_SETTLED has always claimed and could not deliver.
+  //
+  // The spec still follows whichever answer the tier gives rather than
+  // asserting one it cannot produce: what the seeded catalogue sells, and
+  // therefore what funds the sale, is not this scenario's subject.
+  if (eligible.eligible) {
+    // Something may leave, which is what D-124 made reachable at all.
+    expect(BigInt(eligible.withdrawable_now) > 0n).toBe(true);
+  } else {
+    // Not eligible, and the answer says WHY rather than reporting a silent no.
+    // The reason this early in the journey is ordinarily TERMS_NOT_ACCEPTED --
+    // the withdrawal disclosure is read and accepted at step 4, on the page,
+    // which is where §48 puts it -- and it may equally be a minimum not met or
+    // a hold period, depending on what the seeded catalogue sold and what
+    // funded it. Asserting a particular one would be asserting something this
+    // scenario does not control; asserting that there IS one is the property.
     expect(
-      holdsUnfunded,
-      "nothing is withdrawable, and the reason is a stated one rather than a silent zero",
-    ).toBe(true);
-    expect(eligible.withdrawable_now).toBe("0");
+      eligible.reasons.length,
+      `nothing is withdrawable and no reason was given; buckets: ${eligible.buckets
+        .map((bucket) => `${bucket.origin}=${bucket.reasons.join("/")}`)
+        .join(" ")}`,
+    ).toBeGreaterThan(0);
   }
 
   // 4 · A quote, through the page. It reserves nothing and writes no ledger row.
@@ -288,15 +351,54 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
     expect(slice.origin, "only an origin the policy permits is consumed").not.toBe("PROMOTIONAL");
   }
 
-  // 7 · And it stops here. Nothing in this build hands a reserved request to a
-  // provider, so it never reaches PROVIDER_PENDING and the rehearsal provider's
-  // ten-second settlement is never asked for. The page says the state it is
-  // actually in rather than implying movement.
+  // 7 · And then the sweep takes it. `cmd/api/payoutsweep.go` (D-085) hands a
+  // reserved request to the provider every fifteen seconds and asks about it
+  // five seconds later; the rehearsal provider settles ten seconds after it
+  // accepts. So the provider leg happens on its own, without this file touching
+  // the database.
+  //
+  // This spec used to assert the request "stops at VERIFIED" and say that
+  // nothing in this build hands a reserved request to a provider. That was true
+  // when it was written and had stopped being true: the assertion passed only
+  // because it read the state immediately, before the first tick (F-250). What
+  // is asserted now is what the deployment actually does, observed rather than
+  // assumed, with a bounded wait.
+  const seen = new Set<string>([followed.state]);
+  let final = followed.state;
+  for (let attempt = 0; attempt < 24 && final !== "SETTLED" && final !== "FAILED"; attempt += 1) {
+    const poll = await seller.request.get(`/v1/payouts/${request?.payout_id ?? ""}`);
+    const body = (await poll.json()) as { readonly state: string };
+    final = body.state;
+    seen.add(final);
+    if (final === "SETTLED" || final === "FAILED") break;
+    await seller.waitForTimeout(5000);
+  }
   expect(
-    ["VERIFIED", "ELIGIBILITY_CHECK", "DRAFT"],
-    "a reserved request waits rather than being submitted by this build",
-  ).toContain(followed.state);
-  await expect(seller.getByRole("region", { name: "This request" })).toContainText(followed.state);
+    final,
+    `the request did not reach the rehearsal provider's settlement; states seen: ${[...seen].join(" → ")}`,
+  ).toBe("SETTLED");
+
+  // And no value moved anywhere real. The payout is labelled a rehearsal on the
+  // row itself rather than by asking what the provider happens to be today
+  // (F-232), the provider is the rehearsal one, and the page says the state the
+  // request is actually in.
+  const settled = await seller.request.get(`/v1/payouts/${request?.payout_id ?? ""}`);
+  const settledBody = (await settled.json()) as {
+    readonly state: string;
+    readonly sandbox?: boolean;
+    readonly provider?: string;
+  };
+  expect(settledBody.sandbox, "the payout is labelled a rehearsal").toBe(true);
+  if (settledBody.provider !== undefined && settledBody.provider !== "") {
+    expect(settledBody.provider, "the rehearsal provider is the one it went to").toBe(
+      "sandbox_payout",
+    );
+  }
+  await seller.goto("/withdraw");
+  await seller.waitForLoadState("networkidle");
+  await expect(seller.getByRole("region", { name: "This request" })).toContainText(
+    settledBody.state,
+  );
 
   await seller.context().close();
 });

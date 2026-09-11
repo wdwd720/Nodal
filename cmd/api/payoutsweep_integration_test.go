@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
@@ -106,8 +109,8 @@ func newPayoutSweepFixture(t *testing.T) *payoutSweepFixture {
 		func(ctx context.Context, tx pgx.Tx) error {
 			dest, derr := svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: acct.ID, Kind: payout.DestinationBank,
-				Provider: payoutsandbox.Name, ProviderReference: "dest-" + id.New[id.Any]().String(),
-				DisplayLabel: "Test bank", Currency: "USD",
+				Provider: payoutsandbox.Name, ProviderReference: sandboxHandle(),
+				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if derr != nil {
 				return derr
@@ -159,9 +162,37 @@ func (f *payoutSweepFixture) reserve(t *testing.T, amount int64) payout.Request 
 	dest := f.destination
 	require.NoError(t, f.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
+			// A payout names the quote the customer was shown (D-119), so the
+			// sweep fixture has to produce one: the sweep submits what the
+			// surfaces reserved, and a reservation now always has a price
+			// behind it.
+			d, derr := f.svc.Destination(ctx, tx, dest)
+			if derr != nil {
+				return derr
+			}
+			quote, qerr := f.svc.Quote(ctx, tx, payout.QuoteRequest{
+				AccountID: f.account, DestinationID: dest,
+				Quantity:               money.QuantityFromInt64(amount),
+				CreditsPerMajorUnit:    1,
+				MinorUnitsPerMajorUnit: 100,
+				CreditDecimals:         0,
+				PricingVersion:         "sweep-itest-pricing-v1",
+				PolicyVersion:          sweepPolicy().Version,
+				Currency:               "USD",
+				Environment:            "TEST",
+				Sandbox:                true,
+				DisclosureAccepted:     true,
+				IdempotencyKey:         "quote-" + id.New[id.Any]().String(),
+				Now:                    f.clk.Now(),
+			}, d)
+			if qerr != nil {
+				return qerr
+			}
 			r, _, cerr := f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest,
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
 				Quantity:           money.QuantityFromInt64(amount),
+				ProviderTerms:      payout.TermsFrom(f.provider.Capabilities()),
+				Environment:        "TEST",
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + id.New[id.Any]().String(),
 				EffectiveAt:        f.clk.Now(),
@@ -171,6 +202,8 @@ func (f *payoutSweepFixture) reserve(t *testing.T, amount int64) payout.Request 
 				ActiveCaps:          map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
 				Now:                 f.clk.Now(),
 				DestinationVerified: true, ProviderSupports: true,
+				SanctionsState:        compliance.SanctionsClear,
+				JurisdictionSupported: true,
 			})
 			req = r
 			return cerr
@@ -294,4 +327,16 @@ func TestIntegration_ASweepWithNoProviderDoesNothing(t *testing.T) {
 	runPayoutSweeps(ctx, f.db, empty, f.clk,
 		quietLogger())
 	assert.Equal(t, payout.StateVerified, f.stateOf(t, req.ID))
+}
+
+// sandboxHandle is a provider token a fixture can use safely.
+//
+// It replaces the UUID's dashes with a letter rather than stripping them,
+// because payout.ValidateDestinationToken strips '-' before looking for a
+// thirteen-to-nineteen digit run and Luhn-checking it -- and a raw
+// "dest-<uuid>" produces such a run, passing the checksum about one time in
+// ten. A fixture that is refused at random is a fixture that teaches people to
+// rerun the suite.
+func sandboxHandle() string {
+	return "sbx" + strings.ReplaceAll(uuid.NewString(), "-", "x")
 }

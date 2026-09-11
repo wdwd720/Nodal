@@ -848,15 +848,18 @@ export interface CreatePayoutRequest {
   readonly amount: string;
   readonly destinationId?: string;
   /**
-   * The quote the customer was actually shown.
+   * The quote the customer was actually shown, and it is REQUIRED.
    *
    * It is consumed in the same transaction that reserves the value, so one
    * quote funds exactly one payout and an expired or already-used one refuses
    * the request before anything is decided about the money. Sending it is what
    * makes "the number you saw is the number you get" a property of the system
-   * rather than a hope about timing.
+   * rather than a hope about timing -- and without it there is no fee and no
+   * minimum to judge the payout against, which is how a payout below the
+   * provider's published minimum was reserved and settled with the fee never
+   * taken (D-119).
    */
-  readonly quoteId?: string;
+  readonly quoteId: string;
   readonly idempotencyKey: string;
 }
 
@@ -869,8 +872,8 @@ export function useCreatePayout(): UseMutationResult<PayoutRequest, unknown, Cre
         body: {
           account_id: r.accountId,
           amount: r.amount,
+          quote_id: r.quoteId,
           ...(r.destinationId !== undefined ? { destination_id: r.destinationId } : {}),
-          ...(r.quoteId !== undefined ? { quote_id: r.quoteId } : {}),
         },
       });
       return validatedPayout<PayoutRequest>(data, "/payouts");
@@ -2075,7 +2078,14 @@ export interface AddDestinationInput {
   readonly providerToken: string;
   readonly displayLabel?: string;
   readonly currency?: string;
-  readonly country?: string;
+  /**
+   * REQUIRED by the API: the provider is asked whether it can pay a recipient
+   * there before the destination is registered, and it cannot be asked about a
+   * country nobody stated (D-122).
+   */
+  readonly country: string;
+  /** The subdivision, where the provider distinguishes them. */
+  readonly region?: string;
   readonly idempotencyKey: string;
 }
 
@@ -2106,7 +2116,8 @@ export function useAddDestination(): UseMutationResult<PayoutDestination, unknow
             ? {}
             : { display_label: input.displayLabel }),
           ...(input.currency === undefined || input.currency === "" ? {} : { currency: input.currency }),
-          ...(input.country === undefined || input.country === "" ? {} : { country: input.country }),
+          country: input.country,
+          ...(input.region === undefined || input.region === "" ? {} : { region: input.region }),
         },
       });
       return validated<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations");

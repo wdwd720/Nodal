@@ -110,6 +110,36 @@ The hosted URL is **not** stored. Those links are single-use, expire in minutes,
 and are a credential for resuming somebody else's identity check; one is handed
 to the browser that asked for it and written down nowhere.
 
+"Nowhere" has to include the idempotency record, and for a while it did not.
+`POST /v1/me/verification/sessions` is a command route, so `runCommand`
+marshalled its whole response into `idempotency_keys.response_body` — a row
+`cp_readonly` and `cp_ops` may SELECT and `cp_app` may not DELETE — where it sat
+for the key's lifetime, for every session anybody started (F-231). The record now
+keeps the response minus the fields the product documents as never stored, and a
+replay of the same key answers with the session, no link, and a sentence saying
+to start another (D-125). The sentence matters: an omission would leave a browser
+waiting for a field that is never coming.
+
+### 3a. The state machines are edge sets the DATABASE reads
+
+This ADR and `VERIFICATION_AND_WITHDRAWAL.md` §4 both said that "nothing reaches
+VERIFIED except from PENDING, RESTRICTED or SUSPENDED" is a property of the
+transition table rather than of the code that reads it. Until migration 00806 it
+was a property of `internal/verification.CanTransition` and of nothing else: the
+edge bindings of 00731 and 00741 ask whether a transition row names the state the
+entity is really in, and never whether the edge it describes exists. One INSERT
+as `cp_app` reached VERIFIED with a CLEAR sanctions screen, and one more moved a
+session the provider had never been called for to APPROVED (F-227).
+
+`compliance_profile_state_edges` and `verification_session_status_edges` are the
+edge sets, populated from the Go tables and held identical to them by
+`test/integration/enums`; both apply functions refuse an edge that is not there,
+and nothing but `cp_migrate` may write the tables. Evidence gets the matching
+rule: a `verification_checks` row must name its session's own provider, and the
+session must be in a status only a provider ANSWER produces. The residual —
+further check rows on a session that HAS been answered — is recorded in D-121
+with the privilege change that would close it.
+
 ### 4. Age, jurisdiction and sanctions are versioned rule tables in code
 
 `internal/verification/rules` holds them, as data with a version string that is

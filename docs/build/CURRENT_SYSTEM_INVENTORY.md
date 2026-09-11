@@ -727,3 +727,62 @@ route, no change to the ledger, the lot event stream or the payout path. The
 shipped pricing policy issues 10^6 times what it did, which is the fix; no
 deployment has ever sold a Credit, so there are no fundings recorded under the
 old arithmetic.
+
+## Addendum — 2026-09-11: what the withdrawal-verification audit changed (F-224 … F-234, F-249, F-250)
+
+Five migrations, 00806–00810. Architecture: D-119 … D-125, ADR-0025, ADR-0026,
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md`.
+
+### Tables and migrations
+
+| Migration | Table | What it holds | State machine |
+|---|---|---|---|
+| 00806 | `compliance_profile_state_edges` | the legal edges of the §20 verification state machine, populated from `verification.StateEdges()` | read by `cp_compliance_apply_state_transition`; SELECT only for every role but `cp_migrate` |
+| 00806 | `verification_session_status_edges` | the legal edges of the session machine, from `verification.SessionEdges()` | read by `cp_verification_apply_status_transition`; SELECT only |
+| 00807 | `payout_request_state_edges` | the legal edges of the payout machine, from `payout.StateEdges()` | read by `cp_payout_apply_state_transition`; SELECT only |
+| 00807 | `payout_request_transitions` (altered) | gains `reserved_quantity`, `settled_quantity`, `reserved_at`, `settled_at`, `provider_reference`, `provider_status` | the trigger writes all six onto `payout_requests`; NULL means the row says nothing about that number |
+| 00807 | `payout_requests` (altered) | UPDATE revoked from `cp_app`; column grant back for `provider`, `provider_idempotency_key`, `submitted_at`, `verification_level`, `policy_version`, `policy_hash`, `eligibility_reasons`, `failure_reason` | F-42 treatment: the state and the money are the transition row's to write |
+| 00808 | `payout_requests` (altered) | gains `quote_gross_amount_minor`, `quote_fee_amount_minor`, `quote_net_amount_minor`, `quote_currency` | written once at INSERT; three CHECKs: all four or none, the fee is inside the gross, a price names its quote |
+| 00809 | `credit_lot_parents` | which lots were consumed to fund a derived lot, and how much of each | append-only; a lot may not be its own parent |
+| 00809 | `native_market_credit_sources` | the credit lots paid into a market's pooled reserve, drawn down in arrival order when credits leave it | `cp_app` may write `remaining` and nothing else |
+| 00810 | `payout_requests` (altered) | gains `sandbox`, `environment` | `CHECK (NOT coalesce(sandbox,false) OR environment IS DISTINCT FROM 'PROD')`; NULL is a row written before this migration and renders as a rehearsal |
+| 00810 | `payout_destinations` (altered) | gains `region` | required wherever the provider publishes excluded subdivisions for the country |
+
+### Functions
+
+| Migration | Function | What it does |
+|---|---|---|
+| 00806 | `cp_compliance_apply_state_transition()` (replaced) | refuses an edge that is not in `compliance_profile_state_edges`, then writes the state, the timestamps and the screen as before |
+| 00806 | `cp_verification_apply_status_transition()` (replaced) | refuses an edge that is not in `verification_session_status_edges`, then writes the status |
+| 00806 | `cp_verification_check_has_a_session()` | BEFORE INSERT on `verification_checks`: the row must name its session's own provider, and the session must be in a status a provider answer produces |
+| 00807 | `cp_payout_apply_state_transition()` | SECURITY DEFINER; refuses an illegal edge, then writes `payout_requests.state` and the six columns above from the transition row |
+
+Every new definer pins `search_path = pg_catalog, public, pg_temp`
+(`TestIntegration_EverySecurityDefinerPinsPgTemp`). Custom SQLSTATE: `AD001`
+throughout, as in 00761–00763.
+
+### Routes and contract changes
+
+No route is added. What changes:
+
+| Route | Change |
+|---|---|
+| `POST /v1/payouts` | `quote_id` becomes REQUIRED (D-119). The response gains `quoted_gross_amount_minor`, `quoted_fee_amount_minor`, `quoted_net_amount_minor`, `quoted_currency`, `provider`, and `sandbox` on every surface rather than only the by-id read. Another account's destination answers NOT_FOUND rather than FORBIDDEN. |
+| `POST /v1/me/payout-destinations` | `country` becomes REQUIRED and `region` is accepted (D-122). |
+| `POST /v1/me/verification/sessions` | unchanged on a first call; a REPLAY answers with the session, no `hosted_url`, and a new `resume` sentence (D-125). |
+| `GET /v1/me/payout-destinations` | items gain `region`. |
+
+### Go surfaces other domains may read
+
+- `payout.StateEdges()`, `verification.StateEdges()`, `verification.SessionEdges()`
+  — the transition tables as flat from/to pairs, which is what the schema is held
+  against.
+- `payout.ProviderTerms` and `payout.TermsFrom(caps)` — the published fee model
+  and minimum a `CreateRequest` must carry.
+- `credit.LotParent`, `credit.ParentsOfAllocations`, `credit.DerivedFinality`,
+  `credit.Service.ParentsOf`, `credit.Service.SettleDerived` — how a lot minted
+  out of other lots gets its finality and how it moves (D-124).
+- `valuedomain.LessFinal` and `valuedomain.LeastFinal` — the finality ordering,
+  which three packages had their own copy of.
+- `profile.Repository.LockHoldings` — the lock an account closure takes before it
+  reads its financial blockers (F-249).

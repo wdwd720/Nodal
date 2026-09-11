@@ -77,8 +77,20 @@ const (
 	// rather than returned (PROVIDER_BOUNDARY §3).
 	WithdrawalMinimumNotMet WithdrawalReason = "MINIMUM_NOT_MET"
 	// WithdrawalFundingNotSettled is value whose funding can still be clawed
-	// back — a card payment inside its dispute window. Waiting fixes it, which
-	// is why it is a reason of its own rather than folded into the origin.
+	// back — a card payment inside its dispute window, or an earning derived
+	// from one. Waiting fixes it, which is why it is a reason of its own
+	// rather than folded into the origin.
+	//
+	// That sentence was false for every earning in this system until D-124.
+	// internal/commerce and internal/nativemarket minted proceeds and fees
+	// REVERSIBLE unconditionally, and the only writer that promotes a lot out
+	// of REVERSIBLE reads `credit_fundings.lot_id`, which an earning has never
+	// had — so this reason was shown on value whose finality nothing could
+	// move, on a bucket held for a year, with "waiting" as the advice (F-230).
+	// A derived lot now names the lots that funded it, is minted at the least
+	// final finality among them, and is promoted by
+	// credit.Service.SettleDerived when every one of them settles. Waiting
+	// fixes it because something is now waiting on something.
 	WithdrawalFundingNotSettled WithdrawalReason = "FUNDING_NOT_SETTLED"
 	// WithdrawalHoldPeriodNotElapsed is value that has not aged long enough.
 	WithdrawalHoldPeriodNotElapsed WithdrawalReason = "HOLD_PERIOD_NOT_ELAPSED"

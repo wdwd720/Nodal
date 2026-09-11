@@ -289,6 +289,17 @@ function OpenSession(props: {
   readonly accountId: string;
   readonly session: VerificationSession;
   readonly hostedUrl?: string;
+  /**
+   * What the API says instead of a link when this answer is a REPLAY of an
+   * Idempotency-Key.
+   *
+   * The hosted link is a single-use credential for resuming somebody's identity
+   * check, and it is not written down -- not in the idempotency record either,
+   * which is what D-125 fixed. So a retry of the same key comes back with the
+   * session and no link, and the page has to say so and offer the next step
+   * rather than leaving somebody in front of a button that is not there.
+   */
+  readonly resume?: string;
 }): ReactNode {
   const { session } = props;
   const polled = usePollVerification(
@@ -331,6 +342,12 @@ function OpenSession(props: {
         <p className="note">
           The provider returned a reference rather than a page: <code className="mono-small">{hosted}</code>.
           There is no hosted flow to visit on this deployment, which is what a rehearsal looks like.
+        </p>
+      )}
+      {hosted === undefined && props.resume !== undefined && props.resume !== "" && (
+        <p className="note" data-testid="verification-resume">
+          {props.resume} Use “Start again” below: the link is handed to one browser and kept nowhere,
+          so there is nothing to hand back.
         </p>
       )}
       <p className="note">
@@ -568,6 +585,7 @@ export function Verify(): ReactNode {
             accountId={accountId}
             session={session}
             {...(start.data?.hosted_url === undefined ? {} : { hostedUrl: start.data.hosted_url })}
+            {...(start.data?.resume === undefined ? {} : { resume: start.data.resume })}
           />
         </Panel>
       )}

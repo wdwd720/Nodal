@@ -291,6 +291,104 @@ func TestIntegration_EveryDeclaredEnumMatchesItsCheck(t *testing.T) {
 	}
 }
 
+// edgeTable is one Go transition table and the SQL table that repeats it.
+//
+// It is the same pairing as `pair` above, one level along: a CHECK holds a list
+// of VALUES, and these tables hold the list of EDGES between them. Migrations
+// 00806 and 00807 put them in the schema because the edge bindings of 00731 and
+// 00741 ask only whether a transition row names the state the entity is really
+// in -- never whether the edge that row describes is one the state machine has,
+// which let `UNVERIFIED -> VERIFIED`, `CREATED -> APPROVED` and
+// `REJECTED -> SETTLED` commit in one INSERT (F-224, F-229).
+type edgeTable struct {
+	table   string
+	fromCol string
+	toCol   string
+	source  string
+	edges   []string // flat from,to,from,to
+}
+
+func edgeTables() []edgeTable {
+	return []edgeTable{
+		{
+			table: "compliance_profile_state_edges", fromCol: "from_state", toCol: "to_state",
+			source: "verification.StateEdges()", edges: verification.StateEdges(),
+		},
+		{
+			table: "verification_session_status_edges", fromCol: "from_status", toCol: "to_status",
+			source: "verification.SessionEdges()", edges: verification.SessionEdges(),
+		},
+		{
+			table: "payout_request_state_edges", fromCol: "from_state", toCol: "to_state",
+			source: "payout.StateEdges()", edges: payout.StateEdges(),
+		},
+	}
+}
+
+// TestIntegration_EveryLegalEdgeTableMatchesItsGoTable holds each edge table
+// identical to the Go transition table it was populated from.
+//
+// A missing edge is a move the code walks and the database refuses, which
+// surfaces as a failed verification or a stuck payout at the worst moment. An
+// extra one is worse and quieter: an edge the database licenses that no Go
+// switch has a meaning for, which is exactly the hole these tables exist to
+// close.
+func TestIntegration_EveryLegalEdgeTableMatchesItsGoTable(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	for _, e := range edgeTables() {
+		t.Run(e.table, func(t *testing.T) {
+			rows, err := testDB.Query(ctx,
+				fmt.Sprintf(`SELECT %s, %s FROM %s`, e.fromCol, e.toCol, e.table))
+			require.NoErrorf(t, err, "%s is registered here but not in the schema", e.table)
+			defer rows.Close()
+			var got []string
+			for rows.Next() {
+				var from, to string
+				require.NoError(t, rows.Scan(&from, &to))
+				got = append(got, from+">"+to)
+			}
+			require.NoError(t, rows.Err())
+
+			want := make([]string, 0, len(e.edges)/2)
+			for i := 0; i+1 < len(e.edges); i += 2 {
+				want = append(want, e.edges[i]+">"+e.edges[i+1])
+			}
+			require.NotEmpty(t, want, "%s declares no edges; the comparison below would be vacuous", e.source)
+			sort.Strings(got)
+			sort.Strings(want)
+			assert.Equalf(t, want, got,
+				"%s and %s have diverged: an edge in Go and not in the table is a move the database "+
+					"refuses, and an edge in the table and not in Go is one no code has a meaning for",
+				e.source, e.table)
+		})
+	}
+}
+
+// TestIntegration_NobodyButTheMigrationRoleWritesAnEdgeTable: an edge set the
+// application can add a row to is not a constraint.
+func TestIntegration_NobodyButTheMigrationRoleWritesAnEdgeTable(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	for _, e := range edgeTables() {
+		t.Run(e.table, func(t *testing.T) {
+			for _, role := range []string{"cp_app", "cp_readonly", "cp_ops"} {
+				var sel, ins, upd, del bool
+				require.NoError(t, testDB.QueryRow(ctx,
+					`SELECT has_table_privilege($1, $2, 'SELECT'),
+					        has_table_privilege($1, $2, 'INSERT'),
+					        has_table_privilege($1, $2, 'UPDATE'),
+					        has_table_privilege($1, $2, 'DELETE')`, role, e.table).
+					Scan(&sel, &ins, &upd, &del))
+				assert.Truef(t, sel, "%s must be able to READ %s; the trigger consults it as the caller", role, e.table)
+				assert.Falsef(t, ins, "%s may INSERT into %s", role, e.table)
+				assert.Falsef(t, upd, "%s may UPDATE %s", role, e.table)
+				assert.Falsef(t, del, "%s may DELETE from %s", role, e.table)
+			}
+		})
+	}
+}
+
 // TestVerificationStatesAgreeAcrossPackages: the financial verification state
 // machine is declared twice on purpose -- internal/compliance owns the column
 // on compliance_profiles and internal/verification owns the edges between its
@@ -504,13 +602,14 @@ func TestIntegration_NoEnumCheckAppearsUnnoticed(t *testing.T) {
 // The rule is asserted from the outside instead, by
 // internal/intent's own tests driving a rejection code onto a non-terminal
 // transition and watching it refused (00749).
-// The four environment CHECKs (capability_gates, payout_quotes,
-// verification_sessions, verification_checks) repeat the deployment
-// environment list. They are unpaired for the reason the first one already was:
-// config.Environment has no exported all-values list, and adding one purely so
-// a test could read it would be a Go change made by a test rather than by a
-// need. The property they enforce -- a sandbox row cannot exist in PROD -- is
-// asserted directly in internal/verification's integration suite.
+// The five environment CHECKs (capability_gates, payout_quotes,
+// payout_requests, verification_sessions, verification_checks) repeat the
+// deployment environment list. They are unpaired for the reason the first one
+// already was: config.Environment has no exported all-values list, and adding
+// one purely so a test could read it would be a Go change made by a test rather
+// than by a need. The property they enforce -- a sandbox row cannot exist in
+// PROD -- is asserted directly in internal/verification's integration suite and,
+// for the conversion request, in internal/payout's (00810, F-232).
 var unpaired = []string{
 	"accounts.accounts_kind_check",
 	"accounts.accounts_status_check",
@@ -596,6 +695,7 @@ var unpaired = []string{
 	"payout_destination_transitions.payout_destination_transitions_actor_type_check",
 	"payout_provider_events.payout_provider_events_direction_check",
 	"payout_quotes.payout_quotes_environment_check",
+	"payout_requests.payout_requests_environment_check",
 	"performance_snapshots.performance_snapshots_scope_kind_check",
 	"position_lots.position_lots_status_check",
 	"prediction_outcomes.prediction_outcomes_realized_direction_check",

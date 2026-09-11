@@ -62,9 +62,13 @@ func TestCreateRequest_ValidateSaysNothingAboutTheDisclosure(t *testing.T) {
 	t.Parallel()
 	acct, err := accounts.ParseAccountID(id.New[id.Any]().String())
 	require.NoError(t, err)
+	quoteID := NewQuoteID()
 	r := CreateRequest{
 		AccountID:      acct,
 		Quantity:       money.QuantityFromInt64(100),
+		QuoteID:        &quoteID,
+		ProviderTerms:  ProviderTerms{FeeModelPublished: true},
+		Environment:    "TEST",
 		IdempotencyKey: "k",
 		EffectiveAt:    time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 	}
