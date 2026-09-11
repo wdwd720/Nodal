@@ -455,3 +455,32 @@ is claimed. What the research adds to the register above, all human actions:
 The contract Nodal builds against all of them has no primitive by which Nodal
 itself converts Credits to money; it instructs a licensed provider. That is a
 deliberate property of the architecture, not a gap.
+
+
+## Agents (productization wave 1, 2026-09-10)
+
+**The strategy compiler has no backend in this build, and that is a decision
+rather than an omission (D-074, ADR-0029).** Both halves must arrive before a
+strategy can be compiled at all, and each is genuinely external to this wave:
+
+| Item | What it is | Why it is not built here |
+|---|---|---|
+| A model provider credential on the `model` slot (`CP_PROVIDERS_MODEL_MODE`, `..._API_KEY`) | The configuration already exists; the secret does not. EB-013 in the table above is the same blocker seen from the compiler's side. | An account and a paid key. No production Anthropic key has been used anywhere in this repository, and no test contacts the network. |
+| A validation registry for the compiler's TYPE and RISK_COMPAT stages: instruments, venues, tools and the composed risk policy | `strategy.ValidationRefs`, loaded through the `agents.RefsLoader` interface. Nothing loads it today. | It is a build, not a credential — but building it with the registry empty would be worse than not building it: every instrument a user named would fail the TYPE stage and the API would blame the user for a deployment's missing data. |
+
+Until both exist, `POST /v1/strategies/{id}/compile` records each attempt with
+outcome `MODEL_UNAVAILABLE` and failure code `COMPILER_UNAVAILABLE`, produces no
+IR, and says so in words; `compiler_configured` on the strategy read model lets a
+client say so before a user writes a description. No agent can be created,
+because an agent is created only from a compiled strategy version.
+
+**Not blocked and deliberately not built:** the agent runtime stays inert. There
+is no evaluator, no deployed worker, and no production caller for the runtime's
+own services, which is the premise F-65's deferral of the `AGENT_PAUSE` /
+`MODEL_DISABLE` bridge rests on and which `test/security` watches. Nothing in
+this wave crosses it.
+
+**Not built, and owed to §17 rather than to a provider:** a read route for an
+agent's decision history (the immutable `agent_lifecycle_transitions` rows exist
+and nothing returns them over HTTP), and agent performance (`internal/backtest`
+and `internal/performance` do not exist at all).

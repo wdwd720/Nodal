@@ -184,3 +184,46 @@ capital) only.
 | `InternalCommerce` / creator economy | 0 |
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
+
+
+## 9. Addendum — the agent product surface (2026-09-10, productization)
+
+§6 above said "**Not exposed over HTTP:** agents, strategies, backtests,
+predictions". Half of that is no longer true and the half that is has not moved.
+
+**Routes added** (nine; permission is the boundary floor, and tenant scoping is a
+separate per-request check):
+
+| Method + path | Permission | Notes |
+|---|---|---|
+| `POST /v1/strategies` | `strategy:write` | records a description; compiles nothing |
+| `GET /v1/strategies` | `strategy:read` | carries `compiler_configured` |
+| `GET /v1/strategies/{strategyId}` | `strategy:read` | the compiled version and its human-readable form |
+| `POST /v1/strategies/{strategyId}/compile` | `strategy:write` | writes a `compile_attempts` row on every path |
+| `POST /v1/agents` | `strategy:write` | from a compiled strategy version; levels 4-6 refused |
+| `GET /v1/agents` | `strategy:read` | with the whole authority ladder |
+| `GET /v1/agents/{agentId}` | `strategy:read` | limits, budget, last run, honest runtime |
+| `POST /v1/agents/{agentId}/{action}` | `strategy:write` | enable, pause, resume, disable, archive |
+| `GET /v1/admin/agents` | `account:read_any` | operator read model |
+| `POST /v1/admin/agents/{agentId}/pause` | `kill:activate` (+ `agent:pause` and an OPERATOR actor in the domain) | the customer role holds `agent:pause`, so it cannot be the floor of an admin route |
+
+**Tables added:** one. `agent_grants` (migration 00786) — what the OWNER granted
+an agent: authority level, Credit ceilings, universe, frequency, who granted it
+and when. Immutable but for `archived_at`, enforced by a guard trigger raising
+SQLSTATE `AG005`. `cp_app` holds `SELECT, INSERT, UPDATE (archived_at)` and
+nothing else.
+
+**Packages added:** one. `internal/agents` — the management surface, deliberately
+distinct from `internal/agent`, which stays an import-restricted agent tree
+(ADR-0029, D-073).
+
+**What still is not exposed over HTTP:** backtests, predictions, agent decision
+history, and agent performance. The first two have no product surface in this
+wave; the third exists as immutable `agent_lifecycle_transitions` rows with no
+read route yet; the fourth is not built at all (`internal/backtest` and
+`internal/performance` do not exist).
+
+**What did not change:** the agent runtime is still inert at all three layers
+(no deployed worker, no evaluator inside the worker that exists, no production
+caller for the runtime's own services), so F-65's deferral of the kill-switch
+bridge is undisturbed and `test/security` still watches the premise.
