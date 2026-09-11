@@ -11808,8 +11808,16 @@ than rendering a response whose verdict contradicts its own figures — a page t
 says "you may withdraw nothing" over a conversion request the engine approves is
 worse than an error, because the person believes it. The adapter now reads the
 balances and the lots in ONE REPEATABLE READ snapshot, so a concurrent mint
-between two queries cannot fail the page. The page renders the finer buckets; a
-floor differing from the origin is still rendered, as F-261 requires.
+between two queries cannot fail the page. The page renders the finer buckets.
+
+**Correction (2026-09-11, F-280).** The clause that stood here — "a floor
+differing from the origin is still rendered, as F-261 requires" — was false when
+it was written. `apps/web/src` contained no reference to `origin_floor`,
+`root_origins` or `refused_root`, and the bucket table's columns were rank,
+origin, held, may-leave, permitted and why-not; the page also keyed its rows on
+`origin`, which this same fix had just stopped being unique. Both are closed by
+F-280. The sentence is kept rather than replaced, because a register that edits
+its own claims silently is the thing this register exists not to be.
 
 One conservative fold remains and is unavoidable: a bucket's age is that of its
 youngest lot, because a bucket clears a hold period only when all of it does. A
