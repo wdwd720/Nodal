@@ -327,9 +327,28 @@ type Request struct {
 	SubmittedAt   *time.Time
 	SettledAt     *time.Time
 	FailureReason string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+
+	// BlockedReason is why a RESERVED payout cannot be submitted, in words its
+	// holder can read, and BlockedAt is when that was recorded. Empty when
+	// nothing is blocking it.
+	//
+	// It is not a state and it is not a failure. A payout whose destination the
+	// holder removed stays VERIFIED with its Credits reserved -- moving it to
+	// FAILED would return the reservation on the strength of a fact the person
+	// can undo by registering a new destination -- and until F-277 the only
+	// customer-facing mention of the refusal was a field on the DELETE response
+	// that caused it. The request read VERIFIED, which reads as "on its way",
+	// while the sweep refused it every fifteen seconds for ever.
+	BlockedReason string
+	BlockedAt     *time.Time
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
+
+// Blocked reports whether something the holder has to act on is stopping this
+// request. It is a convenience for a renderer: the reason is the answer.
+func (r Request) Blocked() bool { return r.BlockedReason != "" }
 
 // Allocation is one lot slice a payout reserved.
 type Allocation struct {
@@ -337,9 +356,15 @@ type Allocation struct {
 	RequestID RequestID
 	LotID     credit.LotID
 	Origin    valuedomain.CreditOrigin
-	Quantity  money.Quantity
-	Returned  bool
-	CreatedAt time.Time
+	// OriginFloor is what the units in this allocation ultimately came from.
+	// It is recorded beside the origin because the origin alone stopped being
+	// the whole answer at D-131: two allocations of MARKET_TRADING_PROCEEDS,
+	// one out of a settled purchase and one out of a promotional grant, are the
+	// same origin and are not the same value (D-136, F-270).
+	OriginFloor valuedomain.CreditOrigin
+	Quantity    money.Quantity
+	Returned    bool
+	CreatedAt   time.Time
 }
 
 // ProviderTerms are the published numbers a payout has to be judged against:
@@ -490,9 +515,13 @@ type Decision struct {
 	// Lots are the specific provenance lots the eligible amount would come
 	// from, in consumption order.
 	Lots []credit.Lot
-	// Origins is the set of origins those lots carry. Consumption is
-	// restricted to exactly these, so lot selection cannot stray outside what
-	// this decision approved even if the two run a moment apart.
+	// Origins is the set of origins those lots carry, reported so a caller can
+	// say what KIND of value the decision drew on without re-deriving it.
+	//
+	// It is NOT the reservation's filter. It was, and eligibility is decided
+	// per LOT: two lots of one origin can differ in finality and in provenance,
+	// and the reservation took whichever sorted first (D-136, F-270).
+	// `reserve` passes `credit.EligibleLotIDs(d.Lots)`.
 	Origins []valuedomain.CreditOrigin
 
 	// Reasons explains a shortfall. Empty when the full amount is eligible.

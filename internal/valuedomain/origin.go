@@ -236,14 +236,43 @@ func ParseFundingFinality(s string) (FundingFinality, error) {
 }
 
 // finalityTransitions is the explicit legal transition table for a lot's
-// funding finality. UNFUNDED is terminal: nothing external backs it, so
-// nothing external can change it.
+// funding finality.
+//
+// UNFUNDED used to be terminal, on the reasoning that nothing external backs it
+// so nothing external can change it. That is true of the lots it was written
+// for -- a promotional grant, an admin adjustment -- and false of a DERIVED lot
+// minted there. D-124 mints a derived lot at the LEAST FINAL finality among its
+// parents, and the ordering puts UNFUNDED between REVERSIBLE and SETTLED: a
+// seller's earning funded by a buyer's grant AND a buyer's settled card
+// purchase is minted UNFUNDED, and something external backs part of it. When
+// that card is charged back the earning has to freeze, and could not (F-273).
+//
+// So UNFUNDED has exactly one edge, and it points at frozen. It may not become
+// REVERSIBLE or SETTLED: there is no funding row to settle, and a promotion out
+// of UNFUNDED would be value inventing a backer.
 var finalityTransitions = map[FundingFinality][]FundingFinality{
-	FinalityUnfunded:   {},
+	FinalityUnfunded:   {FinalityDisputed},
 	FinalityReversible: {FinalitySettled, FinalityDisputed, FinalityReversed},
 	FinalitySettled:    {FinalityDisputed},
 	FinalityDisputed:   {FinalitySettled, FinalityReversed, FinalityReversible},
 	FinalityReversed:   {},
+}
+
+// FrozenFinalities are the finalities that freeze anything derived from them: a
+// dispute in progress and one that succeeded.
+//
+// It is here rather than as a literal in the sweep's SQL because the sweep's
+// candidate predicate and its acting branch have to agree about which parents
+// freeze a child, and a list written twice is a list that eventually disagrees
+// with itself. `credit.SettleDerived` reads it for both.
+func FrozenFinalities() []FundingFinality {
+	return []FundingFinality{FinalityDisputed, FinalityReversed}
+}
+
+// Frozen reports whether value at this finality freezes what was derived from
+// it.
+func (f FundingFinality) Frozen() bool {
+	return f == FinalityDisputed || f == FinalityReversed
 }
 
 // CanTransitionFinality reports whether from → to is a legal change.
@@ -251,7 +280,9 @@ var finalityTransitions = map[FundingFinality][]FundingFinality{
 // SETTLED → DISPUTED is permitted because a card network can raise a dispute
 // after the window a payment processor considers settled; refusing the
 // transition would leave the system unable to record something that had
-// already happened.
+// already happened. UNFUNDED → DISPUTED is permitted for the reason above the
+// table: a derived lot can be minted UNFUNDED and still have a parent somebody
+// can reclaim.
 func CanTransitionFinality(from, to FundingFinality) bool {
 	for _, t := range finalityTransitions[from] {
 		if t == to {

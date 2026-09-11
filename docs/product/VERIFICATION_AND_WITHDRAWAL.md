@@ -312,6 +312,22 @@ instructs a licensed provider; that is all it does.
 A payout does not take "500 Credits". It takes specific units from specific
 lots, and `GET /v1/payouts/{id}` reports which, in the order they leave.
 
+**The reservation takes exactly the lots the decision evaluated.** That is a
+fact about the code and not a phrase: `payout.Engine.Evaluate` records the lots
+it approved in `Decision.Lots`, and `payout.Service.reserve` passes their IDS to
+`credit.Consume` as `ConsumeRequest.LotIDs`, with the payout-grade finality
+filter (UNFUNDED and SETTLED only — `RequireSpendableFinality` is for SPENDING,
+and it admits REVERSIBLE). It used to pass the set of ORIGINS those lots carried,
+which is a coarser thing than a lot in two ways that both leaked: a decision
+approving a SETTLED purchase was filled from a REVERSIBLE one of the same origin,
+and a decision approving trading proceeds out of a settled purchase was filled
+from proceeds out of a promotional grant (D-136, F-270).
+
+`payout_allocations` records the lot, the origin, the ORIGIN FLOOR and the
+quantity, so a settled payout can be told afterwards from one drawn on value a
+grant funded, and the provenance breakdown reports the two separately rather than
+summing them into one line of `MARKET_TRADING_PROCEEDS`.
+
 The order is `credit.ConsumptionRank`, which runs from the **most restricted**
 origin to the least:
 
@@ -344,21 +360,52 @@ market and sells back out, and what they hold afterwards is
 `MARKET_TRADING_PROCEEDS` — an origin the sandbox policy permits — which lot
 selection then correctly selects (F-261).
 
-What makes §23 hold is the ORIGIN FLOOR: every lot carries the most restricted
-origin anywhere in its provenance, inherited from its parents at mint the way its
-finality is, and `valuedomain.Policy.Permits` releases a lot only when it
-releases BOTH the lot's origin and its floor. A grant round-tripped through a
-market is still a grant. `credit_lot_state.origin_floor` is trigger-maintained
-and the application may only read it; `cp_credit_origin_floor_rank` and
-`valuedomain.CreditOrigin.Restriction()` are held identical by
-`TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`.
+What makes §23 hold is a lot's PROVENANCE, recorded in two forms beside its
+finality and maintained by a trigger the application may only read from:
+
+* `credit_lot_state.root_origins` — every origin the lot's provenance bottoms
+  out in. `valuedomain.Policy.Permits` releases a lot only when the policy
+  releases the lot's own origin AND every root. A grant round-tripped through a
+  market is still a grant, and a lot half funded by a purchase is still half a
+  purchase under a policy that refuses purchases.
+* `credit_lot_state.origin_floor` — the single most restricted of those roots,
+  which is what a screen shows and what an ordering sorts by.
+  `cp_credit_origin_floor_rank` and `valuedomain.CreditOrigin.Restriction()` are
+  held identical by `TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`.
+
+The floor alone was the whole permission answer until D-138, and it could not be.
+"Most restricted" is ranked across the two policies THIS BUILD ships, with the
+origin's own name breaking a tie — so a lot funded by a purchase and by trading
+gains records `MARKET_TRADING_PROCEEDS`, and a policy that releases trading gains
+and closes the purchased float releases it. That policy is one of the answers
+B-02 can come back with. A rank cannot be conservative for a policy it was not
+computed from; a set can, because every root is asked (F-275).
+
+Both are computed from the SAME recursive walk to the provenance roots, on every
+`credit_lot_parents` row, and a parent row may not be written for a lot that is
+already somebody else's parent — so a lot's provenance is closed before anything
+derives from it, and a floor cannot depend on the order the rows were inserted in
+(D-137, F-271). The refusal is `CREDIT_PARENT_AFTER_DESCENDANT`.
 
 `GET /v1/me/eligibility` reports the floor on the bucket as `origin_floor`
-whenever it differs from the origin, because `ORIGIN_NOT_PAYOUT_ELIGIBLE` on a
-bucket of trading proceeds is an answer nobody can act on: what a person needs to
-read is that the value came from a promotional grant. `verification_would_suffice`
-is never set on such a bucket — verifying will not release it, and saying
-otherwise is the refusal §19 forbids, dressed as encouragement.
+whenever it differs from the origin, the roots as `root_origins`, and the first
+root the live policy refuses as `refused_root` — because
+`ORIGIN_NOT_PAYOUT_ELIGIBLE` on a bucket of trading proceeds is an answer nobody
+can act on: what a person needs to read is that the value came from a promotional
+grant. `verification_would_suffice` is never set on such a bucket — verifying will
+not release it, and saying otherwise is the refusal §19 forbids, dressed as
+encouragement.
+
+**The buckets are provenance buckets, not origin buckets.** One entry per
+(origin, floor, root set, finality), so every unit in a bucket gets one answer
+from the policy and `withdrawable_now` is the sum of the buckets. It was one
+bucket per ORIGIN, folded to the least final finality and the most restricted
+floor in it, and one refused lot then zeroed every other lot of its origin: the
+page reported `eligible: false` and `withdrawable_now: 0` beside a positive
+`payout_eligible`, and the conversion request it said was impossible succeeded
+(F-272). The two figures are now equal by construction under no account-level
+block, and `eligibility.ExplainWithdrawal` refuses the request rather than
+rendering a response that contradicts itself.
 
 The pooled reserve of a native market is drawn down WORST FIRST (D-132) for the
 same reason: a pool is fungible, so "whose Credits left" is a choice, and any
@@ -442,12 +489,30 @@ that payment, which is what `FUNDING_NOT_SETTLED` has always claimed; and a
 seller drawn against another trader's reversible contribution waits for THAT
 payment (D-132), which is the same reason one person further away.
 
-**What is still genuinely blocked here.** Nothing in this section: the floor and
-the draw-down order are code, and they are built. B-02 remains what decides
-whether any `PayoutAllowed: true` rule exists in a persisted policy at all, and
-until counsel answers it `DefaultPolicy` forbids every origin — which the floor
-does not change, because a floor can only ever refuse more than the origin alone
-would.
+**What is still genuinely blocked here.** Nothing in this section: the
+provenance model and the draw-down order are code, and they are built. B-02
+remains what decides whether any `PayoutAllowed: true` rule exists in a persisted
+policy at all, and until counsel answers it `DefaultPolicy` forbids every
+origin — which the provenance model does not change, because a root set can only
+ever refuse more than the origin alone would.
+
+**And B-02's answer is now safe to persist either way round.** The question is
+written as two: is the closed-loop float itself stored value, and may trading
+gains ever be withdrawn. One of its answers — the float is stored value, the gains
+are not — is a policy that releases `MARKET_TRADING_PROCEEDS` and closes
+`PURCHASED`, which is not a superset of anything this build ships. A model that
+recorded one ranked origin per lot would have released value a purchase half
+funded under exactly that policy; the root SET is judged against whatever policy
+is in force, so a later policy is conservative for every shape of answer and not
+only for the permissive one (D-138, F-275).
+
+**A refused payout says why.** A reserved request whose destination stopped being
+usable stays VERIFIED with its value reserved — failing it would return the
+reservation on the strength of a fact the person can undo — and it now carries
+`blocked_reason`, which the Withdraw page renders beside the Cancel control.
+There is no route that re-points a payout at a different destination: the
+destination is what the quote, the fee and the provider idempotency key were all
+computed against, so a new destination is a new request (D-139, F-277).
 
 ---
 

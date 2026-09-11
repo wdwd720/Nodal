@@ -150,6 +150,15 @@ func registry() []pair {
 		// left the list one longer than it needed to be.
 		{table: "credit_lots", constraint: "credit_lots_origin_check", source: "valuedomain.AllOrigins()", values: str(valuedomain.AllOrigins())},
 		{table: "credit_lot_state", constraint: "credit_lot_state_origin_floor_check", source: "valuedomain.AllOrigins()", values: str(valuedomain.AllOrigins())},
+		// The same list again on the ROOT SET 00819 computes beside the floor
+		// (D-138). The floor is one origin ranked by this build's policies; the
+		// roots are every origin the provenance bottoms out in, and
+		// valuedomain.Policy.Permits reads all of them -- so an origin the
+		// column accepts and no Go list names is an origin no rule is ever
+		// asked about.
+		{table: "credit_lot_state", constraint: "credit_lot_state_root_origins_declared", source: "valuedomain.AllOrigins()", values: str(valuedomain.AllOrigins())},
+		// And on the record of what a payout actually took (00820, D-136).
+		{table: "payout_allocations", constraint: "payout_allocations_origin_floor_check", source: "valuedomain.AllOrigins()", values: str(valuedomain.AllOrigins())},
 		{table: "deposits", constraint: "deposits_status_check", source: "funding.AllStatuses()", values: str(funding.AllStatuses())},
 		{table: "execution_attempts", constraint: "execution_attempts_finality_check", source: "execution.AllFinalityLevels()", values: str(execution.AllFinalityLevels())},
 		{table: "execution_attempts", constraint: "execution_attempts_status_check", source: "execution.AllAttemptStatuses()", values: str(execution.AllAttemptStatuses())},

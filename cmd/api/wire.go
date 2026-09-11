@@ -614,6 +614,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer).WithLogger(log),
 		hubPublisher{hub: hub}, log)
 
+	// ---- payout: a blocked withdrawal reaches its holder ----
+	//
+	// The follower turns TRANSITION ROWS into notifications, and a payout
+	// refused at submit deliberately writes none: refusing inside the claim
+	// transaction is what leaves the request VERIFIED with its value reserved.
+	// So this one is emitted by the domain, in the transaction that records the
+	// reason, through an interface internal/payout declares (F-277).
+	payoutSvc.SetNotifier(payoutBlockedNotifier{producer: notificationProducer})
+
 	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, err

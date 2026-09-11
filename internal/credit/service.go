@@ -242,11 +242,13 @@ func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) 
 		// column is trigger-written: it is not the application's to assert, and
 		// a Go copy of the rule is a second implementation that eventually
 		// disagrees with the one the database enforces (D-131).
+		var roots []string
 		if err := tx.QueryRow(ctx,
-			`SELECT origin_floor FROM credit_lot_state WHERE lot_id = $1`, lot.ID).
-			Scan(&lot.OriginFloor); err != nil {
+			`SELECT origin_floor, root_origins FROM credit_lot_state WHERE lot_id = $1`, lot.ID).
+			Scan(&lot.OriginFloor, &roots); err != nil {
 			return Lot{}, mapError(err)
 		}
+		lot.RootOrigins = originsOf(roots)
 	}
 	return lot, nil
 }
@@ -269,9 +271,28 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 		return nil, err
 	}
 	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID,
-		r.RequireSpendableFinality, r.AllowedOrigins, r.LotIDs)
+		r.RequireSpendableFinality, r.RequirePayoutFinality, r.AllowedOrigins, r.LotIDs)
 	if err != nil {
 		return nil, err
+	}
+	// The lot restriction, asserted on the way out as well as applied on the way
+	// in. The filter is a parameter of one constant statement and cannot be
+	// bypassed by a caller, so this can only fire if the statement and this
+	// field come apart -- which is exactly the kind of drift that let a payout
+	// consume by origin while its decision was made per lot (D-136, F-270). It
+	// refuses; it does not correct.
+	if len(r.LotIDs) > 0 {
+		allowed := make(map[LotID]bool, len(r.LotIDs))
+		for _, l := range r.LotIDs {
+			allowed[l] = true
+		}
+		for _, lot := range lots {
+			if !allowed[lot.ID] {
+				return nil, errs.Newf(errs.CodeInternal,
+					"credit: consume selected lot %s, which is outside the %d lots the caller allowed",
+					lot.ID, len(r.LotIDs))
+			}
+		}
 	}
 
 	remaining := r.Quantity
@@ -296,7 +317,8 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 			return nil, err
 		}
 		allocs = append(allocs, Allocation{
-			LotID: lot.ID, Origin: lot.Origin, Finality: lot.Finality, Quantity: take, EventID: ev,
+			LotID: lot.ID, Origin: lot.Origin, OriginFloor: lot.OriginFloor,
+			Finality: lot.Finality, Quantity: take, EventID: ev,
 		})
 		remaining = remaining.Sub(take)
 	}

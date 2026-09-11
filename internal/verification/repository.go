@@ -42,18 +42,45 @@ func scanSession(row pgx.Row) (Session, error) {
 	return s, nil
 }
 
-// MarkProviderPolled records that the provider was asked about this session
-// just now.
+// ClaimProviderPoll takes the right to call the provider about this session,
+// atomically, and reports whether this caller got it.
 //
-// It is its own small write rather than a field on an Ingest, because the poll
-// that finds NOTHING CHANGED writes nothing else at all -- and that is exactly
-// the poll the interval exists to stop repeating (00818, D-133).
-func (r *Repository) MarkProviderPolled(ctx context.Context, q db.Querier, id SessionID, at time.Time) error {
-	if _, err := q.Exec(ctx,
-		`UPDATE verification_sessions SET provider_polled_at = $2 WHERE id = $1`, id, at.UTC()); err != nil {
-		return mapError(err)
+// It is one statement, and that is the whole of it. The interval used to be a
+// READ of provider_polled_at in Poll, a comparison against the clock, and only
+// then a separate committed write -- so every request that read the row before
+// that write landed saw the old timestamp and proceeded. Twenty concurrent polls
+// of one session made seventeen calls to an identity provider whose contract is
+// priced and rate-limited per call (F-274). Fifty polls IN SERIES were handled
+// correctly, which is why the shipped interval test passed.
+//
+// The UPDATE is the claim: `provider_polled_at IS NULL OR provider_polled_at <
+// notAfter` is evaluated by PostgreSQL under the row lock the UPDATE itself
+// takes, so exactly one concurrent statement can satisfy it and the losers see
+// the winner's value and match nothing. RETURNING tells the caller which it was.
+//
+// The claim is still committed BEFORE the provider is called, for the reason the
+// payout provider's idempotency key is: a process that dies between the write
+// and the response must not leave a provider that was asked and a record that
+// says it was not. The cost is one interval's silence after a crash, which is
+// the direction to be wrong in (00818, D-133).
+func (r *Repository) ClaimProviderPoll(ctx context.Context, q db.Querier, id SessionID, at, notAfter time.Time) (bool, error) {
+	var claimed time.Time
+	err := q.QueryRow(ctx,
+		`UPDATE verification_sessions
+		    SET provider_polled_at = $2
+		  WHERE id = $1
+		    AND (provider_polled_at IS NULL OR provider_polled_at < $3)
+		 RETURNING provider_polled_at`, id, at.UTC(), notAfter.UTC()).Scan(&claimed)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Somebody else holds this interval, or the session is gone. Either way
+		// this request does not call the provider; Poll answers from the record,
+		// which is what it does for a session that no longer exists too.
+		return false, nil
+	case err != nil:
+		return false, mapError(err)
 	}
-	return nil
+	return true, nil
 }
 
 // OwnerOf returns the user who owns an account. Verification is a property of a

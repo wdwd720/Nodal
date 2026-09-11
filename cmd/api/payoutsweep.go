@@ -11,6 +11,7 @@ import (
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/notifications"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/security"
 )
@@ -304,4 +305,39 @@ func claimSweep(ctx context.Context, database *db.DB, name string) (bool, func()
 		}
 		conn.Release()
 	}, nil
+}
+
+// payoutBlockedNotifier tells the holder of a reserved payout that it cannot be
+// sent, in the transaction that records why (F-277).
+//
+// It lives here rather than in internal/payout because the domain's job is to
+// decide that somebody has to be told and what the sentence is; what telling
+// them MEANS -- a row in the notification centre, deduplicated per obstacle,
+// suppressible per person -- belongs to the wiring layer, and internal/payout
+// stays free of a dependency on internal/notifications.
+//
+// The kind is PAYOUT_NEEDS_REVIEW, which is what this is: the payout has not
+// failed and nothing is wrong with the money, and a person has to decide
+// something. PAYOUT_FAILED would say the withdrawal failed, which is exactly
+// what did not happen -- the Credits are still reserved and still theirs.
+type payoutBlockedNotifier struct {
+	producer *notifications.Producer
+}
+
+func (n payoutBlockedNotifier) PayoutBlocked(ctx context.Context, tx pgx.Tx, in payout.BlockedNotice) error {
+	_, err := n.producer.Emit(ctx, tx, notifications.Notification{
+		UserID:    in.UserID,
+		AccountID: &in.AccountID,
+		Kind:      notifications.KindPayoutNeedsReview,
+		Title:     "A withdrawal needs your decision",
+		Body:      in.Reason,
+		Ref:       notifications.Ref{Type: "payout_request", ID: in.RequestID.String()},
+		// Per (request, obstacle): the sweep re-reads a blocked request on
+		// every pass, and internal/payout only calls this when the reason on
+		// the row actually changed, so the dedup key is the second line of
+		// defence rather than the first.
+		Occurrence: in.Occurrence,
+		OccurredAt: in.At,
+	})
+	return err
 }

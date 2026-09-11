@@ -53,6 +53,39 @@ type Accounts interface {
 	Get(ctx context.Context, q db.Querier, accountID accountsAccountID) (accountsAccount, error)
 }
 
+// BlockedNotice is what a holder is told when a reserved payout cannot be sent.
+//
+// It carries plain fields rather than a notification type so that this package
+// does not depend on internal/notifications: the domain decides that somebody
+// has to be told and what the sentence is, and the wiring layer decides what
+// telling them means.
+type BlockedNotice struct {
+	UserID    accountsUserID
+	AccountID accountsAccountID
+	RequestID RequestID
+	// Reason is the sentence the holder reads. It names the obstacle and the
+	// action, because a reason with no action is a dead end on a page about
+	// somebody's money.
+	Reason string
+	// Occurrence makes the notice idempotent. The sweep re-reads a blocked
+	// request on every pass for as long as it stays blocked, and a person whose
+	// destination was removed on Friday must not find four thousand copies of
+	// this on Monday.
+	Occurrence string
+	At         time.Time
+}
+
+// Notifier raises a notice to the holder of a payout, inside the caller's
+// transaction, so the notice exists if and only if the fact that caused it
+// committed.
+//
+// It is optional. A deployment that has not wired one still records the reason
+// on the request, and the Withdraw page still renders it -- the notification is
+// how somebody who is not looking at the page finds out.
+type Notifier interface {
+	PayoutBlocked(ctx context.Context, tx pgx.Tx, n BlockedNotice) error
+}
+
 // Service creates, reserves, submits and reconciles payouts.
 type Service struct {
 	poster    Poster
@@ -62,7 +95,17 @@ type Service struct {
 	clk       clock.Clock
 	kills     KillSwitchChecker
 	accounts  Accounts
+	notifier  Notifier
 }
+
+// SetNotifier attaches the notifier a blocked payout is reported through.
+//
+// A setter rather than a constructor argument because it is genuinely optional
+// and everything else NewService takes is not: a deployment with no notifier
+// still refuses the payout, still records why, and still shows it. The
+// guards are constructor arguments precisely because a guard a caller may leave
+// nil is a guard that is eventually left nil (F-163); a notice is not a guard.
+func (s *Service) SetNotifier(n Notifier) { s.notifier = n }
 
 // NewService returns a Service. No argument may be nil.
 //
@@ -408,10 +451,19 @@ func (s *Service) CompleteVerification(ctx context.Context, tx pgx.Tx, requestID
 // reservation of the net would leave the fee spendable and the account short at
 // settlement (D-119).
 //
-// Consumption is restricted to exactly the origins the decision approved, so
-// lot selection cannot stray outside it even though the two run a moment apart
-// — a promotional grant can never be swept into a payout approved for creator
-// earnings.
+// Consumption is restricted to exactly the LOTS the decision approved, and to
+// payout-eligible finality, so what leaves is what was evaluated.
+//
+// It used to be restricted to their ORIGINS. Eligibility is decided per lot --
+// `credit.EligibleLots` asks `valuedomain.Policy.Permits` about each lot's
+// finality, its origin and its provenance roots -- and an origin is not a lot.
+// So a decision that approved a SETTLED purchase was filled from a REVERSIBLE
+// one of the same origin, because `RequireSpendableFinality` admits REVERSIBLE
+// and whichever lot sorts first in consumption order is the one taken; and a
+// decision that approved MARKET_TRADING_PROCEEDS whose provenance is a settled
+// purchase was filled from proceeds whose provenance is a promotional grant,
+// which is F-261's laundering route reopened one filter along. Both are D-136:
+// a payout takes exactly the units its decision evaluated (F-270).
 func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decision, effectiveAt time.Time, correlationID string) (Request, error) {
 	conv := valuedomain.ConversionKey{From: valuedomain.InternalCredit, To: valuedomain.PayoutPending}
 	post, err := s.poster.Post(ctx, tx, ledger.Posting{
@@ -445,7 +497,11 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 		Reference:                credit.Reference{Type: "payout_request", ID: req.ID.String()},
 		Reason:                   "reserved against a payout request",
 		RequireSpendableFinality: true,
-		AllowedOrigins:           d.Origins,
+		// A payout's finality bar is PayoutEligible(), not Spendable(). The two
+		// differ by REVERSIBLE, which is precisely the value a card issuer can
+		// still reclaim.
+		RequirePayoutFinality: true,
+		LotIDs:                credit.EligibleLotIDs(d.Lots),
 	})
 	if err != nil {
 		return Request{}, err
@@ -458,9 +514,10 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 	// constraint, so the order inside the transaction does not matter.
 	for _, a := range allocs {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, quantity)
-			 VALUES ($1,$2,$3,$4,$5::numeric)`,
-			NewAllocationID(), req.ID, a.LotID, string(a.Origin), a.Quantity.String()); err != nil {
+			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, origin_floor, quantity)
+			 VALUES ($1,$2,$3,$4,$5,$6::numeric)`,
+			NewAllocationID(), req.ID, a.LotID, string(a.Origin), string(a.OriginFloor),
+			a.Quantity.String()); err != nil {
 			return Request{}, mapError(err)
 		}
 	}
@@ -528,6 +585,11 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 		req       Request
 		claimed   bool
 		submitReq SubmitRequest
+		// blockedReason survives the rollback below. The refusal it describes is
+		// discovered inside the claim transaction and that transaction must roll
+		// back -- that is what leaves the request VERIFIED with its value
+		// reserved -- so the reason is carried out and recorded separately.
+		blockedReason string
 	)
 	err = d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		r, err := s.forUpdate(ctx, tx, requestID)
@@ -567,8 +629,9 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 		// rather than after the claim means a request that cannot be described
 		// to a provider stays in VERIFIED with its value reserved, instead of
 		// being claimed under a committed key nobody can act on.
-		built, berr := s.submitRequestFor(ctx, tx, r, key)
+		built, reason, berr := s.submitRequestFor(ctx, tx, r, key)
 		if berr != nil {
+			blockedReason = reason
 			return berr
 		}
 		submitReq = built
@@ -586,6 +649,18 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 		return nil
 	})
 	if err != nil {
+		if blockedReason != "" {
+			// Best effort, and deliberately not allowed to replace the refusal:
+			// the caller's answer is why the payout was not submitted, and a
+			// failure to WRITE THAT DOWN must not become a different error that
+			// a sweep would then classify differently. It is reported through
+			// the error's fields so an operator sees both.
+			if rerr := s.recordBlocked(ctx, d, requestID, blockedReason); rerr != nil {
+				if e, ok := errs.As(err); ok {
+					err = e.WithField("blocked_reason_not_recorded", rerr.Error())
+				}
+			}
+		}
 		return Request{}, err
 	}
 	if !claimed {
@@ -605,21 +680,24 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 // customer gave up and the fee is inside it, so the net is what the provider is
 // asked to send. Both are recorded on the request, so this reads a fact rather
 // than recomputing one against a fee schedule that may since have moved.
-func (s *Service) submitRequestFor(ctx context.Context, tx pgx.Tx, r Request, key string) (SubmitRequest, error) {
+func (s *Service) submitRequestFor(ctx context.Context, tx pgx.Tx, r Request, key string) (SubmitRequest, string, error) {
 	if r.DestinationID == nil || r.DestinationID.IsZero() {
-		return SubmitRequest{}, errs.New(errs.CodeInvalidStateTransition,
+		return SubmitRequest{}, blockedNoDestination, errs.New(errs.CodeInvalidStateTransition,
 			"this payout names no destination, so there is nobody to pay").
 			WithField("payout_id", r.ID.String())
 	}
 	dest, err := s.Destination(ctx, tx, *r.DestinationID)
 	if err != nil {
-		return SubmitRequest{}, err
+		return SubmitRequest{}, "", err
 	}
 	if dest.AccountID != r.AccountID {
 		// Not reachable through Create, which refuses a quote for another
 		// account's destination. Said here anyway, because this is the last
-		// place before value is sent somewhere.
-		return SubmitRequest{}, errs.New(errs.CodeForbidden,
+		// place before value is sent somewhere. No holder-readable reason: a
+		// person cannot act on this and telling them their payout names
+		// somebody else's destination would be telling them about somebody
+		// else's destination.
+		return SubmitRequest{}, "", errs.New(errs.CodeForbidden,
 			"this payout names a destination that belongs to another account").
 			WithField("payout_id", r.ID.String())
 	}
@@ -643,10 +721,23 @@ func (s *Service) submitRequestFor(ctx context.Context, tx pgx.Tx, r Request, ke
 	// that would return the reservation on the strength of a fact the person can
 	// undo by re-registering, and a sweep that fails a payout every time a
 	// destination is disabled is a sweep that decides for them.
+	//
+	// And the person is TOLD. Refusing here and saying nothing left a request
+	// reading VERIFIED -- which reads as "on its way" -- with the holder's value
+	// reserved, the sweep refusing it every fifteen seconds for ever, and the
+	// only customer-facing mention of the refusal a field on the DELETE response
+	// that caused it (F-277). The reason below is recorded on the request by
+	// Submit, after this transaction has rolled back, and the Withdraw page puts
+	// it beside the Cancel control.
+	//
+	// The wording says "cancel it", and does not offer to re-point it, because
+	// no route re-points a payout: the destination is what the quote, the fee
+	// and the provider idempotency key were computed against, and changing it
+	// afterwards is a new request in everything but name.
 	if !dest.Status.Usable() {
-		return SubmitRequest{}, errs.Newf(errs.CodeInvalidStateTransition,
+		return SubmitRequest{}, blockedDestinationUnusable, errs.Newf(errs.CodeInvalidStateTransition,
 			"this payout names a destination that is %s, so it can no longer receive value; "+
-				"cancel the payout or point it at a destination that can", dest.Status).
+				"cancel the payout to release the Credits it reserved", dest.Status).
 			WithField("payout_id", r.ID.String()).
 			WithField("destination_id", dest.ID.String()).
 			WithField("destination_status", string(dest.Status))
@@ -660,9 +751,97 @@ func (s *Service) submitRequestFor(ctx context.Context, tx pgx.Tx, r Request, ke
 		Currency:             r.QuoteCurrency,
 	}
 	if err := out.Validate(); err != nil {
-		return SubmitRequest{}, err
+		return SubmitRequest{}, "", err
 	}
-	return out, nil
+	return out, "", nil
+}
+
+// The two refusals a holder can act on, in the words they read.
+//
+// They are constants rather than formatted strings so that `recordBlocked` can
+// tell "the same obstacle, again" from "a different one" with a comparison, and
+// so the sentence a person sees is reviewable in one place.
+const (
+	blockedDestinationUnusable = "This withdrawal cannot be sent: the destination it was created for " +
+		"has been removed and can no longer receive value. Cancel it to release the Credits it reserved, " +
+		"then register a destination and ask again."
+	blockedNoDestination = "This withdrawal cannot be sent: it names no destination. Cancel it to " +
+		"release the Credits it reserved, then register a destination and ask again."
+)
+
+// recordBlocked writes why a reserved payout cannot be submitted, and tells its
+// holder once.
+//
+// Its own transaction, because the one that discovered the refusal rolled back:
+// refusing inside the claim is what keeps the request in VERIFIED with its value
+// reserved, and a fact recorded inside a transaction that must roll back is a
+// fact that is never recorded.
+//
+// The UPDATE is conditional on the reason actually CHANGING. The sweep re-reads
+// every reserved request on every pass, so an unconditional write would restamp
+// blocked_at every fifteen seconds and -- worse -- emit a notification each
+// time. Writing only on a change also makes the notice idempotent at the
+// database rather than at the notifier: the row that did not move raises
+// nothing.
+func (s *Service) recordBlocked(ctx context.Context, d *db.DB, id RequestID, reason string) error {
+	at := s.clk.Now().UTC()
+	var (
+		accountID accountsAccountID
+		changed   bool
+	)
+	if err := d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			err := tx.QueryRow(ctx,
+				`UPDATE payout_requests
+				    SET blocked_reason = $2, blocked_at = $3
+				  WHERE id = $1
+				    AND state = 'VERIFIED'
+				    AND blocked_reason IS DISTINCT FROM $2
+				 RETURNING account_id`, id, reason, at).Scan(&accountID)
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return nil
+			case err != nil:
+				return mapError(err)
+			}
+			changed = true
+			if s.notifier == nil {
+				return nil
+			}
+			acct, aerr := s.accounts.Get(ctx, tx, accountID)
+			if aerr != nil {
+				return aerr
+			}
+			return s.notifier.PayoutBlocked(ctx, tx, BlockedNotice{
+				UserID:    acct.OwnerUserID,
+				AccountID: accountID,
+				RequestID: id,
+				Reason:    reason,
+				// One notice per (request, obstacle). A holder who removes a
+				// destination, cancels nothing, and removes another one later
+				// hears about each; the same obstacle, re-read by every sweep
+				// pass, is heard about once.
+				Occurrence: id.String() + ":" + blockedOccurrence(reason),
+				At:         at,
+			})
+		}); err != nil {
+		return err
+	}
+	_ = changed
+	return nil
+}
+
+// blockedOccurrence is a short stable tag for one obstacle, used to make the
+// notice idempotent without putting a paragraph in a dedup key.
+func blockedOccurrence(reason string) string {
+	switch reason {
+	case blockedDestinationUnusable:
+		return "destination-unusable"
+	case blockedNoDestination:
+		return "no-destination"
+	default:
+		return "blocked"
+	}
 }
 
 // applyProviderResult records what a provider said and moves the request.

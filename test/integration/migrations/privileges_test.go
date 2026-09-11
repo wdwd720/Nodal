@@ -332,7 +332,15 @@ func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
 		// column grant on `state` plus an edge binding that never asked whether
 		// the edge exists let cp_app move a REJECTED request to SETTLED with a
 		// forged provider reference (F-229).
+		//
+		// blocked_reason and blocked_at joined the list at 00822. They record
+		// why a RESERVED payout cannot be submitted, in words its holder reads,
+		// and they are the application's for the reason failure_reason beside
+		// them is: they say what this deployment DECIDED, not what state the
+		// request is in or how much money is behind it. The state and the seven
+		// columns around it stay unreachable (F-277).
 		"payout_requests": {
+			"blocked_at", "blocked_reason",
 			"eligibility_reasons", "failure_reason", "policy_hash", "policy_version",
 			"provider", "provider_idempotency_key", "submitted_at", "verification_level",
 		},

@@ -69,16 +69,23 @@ func buildConsumptionOrderSQL() string {
 
 // openLotsQuery selects an account's open lots in consumption order.
 //
-// $3 is "require spendable finality", $4 is the allowed-origin set and $5 is
-// the allowed-lot set; a null or empty set means no restriction of that kind.
-// Expressing all three as parameters of one constant statement is what lets
-// test/security prove the statement is not assembled from anything a request
-// supplied.
+// $3 is "require spendable finality", $4 is the allowed-origin set, $5 is the
+// allowed-lot set and $6 is "require payout-eligible finality"; a null or empty
+// set means no restriction of that kind. Expressing all four as parameters of
+// one constant statement is what lets test/security prove the statement is not
+// assembled from anything a request supplied.
+//
+// The two finality filters are separate rather than one level, because they are
+// two different questions about the same lot and a reservation asks the second:
+// REVERSIBLE value may be SPENT and may not LEAVE (D-136, F-270). Both lists are
+// held identical to valuedomain by
+// TestConsume_TheFinalityFiltersMatchValuedomain.
 const openLotsQuery = `SELECT ` + lotColumns + `
 	  FROM credit_lots l
 	  JOIN credit_lot_state st ON st.lot_id = l.id
 	 WHERE l.account_id = $1 AND l.asset_id = $2 AND st.remaining_quantity > 0
 	   AND ($3::boolean = false OR st.finality IN ('UNFUNDED','REVERSIBLE','SETTLED'))
+	   AND ($6::boolean = false OR st.finality IN ('UNFUNDED','SETTLED'))
 	   AND ($4::text[] IS NULL OR cardinality($4::text[]) = 0 OR l.origin = ANY($4::text[]))
 	   AND ($5::uuid[] IS NULL OR cardinality($5::uuid[]) = 0 OR l.id = ANY($5::uuid[]))
 	 ORDER BY ` + consumptionOrderSQL + `, l.created_at, l.id`
@@ -92,7 +99,7 @@ const accountLotsQuery = `SELECT ` + lotColumns + `
 const lotColumns = `l.id, l.account_id, l.asset_id, l.origin, l.initial_finality, l.quantity::text,
 	 coalesce(l.funding_reference_type,''), coalesce(l.funding_reference_id,''), l.journal_transaction_id,
 	 l.issued_by_actor_type, l.issued_by_actor_id, l.reason, l.created_at,
-	 st.remaining_quantity::text, st.finality, st.origin_floor, st.version`
+	 st.remaining_quantity::text, st.finality, st.origin_floor, st.root_origins, st.version`
 
 func scanLot(row pgx.Row) (Lot, error) {
 	var (
@@ -101,13 +108,15 @@ func scanLot(row pgx.Row) (Lot, error) {
 		refType, refID     string
 		origin, initialFin string
 		finality, floor    string
+		roots              []string
 	)
 	if err := row.Scan(&l.ID, &l.AccountID, &l.AssetID, &origin, &initialFin, &qty,
 		&refType, &refID, &l.JournalTxID,
 		&l.IssuedByActorType, &l.IssuedByActorID, &l.Reason, &l.CreatedAt,
-		&remaining, &finality, &floor, &l.Version); err != nil {
+		&remaining, &finality, &floor, &roots, &l.Version); err != nil {
 		return Lot{}, err
 	}
+	l.RootOrigins = originsOf(roots)
 	var err error
 	if l.Quantity, err = money.ParseQuantity(qty); err != nil {
 		return Lot{}, errs.Wrap(err, errs.CodeInternal, "credit: lot quantity is not an integer")
@@ -126,6 +135,20 @@ func scanLot(row pgx.Row) (Lot, error) {
 	return l, nil
 }
 
+// originsOf converts the projection's root-origin array. A row with none is
+// returned as nil rather than as an empty non-nil slice, so a caller cannot tell
+// "no roots" from "roots I did not read": `Policy.Permits` refuses both.
+func originsOf(in []string) []valuedomain.CreditOrigin {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]valuedomain.CreditOrigin, 0, len(in))
+	for _, o := range in {
+		out = append(out, valuedomain.CreditOrigin(o))
+	}
+	return out
+}
+
 // openLotsForUpdate returns the account's lots that still hold units, in
 // consumption order, with each row locked.
 //
@@ -136,7 +159,8 @@ func scanLot(row pgx.Row) (Lot, error) {
 func (s *Service) openLotsForUpdate(
 	ctx context.Context, tx pgx.Tx,
 	accountID accounts.AccountID, assetID assets.AssetID,
-	requireSpendable bool, allowedOrigins []valuedomain.CreditOrigin, allowedLots []LotID,
+	requireSpendable, requirePayoutFinality bool,
+	allowedOrigins []valuedomain.CreditOrigin, allowedLots []LotID,
 ) ([]Lot, error) {
 	// Both filters are PARAMETERS of one constant statement rather than
 	// fragments concatenated into a built one. An earlier version assembled
@@ -158,7 +182,7 @@ func (s *Service) openLotsForUpdate(
 			lots = append(lots, l.String())
 		}
 	}
-	args := []any{accountID, assetID, requireSpendable, origins, lots}
+	args := []any{accountID, assetID, requireSpendable, origins, lots, requirePayoutFinality}
 	// Serialise spenders on this account's Credits before reading the lots.
 	//
 	// `FOR UPDATE OF st` would be the obvious way and is not available: the

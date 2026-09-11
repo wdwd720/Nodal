@@ -180,22 +180,32 @@ func (s *Service) ParentsOf(ctx context.Context, q db.Querier, lotID LotID) ([]L
 //
 //   - it is REVERSIBLE and NO parent is below a payout-eligible finality, so
 //     the promotion branch will move it; or
-//   - some parent is DISPUTED or REVERSED, so the freeze branch will. A lot
-//     already DISPUTED is not REVERSIBLE or SETTLED, so it is out of the set by
-//     the first clause and the freeze direction converges too.
+//   - some parent is DISPUTED or REVERSED and the lot is not already one of
+//     those itself, so the freeze branch will.
+//
+// The freeze clause used to sit under an outer `st.finality IN
+// ('REVERSIBLE','SETTLED')`, which is a THIRD statement of which lots can be
+// frozen and it did not match the other two. A derived lot is minted at the
+// least final finality among its parents, and UNFUNDED sits between REVERSIBLE
+// and SETTLED -- so an earning funded by a grant and a settled card purchase is
+// minted UNFUNDED and was outside the predicate for ever, whatever happened to
+// the card (F-273). The freeze clause now says what the branch says: any
+// derived lot with a frozen parent that is not itself frozen. The PROMOTION
+// clause keeps its REVERSIBLE test, because promotion out of UNFUNDED would be
+// value inventing a backer.
 //
 // And never a lot with a `credit_fundings` row. Those belong to SettleFunding,
 // which keys on exactly that column; a funded lot that acquired a parent row is
 // either the mint of an externally funded purchase or the forgery F-266 was, and
 // in neither case is this sweep the thing that should move it.
 //
-// The two finality lists are passed in from valuedomain rather than written as
-// SQL literals, so `PayoutEligible()` and this query cannot come to disagree.
+// Both finality lists are passed in from valuedomain rather than written as SQL
+// literals, so `PayoutEligible()`, `Frozen()` and this query cannot come to
+// disagree.
 const settleDerivedCandidates = `
 	SELECT st.lot_id, st.finality
 	  FROM credit_lot_state st
-	 WHERE st.finality IN ('REVERSIBLE','SETTLED')
-	   AND EXISTS (SELECT 1 FROM credit_lot_parents p WHERE p.lot_id = st.lot_id)
+	 WHERE EXISTS (SELECT 1 FROM credit_lot_parents p WHERE p.lot_id = st.lot_id)
 	   AND NOT EXISTS (SELECT 1 FROM credit_fundings f WHERE f.lot_id = st.lot_id)
 	   AND (
 	        (st.finality = 'REVERSIBLE'
@@ -204,11 +214,12 @@ const settleDerivedCandidates = `
 	               JOIN credit_lot_state ps ON ps.lot_id = p.parent_lot_id
 	              WHERE p.lot_id = st.lot_id
 	                AND NOT (ps.finality = ANY($2::text[]))))
-	     OR EXISTS (
+	     OR (NOT (st.finality = ANY($3::text[]))
+	         AND EXISTS (
 	             SELECT 1 FROM credit_lot_parents p
 	               JOIN credit_lot_state ps ON ps.lot_id = p.parent_lot_id
 	              WHERE p.lot_id = st.lot_id
-	                AND ps.finality = ANY($3::text[]))
+	                AND ps.finality = ANY($3::text[])))
 	   )
 	 ORDER BY st.lot_id
 	 LIMIT $1`
@@ -224,11 +235,18 @@ func payoutEligibleFinalities() []string {
 	return out
 }
 
-// frozenFinalities are the ones that freeze a lot derived from them. They are
-// the two SettleDerived's freeze branch acts on, named once here and read by
-// the predicate that decides which lots it is worth looking at.
+// frozenFinalities are the ones that freeze a lot derived from them, as a SQL
+// array. The set itself is valuedomain's: the predicate that selects candidates
+// and the branch that acts on them read one declaration, because a list written
+// twice is how the sweep came to look at REVERSIBLE and SETTLED lots while its
+// own comment said DISPUTED and REVERSED (F-273).
 func frozenFinalities() []string {
-	return []string{string(valuedomain.FinalityDisputed), string(valuedomain.FinalityReversed)}
+	fs := valuedomain.FrozenFinalities()
+	out := make([]string, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, string(f))
+	}
+	return out
 }
 
 // SettleDerivedResult is what one pass of SettleDerived did.
@@ -253,12 +271,20 @@ type SettleDerivedResult struct {
 //
 //   - a REVERSIBLE derived lot whose parents have ALL reached a payout-eligible
 //     finality is promoted to SETTLED. One parent short and nothing moves.
-//   - a REVERSIBLE or SETTLED derived lot with a DISPUTED or REVERSED parent is
-//     moved to DISPUTED, which is neither spendable nor payout-eligible. That
-//     is as far as the ledger can follow a reversal: taking value back from a
-//     third party who earned it and may have spent it is a posting kind this
-//     ledger does not have, and D-124 records the residual rather than
-//     inventing one.
+//
+//   - a derived lot with a DISPUTED or REVERSED parent, at ANY finality that is
+//     not already one of those, is moved to DISPUTED, which is neither
+//     spendable nor payout-eligible. That is as far as the ledger can follow a
+//     reversal: taking value back from a third party who earned it and may have
+//     spent it is a posting kind this ledger does not have, and D-124 records
+//     the residual rather than inventing one.
+//
+//     "At any finality" includes UNFUNDED, which is where a derived lot lands
+//     whenever its least final parent is a grant. That case was unreachable
+//     until D-124's amendment: the predicate looked only at REVERSIBLE and
+//     SETTLED lots, and the finality table called UNFUNDED terminal, so an
+//     earning funded by a grant and a charged-back card stayed spendable for
+//     ever (F-273).
 //
 // Batch-bounded, and each lot is taken under the same advisory lock SetFinality
 // uses, tried rather than waited for -- so two tickers racing skip past each
@@ -316,8 +342,11 @@ func (s *Service) SettleDerived(ctx context.Context, tx pgx.Tx, limit int) (Sett
 		}
 		worst := DerivedFinality(parents)
 		switch {
-		case worst == valuedomain.FinalityDisputed || worst == valuedomain.FinalityReversed:
-			if c.from == valuedomain.FinalityDisputed {
+		case worst.Frozen():
+			// Already frozen, by this pass or an earlier one. REVERSED is
+			// terminal and DISPUTED is where this branch sends things, so
+			// neither is this sweep's to move again.
+			if c.from.Frozen() {
 				continue
 			}
 			if err := s.SetFinality(ctx, tx, c.id, valuedomain.FinalityDisputed,

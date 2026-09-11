@@ -26,6 +26,10 @@ type assetsAssetID = assets.AssetID
 // accountsAccountID is the account identifier, aliased for the same reason.
 type accountsAccountID = accounts.AccountID
 
+// accountsUserID is the person who owns an account. A payout belongs to an
+// account; a notice about one is addressed to the person.
+type accountsUserID = accounts.UserID
+
 // accountsAccount and the two statuses the WITHDRAW guard compares against,
 // aliased for the same reason: service.go names them in an interface and in one
 // refusal, and nothing else in this package needs the accounts package.
@@ -44,7 +48,8 @@ const requestColumns = `id, account_id, destination_id, credit_asset_id, state,
 	coalesce(quote_gross_amount_minor,0), coalesce(quote_fee_amount_minor,0),
 	coalesce(quote_net_amount_minor,0), coalesce(quote_currency,''),
 	sandbox, coalesce(environment,''),
-	reserved_at, submitted_at, settled_at, coalesce(failure_reason,''), created_at, updated_at`
+	reserved_at, submitted_at, settled_at, coalesce(failure_reason,''),
+	coalesce(blocked_reason,''), blocked_at, created_at, updated_at`
 
 func scanRequest(row pgx.Row) (Request, error) {
 	var (
@@ -60,6 +65,7 @@ func scanRequest(row pgx.Row) (Request, error) {
 		&r.QuoteGrossAmountMinor, &r.QuoteFeeAmountMinor, &r.QuoteNetAmountMinor, &r.QuoteCurrency,
 		&r.Sandbox, &r.Environment,
 		&r.ReservedAt, &r.SubmittedAt, &r.SettledAt, &r.FailureReason,
+		&r.BlockedReason, &r.BlockedAt,
 		&r.CreatedAt, &r.UpdatedAt); err != nil {
 		return Request{}, err
 	}
@@ -150,7 +156,7 @@ func (s *Service) allocations(ctx context.Context, q db.Querier, id RequestID, i
 		where += ` AND NOT returned`
 	}
 	rows, err := q.Query(ctx,
-		`SELECT id, request_id, lot_id, origin, quantity::text, returned, created_at
+		`SELECT id, request_id, lot_id, origin, origin_floor, quantity::text, returned, created_at
 		   FROM payout_allocations WHERE `+where+` ORDER BY created_at, id`, id)
 	if err != nil {
 		return nil, mapError(err)
@@ -159,14 +165,17 @@ func (s *Service) allocations(ctx context.Context, q db.Querier, id RequestID, i
 	var out []Allocation
 	for rows.Next() {
 		var (
-			a      Allocation
-			origin string
-			qty    string
+			a           Allocation
+			origin      string
+			originFloor string
+			qty         string
 		)
-		if err := rows.Scan(&a.ID, &a.RequestID, &a.LotID, &origin, &qty, &a.Returned, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.RequestID, &a.LotID, &origin, &originFloor, &qty,
+			&a.Returned, &a.CreatedAt); err != nil {
 			return nil, mapError(err)
 		}
 		a.Origin = valuedomain.CreditOrigin(origin)
+		a.OriginFloor = valuedomain.CreditOrigin(originFloor)
 		v, perr := money.ParseQuantity(qty)
 		if perr != nil {
 			return nil, errs.Wrap(perr, errs.CodeInternal, "payout: allocation quantity is not an integer")

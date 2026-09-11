@@ -98,13 +98,15 @@ func newFakeEligibility() *fakeEligibility {
 		Holdings: []eligibility.OriginHolding{
 			{
 				Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
-				Quantity: money.QuantityFromInt64(5000),
-				Finality: valuedomain.FinalitySettled, HeldDays: 30,
+				RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPurchased},
+				Quantity:    money.QuantityFromInt64(5000),
+				Finality:    valuedomain.FinalitySettled, HeldDays: 30,
 			},
 			{
 				Origin: valuedomain.OriginPromotional, OriginFloor: valuedomain.OriginPromotional,
-				Quantity: money.QuantityFromInt64(9000),
-				Finality: valuedomain.FinalityUnfunded, HeldDays: 30,
+				RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPromotional},
+				Quantity:    money.QuantityFromInt64(9000),
+				Finality:    valuedomain.FinalityUnfunded, HeldDays: 30,
 			},
 			// The bucket D-131 is about: proceeds of the grant above. Its own
 			// origin is one the sandbox policy releases and its floor is not,
@@ -112,8 +114,9 @@ func newFakeEligibility() *fakeEligibility {
 			// statement about the trade.
 			{
 				Origin: valuedomain.OriginMarketTradingProceeds, OriginFloor: valuedomain.OriginPromotional,
-				Quantity: money.QuantityFromInt64(2000),
-				Finality: valuedomain.FinalityUnfunded, HeldDays: 30,
+				RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPromotional},
+				Quantity:    money.QuantityFromInt64(2000),
+				Finality:    valuedomain.FinalityUnfunded, HeldDays: 30,
 			},
 		},
 		PolicyValid: true,
@@ -126,7 +129,15 @@ func newFakeEligibility() *fakeEligibility {
 		DestinationConfigured: true,
 		Sandbox:               true,
 	}
-	return &fakeEligibility{explanation: eligibility.ExplainWithdrawal(in)}
+	// Nothing here is payout-eligible at NODAL_IDENTITY, so the per-lot figure
+	// is zero and so is the sum of the buckets; the fixture states it rather
+	// than leaving the invariant to a zero value that happens to match.
+	in.PayoutEligible = money.Quantity{}
+	out, err := eligibility.ExplainWithdrawal(in)
+	if err != nil {
+		panic("fake eligibility fixture is not self-consistent: " + err.Error())
+	}
+	return &fakeEligibility{explanation: out}
 }
 
 func (f *fakeEligibility) Withdrawal(context.Context, accounts.AccountID) (eligibility.WithdrawalExplanation, error) {
