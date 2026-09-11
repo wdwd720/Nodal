@@ -822,6 +822,256 @@ func (s *PurchaseService) Reconcile(ctx context.Context, tx pgx.Tx, id FundingID
 	return f, nil
 }
 
+// ---------------------------------------------------------------------------
+// the two passes that finish a purchase nobody else will
+// ---------------------------------------------------------------------------
+
+// DefaultReconcileAfter is how long a purchase may sit in flight before this
+// system asks the provider what became of it.
+//
+// Fifteen minutes is not a policy: it is longer than any card authorisation
+// takes and shorter than a person's patience, so anything past it is either
+// abandoned or a lost response, and both want the same question asked.
+const DefaultReconcileAfter = 15 * time.Minute
+
+// DefaultInFlightLifetime is how long a purchase may sit in flight before this
+// system stops holding money-at-risk headroom for it.
+//
+// It is a day because that is how long a customer might plausibly leave a
+// checkout open across a lunch break, a lost phone or a night's sleep, and
+// because it is the horizon Stripe itself uses for an unconfirmed intent. It is
+// deliberately much longer than DefaultReconcileAfter: asking the provider what
+// happened costs one read, and giving up on a payment ends it.
+const DefaultInFlightLifetime = 24 * time.Hour
+
+// preCaptureStates are the states a purchase sits in before any money has been
+// taken. They are the states ExpireInFlight may end.
+//
+// CAPTURE_PENDING is deliberately absent, and fundingTransitions agrees: once
+// the provider says it is processing, cancelling is no longer ours to do, and
+// the money really is in flight, so holding headroom for it is correct rather
+// than a leak. ReconcileDue keeps asking about it every pass; a provider that
+// never answers is an incident for a person, not a state this sweep may invent.
+var preCaptureStates = []string{"CREATED", "AUTHORIZATION_PENDING", "AUTHORIZED"}
+
+// inFlightStates are every state where the provider has not decided. They are
+// the states ReconcileDue asks about.
+var inFlightStates = []string{"CREATED", "AUTHORIZATION_PENDING", "AUTHORIZED", "CAPTURE_PENDING"}
+
+// InFlightFundings lists purchases the provider has not decided, oldest first.
+//
+// It does NOT require a provider reference, and that is the change F-154 turns
+// on. The sweep's old filter was `provider_reference IS NOT NULL`, which is
+// exactly the set of fundings that cannot be in the state the sweep exists to
+// recover: StartPurchase commits the row in phase 1 and the reference in phase
+// 3, so a crash or a provider failure between them leaves a committed row with
+// a NULL reference and nothing that would ever look at it again.
+func (s *PurchaseService) InFlightFundings(
+	ctx context.Context, q db.Querier, states []string, olderThan time.Duration, limit int,
+) ([]FundingID, error) {
+	if olderThan <= 0 {
+		return nil, errs.New(errs.CodeValidationFailed,
+			"credit: a staleness threshold must be positive; zero would treat a purchase opened this instant as abandoned")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	// The cutoff is computed in SQL from the database's own clock, for the
+	// reason SettleDue gives at length: comparing a column the database wrote
+	// against a time this process computed compares two clocks.
+	//
+	// created_at, not updated_at, for the same reason SettleDue measures from
+	// reversible_at. updated_at is maintained by a trigger and means "when was
+	// this row last touched", so any unrelated write restarts it -- and the
+	// question here is how long the PURCHASE has been open, which is a fact
+	// about when it was opened. A checkout begun yesterday whose state moved a
+	// minute ago is still a checkout begun yesterday.
+	rows, err := q.Query(ctx,
+		`SELECT id FROM credit_fundings
+		  WHERE state = ANY($1)
+		    AND created_at < now() - make_interval(secs => $2)
+		  ORDER BY created_at
+		  LIMIT $3
+		  FOR UPDATE SKIP LOCKED`, states, olderThan.Seconds(), limit)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	var out []FundingID
+	for rows.Next() {
+		var id FundingID
+		if err := rows.Scan(&id); err != nil {
+			return nil, mapError(err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapError(err)
+	}
+	return out, nil
+}
+
+// ReconcileDue asks the provider what became of every purchase that has been in
+// flight too long, and applies the answer.
+//
+// # Why it takes a Transactor
+//
+// Because the provider call must not be inside the transaction that writes the
+// answer. One transaction per purchase, not one for the batch: a provider call
+// inside a transaction holds a database connection across the network, and a
+// batch of them holds several out of a pool of eight. That pool starvation is
+// F-27, and it is why this loop looks inefficient and is not.
+//
+// It is idempotent. The listing takes its rows FOR UPDATE SKIP LOCKED, and
+// Reconcile re-reads each funding FOR UPDATE inside its own transaction and
+// does nothing when the state has already moved -- so a worker tier added later
+// can run this alongside the API process with no coordination.
+func (s *PurchaseService) ReconcileDue(
+	ctx context.Context, database Transactor, olderThan time.Duration, limit int,
+) (int, error) {
+	ids, err := s.inFlight(ctx, database, inFlightStates, olderThan, limit)
+	if err != nil {
+		return 0, err
+	}
+	var checked int
+	for _, id := range ids {
+		if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, rerr := s.Reconcile(ctx, tx, id)
+				return rerr
+			}); err != nil {
+			return checked, err
+		}
+		checked++
+	}
+	return checked, nil
+}
+
+// ExpireInFlight cancels purchases nobody completed.
+//
+// # What it is for
+//
+// Every pre-capture state counts against the money-at-risk ceiling, and until
+// this existed nothing ever moved a funding out of one on its own. SettleDue
+// selects REVERSIBLE; the reconciliation sweep adopted whatever the provider
+// said, and an abandoned checkout's provider says "still waiting" forever; a
+// provider call that failed left a committed row in CREATED with no reference
+// at all, which no sweep even looked at. So two abandoned $1,000 checkouts
+// exhausted the blueprint's $2,000 tier and every honest purchase after them
+// was refused AT_CAPACITY with no remedy -- F-90's failure reached through a
+// different door (F-153).
+//
+// # What it does, in the order that makes it safe
+//
+// For a funding that names a payment, the provider is asked first. If the
+// provider says the payment got somewhere -- succeeded, failed, cancelled
+// already -- that answer is applied through Reconcile, the ordinary path, and
+// nothing is cancelled. Only a payment the provider still reports as awaiting
+// its customer is cancelled, and it is cancelled AT THE PROVIDER before it is
+// cancelled here: a funding marked CANCELED over a live PaymentIntent is a card
+// that can still be charged against a terminal funding that will never mint.
+//
+// For a funding that names no payment, there is nothing at the provider this
+// system can ask about and nothing a customer could pay: the client secret is
+// the only thing that can confirm a payment, it is returned once from a
+// successful provider call and never persisted, and a funding that got one has
+// a reference. So the row is cancelled on its own.
+//
+// The provider calls happen outside every transaction, for the reason
+// ReconcileDue gives.
+func (s *PurchaseService) ExpireInFlight(
+	ctx context.Context, database Transactor, olderThan time.Duration, limit int,
+) (int, error) {
+	ids, err := s.inFlight(ctx, database, preCaptureStates, olderThan, limit)
+	if err != nil {
+		return 0, err
+	}
+	log := observability.LoggerFrom(ctx)
+	var expired int
+	for _, id := range ids {
+		var f Funding
+		if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				var rerr error
+				f, rerr = s.credits.Funding(ctx, tx, id)
+				return rerr
+			}); err != nil {
+			return expired, err
+		}
+		if !CanTransitionFunding(f.State, FundingCanceled) {
+			// It moved between the listing and here. Nothing to do.
+			continue
+		}
+
+		reason := "the payment was never opened with the provider and has expired"
+		if f.ProviderReference != "" {
+			// Ask before ending it. A provider that has taken the money is the
+			// authority on that, and cancelling over the top of it would strand
+			// a charge.
+			snap, gerr := s.provider.GetPurchase(ctx, f.ProviderReference)
+			if gerr != nil {
+				log.WarnContext(ctx, "credit: could not ask the provider about an in-flight purchase",
+					"funding_id", f.ID.String(), "error", gerr.Error())
+				continue
+			}
+			if to, ok := FundingStateFor(snap.Status); ok && to != f.State {
+				if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+					func(ctx context.Context, tx pgx.Tx) error {
+						_, rerr := s.Reconcile(ctx, tx, id)
+						return rerr
+					}); err != nil {
+					return expired, err
+				}
+				continue
+			}
+			if _, cerr := s.provider.CancelPurchase(ctx, f.ProviderReference,
+				"credit_funding:"+f.ID.String()+":cancel"); cerr != nil {
+				// The provider refuses to cancel what is no longer ours to
+				// cancel. Reconcile is the path that adopts whatever it became.
+				log.WarnContext(ctx, "credit: the provider refused to cancel an abandoned purchase",
+					"funding_id", f.ID.String(), "error", cerr.Error())
+				if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+					func(ctx context.Context, tx pgx.Tx) error {
+						_, rerr := s.Reconcile(ctx, tx, id)
+						return rerr
+					}); err != nil {
+					return expired, err
+				}
+				continue
+			}
+			reason = "the customer did not complete this payment and it was cancelled with the provider"
+		}
+
+		if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+			func(ctx context.Context, tx pgx.Tx) error {
+				_, aerr := s.credits.AdvanceFunding(ctx, tx, id, FundingCanceled, reason, "")
+				return aerr
+			}); err != nil {
+			return expired, err
+		}
+		log.InfoContext(ctx, "credit: an in-flight purchase expired",
+			"funding_id", f.ID.String(), "had_provider_reference", f.ProviderReference != "",
+			"amount_minor", f.PaidAmount.Minor())
+		expired++
+	}
+	return expired, nil
+}
+
+// inFlight runs the listing in its own short transaction, so the row locks it
+// takes are released before any provider call happens.
+func (s *PurchaseService) inFlight(
+	ctx context.Context, database Transactor, states []string, olderThan time.Duration, limit int,
+) ([]FundingID, error) {
+	var ids []FundingID
+	err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var lerr error
+			ids, lerr = s.InFlightFundings(ctx, tx, states, olderThan, limit)
+			return lerr
+		})
+	return ids, err
+}
+
 // SettleDue promotes fundings whose reversibility window has closed.
 //
 // The window is policy, not a constant. The goal document is explicit that

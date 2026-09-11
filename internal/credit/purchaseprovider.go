@@ -30,6 +30,8 @@ import (
 //     purchase and not a second charge;
 //   - tell us later what happened to that purchase, so a lost response is
 //     recoverable;
+//   - stop a purchase nobody completed, so an abandoned checkout stops being
+//     money this deployment might owe;
 //   - hand us signed evidence of a state change, so we never learn about
 //     money from an unauthenticated caller;
 //   - describe what it actually supports, so nothing is inferred.
@@ -52,6 +54,21 @@ type PurchaseProvider interface {
 	// GetPurchase answers "what happened to this purchase". It is what
 	// resolves a lost create response and what reconciliation reads.
 	GetPurchase(ctx context.Context, providerReference string) (PurchaseSnapshot, error)
+
+	// CancelPurchase stops a payment that has not been captured, and returns
+	// the provider's view of it afterwards.
+	//
+	// It is on this interface rather than an optional capability because
+	// without it a purchase nobody finishes is permanent. Every state before
+	// capture counts against the money-at-risk ceiling, and nothing else in
+	// the lifecycle leaves those states on its own: a customer who opens the
+	// Buy Credits page and closes the tab holds that headroom for the life of
+	// the deployment, and two of them exhaust a launch tier (F-153).
+	//
+	// It must be safe to call on a payment that has already reached a terminal
+	// state; a provider that refuses is telling us the payment is no longer
+	// ours to cancel, and the caller reconciles instead of insisting.
+	CancelPurchase(ctx context.Context, providerReference, idempotencyKey string) (PurchaseSnapshot, error)
 
 	// ParseWebhook verifies and decodes one provider delivery. An
 	// implementation that returns an event without having verified a

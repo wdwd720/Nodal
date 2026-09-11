@@ -41,8 +41,8 @@ func theCreditAsset(t *testing.T, d *db.DB) assets.AssetID {
 		Chain: assets.InternalChain, Kind: assets.KindCredit,
 		ValueDomain: valuedomain.InternalCredit,
 		Symbol:      "CREDIT", Name: "Nodal Credit",
-		Decimals:    uint8(credit.DefaultCreditDecimals),
-		RiskClass:   assets.RiskUnsupported, Status: assets.StatusActive,
+		Decimals:  uint8(credit.DefaultCreditDecimals),
+		RiskClass: assets.RiskUnsupported, Status: assets.StatusActive,
 	})
 	require.NoError(t, err)
 	return created.ID
@@ -175,6 +175,10 @@ func (settleTestProvider) CreatePurchase(context.Context, credit.CreatePurchaseR
 
 func (settleTestProvider) GetPurchase(context.Context, string) (credit.PurchaseSnapshot, error) {
 	panic("the settlement sweep must not call the provider")
+}
+
+func (settleTestProvider) CancelPurchase(context.Context, string, string) (credit.PurchaseSnapshot, error) {
+	panic("the settlement sweep must not cancel a payment")
 }
 
 func (settleTestProvider) ParseWebhook(context.Context, []byte, http.Header) (credit.PurchaseEvent, error) {

@@ -141,34 +141,26 @@ func TestAudit_ChargebackOfSpentCreditsBooksADeficitAndTakesNoOtherLot(t *testin
 // checkout the customer abandons, consume the money-at-risk ceiling forever.
 // ---------------------------------------------------------------------------
 
-// staleQuery is cmd/reconciliation-worker/creditsweep.go's stale() verbatim.
-// The sweep is the only thing that asks a provider what became of an in-flight
-// purchase, and this is the filter it uses.
-const staleQuery = `SELECT id FROM credit_fundings
-	  WHERE state IN ('CREATED','AUTHORIZATION_PENDING','AUTHORIZED','CAPTURE_PENDING')
-	    AND provider_reference IS NOT NULL
-	    AND updated_at < now() - interval '15 minutes'
-	  ORDER BY updated_at
-	  LIMIT $1`
-
 // StartPurchase commits the funding row in phase 1 and calls the provider in
-// phase 2 (purchase.go:176-230). A phase-2 failure returns an error to the
-// caller and leaves the committed row in CREATED with a NULL
-// provider_reference.
+// phase 2. A phase-2 failure returns an error to the caller and leaves the
+// committed row in CREATED with a NULL provider_reference.
 //
-// CREATED is in capacity.atRiskFundingStates, so the amount counts against
-// CP_CAPACITY_MAX_AT_RISK_MINOR. Nothing ever moves it out:
+// CREATED is in capacity.atRiskFundingStates, so the amount counted against
+// CP_CAPACITY_MAX_AT_RISK_MINOR. Nothing ever moved it out:
 //
 //   - SettleDue only selects state = 'REVERSIBLE';
-//   - the reconciliation sweep's stale() requires provider_reference IS NOT
-//     NULL, and Reconcile returns early for an empty reference anyway;
-//   - nothing else in the binary writes CANCELED or FAILED.
+//   - the reconciliation sweep's stale() required provider_reference IS NOT
+//     NULL, and Reconcile returned early for an empty reference anyway;
+//   - nothing else in the binary wrote CANCELED or FAILED.
 //
-// So the ceiling internal/capacity documents as drainable is monotonically
+// So the ceiling internal/capacity documents as drainable was monotonically
 // non-decreasing again, which is F-90's failure ("the deployment would have
 // refused every Credit purchase with AT_CAPACITY, permanently") reached through
 // a different door.
-func TestAudit_AFailedProviderCreateHoldsTheAtRiskCeilingForever(t *testing.T) {
+//
+// Inverted for F-153: ExpireInFlight ends it, and the assertions that recorded
+// the money as stuck forever now record it draining.
+func TestAudit_AFailedProviderCreateIsCancelledAndReleasesTheCeiling(t *testing.T) {
 	f := newPurchaseFixtureWithCeiling(t, 200_000) // the blueprint's $2,000
 
 	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: 200_000}, f.clk.Now)
@@ -192,8 +184,11 @@ func TestAudit_AFailedProviderCreateHoldsTheAtRiskCeilingForever(t *testing.T) {
 		Currency: "USD", IdempotencyKey: f.keyPrefix + ":failed-create",
 	})
 	require.Error(t, err, "the caller is told the purchase failed")
+	f.prov.failCreate = nil
 
 	// And yet the row is committed, in CREATED, with no provider reference.
+	// That part is deliberate: a record to reconcile against is better than a
+	// charge nobody knows about (F-96).
 	var state string
 	var ref *string
 	require.NoError(t, testDB.QueryRow(f.ctx,
@@ -205,22 +200,7 @@ func TestAudit_AFailedProviderCreateHoldsTheAtRiskCeilingForever(t *testing.T) {
 	require.Equal(t, before+100_000, atRisk(),
 		"$1,000 of a payment that was never opened counts against the launch tier's ceiling")
 
-	// Nothing will ever take it back out.
-	var staleIDs []FundingID
-	rows, err := testDB.Query(f.ctx, staleQuery, 100)
-	require.NoError(t, err)
-	for rows.Next() {
-		var id FundingID
-		require.NoError(t, rows.Scan(&id))
-		staleIDs = append(staleIDs, id)
-	}
-	rows.Close()
-	require.NoError(t, rows.Err())
-	for _, id := range staleIDs {
-		got := f.funding(t, id)
-		require.NotEqual(t, "", got.ProviderReference)
-	}
-
+	// SettleDue is not the thing that takes it back out, and never was.
 	var n int
 	require.NoError(t, f.tx(func(tx pgx.Tx) error {
 		var serr error
@@ -229,41 +209,50 @@ func TestAudit_AFailedProviderCreateHoldsTheAtRiskCeilingForever(t *testing.T) {
 	}))
 	require.Zero(t, n, "SettleDue only looks at REVERSIBLE")
 
-	// Even backdating it past every window changes nothing.
-	_, err = testOwnerDB.Exec(f.ctx,
-		`UPDATE credit_fundings SET updated_at = now() - interval '400 days', created_at = now() - interval '400 days'
-		   WHERE idempotency_key = $1`, f.keyPrefix+":failed-create")
+	// A purchase this fresh is not abandoned yet, and the pass leaves it alone.
+	expired, err := f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
 	require.NoError(t, err)
-	require.Equal(t, before+100_000, atRisk(),
-		"a year later it is still counted; there is no expiry and no cancellation path")
+	require.Zero(t, expired, "a checkout opened a moment ago is not an abandoned one")
+	require.Equal(t, before+100_000, atRisk())
 
-	// Which is what exhausts the ceiling. One more failure and a deployment
-	// whose ceiling is the blueprint's $2,000 refuses every honest purchase.
-	f.prov.failCreate = errs.New(errs.CodeProviderUnavailable, "provider is unavailable")
-	_, err = f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
-		AccountID: f.account, Amount: money.USDFromMinor(100_000),
-		Currency: "USD", IdempotencyKey: f.keyPrefix + ":failed-create-2",
-	})
-	require.Error(t, err)
-	f.prov.failCreate = nil
+	// A day later it is. The listing takes its cutoff from the database's own
+	// clock, so the row is backdated rather than the process's clock moved.
+	f.backdate(t, f.keyPrefix+":failed-create", 25*time.Hour)
+	expired, err = f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, expired)
 
-	_, err = f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
-		AccountID: f.account, Amount: money.USDFromMinor(1000), // $10, a working provider
+	got := f.fundingByKey(t, f.keyPrefix+":failed-create")
+	assert.Equal(t, FundingCanceled, got.State,
+		"a payment that was never opened is CANCELED, not FAILED: nobody's card was declined")
+	assert.True(t, got.State.Terminal())
+	assert.Zero(t, f.prov.canceled, "there was nothing at the provider to cancel")
+	assert.Equal(t, before, atRisk(), "and the ceiling has its headroom back")
+
+	// Which is the whole point: an honest purchase is admitted again.
+	honest, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(1000), // $10
 		Currency: "USD", IdempotencyKey: f.keyPrefix + ":honest",
 	})
-	require.Error(t, err, "the ceiling is exhausted by two payments that never existed")
-	assert.Equal(t, errs.CodeAtCapacity, errs.CodeOf(err))
+	require.NoError(t, err, "the ceiling is no longer exhausted by a payment that never existed")
+	require.NotEmpty(t, honest.Funding.ProviderReference)
 }
 
 // The same hole, reached the way a real user reaches it: open the Buy Credits
 // page, get a PaymentIntent, and close the tab.
 //
-// The funding gets a provider reference, so the sweep does find it -- and asks
+// The funding gets a provider reference, so the sweep did find it -- and asked
 // the provider, which reports requires_payment_method forever, which maps to
-// AUTHORIZATION_PENDING, which is also an at-risk state. Reconcile then has
+// AUTHORIZATION_PENDING, which is also an at-risk state. Reconcile then had
 // nothing left to do on every subsequent pass, and no code path in this binary
-// ever cancels an abandoned PaymentIntent or expires the funding.
-func TestAudit_AnAbandonedCheckoutNeverLeavesTheAtRiskCeiling(t *testing.T) {
+// ever cancelled an abandoned PaymentIntent or expired the funding.
+//
+// Inverted for F-153. The pass asks the provider first, and only a payment the
+// provider still reports as awaiting its customer is cancelled -- at the
+// provider before it is cancelled here, because a funding marked CANCELED over
+// a live PaymentIntent is a card that can still be charged against a terminal
+// funding that will never mint.
+func TestAudit_AnAbandonedCheckoutIsCancelledWithTheProviderAndLeavesTheCeiling(t *testing.T) {
 	f := newPurchaseFixture(t)
 
 	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: 200_000}, f.clk.Now)
@@ -283,24 +272,54 @@ func TestAudit_AnAbandonedCheckoutNeverLeavesTheAtRiskCeiling(t *testing.T) {
 	p := f.start(t, "abandoned", 100_000) // $1,000, then the customer walks away
 	require.Equal(t, before+100_000, atRisk())
 
-	// The sweep runs, repeatedly, for a year.
+	// The reconciliation pass runs, repeatedly, and adopts the provider's view
+	// -- which is "still waiting", forever. It is not the thing that ends this.
 	for i := 0; i < 3; i++ {
-		_, err = testOwnerDB.Exec(f.ctx,
-			`UPDATE credit_fundings SET updated_at = now() - interval '400 days' WHERE id = $1`, p.Funding.ID)
-		require.NoError(t, err)
-		require.NoError(t, f.tx(func(tx pgx.Tx) error {
-			_, rerr := f.svcP.Reconcile(f.ctx, tx, p.Funding.ID)
-			return rerr
-		}))
+		f.backdate(t, p.Funding.IdempotencyKey, 400*24*time.Hour)
+		_, rerr := f.svcP.ReconcileDue(f.ctx, testDB, DefaultReconcileAfter, 100)
+		require.NoError(t, rerr)
 	}
+	still := f.funding(t, p.Funding.ID)
+	assert.Contains(t, []FundingState{FundingCreated, FundingAuthorizationPending}, still.State,
+		"reconciliation adopts the provider's view and the provider's view is 'still waiting'")
+	assert.False(t, still.State.Terminal())
+	assert.Equal(t, before+100_000, atRisk())
+
+	// Expiry is. It cancels the PaymentIntent and then the funding.
+	expired, err := f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, expired)
 
 	got := f.funding(t, p.Funding.ID)
-	assert.Contains(t, []FundingState{FundingCreated, FundingAuthorizationPending}, got.State,
-		"reconciliation adopts the provider's view and the provider's view is 'still waiting'")
-	assert.False(t, got.State.Terminal())
-	assert.Equal(t, before+100_000, atRisk(),
-		"an abandoned checkout counts against the launch tier's money-at-risk ceiling forever; "+
-			"nothing in this binary writes CANCELED except an operator resolving a MANUAL_REVIEW")
+	assert.Equal(t, FundingCanceled, got.State)
+	assert.True(t, got.State.Terminal())
+	assert.Equal(t, 1, f.prov.canceled, "the PaymentIntent was cancelled at the provider, not just here")
+	snap, err := f.prov.GetPurchase(f.ctx, p.Funding.ProviderReference)
+	require.NoError(t, err)
+	assert.Equal(t, PurchaseCanceled, snap.Status, "so the customer's card cannot be charged against it later")
+	assert.Equal(t, before, atRisk(),
+		"an abandoned checkout stops counting against the launch tier's money-at-risk ceiling")
+}
+
+// A checkout the customer DID complete, whose success this system has not heard
+// about yet, must not be cancelled by the expiry pass. The pass asks the
+// provider first, and a provider that says the money arrived is the authority.
+func TestAudit_ExpiryNeverCancelsAPaymentTheProviderSaysSucceeded(t *testing.T) {
+	f := newPurchaseFixture(t)
+	p := f.start(t, "paid-late", 10_000)
+
+	// The customer paid; the webhook was lost.
+	f.prov.advance(p.Funding.ProviderReference, PurchaseSucceeded, "succeeded")
+	f.backdate(t, p.Funding.IdempotencyKey, 400*24*time.Hour)
+
+	expired, err := f.svcP.ExpireInFlight(f.ctx, testDB, DefaultInFlightLifetime, 100)
+	require.NoError(t, err)
+	assert.Zero(t, expired, "nothing was abandoned")
+	assert.Zero(t, f.prov.canceled, "and nothing was cancelled at the provider")
+
+	got := f.funding(t, p.Funding.ID)
+	assert.Equal(t, FundingReversible, got.State, "it was minted instead")
+	require.NotNil(t, got.LotID)
 }
 
 // ---------------------------------------------------------------------------
@@ -383,27 +402,13 @@ func TestAudit_AnInquiryThatClosesUnfreezesTheFundingAndDoesNotSettleIt(t *testi
 	assert.Equal(t, "0", bal.PayoutEligible.String())
 	assert.Equal(t, creditsForDollars(t, f, 100).String(), bal.Spendable.String())
 
-	// And it is still counted as money at risk, which is what a reversible
-	// payment is.
-	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: 10_000_000}, f.clk.Now)
-	require.NoError(t, err)
-	var before, after capacity.Reading
-	require.NoError(t, f.tx(func(tx pgx.Tx) error {
-		var merr error
-		before, merr = guard.Measure(f.ctx, tx)
-		return merr
-	}))
-	require.NoError(t, f.tx(func(tx pgx.Tx) error {
-		_, serr := f.svcP.SettleDue(f.ctx, tx, time.Nanosecond, 100)
-		return serr
-	}))
-	require.NoError(t, f.tx(func(tx pgx.Tx) error {
-		var merr error
-		after, merr = guard.Measure(f.ctx, tx)
-		return merr
-	}))
-	assert.Equal(t, before.AtRiskMinor-10_000, after.AtRiskMinor,
-		"settling -- and only settling -- is what takes it out of the money-at-risk ceiling")
+	// And it is still money at risk, which is what a reversible payment is.
+	// SETTLED is the state internal/capacity stops counting, and the funding is
+	// not in it.
+	assert.Contains(t, capacity.AtRiskFundingStates(), string(lifted.State),
+		"an inquiry closing does not take a reversible payment out of the money-at-risk ceiling")
+	assert.NotContains(t, capacity.AtRiskFundingStates(), string(FundingSettled),
+		"which is the state the funding would have been in")
 }
 
 // The same rule for the outcome that IS a dispute won (D-094). A card network
@@ -465,6 +470,31 @@ func (f *fixture) mintedFunding(t *testing.T, qty int64) FundingID {
 	return funding.ID
 }
 
+// backdate moves a funding's created_at into the past, as the migration role.
+//
+// It has to be the owner: 00743 revoked UPDATE on credit_fundings from cp_app
+// and granted back only lot_id and provider_reference, which is exactly the
+// guarantee that stops an application from ageing its own money. And it has to
+// be created_at rather than updated_at, because credit_fundings_updated_at is a
+// BEFORE UPDATE trigger that writes now() over whatever the statement said --
+// so an UPDATE that backdated updated_at would silently do nothing.
+func (f *fixture) backdate(t *testing.T, idempotencyKey string, age time.Duration) {
+	t.Helper()
+	tag, err := testOwnerDB.Exec(f.ctx,
+		`UPDATE credit_fundings SET created_at = now() - make_interval(secs => $2)
+		  WHERE idempotency_key = $1`, idempotencyKey, age.Seconds())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, tag.RowsAffected())
+}
+
+func (f *fixture) fundingByKey(t *testing.T, idempotencyKey string) Funding {
+	t.Helper()
+	var id FundingID
+	require.NoError(t, testDB.QueryRow(f.ctx,
+		`SELECT id FROM credit_fundings WHERE idempotency_key = $1`, idempotencyKey).Scan(&id))
+	return f.fundingRow(t, id)
+}
+
 func (f *fixture) fundingRow(t *testing.T, id FundingID) Funding {
 	t.Helper()
 	got, err := f.svc.Funding(f.ctx, testDB, id)
@@ -501,25 +531,26 @@ func randomKey() string {
 // no caller in the deployed topology.
 // ---------------------------------------------------------------------------
 
-// A provider event that names a reference no funding holds is Ignored
-// (purchase.go:365-374) and the webhook pipeline records the event id as
-// processed, so Stripe's redelivery of the SAME event id is answered Duplicate
-// and never reaches Dispatch again (internal/webhook/handler.go, via
-// event.Inbox.ProcessHashed).
+// A provider event that names a reference no funding holds is Ignored, and the
+// webhook pipeline records the event id as processed, so the provider's
+// redelivery of the SAME event id is answered Duplicate and never reaches
+// Dispatch again (internal/webhook/handler.go, via event.Inbox.ProcessHashed).
 //
 // That window is real: StartPurchase commits the provider reference in phase 3,
-// AFTER the provider call returns (purchase.go:232-256), and Stripe can deliver
+// AFTER the provider call returns, and Stripe can deliver
 // payment_intent.succeeded before that commit lands.
 //
-// PurchaseService.Reconcile is the recovery, and it is the only one. It has
+// PurchaseService.Reconcile is the recovery, and it was the only one. It had
 // exactly one caller in the repository -- cmd/reconciliation-worker -- and
 // render.yaml declares two services, both `type: web`, neither of them that
-// worker. cmd/api deliberately runs SettleDue itself for exactly this reason
-// (cmd/api/creditsettle.go: "the launch tier has no worker tier") and does not
-// run Reconcile.
+// worker. cmd/api deliberately ran SettleDue itself for exactly this reason
+// ("the launch tier has no worker tier") and did not run Reconcile. So on the
+// deployed tier the card was charged and no Credits were ever minted.
 //
-// So on the deployed tier the card is charged and no Credits are ever minted.
-func TestAudit_ASwallowedSucceededEventIsOnlyRecoveredByASweepNobodyRuns(t *testing.T) {
+// Inverted for F-154: the pass is ReconcileDue, it runs in cmd/api beside the
+// settlement sweep, and this asserts the recovery through it rather than
+// through a hand-rolled Reconcile call the deployment never makes.
+func TestAudit_ASwallowedSucceededEventIsRecoveredByTheInProcessPass(t *testing.T) {
 	f := newPurchaseFixture(t)
 
 	// Phase 1 and 2 have happened; phase 3 has not. The provider holds a
@@ -550,27 +581,80 @@ func TestAudit_ASwallowedSucceededEventIsOnlyRecoveredByASweepNobodyRuns(t *test
 	// Stripe redelivers the same event id; the inbox answers Duplicate and
 	// Dispatch is never called again. The funding is still where it was.
 	got := f.funding(t, funding.ID)
-	assert.Equal(t, FundingCreated, got.State)
-	assert.Nil(t, got.LotID, "the card was charged and no Credits exist")
+	require.Equal(t, FundingCreated, got.State)
+	require.Nil(t, got.LotID, "the card was charged and no Credits exist")
 
 	bal, err := f.svc.creditBalance(f.ctx, testDB, f.account, f.asset)
 	require.NoError(t, err)
-	assert.Equal(t, "0", bal.String())
+	require.Equal(t, "0", bal.String())
 
-	// Reconcile is the recovery, and it works. Nothing in the deployed
-	// topology calls it: `grep -rn "\.Reconcile(" cmd/ internal/` names only
-	// cmd/reconciliation-worker, and render.yaml declares no worker service.
+	// The provider knows what happened, and is never asked by anything the
+	// deployed topology runs -- that was the finding.
 	f.prov.mu.Lock()
 	f.prov.byRef[ref] = PurchaseSnapshot{
 		ProviderReference: ref, Status: PurchaseSucceeded, RawStatus: "succeeded",
 		Amount: money.USDFromMinor(10_000), Currency: "USD",
 	}
 	f.prov.mu.Unlock()
-	require.NoError(t, f.tx(func(tx pgx.Tx) error {
-		_, rerr := f.svcP.Reconcile(f.ctx, tx, funding.ID)
-		return rerr
-	}))
+
+	// A purchase this fresh is not stale, so the pass leaves it alone: a
+	// customer mid-checkout must not be reconciled out from under themselves.
+	checked, err := f.svcP.ReconcileDue(f.ctx, testDB, DefaultReconcileAfter, 100)
+	require.NoError(t, err)
+	assert.Zero(t, checked)
+
+	// Fifteen minutes later the pass that cmd/api now runs on its own ticker,
+	// beside runCreditSettlement, finds it and mints.
+	f.backdate(t, f.keyPrefix+":swallowed", 20*time.Minute)
+	checked, err = f.svcP.ReconcileDue(f.ctx, testDB, DefaultReconcileAfter, 100)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, checked, 1)
+
 	recovered := f.funding(t, funding.ID)
 	assert.Equal(t, FundingReversible, recovered.State)
-	require.NotNil(t, recovered.LotID, "Reconcile is what mints; it is not deployed")
+	require.NotNil(t, recovered.LotID, "the swallowed event is recovered by a pass the deployment runs")
+
+	bal, err = f.svc.creditBalance(f.ctx, testDB, f.account, f.asset)
+	require.NoError(t, err)
+	assert.Equal(t, "10000", bal.String())
+	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
+
+	// And it is idempotent: a second pass over the same funding mints nothing
+	// more, which is what lets a worker tier be added later with no
+	// coordination.
+	_, err = f.svcP.ReconcileDue(f.ctx, testDB, DefaultReconcileAfter, 100)
+	require.NoError(t, err)
+	bal, err = f.svc.creditBalance(f.ctx, testDB, f.account, f.asset)
+	require.NoError(t, err)
+	assert.Equal(t, "10000", bal.String())
+}
+
+// The listing the recovery depends on. It used to require
+// `provider_reference IS NOT NULL`, which excluded exactly the fundings the
+// sweep existed to recover: StartPurchase commits the row in phase 1 and the
+// reference in phase 3, so every crash or provider failure between them leaves
+// a committed row with a NULL reference that nothing would ever look at again.
+func TestAudit_TheInFlightListingDoesNotSkipFundingsWithNoProviderReference(t *testing.T) {
+	f := newPurchaseFixture(t)
+
+	f.prov.failCreate = errs.New(errs.CodeProviderUnavailable, "provider is unavailable")
+	_, err := f.svcP.StartPurchase(f.ctx, testDB, StartPurchaseRequest{
+		AccountID: f.account, Amount: money.USDFromMinor(5_000),
+		Currency: "USD", IdempotencyKey: f.keyPrefix + ":no-ref",
+	})
+	require.Error(t, err)
+	f.prov.failCreate = nil
+
+	referenceless := f.fundingByKey(t, f.keyPrefix+":no-ref")
+	require.Empty(t, referenceless.ProviderReference)
+	f.backdate(t, f.keyPrefix+":no-ref", 20*time.Minute)
+
+	var ids []FundingID
+	require.NoError(t, f.tx(func(tx pgx.Tx) error {
+		var lerr error
+		ids, lerr = f.svcP.InFlightFundings(f.ctx, tx, inFlightStates, DefaultReconcileAfter, 100)
+		return lerr
+	}))
+	assert.Contains(t, ids, referenceless.ID,
+		"a funding whose provider reference was never committed is the one case the sweep is for")
 }

@@ -40,7 +40,10 @@ type fakePurchaseProvider struct {
 	// transport failure, which is the case that decides whether a lost
 	// response can charge twice.
 	loseResponse bool
-	created      int
+	// failCancel, when set, is returned instead of cancelling.
+	failCancel error
+	created    int
+	canceled   int
 }
 
 func newFakeProvider() *fakePurchaseProvider {
@@ -100,6 +103,34 @@ func (p *fakePurchaseProvider) GetPurchase(_ context.Context, ref string) (Purch
 	snap, ok := p.byRef[ref]
 	if !ok {
 		return PurchaseSnapshot{}, errs.New(errs.CodeNotFound, "no such payment")
+	}
+	return snap, nil
+}
+
+// CancelPurchase behaves the way an acquirer does: a pre-capture payment
+// becomes CANCELED, and one that already succeeded is refused.
+func (p *fakePurchaseProvider) CancelPurchase(_ context.Context, ref, _ string) (PurchaseSnapshot, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.failCancel != nil {
+		return PurchaseSnapshot{}, p.failCancel
+	}
+	snap, ok := p.byRef[ref]
+	if !ok {
+		return PurchaseSnapshot{}, errs.New(errs.CodeNotFound, "no such payment")
+	}
+	switch snap.Status {
+	case PurchaseSucceeded, PurchaseRefunded, PurchaseDisputed, PurchaseChargeback:
+		return PurchaseSnapshot{}, errs.Newf(errs.CodeConflict,
+			"a payment in %s cannot be canceled", snap.Status)
+	}
+	p.canceled++
+	snap.Status, snap.RawStatus = PurchaseCanceled, "canceled"
+	p.byRef[ref] = snap
+	for k, v := range p.byKey {
+		if v.ProviderReference == ref {
+			p.byKey[k] = snap
+		}
 	}
 	return snap, nil
 }

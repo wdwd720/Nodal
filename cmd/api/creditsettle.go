@@ -76,7 +76,8 @@ func creditSettlement(cfg *config.Config) (window, interval time.Duration) {
 }
 
 // runCreditSettlement promotes fundings whose reversibility window has closed,
-// on a ticker, for as long as this process is up.
+// asks the provider about the ones still in flight, and ends the ones nobody
+// completed -- on a ticker, for as long as this process is up.
 //
 // # Why the API does this
 //
@@ -112,6 +113,33 @@ func creditSettlement(cfg *config.Config) (window, interval time.Duration) {
 // only reason a number is correct -- it is not: the ceiling refuses when it
 // cannot measure, and the settlement window is a risk decision recorded in
 // configuration, not an artefact of how often this fires.
+//
+// # Why the other two passes are here as well
+//
+// For the same reason, discovered twice more.
+//
+// RECONCILIATION had exactly one caller in the repository --
+// cmd/reconciliation-worker -- and render.yaml declares two services, both
+// `type: web`, neither of them that worker. The window it closes is real:
+// StartPurchase commits the provider reference in phase 3, AFTER the provider
+// call returns, and a provider can deliver payment_intent.succeeded before that
+// commit lands. An event naming a reference no funding holds is Ignored, the
+// inbox records the event id as processed, and the provider's redelivery of the
+// same id is answered Duplicate and never reaches Dispatch again. So on the
+// deployed tier the card was charged and no Credits were ever minted, and the
+// one thing that would have found it did not run (F-154).
+//
+// EXPIRY had no caller anywhere, because it did not exist. Every state before
+// capture counts against the money-at-risk ceiling and nothing moved a funding
+// out of one: SettleDue selects REVERSIBLE, and an abandoned checkout's
+// provider reports "still waiting" forever. Two abandoned $1,000 checkouts
+// exhausted the blueprint's $2,000 ceiling and every honest purchase after them
+// was refused AT_CAPACITY with no remedy (F-153).
+//
+// Both are idempotent, take their rows FOR UPDATE SKIP LOCKED and hold no
+// provider call inside a transaction, so a worker tier added later runs them
+// alongside this with no coordination -- the same property that makes the
+// settlement sweep safe here.
 func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.PurchaseService, cfg *config.Config, log *slog.Logger) {
 	if svc == nil || database == nil {
 		return
@@ -129,11 +157,49 @@ func runCreditSettlement(ctx context.Context, database *db.DB, svc *credit.Purch
 		// Once at start as well as on the tick: a process that wakes, serves a
 		// purchase and spins down again would otherwise never sweep at all.
 		settleOnce(ctx, database, svc, window, log)
+		reconcileOnce(ctx, database, svc, log)
+		expireOnce(ctx, database, svc, log)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// reconcileOnce asks the provider what became of every purchase that has been
+// in flight longer than a customer would wait, one transaction per purchase
+// with the provider call outside it.
+func reconcileOnce(ctx context.Context, database *db.DB, svc *credit.PurchaseService, log *slog.Logger) {
+	if svc == nil || database == nil {
+		return
+	}
+	n, err := svc.ReconcileDue(ctx, database, credit.DefaultReconcileAfter, settleBatch)
+	switch {
+	case err != nil && ctx.Err() != nil:
+		// Shutdown, not a failure.
+	case err != nil:
+		log.ErrorContext(ctx, "credit purchase reconciliation failed", "error", err.Error())
+	case n > 0:
+		log.InfoContext(ctx, "credit purchase reconciliation complete", "checked", n)
+	}
+}
+
+// expireOnce ends purchases nobody completed, so an abandoned checkout stops
+// holding money-at-risk headroom for the life of the deployment.
+func expireOnce(ctx context.Context, database *db.DB, svc *credit.PurchaseService, log *slog.Logger) {
+	if svc == nil || database == nil {
+		return
+	}
+	n, err := svc.ExpireInFlight(ctx, database, credit.DefaultInFlightLifetime, settleBatch)
+	switch {
+	case err != nil && ctx.Err() != nil:
+		// Shutdown, not a failure.
+	case err != nil:
+		log.ErrorContext(ctx, "credit purchase expiry failed", "error", err.Error())
+	case n > 0:
+		log.InfoContext(ctx, "credit purchase expiry complete", "expired", n,
+			"lifetime", credit.DefaultInFlightLifetime)
 	}
 }
 
