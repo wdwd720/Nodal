@@ -146,6 +146,25 @@ func CanTransition(from, to State) bool {
 	return false
 }
 
+// StateEdges returns every legal edge as a flat from,to sequence, in
+// declaration order.
+//
+// It exists so the schema can hold the same table. Migration 00806 populates
+// `compliance_profile_state_edges` from this list and the apply trigger
+// consults it, so an INSERT naming an edge §20 does not have is refused by the
+// database rather than only by the code that usually writes it; the enum
+// parity suite compares the two the same way it compares AllStates() with the
+// CHECK.
+func StateEdges() []string {
+	out := make([]string, 0, 32)
+	for _, from := range allStates {
+		for _, to := range stateTransitions[from] {
+			out = append(out, string(from), string(to))
+		}
+	}
+	return out
+}
+
 // TransitionsFrom returns the legal destinations of a state (a copy), for the
 // benefit of an operator tool that has to offer them.
 func TransitionsFrom(s State) []State {

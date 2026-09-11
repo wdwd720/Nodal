@@ -368,23 +368,6 @@ func (s *Service) Ingest(ctx context.Context, database *db.DB, session Session, 
 
 	var out Session
 	err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
-		for _, c := range sortedChecks(result.Checks) {
-			if err := s.deps.Repo.RecordCheck(ctx, tx, Check{
-				SessionID:    session.ID,
-				UserID:       session.UserID,
-				Kind:         c.Kind,
-				Outcome:      c.Outcome,
-				Provider:     session.Provider,
-				ProviderRef:  result.ProviderRef,
-				RulesVersion: session.RulesVersion,
-				Environment:  s.deps.Environment,
-				Sandbox:      sandbox,
-				Detail:       c.Detail,
-				RecordedAt:   now,
-			}); err != nil {
-				return err
-			}
-		}
 		// A provider does not report every step: a person completes a hosted
 		// flow and the provider decides before the next poll, so a session
 		// last seen PENDING_USER_ACTION is answered APPROVED. Each inferred
@@ -416,6 +399,33 @@ func (s *Service) Ingest(ctx context.Context, database *db.DB, session Session, 
 				WithField("session_id", session.ID.String())
 		}
 		out = moved
+
+		// The evidence, AFTER the status it belongs to.
+		//
+		// It used to be written first, and migration 00806 is why the order is
+		// now load-bearing: a check row attaches only to a session in a status a
+		// provider ANSWER produces, because four PASS rows against a session
+		// nobody was ever sent to made the resolver report PAYOUT_KYC (F-224).
+		// Nothing else depends on the order -- the path walked above is computed
+		// from the two statuses and never from the checks.
+		for _, c := range sortedChecks(result.Checks) {
+			if err := s.deps.Repo.RecordCheck(ctx, tx, Check{
+				SessionID:    session.ID,
+				UserID:       session.UserID,
+				Kind:         c.Kind,
+				Outcome:      c.Outcome,
+				Provider:     session.Provider,
+				ProviderRef:  result.ProviderRef,
+				RulesVersion: session.RulesVersion,
+				Environment:  s.deps.Environment,
+				Sandbox:      sandbox,
+				Detail:       c.Detail,
+				RecordedAt:   now,
+			}); err != nil {
+				return err
+			}
+		}
+
 		checks, err := s.deps.Repo.ChecksForSession(ctx, tx, session.ID)
 		if err != nil {
 			return err

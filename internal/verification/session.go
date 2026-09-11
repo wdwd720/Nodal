@@ -197,6 +197,20 @@ func CanTransitionSession(from, to SessionStatus) bool {
 	return false
 }
 
+// SessionEdges returns every legal session edge as a flat from,to sequence, in
+// declaration order. Migration 00806 populates
+// `verification_session_status_edges` from it and the apply trigger consults
+// it; the enum parity suite holds the two identical.
+func SessionEdges() []string {
+	out := make([]string, 0, 32)
+	for _, from := range allSessionStatuses {
+		for _, to := range sessionTransitions[from] {
+			out = append(out, string(from), string(to))
+		}
+	}
+	return out
+}
+
 // SessionTransitionsFrom returns the legal destinations of a status (a copy).
 func SessionTransitionsFrom(s SessionStatus) []SessionStatus {
 	return append([]SessionStatus(nil), sessionTransitions[s]...)
