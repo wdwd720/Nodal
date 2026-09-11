@@ -35,6 +35,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/agent"
+	"github.com/nodal/controlplane/internal/agents"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/credit"
@@ -158,6 +159,13 @@ func registry() []pair {
 		{table: "reconciliation_records", constraint: "reconciliation_records_status_check", source: "reconciliation.AllStatuses()", values: str(reconciliation.AllStatuses())},
 		{table: "data_sources", constraint: "data_sources_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
 		{table: "raw_archive_objects", constraint: "raw_archive_objects_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
+
+		// The agent management surface (00786). agent_grants.authority_level is
+		// deliberately NOT here: it is an integer range CHECK mirroring
+		// agentauthority.MaxSupportedLevel, not a list of string literals, and
+		// TestAuthority_TheLevelCeilingMatchesTheSchema in internal/agents
+		// compares those two directly.
+		{table: "agent_grants", constraint: "agent_grants_schedule_kind_check", source: "agents.ScheduleKinds()", values: str(agents.ScheduleKinds())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
