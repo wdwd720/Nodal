@@ -87,6 +87,11 @@ type WireDeps struct {
 	// leaves them nil and those routes answer UNSUPPORTED.
 	NativeEconomy NativeEconomyDeps
 
+	// Withdrawal holds the verification, eligibility and conversion-request
+	// services of goal PARTS 19-25. Every field is optional for the same
+	// reason: a deployment with no identity vendor has no verification routes,
+	// which is the honest state of one with no contract.
+	Withdrawal WithdrawalDeps
 	// MarketSurfaces holds what the discovery, portfolio and activity reads
 	// need beyond the native-economy services themselves. It is optional in
 	// the same way: nil parts leave their ports nil and their routes
@@ -204,6 +209,7 @@ func Wire(d WireDeps) (Ports, error) {
 		p.Idempotency = idempotencyAdapter{store: d.Idempotency, db: d.DB}
 	}
 	wireNativeEconomy(&p, d)
+	wireWithdrawal(&p, d)
 	// After wireNativeEconomy: the portfolio reads its Credit balance through
 	// the SAME port GET /credits/balance uses, so it cannot be attached before
 	// that port exists.

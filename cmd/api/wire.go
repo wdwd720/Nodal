@@ -32,6 +32,7 @@ import (
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/commerce"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
@@ -64,6 +65,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/valuation"
+	"github.com/nodal/controlplane/internal/verification"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
 
@@ -444,6 +446,51 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+
+	// ---- verification (goal PARTS 19-25) ---------------------------------
+	//
+	// The identity boundary. A deployment with no contracted identity vendor
+	// registers nothing here, and every verification route answers UNSUPPORTED
+	// -- which is the honest state of a system that cannot verify anybody, and
+	// is different from reporting that somebody failed a check.
+	//
+	// The sandbox verification provider is registered on the same one
+	// condition every other sandbox affordance keys off (ADR-0023), and it
+	// refuses PROD on its own account as well.
+	verificationRegistry := verification.NewRegistry(cfg.Env == config.EnvLocal || cfg.Env == config.EnvTest || cfg.SandboxTier())
+	if err := registerSandboxVerificationProvider(cfg, verificationRegistry, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox verification provider: %w", err)
+	}
+	verificationRepo := verification.NewRepository()
+	complianceRepo := compliance.NewRepository(audit.NewWriter())
+	verificationSvc, err := verification.NewService(verification.Deps{
+		Repo:        verificationRepo,
+		Compliance:  complianceRepo,
+		Providers:   verificationRegistry,
+		Clock:       clk,
+		Environment: string(cfg.Env),
+		SandboxTier: cfg.SandboxTier(),
+		ReturnURL:   cfg.Auth.PostLoginURL,
+		RefreshURL:  cfg.Auth.PostLoginURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("verification service: %w", err)
+	}
+	// The composite resolver replaces the cap that internal/identity documents:
+	// NODAL_IDENTITY is what Nodal establishes by itself, and PAYOUT_KYC and
+	// ENHANCED come from a provider decision PLUS the sub-checks that justify
+	// it. It composes with the base rather than replacing it, so an account
+	// whose owner is not ACTIVE still resolves to NONE however good the KYC
+	// evidence is (BLOCKERS B-06 narrows to "no contracted vendor", not "no
+	// code").
+	compositeVerification, err := verification.NewResolver(verificationResolver, verificationRepo, database, clk)
+	if err != nil {
+		return nil, fmt.Errorf("verification resolver: %w", err)
+	}
+	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
+	if err != nil {
+		return nil, err
+	}
 	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, audit.NewWriter(), clk)
 	// The marketplace gate is resolved from the database on every purchase, so
 	// pulling MARKETPLACE stops sales without a restart. Until it is ACTIVE,
@@ -559,7 +606,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// every Domain A action -- which needs exactly that level --
 			// impossible in every deployment whatever its gates said. A
 			// control no user can ever satisfy is not a control.
-			Verification: verificationResolver,
+			Verification: compositeVerification,
 			// The Settlement Compiler's legal policy. The default is the
 			// conservative one: it permits simulation and denies every
 			// internal-economy product and every payout. CP_API_LEGAL_POLICY
@@ -572,6 +619,21 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// determination wearing a network header's clothes.
 			Jurisdiction: nil,
 			Clock:        clk,
+		},
+		// ---- the withdrawal journey (goal PARTS 19-25) ------------------
+		Withdrawal: httpapi.WithdrawalDeps{
+			Verification: verificationSvc,
+			// The base level, deliberately the NODAL_IDENTITY resolver rather
+			// than the composite one: the profile view applies the evidence
+			// rule on top, and composing the composite with itself would be
+			// circular.
+			BaseVerification: verificationResolver,
+			Compliance:       complianceRepo,
+			Accounts:         accountRepo,
+			Pricing:          creditPurchases.Service,
+			CreditDecimals:   creditDecimals,
+			Environment:      string(cfg.Env),
+			SandboxTier:      cfg.SandboxTier(),
 		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.

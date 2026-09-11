@@ -136,6 +136,8 @@ func newKeyed() string { return "prof-" + testSessionID }
 // argument in its own package's tests.
 var meRoutesNamingTheCallersOwnObject = map[string]bool{
 	"/v1/me/notifications/{notificationId}/read": true,
+	"/v1/me/payout-destinations/{destinationId}": true, // internal/payout: a destination is loaded by (account, id); another account's id is not found
+	"/v1/me/verification/sessions/{sessionId}":   true, // internal/verification: a session is loaded under the caller's profile; another person's id is not found
 }
 
 func TestProfile_NoSelfServiceRouteTakesAnIdentifier(t *testing.T) {

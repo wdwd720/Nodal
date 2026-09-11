@@ -138,6 +138,29 @@ type Capabilities struct {
 	MinimumAmount money.USD
 	MaximumAmount money.USD
 
+	// --- the fee model, for the pre-commitment quote ----------------------
+	//
+	// PROVIDER_BOUNDARY §3 makes `QuotePayout` a separate call precisely so
+	// the customer sees the fee and the net before committing. These three
+	// fields are what a quote is computed from.
+
+	// FeeModelPublished is whether this adapter has read a fee schedule out of
+	// a real contract or a published price list.
+	//
+	// It exists because zero is ambiguous and the ambiguity is dangerous: a
+	// fee of zero that means "we do not know" promises a customer a net amount
+	// nobody agreed to. False means there is no quote, rather than a quote of
+	// zero, and `QuoteFee` says so.
+	FeeModelPublished bool
+	// FeeFlat is the fixed part of one payout's fee.
+	FeeFlat money.USD
+	// FeeBasisPoints is the proportional part, in hundredths of a percent.
+	FeeBasisPoints money.BPS
+	// FeeModelVersion identifies the schedule these numbers came from. It is
+	// recorded on every quote, so a quote given in March is still explicable
+	// in June after the provider has repriced.
+	FeeModelVersion string
+
 	// Availability is how far this provider is actually usable, as opposed to
 	// how far its documentation reads.
 	Availability Availability

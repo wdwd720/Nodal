@@ -117,6 +117,11 @@ type fixtures struct {
 	idem        *fakeIdempotency
 	stream      http.Handler
 
+	// The withdrawal journey (goal PARTS 19-25). Defined in
+	// handlers_verification_test.go, beside the tests that drive them.
+	verification *fakeVerification
+	eligibility  *fakeEligibility
+	conversion   *fakeConversion
 	// The product read surfaces (product goal SS12-16).
 	marketData   *fakeMarketData
 	portfolio    *fakePortfolio
@@ -202,6 +207,10 @@ func newFixtures() *fixtures {
 		health:    &fakeHealth{},
 		webhook:   &fakeWebhook{status: http.StatusOK},
 		idem:      newFakeIdempotency(),
+
+		verification: newFakeVerification(),
+		eligibility:  newFakeEligibility(),
+		conversion:   newFakeConversion(),
 		marketData: &fakeMarketData{
 			page:    nativemarket.MarketPage{Markets: []nativemarket.MarketSummary{sampleMarketSummary()}, Stable: true},
 			detail:  sampleMarketDetail(),
@@ -234,6 +243,8 @@ func (f *fixtures) ports() Ports {
 		// satisfied its "not 401" assertion while measuring nothing (F-132).
 		Webhooks: map[string]WebhookPort{stripecredit.ProviderName: f.webhook},
 		Stream:   f.stream,
+
+		Verification: f.verification, Eligibility: f.eligibility, Conversion: f.conversion,
 		// Scoped to the caller: neither port takes an account id, so neither
 		// fake is given one to hand back.
 		Notifications: f.notifs,

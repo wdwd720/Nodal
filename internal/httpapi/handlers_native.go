@@ -498,7 +498,29 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 		out.EligibleQuantity = ptr(qtyString(d.Eligible))
 		out.VerificationWouldSuffice = ptr(d.VerificationWouldSuffice)
 		out.RequiredVerification = ptr(string(d.RequiredVerification))
+		// What value WOULD leave, from the decision's own lot selection. On a
+		// creation the allocations may not exist yet -- a request that only
+		// needs verification reserves nothing -- so the decision is the only
+		// place this can come from (PART 23).
+		out.Provenance = ptr(toAPIProvenance(payout.DecisionProvenance(d)))
 	}
+	if r.QuoteID != nil {
+		id := uuid.MustParse(r.QuoteID.String())
+		out.QuoteId = &id
+	}
+	return out
+}
+
+// withProvenance attaches what value a payout draws on, in the order it leaves
+// (PART 23). It is a read over payout_allocations and changes no ledger
+// semantics: a payout does not take "500 Credits", it takes specific units from
+// specific provenance lots, and a person is entitled to see which.
+func (s *Server) withProvenance(ctx context.Context, out api.PayoutRequest, id payout.RequestID) api.PayoutRequest {
+	slices, err := s.opts.Ports.Payouts.Provenance(ctx, id)
+	if err == nil && len(slices) > 0 {
+		out.Provenance = ptr(toAPIProvenance(slices))
+	}
+	out.Sandbox = ptr(s.opts.Ports.Payouts.SandboxProvider())
 	return out
 }
 
@@ -526,9 +548,23 @@ func (s *Server) PostPayouts(ctx context.Context, request api.PostPayoutsRequest
 		}
 		destID = &parsed
 	}
+	// The quote the customer was shown (PART 19, PART 22). It is optional
+	// here and required by nothing above: an operator resolving a stuck payout
+	// has no quote to name, while a person pressing a button in a browser
+	// always does. When present it must name the same destination and the same
+	// gross amount, and internal/payout consumes it inside the reserving
+	// transaction so one quote funds exactly one payout.
+	var quoteID *payout.QuoteID
+	if request.Body.QuoteId != nil {
+		parsed, perr := payout.ParseQuoteID(request.Body.QuoteId.String())
+		if perr != nil {
+			return nil, validationError("quote_id", "quote_id must be a canonical UUID")
+		}
+		quoteID = &parsed
+	}
 
 	cmd := CreatePayout{
-		AccountID: accountID, Amount: amount, DestinationID: destID,
+		AccountID: accountID, Amount: amount, DestinationID: destID, QuoteID: quoteID,
 		IdempotencyKey: request.Params.IdempotencyKey,
 		CorrelationID:  observability.CorrelationID(ctx),
 	}
@@ -603,7 +639,9 @@ func (s *Server) GetPayoutsPayoutId(ctx context.Context, request api.GetPayoutsP
 		return nil, errs.New(errs.CodeNotFound, "no such payout").
 			WithField("payout_id", id.String())
 	}
-	return api.GetPayoutsPayoutId200JSONResponse(toAPIPayout(r, payout.Decision{})), nil
+	return api.GetPayoutsPayoutId200JSONResponse(
+		s.withProvenance(ctx, toAPIPayout(r, payout.Decision{}), id),
+	), nil
 }
 
 // securityRequireAccountOwner is security.RequireAccountOwner: ownership only,

@@ -235,9 +235,19 @@ type Destination struct {
 	DisplayLabel      string
 	Currency          string
 	Status            DestinationStatus
-	VerifiedAt        *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	// Country is the ISO 3166-1 alpha-2 code of the jurisdiction this pays
+	// into. `Capabilities` carries SupportedCountries and ExcludedRegions and
+	// nothing could feed them until the destination knew (00763).
+	Country string
+	// MaskedDisplay is what a person recognises without Nodal holding the
+	// number: "••••4242". It is validated to be a mask rather than a number.
+	MaskedDisplay string
+	// Sandbox marks a destination that belongs to a rehearsal. It is shown on
+	// every response that mentions it.
+	Sandbox    bool
+	VerifiedAt *time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Request is a payout_requests row.
@@ -264,6 +274,7 @@ type Request struct {
 	ProviderStatus         string
 
 	IdempotencyKey string
+	QuoteID        *QuoteID
 	ReservedAt     *time.Time
 	SubmittedAt    *time.Time
 	SettledAt      *time.Time
@@ -288,6 +299,14 @@ type CreateRequest struct {
 	AccountID     accounts.AccountID
 	DestinationID *DestinationID
 	Quantity      money.Quantity
+
+	// QuoteID names the pre-commitment quote the customer was shown. It is
+	// optional in this type and required by the HTTP surface, and the reason
+	// for the difference is that an operator resolving a stuck payout has no
+	// quote to name while a person pressing a button in a browser always does.
+	// When it is present the quote is consumed inside the same transaction, so
+	// a quote can fund exactly one payout.
+	QuoteID *QuoteID
 
 	IdempotencyKey string
 	EffectiveAt    time.Time

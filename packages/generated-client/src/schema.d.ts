@@ -2423,6 +2423,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What of your balance may be withdrawn, per origin, and why not the rest (§19, §23)
+         * @description Eligibility is decided per unit of provenance, not per balance. This returns one bucket per credit origin with the reasons that bucket cannot leave, and a top-level answer that composes them with the account's jurisdiction, its restrictions, the capability gates and the payout provider. It moves nothing and reserves nothing.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Withdrawal eligibility, explained */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WithdrawalEligibility"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notification-preferences": {
         parameters: {
             query?: never;
@@ -2646,6 +2689,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/payout-destinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where you have asked value to be sent (§25)
+         * @description Includes disabled and rejected destinations. A person who removed one and cannot see that it is gone will add it again, and a person whose destination a provider refused needs to see the refusal rather than an empty list.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Destinations */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"][];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Register a payout destination from a provider token (§25)
+         * @description Nodal never stores a bank account number, a card number, an IBAN, a routing number, a private key or a seed phrase. What is sent here is the PROVIDER'S token for a destination plus a mask a person recognises, and an input that looks like a raw number is refused rather than stored. Adding a destination is a high-risk operation and requires a recent strong authentication. A destination is born unusable: whether it may receive value is the provider's decision, not the request's.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePayoutDestination"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"];
+                    };
+                };
+                /** @description Destination registered, awaiting the provider's verification */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/payout-destinations/{destinationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop using a payout destination (§25)
+         * @description Disables it rather than deleting it: a destination that value has left through is financial history. A disabled destination never returns; adding it again is a new registration with its own creation time, which is what makes a cooldown on a changed destination a fact rather than a field somebody remembers to reset.
+         */
+        delete: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    destinationId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Destination disabled */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutDestination"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/portfolio": {
         parameters: {
             query?: never;
@@ -2837,6 +3014,199 @@ export interface paths {
                 400: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your financial verification profile, what is missing, and what to do next (§20, §24)
+         * @description The financial profile area of §24. It carries a state, a level, the sub-checks behind that level and the actions available, and it carries no personal data at all: there is no document identifier, no government number and no date of birth, because this system never had any. A provider holds the evidence; Nodal holds the conclusion.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Verification profile */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationProfile"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification/sandbox-outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * SANDBOX TIER ONLY - choose what the rehearsal verification decides
+         * @description A sandbox-tier affordance (ADR-0023) and nothing else. It exists so the whole withdrawal journey can be exercised without fabricating an approval, and it is refused with FORBIDDEN on any deployment that is not a sandbox tier and by any provider that is not the sandbox one. There is no default outcome anywhere in this path: a rehearsal session nobody has answered stays pending forever, because "approved unless told otherwise" is a fabricated approval with extra steps. Every row it writes is labelled sandbox, and a database CHECK refuses that label in PROD.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SandboxVerificationOutcome"];
+                };
+            };
+            responses: {
+                /** @description The session as the chosen outcome left it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationSession"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a provider-hosted identity verification (§20)
+         * @description Returns a single-use hosted URL the browser is sent to. Nodal stores the provider's reference and never the URL: those links are credentials for resuming somebody's identity check. The jurisdiction is supplied by the caller and is never inferred from a network address, which is a legal determination wearing a network header's clothes. A person already has at most one open session; asking again resumes it rather than racing it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["StartVerificationRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay, or a resumed session */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedVerification"];
+                    };
+                };
+                /** @description A hosted session to send the person to */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedVerification"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/verification/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ask the provider what happened, and record it
+         * @description Never trust the redirect. A customer arriving back at the return URL says they came back, not that they passed, so this polls the provider and ingests whatever it says. It is idempotent: a status that has not moved records nothing.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path: {
+                    sessionId: components["parameters"]["SessionId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The session as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificationSession"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3697,6 +4067,64 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payouts/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What a payout would cost, before committing to it (§19, §22)
+         * @description A separate pre-commitment call, because the customer sees the fee and the net before they commit. The minimum is judged NET of fees, since sub-minimum dust is destroyed rather than returned. A quote expires, and an expired one is refused rather than silently re-priced: a person who saw a number and pressed the button a quarter of an hour later is told the number moved, not charged a different one. Nothing is reserved and no ledger row is written.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePayoutQuote"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay of the quote the customer was shown */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutQuote"];
+                    };
+                };
+                /** @description A quote that stands until it expires */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PayoutQuote"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -4566,10 +4994,29 @@ export interface components {
             name: string;
             symbol: string;
         };
+        CreatePayoutDestination: {
+            account_id: components["schemas"]["UUID"];
+            country?: string;
+            currency?: string;
+            display_label?: string;
+            /** @enum {string} */
+            kind: "BANK" | "CARD_PUSH" | "FIAT_WALLET" | "CRYPTO_WALLET";
+            masked_display?: string;
+            /** @description The provider's token for the destination, or on a sandbox tier a sandbox handle. An input that looks like an account number, a card number, an IBAN, a private key or a seed phrase is REFUSED, not stored: Nodal never holds one. */
+            provider_token: string;
+        };
+        CreatePayoutQuote: {
+            account_id: components["schemas"]["UUID"];
+            /** @description The GROSS Credits the customer would give up. The fee comes out of it. */
+            amount: components["schemas"]["Quantity"];
+            destination_id: components["schemas"]["UUID"];
+        };
         CreatePayoutRequest: {
             account_id: components["schemas"]["UUID"];
             amount: components["schemas"]["Quantity"];
             destination_id?: components["schemas"]["UUID"];
+            /** @description The quote from POST /payouts/quote that the customer was shown. When present it is consumed in the same transaction that reserves the value, so one quote funds exactly one payout, and an expired or already-used quote refuses the request before anything is decided about the money. It must name the same destination and the same gross amount. */
+            quote_id?: components["schemas"]["UUID"];
         };
         CreateStrategyRequest: {
             account_id: components["schemas"]["UUID"];
@@ -5277,6 +5724,69 @@ export interface components {
         Page: {
             next_cursor: string | null;
         };
+        /** @description Nodal stores the provider's token and a mask. There is no account number, card number, IBAN, routing number or key in this object, and there is none in the table behind it. */
+        PayoutDestination: {
+            account_id: components["schemas"]["UUID"];
+            country?: string;
+            created_at: components["schemas"]["Timestamp"];
+            currency?: string;
+            destination_id: components["schemas"]["UUID"];
+            display_label?: string;
+            /** @enum {string} */
+            kind: "BANK" | "CARD_PUSH" | "FIAT_WALLET" | "CRYPTO_WALLET";
+            /** @description What a person recognises, such as "••••4242". Never the whole number. */
+            masked_display?: string;
+            provider: string;
+            sandbox: boolean;
+            status: components["schemas"]["PayoutDestinationStatus"];
+            /** @description Whether a payout may be sent here right now. */
+            usable?: boolean;
+            verified_at?: components["schemas"]["Timestamp"];
+        };
+        /**
+         * @description UNVERIFIED is §25's VERIFYING and VERIFIED is its ACTIVE; the existing names are kept because working code and a registered enum pairing use them (D-060). REJECTED and DISABLED are terminal: a destination never comes back, and adding it again is a new registration.
+         * @enum {string}
+         */
+        PayoutDestinationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED" | "DISABLED";
+        /** @description One origin's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first. */
+        PayoutProvenanceSlice: {
+            consumption_rank: number;
+            origin: components["schemas"]["CreditOrigin"];
+            quantity: components["schemas"]["Quantity"];
+            /** @description True for a slice a cancellation gave back to the exact lots it came from. */
+            returned?: boolean;
+        };
+        /** @description What the provider said a payout would cost, before anybody committed. Both sides are exact integers; there is no rate field holding a decimal. */
+        PayoutQuote: {
+            account_id: components["schemas"]["UUID"];
+            consumed_at?: components["schemas"]["Timestamp"];
+            created_at?: components["schemas"]["Timestamp"];
+            currency: string;
+            destination_id: components["schemas"]["UUID"];
+            expires_at: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            fee_amount_minor: number;
+            /** @description Which fee schedule produced these numbers. On a sandbox tier it says in words that the figures are placeholders and not a price anybody has agreed. */
+            fee_model_version?: string;
+            fee_quantity: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            gross_amount_minor: number;
+            gross_quantity: components["schemas"]["Quantity"];
+            /** Format: int64 */
+            minimum_amount_minor?: number;
+            /** @description Judged NET of fees, because sub-minimum dust is destroyed rather than returned. */
+            minimum_ok: boolean;
+            /** Format: int64 */
+            net_amount_minor: number;
+            net_quantity: components["schemas"]["Quantity"];
+            policy_version?: string;
+            pricing_version?: string;
+            /** @description What value would leave, in the order it would leave. */
+            provenance?: components["schemas"]["PayoutProvenanceSlice"][];
+            provider: string;
+            quote_id: components["schemas"]["UUID"];
+            sandbox: boolean;
+        };
         PayoutRequest: {
             account_id: components["schemas"]["UUID"];
             created_at?: components["schemas"]["Timestamp"];
@@ -5288,9 +5798,15 @@ export interface components {
             payout_id: components["schemas"]["UUID"];
             policy_hash?: string;
             policy_version: string;
+            /** @description What value is leaving, in the order it leaves (§23). A payout does not take "500 Credits"; it takes specific units from specific provenance lots, and this is which. */
+            provenance?: components["schemas"]["PayoutProvenanceSlice"][];
+            /** @description The pre-commitment quote this payout was created against, when there was one. */
+            quote_id?: components["schemas"]["UUID"];
             requested_quantity: components["schemas"]["Quantity"];
             required_verification?: string;
             reserved_quantity: components["schemas"]["Quantity"];
+            /** @description True when this payout is a rehearsal against a sandbox provider. */
+            sandbox?: boolean;
             settled_quantity?: components["schemas"]["Quantity"];
             /** @enum {string} */
             state: "DRAFT" | "ELIGIBILITY_CHECK" | "VERIFICATION_REQUIRED" | "VERIFICATION_PENDING" | "VERIFIED" | "SUBMITTED" | "PROVIDER_PENDING" | "PAYOUT_STATUS_UNKNOWN" | "SETTLED" | "FAILED" | "REJECTED" | "REVERSED" | "MANUAL_REVIEW";
@@ -5497,6 +6013,15 @@ export interface components {
             /** @description Where earnings are attributed. Omit for the selling account itself, which is the ordinary case. */
             payout_account_id?: components["schemas"]["UUID"];
         };
+        /** @description SANDBOX TIER ONLY. Refused with FORBIDDEN anywhere else. */
+        SandboxVerificationOutcome: {
+            account_id: components["schemas"]["UUID"];
+            /**
+             * @description There is no default. UNDERAGE and SANCTIONED are separate from REJECTED because §21 requires an age failure and a sanctions failure to be separately expressible.
+             * @enum {string}
+             */
+            outcome: "VERIFIED" | "NEEDS_INFORMATION" | "REJECTED" | "UNDERAGE" | "SANCTIONED";
+        };
         /** @description Derived from the session store and the claims of the current session. Nothing here is a secret and nothing here is created by asking. */
         SecuritySummary: {
             active_sessions: number;
@@ -5531,6 +6056,27 @@ export interface components {
             /** @enum {string} */
             fiat_currency: "USD";
             funding_source_id?: components["schemas"]["UUID"];
+        };
+        StartedVerification: {
+            expires_at?: components["schemas"]["Timestamp"];
+            /** @description Single-use and short-lived. It is returned here and stored nowhere. On a sandbox tier it is a `sandbox:` reference rather than a page, because there is no hosted flow to visit. */
+            hosted_url?: string;
+            sandbox: boolean;
+            /** @description Present only for a rehearsal session. It is where a sandbox operator chooses the outcome explicitly, and its presence is what makes a sandbox session visibly a rehearsal. */
+            sandbox_control_path?: string;
+            session: components["schemas"]["VerificationSession"];
+        };
+        StartVerificationRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description ISO 3166-1 alpha-2. Never inferred from a network address. */
+            jurisdiction_country: string;
+            /** @description The subdivision code without its country prefix. Required where the rules depend on it. */
+            jurisdiction_region?: string;
+            /**
+             * @description Defaults to PAYOUT_KYC, which is what a withdrawal needs.
+             * @enum {string}
+             */
+            purpose?: "PAYOUT_KYC" | "ENHANCED";
         };
         StatusChange: {
             policy_version?: string;
@@ -5708,6 +6254,95 @@ export interface components {
             /** @enum {string} */
             venue_status: "ACTIVE" | "DEGRADED" | "DISABLED";
         };
+        /** @description One sub-check, its answer, who produced it and under which rule version. `detail` is a safe reason code and never a document, a government identifier or a date of birth. */
+        VerificationCheck: {
+            detail?: string;
+            kind: components["schemas"]["VerificationCheckKind"];
+            outcome: components["schemas"]["VerificationOutcome"];
+            provider: string;
+            provider_ref?: string;
+            recorded_at: components["schemas"]["Timestamp"];
+            rules_version: string;
+            /** @description A rehearsal answer. A database CHECK refuses one in PROD. */
+            sandbox: boolean;
+        };
+        /**
+         * @description The five things §21 says must each be able to refuse on their own.
+         * @enum {string}
+         */
+        VerificationCheckKind: "IDENTITY_DOCUMENT" | "AGE" | "JURISDICTION" | "SANCTIONS" | "PEP";
+        /**
+         * @description How thoroughly the person behind an account has been identified. NODAL_IDENTITY is a verified e-mail address and says nothing about who they are or whether they may receive money; PAYOUT_KYC and ENHANCED are a provider's decision plus the sub-checks that justify it.
+         * @enum {string}
+         */
+        VerificationLevel: "NONE" | "NODAL_IDENTITY" | "PAYOUT_KYC" | "ENHANCED";
+        /**
+         * @description One sub-check's answer. UNKNOWN is not a pass and not a fail: a provider that has not screened somebody has not cleared them either.
+         * @enum {string}
+         */
+        VerificationOutcome: "PASS" | "FAIL" | "NEEDS_INFORMATION" | "UNKNOWN" | "NOT_APPLICABLE";
+        /** @description The §24 profile area. It says what has been established, what has not, and what to do next. It carries no personal data. */
+        VerificationProfile: {
+            account_id: components["schemas"]["UUID"];
+            age_verified: boolean;
+            checks?: components["schemas"]["VerificationCheck"][];
+            expires_at?: components["schemas"]["Timestamp"];
+            jurisdiction_country?: string;
+            jurisdiction_refusals?: string[];
+            jurisdiction_region?: string;
+            jurisdiction_supported: boolean;
+            level: components["schemas"]["VerificationLevel"];
+            /** @description The age threshold this jurisdiction is judged against, from the versioned rule table. */
+            minimum_age: number;
+            missing?: components["schemas"]["VerificationRequirement"][];
+            /** @description Whether verification, by itself, no longer stands between this person and a withdrawal. It says nothing about whether a withdrawal is possible; see /me/eligibility for that. */
+            payout_ready: boolean;
+            provider?: string;
+            /** @enum {string} */
+            provider_availability?: "" | "NOT_OFFERED" | "REQUIRES_APPLICATION" | "APPLICATION_PENDING" | "APPLICATION_DENIED" | "SANDBOX_ONLY" | "LIVE";
+            restrictions?: string[];
+            rules_version: string;
+            /** @enum {string} */
+            sanctions_state: "UNKNOWN" | "CLEAR" | "HIT" | "REVIEW";
+            /** @description True when any of this was established by a rehearsal provider. */
+            sandbox: boolean;
+            session?: components["schemas"]["VerificationSession"];
+            state: components["schemas"]["VerificationState"];
+            verified_at?: components["schemas"]["Timestamp"];
+        };
+        /** @description One thing standing between a person and a level, with what they can do about it. */
+        VerificationRequirement: {
+            /** @enum {string} */
+            action: "START_VERIFICATION" | "CONTINUE_VERIFICATION" | "PROVIDE_INFORMATION" | "REVERIFY" | "CONTACT_SUPPORT" | "WAIT" | "NONE";
+            /** @description A check kind, or VERIFICATION_SESSION / JURISDICTION / PROVIDER / OPERATOR_REVIEW / VERIFICATION_EXPIRED. */
+            code: string;
+            detail: string;
+        };
+        VerificationSession: {
+            created_at: components["schemas"]["Timestamp"];
+            expires_at?: components["schemas"]["Timestamp"];
+            failure_reason?: string;
+            jurisdiction_country?: string;
+            jurisdiction_region?: string;
+            provider: string;
+            provider_ref?: string;
+            /** @enum {string} */
+            purpose: "PAYOUT_KYC" | "ENHANCED";
+            rules_version?: string;
+            sandbox: boolean;
+            session_id: components["schemas"]["UUID"];
+            status: components["schemas"]["VerificationSessionStatus"];
+        };
+        /**
+         * @description The provider-abstract status union of PROVIDER_BOUNDARY §3, derived from what Persona, Veriff, Sumsub and Stripe Identity each report so that no one vendor's vocabulary becomes the schema's.
+         * @enum {string}
+         */
+        VerificationSessionStatus: "CREATED" | "PENDING_USER_ACTION" | "PROCESSING" | "REQUIRES_INPUT" | "MANUAL_REVIEW" | "APPROVED" | "DECLINED" | "CANCELLED" | "EXPIRED";
+        /**
+         * @description The financial verification state machine of §20. UNVERIFIED is §20's NOT_STARTED under the name the schema already used. Nothing reaches VERIFIED except through a provider session that decided so.
+         * @enum {string}
+         */
+        VerificationState: "UNVERIFIED" | "REQUIRED" | "STARTED" | "PENDING" | "NEEDS_INFORMATION" | "VERIFIED" | "REJECTED" | "EXPIRED" | "RESTRICTED" | "SUSPENDED";
         Withdrawal: {
             account_id: components["schemas"]["UUID"];
             asset_id: components["schemas"]["UUID"];
@@ -5717,6 +6352,49 @@ export interface components {
             quantity: components["schemas"]["Quantity"];
             status: string;
         };
+        WithdrawalEligibility: {
+            account_id: components["schemas"]["UUID"];
+            buckets: components["schemas"]["WithdrawalOriginBucket"][];
+            current_verification: components["schemas"]["VerificationLevel"];
+            destination_configured?: boolean;
+            eligible: boolean;
+            frozen: components["schemas"]["Quantity"];
+            gross: components["schemas"]["Quantity"];
+            ineligible: components["schemas"]["Quantity"];
+            jurisdiction_supported?: boolean;
+            /** @description The provider's minimum expressed in Credits, or "0" when it publishes none. Zero is never "any amount will do". */
+            minimum_quantity?: components["schemas"]["Quantity"];
+            payout_eligible: components["schemas"]["Quantity"];
+            policy_hash?: string;
+            policy_version: string;
+            provider?: string;
+            provider_available?: boolean;
+            reasons: components["schemas"]["WithdrawalReason"][];
+            required_verification: components["schemas"]["VerificationLevel"];
+            sandbox: boolean;
+            spendable: components["schemas"]["Quantity"];
+            /** @description True when identity verification is the only thing standing between this person and some of their money. */
+            verification_would_suffice?: boolean;
+            withdrawable_now: components["schemas"]["Quantity"];
+        };
+        WithdrawalOriginBucket: {
+            /** @description Where this origin sits in the consumption order. Lower leaves first. */
+            consumption_rank: number;
+            min_hold_days?: number;
+            origin: components["schemas"]["CreditOrigin"];
+            payout_allowed: boolean;
+            quantity: components["schemas"]["Quantity"];
+            reasons: components["schemas"]["WithdrawalReason"][];
+            required_capability?: string;
+            required_verification?: components["schemas"]["VerificationLevel"];
+            verification_would_suffice?: boolean;
+            withdrawable: components["schemas"]["Quantity"];
+        };
+        /**
+         * @description A machine-readable reason value cannot leave. Each names something that could change. REQUIRES_VERIFICATION is a NEXT STEP and not a denial, and the product must present it as one.
+         * @enum {string}
+         */
+        WithdrawalReason: "REQUIRES_VERIFICATION" | "ORIGIN_NOT_WITHDRAWABLE" | "CAPABILITY_INACTIVE" | "JURISDICTION_RESTRICTED" | "ACCOUNT_RESTRICTED" | "PROVIDER_UNAVAILABLE" | "MINIMUM_NOT_MET" | "FUNDING_NOT_SETTLED" | "HOLD_PERIOD_NOT_ELAPSED" | "NO_VALUE" | "POLICY_INVALID";
         WithdrawalRequest: {
             account_id: components["schemas"]["UUID"];
             asset_id: components["schemas"]["UUID"];

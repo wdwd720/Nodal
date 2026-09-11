@@ -184,6 +184,47 @@ capital) only.
 | `InternalCommerce` / creator economy | 0 |
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
+## 9. Productization additions: verification and the conversion request (2026-09-10)
+
+Appended rather than folded into §5 and §6 above, because those sections are a
+frozen baseline measurement and this is what was added after it. Architecture:
+ADR-0025, ADR-0026, `docs/product/VERIFICATION_AND_WITHDRAWAL.md`.
+
+### Tables and migrations
+
+| Migration | Table | What it holds | State machine |
+|---|---|---|---|
+| 00761 | `compliance_profile_transitions` | every change of a person's verification state, with actor, reason, provider, provider reference and the session it came from | writes `compliance_profiles.identity_state`, `verified_at`, `expires_at`; `cp_app` holds UPDATE on the attribute columns only |
+| 00761 | `compliance_profiles` (altered) | the state list grows to §20's ten; born UNVERIFIED | F-42 + edge binding + birth control |
+| 00762 | `verification_sessions` | one attempt: purpose, provider, provider reference, status, jurisdiction, rule version, environment, sandbox flag, expiry. **No hosted URL** | 9 statuses, F-42 + edge binding + birth control; one open session per person (partial unique index) |
+| 00762 | `verification_session_transitions` | the edges of the above | immutable |
+| 00762 | `verification_checks` | the evidence: one append-only row per sub-check (IDENTITY_DOCUMENT, AGE, JURISDICTION, SANCTIONS, PEP) with outcome, provider, reference, rule version, environment and sandbox flag | append-only; `CHECK (NOT sandbox OR environment <> 'PROD')` |
+| 00763 | `payout_destination_transitions` | the edges of a destination's usability | writes `payout_destinations.status` and `verified_at` |
+| 00763 | `payout_destinations` (altered) | gains `country`, `masked_display`, `sandbox`; born UNVERIFIED | F-42 + edge binding + birth control; REJECTED and DISABLED terminal |
+| 00764 | `payout_quotes` | the pre-commitment quote: gross/fee/net on both the Credit side and the money side, three rule versions, `minimum_ok` net of fees, expiry, consumed-once | no state column by design; immutable but for `consumed_at`; unique on `(account_id, idempotency_key)` |
+| 00764 | `payout_requests` (altered) | gains `quote_id` | unchanged |
+
+Custom SQLSTATE added: `PQ001` (quote immutability). `AD001` is reused for the
+three birth controls.
+
+### Routes
+
+| Method | Path | Permission | Step-up | Notes |
+|---|---|---|---|---|
+| GET | `/v1/me/verification` | `account:read` | — | the §24 profile area: state, level, evidence, what is missing and the action for each. No PII. |
+| POST | `/v1/me/verification/sessions` | `payout:create` or `withdrawal:create` | — | opens a provider-hosted session; the jurisdiction is supplied and never inferred |
+| GET | `/v1/me/verification/sessions/{sessionId}` | `account:read` | — | polls the provider and ingests the decision; idempotent |
+| POST | `/v1/me/verification/sandbox-outcome` | `payout:create` or `withdrawal:create` | — | **SANDBOX TIER ONLY**, refused three times over |
+| GET | `/v1/me/eligibility` | `payout:read` or `credit:read` | — | withdrawal eligibility per origin bucket, with reasons |
+| GET | `/v1/me/payout-destinations` | `payout:read` | — | includes disabled and rejected ones |
+| POST | `/v1/me/payout-destinations` | `payout:create` | yes | takes a PROVIDER TOKEN; refuses anything that looks like an account number |
+| DELETE | `/v1/me/payout-destinations/{destinationId}` | `payout:create` | yes | disables; never deletes |
+| POST | `/v1/payouts/quote` | `payout:create` | — | gross, fee, net, expiry, and the provenance that would leave |
+
+`POST /v1/payouts` gains an optional `quote_id`; `GET /v1/payouts/{id}` gains
+`provenance` and `sandbox`. No new permission and no new capability were
+declared: the customer role already holds `payout:create` and `payout:read`, and
+verification exists to enable a payout.
 ## Addendum — 2026-09-10: the Nodal-native market's product surface (M)
 
 This section is an addendum rather than an edit: §§1–8 above are a dated
@@ -339,6 +380,20 @@ Schema is at migration **783** after this batch.
 
 | Package | What it is |
 |---|---|
+| `internal/verification` | the financial verification state machine, the session and evidence model, the provider contract and registry, the composite resolver, the §24 snapshot, the sandbox control |
+| `internal/verification/rules` | the versioned age, country and sanctions rule tables (`verification-rules-v1-us-only`) |
+| `internal/provider/verifysandbox` | the rehearsal identity provider: refuses PROD, decides nothing on its own, has no default outcome |
+| `internal/eligibility/withdrawal.go` | the pure per-origin withdrawal explanation composing policy, gates, verification, jurisdiction and provider |
+| `internal/payout/destination.go`, `quote.go`, `provenance.go` | the destination lifecycle and token validation, the pre-commitment quote, the provenance read model |
+| `internal/httpapi/handlers_verification.go`, `handlers_eligibility.go`, `handlers_payout_destinations.go`, `ports_verification.go`, `wiring_verification.go` | the HTTP surface and its adapters |
+
+### What did NOT change
+
+The value-domain isolation, the payout state machine's thirteen states, the
+ledger paths, the fail-closed `valuedomain.DefaultPolicy`, the capability gates,
+and the rule that no approval reference is fabricated. `internal/verification`
+imports neither `internal/credit` nor `internal/ledger`, and a test counts the
+Credit tables across a full verification to keep it that way.
 | `internal/notifications` (new) | the product notification centre: `Producer.Emit` (in the caller's transaction, idempotent on user/kind/ref/occurrence), the read side, preferences, and the six-source `Follower` |
 | `internal/stream` (extended) | `notification.created` and `data.changed`, per-user addressing, a Broadcast flag, time-encoded event ids, durable resume, a per-user stream cap |
 | `internal/notification` (unchanged) | the 2026-09 package. Still has no production caller; kept because deleting it deletes its tests (D-070) |
