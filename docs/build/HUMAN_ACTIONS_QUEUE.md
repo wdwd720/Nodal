@@ -51,7 +51,7 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 ## 3b. Merge the productization PR (OPEN, after 3 has verified)
 
 - **Where:** https://github.com/wdwd720/Nodal/pull/1 → **Ready for review** → **Merge** (a merge commit, not a squash: the branch's history is the audit trail the registers cite by hash).
-- **When:** only after item 3's verification passed on `9906c9f`, and only when Claude has merged the last two fix branches (`fix/withdrawal`, `fix/docs`) and refreshed the PR — the PR body and `docs/build/MASTER_BUILD_STATE.md` "RESUME HERE" both say whether that has happened.
+- **When:** only after item 3's verification passed on `9906c9f`. Every fix branch is merged (the last, `fix/withdrawal-4`, at 06:20 PDT on 2026-09-11) and the PR tracks the pushed branch; `docs/build/MASTER_BUILD_STATE.md` "RESUME HERE" names the final commit.
 - **Why:** merging deploys the productization build to STAGING (the API from `render.yaml`'s `nodal-api`, and creates the static site `nodal-web`), which is what §2's live verification and item 4's CNAME need.
 - **Unblocks:** items 4 and 6; the §56 browser walk of the live staging system.
 
