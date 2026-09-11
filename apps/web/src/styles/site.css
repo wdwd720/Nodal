@@ -693,3 +693,12 @@
   font-size: var(--text-2xs);
   flex: 0 0 auto;
 }
+
+/*
+ * A public policy page shows the whole document rather than an excerpt, so its
+ * scroll region is taller than the one on the acceptance screen — there is no
+ * control below it competing for the fold.
+ */
+.doc-scroll-tall {
+  max-height: 40rem;
+}

@@ -26,6 +26,8 @@ import { isUnauthenticated } from "./problem.ts";
 import {
   ContractViolation,
   accountSpec,
+  nativeMarketPageSpec,
+  publicLegalDocumentSpec,
   legalDocumentSpec,
   termsStateSpec,
   unreadCountSpec,
@@ -981,3 +983,76 @@ export function useUnreadCount(enabled: boolean): UseQueryResult<number> {
 
 /** Re-exported so a page can validate a document it received on its own. */
 export { legalDocumentSpec };
+
+/* --------------------------------------------------------------------------
+ * The public reads (D-080)
+ *
+ * Both answer without a session, and both are used by the signed-out site. They
+ * are named `usePublic*` so that the signed-in screens — which need acceptance
+ * state, and the market detail the discovery list does not carry — cannot reach
+ * for them by accident and get a thinner answer than they needed.
+ * ------------------------------------------------------------------------ */
+
+export type PublicLegalDocument = Schemas["PublicLegalDocument"];
+export type NativeMarketSummary = Schemas["NativeMarketSummary"];
+
+export const publicKeys = {
+  terms: ["public", "terms"] as const,
+  markets: (limit: number) => ["public", "native-markets", limit] as const,
+};
+
+/**
+ * The legal registry, with the text, for anyone.
+ *
+ * This is the same registry `/me/terms-acceptances` serves and the same bytes:
+ * `content_hash` matches, so the words a visitor reads on the public site are
+ * the words the acceptance record will name. That is why the public pages
+ * render this rather than prose of their own — an explainer beside an agreement
+ * is two texts, and a reader can only be misled by the one that is not binding.
+ */
+export function usePublicTerms(): UseQueryResult<PublicLegalDocument[]> {
+  return useQuery({
+    queryKey: publicKeys.terms,
+    // The registry changes when somebody ships a new version, not while a page
+    // is open. Five minutes is long enough to make navigating between the
+    // documents free and short enough that a re-issue reaches a visitor who
+    // leaves the tab open.
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await api.GET("/terms", {});
+      return validatedList<PublicLegalDocument>(data, publicLegalDocumentSpec, "/terms");
+    },
+  });
+}
+
+export interface PublicMarkets {
+  readonly markets: readonly NativeMarketSummary[];
+  /** Which ordering the backend actually used. */
+  readonly sort: string;
+  /** Whether paging this ordering sees every market exactly once. */
+  readonly stable: boolean;
+}
+
+/**
+ * A page of the market discovery list, without a session.
+ *
+ * The public preview takes the newest markets and nothing else: NEWEST is the
+ * only ordering that is stable under paging, and a marketing surface ranking by
+ * a live figure would be showing a leaderboard that reorders while it is read.
+ */
+export function usePublicMarkets(limit = 6): UseQueryResult<PublicMarkets> {
+  return useQuery({
+    queryKey: publicKeys.markets(limit),
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets", {
+        params: { query: { limit, sort: "NEWEST" } },
+      });
+      const page = validated<{
+        markets: NativeMarketSummary[];
+        sort: string;
+        stable: boolean;
+      }>(data, nativeMarketPageSpec, "/native-markets");
+      return { markets: page.markets, sort: page.sort, stable: page.stable };
+    },
+  });
+}

@@ -677,3 +677,70 @@ export const termsStateSpec: Spec = {
 export const unreadCountSpec: Spec = {
   required: { count: "integer" },
 };
+
+/* ---------------------------------------------------------------------------
+ * The public reads (D-080): the legal registry and market discovery.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * A served legal document with no acceptance state.
+ *
+ * `body` is REQUIRED here, unlike on `LegalDocument`, and that difference is
+ * the point of the endpoint: the public site renders the bytes rather than an
+ * explainer, so a document that arrived without them would leave the page with
+ * nothing honest to show. `content_hash` is the sha256 of exactly those bytes
+ * and is the same value `/me/terms-acceptances` serves, so a visitor can check
+ * that what they read before signing up is what they were later asked to
+ * accept.
+ */
+export const publicLegalDocumentSpec: Spec = {
+  required: {
+    document_id: "string",
+    version: "string",
+    title: "string",
+    content_hash: "string",
+    requirement: "string",
+    counsel_review_required: "boolean",
+    body: "string",
+  },
+};
+
+/**
+ * One market as the discovery list returns it.
+ *
+ * Only the fields the public preview renders are checked. Every price is an
+ * integer at `price_scale` and every quantity is base units, so the formatter
+ * is given exact digits and a scale rather than anything that has already been
+ * through a double.
+ *
+ * `has_24h_change` is validated because the change is meaningless without it:
+ * a market that has not traded in the window has not moved nothing, and
+ * rendering a zero for it would be the interface inventing a fact.
+ */
+export const nativeMarketSummarySpec: Spec = {
+  required: {
+    market_id: "uuid",
+    name: "string",
+    symbol: "string",
+    market_status: "string",
+    last_price: "quantity",
+    price_scale: "integer",
+    asset_decimals: "integer",
+    real_credit_reserve: "quantity",
+    liquidity_credits: "quantity",
+    credit_volume_24h: "quantity",
+    trades_24h: "integer",
+    demo: "boolean",
+    created_at: "timestamp",
+  },
+  optional: {
+    description: "string",
+    has_24h_change: "boolean",
+    change_24h_bps: "integer",
+    moderation_state: "string",
+  },
+};
+
+export const nativeMarketPageSpec: Spec = {
+  arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
+};
