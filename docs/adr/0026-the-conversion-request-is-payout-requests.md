@@ -168,8 +168,15 @@ already reserved for it, and the removal now answers which requests it stranded
 
 ### 3. Provenance is a read model, and the order is not the intuitive one
 
-`payout.Provenance` folds `payout_allocations` by origin and orders them by
-`credit.ConsumptionRank`. Nothing is recomputed and no ledger semantics change.
+`payout.Provenance` folds `payout_allocations` by (origin, origin floor) and
+orders them by `credit.ConsumptionRank`. Nothing is recomputed and no ledger
+semantics change.
+
+It folded by ORIGIN alone until D-136, and a provenance is not an origin: trading
+proceeds out of a settled purchase and trading proceeds out of a promotional
+grant read as one line of `MARKET_TRADING_PROCEEDS`, so a reader could not tell
+what actually left. `payout_allocations.origin_floor` (00820) records it beside
+the origin.
 
 The order deserves stating plainly because it is the opposite of §23's sketch:
 consumption runs from the MOST restricted origin to the least — promotional,
@@ -188,10 +195,31 @@ That is NOT all of §23's requirement, and this paragraph used to claim it was.
 Selection decides which of the lots an account HOLDS may leave; §23 is about a
 TRANSFORMATION that produces a lot of a different origin, and a grant traded into
 `MARKET_TRADING_PROCEEDS` is a lot selection then correctly selects (F-261). What
-makes §23 hold is the ORIGIN FLOOR: every lot carries the most restricted origin
-in its provenance, inherited at mint, and the policy must release the floor as
-well as the origin (D-131). `GET /v1/me/eligibility` reports it as `origin_floor`
-so the refusal names the grant rather than the trade.
+makes §23 hold is a lot's recorded PROVENANCE: `credit_lot_state.root_origins`
+holds every origin the lot's value bottoms out in, and the policy must release
+all of them as well as the lot's own origin (D-131, D-138).
+`credit_lot_state.origin_floor` is the most restricted of those roots, which
+`GET /v1/me/eligibility` reports as `origin_floor` so the refusal names the grant
+rather than the trade; `refused_root` names the root the live policy actually
+refuses, which under a policy this build does not ship need not be the same
+origin.
+
+### 4. The reservation takes the lots the decision evaluated, by id
+
+Eligibility is decided per LOT and the reservation used to consume by ORIGIN.
+`payout.Engine.Evaluate` records the approved lots in `Decision.Lots`;
+`payout.Service.reserve` passed `credit.EligibleOrigins(d.Lots)` as
+`ConsumeRequest.AllowedOrigins`, and two lots of one origin are one origin. A
+decision approving a SETTLED purchase was filled from a REVERSIBLE one — the
+consume's finality filter was the SPENDABLE one, which admits REVERSIBLE — and a
+decision approving proceeds out of a purchase was filled from proceeds out of a
+grant, which is F-261's route reopened one filter along (F-270).
+
+`reserve` now passes the lot IDS, `Consume` refuses to draw outside them, and the
+payout path carries its own finality filter (`RequirePayoutFinality`: UNFUNDED and
+SETTLED). `RequireSpendableFinality` is untouched, because reversible value may be
+SPENT and that is a deliberate product answer with a dispute reserve behind it
+(D-136).
 
 ## Why this and not the alternatives
 
@@ -225,11 +253,20 @@ so the refusal names the grant rather than the trade.
   `VERIFICATION_AND_WITHDRAWAL.md`: a licensed conversion provider (B-01, B-05),
   the Stripe restricted-business determination (B-09), and the counsel decision
   about which origins may ever be withdrawn (B-02).
+- A reserved request whose destination has stopped being usable carries
+  `blocked_reason`, and the Withdraw page renders it beside the Cancel control.
+  The request stays VERIFIED with its value reserved, because failing it would
+  return the reservation on the strength of a fact the person can undo; there is
+  no route that re-points a payout, since the destination is what the quote, the
+  fee and the provider idempotency key were computed against (D-139, F-277).
 
 ## Evidence
 
-Migrations 00763, 00764; `internal/payout` (`destination.go`, `quote.go`,
-`provenance.go`) and its unit and integration suites, including
+Migrations 00763, 00764, 00814, 00815, 00819, 00820, 00822; `internal/payout`
+(`destination.go`, `quote.go`, `provenance.go`, `service.go`) and its unit and
+integration suites, including
+`TestIntegration_AMixedBalanceDrawsOnlyTheLotTheDecisionApproved`,
+`TestIntegration_APayoutRefusedAtSubmitSaysWhyAndTellsItsHolder`,
 `TestIntegration_ADestinationStatusIsNotTheApplicationsToWrite`,
 `TestIntegration_AQuoteStandsAndIsSpentOnce`,
 `TestIntegration_AnExpiredQuoteRefusesThePayout` and

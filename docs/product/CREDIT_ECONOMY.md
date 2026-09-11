@@ -230,10 +230,22 @@ A payout is the only exit, and it does not reserve "500 Credits" — it reserves
 returns exactly what it took. Without that, a user could launder a promotional
 grant into an earning by reserving a payout and cancelling it.
 
+**Those lots are the ones the eligibility decision evaluated, by id.** The
+decision is made per LOT — `Policy.Permits` is asked about each lot's finality,
+its origin and its provenance roots — and `payout.Service.reserve` passes the
+approved lots' IDS to `credit.Consume`. It used to pass the set of ORIGINS they
+carried, and two lots of one origin are one origin: a decision approving a settled
+purchase was filled from a reversible one, and a decision approving trading
+proceeds out of a purchase was filled from proceeds out of a grant (D-136, F-270).
+"Reservation by lot" is a property of the code, not a description of it.
+
 Four independent things must all say yes:
 
 1. **Finality.** `REVERSIBLE`, `DISPUTED` and `REVERSED` value can never be paid
-   out, whatever the policy says.
+   out, whatever the policy says. The reservation asks that question with its own
+   filter — `RequirePayoutFinality`, which admits `UNFUNDED` and `SETTLED` only.
+   `RequireSpendableFinality` is a different question with a different answer:
+   reversible value may BUY things, knowingly, against a dispute reserve.
 2. **Origin policy** (`valuedomain.Policy`, versioned and hashed):
    - `DefaultPolicy` — what every deployment runs unless told otherwise —
      permits **no origin at all**. It is fail-closed by construction, not by
@@ -247,19 +259,38 @@ Four independent things must all say yes:
      was withdrawable here until D-095, which is the sentence above stated and
      then broken one line later, and it gave a platform a payout path gated only
      by a competition it runs itself (F-157).
-3. **The origin FLOOR** (`credit_lot_state.origin_floor`, D-131). Value minted
-   out of other value carries the most restricted origin anywhere in its
-   provenance, and the policy must permit the floor as well as the origin. A lot
-   nothing funded has its own origin as its floor; a derived lot — trading
+3. **The provenance ROOTS** (`credit_lot_state.root_origins`, D-138) and the
+   **origin FLOOR** computed from them (`credit_lot_state.origin_floor`, D-131).
+   Value minted out of other value records every origin its provenance bottoms
+   out in, and the policy must permit ALL of them as well as the lot's own
+   origin. A lot nothing funded is its own root; a derived lot — trading
    proceeds, a creator earning, a marketplace sale, the platform's fee on any of
-   them — inherits the most restricted floor among the lots consumed to fund it,
-   at the moment it is minted, and nothing later raises it.
+   them — takes the union of its parents' roots at the moment it is minted, and
+   nothing later narrows it.
 
-   Without it the rule above was true of a grant and false of a grant that had
-   been traded: proceeds of a `PROMOTIONAL` lot are `MARKET_TRADING_PROCEEDS`,
-   which `SandboxPolicy` permits, at `UNFUNDED`, which `PayoutEligible()`
-   admits. That is goal §23's forbidden pattern — nonwithdrawable source, trade,
-   payout-eligible balance — and it was reachable (F-261).
+   Without a provenance rule at all, the origin rule above was true of a grant
+   and false of a grant that had been traded: proceeds of a `PROMOTIONAL` lot are
+   `MARKET_TRADING_PROCEEDS`, which `SandboxPolicy` permits, at `UNFUNDED`, which
+   `PayoutEligible()` admits. That is goal §23's forbidden pattern —
+   nonwithdrawable source, trade, payout-eligible balance — and it was reachable
+   (F-261).
+
+   The FLOOR alone could not be the whole rule either. It is the most restricted
+   root ranked across the two policies this build ships, with the origin's name
+   breaking a tie, so a lot funded by a purchase and by trading gains records
+   `MARKET_TRADING_PROCEEDS` — and a policy that releases trading gains and
+   closes the purchased float, which is one of the answers B-02 can come back
+   with, would release it. A rank is conservative only for a policy that permits
+   a superset of what this build permits; a set is conservative for every policy,
+   because every root is asked (F-275). The floor stays, for display and for
+   ordering, and it is one of the roots by construction.
+
+   Both are computed from one recursive walk to the roots, on every parent row,
+   and a lot's provenance is CLOSED before anything derives from it: a
+   `credit_lot_parents` row naming a child that is already somebody else's parent
+   is refused with `CREDIT_PARENT_AFTER_DESCENDANT`. Without that the walk read
+   one level deep and a grandchild written before its parent's provenance carried
+   a floor better than its ancestry (D-137, F-271).
 4. **Capabilities and verification.** The permitted origins require
    `PAYOUT_RESERVE` ACTIVE and a verification level the account actually holds.
 
@@ -267,13 +298,14 @@ So: **promotional, refunded, adjusted, provider-settled and prize value can neve
 leave this system under any policy in this build — nor can anything minted out of
 them.** That is what makes the sandbox demo catalogue safe: its Credits are
 `PROMOTIONAL`, and every earning, fee and sale proceeds a demo trade produces has
-`PROMOTIONAL` as its origin floor, so all of it is spendable inside the product
-and unable to leave it, whatever it is traded into
+`PROMOTIONAL` in its root set and as its origin floor, so all of it is spendable
+inside the product and unable to leave it, whatever it is traded into
 (`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave`, which asks
 `Policy.Permits` about every seeded lot under both policies).
 
-What the floor costs, said here rather than discovered: a person who buys with a
-promotional grant and sells at a profit cannot withdraw the profit either, and a
+What the provenance rule costs, said here rather than discovered: a person who
+buys with a promotional grant and sells at a profit cannot withdraw the profit
+either, and a
 seller into a native market whose pool still holds somebody else's grant is drawn
 against that grant and inherits its floor (D-132). The alternative — splitting a
 lot into a withdrawable part and a granted part — is a second provenance model on
@@ -368,17 +400,31 @@ Stated so nobody has to discover it:
 - **No Credit purchase has ever been made against a live provider.**
   `CREDIT_PURCHASE` is not ACTIVE in any deployment; see
   `docs/build/BLOCKERS.md` and `docs/audit/LAUNCH_GATE_MATRIX.md`.
-- **The origin floor is a MINIMUM, and it never rises.** A lot's floor is fixed
-  when the lot is minted and nothing moves it — not a settlement, not a policy
-  version persisted through the approval path, not a later trade. That is the
-  conservative direction and it is the same property `credit_lots.origin`
-  already has; there is deliberately no operation that "cleans" provenance,
-  because one would be the first thing somebody asked for (D-131).
+- **Provenance is a MINIMUM, and it never narrows.** A lot's root set and the
+  floor computed from it are fixed when the lot is minted and nothing moves
+  them — not a settlement, not a policy version persisted through the approval
+  path, not a later trade. That is the conservative direction and it is the same
+  property `credit_lots.origin` already has; there is deliberately no operation
+  that "cleans" provenance, because one would be the first thing somebody asked
+  for (D-131, D-138).
 - **A pool draw-down is worst-first, and the wait it causes is not a refusal.**
   A seller drawn against somebody else's REVERSIBLE contribution receives
   reversible proceeds until that contribution settles, at which point
   `credit.Service.SettleDerived` promotes them. A seller drawn against somebody
   else's GRANT inherits a promotional floor, and that does not move (D-132).
+- **A pool whose record cannot account for a sale still constrains it.** If
+  `native_market_credit_sources` covers less than a sale draws out, the parents
+  it DOES name are kept, the proceeds are minted at the worst of them, and the
+  shortfall is recorded as an audit event naming the market. It is unreachable on
+  a database migrated from 00809 onwards — the record and the reserve move in one
+  transaction — and it exists for a pool that traded before the record did
+  (F-276).
+- **A derived lot minted UNFUNDED can still be FROZEN.** UNFUNDED is where a
+  derived lot lands when its least final parent is a grant, and one of its OTHER
+  parents can still be charged back. `UNFUNDED → DISPUTED` is the one edge that
+  finality has, and it only ever runs towards frozen: there is no promotion out
+  of UNFUNDED, because that would be value inventing a backer (D-124 amended,
+  F-273).
 
 ## Evidence
 
@@ -386,5 +432,6 @@ Stated so nobody has to discover it:
 (issue, consume, balances, purchase); `internal/ledger` (the journal and its
 triggers); `internal/nativemarket` (the curve, risk, safety, prints, positions);
 `internal/payout` (reservation by lot); migrations 00711, 00712, 00713, 00729,
-00743, 00771, 00772, 00773, 00774, 00793; ADR-0023, ADR-0027; D-063 to D-068,
-D-086, D-093 to D-096; findings F-151 to F-159.
+00743, 00771, 00772, 00773, 00774, 00793, 00816, 00819, 00820, 00821; ADR-0023,
+ADR-0026, ADR-0027; D-063 to D-068, D-086, D-093 to D-096, D-124, D-131, D-132,
+D-136 to D-139; findings F-151 to F-159, F-261, F-262, F-270 to F-277.

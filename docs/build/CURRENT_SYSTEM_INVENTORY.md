@@ -909,3 +909,88 @@ route, no change to the ledger or the lot event stream. `DefaultPolicy` still
 releases no origin, so the origin floor changes nothing about what a
 non-sandbox deployment may pay out — a floor can only ever refuse more than the
 origin alone would.
+
+
+## Addendum — 2026-09-11: what the THIRD withdrawal-verification audit changed (F-270 … F-277)
+
+Four migrations, 00819–00822. Architecture: D-136 … D-139, dated amendments to
+D-124, D-131 and D-133, ADR-0026 §3/§4,
+`docs/product/CREDIT_ECONOMY.md` §4 and §7,
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §7 and §9.
+
+Half of the six findings are defects in the SECOND round's own remediation. The
+one P1 is the invariant both previous rounds failed to hold at a different
+layer — value the policy refuses must not reach a payout — closed here at the
+layer that moves the units.
+
+### Tables and columns
+
+| Migration | Table | What it holds | State machine |
+|---|---|---|---|
+| 00819 | `credit_lot_state` (altered) | gains `root_origins text[]`, NOT NULL, non-empty, CHECKed against the eleven declared origins, with `origin_floor = ANY(root_origins)` | trigger-maintained like `finality` and `origin_floor`; `cp_app` holds SELECT only; backfilled — and every existing `origin_floor` recomputed — from the recursive provenance roots |
+| 00820 | `payout_allocations` (altered) | gains `origin_floor`, NOT NULL, CHECKed against the eleven declared origins | a RECORD of what left, backfilled from the lot's state; what stops the wrong lot being reserved is the lot restriction, not this column |
+| 00822 | `payout_requests` (altered) | gains `blocked_reason` and `blocked_at`, paired by a CHECK so a reason without an instant cannot exist | the application's to write, like `failure_reason`; the state and the money stay written only by the transition trigger (00807) |
+
+### Functions and triggers
+
+| Migration | Function | What it does |
+|---|---|---|
+| 00819 | `cp_credit_lot_root_origins(uuid)` | the set of origins a lot's provenance bottoms out in, by `WITH RECURSIVE` — the rule 00816's backfill stated and its trigger did not implement. STABLE; both provenance columns are computed from it |
+| 00819 | `cp_credit_lot_open()` (replaced) | opens the projection with the lot's own origin as its floor AND as its only root |
+| 00819 | `cp_credit_lot_parent_has_no_descendant_yet()` | BEFORE INSERT on `credit_lot_parents` (CR005): refuses a row whose child is already somebody else's parent, so a lot's provenance is closed before anything derives from it |
+| 00819 | `cp_credit_lot_apply_origin_floor()` (replaced) | AFTER INSERT on `credit_lot_parents`: sets `root_origins` from the recursive roots and `origin_floor` to the most restricted of them, instead of reading the parents' current floors one level deep |
+| 00821 | `cp_credit_finality_can_transition()` (replaced) | `UNFUNDED → DISPUTED` is legal. It is where a derived lot lands when its least final parent is a grant, and one of its other parents can still be charged back; the edge runs only towards frozen |
+
+Every new definer pins `search_path = pg_catalog, public, pg_temp`. No new
+SQLSTATE: the provenance refusals are `CR005`, in `internal/credit`'s family.
+
+### Routes and contract changes
+
+No route is added, and no route is removed. Five additive optional response
+fields:
+
+| Route | Change |
+|---|---|
+| `GET /v1/me/eligibility` | a bucket is now one PROVENANCE — (origin, origin floor, root set, finality) — so more than one bucket may carry the same `origin`, and a client keying on `origin` alone must key on all four. Each gains `finality`, `root_origins` and `refused_root` (the first root the live policy refuses, which under a policy this build does not ship need not be `origin_floor`). `withdrawable_now` now equals `payout_eligible` by construction under no account-level block (F-272). |
+| `GET /v1/payouts/{id}`, `POST /v1/payouts`, `POST /v1/payouts/quote` | each provenance slice gains `origin_floor`, and the slices fold by (origin, floor): trading proceeds out of a purchase and trading proceeds out of a grant are reported separately rather than summed (D-136). |
+| `GET /v1/payouts/{id}`, `GET /v1/payouts` | a payout request gains `blocked_reason` and `blocked_at`: why a RESERVED payout cannot be sent, in words its holder can read. It is not a state and not a failure — the request is still VERIFIED and its Credits are still reserved (D-139). |
+
+### Go surfaces other domains may read
+
+- `credit.EligibleLotIDs(lots)` — the lot ids a decision approved, which is what
+  `ConsumeRequest.LotIDs` takes. `credit.EligibleOrigins` remains, for reporting
+  what KIND of value a decision draws on, and is no longer a filter.
+- `credit.ConsumeRequest.RequirePayoutFinality` — the payout-grade finality
+  filter (UNFUNDED and SETTLED). `RequireSpendableFinality` is unchanged and is
+  what spending uses.
+- `credit.Allocation.OriginFloor`, `credit.Lot.RootOrigins` — provenance as it
+  travels out of the projection.
+- `valuedomain.PermitInput.RootOrigins`, `valuedomain.Policy.RefusedRoot(roots)`,
+  `valuedomain.FrozenFinalities()`, `valuedomain.FundingFinality.Frozen()`.
+  Neither `RootOrigins` nor `OriginFloor` has a permissive zero value: an
+  unstated one is UNKNOWN_ORIGIN and refuses.
+- `eligibility.OriginHolding.RootOrigins`, `eligibility.OriginBucket.RootOrigins`,
+  `.Finality`, `.RefusedRoot`. `eligibility.ExplainWithdrawal` now returns an
+  error: it refuses rather than rendering a response whose verdict contradicts
+  its own figures.
+- `payout.Notifier` and `payout.BlockedNotice`, with `(*payout.Service).SetNotifier`
+  — how a blocked reserved payout reaches its holder. Optional: a deployment that
+  wires none still refuses, still records and still renders.
+- `verification.Repository.ClaimProviderPoll` replaces `MarkProviderPolled`. It
+  claims the interval atomically and reports whether this caller got it; the
+  losers answer from the record.
+
+### What did NOT change
+
+No new capability gate, no new environment variable, no new error code, no new
+route, no change to the ledger or the lot event stream. `DefaultPolicy` still
+releases no origin. The origin floor and its SQL rank are unchanged and still
+held identical by `TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`;
+what changed is that they are a DISPLAY and ORDERING answer, and the permission
+answer is the root set.
+
+`compliance_profiles.sanctions_state` is unchanged and still has no legal-edge
+table in Go or in SQL. It is the residual D-121 records, confirmed again by
+`TestAuditWV3_TheSanctionsScreenResidualIsStillReachable` and left open: the
+edges a sanctions machine needs are a compliance decision that belongs to
+whoever answers B-02.

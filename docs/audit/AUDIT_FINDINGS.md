@@ -227,6 +227,14 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-267 | P3 | PRODUCTIZATION | fixed | redactForStorage failed open: it returned the sentinel for "keep the whole body" on the two branches that exist to keep a credential out |
 | F-268 | P3 | PRODUCTIZATION | fixed | PROVIDER_BOUNDARY §3b named a service method as a provider method and omitted two the interface has |
 | F-269 | P3 | PRODUCTIZATION | fixed | A quote was priced for a recipient the provider cannot pay, and the refusal at commit consumed the quote |
+| F-270 | P1 | PRODUCTIZATION | fixed | The reservation consumed by ORIGIN while eligibility was decided per LOT, so a payout approved on a settled purchase was filled from a reversible one |
+| F-271 | P2 | PRODUCTIZATION | fixed | A lot's origin floor depended on the order its parent rows were inserted, so a grandchild of a grant carried a floor the policy releases |
+| F-272 | P2 | PRODUCTIZATION | fixed | GET /v1/me/eligibility stated two contradictory figures for the same money and made its verdict from the false one |
+| F-273 | P2 | PRODUCTIZATION | fixed | The derived sweep's freeze direction could not see a lot minted UNFUNDED, so an earning funded by a charged-back card stayed spendable |
+| F-274 | P3 | PRODUCTIZATION | fixed | The per-session poll interval was a read-then-write, so twenty concurrent polls made seventeen provider calls |
+| F-275 | P3 | PRODUCTIZATION | fixed | The origin floor is one origin ranked by this build's two policies, so under another policy it is not the most restricted parent |
+| F-276 | P3 | PRODUCTIZATION | fixed | The pool-record shortfall branch discarded the parents it found, stranding the lot REVERSIBLE for ever with no provenance |
+| F-277 | P3 | PRODUCTIZATION | fixed | A payout refused at submit sat in VERIFIED with its value reserved and carried no reason a customer could read |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -11657,3 +11665,327 @@ three places that ask cannot ask different questions.
 `internal/payout/recipient.go`, `internal/httpapi/wiring_verification.go`,
 `internal/httpapi/wiring_native.go`. TEST_INT:
 `TestAuditWV2_AQuoteIsNotGivenForARecipientTheProviderCannotPay`.
+
+## F-270 · The reservation consumed by ORIGIN while eligibility was decided per LOT · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the third withdrawal-verification audit, reproduced as
+`TestAuditWV3_APayoutApprovedOnASettledLotIsFilledFromAReversibleOne` and
+`TestAuditWV3_APayoutApprovedOnAPurchasedFloorIsFilledFromAPromotionalOne`.
+
+It is the same invariant the two previous rounds each failed to hold at a
+different layer: value the policy refuses must not reach a payout. F-261 closed
+it in the provenance model and F-262 in the pooled draw-down; this is the layer
+that moves the units.
+
+`payout.Engine.Evaluate` walks `credit.EligibleLots` — a per-lot
+`valuedomain.Policy.Permits`, which reads the lot's FINALITY and its ORIGIN
+FLOOR — and records the exact lots it approved in `Decision.Lots`.
+`payout.Service.reserve` threw that away: it passed
+`credit.EligibleOrigins(d.Lots)`, the set of origin STRINGS, as
+`ConsumeRequest.AllowedOrigins`, and `credit.Consume` selected whatever sorted
+first in consumption order among lots of those origins whose finality was merely
+SPENDABLE. `ConsumeRequest.LotIDs` existed for exactly this and was unused; its
+own comment says why the origin filter is not enough — "two purchases produce two
+lots of the same origin".
+
+Two consequences, each reachable on its own:
+
+1. **Finality.** `PayoutEligible()` admits SETTLED and UNFUNDED, because "paying
+   out value that a card issuer can still reclaim turns a chargeback into an
+   uncollateralised loss, which PART XI forbids". `Spendable()` also admits
+   REVERSIBLE, and that was the filter the reservation applied. An account
+   holding a reversible purchase minted before a settled one had the REVERSIBLE
+   lot reserved against a decision that approved only the settled one.
+2. **Provenance.** Two lots of MARKET_TRADING_PROCEEDS — one round-tripped out of
+   a promotional grant, one out of a settled purchase — are one ORIGIN, so
+   approving the second approved consumption of the first. `CREDIT_ECONOMY.md` §4
+   says promotional value "can never leave this system under any policy in this
+   build"; it left.
+
+**Fix.** D-136. `reserve` passes `credit.EligibleLotIDs(d.Lots)` as
+`ConsumeRequest.LotIDs`; the restriction is a parameter of the one constant
+statement `openLotsQuery` is, and `Consume` asserts on the way out that every lot
+it selected is inside the set rather than correcting it. The payout path's
+finality bar is a parameter of its own, `RequirePayoutFinality`, which admits
+UNFUNDED and SETTLED only — `RequireSpendableFinality` is untouched, because
+REVERSIBLE value may be SPENT and that is the deliberate product answer.
+`payout_allocations` records `origin_floor` beside `origin` (00820) and the
+provenance read model folds by both, so what left is reported as what it was.
+
+**The residual this round does not close.** `compliance_profiles.sanctions_state`
+is the fifth state column in this area carried on a transition row and the only
+one with no legal-edge table in Go or in SQL, so a same-state
+`compliance_profile_transitions` row may still move a screen from HIT to CLEAR.
+`payout.restricted()` and `eligibility.applyAccountFacts` both read that column
+before a conversion request may proceed. It is recorded rather than fixed, here
+as in D-121: the edges a real sanctions machine needs — HIT → CLEAR after a false
+positive, REVIEW → HIT, an expiry — are a compliance decision that belongs to
+whoever answers B-02, and inventing them in a fix agent's migration would be
+inventing the compliance process they encode. The auditor's probe
+`TestAuditWV3_TheSanctionsScreenResidualIsStillReachable` is left exactly as it
+is, driving the row and recording what happens.
+
+**Evidence.** STATIC_PROOF: `internal/payout/service.go`,
+`internal/payout/provenance.go`, `internal/credit/types.go`,
+`internal/credit/balances.go`, `internal/credit/repository.go`,
+`migrations/00820_a_payout_records_what_left_as_what_it_was.sql`. TEST_INT:
+`TestAuditWV3_APayoutApprovedOnASettledLotIsFilledFromAReversibleOne`,
+`TestAuditWV3_APayoutApprovedOnAPurchasedFloorIsFilledFromAPromotionalOne`,
+`TestIntegration_AMixedBalanceDrawsOnlyTheLotTheDecisionApproved`,
+`TestIntegration_ProvenanceReportsTwoFloorsOfOneOriginSeparately`.
+
+## F-271 · A lot's origin floor depended on the order its parent rows were inserted · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the third withdrawal-verification audit, reproduced as
+`TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted`.
+
+00816's trigger computes a child's floor from its parents' CURRENT
+`credit_lot_state.origin_floor`, which reads one level deep. A lot's own floor is
+opened at its OWN origin by `cp_credit_lot_open` and falls only when ITS parent
+rows land, and `cp_credit_lot_parent_is_written_at_mint` permits a parent row for
+any lot created in the same transaction. So a transaction that mints a child of a
+promotional grant and a child of THAT, and writes the GRANDCHILD's parent row
+first, gives the grandchild a MARKET_TRADING_PROCEEDS floor — and `SandboxPolicy`
+releases it. Nothing recomputes it afterwards.
+
+00816's own BACKFILL states the correct rule with `WITH RECURSIVE`. The trigger
+implemented a different one, in the same migration.
+
+F-266's recorded residual argues the opposite in as many words: "both derived
+rules take the WORST parent … so naming an EXTRA parent can only make a lot LESS
+withdrawable. The direction that could launder is OMITTING a parent." Nothing was
+omitted in the reproduction; every true parent row was written.
+
+**Fix.** D-137. `cp_credit_lot_root_origins(uuid)` is the backfill's recursive
+query, named, and both `origin_floor` and `root_origins` are set from its answer
+on every parent row. `cp_credit_lot_parent_has_no_descendant_yet` refuses, BEFORE
+INSERT with CR005, a `credit_lot_parents` row whose child is already somebody
+else's parent — so the ordering that produces a stale read cannot be written at
+all. The alternative, a deferred recomputation at COMMIT, was not taken because
+its failure mode is a floor that is wrong and looks settled, where this one's is
+a mint that did not happen. 00819 also recomputes every existing row's floor from
+the recursive rule, because a deployment carrying a stale one has no way to know
+which rows they are. 00816's residual paragraph is corrected in D-131's amendment:
+the "extra parent only lowers" argument holds for one level, and the fix makes it
+hold for all.
+
+**Evidence.** STATIC_PROOF:
+`migrations/00819_a_floor_is_computed_from_the_roots_and_provenance_is_a_set.sql`.
+TEST_INT: `TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted`,
+`TestAuditWV3_AParentRowStillCannotBeWrittenAfterTheMint`.
+
+## F-272 · GET /v1/me/eligibility stated two contradictory figures for the same money · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the third withdrawal-verification audit, reproduced as
+`TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave`.
+
+`payout_eligible` comes from `credit.Balances`, which evaluates
+`Policy.Permits` PER LOT. `withdrawable_now` was the sum of the per-ORIGIN
+buckets, and `foldHoldings` collapsed every lot of one origin into a single
+`OriginHolding` carrying the LEAST final finality and the MOST restricted floor
+in the bucket. One refused lot therefore zeroed every other lot of its origin —
+including the ones `payout.Engine.Evaluate` approves, and does approve: POST
+/v1/payouts reserves them.
+
+So one payload said `eligible: false`, `withdrawable_now: 0` and
+`payout_eligible: 200000000`, and the conversion request the page said was
+impossible succeeded. The conservative fold is deliberate and documented on
+eligibility's own type. What was documented nowhere is that the two figures in
+one response, and the verdict derived from one of them, disagree with the commit
+path.
+
+**Fix.** Buckets are keyed by `(origin, origin_floor, root set, finality)`, so
+every bucket is homogeneous in exactly the inputs `Permits` reads about the value
+itself and `withdrawable_now` equals `payout_eligible` by construction under no
+account-level block. `ExplainWithdrawal` asserts that and returns an error rather
+than rendering a response whose verdict contradicts its own figures — a page that
+says "you may withdraw nothing" over a conversion request the engine approves is
+worse than an error, because the person believes it. The adapter now reads the
+balances and the lots in ONE REPEATABLE READ snapshot, so a concurrent mint
+between two queries cannot fail the page. The page renders the finer buckets; a
+floor differing from the origin is still rendered, as F-261 requires.
+
+One conservative fold remains and is unavoidable: a bucket's age is that of its
+youngest lot, because a bucket clears a hold period only when all of it does. A
+policy with a positive `MinHoldDays` could therefore make a bucket
+heterogeneous — that is the case the invariant refuses loudly instead of
+rendering, and neither policy this build ships has one.
+
+**Evidence.** STATIC_PROOF: `internal/eligibility/withdrawal.go`,
+`internal/httpapi/wiring_verification.go`,
+`internal/httpapi/handlers_eligibility.go`. TEST_UNIT:
+`TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave`,
+`TestExplainWithdrawal_TheSandboxPolicyPerOrigin`.
+
+## F-273 · The derived sweep's freeze direction could not see a lot minted UNFUNDED · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the third withdrawal-verification audit, reproduced as
+`TestAuditWV3_ADerivedLotAtUnfundedIsStillFrozenByADisputedParent`.
+
+D-124's freeze half says "a REVERSIBLE or SETTLED derived lot with a DISPUTED or
+REVERSED parent is moved to DISPUTED". `settleDerivedCandidates` opened
+`st.finality IN ('REVERSIBLE','SETTLED')`, and valuedomain's ordering puts
+UNFUNDED between REVERSIBLE and SETTLED — so `DerivedFinality({UNFUNDED,
+SETTLED})` is UNFUNDED, and a lot minted there was outside the predicate for
+ever. `finalityTransitions` called UNFUNDED terminal, so even a query that
+selected it could not have moved it.
+
+It is reached by an ordinary purchase. A buyer holding a grant and a settled card
+purchase spends across both; consumption order takes the grant first, so the
+seller's earning names both lots as parents and is minted UNFUNDED. The card is
+then charged back and nothing freezes the earning. Had the buyer held only the
+purchase, the earning would have been SETTLED and the sweep would have frozen it.
+F-260 named this direction: "Freezing starving is worse and quieter: an earning
+whose funding was charged back stays spendable."
+
+**Fix.** D-124 amended. The candidate predicate's freeze clause is now "a derived
+lot with a frozen parent that is not itself frozen", at any finality, with the
+frozen set read from `valuedomain.FrozenFinalities()` rather than written as a
+SQL literal; the promotion clause keeps its REVERSIBLE test, because promotion
+out of UNFUNDED would be value inventing a backer. UNFUNDED gains exactly one
+edge, towards DISPUTED, in `finalityTransitions` and in
+`cp_credit_finality_can_transition` (00821), and the finality parity test compares
+all twenty-five pairs.
+
+**Evidence.** STATIC_PROOF: `internal/credit/derived.go`,
+`internal/valuedomain/origin.go`,
+`migrations/00821_an_unfunded_derived_lot_can_still_be_frozen.sql`. TEST_INT:
+`TestAuditWV3_ADerivedLotAtUnfundedIsStillFrozenByADisputedParent`,
+`TestIntegration_GoAndSQLAgreeOnEveryFinalityTransition`.
+
+## F-274 · The per-session poll interval was a read-then-write · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the third withdrawal-verification audit, reproduced as
+`TestAuditWV3_ConcurrentPollsOfOneSessionShareTheInterval`.
+
+`verification.Service.Poll` read `session.ProviderPolledAt`, compared it with the
+clock, and only then committed `MarkProviderPolled` in a transaction of its own.
+Every request that read the row before that commit landed saw the old timestamp
+and proceeded. D-133's stated purpose is that "one signed-in person cannot make
+this deployment call an identity provider six hundred times a minute"; the
+General rate-limit class is 600/minute per principal, and a browser that fires
+them concurrently rather than in series got one provider call per concurrent
+request — twenty tabs, seventeen calls. The shipped
+`TestIntegration_APollInsideTheMinimumIntervalCallsNobody` polls fifty times IN
+SERIES, which is the case the read-then-write does handle.
+
+**Fix.** D-133 amended. `Repository.ClaimProviderPoll` replaces
+`MarkProviderPolled` with one statement: `UPDATE verification_sessions SET
+provider_polled_at = $2 WHERE id = $1 AND (provider_polled_at IS NULL OR
+provider_polled_at < $3) RETURNING …`. PostgreSQL evaluates the predicate under
+the row lock the UPDATE itself takes, so exactly one concurrent statement can
+satisfy it; the losers match no row and answer from the record. The claim is still
+committed before the provider is called. No migration: the column, its grant and
+its comment are 00818's.
+
+**Evidence.** STATIC_PROOF: `internal/verification/service.go`,
+`internal/verification/repository.go`. TEST_INT:
+`TestAuditWV3_ConcurrentPollsOfOneSessionShareTheInterval`,
+`TestIntegration_APollInsideTheMinimumIntervalCallsNobody`.
+
+## F-275 · The origin floor is one origin ranked by this build's two policies · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the third withdrawal-verification audit, reproduced as
+`TestAuditWV3_TheFloorIsTheMostRestrictedParentUnderThePolicyThatJudgesIt`.
+
+`CreditOrigin.Restriction()` is how restricted an origin is across the two
+policies THIS BUILD ships, with the origin's own name breaking a tie. PURCHASED
+and MARKET_TRADING_PROCEEDS both rank `OriginClosedSomewhere`, so a lot funded by
+one of each records MARKET_TRADING_PROCEEDS — the name that sorts first — and
+`cp_credit_origin_floor_rank` agrees with it about an answer that is arbitrary
+with respect to any policy.
+
+B-02 is written as two questions: "is Nodal's closed-loop Credit float itself
+stored value requiring a licence; may trading gains ever be withdrawn". The answer
+"the float is stored value, the gains are not" is a policy that releases
+MARKET_TRADING_PROCEEDS and closes PURCHASED, which is not a superset of
+anything. Under it that lot is released and half of what funded it was refused —
+the shape §23 forbids, reached without any trade being wrong. D-131's residual 1
+says a policy persisted after a lot was minted "would not change any floor
+already written … which is the conservative direction"; it is conservative only
+for a superset.
+
+**Fix.** D-138. `credit_lot_state.root_origins text[]` carries the whole set of
+origins a lot's provenance bottoms out in, trigger-maintained by the same
+recursive computation D-137's floor uses, and `Policy.Permits` releases a lot only
+when the policy releases the lot's own origin AND every root. An empty set is read
+as UNKNOWN_ORIGIN and refuses. `origin_floor` stays as the single most restricted
+origin for display and ordering, the rank and its SQL mirror stay with it, and the
+parity test is unchanged; `Policy.RefusedRoot` names the first root a policy
+refuses, because under a policy this build does not ship that is not always the
+one this build's rank calls most restricted. D-131's residual 1 is corrected in
+its amendment: a later policy is judged against the full set, so the model is
+conservative for every policy and not only for supersets.
+
+**Evidence.** STATIC_PROOF: `internal/valuedomain/policy.go`,
+`internal/valuedomain/originfloor.go`, `internal/credit/repository.go`,
+`migrations/00819_a_floor_is_computed_from_the_roots_and_provenance_is_a_set.sql`.
+TEST_UNIT: `TestAuditWV3_TheFloorIsTheMostRestrictedParentUnderThePolicyThatJudgesIt`.
+TEST_INT: `TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`.
+
+## F-276 · The pool-record shortfall branch discarded the parents it found · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the third withdrawal-verification audit, by reading
+`internal/nativemarket/service.go`'s Sell arm.
+
+When `drawPoolSources` could not account for the whole draw-down, `moveCredits`
+set `drawn = nil` — one line under a comment saying the found parents still
+constrain the mint downwards. Dropping them is what made that comment false. A
+parentless derived lot is minted at the REVERSIBLE fallback, and
+`settleDerivedCandidates` requires a parent row, so no direction of
+`SettleDerived` can ever see it again: it is stranded REVERSIBLE for ever, which
+is F-230's outcome restored on the one path F-230's fix did not cover. Its origin
+floor opens at MARKET_TRADING_PROCEEDS, which `SandboxPolicy` releases, so the
+provenance of the value that DID fund it is discarded in the permissive
+direction.
+
+On a fresh deployment the branch is unreachable: `recordPoolSources` writes a row
+for every Credit that reaches a pool, in the same transaction as the buy, and
+`drawPoolSources` draws only against those rows. It exists for a pool that traded
+before the record did — legacy data, and it is said here rather than inferred.
+
+**Fix.** The parents are kept. `RecordLot` mints at the least final of them and
+the origin floor is computed from their roots, so naming what the record does know
+can only narrow the provenance, never widen it. What is not claimed is that the
+parents are complete, and the shortfall says so: an audit event
+`native_market.pool_provenance_shortfall` in the trade's own transaction, naming
+the market, what was asked for and what was covered.
+
+**Evidence.** STATIC_PROOF: `internal/nativemarket/service.go`. TEST_INT:
+`TestIntegration_APoolShortfallKeepsTheParentsItFound`.
+
+## F-277 · A payout refused at submit carried no reason a customer could read · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the third withdrawal-verification audit, by reading
+`payout.Service.submitRequestFor` against the routes that exist.
+
+F-263 made `Submit` refuse a request whose destination has stopped being usable,
+inside the claim transaction and before the transition to SUBMITTED, so the
+transaction rolls back and the request stays VERIFIED with its value reserved.
+The shape is right — moving it to FAILED would return the reservation on the
+strength of a fact the person can undo — and the silence is not. The request reads
+VERIFIED, which reads as "on its way"; the refusal is an error the sweep logs for
+an operator every fifteen seconds; and the only customer-facing mention was a
+field on the DELETE response that disabled the destination, which is gone as soon
+as the page is. The refusal's own words told the holder to "point it at a
+destination that can", and no route re-points a payout.
+
+**Fix.** D-139. `payout_requests.blocked_reason` and `blocked_at` (00822), paired
+by a CHECK so a reason without an instant cannot exist. `Submit` carries the
+reason out of the rolled-back transaction and records it in one of its own,
+conditionally on the reason CHANGING so a re-reading sweep neither restamps it nor
+tells the holder again. The holder is told once, through an optional
+`payout.Notifier` that `cmd/api` implements over the notification producer, as
+PAYOUT_NEEDS_REVIEW — not PAYOUT_FAILED, which is what `failure_reason` would have
+rendered as and is exactly what did not happen. The Withdraw page renders the
+sentence immediately above the Cancel control and says that cancelling is what
+releases the Credits. No re-pointing route: the destination is what the quote, the
+fee and the provider idempotency key were computed against, and a new destination
+is a new request.
+
+**Evidence.** STATIC_PROOF:
+`migrations/00822_a_refused_payout_says_why_where_its_holder_can_read_it.sql`,
+`internal/payout/service.go`, `internal/httpapi/handlers_native.go`,
+`cmd/api/payoutsweep.go`, `apps/web/src/pages/withdraw/Withdraw.tsx`. TEST_INT:
+`TestIntegration_APayoutRefusedAtSubmitSaysWhyAndTellsItsHolder`,
+`TestIntegration_ABlockedPayoutRecordsItsReasonWithNoNotifierWired`.
