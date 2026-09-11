@@ -155,10 +155,27 @@ func TestIntegration_Login_StepUpExpiryUnknownStateAndOperatorRoles(t *testing.T
 	assert.Equal(t, []security.Role{security.RoleAdmin}, asOperator.Issued.Session.Roles)
 
 	// return_to must be a local path.
-	_, err = svc.Begin(ctx, identity.BeginRequest{ReturnTo: "https://evil.test/x"})
-	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
-	_, err = svc.Begin(ctx, identity.BeginRequest{ReturnTo: "//evil.test"})
-	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	//
+	// The backslash forms are here because the guard used to accept them: it
+	// was HasPrefix("/") && !HasPrefix("//"), and a browser resolves "/\host"
+	// through the relative-slash state into the AUTHORITY state, so the value
+	// reached the Location header of the response that sets the session cookie
+	// (F-146). identity.IsLocalPath's own unit test covers the whole set; these
+	// four prove Begin applies it before the row is written.
+	for _, bad := range []string{
+		"https://evil.test/x",
+		"//evil.test",
+		`/\evil.test`,
+		"/\tevil.test",
+	} {
+		_, err = svc.Begin(ctx, identity.BeginRequest{ReturnTo: bad})
+		assert.Equalf(t, errs.CodeValidationFailed, errs.CodeOf(err), "Begin recorded %q", bad)
+	}
+	// And a real path still works, because a guard that refuses those too has
+	// broken the feature return_to exists for.
+	deep, derr := svc.Begin(ctx, identity.BeginRequest{ReturnTo: "/markets/abc?tab=trades"})
+	require.NoError(t, derr)
+	require.NotEmpty(t, deep.State)
 }
 
 // A verified e-mail address is kept, encrypted, beside the hash that finds it
