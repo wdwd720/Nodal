@@ -53,6 +53,7 @@ import { AsyncPanel, EmptyState } from "../../components/DataState.tsx";
 import { Dialog } from "../../components/Dialog.tsx";
 import { Figure } from "../../components/Figure.tsx";
 import { SegmentedBar } from "../../components/SegmentedBar.tsx";
+import { invalidateScopes } from "../../components/StreamStatus.tsx";
 import {
   Disclosure,
   Field,
@@ -148,17 +149,16 @@ export function MarketDetail(): ReactNode {
   const simulated = sandbox || market?.demo === true;
 
   const afterFill = (): void => {
-    // The stream invalidates the same keys, but a fill must not depend on a
-    // connection being up: the position, the balance and the tape are all
-    // things this screen just changed, so it asks for them again itself.
-    void queryClient.invalidateQueries({ queryKey: ["native-market"] });
-    void queryClient.invalidateQueries({ queryKey: ["credits"] });
-    // `usePortfolio` is keyed ["me", "portfolio", id], and the stream only
-    // invalidates that prefix on an `account` scope — a fill emits `position`
-    // and `balance`, so without this the position the fill just changed is the
-    // one thing on the screen that would not refresh.
-    void queryClient.invalidateQueries({ queryKey: ["me", "portfolio"] });
-    void queryClient.invalidateQueries({ queryKey: ["activity"] });
+    // A fill must not depend on the event stream being up: the position, the
+    // balance and the tape are all things this screen just changed, so it asks
+    // for them again itself rather than waiting to be told.
+    //
+    // WHICH reads those are is the stream's map, imported rather than
+    // reproduced. This page used to carry its own four-line copy, and that copy
+    // was the only thing making a fill refresh the portfolio at all — the map
+    // was missing the key and nobody noticed, because the workaround hid it
+    // exactly where a reviewer would look (F-202, D-112).
+    invalidateScopes(queryClient, "balance", "position");
   };
 
   return (

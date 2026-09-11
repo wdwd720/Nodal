@@ -33,6 +33,15 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { API_BASE } from "../api/client.ts";
+import {
+  agentKeys,
+  keys,
+  marketKeys,
+  meKeys,
+  nodalKeys,
+  portfolioKeys,
+  withdrawKeys,
+} from "../api/queries.ts";
 import { Pill } from "./Layout.tsx";
 
 export type StreamState = "connecting" | "open" | "reconnecting";
@@ -52,28 +61,100 @@ export interface StreamStatusValue {
   readonly reconnected: boolean;
 }
 
-/** The scopes `data.changed` names. `internal/notifications/follower.go`. */
-type Scope = "balance" | "position" | "market" | "payout" | "account";
+/**
+ * The scopes `data.changed` names. `internal/notifications/follower.go` is the
+ * authority; all eight of its constants are here, because a scope this build
+ * does not know about falls through to invalidating the entire cache.
+ */
+type Scope =
+  | "balance"
+  | "position"
+  | "market"
+  | "payout"
+  | "account"
+  | "verification"
+  | "eligibility"
+  | "agent";
+
+/**
+ * A query key's leading, constant segments — the prefix an invalidation matches.
+ *
+ * TanStack Query matches a `queryKey` by prefix, so invalidating `["me",
+ * "portfolio"]` reaches `["me", "portfolio", accountId]` and invalidating
+ * `["me"]` reaches every one of the nine keys that start with it.
+ *
+ * The prefixes below are TAKEN FROM THE KEY FACTORIES rather than written out
+ * again (D-112). That is the whole fix for the defect the audit found here: the
+ * previous map was a list of hand-copied strings, five of which — "buying-
+ * power", "holdings", "activity", "native-asset", "native-assets" — named reads
+ * this application stopped making when D-077 removed the hosted rail, while the
+ * two keys a fill actually changes, `["me","portfolio",…]` and
+ * `["me","activity",…]`, were in no scope at all. A signal arrived, five
+ * invalidations matched nothing, and the position the customer was looking at
+ * did not refresh. Renaming a key in `queries.ts` now changes this map with it;
+ * deleting one stops it compiling.
+ */
+function prefixOf(key: ReadonlyArray<string | number | boolean>, depth: number): readonly string[] {
+  return key.slice(0, depth).map((segment) => String(segment));
+}
+
+const creditsPrefix = prefixOf(nodalKeys.credits(""), 1);
+const portfolioPrefix = prefixOf(portfolioKeys.portfolio(""), 2);
+const meActivityPrefix = prefixOf(portfolioKeys.activity("", "", ""), 2);
+const eligibilityPrefix = prefixOf(withdrawKeys.eligibility(""), 2);
+const verificationPrefix = prefixOf(withdrawKeys.verification(""), 2);
+const destinationsPrefix = prefixOf(withdrawKeys.destinations(""), 2);
+const payoutsPrefix = prefixOf(nodalKeys.payouts(""), 1);
+const payoutPrefix = prefixOf(agentKeys.payout(""), 1);
+const marketPrefix = prefixOf(marketKeys.summary(""), 1);
+const marketsPrefix = prefixOf(portfolioKeys.markets("", 0), 1);
+const productsPrefix = prefixOf(nodalKeys.products(""), 1);
+const internalOrdersPrefix = prefixOf(nodalKeys.orders("", ""), 1);
+const agentPrefix = prefixOf(agentKeys.agent(""), 1);
+const agentsPrefix = prefixOf(agentKeys.agents(""), 1);
+const accountsPrefix = keys.accounts;
+const mePrefix = keys.me;
+const myAccountPrefix = meKeys.myAccount;
 
 /**
  * Which cached reads a scope makes stale.
  *
- * Keyed by the prefix of the query keys in `api/queries.ts`. Over-invalidating
- * is always safe — the worst case is a refetch nobody needed — and under-
- * invalidating leaves a figure on screen that the backend has already moved
- * past, which is the failure this whole mechanism exists to prevent.
+ * Over-invalidating is always safe — the worst case is a refetch nobody needed
+ * — and under-invalidating leaves a figure on screen that the backend has
+ * already moved past, which is the failure this whole mechanism exists to
+ * prevent. So a balance signal reaches eligibility as well as the balance:
+ * `frozen` and `payout_eligible` are computed from the same lots.
  */
-const SCOPE_KEYS: Readonly<Record<Scope, readonly string[]>> = {
-  balance: ["credits", "buying-power", "holdings", "activity"],
-  position: ["holdings", "native-market", "native-asset", "activity"],
-  market: ["native-markets", "native-market", "native-asset", "native-assets"],
-  payout: ["payouts", "credits", "activity"],
-  account: ["accounts", "me", "activity"],
+const SCOPE_KEYS: Readonly<Record<Scope, ReadonlyArray<readonly string[]>>> = {
+  balance: [creditsPrefix, portfolioPrefix, meActivityPrefix, eligibilityPrefix, internalOrdersPrefix],
+  position: [portfolioPrefix, meActivityPrefix, marketPrefix, marketsPrefix],
+  market: [marketsPrefix, marketPrefix, productsPrefix],
+  payout: [payoutsPrefix, payoutPrefix, creditsPrefix, eligibilityPrefix, meActivityPrefix],
+  account: [accountsPrefix, mePrefix, meActivityPrefix],
+  verification: [verificationPrefix, eligibilityPrefix, myAccountPrefix],
+  eligibility: [eligibilityPrefix, destinationsPrefix, creditsPrefix],
+  agent: [agentPrefix, agentsPrefix, meActivityPrefix],
 };
 
-function invalidate(client: QueryClient, prefixes: readonly string[]): void {
+function invalidate(client: QueryClient, prefixes: ReadonlyArray<readonly string[]>): void {
   for (const prefix of prefixes) {
-    void client.invalidateQueries({ queryKey: [prefix] });
+    void client.invalidateQueries({ queryKey: prefix });
+  }
+}
+
+/**
+ * The same invalidation a signal would have caused, for a page that just caused
+ * the change itself.
+ *
+ * A command's own success is better evidence than an event: it is certain, and
+ * it arrives whether or not a connection is up. What a page must NOT do is
+ * decide for itself which reads a fill made stale — that is the map above, and
+ * a second hand-written copy of it beside a mutation is how the map came to be
+ * wrong in the first place while every screen still looked correct.
+ */
+export function invalidateScopes(client: QueryClient, ...scopes: readonly Scope[]): void {
+  for (const scope of scopes) {
+    invalidate(client, SCOPE_KEYS[scope]);
   }
 }
 
@@ -128,25 +209,23 @@ export function useEventStream(enabled: boolean): StreamStatusValue {
       const data: unknown = typeof parsed === "object" && parsed !== null ? (parsed as { data?: unknown }).data : undefined;
 
       switch (type) {
+        // The typed events the outbox relay publishes. `agent.state` and the
+        // credit-affecting ones are the only two shapes this product still
+        // emits; the hosted rail's `order.transitioned`,
+        // `intent.transitioned` and `deposit.transitioned` went with the pages
+        // that read them (D-077), so they are no longer named here — an
+        // unrecognised type already refetches everything, which is the right
+        // answer to an event this build does not understand.
         case "buying_power.changed":
-          invalidate(queryClient, ["buying-power", "holdings", "credits"]);
-          break;
-        case "order.transitioned":
-          invalidate(queryClient, ["orders", "intents"]);
-          break;
-        case "intent.transitioned":
-          invalidate(queryClient, ["intents", "intent"]);
-          break;
-        case "deposit.transitioned":
-          invalidate(queryClient, ["deposits"]);
+          invalidate(queryClient, SCOPE_KEYS.balance);
           break;
         case "agent.state":
-          invalidate(queryClient, ["agents", "intents"]);
+          invalidate(queryClient, SCOPE_KEYS.agent);
           break;
         case "notification.created":
           // The count and the list, and nothing else: the notification's own
           // body is already in the event and is not a figure.
-          void queryClient.invalidateQueries({ queryKey: ["me", "notifications"] });
+          void queryClient.invalidateQueries({ queryKey: meKeys.notifications });
           break;
         case "data.changed": {
           const scope = stringField(data, "scope");
@@ -167,7 +246,10 @@ export function useEventStream(enabled: boolean): StreamStatusValue {
           void queryClient.invalidateQueries();
           break;
       }
-      void queryClient.invalidateQueries({ queryKey: ["activity"] });
+      // Anything at all happened, so the feed that records everything is stale.
+      // This used to invalidate `["activity"]`, which is the hosted rail's key
+      // and which no page has read since D-077.
+      void queryClient.invalidateQueries({ queryKey: meActivityPrefix });
     };
 
     source.addEventListener("open", onOpen);
