@@ -8622,6 +8622,7 @@ type MiddlewareFunc func(http.Handler) http.Handler
 
 // GetAccounts operation middleware
 func (siw *ServerInterfaceWrapper) GetAccounts(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAccounts(w, r)
 	}))
@@ -8635,6 +8636,7 @@ func (siw *ServerInterfaceWrapper) GetAccounts(w http.ResponseWriter, r *http.Re
 
 // GetAccountsAccountId operation middleware
 func (siw *ServerInterfaceWrapper) GetAccountsAccountId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8660,6 +8662,7 @@ func (siw *ServerInterfaceWrapper) GetAccountsAccountId(w http.ResponseWriter, r
 
 // GetAccountsAccountIdActivity operation middleware
 func (siw *ServerInterfaceWrapper) GetAccountsAccountIdActivity(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8714,6 +8717,7 @@ func (siw *ServerInterfaceWrapper) GetAccountsAccountIdActivity(w http.ResponseW
 
 // GetAccountsAccountIdBuyingPower operation middleware
 func (siw *ServerInterfaceWrapper) GetAccountsAccountIdBuyingPower(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8755,6 +8759,7 @@ func (siw *ServerInterfaceWrapper) GetAccountsAccountIdBuyingPower(w http.Respon
 
 // GetAccountsAccountIdExport operation middleware
 func (siw *ServerInterfaceWrapper) GetAccountsAccountIdExport(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8822,6 +8827,7 @@ func (siw *ServerInterfaceWrapper) GetAccountsAccountIdExport(w http.ResponseWri
 
 // GetAccountsAccountIdHoldings operation middleware
 func (siw *ServerInterfaceWrapper) GetAccountsAccountIdHoldings(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8847,6 +8853,7 @@ func (siw *ServerInterfaceWrapper) GetAccountsAccountIdHoldings(w http.ResponseW
 
 // GetAccountsAccountIdLedgerTransactions operation middleware
 func (siw *ServerInterfaceWrapper) GetAccountsAccountIdLedgerTransactions(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8901,6 +8908,7 @@ func (siw *ServerInterfaceWrapper) GetAccountsAccountIdLedgerTransactions(w http
 
 // GetAdminAccounts operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminAccounts(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -8959,6 +8967,7 @@ func (siw *ServerInterfaceWrapper) GetAdminAccounts(w http.ResponseWriter, r *ht
 
 // PostAdminAccountsAccountIdStatus operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminAccountsAccountIdStatus(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9012,6 +9021,7 @@ func (siw *ServerInterfaceWrapper) PostAdminAccountsAccountIdStatus(w http.Respo
 
 // GetAdminActions operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminActions(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9070,6 +9080,7 @@ func (siw *ServerInterfaceWrapper) GetAdminActions(w http.ResponseWriter, r *htt
 
 // PostAdminActions operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminActions(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9114,6 +9125,7 @@ func (siw *ServerInterfaceWrapper) PostAdminActions(w http.ResponseWriter, r *ht
 
 // PostAdminActionsActionIdDecision operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminActionsActionIdDecision(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9176,6 +9188,7 @@ func (siw *ServerInterfaceWrapper) PostAdminActionsActionIdDecision(w http.Respo
 
 // GetAdminAgents operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminAgents(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9234,6 +9247,7 @@ func (siw *ServerInterfaceWrapper) GetAdminAgents(w http.ResponseWriter, r *http
 
 // PostAdminAgentsAgentIdPause operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9287,6 +9301,7 @@ func (siw *ServerInterfaceWrapper) PostAdminAgentsAgentIdPause(w http.ResponseWr
 
 // GetAdminGates operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminGates(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminGates(w, r)
 	}))
@@ -9300,6 +9315,7 @@ func (siw *ServerInterfaceWrapper) GetAdminGates(w http.ResponseWriter, r *http.
 
 // GetAdminGatesCapabilityHistory operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminGatesCapabilityHistory(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9325,6 +9341,7 @@ func (siw *ServerInterfaceWrapper) GetAdminGatesCapabilityHistory(w http.Respons
 
 // PostAdminGatesCapabilityAction operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminGatesCapabilityAction(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9387,6 +9404,7 @@ func (siw *ServerInterfaceWrapper) PostAdminGatesCapabilityAction(w http.Respons
 
 // PostAdminInstrumentsInstrumentIdStatus operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminInstrumentsInstrumentIdStatus(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9440,6 +9458,7 @@ func (siw *ServerInterfaceWrapper) PostAdminInstrumentsInstrumentIdStatus(w http
 
 // GetAdminKillSwitches operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminKillSwitches(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminKillSwitches(w, r)
 	}))
@@ -9453,6 +9472,7 @@ func (siw *ServerInterfaceWrapper) GetAdminKillSwitches(w http.ResponseWriter, r
 
 // PostAdminKillSwitches operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminKillSwitches(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9497,6 +9517,7 @@ func (siw *ServerInterfaceWrapper) PostAdminKillSwitches(w http.ResponseWriter, 
 
 // GetAdminProviders operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminProviders(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdminProviders(w, r)
 	}))
@@ -9510,6 +9531,7 @@ func (siw *ServerInterfaceWrapper) GetAdminProviders(w http.ResponseWriter, r *h
 
 // GetAdminReconciliationRecords operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminReconciliationRecords(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9581,6 +9603,7 @@ func (siw *ServerInterfaceWrapper) GetAdminReconciliationRecords(w http.Response
 
 // PostAdminReconciliationRecordsRecordIdResolve operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9634,6 +9657,7 @@ func (siw *ServerInterfaceWrapper) PostAdminReconciliationRecordsRecordIdResolve
 
 // GetAdminUsersUserId operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminUsersUserId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9659,6 +9683,7 @@ func (siw *ServerInterfaceWrapper) GetAdminUsersUserId(w http.ResponseWriter, r 
 
 // PostAdminUsersUserIdClosure operation middleware
 func (siw *ServerInterfaceWrapper) PostAdminUsersUserIdClosure(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9712,6 +9737,7 @@ func (siw *ServerInterfaceWrapper) PostAdminUsersUserIdClosure(w http.ResponseWr
 
 // GetAgents operation middleware
 func (siw *ServerInterfaceWrapper) GetAgents(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9770,6 +9796,7 @@ func (siw *ServerInterfaceWrapper) GetAgents(w http.ResponseWriter, r *http.Requ
 
 // PostAgents operation middleware
 func (siw *ServerInterfaceWrapper) PostAgents(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9814,6 +9841,7 @@ func (siw *ServerInterfaceWrapper) PostAgents(w http.ResponseWriter, r *http.Req
 
 // GetAgentsAgentId operation middleware
 func (siw *ServerInterfaceWrapper) GetAgentsAgentId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9839,6 +9867,7 @@ func (siw *ServerInterfaceWrapper) GetAgentsAgentId(w http.ResponseWriter, r *ht
 
 // PostAgentsAgentIdAction operation middleware
 func (siw *ServerInterfaceWrapper) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9901,6 +9930,7 @@ func (siw *ServerInterfaceWrapper) PostAgentsAgentIdAction(w http.ResponseWriter
 
 // GetAssets operation middleware
 func (siw *ServerInterfaceWrapper) GetAssets(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAssets(w, r)
 	}))
@@ -9914,6 +9944,7 @@ func (siw *ServerInterfaceWrapper) GetAssets(w http.ResponseWriter, r *http.Requ
 
 // GetAuthCallback operation middleware
 func (siw *ServerInterfaceWrapper) GetAuthCallback(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -9959,6 +9990,7 @@ func (siw *ServerInterfaceWrapper) GetAuthCallback(w http.ResponseWriter, r *htt
 
 // GetAuthLogin operation middleware
 func (siw *ServerInterfaceWrapper) GetAuthLogin(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10004,6 +10036,7 @@ func (siw *ServerInterfaceWrapper) GetAuthLogin(w http.ResponseWriter, r *http.R
 
 // PostAuthLogout operation middleware
 func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAuthLogout(w, r)
 	}))
@@ -10017,6 +10050,7 @@ func (siw *ServerInterfaceWrapper) PostAuthLogout(w http.ResponseWriter, r *http
 
 // GetCreditsBalance operation middleware
 func (siw *ServerInterfaceWrapper) GetCreditsBalance(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10049,6 +10083,7 @@ func (siw *ServerInterfaceWrapper) GetCreditsBalance(w http.ResponseWriter, r *h
 
 // GetCreditsPricing operation middleware
 func (siw *ServerInterfaceWrapper) GetCreditsPricing(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCreditsPricing(w, r)
 	}))
@@ -10062,6 +10097,7 @@ func (siw *ServerInterfaceWrapper) GetCreditsPricing(w http.ResponseWriter, r *h
 
 // GetEventsStream operation middleware
 func (siw *ServerInterfaceWrapper) GetEventsStream(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10102,6 +10138,7 @@ func (siw *ServerInterfaceWrapper) GetEventsStream(w http.ResponseWriter, r *htt
 
 // GetFundingDeposits operation middleware
 func (siw *ServerInterfaceWrapper) GetFundingDeposits(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10160,6 +10197,7 @@ func (siw *ServerInterfaceWrapper) GetFundingDeposits(w http.ResponseWriter, r *
 
 // PostFundingDeposits operation middleware
 func (siw *ServerInterfaceWrapper) PostFundingDeposits(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10204,6 +10242,7 @@ func (siw *ServerInterfaceWrapper) PostFundingDeposits(w http.ResponseWriter, r 
 
 // GetFundingDepositsDepositId operation middleware
 func (siw *ServerInterfaceWrapper) GetFundingDepositsDepositId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10229,6 +10268,7 @@ func (siw *ServerInterfaceWrapper) GetFundingDepositsDepositId(w http.ResponseWr
 
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetHealthz(w, r)
 	}))
@@ -10242,6 +10282,7 @@ func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Req
 
 // GetInstruments operation middleware
 func (siw *ServerInterfaceWrapper) GetInstruments(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetInstruments(w, r)
 	}))
@@ -10255,6 +10296,7 @@ func (siw *ServerInterfaceWrapper) GetInstruments(w http.ResponseWriter, r *http
 
 // GetInstrumentsInstrumentId operation middleware
 func (siw *ServerInterfaceWrapper) GetInstrumentsInstrumentId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10280,6 +10322,7 @@ func (siw *ServerInterfaceWrapper) GetInstrumentsInstrumentId(w http.ResponseWri
 
 // GetIntents operation middleware
 func (siw *ServerInterfaceWrapper) GetIntents(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10338,6 +10381,7 @@ func (siw *ServerInterfaceWrapper) GetIntents(w http.ResponseWriter, r *http.Req
 
 // PostIntents operation middleware
 func (siw *ServerInterfaceWrapper) PostIntents(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10382,6 +10426,7 @@ func (siw *ServerInterfaceWrapper) PostIntents(w http.ResponseWriter, r *http.Re
 
 // GetIntentsIntentId operation middleware
 func (siw *ServerInterfaceWrapper) GetIntentsIntentId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10407,6 +10452,7 @@ func (siw *ServerInterfaceWrapper) GetIntentsIntentId(w http.ResponseWriter, r *
 
 // PostIntentsIntentIdCancel operation middleware
 func (siw *ServerInterfaceWrapper) PostIntentsIntentIdCancel(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10460,6 +10506,7 @@ func (siw *ServerInterfaceWrapper) PostIntentsIntentIdCancel(w http.ResponseWrit
 
 // GetInternalOrders operation middleware
 func (siw *ServerInterfaceWrapper) GetInternalOrders(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10518,6 +10565,7 @@ func (siw *ServerInterfaceWrapper) GetInternalOrders(w http.ResponseWriter, r *h
 
 // GetInternalProducts operation middleware
 func (siw *ServerInterfaceWrapper) GetInternalProducts(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10563,6 +10611,7 @@ func (siw *ServerInterfaceWrapper) GetInternalProducts(w http.ResponseWriter, r 
 
 // PostInternalProducts operation middleware
 func (siw *ServerInterfaceWrapper) PostInternalProducts(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10607,6 +10656,7 @@ func (siw *ServerInterfaceWrapper) PostInternalProducts(w http.ResponseWriter, r
 
 // GetInternalProductsProductId operation middleware
 func (siw *ServerInterfaceWrapper) GetInternalProductsProductId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10632,6 +10682,7 @@ func (siw *ServerInterfaceWrapper) GetInternalProductsProductId(w http.ResponseW
 
 // PostInternalProductsProductIdOrders operation middleware
 func (siw *ServerInterfaceWrapper) PostInternalProductsProductIdOrders(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10685,6 +10736,7 @@ func (siw *ServerInterfaceWrapper) PostInternalProductsProductIdOrders(w http.Re
 
 // PostInternalProductsProductIdStatus operation middleware
 func (siw *ServerInterfaceWrapper) PostInternalProductsProductIdStatus(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10738,6 +10790,7 @@ func (siw *ServerInterfaceWrapper) PostInternalProductsProductIdStatus(w http.Re
 
 // PostInternalSellers operation middleware
 func (siw *ServerInterfaceWrapper) PostInternalSellers(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10782,6 +10835,7 @@ func (siw *ServerInterfaceWrapper) PostInternalSellers(w http.ResponseWriter, r 
 
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
 	}))
@@ -10795,6 +10849,7 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 // GetMeAccount operation middleware
 func (siw *ServerInterfaceWrapper) GetMeAccount(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMeAccount(w, r)
 	}))
@@ -10808,6 +10863,7 @@ func (siw *ServerInterfaceWrapper) GetMeAccount(w http.ResponseWriter, r *http.R
 
 // PostMeAccountClose operation middleware
 func (siw *ServerInterfaceWrapper) PostMeAccountClose(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10852,6 +10908,7 @@ func (siw *ServerInterfaceWrapper) PostMeAccountClose(w http.ResponseWriter, r *
 
 // PostMeAccountCloseCancel operation middleware
 func (siw *ServerInterfaceWrapper) PostMeAccountCloseCancel(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10896,6 +10953,7 @@ func (siw *ServerInterfaceWrapper) PostMeAccountCloseCancel(w http.ResponseWrite
 
 // GetMeActivity operation middleware
 func (siw *ServerInterfaceWrapper) GetMeActivity(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -10967,6 +11025,7 @@ func (siw *ServerInterfaceWrapper) GetMeActivity(w http.ResponseWriter, r *http.
 
 // GetMeAudit operation middleware
 func (siw *ServerInterfaceWrapper) GetMeAudit(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11012,6 +11071,7 @@ func (siw *ServerInterfaceWrapper) GetMeAudit(w http.ResponseWriter, r *http.Req
 
 // GetMeEligibility operation middleware
 func (siw *ServerInterfaceWrapper) GetMeEligibility(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11044,6 +11104,7 @@ func (siw *ServerInterfaceWrapper) GetMeEligibility(w http.ResponseWriter, r *ht
 
 // GetMeNotificationPreferences operation middleware
 func (siw *ServerInterfaceWrapper) GetMeNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMeNotificationPreferences(w, r)
 	}))
@@ -11057,6 +11118,7 @@ func (siw *ServerInterfaceWrapper) GetMeNotificationPreferences(w http.ResponseW
 
 // PutMeNotificationPreferences operation middleware
 func (siw *ServerInterfaceWrapper) PutMeNotificationPreferences(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11101,6 +11163,7 @@ func (siw *ServerInterfaceWrapper) PutMeNotificationPreferences(w http.ResponseW
 
 // GetMeNotifications operation middleware
 func (siw *ServerInterfaceWrapper) GetMeNotifications(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11172,6 +11235,7 @@ func (siw *ServerInterfaceWrapper) GetMeNotifications(w http.ResponseWriter, r *
 
 // PostMeNotificationsReadAll operation middleware
 func (siw *ServerInterfaceWrapper) PostMeNotificationsReadAll(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11216,6 +11280,7 @@ func (siw *ServerInterfaceWrapper) PostMeNotificationsReadAll(w http.ResponseWri
 
 // GetMeNotificationsUnreadCount operation middleware
 func (siw *ServerInterfaceWrapper) GetMeNotificationsUnreadCount(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMeNotificationsUnreadCount(w, r)
 	}))
@@ -11229,6 +11294,7 @@ func (siw *ServerInterfaceWrapper) GetMeNotificationsUnreadCount(w http.Response
 
 // PostMeNotificationsNotificationIdRead operation middleware
 func (siw *ServerInterfaceWrapper) PostMeNotificationsNotificationIdRead(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11282,6 +11348,7 @@ func (siw *ServerInterfaceWrapper) PostMeNotificationsNotificationIdRead(w http.
 
 // GetMePayoutDestinations operation middleware
 func (siw *ServerInterfaceWrapper) GetMePayoutDestinations(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11327,6 +11394,7 @@ func (siw *ServerInterfaceWrapper) GetMePayoutDestinations(w http.ResponseWriter
 
 // PostMePayoutDestinations operation middleware
 func (siw *ServerInterfaceWrapper) PostMePayoutDestinations(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11371,6 +11439,7 @@ func (siw *ServerInterfaceWrapper) PostMePayoutDestinations(w http.ResponseWrite
 
 // DeleteMePayoutDestinationsDestinationId operation middleware
 func (siw *ServerInterfaceWrapper) DeleteMePayoutDestinationsDestinationId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11437,6 +11506,7 @@ func (siw *ServerInterfaceWrapper) DeleteMePayoutDestinationsDestinationId(w htt
 
 // GetMePortfolio operation middleware
 func (siw *ServerInterfaceWrapper) GetMePortfolio(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11469,6 +11539,7 @@ func (siw *ServerInterfaceWrapper) GetMePortfolio(w http.ResponseWriter, r *http
 
 // PostMeProfile operation middleware
 func (siw *ServerInterfaceWrapper) PostMeProfile(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11513,6 +11584,7 @@ func (siw *ServerInterfaceWrapper) PostMeProfile(w http.ResponseWriter, r *http.
 
 // GetMeSecurity operation middleware
 func (siw *ServerInterfaceWrapper) GetMeSecurity(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMeSecurity(w, r)
 	}))
@@ -11526,6 +11598,7 @@ func (siw *ServerInterfaceWrapper) GetMeSecurity(w http.ResponseWriter, r *http.
 
 // GetMeTermsAcceptances operation middleware
 func (siw *ServerInterfaceWrapper) GetMeTermsAcceptances(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMeTermsAcceptances(w, r)
 	}))
@@ -11539,6 +11612,7 @@ func (siw *ServerInterfaceWrapper) GetMeTermsAcceptances(w http.ResponseWriter, 
 
 // PostMeTermsAcceptances operation middleware
 func (siw *ServerInterfaceWrapper) PostMeTermsAcceptances(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11583,6 +11657,7 @@ func (siw *ServerInterfaceWrapper) PostMeTermsAcceptances(w http.ResponseWriter,
 
 // GetMeVerification operation middleware
 func (siw *ServerInterfaceWrapper) GetMeVerification(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11615,6 +11690,7 @@ func (siw *ServerInterfaceWrapper) GetMeVerification(w http.ResponseWriter, r *h
 
 // PostMeVerificationSandboxOutcome operation middleware
 func (siw *ServerInterfaceWrapper) PostMeVerificationSandboxOutcome(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11659,6 +11735,7 @@ func (siw *ServerInterfaceWrapper) PostMeVerificationSandboxOutcome(w http.Respo
 
 // PostMeVerificationSessions operation middleware
 func (siw *ServerInterfaceWrapper) PostMeVerificationSessions(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11703,6 +11780,7 @@ func (siw *ServerInterfaceWrapper) PostMeVerificationSessions(w http.ResponseWri
 
 // GetMeVerificationSessionsSessionId operation middleware
 func (siw *ServerInterfaceWrapper) GetMeVerificationSessionsSessionId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11744,6 +11822,7 @@ func (siw *ServerInterfaceWrapper) GetMeVerificationSessionsSessionId(w http.Res
 
 // GetNativeAssets operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeAssets(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11776,6 +11855,7 @@ func (siw *ServerInterfaceWrapper) GetNativeAssets(w http.ResponseWriter, r *htt
 
 // PostNativeAssets operation middleware
 func (siw *ServerInterfaceWrapper) PostNativeAssets(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11820,6 +11900,7 @@ func (siw *ServerInterfaceWrapper) PostNativeAssets(w http.ResponseWriter, r *ht
 
 // GetNativeAssetsAssetId operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeAssetsAssetId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11845,6 +11926,7 @@ func (siw *ServerInterfaceWrapper) GetNativeAssetsAssetId(w http.ResponseWriter,
 
 // PostNativeAssetsAssetIdSubmit operation middleware
 func (siw *ServerInterfaceWrapper) PostNativeAssetsAssetIdSubmit(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11898,6 +11980,7 @@ func (siw *ServerInterfaceWrapper) PostNativeAssetsAssetIdSubmit(w http.Response
 
 // GetNativeMarkets operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarkets(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -11982,6 +12065,7 @@ func (siw *ServerInterfaceWrapper) GetNativeMarkets(w http.ResponseWriter, r *ht
 
 // GetNativeMarketsMarketId operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12007,6 +12091,7 @@ func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketId(w http.ResponseWrite
 
 // GetNativeMarketsMarketIdCandles operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdCandles(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12074,6 +12159,7 @@ func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdCandles(w http.Respon
 
 // PostNativeMarketsMarketIdOrders operation middleware
 func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdOrders(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12127,6 +12213,7 @@ func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdOrders(w http.Respon
 
 // PostNativeMarketsMarketIdQuotes operation middleware
 func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdQuotes(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12180,6 +12267,7 @@ func (siw *ServerInterfaceWrapper) PostNativeMarketsMarketIdQuotes(w http.Respon
 
 // GetNativeMarketsMarketIdSummary operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdSummary(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12221,6 +12309,7 @@ func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdSummary(w http.Respon
 
 // GetNativeMarketsMarketIdTrades operation middleware
 func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdTrades(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12262,6 +12351,7 @@ func (siw *ServerInterfaceWrapper) GetNativeMarketsMarketIdTrades(w http.Respons
 
 // GetOrders operation middleware
 func (siw *ServerInterfaceWrapper) GetOrders(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12320,6 +12410,7 @@ func (siw *ServerInterfaceWrapper) GetOrders(w http.ResponseWriter, r *http.Requ
 
 // GetOrdersOrderId operation middleware
 func (siw *ServerInterfaceWrapper) GetOrdersOrderId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12345,6 +12436,7 @@ func (siw *ServerInterfaceWrapper) GetOrdersOrderId(w http.ResponseWriter, r *ht
 
 // PostPayments operation middleware
 func (siw *ServerInterfaceWrapper) PostPayments(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12389,6 +12481,7 @@ func (siw *ServerInterfaceWrapper) PostPayments(w http.ResponseWriter, r *http.R
 
 // GetPaymentsPaymentId operation middleware
 func (siw *ServerInterfaceWrapper) GetPaymentsPaymentId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12414,6 +12507,7 @@ func (siw *ServerInterfaceWrapper) GetPaymentsPaymentId(w http.ResponseWriter, r
 
 // GetPayouts operation middleware
 func (siw *ServerInterfaceWrapper) GetPayouts(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12459,6 +12553,7 @@ func (siw *ServerInterfaceWrapper) GetPayouts(w http.ResponseWriter, r *http.Req
 
 // PostPayouts operation middleware
 func (siw *ServerInterfaceWrapper) PostPayouts(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12503,6 +12598,7 @@ func (siw *ServerInterfaceWrapper) PostPayouts(w http.ResponseWriter, r *http.Re
 
 // PostPayoutsQuote operation middleware
 func (siw *ServerInterfaceWrapper) PostPayoutsQuote(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12547,6 +12643,7 @@ func (siw *ServerInterfaceWrapper) PostPayoutsQuote(w http.ResponseWriter, r *ht
 
 // GetPayoutsPayoutId operation middleware
 func (siw *ServerInterfaceWrapper) GetPayoutsPayoutId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12572,6 +12669,7 @@ func (siw *ServerInterfaceWrapper) GetPayoutsPayoutId(w http.ResponseWriter, r *
 
 // PostPayoutsPayoutIdCancel operation middleware
 func (siw *ServerInterfaceWrapper) PostPayoutsPayoutIdCancel(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12625,6 +12723,7 @@ func (siw *ServerInterfaceWrapper) PostPayoutsPayoutIdCancel(w http.ResponseWrit
 
 // PostQuotesPreview operation middleware
 func (siw *ServerInterfaceWrapper) PostQuotesPreview(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostQuotesPreview(w, r)
 	}))
@@ -12638,6 +12737,7 @@ func (siw *ServerInterfaceWrapper) PostQuotesPreview(w http.ResponseWriter, r *h
 
 // GetReadyz operation middleware
 func (siw *ServerInterfaceWrapper) GetReadyz(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetReadyz(w, r)
 	}))
@@ -12651,6 +12751,7 @@ func (siw *ServerInterfaceWrapper) GetReadyz(w http.ResponseWriter, r *http.Requ
 
 // GetSessions operation middleware
 func (siw *ServerInterfaceWrapper) GetSessions(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSessions(w, r)
 	}))
@@ -12664,6 +12765,7 @@ func (siw *ServerInterfaceWrapper) GetSessions(w http.ResponseWriter, r *http.Re
 
 // DeleteSessionsSessionId operation middleware
 func (siw *ServerInterfaceWrapper) DeleteSessionsSessionId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12689,6 +12791,7 @@ func (siw *ServerInterfaceWrapper) DeleteSessionsSessionId(w http.ResponseWriter
 
 // GetStrategies operation middleware
 func (siw *ServerInterfaceWrapper) GetStrategies(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12734,6 +12837,7 @@ func (siw *ServerInterfaceWrapper) GetStrategies(w http.ResponseWriter, r *http.
 
 // PostStrategies operation middleware
 func (siw *ServerInterfaceWrapper) PostStrategies(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12778,6 +12882,7 @@ func (siw *ServerInterfaceWrapper) PostStrategies(w http.ResponseWriter, r *http
 
 // GetStrategiesStrategyId operation middleware
 func (siw *ServerInterfaceWrapper) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12803,6 +12908,7 @@ func (siw *ServerInterfaceWrapper) GetStrategiesStrategyId(w http.ResponseWriter
 
 // PostStrategiesStrategyIdCompile operation middleware
 func (siw *ServerInterfaceWrapper) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12856,6 +12962,7 @@ func (siw *ServerInterfaceWrapper) PostStrategiesStrategyIdCompile(w http.Respon
 
 // GetTerms operation middleware
 func (siw *ServerInterfaceWrapper) GetTerms(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetTerms(w, r)
 	}))
@@ -12869,6 +12976,7 @@ func (siw *ServerInterfaceWrapper) GetTerms(w http.ResponseWriter, r *http.Reque
 
 // GetVersion operation middleware
 func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Request) {
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetVersion(w, r)
 	}))
@@ -12882,6 +12990,7 @@ func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Req
 
 // PostWebhooksProvider operation middleware
 func (siw *ServerInterfaceWrapper) PostWebhooksProvider(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -12907,6 +13016,7 @@ func (siw *ServerInterfaceWrapper) PostWebhooksProvider(w http.ResponseWriter, r
 
 // PostWithdrawals operation middleware
 func (siw *ServerInterfaceWrapper) PostWithdrawals(w http.ResponseWriter, r *http.Request) {
+
 	var err error
 	_ = err
 
@@ -13398,7 +13508,8 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 
 type ProblemApplicationProblemPlusJSONResponse Problem
 
-type GetAccountsRequestObject struct{}
+type GetAccountsRequestObject struct {
+}
 
 type GetAccountsResponseObject interface {
 	VisitGetAccountsResponse(w http.ResponseWriter) error
@@ -13407,6 +13518,7 @@ type GetAccountsResponseObject interface {
 type GetAccounts200JSONResponse []Account
 
 func (response GetAccounts200JSONResponse) VisitGetAccountsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13428,6 +13540,7 @@ type GetAccountsAccountIdResponseObject interface {
 type GetAccountsAccountId200JSONResponse Account
 
 func (response GetAccountsAccountId200JSONResponse) VisitGetAccountsAccountIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13443,6 +13556,7 @@ type GetAccountsAccountId403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAccountsAccountId403ApplicationProblemPlusJSONResponse) VisitGetAccountsAccountIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13456,6 +13570,7 @@ func (response GetAccountsAccountId403ApplicationProblemPlusJSONResponse) VisitG
 type GetAccountsAccountId404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetAccountsAccountId404ApplicationProblemPlusJSONResponse) VisitGetAccountsAccountIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13478,6 +13593,7 @@ type GetAccountsAccountIdActivityResponseObject interface {
 type GetAccountsAccountIdActivity200JSONResponse ActivityPage
 
 func (response GetAccountsAccountIdActivity200JSONResponse) VisitGetAccountsAccountIdActivityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13500,6 +13616,7 @@ type GetAccountsAccountIdBuyingPowerResponseObject interface {
 type GetAccountsAccountIdBuyingPower200JSONResponse BuyingPower
 
 func (response GetAccountsAccountIdBuyingPower200JSONResponse) VisitGetAccountsAccountIdBuyingPowerResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13515,6 +13632,7 @@ type GetAccountsAccountIdBuyingPower403ApplicationProblemPlusJSONResponse struct
 }
 
 func (response GetAccountsAccountIdBuyingPower403ApplicationProblemPlusJSONResponse) VisitGetAccountsAccountIdBuyingPowerResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13537,6 +13655,7 @@ type GetAccountsAccountIdExportResponseObject interface {
 type GetAccountsAccountIdExport200JSONResponse map[string]interface{}
 
 func (response GetAccountsAccountIdExport200JSONResponse) VisitGetAccountsAccountIdExportResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13553,6 +13672,7 @@ type GetAccountsAccountIdExport200TextcsvResponse struct {
 }
 
 func (response GetAccountsAccountIdExport200TextcsvResponse) VisitGetAccountsAccountIdExportResponse(w http.ResponseWriter) error {
+
 	w.Header().Set("Content-Type", "text/csv")
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
@@ -13577,6 +13697,7 @@ type GetAccountsAccountIdHoldingsResponseObject interface {
 type GetAccountsAccountIdHoldings200JSONResponse HoldingsResponse
 
 func (response GetAccountsAccountIdHoldings200JSONResponse) VisitGetAccountsAccountIdHoldingsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13599,6 +13720,7 @@ type GetAccountsAccountIdLedgerTransactionsResponseObject interface {
 type GetAccountsAccountIdLedgerTransactions200JSONResponse JournalTransactionPage
 
 func (response GetAccountsAccountIdLedgerTransactions200JSONResponse) VisitGetAccountsAccountIdLedgerTransactionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13620,6 +13742,7 @@ type GetAdminAccountsResponseObject interface {
 type GetAdminAccounts200JSONResponse AccountPage
 
 func (response GetAdminAccounts200JSONResponse) VisitGetAdminAccountsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13635,6 +13758,7 @@ type GetAdminAccounts403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAdminAccounts403ApplicationProblemPlusJSONResponse) VisitGetAdminAccountsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13658,6 +13782,7 @@ type PostAdminAccountsAccountIdStatusResponseObject interface {
 type PostAdminAccountsAccountIdStatus200JSONResponse Account
 
 func (response PostAdminAccountsAccountIdStatus200JSONResponse) VisitPostAdminAccountsAccountIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13673,6 +13798,7 @@ type PostAdminAccountsAccountIdStatus403ApplicationProblemPlusJSONResponse struc
 }
 
 func (response PostAdminAccountsAccountIdStatus403ApplicationProblemPlusJSONResponse) VisitPostAdminAccountsAccountIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13686,6 +13812,7 @@ func (response PostAdminAccountsAccountIdStatus403ApplicationProblemPlusJSONResp
 type PostAdminAccountsAccountIdStatus409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminAccountsAccountIdStatus409ApplicationProblemPlusJSONResponse) VisitPostAdminAccountsAccountIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13707,6 +13834,7 @@ type GetAdminActionsResponseObject interface {
 type GetAdminActions200JSONResponse AdminActionPage
 
 func (response GetAdminActions200JSONResponse) VisitGetAdminActionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13729,6 +13857,7 @@ type PostAdminActionsResponseObject interface {
 type PostAdminActions201JSONResponse AdminAction
 
 func (response PostAdminActions201JSONResponse) VisitPostAdminActionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13753,6 +13882,7 @@ type PostAdminActionsActionIdDecisionResponseObject interface {
 type PostAdminActionsActionIdDecision200JSONResponse AdminAction
 
 func (response PostAdminActionsActionIdDecision200JSONResponse) VisitPostAdminActionsActionIdDecisionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13768,6 +13898,7 @@ type PostAdminActionsActionIdDecision403ApplicationProblemPlusJSONResponse struc
 }
 
 func (response PostAdminActionsActionIdDecision403ApplicationProblemPlusJSONResponse) VisitPostAdminActionsActionIdDecisionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13781,6 +13912,7 @@ func (response PostAdminActionsActionIdDecision403ApplicationProblemPlusJSONResp
 type PostAdminActionsActionIdDecision409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminActionsActionIdDecision409ApplicationProblemPlusJSONResponse) VisitPostAdminActionsActionIdDecisionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13802,6 +13934,7 @@ type GetAdminAgentsResponseObject interface {
 type GetAdminAgents200JSONResponse AgentPage
 
 func (response GetAdminAgents200JSONResponse) VisitGetAdminAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13817,6 +13950,7 @@ type GetAdminAgents403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAdminAgents403ApplicationProblemPlusJSONResponse) VisitGetAdminAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13840,6 +13974,7 @@ type PostAdminAgentsAgentIdPauseResponseObject interface {
 type PostAdminAgentsAgentIdPause200JSONResponse Agent
 
 func (response PostAdminAgentsAgentIdPause200JSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13855,6 +13990,7 @@ type PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13868,6 +14004,7 @@ func (response PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse)
 type PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13881,6 +14018,7 @@ func (response PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse)
 type PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13891,7 +14029,8 @@ func (response PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse)
 	return err
 }
 
-type GetAdminGatesRequestObject struct{}
+type GetAdminGatesRequestObject struct {
+}
 
 type GetAdminGatesResponseObject interface {
 	VisitGetAdminGatesResponse(w http.ResponseWriter) error
@@ -13900,6 +14039,7 @@ type GetAdminGatesResponseObject interface {
 type GetAdminGates200JSONResponse []CapabilityGate
 
 func (response GetAdminGates200JSONResponse) VisitGetAdminGatesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13921,6 +14061,7 @@ type GetAdminGatesCapabilityHistoryResponseObject interface {
 type GetAdminGatesCapabilityHistory200JSONResponse []CapabilityGateTransition
 
 func (response GetAdminGatesCapabilityHistory200JSONResponse) VisitGetAdminGatesCapabilityHistoryResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13936,6 +14077,7 @@ type GetAdminGatesCapabilityHistory404ApplicationProblemPlusJSONResponse struct 
 }
 
 func (response GetAdminGatesCapabilityHistory404ApplicationProblemPlusJSONResponse) VisitGetAdminGatesCapabilityHistoryResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13960,6 +14102,7 @@ type PostAdminGatesCapabilityActionResponseObject interface {
 type PostAdminGatesCapabilityAction200JSONResponse CapabilityGate
 
 func (response PostAdminGatesCapabilityAction200JSONResponse) VisitPostAdminGatesCapabilityActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13975,6 +14118,7 @@ type PostAdminGatesCapabilityAction403ApplicationProblemPlusJSONResponse struct 
 }
 
 func (response PostAdminGatesCapabilityAction403ApplicationProblemPlusJSONResponse) VisitPostAdminGatesCapabilityActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -13988,6 +14132,7 @@ func (response PostAdminGatesCapabilityAction403ApplicationProblemPlusJSONRespon
 type PostAdminGatesCapabilityAction409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminGatesCapabilityAction409ApplicationProblemPlusJSONResponse) VisitPostAdminGatesCapabilityActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14011,6 +14156,7 @@ type PostAdminInstrumentsInstrumentIdStatusResponseObject interface {
 type PostAdminInstrumentsInstrumentIdStatus200JSONResponse Instrument
 
 func (response PostAdminInstrumentsInstrumentIdStatus200JSONResponse) VisitPostAdminInstrumentsInstrumentIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14021,7 +14167,8 @@ func (response PostAdminInstrumentsInstrumentIdStatus200JSONResponse) VisitPostA
 	return err
 }
 
-type GetAdminKillSwitchesRequestObject struct{}
+type GetAdminKillSwitchesRequestObject struct {
+}
 
 type GetAdminKillSwitchesResponseObject interface {
 	VisitGetAdminKillSwitchesResponse(w http.ResponseWriter) error
@@ -14030,6 +14177,7 @@ type GetAdminKillSwitchesResponseObject interface {
 type GetAdminKillSwitches200JSONResponse []KillSwitch
 
 func (response GetAdminKillSwitches200JSONResponse) VisitGetAdminKillSwitchesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14052,6 +14200,7 @@ type PostAdminKillSwitchesResponseObject interface {
 type PostAdminKillSwitches200JSONResponse KillSwitch
 
 func (response PostAdminKillSwitches200JSONResponse) VisitPostAdminKillSwitchesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14067,6 +14216,7 @@ type PostAdminKillSwitches403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostAdminKillSwitches403ApplicationProblemPlusJSONResponse) VisitPostAdminKillSwitchesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14077,7 +14227,8 @@ func (response PostAdminKillSwitches403ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
-type GetAdminProvidersRequestObject struct{}
+type GetAdminProvidersRequestObject struct {
+}
 
 type GetAdminProvidersResponseObject interface {
 	VisitGetAdminProvidersResponse(w http.ResponseWriter) error
@@ -14086,6 +14237,7 @@ type GetAdminProvidersResponseObject interface {
 type GetAdminProviders200JSONResponse []ProviderStatus
 
 func (response GetAdminProviders200JSONResponse) VisitGetAdminProvidersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14107,6 +14259,7 @@ type GetAdminReconciliationRecordsResponseObject interface {
 type GetAdminReconciliationRecords200JSONResponse ReconciliationRecordPage
 
 func (response GetAdminReconciliationRecords200JSONResponse) VisitGetAdminReconciliationRecordsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14130,6 +14283,7 @@ type PostAdminReconciliationRecordsRecordIdResolveResponseObject interface {
 type PostAdminReconciliationRecordsRecordIdResolve200JSONResponse ReconciliationRecord
 
 func (response PostAdminReconciliationRecordsRecordIdResolve200JSONResponse) VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14145,6 +14299,7 @@ type PostAdminReconciliationRecordsRecordIdResolve403ApplicationProblemPlusJSONR
 }
 
 func (response PostAdminReconciliationRecordsRecordIdResolve403ApplicationProblemPlusJSONResponse) VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14158,6 +14313,7 @@ func (response PostAdminReconciliationRecordsRecordIdResolve403ApplicationProble
 type PostAdminReconciliationRecordsRecordIdResolve422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminReconciliationRecordsRecordIdResolve422ApplicationProblemPlusJSONResponse) VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14179,6 +14335,7 @@ type GetAdminUsersUserIdResponseObject interface {
 type GetAdminUsersUserId200JSONResponse AdminUserView
 
 func (response GetAdminUsersUserId200JSONResponse) VisitGetAdminUsersUserIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14194,6 +14351,7 @@ type GetAdminUsersUserId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAdminUsersUserId404ApplicationProblemPlusJSONResponse) VisitGetAdminUsersUserIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14217,6 +14375,7 @@ type PostAdminUsersUserIdClosureResponseObject interface {
 type PostAdminUsersUserIdClosure200JSONResponse AdminUserView
 
 func (response PostAdminUsersUserIdClosure200JSONResponse) VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14232,6 +14391,7 @@ type PostAdminUsersUserIdClosure404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostAdminUsersUserIdClosure404ApplicationProblemPlusJSONResponse) VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14245,6 +14405,7 @@ func (response PostAdminUsersUserIdClosure404ApplicationProblemPlusJSONResponse)
 type PostAdminUsersUserIdClosure409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminUsersUserIdClosure409ApplicationProblemPlusJSONResponse) VisitPostAdminUsersUserIdClosureResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14266,6 +14427,7 @@ type GetAgentsResponseObject interface {
 type GetAgents200JSONResponse AgentPage
 
 func (response GetAgents200JSONResponse) VisitGetAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14281,6 +14443,7 @@ type GetAgents403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAgents403ApplicationProblemPlusJSONResponse) VisitGetAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14303,6 +14466,7 @@ type PostAgentsResponseObject interface {
 type PostAgents200JSONResponse Agent
 
 func (response PostAgents200JSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14316,6 +14480,7 @@ func (response PostAgents200JSONResponse) VisitPostAgentsResponse(w http.Respons
 type PostAgents201JSONResponse Agent
 
 func (response PostAgents201JSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14331,6 +14496,7 @@ type PostAgents403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostAgents403ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14344,6 +14510,7 @@ func (response PostAgents403ApplicationProblemPlusJSONResponse) VisitPostAgentsR
 type PostAgents409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAgents409ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14357,6 +14524,7 @@ func (response PostAgents409ApplicationProblemPlusJSONResponse) VisitPostAgentsR
 type PostAgents422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAgents422ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14378,6 +14546,7 @@ type GetAgentsAgentIdResponseObject interface {
 type GetAgentsAgentId200JSONResponse Agent
 
 func (response GetAgentsAgentId200JSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14393,6 +14562,7 @@ type GetAgentsAgentId403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAgentsAgentId403ApplicationProblemPlusJSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14406,6 +14576,7 @@ func (response GetAgentsAgentId403ApplicationProblemPlusJSONResponse) VisitGetAg
 type GetAgentsAgentId404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetAgentsAgentId404ApplicationProblemPlusJSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14430,6 +14601,7 @@ type PostAgentsAgentIdActionResponseObject interface {
 type PostAgentsAgentIdAction200JSONResponse Agent
 
 func (response PostAgentsAgentIdAction200JSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14445,6 +14617,7 @@ type PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14458,6 +14631,7 @@ func (response PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse) Vis
 type PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14471,6 +14645,7 @@ func (response PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse) Vis
 type PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14484,6 +14659,7 @@ func (response PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse) Vis
 type PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14494,7 +14670,8 @@ func (response PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
-type GetAssetsRequestObject struct{}
+type GetAssetsRequestObject struct {
+}
 
 type GetAssetsResponseObject interface {
 	VisitGetAssetsResponse(w http.ResponseWriter) error
@@ -14503,6 +14680,7 @@ type GetAssetsResponseObject interface {
 type GetAssets200JSONResponse []Asset
 
 func (response GetAssets200JSONResponse) VisitGetAssetsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14521,7 +14699,8 @@ type GetAuthCallbackResponseObject interface {
 	VisitGetAuthCallbackResponse(w http.ResponseWriter) error
 }
 
-type GetAuthCallback302Response struct{}
+type GetAuthCallback302Response struct {
+}
 
 func (response GetAuthCallback302Response) VisitGetAuthCallbackResponse(w http.ResponseWriter) error {
 	w.WriteHeader(302)
@@ -14533,6 +14712,7 @@ type GetAuthCallback400ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAuthCallback400ApplicationProblemPlusJSONResponse) VisitGetAuthCallbackResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14546,6 +14726,7 @@ func (response GetAuthCallback400ApplicationProblemPlusJSONResponse) VisitGetAut
 type GetAuthCallback401ApplicationProblemPlusJSONResponse Problem
 
 func (response GetAuthCallback401ApplicationProblemPlusJSONResponse) VisitGetAuthCallbackResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14564,7 +14745,8 @@ type GetAuthLoginResponseObject interface {
 	VisitGetAuthLoginResponse(w http.ResponseWriter) error
 }
 
-type GetAuthLogin302Response struct{}
+type GetAuthLogin302Response struct {
+}
 
 func (response GetAuthLogin302Response) VisitGetAuthLoginResponse(w http.ResponseWriter) error {
 	w.WriteHeader(302)
@@ -14576,6 +14758,7 @@ type GetAuthLogin400ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAuthLogin400ApplicationProblemPlusJSONResponse) VisitGetAuthLoginResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14589,6 +14772,7 @@ func (response GetAuthLogin400ApplicationProblemPlusJSONResponse) VisitGetAuthLo
 type GetAuthLogin503ApplicationProblemPlusJSONResponse Problem
 
 func (response GetAuthLogin503ApplicationProblemPlusJSONResponse) VisitGetAuthLoginResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14599,13 +14783,15 @@ func (response GetAuthLogin503ApplicationProblemPlusJSONResponse) VisitGetAuthLo
 	return err
 }
 
-type PostAuthLogoutRequestObject struct{}
+type PostAuthLogoutRequestObject struct {
+}
 
 type PostAuthLogoutResponseObject interface {
 	VisitPostAuthLogoutResponse(w http.ResponseWriter) error
 }
 
-type PostAuthLogout204Response struct{}
+type PostAuthLogout204Response struct {
+}
 
 func (response PostAuthLogout204Response) VisitPostAuthLogoutResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
@@ -14623,6 +14809,7 @@ type GetCreditsBalanceResponseObject interface {
 type GetCreditsBalance200JSONResponse CreditBalance
 
 func (response GetCreditsBalance200JSONResponse) VisitGetCreditsBalanceResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14638,6 +14825,7 @@ type GetCreditsBalance403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetCreditsBalance403ApplicationProblemPlusJSONResponse) VisitGetCreditsBalanceResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14651,6 +14839,7 @@ func (response GetCreditsBalance403ApplicationProblemPlusJSONResponse) VisitGetC
 type GetCreditsBalance422ApplicationProblemPlusJSONResponse Problem
 
 func (response GetCreditsBalance422ApplicationProblemPlusJSONResponse) VisitGetCreditsBalanceResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14661,7 +14850,8 @@ func (response GetCreditsBalance422ApplicationProblemPlusJSONResponse) VisitGetC
 	return err
 }
 
-type GetCreditsPricingRequestObject struct{}
+type GetCreditsPricingRequestObject struct {
+}
 
 type GetCreditsPricingResponseObject interface {
 	VisitGetCreditsPricingResponse(w http.ResponseWriter) error
@@ -14670,6 +14860,7 @@ type GetCreditsPricingResponseObject interface {
 type GetCreditsPricing200JSONResponse CreditPricing
 
 func (response GetCreditsPricing200JSONResponse) VisitGetCreditsPricingResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14694,6 +14885,7 @@ type GetEventsStream200TexteventStreamResponse struct {
 }
 
 func (response GetEventsStream200TexteventStreamResponse) VisitGetEventsStreamResponse(w http.ResponseWriter) error {
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
@@ -14741,6 +14933,7 @@ type GetFundingDepositsResponseObject interface {
 type GetFundingDeposits200JSONResponse DepositPage
 
 func (response GetFundingDeposits200JSONResponse) VisitGetFundingDepositsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14763,6 +14956,7 @@ type PostFundingDepositsResponseObject interface {
 type PostFundingDeposits200JSONResponse Deposit
 
 func (response PostFundingDeposits200JSONResponse) VisitPostFundingDepositsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14776,6 +14970,7 @@ func (response PostFundingDeposits200JSONResponse) VisitPostFundingDepositsRespo
 type PostFundingDeposits202JSONResponse Deposit
 
 func (response PostFundingDeposits202JSONResponse) VisitPostFundingDepositsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14791,6 +14986,7 @@ type PostFundingDeposits422ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostFundingDeposits422ApplicationProblemPlusJSONResponse) VisitPostFundingDepositsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14812,6 +15008,7 @@ type GetFundingDepositsDepositIdResponseObject interface {
 type GetFundingDepositsDepositId200JSONResponse DepositDetail
 
 func (response GetFundingDepositsDepositId200JSONResponse) VisitGetFundingDepositsDepositIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14827,6 +15024,7 @@ type GetFundingDepositsDepositId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetFundingDepositsDepositId404ApplicationProblemPlusJSONResponse) VisitGetFundingDepositsDepositIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14837,20 +15035,23 @@ func (response GetFundingDepositsDepositId404ApplicationProblemPlusJSONResponse)
 	return err
 }
 
-type GetHealthzRequestObject struct{}
+type GetHealthzRequestObject struct {
+}
 
 type GetHealthzResponseObject interface {
 	VisitGetHealthzResponse(w http.ResponseWriter) error
 }
 
-type GetHealthz200Response struct{}
+type GetHealthz200Response struct {
+}
 
 func (response GetHealthz200Response) VisitGetHealthzResponse(w http.ResponseWriter) error {
 	w.WriteHeader(200)
 	return nil
 }
 
-type GetInstrumentsRequestObject struct{}
+type GetInstrumentsRequestObject struct {
+}
 
 type GetInstrumentsResponseObject interface {
 	VisitGetInstrumentsResponse(w http.ResponseWriter) error
@@ -14859,6 +15060,7 @@ type GetInstrumentsResponseObject interface {
 type GetInstruments200JSONResponse []Instrument
 
 func (response GetInstruments200JSONResponse) VisitGetInstrumentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14880,6 +15082,7 @@ type GetInstrumentsInstrumentIdResponseObject interface {
 type GetInstrumentsInstrumentId200JSONResponse InstrumentDetail
 
 func (response GetInstrumentsInstrumentId200JSONResponse) VisitGetInstrumentsInstrumentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14895,6 +15098,7 @@ type GetInstrumentsInstrumentId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetInstrumentsInstrumentId404ApplicationProblemPlusJSONResponse) VisitGetInstrumentsInstrumentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14916,6 +15120,7 @@ type GetIntentsResponseObject interface {
 type GetIntents200JSONResponse TradeIntentPage
 
 func (response GetIntents200JSONResponse) VisitGetIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14938,6 +15143,7 @@ type PostIntentsResponseObject interface {
 type PostIntents200JSONResponse TradeIntent
 
 func (response PostIntents200JSONResponse) VisitPostIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14951,6 +15157,7 @@ func (response PostIntents200JSONResponse) VisitPostIntentsResponse(w http.Respo
 type PostIntents202JSONResponse TradeIntent
 
 func (response PostIntents202JSONResponse) VisitPostIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14966,6 +15173,7 @@ type PostIntents400ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostIntents400ApplicationProblemPlusJSONResponse) VisitPostIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14979,6 +15187,7 @@ func (response PostIntents400ApplicationProblemPlusJSONResponse) VisitPostIntent
 type PostIntents403ApplicationProblemPlusJSONResponse Problem
 
 func (response PostIntents403ApplicationProblemPlusJSONResponse) VisitPostIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -14992,6 +15201,7 @@ func (response PostIntents403ApplicationProblemPlusJSONResponse) VisitPostIntent
 type PostIntents409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostIntents409ApplicationProblemPlusJSONResponse) VisitPostIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15005,6 +15215,7 @@ func (response PostIntents409ApplicationProblemPlusJSONResponse) VisitPostIntent
 type PostIntents422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostIntents422ApplicationProblemPlusJSONResponse) VisitPostIntentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15026,6 +15237,7 @@ type GetIntentsIntentIdResponseObject interface {
 type GetIntentsIntentId200JSONResponse TradeIntentDetail
 
 func (response GetIntentsIntentId200JSONResponse) VisitGetIntentsIntentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15041,6 +15253,7 @@ type GetIntentsIntentId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetIntentsIntentId404ApplicationProblemPlusJSONResponse) VisitGetIntentsIntentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15063,6 +15276,7 @@ type PostIntentsIntentIdCancelResponseObject interface {
 type PostIntentsIntentIdCancel202JSONResponse TradeIntent
 
 func (response PostIntentsIntentIdCancel202JSONResponse) VisitPostIntentsIntentIdCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15078,6 +15292,7 @@ type PostIntentsIntentIdCancel409ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostIntentsIntentIdCancel409ApplicationProblemPlusJSONResponse) VisitPostIntentsIntentIdCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15099,6 +15314,7 @@ type GetInternalOrdersResponseObject interface {
 type GetInternalOrders200JSONResponse InternalOrderPage
 
 func (response GetInternalOrders200JSONResponse) VisitGetInternalOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15120,6 +15336,7 @@ type GetInternalProductsResponseObject interface {
 type GetInternalProducts200JSONResponse InternalProductPage
 
 func (response GetInternalProducts200JSONResponse) VisitGetInternalProductsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15142,6 +15359,7 @@ type PostInternalProductsResponseObject interface {
 type PostInternalProducts201JSONResponse InternalProduct
 
 func (response PostInternalProducts201JSONResponse) VisitPostInternalProductsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15157,6 +15375,7 @@ type PostInternalProducts403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostInternalProducts403ApplicationProblemPlusJSONResponse) VisitPostInternalProductsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15170,6 +15389,7 @@ func (response PostInternalProducts403ApplicationProblemPlusJSONResponse) VisitP
 type PostInternalProducts422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostInternalProducts422ApplicationProblemPlusJSONResponse) VisitPostInternalProductsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15191,6 +15411,7 @@ type GetInternalProductsProductIdResponseObject interface {
 type GetInternalProductsProductId200JSONResponse InternalProduct
 
 func (response GetInternalProductsProductId200JSONResponse) VisitGetInternalProductsProductIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15206,6 +15427,7 @@ type GetInternalProductsProductId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetInternalProductsProductId404ApplicationProblemPlusJSONResponse) VisitGetInternalProductsProductIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15229,6 +15451,7 @@ type PostInternalProductsProductIdOrdersResponseObject interface {
 type PostInternalProductsProductIdOrders200JSONResponse InternalOrder
 
 func (response PostInternalProductsProductIdOrders200JSONResponse) VisitPostInternalProductsProductIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15242,6 +15465,7 @@ func (response PostInternalProductsProductIdOrders200JSONResponse) VisitPostInte
 type PostInternalProductsProductIdOrders201JSONResponse InternalOrder
 
 func (response PostInternalProductsProductIdOrders201JSONResponse) VisitPostInternalProductsProductIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15257,6 +15481,7 @@ type PostInternalProductsProductIdOrders403ApplicationProblemPlusJSONResponse st
 }
 
 func (response PostInternalProductsProductIdOrders403ApplicationProblemPlusJSONResponse) VisitPostInternalProductsProductIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15270,6 +15495,7 @@ func (response PostInternalProductsProductIdOrders403ApplicationProblemPlusJSONR
 type PostInternalProductsProductIdOrders409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostInternalProductsProductIdOrders409ApplicationProblemPlusJSONResponse) VisitPostInternalProductsProductIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15283,6 +15509,7 @@ func (response PostInternalProductsProductIdOrders409ApplicationProblemPlusJSONR
 type PostInternalProductsProductIdOrders422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostInternalProductsProductIdOrders422ApplicationProblemPlusJSONResponse) VisitPostInternalProductsProductIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15306,6 +15533,7 @@ type PostInternalProductsProductIdStatusResponseObject interface {
 type PostInternalProductsProductIdStatus200JSONResponse InternalProduct
 
 func (response PostInternalProductsProductIdStatus200JSONResponse) VisitPostInternalProductsProductIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15321,6 +15549,7 @@ type PostInternalProductsProductIdStatus403ApplicationProblemPlusJSONResponse st
 }
 
 func (response PostInternalProductsProductIdStatus403ApplicationProblemPlusJSONResponse) VisitPostInternalProductsProductIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15334,6 +15563,7 @@ func (response PostInternalProductsProductIdStatus403ApplicationProblemPlusJSONR
 type PostInternalProductsProductIdStatus404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostInternalProductsProductIdStatus404ApplicationProblemPlusJSONResponse) VisitPostInternalProductsProductIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15347,6 +15577,7 @@ func (response PostInternalProductsProductIdStatus404ApplicationProblemPlusJSONR
 type PostInternalProductsProductIdStatus422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostInternalProductsProductIdStatus422ApplicationProblemPlusJSONResponse) VisitPostInternalProductsProductIdStatusResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15369,6 +15600,7 @@ type PostInternalSellersResponseObject interface {
 type PostInternalSellers200JSONResponse InternalSeller
 
 func (response PostInternalSellers200JSONResponse) VisitPostInternalSellersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15384,6 +15616,7 @@ type PostInternalSellers403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostInternalSellers403ApplicationProblemPlusJSONResponse) VisitPostInternalSellersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15397,6 +15630,7 @@ func (response PostInternalSellers403ApplicationProblemPlusJSONResponse) VisitPo
 type PostInternalSellers422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostInternalSellers422ApplicationProblemPlusJSONResponse) VisitPostInternalSellersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15407,7 +15641,8 @@ func (response PostInternalSellers422ApplicationProblemPlusJSONResponse) VisitPo
 	return err
 }
 
-type GetMeRequestObject struct{}
+type GetMeRequestObject struct {
+}
 
 type GetMeResponseObject interface {
 	VisitGetMeResponse(w http.ResponseWriter) error
@@ -15416,6 +15651,7 @@ type GetMeResponseObject interface {
 type GetMe200JSONResponse Principal
 
 func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15431,6 +15667,7 @@ type GetMe401ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15441,7 +15678,8 @@ func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w 
 	return err
 }
 
-type GetMeAccountRequestObject struct{}
+type GetMeAccountRequestObject struct {
+}
 
 type GetMeAccountResponseObject interface {
 	VisitGetMeAccountResponse(w http.ResponseWriter) error
@@ -15450,6 +15688,7 @@ type GetMeAccountResponseObject interface {
 type GetMeAccount200JSONResponse MyAccount
 
 func (response GetMeAccount200JSONResponse) VisitGetMeAccountResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15472,6 +15711,7 @@ type PostMeAccountCloseResponseObject interface {
 type PostMeAccountClose200JSONResponse MyAccount
 
 func (response PostMeAccountClose200JSONResponse) VisitPostMeAccountCloseResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15487,6 +15727,7 @@ type PostMeAccountClose409ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostMeAccountClose409ApplicationProblemPlusJSONResponse) VisitPostMeAccountCloseResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15508,6 +15749,7 @@ type PostMeAccountCloseCancelResponseObject interface {
 type PostMeAccountCloseCancel200JSONResponse MyAccount
 
 func (response PostMeAccountCloseCancel200JSONResponse) VisitPostMeAccountCloseCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15523,6 +15765,7 @@ type PostMeAccountCloseCancel404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostMeAccountCloseCancel404ApplicationProblemPlusJSONResponse) VisitPostMeAccountCloseCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15544,6 +15787,7 @@ type GetMeActivityResponseObject interface {
 type GetMeActivity200JSONResponse ActivityFeedPage
 
 func (response GetMeActivity200JSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15559,6 +15803,7 @@ type GetMeActivity403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMeActivity403ApplicationProblemPlusJSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15572,6 +15817,7 @@ func (response GetMeActivity403ApplicationProblemPlusJSONResponse) VisitGetMeAct
 type GetMeActivity422ApplicationProblemPlusJSONResponse Problem
 
 func (response GetMeActivity422ApplicationProblemPlusJSONResponse) VisitGetMeActivityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15593,6 +15839,7 @@ type GetMeAuditResponseObject interface {
 type GetMeAudit200JSONResponse MeAuditPage
 
 func (response GetMeAudit200JSONResponse) VisitGetMeAuditResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15614,6 +15861,7 @@ type GetMeEligibilityResponseObject interface {
 type GetMeEligibility200JSONResponse WithdrawalEligibility
 
 func (response GetMeEligibility200JSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15629,6 +15877,7 @@ type GetMeEligibility403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMeEligibility403ApplicationProblemPlusJSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15642,6 +15891,7 @@ func (response GetMeEligibility403ApplicationProblemPlusJSONResponse) VisitGetMe
 type GetMeEligibility404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetMeEligibility404ApplicationProblemPlusJSONResponse) VisitGetMeEligibilityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15652,7 +15902,8 @@ func (response GetMeEligibility404ApplicationProblemPlusJSONResponse) VisitGetMe
 	return err
 }
 
-type GetMeNotificationPreferencesRequestObject struct{}
+type GetMeNotificationPreferencesRequestObject struct {
+}
 
 type GetMeNotificationPreferencesResponseObject interface {
 	VisitGetMeNotificationPreferencesResponse(w http.ResponseWriter) error
@@ -15661,6 +15912,7 @@ type GetMeNotificationPreferencesResponseObject interface {
 type GetMeNotificationPreferences200JSONResponse NotificationPreferences
 
 func (response GetMeNotificationPreferences200JSONResponse) VisitGetMeNotificationPreferencesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15683,6 +15935,7 @@ type PutMeNotificationPreferencesResponseObject interface {
 type PutMeNotificationPreferences200JSONResponse NotificationPreferences
 
 func (response PutMeNotificationPreferences200JSONResponse) VisitPutMeNotificationPreferencesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15704,6 +15957,7 @@ type GetMeNotificationsResponseObject interface {
 type GetMeNotifications200JSONResponse NotificationPage
 
 func (response GetMeNotifications200JSONResponse) VisitGetMeNotificationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15725,6 +15979,7 @@ type PostMeNotificationsReadAllResponseObject interface {
 type PostMeNotificationsReadAll200JSONResponse MarkedRead
 
 func (response PostMeNotificationsReadAll200JSONResponse) VisitPostMeNotificationsReadAllResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15735,7 +15990,8 @@ func (response PostMeNotificationsReadAll200JSONResponse) VisitPostMeNotificatio
 	return err
 }
 
-type GetMeNotificationsUnreadCountRequestObject struct{}
+type GetMeNotificationsUnreadCountRequestObject struct {
+}
 
 type GetMeNotificationsUnreadCountResponseObject interface {
 	VisitGetMeNotificationsUnreadCountResponse(w http.ResponseWriter) error
@@ -15744,6 +16000,7 @@ type GetMeNotificationsUnreadCountResponseObject interface {
 type GetMeNotificationsUnreadCount200JSONResponse UnreadCount
 
 func (response GetMeNotificationsUnreadCount200JSONResponse) VisitGetMeNotificationsUnreadCountResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15766,6 +16023,7 @@ type PostMeNotificationsNotificationIdReadResponseObject interface {
 type PostMeNotificationsNotificationIdRead200JSONResponse Notification
 
 func (response PostMeNotificationsNotificationIdRead200JSONResponse) VisitPostMeNotificationsNotificationIdReadResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15781,6 +16039,7 @@ type PostMeNotificationsNotificationIdRead404ApplicationProblemPlusJSONResponse 
 }
 
 func (response PostMeNotificationsNotificationIdRead404ApplicationProblemPlusJSONResponse) VisitPostMeNotificationsNotificationIdReadResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15802,6 +16061,7 @@ type GetMePayoutDestinationsResponseObject interface {
 type GetMePayoutDestinations200JSONResponse []PayoutDestination
 
 func (response GetMePayoutDestinations200JSONResponse) VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15817,6 +16077,7 @@ type GetMePayoutDestinations403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMePayoutDestinations403ApplicationProblemPlusJSONResponse) VisitGetMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15839,6 +16100,7 @@ type PostMePayoutDestinationsResponseObject interface {
 type PostMePayoutDestinations200JSONResponse PayoutDestination
 
 func (response PostMePayoutDestinations200JSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15852,6 +16114,7 @@ func (response PostMePayoutDestinations200JSONResponse) VisitPostMePayoutDestina
 type PostMePayoutDestinations201JSONResponse PayoutDestination
 
 func (response PostMePayoutDestinations201JSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15867,6 +16130,7 @@ type PostMePayoutDestinations403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostMePayoutDestinations403ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15880,6 +16144,7 @@ func (response PostMePayoutDestinations403ApplicationProblemPlusJSONResponse) Vi
 type PostMePayoutDestinations409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostMePayoutDestinations409ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15893,6 +16158,7 @@ func (response PostMePayoutDestinations409ApplicationProblemPlusJSONResponse) Vi
 type PostMePayoutDestinations422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostMePayoutDestinations422ApplicationProblemPlusJSONResponse) VisitPostMePayoutDestinationsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15915,6 +16181,7 @@ type DeleteMePayoutDestinationsDestinationIdResponseObject interface {
 type DeleteMePayoutDestinationsDestinationId200JSONResponse PayoutDestination
 
 func (response DeleteMePayoutDestinationsDestinationId200JSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15930,6 +16197,7 @@ type DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJSONRespons
 }
 
 func (response DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15943,6 +16211,7 @@ func (response DeleteMePayoutDestinationsDestinationId403ApplicationProblemPlusJ
 type DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJSONResponse Problem
 
 func (response DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15956,6 +16225,7 @@ func (response DeleteMePayoutDestinationsDestinationId404ApplicationProblemPlusJ
 type DeleteMePayoutDestinationsDestinationId409ApplicationProblemPlusJSONResponse Problem
 
 func (response DeleteMePayoutDestinationsDestinationId409ApplicationProblemPlusJSONResponse) VisitDeleteMePayoutDestinationsDestinationIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15977,6 +16247,7 @@ type GetMePortfolioResponseObject interface {
 type GetMePortfolio200JSONResponse Portfolio
 
 func (response GetMePortfolio200JSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -15992,6 +16263,7 @@ type GetMePortfolio403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMePortfolio403ApplicationProblemPlusJSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16005,6 +16277,7 @@ func (response GetMePortfolio403ApplicationProblemPlusJSONResponse) VisitGetMePo
 type GetMePortfolio404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetMePortfolio404ApplicationProblemPlusJSONResponse) VisitGetMePortfolioResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16027,6 +16300,7 @@ type PostMeProfileResponseObject interface {
 type PostMeProfile200JSONResponse UserProfile
 
 func (response PostMeProfile200JSONResponse) VisitPostMeProfileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16042,6 +16316,7 @@ type PostMeProfile400ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostMeProfile400ApplicationProblemPlusJSONResponse) VisitPostMeProfileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16055,6 +16330,7 @@ func (response PostMeProfile400ApplicationProblemPlusJSONResponse) VisitPostMePr
 type PostMeProfile409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostMeProfile409ApplicationProblemPlusJSONResponse) VisitPostMeProfileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16065,7 +16341,8 @@ func (response PostMeProfile409ApplicationProblemPlusJSONResponse) VisitPostMePr
 	return err
 }
 
-type GetMeSecurityRequestObject struct{}
+type GetMeSecurityRequestObject struct {
+}
 
 type GetMeSecurityResponseObject interface {
 	VisitGetMeSecurityResponse(w http.ResponseWriter) error
@@ -16074,6 +16351,7 @@ type GetMeSecurityResponseObject interface {
 type GetMeSecurity200JSONResponse SecuritySummary
 
 func (response GetMeSecurity200JSONResponse) VisitGetMeSecurityResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16084,7 +16362,8 @@ func (response GetMeSecurity200JSONResponse) VisitGetMeSecurityResponse(w http.R
 	return err
 }
 
-type GetMeTermsAcceptancesRequestObject struct{}
+type GetMeTermsAcceptancesRequestObject struct {
+}
 
 type GetMeTermsAcceptancesResponseObject interface {
 	VisitGetMeTermsAcceptancesResponse(w http.ResponseWriter) error
@@ -16093,6 +16372,7 @@ type GetMeTermsAcceptancesResponseObject interface {
 type GetMeTermsAcceptances200JSONResponse TermsState
 
 func (response GetMeTermsAcceptances200JSONResponse) VisitGetMeTermsAcceptancesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16115,6 +16395,7 @@ type PostMeTermsAcceptancesResponseObject interface {
 type PostMeTermsAcceptances200JSONResponse TermsState
 
 func (response PostMeTermsAcceptances200JSONResponse) VisitPostMeTermsAcceptancesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16130,6 +16411,7 @@ type PostMeTermsAcceptances400ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostMeTermsAcceptances400ApplicationProblemPlusJSONResponse) VisitPostMeTermsAcceptancesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16151,6 +16433,7 @@ type GetMeVerificationResponseObject interface {
 type GetMeVerification200JSONResponse VerificationProfile
 
 func (response GetMeVerification200JSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16166,6 +16449,7 @@ type GetMeVerification403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetMeVerification403ApplicationProblemPlusJSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16179,6 +16463,7 @@ func (response GetMeVerification403ApplicationProblemPlusJSONResponse) VisitGetM
 type GetMeVerification404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetMeVerification404ApplicationProblemPlusJSONResponse) VisitGetMeVerificationResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16201,6 +16486,7 @@ type PostMeVerificationSandboxOutcomeResponseObject interface {
 type PostMeVerificationSandboxOutcome200JSONResponse VerificationSession
 
 func (response PostMeVerificationSandboxOutcome200JSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16216,6 +16502,7 @@ type PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResponse struc
 }
 
 func (response PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16229,6 +16516,7 @@ func (response PostMeVerificationSandboxOutcome403ApplicationProblemPlusJSONResp
 type PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16242,6 +16530,7 @@ func (response PostMeVerificationSandboxOutcome404ApplicationProblemPlusJSONResp
 type PostMeVerificationSandboxOutcome422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostMeVerificationSandboxOutcome422ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSandboxOutcomeResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16264,6 +16553,7 @@ type PostMeVerificationSessionsResponseObject interface {
 type PostMeVerificationSessions200JSONResponse StartedVerification
 
 func (response PostMeVerificationSessions200JSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16277,6 +16567,7 @@ func (response PostMeVerificationSessions200JSONResponse) VisitPostMeVerificatio
 type PostMeVerificationSessions201JSONResponse StartedVerification
 
 func (response PostMeVerificationSessions201JSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16292,6 +16583,7 @@ type PostMeVerificationSessions403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostMeVerificationSessions403ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16305,6 +16597,7 @@ func (response PostMeVerificationSessions403ApplicationProblemPlusJSONResponse) 
 type PostMeVerificationSessions422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostMeVerificationSessions422ApplicationProblemPlusJSONResponse) VisitPostMeVerificationSessionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16327,6 +16620,7 @@ type GetMeVerificationSessionsSessionIdResponseObject interface {
 type GetMeVerificationSessionsSessionId200JSONResponse VerificationSession
 
 func (response GetMeVerificationSessionsSessionId200JSONResponse) VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16342,6 +16636,7 @@ type GetMeVerificationSessionsSessionId404ApplicationProblemPlusJSONResponse str
 }
 
 func (response GetMeVerificationSessionsSessionId404ApplicationProblemPlusJSONResponse) VisitGetMeVerificationSessionsSessionIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16363,6 +16658,7 @@ type GetNativeAssetsResponseObject interface {
 type GetNativeAssets200JSONResponse NativeAssetPage
 
 func (response GetNativeAssets200JSONResponse) VisitGetNativeAssetsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16385,6 +16681,7 @@ type PostNativeAssetsResponseObject interface {
 type PostNativeAssets200JSONResponse NativeAsset
 
 func (response PostNativeAssets200JSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16398,6 +16695,7 @@ func (response PostNativeAssets200JSONResponse) VisitPostNativeAssetsResponse(w 
 type PostNativeAssets201JSONResponse NativeAsset
 
 func (response PostNativeAssets201JSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16413,6 +16711,7 @@ type PostNativeAssets409ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostNativeAssets409ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16426,6 +16725,7 @@ func (response PostNativeAssets409ApplicationProblemPlusJSONResponse) VisitPostN
 type PostNativeAssets422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostNativeAssets422ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16447,6 +16747,7 @@ type GetNativeAssetsAssetIdResponseObject interface {
 type GetNativeAssetsAssetId200JSONResponse NativeAsset
 
 func (response GetNativeAssetsAssetId200JSONResponse) VisitGetNativeAssetsAssetIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16462,6 +16763,7 @@ type GetNativeAssetsAssetId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetNativeAssetsAssetId404ApplicationProblemPlusJSONResponse) VisitGetNativeAssetsAssetIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16485,6 +16787,7 @@ type PostNativeAssetsAssetIdSubmitResponseObject interface {
 type PostNativeAssetsAssetIdSubmit200JSONResponse NativeAsset
 
 func (response PostNativeAssetsAssetIdSubmit200JSONResponse) VisitPostNativeAssetsAssetIdSubmitResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16500,6 +16803,7 @@ type PostNativeAssetsAssetIdSubmit403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostNativeAssetsAssetIdSubmit403ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsAssetIdSubmitResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16513,6 +16817,7 @@ func (response PostNativeAssetsAssetIdSubmit403ApplicationProblemPlusJSONRespons
 type PostNativeAssetsAssetIdSubmit404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostNativeAssetsAssetIdSubmit404ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsAssetIdSubmitResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16526,6 +16831,7 @@ func (response PostNativeAssetsAssetIdSubmit404ApplicationProblemPlusJSONRespons
 type PostNativeAssetsAssetIdSubmit409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostNativeAssetsAssetIdSubmit409ApplicationProblemPlusJSONResponse) VisitPostNativeAssetsAssetIdSubmitResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16547,6 +16853,7 @@ type GetNativeMarketsResponseObject interface {
 type GetNativeMarkets200JSONResponse NativeMarketPage
 
 func (response GetNativeMarkets200JSONResponse) VisitGetNativeMarketsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16562,6 +16869,7 @@ type GetNativeMarkets422ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetNativeMarkets422ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16583,6 +16891,7 @@ type GetNativeMarketsMarketIdResponseObject interface {
 type GetNativeMarketsMarketId200JSONResponse NativeMarket
 
 func (response GetNativeMarketsMarketId200JSONResponse) VisitGetNativeMarketsMarketIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16598,6 +16907,7 @@ type GetNativeMarketsMarketId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetNativeMarketsMarketId404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16620,6 +16930,7 @@ type GetNativeMarketsMarketIdCandlesResponseObject interface {
 type GetNativeMarketsMarketIdCandles200JSONResponse NativeCandlePage
 
 func (response GetNativeMarketsMarketIdCandles200JSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16635,6 +16946,7 @@ type GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONResponse struct
 }
 
 func (response GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16648,6 +16960,7 @@ func (response GetNativeMarketsMarketIdCandles404ApplicationProblemPlusJSONRespo
 type GetNativeMarketsMarketIdCandles422ApplicationProblemPlusJSONResponse Problem
 
 func (response GetNativeMarketsMarketIdCandles422ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdCandlesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16671,6 +16984,7 @@ type PostNativeMarketsMarketIdOrdersResponseObject interface {
 type PostNativeMarketsMarketIdOrders200JSONResponse NativeFill
 
 func (response PostNativeMarketsMarketIdOrders200JSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16684,6 +16998,7 @@ func (response PostNativeMarketsMarketIdOrders200JSONResponse) VisitPostNativeMa
 type PostNativeMarketsMarketIdOrders201JSONResponse NativeFill
 
 func (response PostNativeMarketsMarketIdOrders201JSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16697,6 +17012,7 @@ func (response PostNativeMarketsMarketIdOrders201JSONResponse) VisitPostNativeMa
 type PostNativeMarketsMarketIdOrders409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostNativeMarketsMarketIdOrders409ApplicationProblemPlusJSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16712,6 +17028,7 @@ type PostNativeMarketsMarketIdOrders422ApplicationProblemPlusJSONResponse struct
 }
 
 func (response PostNativeMarketsMarketIdOrders422ApplicationProblemPlusJSONResponse) VisitPostNativeMarketsMarketIdOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16735,6 +17052,7 @@ type PostNativeMarketsMarketIdQuotesResponseObject interface {
 type PostNativeMarketsMarketIdQuotes200JSONResponse NativeQuote
 
 func (response PostNativeMarketsMarketIdQuotes200JSONResponse) VisitPostNativeMarketsMarketIdQuotesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16750,6 +17068,7 @@ type PostNativeMarketsMarketIdQuotes422ApplicationProblemPlusJSONResponse struct
 }
 
 func (response PostNativeMarketsMarketIdQuotes422ApplicationProblemPlusJSONResponse) VisitPostNativeMarketsMarketIdQuotesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16772,6 +17091,7 @@ type GetNativeMarketsMarketIdSummaryResponseObject interface {
 type GetNativeMarketsMarketIdSummary200JSONResponse NativeMarketDetail
 
 func (response GetNativeMarketsMarketIdSummary200JSONResponse) VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16787,6 +17107,7 @@ type GetNativeMarketsMarketIdSummary404ApplicationProblemPlusJSONResponse struct
 }
 
 func (response GetNativeMarketsMarketIdSummary404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdSummaryResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16809,6 +17130,7 @@ type GetNativeMarketsMarketIdTradesResponseObject interface {
 type GetNativeMarketsMarketIdTrades200JSONResponse NativeTradePage
 
 func (response GetNativeMarketsMarketIdTrades200JSONResponse) VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16824,6 +17146,7 @@ type GetNativeMarketsMarketIdTrades404ApplicationProblemPlusJSONResponse struct 
 }
 
 func (response GetNativeMarketsMarketIdTrades404ApplicationProblemPlusJSONResponse) VisitGetNativeMarketsMarketIdTradesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16845,6 +17168,7 @@ type GetOrdersResponseObject interface {
 type GetOrders200JSONResponse OrderPage
 
 func (response GetOrders200JSONResponse) VisitGetOrdersResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16866,6 +17190,7 @@ type GetOrdersOrderIdResponseObject interface {
 type GetOrdersOrderId200JSONResponse OrderDetail
 
 func (response GetOrdersOrderId200JSONResponse) VisitGetOrdersOrderIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16881,6 +17206,7 @@ type GetOrdersOrderId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOrdersOrderId404ApplicationProblemPlusJSONResponse) VisitGetOrdersOrderIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16903,6 +17229,7 @@ type PostPaymentsResponseObject interface {
 type PostPayments200JSONResponse CreditPurchase
 
 func (response PostPayments200JSONResponse) VisitPostPaymentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16916,6 +17243,7 @@ func (response PostPayments200JSONResponse) VisitPostPaymentsResponse(w http.Res
 type PostPayments201JSONResponse CreditPurchase
 
 func (response PostPayments201JSONResponse) VisitPostPaymentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16931,6 +17259,7 @@ type PostPayments403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostPayments403ApplicationProblemPlusJSONResponse) VisitPostPaymentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16944,6 +17273,7 @@ func (response PostPayments403ApplicationProblemPlusJSONResponse) VisitPostPayme
 type PostPayments422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostPayments422ApplicationProblemPlusJSONResponse) VisitPostPaymentsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16965,6 +17295,7 @@ type GetPaymentsPaymentIdResponseObject interface {
 type GetPaymentsPaymentId200JSONResponse CreditPurchase
 
 func (response GetPaymentsPaymentId200JSONResponse) VisitGetPaymentsPaymentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16980,6 +17311,7 @@ type GetPaymentsPaymentId403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetPaymentsPaymentId403ApplicationProblemPlusJSONResponse) VisitGetPaymentsPaymentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -16993,6 +17325,7 @@ func (response GetPaymentsPaymentId403ApplicationProblemPlusJSONResponse) VisitG
 type GetPaymentsPaymentId404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetPaymentsPaymentId404ApplicationProblemPlusJSONResponse) VisitGetPaymentsPaymentIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17014,6 +17347,7 @@ type GetPayoutsResponseObject interface {
 type GetPayouts200JSONResponse PayoutRequestPage
 
 func (response GetPayouts200JSONResponse) VisitGetPayoutsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17036,6 +17370,7 @@ type PostPayoutsResponseObject interface {
 type PostPayouts200JSONResponse PayoutRequest
 
 func (response PostPayouts200JSONResponse) VisitPostPayoutsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17049,6 +17384,7 @@ func (response PostPayouts200JSONResponse) VisitPostPayoutsResponse(w http.Respo
 type PostPayouts201JSONResponse PayoutRequest
 
 func (response PostPayouts201JSONResponse) VisitPostPayoutsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17064,6 +17400,7 @@ type PostPayouts422ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostPayouts422ApplicationProblemPlusJSONResponse) VisitPostPayoutsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17086,6 +17423,7 @@ type PostPayoutsQuoteResponseObject interface {
 type PostPayoutsQuote200JSONResponse PayoutQuote
 
 func (response PostPayoutsQuote200JSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17099,6 +17437,7 @@ func (response PostPayoutsQuote200JSONResponse) VisitPostPayoutsQuoteResponse(w 
 type PostPayoutsQuote201JSONResponse PayoutQuote
 
 func (response PostPayoutsQuote201JSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17114,6 +17453,7 @@ type PostPayoutsQuote403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostPayoutsQuote403ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17127,6 +17467,7 @@ func (response PostPayoutsQuote403ApplicationProblemPlusJSONResponse) VisitPostP
 type PostPayoutsQuote404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostPayoutsQuote404ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17140,6 +17481,7 @@ func (response PostPayoutsQuote404ApplicationProblemPlusJSONResponse) VisitPostP
 type PostPayoutsQuote422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostPayoutsQuote422ApplicationProblemPlusJSONResponse) VisitPostPayoutsQuoteResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17161,6 +17503,7 @@ type GetPayoutsPayoutIdResponseObject interface {
 type GetPayoutsPayoutId200JSONResponse PayoutRequest
 
 func (response GetPayoutsPayoutId200JSONResponse) VisitGetPayoutsPayoutIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17176,6 +17519,7 @@ type GetPayoutsPayoutId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetPayoutsPayoutId404ApplicationProblemPlusJSONResponse) VisitGetPayoutsPayoutIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17199,6 +17543,7 @@ type PostPayoutsPayoutIdCancelResponseObject interface {
 type PostPayoutsPayoutIdCancel200JSONResponse PayoutRequest
 
 func (response PostPayoutsPayoutIdCancel200JSONResponse) VisitPostPayoutsPayoutIdCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17214,6 +17559,7 @@ type PostPayoutsPayoutIdCancel404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostPayoutsPayoutIdCancel404ApplicationProblemPlusJSONResponse) VisitPostPayoutsPayoutIdCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17227,6 +17573,7 @@ func (response PostPayoutsPayoutIdCancel404ApplicationProblemPlusJSONResponse) V
 type PostPayoutsPayoutIdCancel409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostPayoutsPayoutIdCancel409ApplicationProblemPlusJSONResponse) VisitPostPayoutsPayoutIdCancelResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17248,6 +17595,7 @@ type PostQuotesPreviewResponseObject interface {
 type PostQuotesPreview200JSONResponse QuoteDisclosure
 
 func (response PostQuotesPreview200JSONResponse) VisitPostQuotesPreviewResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17263,6 +17611,7 @@ type PostQuotesPreview422ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostQuotesPreview422ApplicationProblemPlusJSONResponse) VisitPostQuotesPreviewResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17276,6 +17625,7 @@ func (response PostQuotesPreview422ApplicationProblemPlusJSONResponse) VisitPost
 type PostQuotesPreview503ApplicationProblemPlusJSONResponse Problem
 
 func (response PostQuotesPreview503ApplicationProblemPlusJSONResponse) VisitPostQuotesPreviewResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17286,27 +17636,31 @@ func (response PostQuotesPreview503ApplicationProblemPlusJSONResponse) VisitPost
 	return err
 }
 
-type GetReadyzRequestObject struct{}
+type GetReadyzRequestObject struct {
+}
 
 type GetReadyzResponseObject interface {
 	VisitGetReadyzResponse(w http.ResponseWriter) error
 }
 
-type GetReadyz200Response struct{}
+type GetReadyz200Response struct {
+}
 
 func (response GetReadyz200Response) VisitGetReadyzResponse(w http.ResponseWriter) error {
 	w.WriteHeader(200)
 	return nil
 }
 
-type GetReadyz503Response struct{}
+type GetReadyz503Response struct {
+}
 
 func (response GetReadyz503Response) VisitGetReadyzResponse(w http.ResponseWriter) error {
 	w.WriteHeader(503)
 	return nil
 }
 
-type GetSessionsRequestObject struct{}
+type GetSessionsRequestObject struct {
+}
 
 type GetSessionsResponseObject interface {
 	VisitGetSessionsResponse(w http.ResponseWriter) error
@@ -17315,6 +17669,7 @@ type GetSessionsResponseObject interface {
 type GetSessions200JSONResponse []SessionSummary
 
 func (response GetSessions200JSONResponse) VisitGetSessionsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17333,7 +17688,8 @@ type DeleteSessionsSessionIdResponseObject interface {
 	VisitDeleteSessionsSessionIdResponse(w http.ResponseWriter) error
 }
 
-type DeleteSessionsSessionId204Response struct{}
+type DeleteSessionsSessionId204Response struct {
+}
 
 func (response DeleteSessionsSessionId204Response) VisitDeleteSessionsSessionIdResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
@@ -17345,6 +17701,7 @@ type DeleteSessionsSessionId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response DeleteSessionsSessionId404ApplicationProblemPlusJSONResponse) VisitDeleteSessionsSessionIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17366,6 +17723,7 @@ type GetStrategiesResponseObject interface {
 type GetStrategies200JSONResponse StrategyPage
 
 func (response GetStrategies200JSONResponse) VisitGetStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17381,6 +17739,7 @@ type GetStrategies403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetStrategies403ApplicationProblemPlusJSONResponse) VisitGetStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17403,6 +17762,7 @@ type PostStrategiesResponseObject interface {
 type PostStrategies200JSONResponse Strategy
 
 func (response PostStrategies200JSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17416,6 +17776,7 @@ func (response PostStrategies200JSONResponse) VisitPostStrategiesResponse(w http
 type PostStrategies201JSONResponse Strategy
 
 func (response PostStrategies201JSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17431,6 +17792,7 @@ type PostStrategies403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostStrategies403ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17444,6 +17806,7 @@ func (response PostStrategies403ApplicationProblemPlusJSONResponse) VisitPostStr
 type PostStrategies409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostStrategies409ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17457,6 +17820,7 @@ func (response PostStrategies409ApplicationProblemPlusJSONResponse) VisitPostStr
 type PostStrategies422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostStrategies422ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17478,6 +17842,7 @@ type GetStrategiesStrategyIdResponseObject interface {
 type GetStrategiesStrategyId200JSONResponse Strategy
 
 func (response GetStrategiesStrategyId200JSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17493,6 +17858,7 @@ type GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17506,6 +17872,7 @@ func (response GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse) Vis
 type GetStrategiesStrategyId404ApplicationProblemPlusJSONResponse Problem
 
 func (response GetStrategiesStrategyId404ApplicationProblemPlusJSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17528,6 +17895,7 @@ type PostStrategiesStrategyIdCompileResponseObject interface {
 type PostStrategiesStrategyIdCompile200JSONResponse CompileResult
 
 func (response PostStrategiesStrategyIdCompile200JSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17543,6 +17911,7 @@ type PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONResponse struct
 }
 
 func (response PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17556,6 +17925,7 @@ func (response PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONRespo
 type PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONResponse Problem
 
 func (response PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17569,6 +17939,7 @@ func (response PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONRespo
 type PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONResponse Problem
 
 func (response PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17582,6 +17953,7 @@ func (response PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONRespo
 type PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17592,7 +17964,8 @@ func (response PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONRespo
 	return err
 }
 
-type GetTermsRequestObject struct{}
+type GetTermsRequestObject struct {
+}
 
 type GetTermsResponseObject interface {
 	VisitGetTermsResponse(w http.ResponseWriter) error
@@ -17601,6 +17974,7 @@ type GetTermsResponseObject interface {
 type GetTerms200JSONResponse []PublicLegalDocument
 
 func (response GetTerms200JSONResponse) VisitGetTermsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17611,7 +17985,8 @@ func (response GetTerms200JSONResponse) VisitGetTermsResponse(w http.ResponseWri
 	return err
 }
 
-type GetVersionRequestObject struct{}
+type GetVersionRequestObject struct {
+}
 
 type GetVersionResponseObject interface {
 	VisitGetVersionResponse(w http.ResponseWriter) error
@@ -17627,6 +18002,7 @@ type GetVersion200JSONResponse struct {
 }
 
 func (response GetVersion200JSONResponse) VisitGetVersionResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17646,14 +18022,16 @@ type PostWebhooksProviderResponseObject interface {
 	VisitPostWebhooksProviderResponse(w http.ResponseWriter) error
 }
 
-type PostWebhooksProvider200Response struct{}
+type PostWebhooksProvider200Response struct {
+}
 
 func (response PostWebhooksProvider200Response) VisitPostWebhooksProviderResponse(w http.ResponseWriter) error {
 	w.WriteHeader(200)
 	return nil
 }
 
-type PostWebhooksProvider400Response struct{}
+type PostWebhooksProvider400Response struct {
+}
 
 func (response PostWebhooksProvider400Response) VisitPostWebhooksProviderResponse(w http.ResponseWriter) error {
 	w.WriteHeader(400)
@@ -17672,6 +18050,7 @@ type PostWithdrawalsResponseObject interface {
 type PostWithdrawals202JSONResponse Withdrawal
 
 func (response PostWithdrawals202JSONResponse) VisitPostWithdrawalsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17687,6 +18066,7 @@ type PostWithdrawals403ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PostWithdrawals403ApplicationProblemPlusJSONResponse) VisitPostWithdrawalsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -17700,6 +18080,7 @@ func (response PostWithdrawals403ApplicationProblemPlusJSONResponse) VisitPostWi
 type PostWithdrawals422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostWithdrawals422ApplicationProblemPlusJSONResponse) VisitPostWithdrawalsResponse(w http.ResponseWriter) error {
+
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
@@ -18044,10 +18425,8 @@ type StrictServerInterface interface {
 	PostWithdrawals(ctx context.Context, request PostWithdrawalsRequestObject) (PostWithdrawalsResponseObject, error)
 }
 
-type (
-	StrictHandlerFunc    func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-	StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
-)
+type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -21889,13 +22268,13 @@ func GetSpec() (swagger *openapi3.T, err error) {
 	var specData []byte
 	specData, err = rawSpec()
 	if err != nil {
-		return swagger, err
+		return
 	}
 	swagger, err = loader.LoadFromData(specData)
 	if err != nil {
-		return swagger, err
+		return
 	}
-	return swagger, err
+	return
 }
 
 // GetSpecJSON returns the raw JSON bytes of the embedded OpenAPI
