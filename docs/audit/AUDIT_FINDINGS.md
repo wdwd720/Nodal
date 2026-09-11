@@ -157,6 +157,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-131 | P3 | NEW | fixed | A fixture wrote agent rows with v4 UUIDs into a column the application reads as a v7 typed id, so it created rows this system can write and cannot read |
 | F-132 | P2 | NEW | fixed | The webhook route's "declared public" assertion has never been measured: the probe was answered 404 by a provider lookup, which satisfies "not 401" while proving nothing |
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
+| F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
+| F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
 
 ---
 
@@ -7408,3 +7410,49 @@ definition, nothing else. TEST_INTEGRATION:
 the window is deleted by `cp_ops` under 00754's column grant, one inside the
 window survives, `SELECT expires_at` as `cp_ops` works and `SELECT token_hash`
 is refused with `permission denied`.
+
+## F-134 · The Go e2e suite could not sign in, so every test behind a sign-in had failed since F-87 · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the productization test-matrix run (`make e2e`) on the merged
+tree, then reproduced on the audited checkpoint `024c691` to tell a regression
+from a baseline defect: it is the baseline.
+
+F-87 bound `GET /v1/auth/callback` to the browser that began the flow by a
+login-state cookie set on the login redirect. `test/e2e`'s client holds no
+cookie jar by design (each hop's Set-Cookie is read explicitly), and its
+`signIn` helper never carried that cookie to the callback, so every sign-in was
+refused with `UNAUTHENTICATED: this sign-in did not start in this browser` and
+all six e2e tests failed. CI's last run on `main` (16cba60) is red on exactly
+this; the checkpoint's local matrix did not include `make e2e`.
+
+Three further expectations had gone stale behind the sign-in failure and were
+found once it was fixed: an oversized body is refused by the transport budget as
+`413 BODY_TOO_LARGE` (the test expected 400); the stream's first frame is the
+`retry:` hint (the test accepted only a comment or an event block); and the
+reconciliation resolution the "unwired capability" probe aimed at has been wired
+since the probe was written.
+
+**Fix.** The client carries the login-state cookie by hand from the login
+redirect to the callback, as a browser would; the three expectations follow the
+contract as it is; the unwired probe aims at `GET /v1/credits/pricing`, which the
+e2e API child genuinely runs without a provider for. Commit 2521945.
+
+**Evidence.** TEST_E2E: `make e2e` — 6/6 on a fresh database (was 0/6).
+STATIC_PROOF: `test/e2e/client_test.go` (`loginState`), `errors_test.go`,
+`stream_test.go`.
+
+## F-135 · The chaos purchase world set a platform fee the service overwrites · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same matrix run (`make chaos`), reproduced on `024c691`.
+
+`commerce.CreateProduct` assigns the service's platform fee to every product
+(`DefaultPlatformFeeBPS` is 0) and ignores the literal's `PlatformFeeBPS`; the
+chaos world set 1,000 bps on the literal and asserted seller proceeds of 900 on
+a 1,000 price, so `TestChaos_APurchaseDiesMidTransaction` failed on its final
+assertion after proving everything it was written to prove about the killed
+transaction. No product behaviour was wrong.
+
+**Fix.** The world sets the fee on the service (`SetPlatformFeeBPS(1_000)`)
+before creating its product. Commit 2521945.
+
+**Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.

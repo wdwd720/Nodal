@@ -39,6 +39,7 @@ import { useEffect, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { useTermsState } from "./api/queries.ts";
+import { POLICY_PAGES } from "./content/policies/index.ts";
 import { AppShell } from "./components/AppShell.tsx";
 import { Boot } from "./components/Boot.tsx";
 import { Explanation, Loading } from "./components/DataState.tsx";
@@ -46,7 +47,11 @@ import { clearSignInPending, signInPending } from "./lib/survives-sign-in.ts";
 import { signInPathFor, useSession } from "./session.tsx";
 
 import { Activity } from "./pages/activity/Activity.tsx";
-import { Agents } from "./pages/Agents.tsx";
+import { AgentDetail } from "./pages/agents/AgentDetail.tsx";
+import { AgentNew } from "./pages/agents/AgentNew.tsx";
+import { AgentsList } from "./pages/agents/AgentsList.tsx";
+import { Verify } from "./pages/verify/Verify.tsx";
+import { Withdraw } from "./pages/withdraw/Withdraw.tsx";
 import { Home } from "./pages/home/Home.tsx";
 import { CreateAsset } from "./pages/markets/CreateAsset.tsx";
 import { MarketDetail } from "./pages/markets/MarketDetail.tsx";
@@ -283,13 +288,13 @@ export function App(): ReactNode {
         <Route path="/learn" element={<Learn />} />
         <Route path="/get-started" element={<GetStarted />} />
         <Route path="/sign-in" element={<SignIn />} />
-        {/* The policy pages are public because somebody must be able to read
-            what the product does before they have an account to accept
-            anything with. The documents an acceptance RECORDS are the API's,
-            and they are shown in full at `/welcome/terms`. */}
-        <Route path="/terms" element={<PolicyPage slug="terms" />} />
-        <Route path="/privacy" element={<PolicyPage slug="privacy" />} />
-        <Route path="/risk" element={<PolicyPage slug="risk" />} />
+        {/* The legal documents, rendered from `GET /v1/terms` (D-080) — the same
+            registry and the same bytes an acceptance records. All five have a
+            page: a document the product serves and never shows is a document
+            nobody reads. */}
+        {POLICY_PAGES.map((page) => (
+          <Route key={page.slug} path={`/${page.slug}`} element={<PolicyPage slug={page.slug} />} />
+        ))}
       </Route>
 
       {/* Onboarding: a session, but not the shell and not the gate. */}
@@ -311,7 +316,11 @@ export function App(): ReactNode {
             product marketplace is not a market whose id is "products". */}
         <Route path="/markets/:marketId" element={<MarketDetail />} />
         <Route path="/create-asset" element={<CreateAsset />} />
-        <Route path="/agents" element={<Agents />} />
+        <Route path="/agents" element={<AgentsList />} />
+        <Route path="/agents/new" element={<AgentNew />} />
+        <Route path="/agents/:agentId" element={<AgentDetail />} />
+        <Route path="/withdraw" element={<Withdraw />} />
+        <Route path="/verify" element={<Verify />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/buy-credits" element={<BuyCredits />} />

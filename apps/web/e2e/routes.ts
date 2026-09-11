@@ -31,9 +31,14 @@ export const PUBLIC_ROUTES: readonly RouteUnderTest[] = [
   { path: "/learn", heading: "Learn", nav: "Learn" },
   { path: "/get-started", heading: "Get started" },
   { path: "/sign-in", heading: "Sign in" },
-  { path: "/terms", heading: "Product terms" },
-  { path: "/privacy", heading: "Privacy" },
-  { path: "/risk", heading: "Risk disclosure" },
+  // The five legal documents, served by `GET /v1/terms` (D-080). The heading is
+  // the page's own, so the address and the title agree before the fetch lands;
+  // the document's title comes from the registry.
+  { path: "/terms", heading: "Terms of Service" },
+  { path: "/privacy", heading: "Privacy Notice" },
+  { path: "/risk", heading: "Risk Disclosure" },
+  { path: "/credits-terms", heading: "Credits Terms" },
+  { path: "/withdrawal-disclosure", heading: "Withdrawal and Verification Disclosure" },
 ];
 
 /**
@@ -54,6 +59,18 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/markets/products", heading: "Marketplace", nav: "Products" },
   { path: "/create-asset", heading: "Create asset", nav: "Create asset" },
   { path: "/agents", heading: "Agents", nav: "Agents" },
+  // No `nav`: the create flow is reached from the agents page rather than the
+  // rail, because it is an action and not a destination.
+  { path: "/agents/new", heading: "Create an agent" },
+  // No `nav`: Withdraw is a PRIMARY ACTION in the masthead rather than a
+  // section in the rail, and `nav` names a link inside the "Sections"
+  // navigation. It is shown to everybody — including the accounts that cannot
+  // use it, which is the point of goal §19 — but it is not a destination.
+  { path: "/withdraw", heading: "Withdraw" },
+  // No `nav`: verification is reached from Withdraw, because that is the only
+  // thing in the product that needs it — goal §19's "nothing else in the
+  // product needs this" is a routing fact as much as a sentence.
+  { path: "/verify", heading: "Verify your identity" },
   { path: "/portfolio", heading: "Portfolio", nav: "Portfolio" },
   { path: "/activity", heading: "Activity", nav: "Activity" },
   // No `nav`: Buy Credits is a primary action in the header rather than a rail

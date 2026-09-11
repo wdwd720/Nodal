@@ -44,6 +44,7 @@ import {
   usePortfolio,
   type ActivityFeed,
   type Agent,
+  type AgentList,
   type CreditBalance,
   type MarketPage,
   type NativeMarketSummary,
@@ -167,12 +168,15 @@ export function Home(): ReactNode {
           loadingLabel="Asking the backend for this account's agents…"
           skeleton={<Skeleton shape="rows" count={3} label="The agent list is loading" />}
           empty={{
-            isEmpty: (list: Agent[]) => list.length === 0,
+            // `useAgents` answers with the whole page — the roster AND the
+            // declared authority levels, which only the page response carries.
+            // This panel wants the roster; `/agents` wants both.
+            isEmpty: (page: AgentList) => page.items.length === 0,
             title: EMPTY_STATES.agents.title,
             body: EMPTY_STATES.agents.body,
           }}
         >
-          {(list: Agent[]) => <Agents list={list} />}
+          {(page: AgentList) => <Agents list={page.items} />}
         </AsyncPanel>
       </Panel>
 
