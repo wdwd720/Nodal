@@ -157,6 +157,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-131 | P3 | NEW | fixed | A fixture wrote agent rows with v4 UUIDs into a column the application reads as a v7 typed id, so it created rows this system can write and cannot read |
 | F-132 | P2 | NEW | fixed | The webhook route's "declared public" assertion has never been measured: the probe was answered 404 by a provider lookup, which satisfies "not 401" while proving nothing |
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
+| F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
+| F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
 
 ---
 
