@@ -36,9 +36,23 @@ export const SAME_ORIGIN = { "Sec-Fetch-Site": "same-origin" } as const;
 export const COUNTRY = "US";
 export const REGION = "CA";
 
-/** A sandbox handle. It is not an account number, and there is nowhere for one to go. */
+/**
+ * A sandbox handle. It is not an account number, and there is nowhere for one
+ * to go.
+ *
+ * It must not LOOK like one either: the destination route refuses any run of
+ * thirteen to nineteen digits that satisfies the Luhn checksum, and a
+ * millisecond timestamp is a thirteen-digit run that passes Luhn about one time
+ * in ten. The first version of this helper was exactly that, so the journey
+ * that registers a destination was refused with "that contains what looks like
+ * a payment card number" on roughly every tenth run. Base 36 keeps the run
+ * short and letters break it up; the random tail keeps two handles minted in
+ * the same millisecond distinct.
+ */
 export function sandboxHandle(): string {
-  return `sandbox-handle-${String(Date.now())}`;
+  const stamp = Date.now().toString(36);
+  const tail = Math.random().toString(36).slice(2, 8);
+  return `sandbox-handle-${stamp}-${tail}`;
 }
 
 export async function accountIdOf(page: Page): Promise<string> {
