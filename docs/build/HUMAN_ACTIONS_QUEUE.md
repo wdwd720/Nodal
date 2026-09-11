@@ -79,6 +79,13 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Constraints the software enforces:** PROD accepts an empty value or exactly one ADMIN and nothing else; BREAK_GLASS cannot be declared; a grant an operator later revokes does not come back at the next login (remove the declaration to stop offering it).
 - **Not yet possible in the product:** granting a SECOND operator. ADR-0024 records that as a known gap; today a second declaration (outside PROD) or an INSERT with the migration credential is the only route.
 
+## 7. GitHub: Actions minutes are exhausted for the private repository (OPEN, your call)
+
+- **What Claude saw (2026-09-10 23:50 PDT):** every job of the draft PR #1 run failed in 2–7 seconds with the annotation *"The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings."* No job ran; no log exists. The runs on `main` earlier today (`16cba60`) did run, so the free allowance was used up between then and now, or a payment method failed.
+- **Where:** https://github.com/settings/billing → **Actions** (usage and the spending limit).
+- **Options, none taken by Claude because §42 forbids adding cost and making the repository public is a disclosure decision:** (a) wait for the monthly reset of the free-plan minutes (2,000 min/month for private repositories) — the draft PR re-runs on its next push; (b) make `wdwd720/Nodal` public, which makes Actions free and unlimited but publishes the code; (c) raise the spending limit, which is paid and therefore not what the goal wants. If you choose (a) or (b), tell Claude and it re-triggers the run (an empty commit or `gh run rerun`) and records the result in `docs/audit/PRODUCTION_EVIDENCE_INDEX.md`.
+- **Meanwhile:** every matrix tier that CI would run has been run on this machine and is recorded in the evidence index; CI is the Linux cross-check, not the only evidence. Every push to the branch will show a red check for the same reason until this is resolved — it costs nothing.
+
 ## Done
 
 (nothing yet)
