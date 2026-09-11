@@ -65,6 +65,11 @@ type Ports struct {
 	Commerce      CommercePort
 	Health        HealthPort
 	Idempotency   IdempotencyPort
+	// ---- profile, terms and account lifecycle ----
+	// A nil port answers UNSUPPORTED on the /me/profile, /me/terms-acceptances,
+	// /me/account and /admin/users routes, and leaves GET /v1/me answering
+	// exactly what it answered before the product surfaces existed.
+	Profile ProfilePort
 	// ---- notifications, realtime and the customer's own audit trail ----
 	//
 	// Notifications is the customer's notification centre; MeAudit is their own

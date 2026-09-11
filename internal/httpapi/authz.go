@@ -234,6 +234,42 @@ var operationPolicies = map[string]operationPolicy{
 		AnyOf: perms(security.PermReconciliationResolve), StepUp: true, Mutating: true,
 	},
 
+	// --- profile, terms and account lifecycle ------------------------------
+	//
+	// A /me route names no resource but the caller: there is no id in the path,
+	// and the subject comes from the principal. The permission question therefore
+	// degenerates to "is this a principal with a product account", and
+	// account:read is exactly that -- every role holds it, and there is no
+	// deployment that would let somebody hold an account but not choose their own
+	// display name, accept the terms that let them use the product, or ask to
+	// leave. A permission no deployment would ever withhold is not a control; it
+	// is a synonym for a permission that already exists (D-054).
+	//
+	// What IS a control here is the step-up on closure and the cooling-off period
+	// behind it, and the fact that only an operator can effect one.
+	"PostMeProfile":          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), Mutating: true},
+	"GetMeTermsAcceptances":  {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostMeTermsAcceptances": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), Mutating: true},
+	"GetMeAccount":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	// Asking to close an account ends every session and cannot be undone once an
+	// operator effects it, so it demands a recent strong authentication, as the
+	// withdrawal route does.
+	"PostMeAccountClose": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), StepUp: true, Mutating: true},
+	// Cancelling deliberately does NOT: the safe direction must never be harder
+	// than the dangerous one, or a user who cannot step up could not undo a
+	// request made from a session that could (D-055).
+	"PostMeAccountCloseCancel": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny), Mutating: true},
+	// The security page is a summary of the caller's own sessions, which is the
+	// authority session:list_own already names.
+	"GetMeSecurity": {AnyOf: perms(security.PermSessionListOwn)},
+
+	// --- admin: product support (PART 38) ---------------------------------
+	// The support view is a read under the permission every operator role holds.
+	// Deciding a closure request is an account status change and takes the same
+	// permission and step-up as PostAdminAccountsAccountIdStatus, because that is
+	// what it ends up performing.
+	"GetAdminUsersUserId":         {AnyOf: perms(security.PermAccountReadAny)},
+	"PostAdminUsersUserIdClosure": {AnyOf: perms(security.PermAccountFreeze), StepUp: true, Mutating: true},
 	// --- notifications and the customer's own audit trail -----------------
 	//
 	// account:read and nothing new. A notification centre grants no authority

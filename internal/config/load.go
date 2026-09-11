@@ -557,6 +557,8 @@ func specs() []varSpec {
 			setDuration(func(c *Config) *time.Duration { return &c.Auth.StepUpMaxAge })),
 		req("CP_AUTH_DEBUG_ENABLED", secAuth, "Enable debug authentication endpoints. Must be false in STAGING/PROD.", "false",
 			setBool(func(c *Config) *bool { return &c.Auth.DebugAuthEnabled })),
+		opt("CP_AUTH_BOOTSTRAP_OPERATORS", secAuth, "Operator-directory rows this deployment grants at login, as issuer|subject=ROLE entries separated by commas. Nothing else writes operator_roles, so this is how a deployment gets its first operator. Empty declares none. PROD accepts only empty or exactly one ADMIN.", "",
+			setString(func(c *Config) *string { return &c.Auth.BootstrapOperators })),
 	}
 
 	for _, slot := range providerSlots() {

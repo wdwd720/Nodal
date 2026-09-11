@@ -169,6 +169,7 @@
 //	CP_AUTH_POST_LOGIN_URL          where the callback sends the browser; empty = "/" (same-origin app only)
 //	CP_AUTH_STEP_UP_MAX_AGE         duration
 //	CP_AUTH_DEBUG_ENABLED           bool (false in STAGING/PROD)
+//	CP_AUTH_BOOTSTRAP_OPERATORS     issuer|subject=ROLE, comma separated; PROD accepts empty or one ADMIN
 //
 // Providers: for each slot X in CREDIT_PURCHASE, PAYOUT, FUNDING, WALLET,
 // SIGNING, EXECUTION, MARKET_DATA, CHAIN_OBSERVER, CHAIN_OBSERVER_FALLBACK,

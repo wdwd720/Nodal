@@ -185,6 +185,63 @@ capital) only.
 
 Everything in §4 marked **A** is absent. This — not a defect list — is the dominant migration cost.
 
+## 9. Product surfaces added during productization — profile, terms and account lifecycle
+
+> Appended 2026-09-10. Sections 1–8 above are a snapshot taken at migration 731
+> and are not restated here; this section records what the profile/account
+> lifecycle work added, so the numbers in §5 and §6 are known to be that
+> snapshot's rather than silently stale.
+
+**Migrations 00756–00760.**
+
+| Migration | Adds |
+|---|---|
+| `00756` | `user_profiles` — one row per user: display name, optional unique handle, locale, time zone, avatar seed, four onboarding timestamps. Two triggers: nothing is born onboarded (`PROFILE_BORN_ONBOARDED`), a step is stamped once (`PROFILE_STEP_RESTAMPED`). No personal data column, asserted against `information_schema` |
+| `00757` | `user_status_transitions` + the F-42 pair for `users.status`: flag-edge on insert, a SECURITY DEFINER writer, a deferred constraint trigger binding the edge, `REVOKE UPDATE ON users FROM cp_app` with `GRANT UPDATE (email_hash)` back for the row lock |
+| `00758` | `account_closure_requests` + `account_closure_request_transitions`: PENDING → CANCELLED \| REFUSED \| EFFECTED, one open request per user (partial unique index), a birth control, and a writer that refuses EFFECTED before `cooling_off_until` |
+| `00759` | `terms_acceptances` — append-only, one row per (user, document, version, sha256 of the bytes shown), with the acting session, address and user agent |
+| `00760` | `operator_roles.role` gains a CHECK: every declared role except BREAK_GLASS, paired with `operatorroles.Directory()` in `test/integration/enums` |
+
+**Routes added (10).** All under `/v1`; permissions are the existing ones.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/me` | `account:read` \| `account:read_any` | *extended*, additively: `profile`, `onboarding`, `break_glass_until` |
+| POST | `/me/profile` | `account:read` \| `account:read_any` | mutating; display name, handle, locale, time zone |
+| GET | `/me/terms-acceptances` | `account:read` \| `account:read_any` | serves the document text, version, hash and counsel-review flag |
+| POST | `/me/terms-acceptances` | `account:read` \| `account:read_any` | mutating; idempotent per (document, version, bytes) |
+| GET | `/me/account` | `account:read` \| `account:read_any` | status, restrictions written for the user, the closure request |
+| POST | `/me/account/close` | `account:read` \| `account:read_any` | mutating, **step-up** |
+| POST | `/me/account/close/cancel` | `account:read` \| `account:read_any` | mutating, deliberately **no** step-up (D-055) |
+| GET | `/me/security` | `session:list_own` | derived from the session store and the session's claims |
+| GET | `/admin/users/{userId}` | `account:read_any` | read-only support view (§38) |
+| POST | `/admin/users/{userId}/closure` | `account:freeze` | mutating, **step-up**; CANCEL \| REFUSE \| EFFECT |
+
+`Account` also gained a read-only `owner_user_id`, so a surface that can list
+accounts can reach the person who holds one.
+
+**Packages added.**
+
+- `internal/profile` — the product record, the terms view, the account lifecycle
+  and the operator support view. Imports no money, no ledger and no verification
+  domain.
+- `internal/terms` — the five legal documents as embedded Markdown with one
+  version constant. A leaf: standard library only.
+- `internal/operatorroles` — the declaration format, the roles the operator
+  directory may name, and the production rule. A leaf: `internal/security` and
+  `internal/errs` only, so `internal/config` can validate a deployment's
+  declaration without importing the login path.
+
+**State machines added.**
+
+- `account_closure_requests.state`: `PENDING → {CANCELLED, REFUSED, EFFECTED}`;
+  all three destinations terminal, no edge out of them, no self-edge. A new
+  request after a decision restarts the cooling-off period.
+- `users.status`: `ACTIVE ↔ SUSPENDED`, both → `CLOSED`, `CLOSED` terminal. The
+  values existed since 00010; 00757 is what bound them.
+
+**Configuration added.** One variable, `CP_AUTH_BOOTSTRAP_OPERATORS`
+(ADR-0024). PROD accepts only an empty value or exactly one ADMIN.
 ---
 
 ## Productization wave — notifications, realtime and the customer's own audit trail (2026-09-10)

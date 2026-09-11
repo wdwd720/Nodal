@@ -168,6 +168,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{payoutId}":       testSessionID,
 		"{paymentId}":      testSessionID,
 		"{productId}":      testOrderID.String(),
+		"{userId}":         testUserID.String(),
 		"{notificationId}": testOrderID.String(),
 		// The agent surface. `{action}` is shared with the gate route above and
 		// is already mapped; an agent action that is not one of the five is

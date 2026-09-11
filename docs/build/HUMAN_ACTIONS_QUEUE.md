@@ -52,6 +52,15 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Then:** Render → `nodal-web` → Settings → Custom Domains → confirm `app-nodal.actorvia.xyz` verifies (Render issues the certificate itself, $0).
 - **Do not** touch `api-nodal`, `api`, `www`, `releases` or any other Actorvia record.
 
+## 5. ZITADEL: the first operator's subject, for CP_AUTH_BOOTSTRAP_OPERATORS (OPEN, before any admin surface is used)
+
+- **Why:** `operator_roles` is the only source of operator authority and nothing in the product writes it, so a deployment that has never had an operator cannot get one -- the gate ceremony, the kill switches and the §38 support surface are all unreachable. ADR-0024 decided the mechanism; it needs one value only a person can read out of the identity provider.
+- **Where:** ZITADEL console (`https://nodal-az1hxe.us1.zitadel.cloud`) -> Users -> the person who will be the first operator -> copy their **User ID** (an opaque numeric string, e.g. `284169943049306115`). It is not an e-mail address and not a username.
+- **What:** in the Render dashboard for `nodal-api`, set `CP_AUTH_BOOTSTRAP_OPERATORS` to `https://nodal-az1hxe.us1.zitadel.cloud|<that user id>=ADMIN` -- the issuer exactly as `CP_AUTH_ISSUER` has it, a pipe, the subject, `=ADMIN`.
+- **Then:** that person signs in once. The row appears in `operator_roles` with `granted_by` NULL and a reason naming the variable, an `operator_role.bootstrapped` audit event is written on the admin stream, and their next session carries ADMIN. The boot log names every declared entry, so the API log line is the check that the value reached the process.
+- **Constraints the software enforces:** PROD accepts an empty value or exactly one ADMIN and nothing else; BREAK_GLASS cannot be declared; a grant an operator later revokes does not come back at the next login (remove the declaration to stop offering it).
+- **Not yet possible in the product:** granting a SECOND operator. ADR-0024 records that as a known gap; today a second declaration (outside PROD) or an INSERT with the migration credential is the only route.
+
 ## Done
 
 (nothing yet)
