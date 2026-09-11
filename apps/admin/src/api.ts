@@ -37,6 +37,7 @@ export type AccountRestriction = Schemas["AccountRestriction"];
 export type TermsAcceptance = Schemas["TermsAcceptance"];
 export type Agent = Schemas["Agent"];
 export type AgentPage = Schemas["AgentPage"];
+export type CapabilityGateTransition = Schemas["CapabilityGateTransition"];
 
 const client = createApiClient({ baseUrl: "/v1" });
 
@@ -260,6 +261,23 @@ export async function decideAction(
 
 export async function listGates(): Promise<CapabilityGate[]> {
   return must(await client.GET("/admin/gates"), "the capability gates");
+}
+
+/**
+ * Every recorded transition of one gate, oldest first.
+ *
+ * These are the `capability_gate_transitions` rows, written by
+ * `cp_gate_transition` and `cp_gate_sandbox` in the same statement as the state
+ * change they record — so the history cannot disagree with the row, and a
+ * transition cannot exist without one. It reads under `gate:read`, the same
+ * permission the gates surface itself takes, so anyone who can see a gate can
+ * see who moved it.
+ */
+export async function listGateTransitions(capability: Capability): Promise<CapabilityGateTransition[]> {
+  return must(
+    await client.GET("/admin/gates/{capability}/history", { params: { path: { capability } } }),
+    "the gate's transition history",
+  );
 }
 
 /**
