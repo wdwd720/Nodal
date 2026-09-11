@@ -217,16 +217,39 @@ and the constant-product trigger. The only raw SQL is the INSERT into
 times — in `NewSeeder`, in `cmd/api`, and in migration 00774's CHECK — and runs
 only on a sandbox tier.
 
-Demo Credits are `PROMOTIONAL`, which no payout policy in this build permits to
-be withdrawn, including the sandbox one. So they can be spent inside the product
-and can never leave it, which is what demo money should be. The moderation
-verdict is the screener's: the demo copy is written to pass on its own and the
-seeder refuses to continue if it does not, because approving its own content
-would be manufacturing a moderation decision.
+Demo Credits cannot leave the product, and it takes two different controls to
+say so, because the seeder mints two different kinds (corrected after F-200; the
+paragraph here used to name only the first and claim it covered both).
+
+The grant a demo trader is funded with is `PROMOTIONAL` at `UNFUNDED` finality.
+Nobody paid for it, the provenance says so, and no payout policy in this build
+releases that origin — `valuedomain.DefaultPolicy` releases nothing at all, and
+`SandboxPolicy`, the one a sandbox tier actually runs, releases purchased and
+earned value and refuses granted value outright. Origin is what holds it.
+
+Then the seeded trades produce more Credits: `MARKET_TRADING_PROCEEDS` to
+whoever sold, and `MARKET_CREATOR_EARNING` to the creator of every seeded asset,
+on every trade. `SandboxPolicy` marks **both of those origins withdrawable** — a
+sandbox tier is meant to be able to rehearse a payout of earned value. What
+stops them is the other half of the rule: `nativemarket.Execute` issues both at
+`REVERSIBLE` finality, and `FundingFinality.PayoutEligible` is a floor beneath
+every origin policy that only `SETTLED` and `UNFUNDED` value clears. Value the
+funder could still reverse is not payout-eligible whatever its origin says, and
+Credits derived from a pool that buyers funded are reversible until something
+establishes otherwise.
+
+So: the grant is held by origin, the trading Credits are held by finality, and
+`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` now asserts both — over
+every lot the seeder creates in every account it touches, rather than over one
+trader's origins.
+
+The moderation verdict is the screener's: the demo copy is written to pass on
+its own and the seeder refuses to continue if it does not, because approving its
+own content would be manufacturing a moderation decision.
 
 ## Consequences
 
-- Seven routes: `GET /v1/native-markets`, `.../{id}/summary`, `.../{id}/candles`,
+- Six routes: `GET /v1/native-markets`, `.../{id}/summary`, `.../{id}/candles`,
   `.../{id}/trades`, `GET /v1/me/portfolio`, `GET /v1/me/activity`.
   `GET /v1/accounts/{id}/activity` is unchanged and stays the hosted rail's
   operational timeline (D-066).
