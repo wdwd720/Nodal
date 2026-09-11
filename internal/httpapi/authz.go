@@ -176,7 +176,10 @@ var operationPolicies = map[string]operationPolicy{
 	// native_asset:read may already list, and none of them names an account.
 	// The tape deliberately carries no account id, so it cannot become a way
 	// to watch a particular trader.
-	"GetNativeMarkets":                {AnyOf: perms(security.PermNativeAssetRead)},
+	// Market discovery is product data, not account data: the list carries no
+	// balances, positions or identities, and the public site previews it for a
+	// visitor with no session (D-080). Every other market read stays gated.
+	"GetNativeMarkets":                {Public: true},
 	"GetNativeMarketsMarketIdSummary": {AnyOf: perms(security.PermNativeAssetRead)},
 	"GetNativeMarketsMarketIdCandles": {AnyOf: perms(security.PermNativeAssetRead)},
 	"GetNativeMarketsMarketIdTrades":  {AnyOf: perms(security.PermNativeAssetRead)},
@@ -401,6 +404,9 @@ var operationPolicies = map[string]operationPolicy{
 	"GetHealthz": {Public: true},
 	"GetReadyz":  {Public: true},
 	"GetVersion": {Public: true},
+	// The legal registry is public: a visitor reads the binding text before
+	// creating an account. Acceptance stays behind a session.
+	"GetTerms": {Public: true},
 	// The webhook endpoint carries no session. Its authority is the
 	// provider signature, verified over the raw bytes by internal/webhook
 	// before anything is persisted beyond a security event.

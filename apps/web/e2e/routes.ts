@@ -31,9 +31,14 @@ export const PUBLIC_ROUTES: readonly RouteUnderTest[] = [
   { path: "/learn", heading: "Learn", nav: "Learn" },
   { path: "/get-started", heading: "Get started" },
   { path: "/sign-in", heading: "Sign in" },
-  { path: "/terms", heading: "Product terms" },
-  { path: "/privacy", heading: "Privacy" },
-  { path: "/risk", heading: "Risk disclosure" },
+  // The five legal documents, served by `GET /v1/terms` (D-080). The heading is
+  // the page's own, so the address and the title agree before the fetch lands;
+  // the document's title comes from the registry.
+  { path: "/terms", heading: "Terms of Service" },
+  { path: "/privacy", heading: "Privacy Notice" },
+  { path: "/risk", heading: "Risk Disclosure" },
+  { path: "/credits-terms", heading: "Credits Terms" },
+  { path: "/withdrawal-disclosure", heading: "Withdrawal and Verification Disclosure" },
 ];
 
 /**
@@ -67,9 +72,17 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/verify", heading: "Verify your identity" },
   { path: "/portfolio", heading: "Portfolio", nav: "Portfolio" },
   { path: "/activity", heading: "Activity", nav: "Activity" },
+  // No `nav`: Buy Credits is a primary action in the header rather than a rail
+  // destination, which is where USER_JOURNEY §2 puts it.
+  { path: "/buy-credits", heading: "Buy Credits" },
+  // No `nav`: the shell reaches notifications through the bell and the account
+  // menu, neither of which is the "Sections" navigation the nav walk uses.
+  { path: "/notifications", heading: "Notifications" },
   // No `nav`: Settings is reached from the account menu rather than the rail,
   // which is where USER_JOURNEY §2 puts it.
   { path: "/settings", heading: "Settings and security" },
+  { path: "/settings/security", heading: "Security" },
+  { path: "/settings/account", heading: "Account" },
 ];
 
 /**

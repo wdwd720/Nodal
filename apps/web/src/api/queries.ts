@@ -26,6 +26,8 @@ import { isUnauthenticated } from "./problem.ts";
 import {
   ContractViolation,
   accountSpec,
+  nativeMarketPageSpec,
+  publicLegalDocumentSpec,
   legalDocumentSpec,
   termsStateSpec,
   unreadCountSpec,
@@ -52,18 +54,30 @@ import {
   nativeMarketSpec,
   nativeQuoteSpec,
   payoutRequestSpec,
+  itemsSpec,
+  validated,
+  validatedList,
+  activityFeedItemSpec,
   agentSpec,
+  creditPricingSpec,
+  creditPurchaseSpec,
+  markedReadSpec,
+  meAuditEntrySpec,
+  myAccountSpec,
+  notificationPreferenceSpec,
+  notificationSpec,
+  nativeMarketSummarySpec,
+  portfolioSpec,
+  portfolioTotalsSpec,
+  securitySummarySpec,
   authorityLevelSpec,
   strategySpec,
   payoutDestinationSpec,
   payoutQuoteSpec,
   verificationSessionSpec,
-  itemsSpec,
-  validated,
   validatedAgent,
   validatedCompileResult,
   validatedEligibility,
-  validatedList,
   validatedPayout,
   validatedStartedVerification,
   validatedStrategy,
@@ -883,7 +897,17 @@ export type TermsDocumentId = NonNullable<Schemas["TermsAcceptanceRequest"]["doc
 export const meKeys = {
   terms: ["me", "terms"] as const,
   unread: ["me", "notifications", "unread"] as const,
+  /** The prefix. Invalidating it reaches the bell AND every page of the list. */
   notifications: ["me", "notifications"] as const,
+  notificationPage: (unread: boolean, cursor: string) =>
+    ["me", "notifications", "page", unread, cursor] as const,
+  notificationPreferences: ["me", "notification-preferences"] as const,
+  pricing: ["credit-pricing"] as const,
+  purchase: (id: string) => ["credit-purchase", id] as const,
+  agents: (accountId: string) => ["agents", accountId] as const,
+  myAccount: ["me", "account"] as const,
+  security: ["me", "security"] as const,
+  audit: (cursor: string) => ["me", "audit", cursor] as const,
 };
 
 /**
@@ -1006,6 +1030,537 @@ export function useUnreadCount(enabled: boolean): UseQueryResult<number> {
 
 /** Re-exported so a page can validate a document it received on its own. */
 export { legalDocumentSpec };
+
+/* --------------------------------------------------------------------------
+ * Buying Credits, the notification centre, and the account's own standing
+ * (USER_JOURNEY §3, §4, §9).
+ *
+ * The shape of the purchase hooks is the interesting part. `POST /v1/payments`
+ * answers 201 with a `client_secret` on creation and 200 WITHOUT one on an
+ * idempotent replay, and the secret is never returned by a read. So the secret
+ * exists in exactly one place for exactly as long as the mutation result lives,
+ * and nothing here writes it to a query cache: a cached provider secret is a
+ * second browser resuming somebody else's payment form.
+ *
+ * The state of a purchase, by contrast, is a read that must be allowed to go
+ * stale and be asked again — the browser learns that a payment captured from
+ * `GET /v1/payments/{id}` and from the event stream, never from the redirect
+ * the provider sent the customer back with.
+ * ------------------------------------------------------------------------ */
+
+export type CreditPricing = Schemas["CreditPricing"];
+/**
+ * The purchase, plus the sandbox flag.
+ *
+ * The flag is declared here as well as in the generated types because the API
+ * gained it after this page was written, and a page that renders a sandbox
+ * label must compile against an API that has not been regenerated yet. The
+ * intersection is a no-op once the generated type carries it. It stays
+ * optional: an absent flag means the deployment did not say, which labels
+ * nothing and never quietly means "live".
+ */
+export type CreditPurchase = Schemas["CreditPurchase"] & { readonly sandbox?: boolean };
+export type Notification = Schemas["Notification"];
+export type NotificationKind = Schemas["NotificationKind"];
+export type NotificationPreference = Schemas["NotificationPreferences"]["items"][number];
+export type MyAccount = Schemas["MyAccount"];
+export type SecuritySummary = Schemas["SecuritySummary"];
+export type MeAuditEntry = Schemas["MeAuditPage"]["items"][number];
+
+/** The rate and the bounds, as the server states them. Nothing derives them here. */
+export function useCreditPricing(): UseQueryResult<CreditPricing> {
+  return useQuery({
+    queryKey: meKeys.pricing,
+    queryFn: async () => {
+      const { data } = await api.GET("/credits/pricing", {});
+      return validated<CreditPricing>(data, creditPricingSpec, "/credits/pricing");
+    },
+  });
+}
+
+export interface StartPurchaseInput {
+  readonly accountId: string;
+  /** Exact minor units of the pricing currency. Never a Credit quantity: there is no such field. */
+  readonly amountMinor: number;
+  readonly currency: string;
+  /** Created once, when the customer confirmed the amount. Reused by every retry. */
+  readonly idempotencyKey: string;
+}
+
+export function useStartCreditPurchase(): UseMutationResult<CreditPurchase, unknown, StartPurchaseInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: StartPurchaseInput) => {
+      const { data } = await api.POST("/payments", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          amount_minor: input.amountMinor,
+          currency: input.currency,
+        },
+      });
+      return validated<CreditPurchase>(data, creditPurchaseSpec, "/payments");
+    },
+    onSuccess: (purchase, input) => {
+      // The balance is not moved by this call — a PaymentIntent is not money —
+      // but the purchase row exists now, so anything reading it is stale.
+      void qc.invalidateQueries({ queryKey: meKeys.purchase(purchase.purchase_id) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.credits(input.accountId) });
+    },
+  });
+}
+
+/**
+ * The authoritative state of one purchase.
+ *
+ * `refetchMs` is how the "Balance updating" state waits: the webhook is what
+ * captures a payment, and a provider redirect only says the customer came back.
+ * Callers stop polling when the state is terminal rather than polling forever.
+ */
+export function useCreditPurchase(
+  purchaseId: string | undefined,
+  options: { readonly refetchMs?: number } = {},
+): UseQueryResult<CreditPurchase> {
+  return useQuery({
+    queryKey: meKeys.purchase(purchaseId ?? ""),
+    enabled: purchaseId !== undefined && purchaseId !== "",
+    staleTime: 0,
+    ...(options.refetchMs === undefined ? {} : { refetchInterval: options.refetchMs }),
+    queryFn: async () => {
+      const { data } = await api.GET("/payments/{paymentId}", {
+        params: { path: { paymentId: purchaseId ?? "" } },
+      });
+      return validated<CreditPurchase>(data, creditPurchaseSpec, "/payments/{id}");
+    },
+  });
+}
+
+export interface NotificationList {
+  readonly items: Notification[];
+  readonly nextCursor: string | null;
+}
+
+export function useNotifications(options: {
+  readonly unread: boolean;
+  readonly cursor?: string;
+}): UseQueryResult<NotificationList> {
+  const { unread, cursor } = options;
+  return useQuery({
+    queryKey: meKeys.notificationPage(unread, cursor ?? ""),
+    queryFn: async () => {
+      const { data } = await api.GET("/me/notifications", {
+        params: {
+          query: {
+            unread,
+            limit: 50,
+            ...(cursor === undefined || cursor === "" ? {} : { cursor }),
+          },
+        },
+      });
+      const page = validated<Schemas["NotificationPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: notificationSpec } } },
+        "/me/notifications",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+/** Everything a change to one notification makes stale. */
+function invalidateNotifications(qc: ReturnType<typeof useQueryClient>): void {
+  // One prefix covers the bell and every page of the list, so they can never
+  // disagree about how many are unread.
+  void qc.invalidateQueries({ queryKey: meKeys.notifications });
+}
+
+export function useMarkNotificationRead(): UseMutationResult<Notification, unknown, string> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (notificationId: string) => {
+      const { data } = await api.POST("/me/notifications/{notificationId}/read", {
+        ...idempotent(newIdempotencyKey(), { path: { notificationId } }),
+      });
+      return validated<Notification>(data, notificationSpec, "/me/notifications/{id}/read");
+    },
+    onSuccess: () => {
+      invalidateNotifications(qc);
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead(): UseMutationResult<number, unknown, void> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.POST("/me/notifications/read-all", {
+        ...idempotent(newIdempotencyKey()),
+      });
+      return validated<Schemas["MarkedRead"]>(data, markedReadSpec, "/me/notifications/read-all").updated;
+    },
+    onSuccess: () => {
+      invalidateNotifications(qc);
+    },
+  });
+}
+
+export function useNotificationPreferences(): UseQueryResult<NotificationPreference[]> {
+  return useQuery({
+    queryKey: meKeys.notificationPreferences,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/notification-preferences", {});
+      return validated<Schemas["NotificationPreferences"]>(
+        data,
+        { arrays: { items: { required: true, spec: notificationPreferenceSpec } } },
+        "/me/notification-preferences",
+      ).items;
+    },
+  });
+}
+
+export interface PreferenceChange {
+  readonly kind: NotificationKind;
+  readonly enabled: boolean;
+}
+
+export function useUpdateNotificationPreferences(): UseMutationResult<
+  NotificationPreference[],
+  unknown,
+  readonly PreferenceChange[]
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: readonly PreferenceChange[]) => {
+      const { data } = await api.PUT("/me/notification-preferences", {
+        ...idempotent(newIdempotencyKey()),
+        body: { items: changes.map((c) => ({ kind: c.kind, enabled: c.enabled })) },
+      });
+      return validated<Schemas["NotificationPreferences"]>(
+        data,
+        { arrays: { items: { required: true, spec: notificationPreferenceSpec } } },
+        "/me/notification-preferences",
+      ).items;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: meKeys.notificationPreferences });
+    },
+  });
+}
+
+export function useMyAccount(enabled = true): UseQueryResult<MyAccount> {
+  return useQuery({
+    queryKey: meKeys.myAccount,
+    enabled,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/account", {});
+      return validated<MyAccount>(data, myAccountSpec, "/me/account");
+    },
+  });
+}
+
+export interface CloseAccountInput {
+  readonly reason?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Asks for closure. Needs a recent strong authentication, so the caller must be
+ * ready to render the step-up round trip and come back to the same place.
+ */
+export function useCloseAccount(): UseMutationResult<MyAccount, unknown, CloseAccountInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CloseAccountInput) => {
+      const { data } = await api.POST("/me/account/close", {
+        ...idempotent(input.idempotencyKey),
+        body: input.reason === undefined || input.reason === "" ? {} : { reason: input.reason },
+      });
+      return validated<MyAccount>(data, myAccountSpec, "/me/account/close");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: meKeys.myAccount });
+    },
+  });
+}
+
+/**
+ * Cancels an open closure request.
+ *
+ * Deliberately no step-up: requesting closure is the dangerous direction, and
+ * stopping a request must never be harder than starting it.
+ */
+export function useCancelAccountClosure(): UseMutationResult<MyAccount, unknown, void> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.POST("/me/account/close/cancel", {
+        ...idempotent(newIdempotencyKey()),
+      });
+      return validated<MyAccount>(data, myAccountSpec, "/me/account/close/cancel");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: meKeys.myAccount });
+    },
+  });
+}
+
+export function useSecuritySummary(enabled = true): UseQueryResult<SecuritySummary> {
+  return useQuery({
+    queryKey: meKeys.security,
+    enabled,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/security", {});
+      return validated<SecuritySummary>(data, securitySummarySpec, "/me/security");
+    },
+  });
+}
+
+export interface AuditPage {
+  readonly items: MeAuditEntry[];
+  readonly nextCursor: string | null;
+}
+
+export function useMeAudit(cursor: string | undefined): UseQueryResult<AuditPage> {
+  return useQuery({
+    queryKey: meKeys.audit(cursor ?? ""),
+    queryFn: async () => {
+      const { data } = await api.GET("/me/audit", {
+        params: {
+          query: cursor === undefined || cursor === "" ? { limit: 50 } : { limit: 50, cursor },
+        },
+      });
+      const page = validated<Schemas["MeAuditPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: meAuditEntrySpec } } },
+        "/me/audit",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Portfolio, the activity feed and market discovery (goal §15, §16, §12).
+ *
+ * Three reads, one rule between them: the SERVER computes and this file
+ * checks. Nothing here sums a position into a total, derives a P&L from a
+ * balance difference, or ranks a market — `/v1/me/portfolio` carries its own
+ * `totals` marked at an explicit `as_of`, and `/v1/native-markets` carries the
+ * `sort` it applied and whether paging that ordering is stable. A browser that
+ * re-derived any of those would eventually disagree with the ledger, and the
+ * ledger is the one that is right.
+ * ------------------------------------------------------------------------ */
+
+export type Portfolio = Schemas["Portfolio"];
+export type PortfolioPosition = Schemas["PortfolioPosition"];
+export type PortfolioTotals = Schemas["PortfolioTotals"];
+export type ValueTemperature = Schemas["ValueTemperature"];
+export type ActivityFeedItem = Schemas["ActivityFeedItem"];
+export type ActivityFeedKind = Schemas["ActivityFeedKind"];
+export type ActivityAmount = Schemas["ActivityFeedItem"]["amounts"][number];
+export type NativeMarketSummary = Schemas["NativeMarketSummary"];
+export type MarketSort = NonNullable<Schemas["NativeMarketPage"]["sort"]>;
+
+export const portfolioKeys = {
+  portfolio: (accountId: string) => ["me", "portfolio", accountId] as const,
+  activity: (accountId: string, kinds: string, cursor: string) =>
+    ["me", "activity", accountId, kinds, cursor] as const,
+  markets: (sort: string, limit: number) => ["native-markets", sort, limit] as const,
+};
+
+/**
+ * The Credit balance, every open position and the totals, all marked at one
+ * instant the server states.
+ *
+ * `staleTime: 0` because this is a balance: a figure nobody is refreshing must
+ * not be shown as current, and the stream invalidates this key rather than
+ * patching it.
+ */
+export function usePortfolio(accountId: string | undefined): UseQueryResult<Portfolio> {
+  return useQuery({
+    queryKey: portfolioKeys.portfolio(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/portfolio", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      const portfolio = validated<Portfolio>(data, portfolioSpec, "/me/portfolio");
+      // The two nested objects, checked against their own specs rather than
+      // waved through as `object`: they are where every figure on the page
+      // comes from, and a malformed one must be an error and not a blank.
+      validated<CreditBalance>(portfolio.credits, creditBalanceSpec, "/me/portfolio.credits");
+      validated<PortfolioTotals>(portfolio.totals, portfolioTotalsSpec, "/me/portfolio.totals");
+      return portfolio;
+    },
+  });
+}
+
+export interface ActivityFeed {
+  readonly items: ActivityFeedItem[];
+  readonly nextCursor: string | null;
+}
+
+/**
+ * The unified timeline.
+ *
+ * `kind` repeats in the query string rather than being comma-joined, which is
+ * what the contract declares. An empty filter is omitted entirely, because
+ * "every kind" and "none of them" are different requests and only one of them
+ * is what an unfiltered feed means.
+ */
+export function useMeActivity(options: {
+  readonly accountId: string | undefined;
+  readonly kinds: readonly ActivityFeedKind[];
+  readonly cursor?: string;
+  readonly limit?: number;
+}): UseQueryResult<ActivityFeed> {
+  const { accountId, kinds, cursor } = options;
+  const limit = options.limit ?? 50;
+  return useQuery({
+    queryKey: portfolioKeys.activity(accountId ?? "", kinds.join(","), cursor ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/activity", {
+        params: {
+          query: {
+            account_id: accountId ?? "",
+            limit,
+            ...(kinds.length === 0 ? {} : { kind: [...kinds] }),
+            ...(cursor === undefined || cursor === "" ? {} : { cursor }),
+          },
+        },
+      });
+      const page = validated<Schemas["ActivityFeedPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: activityFeedItemSpec } } },
+        "/me/activity",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+export interface MarketPage {
+  readonly markets: NativeMarketSummary[];
+  readonly sort: MarketSort;
+  /** Whether paging this ordering sees every market exactly once. */
+  readonly stable: boolean;
+  readonly nextCursor: string | null;
+}
+
+/**
+ * One page of market discovery, in the ordering the server applied.
+ *
+ * `sort` and `stable` come back from the response rather than being assumed
+ * from the request: only NEWEST is stable under paging, because every other key
+ * ranks by a figure that moves when somebody trades, and a page that claimed
+ * otherwise would show a reader the same market twice and call it two.
+ */
+export function useMarketDiscovery(options: {
+  readonly sort: MarketSort;
+  readonly limit?: number;
+  readonly enabled?: boolean;
+}): UseQueryResult<MarketPage> {
+  const limit = options.limit ?? 50;
+  return useQuery({
+    queryKey: portfolioKeys.markets(options.sort, limit),
+    enabled: options.enabled !== false,
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets", {
+        params: { query: { sort: options.sort, limit } },
+      });
+      const page = validated<Schemas["NativeMarketPage"]>(
+        data,
+        {
+          required: { sort: "string", stable: "boolean" },
+          arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
+        },
+        "/native-markets",
+      );
+      return {
+        markets: page.markets,
+        sort: page.sort,
+        stable: page.stable,
+        nextCursor: page.next_cursor,
+      };
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * The public reads (D-080)
+ *
+ * Both answer without a session, and both are used by the signed-out site. They
+ * are named `usePublic*` so that the signed-in screens — which need acceptance
+ * state, and the market detail the discovery list does not carry — cannot reach
+ * for them by accident and get a thinner answer than they needed.
+ * ------------------------------------------------------------------------ */
+
+export type PublicLegalDocument = Schemas["PublicLegalDocument"];
+
+export const publicKeys = {
+  terms: ["public", "terms"] as const,
+  markets: (limit: number) => ["public", "native-markets", limit] as const,
+};
+
+/**
+ * The legal registry, with the text, for anyone.
+ *
+ * This is the same registry `/me/terms-acceptances` serves and the same bytes:
+ * `content_hash` matches, so the words a visitor reads on the public site are
+ * the words the acceptance record will name. That is why the public pages
+ * render this rather than prose of their own — an explainer beside an agreement
+ * is two texts, and a reader can only be misled by the one that is not binding.
+ */
+export function usePublicTerms(): UseQueryResult<PublicLegalDocument[]> {
+  return useQuery({
+    queryKey: publicKeys.terms,
+    // The registry changes when somebody ships a new version, not while a page
+    // is open. Five minutes is long enough to make navigating between the
+    // documents free and short enough that a re-issue reaches a visitor who
+    // leaves the tab open.
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await api.GET("/terms", {});
+      return validatedList<PublicLegalDocument>(data, publicLegalDocumentSpec, "/terms");
+    },
+  });
+}
+
+export interface PublicMarkets {
+  readonly markets: readonly NativeMarketSummary[];
+  /** Which ordering the backend actually used. */
+  readonly sort: string;
+  /** Whether paging this ordering sees every market exactly once. */
+  readonly stable: boolean;
+}
+
+/**
+ * A page of the market discovery list, without a session.
+ *
+ * The public preview takes the newest markets and nothing else: NEWEST is the
+ * only ordering that is stable under paging, and a marketing surface ranking by
+ * a live figure would be showing a leaderboard that reorders while it is read.
+ */
+export function usePublicMarkets(limit = 6): UseQueryResult<PublicMarkets> {
+  return useQuery({
+    queryKey: publicKeys.markets(limit),
+    queryFn: async () => {
+      const { data } = await api.GET("/native-markets", {
+        params: { query: { limit, sort: "NEWEST" } },
+      });
+      const page = validated<{
+        markets: NativeMarketSummary[];
+        sort: string;
+        stable: boolean;
+      }>(data, nativeMarketPageSpec, "/native-markets");
+      return { markets: page.markets, sort: page.sort, stable: page.stable };
+    },
+  });
+}
 
 /* --------------------------------------------------------------------------
  * Agents and strategies (goal §17, §18)

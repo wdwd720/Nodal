@@ -1014,6 +1014,20 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/UserProfile" } } }
         "400": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /terms:
+    get:
+      tags: [auth]
+      security: []
+      summary: The legal documents currently served, with their text, for anyone
+      description: >-
+        The same registry a signed-in person accepts from (internal/terms), without
+        any acceptance state: a visitor with no account can read the binding text
+        before creating one, and the public site serves these bytes rather than an
+        explainer. Every document says whether counsel review is still required.
+      responses:
+        "200":
+          description: Current documents, oldest requirement first
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PublicLegalDocument" } } } }
   /me/terms-acceptances:
     get:
       tags: [auth]
@@ -1398,6 +1412,7 @@ paths:
   # ---- native markets: discovery, charts and the tape (M) ----
   /native-markets:
     get:
+      security: []
       tags: [native-economy]
       summary: Discover internal markets (product goal §12, §35)
       description: >-
@@ -3080,6 +3095,18 @@ components:
             records acceptance of.
         accepted: { type: boolean }
         accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    PublicLegalDocument:
+      type: object
+      description: A served legal document without any person's acceptance state.
+      required: [document_id, version, title, content_hash, requirement, counsel_review_required, body]
+      properties:
+        document_id: { type: string }
+        version: { type: string }
+        title: { type: string }
+        content_hash: { type: string, description: "sha256 of the exact body bytes; an acceptance records this hash" }
+        requirement: { type: string }
+        counsel_review_required: { type: boolean }
+        body: { type: string }
     TermsState:
       type: object
       required: [documents, outstanding]

@@ -83,20 +83,18 @@ export const DESTINATIONS: readonly NavItem[] = [
 ];
 
 /**
- * The two actions a customer starts from.
- *
- * Both are owned by other branches. Flip `present` to true as each lands.
+ * The two actions a customer starts from. Both have pages now.
  */
 export const PRIMARY_ACTIONS: readonly NavItem[] = [
-  { to: "/buy-credits", label: "Buy Credits", present: false },
+  { to: "/buy-credits", label: "Buy Credits", present: true },
   { to: "/withdraw", label: "Withdraw", present: true },
 ];
 
 /** What the account menu offers. Sign out is a real action and is always there. */
 export const ACCOUNT_LINKS: readonly NavItem[] = [
   { to: "/settings", label: "Settings", present: true },
-  { to: "/settings/security", label: "Security", present: false },
-  { to: "/notifications", label: "Notifications", present: false },
+  { to: "/settings/security", label: "Security", present: true },
+  { to: "/notifications", label: "Notifications", present: true },
 ];
 
 /** Sections reachable from the rail that are not one of the five. */

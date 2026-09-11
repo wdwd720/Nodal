@@ -98,7 +98,14 @@ test("the settlement asset is disclosed on every page that shows a balance", () 
   const balancePages = uiFiles().filter(
     (file) => file.path.startsWith("src/pages/") && /formatUsd|<Usd\b/.test(file.text),
   );
-  assert.ok(balancePages.length > 0, "expected at least one page to render a USD figure");
+  // There is deliberately no "at least one page must show a USD figure" here
+  // any more. D-077 removed the hosted rail and the last screen that rendered
+  // one went with it, so the product is Credit-denominated end to end and that
+  // list is legitimately empty. The rule below is the one that matters and it
+  // is unchanged: it bites the moment a USD figure comes back without saying
+  // what the underlying asset actually is. An emptiness assertion would have
+  // made a page that shows no dollar figures into a test failure, which is the
+  // opposite of what PART 112 asks for.
   const offenders = balancePages.filter(
     (file) =>
       !file.text.includes("USDC_DISCLOSURE") &&

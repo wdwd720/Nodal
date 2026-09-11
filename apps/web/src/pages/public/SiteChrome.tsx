@@ -24,6 +24,7 @@ import { useVersion } from "../../api/queries.ts";
 import { BrandLockup } from "../../components/Brand.tsx";
 import { IconButton, LinkButton } from "../../components/Button.tsx";
 import { Sheet } from "../../components/Dialog.tsx";
+import { POLICY_PAGES } from "../../content/policies/index.ts";
 import { PUBLIC_BOUNDARY_LINE } from "../../content/site.ts";
 import { RISK_FOOTER } from "../../lib/honesty.ts";
 
@@ -186,15 +187,11 @@ function SiteFoot(): ReactNode {
           <div>
             <h2>Legal</h2>
             <ul>
-              <li>
-                <Link to="/terms">Terms</Link>
-              </li>
-              <li>
-                <Link to="/privacy">Privacy</Link>
-              </li>
-              <li>
-                <Link to="/risk">Risk disclosure</Link>
-              </li>
+              {POLICY_PAGES.map((page) => (
+                <li key={page.slug}>
+                  <Link to={`/${page.slug}`}>{page.title}</Link>
+                </li>
+              ))}
             </ul>
           </div>
           <div>
