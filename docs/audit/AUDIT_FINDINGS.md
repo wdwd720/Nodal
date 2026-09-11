@@ -7700,7 +7700,7 @@ activation; a native market, its printed price and its activation; an agent's
 creation, last run, grant and pause; a credit purchase's creation, reversibility
 and settlement; a portfolio position's first acquisition and last trade; an
 admin action's approval and execution; an activity item; a gate transition; and
-a kill-switch release. Every one is now UTC. Commit 6a9c6b0.
+a kill-switch release. Every one is now UTC. Commit 9b87a8d.
 
 **Evidence.** TEST_UNIT: `TestAudit_StrategyTimestampsAreNotUTC`,
 `TestStrategyConverters_PublishUTC`,
