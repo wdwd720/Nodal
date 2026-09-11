@@ -186,7 +186,10 @@ test("F-web: the agent detail route passes axe and reflows at 375px", async ({ p
   const res = await page.request.get(`/v1/agents?account_id=${id}`);
   const body = (await res.json()) as { items?: Array<{ id: string }> };
   const agent = body.items?.[0];
-  test.skip(agent === undefined, "no agent on this account to open");
+  test.skip(
+    agent === undefined,
+    "no agent can exist on this deployment: the strategy service is wired with no compiler (cmd/api/wire.go), so no strategy version is produced and an agent references one — the same reason d-agent.spec.ts states (F-251)",
+  );
 
   await page.goto(`/agents/${agent?.id ?? ""}`);
   await expect(page.locator("h1")).toHaveCount(1);

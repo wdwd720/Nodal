@@ -143,6 +143,21 @@ test("a freeze cannot be silenced", async ({ page }) => {
   ).toEqual(expect.arrayContaining(["CREDIT_PURCHASE_REVERSED", "ACCOUNT_RESTRICTED"]));
 });
 
+test("an unsigned dispute delivery is never accepted", async ({ page }) => {
+  // Provable everywhere: the ingestion route does not accept an unsigned
+  // dispute. A freeze somebody could cause by POSTing JSON would be worse than
+  // one nobody can see. It is its own test so that the driven test below is
+  // counted as what it is on a run that cannot drive it (F-252).
+  const unsigned = await page.request.post("/v1/webhooks/stripe_credit", {
+    headers: { "Content-Type": "application/json" },
+    data: { id: "evt_e2e_unsigned", object: "event", type: "charge.dispute.created" },
+  });
+  expect(
+    unsigned.status(),
+    "an unsigned delivery is refused (400) or the provider is not registered (404) — never accepted",
+  ).not.toBe(200);
+});
+
 test("the dispute webhook freezes value the customer can see is frozen", async ({ page }) => {
   test.info().annotations.push({
     type: "requires",
@@ -150,21 +165,7 @@ test("the dispute webhook freezes value the customer can see is frozen", async (
       "CP_WEB_STRIPE_WEBHOOK_SECRET and CP_WEB_CAPTURED_CHARGE_ID, plus an API with a " +
       "configured credit-purchase provider. There is no fake mode for it.",
   });
-
-  if (!CAN_DRIVE) {
-    // What is provable everywhere: the ingestion route does not accept an
-    // unsigned dispute. A freeze somebody could cause by POSTing JSON would be
-    // worse than one nobody can see.
-    const unsigned = await page.request.post("/v1/webhooks/stripe_credit", {
-      headers: { "Content-Type": "application/json" },
-      data: { id: "evt_e2e_unsigned", object: "event", type: "charge.dispute.created" },
-    });
-    expect(
-      unsigned.status(),
-      "an unsigned delivery is refused (400) or the provider is not registered (404) — never accepted",
-    ).not.toBe(200);
-    return;
-  }
+  test.skip(!CAN_DRIVE, "driving a dispute needs CP_WEB_STRIPE_WEBHOOK_SECRET and CP_WEB_CAPTURED_CHARGE_ID and an API with a configured credit-purchase provider; this run has none of them (goal §59: no key on this tier)");
 
   const payload = JSON.stringify({
     id: `evt_e2e_${String(Date.now())}`,

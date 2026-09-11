@@ -182,6 +182,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-221 | P3 | PRODUCTIZATION | fixed | Adding a payout destination minted an idempotency key per press, so a retry registered it twice |
 | F-222 | P2 | PRODUCTIZATION | fixed | Finishing onboarding raced the profile refetch, so a slow connection sent a new customer back to a terms page with nothing left to accept |
 | F-223 | P3 | PRODUCTIZATION | fixed | The demodata command gave its ledger no capability resolver, so it refused every demo trade on a database whose gates were sandbox-active |
+| F-251 | P3 | PRODUCTIZATION | fixed | The agent-detail sweep skipped with a reason that was not the reason, on the route its own finding was about |
+| F-252 | P3 | PRODUCTIZATION | fixed | Two webhook-driven scenarios counted as passes while proving only that an unsigned delivery is refused, and four purchase tests were never registered |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -8062,6 +8064,49 @@ surfaces the command's exit code instead of piping it into `tail`.
 `TestCapabilities_ResolverAnswersEverythingTheCompilerCanRequire`,
 `TestCapabilities_EveryAnsweredKeyIsADeclaredGate`; the merged Playwright run's
 `DEMODATA_EXIT=0`.
+
+## F-251 · The agent-detail sweep skipped with a reason that was not the reason · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the browser end-to-end audit (F-e2e-3).
+
+`apps/web/e2e/audit-frontend.spec.ts` skipped its `/agents/:agentId` axe and
+reflow sweep with "no agent on this account to open". The reason is the one
+`scenarios/d-agent.spec.ts` states: `cmd/api/wire.go` builds the strategy
+service with no compiler, so no strategy version is produced and no agent can
+exist on any deployment of this build. Both sweeps of that route therefore skip
+on every fresh-database run, which is F-216's shape recurring on the very route
+F-213 added to the lists -- it has no axe, 375 px or honesty coverage anywhere.
+
+**Fix.** The skip names the real reason. The route still has no subject: giving
+it one is a product change (a compiler backend on the sandbox tier, or a fixture
+agent from the demo seeder), recorded as a residual rather than done here.
+
+**Evidence.** `apps/web/e2e/audit-frontend.spec.ts`; `apps/web/e2e/scenarios/d-agent.spec.ts`.
+
+## F-252 · Two webhook-driven scenarios counted as passes while proving only an unsigned refusal · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the browser end-to-end audit (F-e2e-2).
+
+`scenarios/g-refund.spec.ts` "the refund webhook produces a reversal the
+customer can see" and `scenarios/h-dispute.spec.ts` "the dispute webhook freezes
+value the customer can see is frozen" both `return`ed early when the Stripe
+webhook secret and captured charge were absent, after asserting only that an
+unsigned delivery is refused. Those two variables are set nowhere in the
+repository -- CI's `web-e2e` job included -- so the early-return branch is the
+only one that had ever run, and the suite counted two passes for a refund and a
+dispute nobody had ever driven. Separately, `scenarios/b-buy-credits.spec.ts`
+registered four tests only when a publishable key was present, so they were
+absent from the counts entirely and nothing said so.
+
+**Fix.** The unsigned-delivery check is its own always-running test in each
+file; the driven test skips with the exact precondition, so it lands in the
+skip column. The four purchase tests are registered on every run and skip with
+the reason when the build has no key; the refusal-branch test skips, with its
+reason, when it has one.
+
+**Evidence.** `apps/web/e2e/scenarios/g-refund.spec.ts`, `h-dispute.spec.ts`,
+`b-buy-credits.spec.ts`; the merged Playwright run after the change (the skip
+column grows by the cases that were never proven).
 
 ## F-185 · Any authenticated person could end the API process by closing a stream · PRODUCTIZATION · P1 · FIXED
 

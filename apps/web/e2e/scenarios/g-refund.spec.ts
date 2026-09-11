@@ -186,6 +186,22 @@ test("a reversed purchase is rendered as a reversal, not as a missing row", asyn
   await expect(prefs).toContainText("always sent");
 });
 
+test("an unsigned refund delivery is never accepted", async ({ page }) => {
+  // Provable on every tier, with or without a provider: the ingestion route
+  // does not silently accept an unsigned delivery. This used to live inside the
+  // driven test below as its "cannot drive" branch, which made that test count
+  // as a pass on every run that had ever happened while proving only this
+  // (F-252).
+  const unsigned = await page.request.post("/v1/webhooks/stripe_credit", {
+    headers: { "Content-Type": "application/json" },
+    data: { id: "evt_e2e_unsigned", object: "event", type: "charge.refunded" },
+  });
+  expect(
+    unsigned.status(),
+    "an unsigned delivery is refused (400) or the provider is not registered (404) — never accepted",
+  ).not.toBe(200);
+});
+
 test("the refund webhook produces a reversal the customer can see", async ({ page }) => {
   test.info().annotations.push({
     type: "requires",
@@ -193,20 +209,8 @@ test("the refund webhook produces a reversal the customer can see", async ({ pag
       "CP_WEB_STRIPE_WEBHOOK_SECRET and CP_WEB_CAPTURED_CHARGE_ID, plus an API with a " +
       "configured credit-purchase provider. There is no fake mode for it.",
   });
-
-  if (!CAN_DRIVE) {
-    // Not a skip and not a pass dressed up as one: what IS provable without a
-    // provider is that the route is not silently accepting unsigned deliveries.
-    const unsigned = await page.request.post("/v1/webhooks/stripe_credit", {
-      headers: { "Content-Type": "application/json" },
-      data: { id: "evt_e2e_unsigned", object: "event", type: "charge.refunded" },
-    });
-    expect(
-      unsigned.status(),
-      "an unsigned delivery is refused (400) or the provider is not registered (404) — never accepted",
-    ).not.toBe(200);
-    return;
-  }
+  // A skip, counted as one, rather than an early return counted as a pass.
+  test.skip(!CAN_DRIVE, "driving a refund needs CP_WEB_STRIPE_WEBHOOK_SECRET and CP_WEB_CAPTURED_CHARGE_ID and an API with a configured credit-purchase provider; this run has none of them (goal §59: no key on this tier)");
 
   const before = await page.request.get("/v1/me/notifications?limit=50");
   expect(before.ok()).toBeTruthy();

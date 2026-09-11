@@ -105,175 +105,180 @@ test("the page says what a Credit is, and never calls it withdrawable", async ({
   expect(text, "and it says outright that a Credit is not a deposit").toContain("not a deposit");
 });
 
-if (!KEY_PRESENT) {
-  test("with no publishable key the page refuses to draw a form", async ({ page }) => {
-    // The Stripe section of the frontend brief: absent or invalid → "Payments
-    // unavailable" with the reason, never a form. A dead card form takes
-    // somebody's attention and their keystrokes and gives nothing back, and an
-    // amount chooser that leads to it is the same mistake one screen earlier.
-    await page.goto("/buy-credits");
-    await expect(page.getByRole("heading", { level: 1, name: "Buy Credits" })).toBeVisible();
+// Registered on every run; skipped, with the reason, when a key IS present.
+test("with no publishable key the page refuses to draw a form", async ({ page }) => {
+  test.skip(KEY_PRESENT, "this build was compiled with a publishable key, so the page draws the chooser rather than the refusal");
+  // The Stripe section of the frontend brief: absent or invalid → "Payments
+  // unavailable" with the reason, never a form. A dead card form takes
+  // somebody's attention and their keystrokes and gives nothing back, and an
+  // amount chooser that leads to it is the same mistake one screen earlier.
+  await page.goto("/buy-credits");
+  await expect(page.getByRole("heading", { level: 1, name: "Buy Credits" })).toBeVisible();
 
-    const panel = page.locator(".panel", { hasText: "Payments unavailable" });
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText("No payment can be taken here");
-    await expect(panel).toContainText("Nothing is wrong with your account");
+  const panel = page.locator(".panel", { hasText: "Payments unavailable" });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("No payment can be taken here");
+  await expect(panel).toContainText("Nothing is wrong with your account");
 
-    // No card fields, no amount field, no Stripe iframe: not one input on the page.
-    await expect(page.locator("main input")).toHaveCount(0);
-    await expect(page.locator("main iframe")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /^Continue to payment$/ })).toHaveCount(0);
+  // No card fields, no amount field, no Stripe iframe: not one input on the page.
+  await expect(page.locator("main input")).toHaveCount(0);
+  await expect(page.locator("main iframe")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Continue to payment$/ })).toHaveCount(0);
+});
+
+// Registered on every run and skipped, with the reason, when the build has no
+// publishable key: four tests that were registered only when it did were absent
+// from the counts entirely, and nothing said so (F-252).
+test("a deployment that cannot price Credits says so, and offers no amount", async ({ page }) => {
+  test.skip(!KEY_PRESENT, "no VITE_STRIPE_PUBLISHABLE_KEY at build time: the page takes the refusal branch and the chooser, the presets and the priced confirmation cannot be exercised (goal §59: no key on this tier)");
+  const answer = await pricing(page);
+  await page.goto("/buy-credits");
+  await expect(page.getByRole("heading", { level: 1, name: "Buy Credits" })).toBeVisible();
+
+  if (answer.policy !== undefined) {
+    // This deployment prices Credits, so the chooser is the right screen and
+    // the other tests below cover it. What matters here is the negative: the
+    // page did not take the refusal branch.
+    await expect(page.locator(".panel", { hasText: "How much" })).toBeVisible();
+    return;
+  }
+
+  // It does not. The refusal carries the backend's own stable code, says what
+  // it is about — the product, not this person — and draws no form.
+  const refusal = page.locator(".refusal, .explain").first();
+  await expect(refusal).toBeVisible();
+  await expect(refusal).toContainText(answer.refusedWith as string);
+  await expect(page.locator("main input")).toHaveCount(0);
+  await expect(page.locator("main iframe")).toHaveCount(0);
+  await expect(page.getByText("No amount is offered")).toBeVisible();
+});
+
+test("the amount chooser states the rate and the bounds the server gave", async ({ page }) => {
+  test.skip(!KEY_PRESENT, "no VITE_STRIPE_PUBLISHABLE_KEY at build time: the page takes the refusal branch and the chooser, the presets and the priced confirmation cannot be exercised (goal §59: no key on this tier)");
+  const answer = await pricing(page);
+  if (answer.policy === undefined) return;
+  const policy = answer.policy;
+  await page.goto("/buy-credits");
+
+  const panel = page.locator(".panel", { hasText: "How much" });
+  await expect(panel).toBeVisible();
+
+  // The rate is read from the response, never derived: the page shows the
+  // server's own "Credits per one unit" figure and names the policy version
+  // that produced it.
+  await expect(panel).toContainText(`Pricing policy ${policy.version}`);
+  await expect(panel).toContainText(`per 1 ${policy.currency}`);
+  await expect(panel.getByText(String(policy.credits_per_major_unit), { exact: false }).first()).toBeVisible();
+
+  // The bounds are the server's, verbatim, in the currency the customer types.
+  await expect(panel).toContainText(minorToUsd(policy.min_amount_minor));
+  await expect(panel).toContainText(minorToUsd(policy.max_amount_minor));
+});
+
+test("a preset fills the amount and an out-of-bounds amount is refused before the card", async ({
+  page,
+}) => {
+  test.skip(!KEY_PRESENT, "no VITE_STRIPE_PUBLISHABLE_KEY at build time: the page takes the refusal branch and the chooser, the presets and the priced confirmation cannot be exercised (goal §59: no key on this tier)");
+  const answer = await pricing(page);
+  if (answer.policy === undefined) return;
+  const policy = answer.policy;
+  await page.goto("/buy-credits");
+  const panel = page.locator(".panel", { hasText: "How much" });
+
+  const preset = page.getByRole("button", { name: `25.00 ${policy.currency}` });
+  if (await preset.isVisible()) {
+    await preset.click();
+    await expect(panel.getByLabel(`Amount in ${policy.currency}`)).toHaveValue("25.00");
+  }
+
+  // Below the minimum the field says the minimum, in the customer's units,
+  // and the confirm button states why it is off rather than simply being off.
+  const belowMinimum = minorToUsd(policy.min_amount_minor > 1 ? policy.min_amount_minor - 1 : 0);
+  await panel.getByLabel(`Amount in ${policy.currency}`).fill(belowMinimum);
+  await expect(panel.getByRole("alert")).toContainText(minorToUsd(policy.min_amount_minor));
+  const confirm = page.getByRole("button", { name: "Continue to payment" });
+  await expect(confirm).toBeDisabled();
+  const reason = await confirm.getAttribute("aria-describedby");
+  expect(reason, "a disabled confirm says why").toBeTruthy();
+});
+
+test("confirming shows what the SERVER priced, or the refusal it gave", async ({ page }) => {
+  test.skip(!KEY_PRESENT, "no VITE_STRIPE_PUBLISHABLE_KEY at build time: the page takes the refusal branch and the chooser, the presets and the priced confirmation cannot be exercised (goal §59: no key on this tier)");
+  const answer = await pricing(page);
+  if (answer.policy === undefined) return;
+  const policy = answer.policy;
+  const id = await accountId(page);
+  // $25 where the policy allows it, otherwise the nearest bound. Written as
+  // comparisons rather than with a numeric helper: the source guard forbids
+  // float arithmetic anywhere in this tree, comments included.
+  const wanted = 2500;
+  const amountMinor =
+    wanted < policy.min_amount_minor
+      ? policy.min_amount_minor
+      : wanted > policy.max_amount_minor
+        ? policy.max_amount_minor
+        : wanted;
+
+  // A probe against the same route the page uses, so the assertion below is
+  // against what this deployment actually answers rather than against what
+  // it is hoped to answer. The pricing policy is a pure function of the
+  // amount, so the quantity the page is shown is the quantity seen here.
+  const probe = await page.request.post("/v1/payments", {
+    headers: { "Idempotency-Key": `e2e-b-probe-${String(Date.now())}` },
+    data: { account_id: id, amount_minor: amountMinor, currency: policy.currency },
   });
-}
+  const probeBody = (await probe.json()) as Record<string, unknown>;
 
-if (KEY_PRESENT) {
-  test("a deployment that cannot price Credits says so, and offers no amount", async ({ page }) => {
-    const answer = await pricing(page);
-    await page.goto("/buy-credits");
-    await expect(page.getByRole("heading", { level: 1, name: "Buy Credits" })).toBeVisible();
+  await page.goto("/buy-credits");
+  const panel = page.locator(".panel", { hasText: "How much" });
+  await panel.getByLabel(`Amount in ${policy.currency}`).fill(minorToUsd(amountMinor));
+  await page.getByRole("button", { name: "Continue to payment" }).click();
 
-    if (answer.policy !== undefined) {
-      // This deployment prices Credits, so the chooser is the right screen and
-      // the other tests below cover it. What matters here is the negative: the
-      // page did not take the refusal branch.
-      await expect(page.locator(".panel", { hasText: "How much" })).toBeVisible();
-      return;
-    }
-
-    // It does not. The refusal carries the backend's own stable code, says what
-    // it is about — the product, not this person — and draws no form.
+  if (!probe.ok()) {
+    // The refusal branch. This is the branch a deployment with no configured
+    // credit-purchase provider takes, and it is a first-class state: the page
+    // owes the backend's own stable code and a next step, not "something went
+    // wrong".
+    const code = String(probeBody["code"] ?? "");
+    expect(code, "a refusal carries a stable code").toBeTruthy();
     const refusal = page.locator(".refusal, .explain").first();
     await expect(refusal).toBeVisible();
-    await expect(refusal).toContainText(answer.refusedWith as string);
-    await expect(page.locator("main input")).toHaveCount(0);
+    await expect(refusal).toContainText(code);
+    // And nothing was bought: no card fields appeared.
     await expect(page.locator("main iframe")).toHaveCount(0);
-    await expect(page.getByText("No amount is offered")).toBeVisible();
-  });
+    return;
+  }
 
-  test("the amount chooser states the rate and the bounds the server gave", async ({ page }) => {
-    const answer = await pricing(page);
-    if (answer.policy === undefined) return;
-    const policy = answer.policy;
-    await page.goto("/buy-credits");
+  // The success branch. "USD payment → Credits received", exact, from the
+  // server, BEFORE a card has been touched — which is the whole reason the
+  // quantity is not computed in the browser.
+  const quantity = String(probeBody["credit_quantity"] ?? "");
+  expect(quantity, "the server decided a quantity").toBeTruthy();
 
-    const panel = page.locator(".panel", { hasText: "How much" });
-    await expect(panel).toBeVisible();
+  const confirm = page.locator(".panel", { hasText: "Confirm and pay" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText(minorToUsd(amountMinor));
+  await expect(confirm).toContainText(`pricing policy ${String(probeBody["pricing_version"] ?? "")}`);
+  // The exact quantity is in the figure's title attribute, unrounded,
+  // whatever the display form is.
+  const figure = confirm.locator(".figure[title*='Credits']").first();
+  await expect(figure).toBeVisible();
 
-    // The rate is read from the response, never derived: the page shows the
-    // server's own "Credits per one unit" figure and names the policy version
-    // that produced it.
-    await expect(panel).toContainText(`Pricing policy ${policy.version}`);
-    await expect(panel).toContainText(`per 1 ${policy.currency}`);
-    await expect(panel.getByText(String(policy.credits_per_major_unit), { exact: false }).first()).toBeVisible();
+  // A sandbox purchase is labelled, and only when the API said so.
+  if (probeBody["sandbox"] === true) {
+    await expect(page.getByLabel("This is a sandbox payment")).toBeVisible();
+    await expect(confirm.locator(".badge-simulated")).toBeVisible();
+  } else {
+    await expect(page.getByLabel("This is a sandbox payment")).toHaveCount(0);
+  }
 
-    // The bounds are the server's, verbatim, in the currency the customer types.
-    await expect(panel).toContainText(minorToUsd(policy.min_amount_minor));
-    await expect(panel).toContainText(minorToUsd(policy.max_amount_minor));
-  });
-
-  test("a preset fills the amount and an out-of-bounds amount is refused before the card", async ({
-    page,
-  }) => {
-    const answer = await pricing(page);
-    if (answer.policy === undefined) return;
-    const policy = answer.policy;
-    await page.goto("/buy-credits");
-    const panel = page.locator(".panel", { hasText: "How much" });
-
-    const preset = page.getByRole("button", { name: `25.00 ${policy.currency}` });
-    if (await preset.isVisible()) {
-      await preset.click();
-      await expect(panel.getByLabel(`Amount in ${policy.currency}`)).toHaveValue("25.00");
-    }
-
-    // Below the minimum the field says the minimum, in the customer's units,
-    // and the confirm button states why it is off rather than simply being off.
-    const belowMinimum = minorToUsd(policy.min_amount_minor > 1 ? policy.min_amount_minor - 1 : 0);
-    await panel.getByLabel(`Amount in ${policy.currency}`).fill(belowMinimum);
-    await expect(panel.getByRole("alert")).toContainText(minorToUsd(policy.min_amount_minor));
-    const confirm = page.getByRole("button", { name: "Continue to payment" });
-    await expect(confirm).toBeDisabled();
-    const reason = await confirm.getAttribute("aria-describedby");
-    expect(reason, "a disabled confirm says why").toBeTruthy();
-  });
-
-  test("confirming shows what the SERVER priced, or the refusal it gave", async ({ page }) => {
-    const answer = await pricing(page);
-    if (answer.policy === undefined) return;
-    const policy = answer.policy;
-    const id = await accountId(page);
-    // $25 where the policy allows it, otherwise the nearest bound. Written as
-    // comparisons rather than with a numeric helper: the source guard forbids
-    // float arithmetic anywhere in this tree, comments included.
-    const wanted = 2500;
-    const amountMinor =
-      wanted < policy.min_amount_minor
-        ? policy.min_amount_minor
-        : wanted > policy.max_amount_minor
-          ? policy.max_amount_minor
-          : wanted;
-
-    // A probe against the same route the page uses, so the assertion below is
-    // against what this deployment actually answers rather than against what
-    // it is hoped to answer. The pricing policy is a pure function of the
-    // amount, so the quantity the page is shown is the quantity seen here.
-    const probe = await page.request.post("/v1/payments", {
-      headers: { "Idempotency-Key": `e2e-b-probe-${String(Date.now())}` },
-      data: { account_id: id, amount_minor: amountMinor, currency: policy.currency },
-    });
-    const probeBody = (await probe.json()) as Record<string, unknown>;
-
-    await page.goto("/buy-credits");
-    const panel = page.locator(".panel", { hasText: "How much" });
-    await panel.getByLabel(`Amount in ${policy.currency}`).fill(minorToUsd(amountMinor));
-    await page.getByRole("button", { name: "Continue to payment" }).click();
-
-    if (!probe.ok()) {
-      // The refusal branch. This is the branch a deployment with no configured
-      // credit-purchase provider takes, and it is a first-class state: the page
-      // owes the backend's own stable code and a next step, not "something went
-      // wrong".
-      const code = String(probeBody["code"] ?? "");
-      expect(code, "a refusal carries a stable code").toBeTruthy();
-      const refusal = page.locator(".refusal, .explain").first();
-      await expect(refusal).toBeVisible();
-      await expect(refusal).toContainText(code);
-      // And nothing was bought: no card fields appeared.
-      await expect(page.locator("main iframe")).toHaveCount(0);
-      return;
-    }
-
-    // The success branch. "USD payment → Credits received", exact, from the
-    // server, BEFORE a card has been touched — which is the whole reason the
-    // quantity is not computed in the browser.
-    const quantity = String(probeBody["credit_quantity"] ?? "");
-    expect(quantity, "the server decided a quantity").toBeTruthy();
-
-    const confirm = page.locator(".panel", { hasText: "Confirm and pay" });
-    await expect(confirm).toBeVisible();
-    await expect(confirm).toContainText(minorToUsd(amountMinor));
-    await expect(confirm).toContainText(`pricing policy ${String(probeBody["pricing_version"] ?? "")}`);
-    // The exact quantity is in the figure's title attribute, unrounded,
-    // whatever the display form is.
-    const figure = confirm.locator(".figure[title*='Credits']").first();
-    await expect(figure).toBeVisible();
-
-    // A sandbox purchase is labelled, and only when the API said so.
-    if (probeBody["sandbox"] === true) {
-      await expect(page.getByLabel("This is a sandbox payment")).toBeVisible();
-      await expect(confirm.locator(".badge-simulated")).toBeVisible();
-    } else {
-      await expect(page.getByLabel("This is a sandbox payment")).toHaveCount(0);
-    }
-
-    // The provider's own fields, on the provider's own origin. Card data never
-    // reaches this document.
-    const frame = page.locator("main iframe[name^='__privateStripeFrame']").first();
-    await expect(frame).toBeVisible({ timeout: 20_000 });
-    const src = (await frame.getAttribute("src")) ?? "";
-    expect(src.startsWith("https://js.stripe.com/"), "the card fields are served by Stripe").toBe(true);
-  });
-}
+  // The provider's own fields, on the provider's own origin. Card data never
+  // reaches this document.
+  const frame = page.locator("main iframe[name^='__privateStripeFrame']").first();
+  await expect(frame).toBeVisible({ timeout: 20_000 });
+  const src = (await frame.getAttribute("src")) ?? "";
+  expect(src.startsWith("https://js.stripe.com/"), "the card fields are served by Stripe").toBe(true);
+});
 
 test("the balance is never changed by arithmetic in the browser", async ({ page }) => {
   // The "must not happen" column for scenario B. Whatever the purchase page
