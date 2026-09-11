@@ -91,6 +91,9 @@ async function signedOutPage(browser: Browser): Promise<Page> {
 for (const route of APP_ROUTES) {
   test(`rendered text of ${route.path} uses no forbidden phrasing`, async ({ page }) => {
     await page.goto(route.path);
+    // The page under test. Scanning the 404 for forbidden vocabulary proves
+    // that the 404 is clean and nothing else.
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     const text = await visibleText(page);
     for (const [pattern, why] of FORBIDDEN) {
       expect(pattern.test(text), `${route.path}: ${String(pattern)} — ${why}`).toBe(false);
@@ -208,8 +211,14 @@ test("a simulated surface on the public site says it is an example", async ({ br
   const page = await signedOutPage(browser);
   for (const path of ["/", "/product", "/product/markets", "/product/agents"]) {
     await page.goto(path);
-    const text = await visibleText(page);
+    // The wait comes BEFORE the read. Reading first and settling after tested
+    // the page as it was during its own fetches: an example composition that
+    // the live list was about to replace, or a chip that had not rendered yet.
+    // Both directions of that are wrong, and the harmless-looking one — a check
+    // that passes because the thing it polices had not appeared — is the one
+    // that leaves a real page unchecked.
     await page.waitForLoadState("networkidle");
+    const text = await visibleText(page);
     if ((await page.locator(".badge-simulated").count()) === 0) continue;
     expect(text, `${path} labels its simulated surfaces`).toContain(
       "Example data, not a live account",
@@ -286,8 +295,11 @@ test("a page showing a USD valuation says what is actually held", async ({ page 
 test("a page showing Credits says what a Credit is", async ({ page }) => {
   for (const path of ["/markets", "/markets/products"]) {
     await page.goto(path);
-    const text = await visibleText(page);
+    // Settle first, then read: the figure this rule is about arrives from the
+    // API, so a read taken before the fetch lands finds no figure and skips the
+    // page it was written to check.
     await page.waitForLoadState("networkidle");
+    const text = await visibleText(page);
     // The gate is a rendered Credit FIGURE, not the word. A page can name
     // Credits in prose — "a shared pool of Credits" — while showing no figure
     // at all, which is what `/markets` does on a deployment with no assets
@@ -302,6 +314,7 @@ test("a page showing Credits says what a Credit is", async ({ page }) => {
 test("a model score never appears without the denial beside it", async ({ page }) => {
   for (const route of APP_ROUTES) {
     await page.goto(route.path);
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     const text = await visibleText(page);
     if (!/confidence/i.test(text)) continue;
     expect(text, `${route.path}: confidence appears, so the denial must too`).toContain(
@@ -327,6 +340,7 @@ test("pending settlement is never hidden", async ({ page }) => {
 test("the risk statement is on every page", async ({ browser, page }) => {
   for (const route of APP_ROUTES) {
     await page.goto(route.path);
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     const text = await visibleText(page);
     expect(text, `${route.path} carries the risk statement`).toContain("can lose money");
   }
@@ -363,6 +377,41 @@ test("no page puts a Credit figure and a currency figure together", async ({ pag
       `${path} rendered a currency amount on a page that quotes Credits`,
     ).toBeFalsy();
   }
+});
+
+test("every public page says whether this deployment is a rehearsal", async ({ browser }) => {
+  // `USER_JOURNEY.md` §0 promises the label, and the public site is where it
+  // matters most: somebody signed out is deciding whether this is a real
+  // product, and every sentence on the marketing pages reads as one until
+  // something says the deployment is a rehearsal. Both directions again — a
+  // real deployment wearing a sandbox label is the same lie as a sandbox
+  // deployment without one.
+  const page = await signedOutPage(browser);
+  const response = await page.request.get("/v1/version");
+  expect(response.ok()).toBeTruthy();
+  const version = (await response.json()) as { sandbox_tier?: boolean };
+
+  const wrong: string[] = [];
+  for (const route of PUBLIC_ROUTES) {
+    await page.goto(route.path);
+    await expect(page.locator("h1")).toHaveCount(1);
+    await page.waitForLoadState("networkidle");
+    const lines = page.locator(".sandbox-line");
+    const count = await lines.count();
+    if (version.sandbox_tier === true) {
+      if (count === 0) {
+        wrong.push(`${route.path} is served by a sandbox tier and says nothing`);
+        continue;
+      }
+      await expect(lines.first()).toContainText("nothing moves real value");
+      // Part of the document, not something that can be dismissed.
+      await expect(lines.first().getByRole("button")).toHaveCount(0);
+    } else if (count > 0) {
+      wrong.push(`${route.path} wears a sandbox label on a deployment that is not one`);
+    }
+  }
+  await page.context().close();
+  expect(wrong, "the public site's sandbox labelling").toEqual([]);
 });
 
 test("the shell says whether this deployment is a rehearsal", async ({ page }) => {

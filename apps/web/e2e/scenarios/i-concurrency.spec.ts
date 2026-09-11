@@ -30,13 +30,13 @@
 import { createHmac } from "node:crypto";
 
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
+import { CREDIT_DECIMALS } from "../../src/lib/credits.ts";
 
 const WEBHOOK_SECRET = process.env["CP_WEB_STRIPE_WEBHOOK_SECRET"] ?? "";
 const CAPTURED_CHARGE = process.env["CP_WEB_CAPTURED_CHARGE_ID"] ?? "";
 const CAN_DRIVE_WEBHOOK = WEBHOOK_SECRET !== "" && CAPTURED_CHARGE !== "";
 
 const STATE = ".playwright/state.json";
-const CREDIT_DECIMALS = 6;
 /** What each leg spends, in whole Credits. Small, because it runs three times. */
 const SPEND_WHOLE = "5";
 const SPEND = `${SPEND_WHOLE}${"0".repeat(CREDIT_DECIMALS)}`;

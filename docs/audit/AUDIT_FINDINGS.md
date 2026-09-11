@@ -159,6 +159,26 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-201 | P1 | PRODUCTIZATION | fixed | The withdrawal bar drew the frozen bucket beside the ineligible one it is already inside, so the picture claimed more than the total |
+| F-202 | P1 | PRODUCTIZATION | fixed | A fill left the portfolio, the holdings and the activity feed stale: the stream's scope map named five dead prefixes and neither key a fill changes |
+| F-203 | P1 | PRODUCTIZATION | fixed | After any refused order the ticket reused its idempotency key with a new quote's body, so the customer was told about the key instead of about the trade |
+| F-204 | P2 | PRODUCTIZATION | fixed | Signing out left the previous customer's typed form state, including a payout destination id, in the tab for the next person |
+| F-205 | P2 | PRODUCTIZATION | fixed | The Buy Credits idempotency key was kept across a change of amount, so a changed amount answered 409 with no recovery |
+| F-206 | P2 | PRODUCTIZATION | fixed | The public site never said the deployment is a sandbox tier, though it read the response that says so for its build tag |
+| F-207 | P2 | PRODUCTIZATION | fixed | The same market figures were `economy` on Home and `simulated` on `/markets`, so the temperature described the page rather than the tier |
+| F-208 | P2 | PRODUCTIZATION | fixed | Every press of a command button minted a new idempotency key, so a lost reply and a second press were a second purchase, decision, agent or asset |
+| F-209 | P2 | PRODUCTIZATION | fixed | The application sweeps asserted nothing that identifies the page, so `/this-route-does-not-exist` satisfied all of them |
+| F-210 | P2 | PRODUCTIZATION | fixed | `g-refund.spec.ts`'s reversal test asserted an unconditional label, so it passed on exactly the account that disproves its name |
+| F-211 | P3 | PRODUCTIZATION | fixed | No focus management on a route change: a keyboard or screen-reader user was left in the rail beside a page nobody announced |
+| F-212 | P3 | PRODUCTIZATION | fixed | Every unmapped failure rendered the one generic apology `UI_UX_SYSTEM.md` §4 forbids by name, while discarding the title the backend had sent |
+| F-213 | P3 | PRODUCTIZATION | fixed | `/agents/:agentId` was in no route list, so its only coverage was the not-found state — the one shape of it that renders no figure |
+| F-214 | P3 | PRODUCTIZATION | fixed | Three components nothing imports, one of them a second money formatter |
+| F-215 | P3 | PRODUCTIZATION | fixed | `Figure` silently dropped `symbol` on counts and `stablecoin` on base-unit values, and read a percent's base units as a decimal |
+| F-216 | P3 | PRODUCTIZATION | fixed | The paused-market refusal test skipped on every run there has ever been, so its assertions had executed zero times |
+| F-217 | P3 | PRODUCTIZATION | fixed | `AgentNew.tsx` and `AgentDetail.tsx` minted a key per press under comments promising the opposite |
+| F-218 | P3 | PRODUCTIZATION | fixed | No error boundary anywhere: a malformed stash reaching the BigInt constructor blanked the whole application on every load until the tab was closed |
+| F-219 | P3 | PRODUCTIZATION | fixed | `openapi.yaml` said quote fees are Credits at price_scale; they are at the Credit asset's scale, twelve orders of magnitude apart |
+| F-220 | P3 | PRODUCTIZATION | fixed | Two honesty checks settled the network after reading the page, so they read it mid-fetch |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -7522,6 +7542,432 @@ before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
 
+## F-201 · The withdrawal bar drew one Credit in two segments · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the frontend audit (goal §54), reproduced in
+`apps/web/e2e/audit-frontend.spec.ts` — "the withdrawal bar does not count one
+Credit in two segments", which sums the shares the bar states in its own
+accessible label and finds them over 100%.
+
+`/withdraw` drew three segments — `payout_eligible`, `ineligible` and `frozen` —
+against `gross`. The first two ARE the whole: `internal/eligibility/withdrawal.go`
+computes `Ineligible` as `Gross.Sub(PayoutEligible)`. And `frozen` is a disputed
+lot, which no payout policy permits, so every frozen Credit was already inside
+the second segment. The picture therefore claimed more than the total it was
+drawn against, and it did so in the flattering direction: the frozen Credits
+appeared as value held back twice, on the one screen a customer opens to work
+out what can actually leave.
+
+**Fix.** Two segments against `gross`, which account for every Credit exactly
+once. `frozen` is a labelled field beside the bar, next to `spendable`, with the
+sentence saying it is inside the ineligible part rather than beside it — because
+"may be used inside Nodal" and "may leave Nodal" are two permissions and this
+page exists to keep them apart.
+
+**Evidence.** `apps/web/src/pages/withdraw/Withdraw.tsx`; the audit
+reproduction passes against a sandbox-tier API on a fresh database.
+
+## F-202 · A fill left the portfolio, the holdings and the activity feed stale · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the frontend audit, reproduced twice: in
+`apps/web/src/lib/audit-frontend.test.ts` against the source, and in
+`e2e/audit-frontend.spec.ts` by delivering the `data.changed` event the server
+sends and watching whether `/v1/me/portfolio` is refetched.
+
+`StreamStatus.tsx`'s `SCOPE_KEYS` was a list of hand-copied query prefixes.
+Five of them — "buying-power", "holdings", "activity", "native-asset",
+"native-assets" — named reads no page has made since D-077 removed the hosted
+rail, and an invalidation against a prefix nothing reads matches nothing and
+raises nothing. Meanwhile the two keys a fill actually changes,
+`["me","portfolio",…]` and `["me","activity",…]`, were in no scope at all. A
+fill emits `position` and `balance`; the position it changed, the Credits it
+spent and the row it wrote were the three things on screen that did not refresh.
+
+It survived because `MarketDetail.tsx` carried its own four-line copy of the map
+beside its mutation, which made the trade screen look correct and hid the defect
+exactly where a reviewer would have looked for it.
+
+**Fix.** The map is derived from the key factories in `api/queries.ts` (D-112)
+and holds no string of its own, so renaming a key moves the map with it and
+deleting one stops the build. `MarketDetail` imports `invalidateScopes` instead
+of reproducing it. The three scopes the follower emits and the app had never
+heard of — verification, eligibility, agent — are mapped rather than falling
+through to invalidating the entire cache.
+
+**Evidence.** `apps/web/src/components/StreamStatus.tsx`,
+`apps/web/src/lib/stream-scopes.test.ts` (four assertions, including one that
+reads the scope constants out of `internal/notifications/follower.go`); both
+audit reproductions pass.
+
+## F-203 · A refused order was answered about its idempotency key · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the frontend audit, reproduced in `e2e/audit-frontend.spec.ts` —
+"a second confirmation of the same trade is evaluated, not refused for its key".
+
+The ticket minted its key at confirmation and kept it, which is right for a
+replay of the same request. But every route back to the confirm button goes
+through a new quote, and `quote_id` is in the body: the key was unchanged and
+the body was not, so the backend answered `INVALID_IDEMPOTENCY_REUSE`. A
+customer who had just asked the market to price their order again, and
+confirmed, was told something about a header — with nothing on the page that
+could fix it, because the page was the thing holding the stale key.
+
+**Fix.** `apps/web/src/lib/idempotency.ts` holds one key per command against a
+signature of the body the backend compares: the same body returns the same key,
+a changed body mints a new one, and it survives the sign-in round trip so
+scenario J is still a retry rather than a second request. Taking a new quote
+clears it explicitly as well. `INVALID_IDEMPOTENCY_REUSE` joins `lib/errors.ts`
+with a `requote` recovery, so if this is ever got wrong again the customer is
+not left at a dead end on top of an order that did not happen.
+
+**Evidence.** `apps/web/src/pages/markets/Ticket.tsx`,
+`apps/web/src/lib/idempotency.ts`, `apps/web/src/lib/errors.ts`; the audit
+reproduction passes.
+
+## F-204 · Signing out left the previous customer's form state in the tab · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit, reproduced in `e2e/audit-frontend.spec.ts` —
+"signing out forgets what the previous customer typed".
+
+`survives-sign-in.ts` says in its own header that the mirror "is scoped to the
+one tab and dies with it, so a shared computer does not hand the next person a
+form". Signing out is exactly the shared-computer case, and it does not kill the
+tab: the handler revoked the session, reloaded the page and cleared no storage,
+so every `nodal.form.*` key stayed for the thirty minutes of the TTL —
+a withdrawal amount and a stashed payout destination id among them.
+
+**Fix.** `clearAllFormState()` empties the in-tab map and every
+`nodal.`-prefixed key in the mirror, called from the sign-out handler before
+the reload, on `onSettled` rather than on success: the decision to stop using
+this tab is the customer's and does not depend on the backend answering.
+
+**Evidence.** `apps/web/src/lib/survives-sign-in.ts`,
+`apps/web/src/components/AppShell.tsx`; two unit tests including the
+storage-denied path; the audit reproduction passes.
+
+## F-205 · The Buy Credits key was kept across a change of amount · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit reading `BuyCredits.tsx` beside the ticket.
+
+The amount and the key were two independent stashes. Changing the amount
+changed the body and not the key, so the backend compared the recorded body,
+found a different `amount_minor` and answered 409 — on the payment screen, about
+a header, with no recovery on the page, to somebody who had done nothing but
+change their mind about how much to buy.
+
+**Fix.** The key is held against the amount it was minted for, through the same
+`useIdempotencyKey` the ticket uses, and is dropped in the same handler that
+changes the amount — both the typed field and the preset buttons. `onStartOver`
+clears it.
+
+**Evidence.** `apps/web/src/pages/credits/BuyCredits.tsx`,
+`apps/web/src/lib/idempotency.ts`; scenario B green.
+
+## F-206 · The public site never said the deployment is a rehearsal · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit, reproduced in `e2e/audit-frontend.spec.ts` —
+"the public site says whether this deployment is a rehearsal".
+
+`SiteChrome` read `GET /v1/version` for the build tag in its footer and
+discarded `sandbox_tier`. `USER_JOURNEY.md` §0 promises the label, and the
+public site is where it matters most: somebody signed out is deciding whether
+this is a real product, and every sentence on the marketing pages read as one.
+
+**Fix.** `SandboxLine` moves out of `AppShell` into its own module and both
+shells render it. `honesty.spec.ts` holds every public route to it in both
+directions — a real deployment wearing a sandbox label is the same lie as a
+sandbox deployment without one.
+
+**Evidence.** `apps/web/src/components/SandboxLine.tsx`,
+`apps/web/src/pages/public/SiteChrome.tsx`, `apps/web/e2e/honesty.spec.ts`; the
+audit reproduction passes.
+
+## F-207 · One deployment, two temperatures · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit comparing Home and `/markets` on a sandbox tier.
+
+`/markets` read the version, desaturated every figure and said why. Home,
+`/activity` and `/agents` never read it, so the same market moved by the same
+amount was the internal economy on one screen and a simulation two clicks away.
+That teaches a reader that the desaturation is a fact about the market rather
+than about the deployment, which is the opposite of what the three temperatures
+are for.
+
+**Fix.** All four pages read it once and pass it down. The standing sentence
+moves to `lib/honesty.ts` as `SANDBOX_TIER_NOTE`, so there is one of it rather
+than four that can drift.
+
+**Evidence.** `apps/web/src/pages/home/Home.tsx`,
+`apps/web/src/pages/activity/Activity.tsx`,
+`apps/web/src/pages/agents/AgentsList.tsx`,
+`apps/web/src/pages/markets/Markets.tsx`, `apps/web/src/lib/honesty.ts`.
+
+## F-208 · Every press minted a new idempotency key · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit reading `Products.tsx`, and then the same shape
+in three more places.
+
+`Products.tsx`, `AgentDetail.tsx`, `AgentNew.tsx` and `CreateAsset.tsx` all
+called `newIdempotencyKey()` inside the click handler. A reply lost in transit
+and a second press were therefore a second purchase, a second lifecycle
+decision, a second agent and a second asset — the exact failure the header
+exists to prevent. Three of them carried a comment promising the opposite;
+`CreateAsset.tsx` said in words that "a retry of the same confirmation must
+never make a second asset", which was the one thing it could not deliver.
+`Withdraw.tsx`'s confirmation had the other half of the defect (F-203's shape)
+on the most sensitive command in the product.
+
+**Fix.** `useIdempotencyKey` at every one of those sites, keyed by the thing
+acted on, with a signature over the fields the backend compares, cleared on
+success.
+
+**Evidence.** `apps/web/src/lib/idempotency.ts` and the five pages;
+`e2e/scenarios/i-concurrency.spec.ts` and `j-session-expiry.spec.ts` green.
+
+## F-209 · The application sweeps asserted nothing that identifies the page · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit, reproduced in `e2e/audit-frontend.spec.ts` —
+"the APP_ROUTES sweeps assert nothing that identifies the page".
+
+`accessibility.spec.ts`, `controls.spec.ts` and `honesty.spec.ts` each walked
+`APP_ROUTES` asserting one thing about what rendered: exactly one `h1`. The 404
+page satisfies that, and so does a sign-in page a gate diverted to — and this
+404 page is a tidy list of live links, so it also passes the dead-control walk
+and carries no forbidden vocabulary. Fifteen routes could have stopped existing
+and all three suites would have stayed green while checking the same not-found
+screen fifteen times. `RouteUnderTest.heading` existed for this and only the
+public sweep read it.
+
+**Fix.** Every application sweep asserts `route.heading` before it asserts
+anything else, as the public sweep already did.
+
+**Evidence.** `apps/web/e2e/accessibility.spec.ts`, `controls.spec.ts`,
+`honesty.spec.ts`.
+
+## F-210 · The reversal test passed on the account that disproves its name · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the frontend audit reading `g-refund.spec.ts` against the API's
+`reversed` bucket.
+
+The test asserted that the Credit panel contains the words "Not payout-eligible"
+— a heading the panel carries unconditionally, on every account, reversal or
+not. So on an account whose balance reports a non-zero `reversed` bucket that
+the panel does not draw at all, it passed.
+
+**Fix.** It asserts the figure: a field labelled for the bucket whose `title` is
+the API's own string for it, reconstructed in the spec by moving the point
+through the base units rather than parsing them.
+
+**Note.** This test FAILS on the branch that fixed it, deliberately. The Credit
+panel learning the `reversed` bucket is a separate finding owned by the
+credits-and-payments branch; the test is written against the contract
+(`reversed` on `GET /v1/credits/balance`) rather than against what Home draws
+today, because the contract is the part that has to be true and a test that
+waited for the page to catch up would be the same test that had been passing
+wrongly all along.
+
+**Evidence.** `apps/web/e2e/scenarios/g-refund.spec.ts`.
+
+## F-211 · No focus management on a route change · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit, reproduced in `e2e/audit-frontend.spec.ts` —
+"changing route moves focus into the new page".
+
+A client-side navigation replaced the document's content and left focus on the
+link that was clicked. A screen-reader user was told nothing had happened; a
+keyboard user's next Tab resumed in the rail, so reaching the first control on
+the page they had asked for meant walking the whole navigation again.
+
+**Fix.** `AppShell` focuses `#main` — which already has `tabIndex={-1}` for the
+skip link, so this is the same landing place "Skip to main content" gives — on
+every `location.pathname` change after the first render. The first is skipped
+deliberately: a fresh page load already has focus at the top of the document,
+and stealing it there would fight the browser's own restore on a back
+navigation.
+
+**Evidence.** `apps/web/src/components/AppShell.tsx`; the audit reproduction
+passes.
+
+## F-212 · The one generic sentence the design system forbids by name · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit, reproduced in
+`apps/web/src/lib/audit-frontend.test.ts` — "no error state says 'Something went
+wrong'".
+
+Every problem code without a case in `explain()` fell through to a heading
+`UI_UX_SYSTEM.md` §4 forbids by name. It tells the reader nothing, and it was
+not even true: the backend had said what happened, in a `title` the app was
+discarding.
+
+**Fix.** The backend's title where it gave one that is more than the code
+repeated back; otherwise "The backend did not complete this", which says what is
+actually known. The stable code and the correlation id are unchanged.
+
+**Evidence.** `apps/web/src/api/problem.ts`. The audit reproduction files join
+the guard tests in `scan.ts`'s exclusion list (D-114) for the reason that list
+exists: a file asserting a sentence appears nowhere has to write the sentence
+down.
+
+## F-213 · `/agents/:agentId` was in no route list · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit enumerating the route lists against the router.
+
+`APP_ROUTES` cannot hold it — the sweeps walk that list by navigating to each
+`path` and would ask the API for an agent called ":agentId" — and
+`DYNAMIC_APP_ROUTES` did not name it either. Its only coverage was its not-found
+state: the one shape of the page that renders no figure, no limit, no lifecycle
+control and no authority level, which is to say the one shape that cannot fail
+the checks a sweep would apply.
+
+**Fix.** It joins `DYNAMIC_APP_ROUTES`, and `d-agent` — the scenario that owns
+it — runs axe, the 375px reflow check and two honesty rules against a real
+agent. This build produces none, because the strategy service is wired with no
+compiler, so the skip says that in those words rather than "no agent".
+
+**Evidence.** `apps/web/e2e/routes.ts`, `apps/web/e2e/scenarios/d-agent.spec.ts`.
+
+## F-214 · Three components nothing imports · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit, reproduced in
+`apps/web/src/lib/audit-frontend.test.ts` — "every component in the tree has a
+caller".
+
+`Money.tsx` was a second money formatter, with its own absent and malformed
+states, written before `Figure` and the number ladder in `UI_UX_SYSTEM.md` §6.
+Two formatters is one more than a codebase this careful about exact values can
+afford: "every figure goes through `Figure`" is only true while there is nothing
+else to go through. `MintIdentity.tsx` belonged to the hosted rail D-077
+removed. `Tabs.tsx` was a correct WAI-ARIA tablist no screen ever rendered.
+
+**Fix.** All three deleted, with `TabButton` — which nothing else can use —
+and `UI_UX_SYSTEM.md` §7 records it rather than describing a component that is
+not there (D-113).
+
+**Evidence.** `docs/product/UI_UX_SYSTEM.md` §7 and §11; the audit reproduction
+passes.
+
+## F-215 · `Figure` dropped options its callers passed · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit, reproduced in
+`apps/web/src/lib/audit-frontend.test.ts` — two tests, on the count's symbol and
+on the stablecoin band.
+
+`Figure` accepts `symbol` on every kind, `stablecoin` on money and a value in
+either exact form. Three combinations were silently dropped. `formatCount`
+ignored the symbol, so the Credits-per-dollar rate on Buy Credits rendered as a
+bare "100" with nothing to say a hundred of what. `formatUnits` had no
+stablecoin branch, so the depeg band applied to a value sent as a decimal and
+not to the same value sent as base units. And the percent kind read
+`{base, scale}` as though the point had already moved, which renders five per
+cent as five hundred.
+
+**Fix.** All three honoured. A dropped option is worse than a missing one: the
+caller asked, the type accepted, and the screen said something else.
+
+**Evidence.** `apps/web/src/lib/format.ts`,
+`apps/web/src/components/Figure.tsx`; two new unit tests in `format.test.ts`;
+both audit reproductions pass.
+
+## F-216 · The paused-market refusal test had never run · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit reading the skip in `c-trade.spec.ts`.
+
+It skipped on "every market in this deployment is open", which is true of every
+seeded deployment, so the assertions under it had executed zero times while
+reading like coverage in a report.
+
+**Fix.** The test drives the real control. `NATIVE_MARKET_CLOSE_ONLY` is
+single-operator with a step-up (`internal/admin/kinds.go`), so an operator signs
+in through the development provider's MFA link, proposes the action and executes
+it, and the test then asserts the refusal the ticket renders. Nothing is faked
+and no row is written behind the API's back. It stops the LAST market in the
+discovery ordering, because coming back is `NATIVE_MARKET_RESUME` — dual control
+with an approve-side permission no standing role holds — and every other spec
+reaches for the first ACTIVE market. Where the deployment declares no operator
+it still skips, and the skip now names the setting that would change that
+(`CP_AUTH_BOOTSTRAP_OPERATORS=devidp|dev:operations=OPERATIONS`) rather than
+naming the weather.
+
+**Evidence.** `apps/web/e2e/scenarios/c-trade.spec.ts`; verified against a
+sandbox-tier API with that declaration — the market moves to CLOSE_ONLY through
+`/v1/admin/actions` and the ticket renders the refusal.
+
+## F-217 · The agent commands minted a key per press under comments promising otherwise · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit reading `AgentNew.tsx` and `AgentDetail.tsx`.
+
+The same defect as F-208, recorded separately because of the comments: each site
+explained that the key was minted at confirmation "so a retry after a stronger
+sign-in replays this decision instead of making a second one", and then minted a
+fresh one on every press, which makes every retry a second decision.
+
+**Fix.** `useIdempotencyKey` keyed by agent and by action, with the reason in the
+signature, so pausing and then disabling the same agent are two requests and
+pressing pause twice is one. The compile step keeps a key per attempt — asking
+again IS a new decision, and the attempt number the backend records is the
+evidence — but keeps it long enough for a lost reply to be re-sent as the same
+attempt. The comments now describe what the code does.
+
+**Evidence.** `apps/web/src/pages/agents/AgentNew.tsx`,
+`apps/web/src/pages/agents/AgentDetail.tsx`.
+
+## F-218 · A malformed stash blanked the whole application · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit.
+
+There was no error boundary anywhere. React unmounts the entire tree when a
+render throws and nothing catches it, so any exception on any page replaced the
+application with an empty document: no heading, no message, no control, and the
+same result on every reload. The audit reached it by the most ordinary route
+there is — a recovered draft whose amount was no longer a string, handed to the
+BigInt constructor — which meant one bad value in a tab's own storage made the
+product unusable until somebody thought to clear site data.
+
+**Fix.** Two lines of defence. `survives-sign-in.ts` checks a recovered draft
+against the shape the page declared before casting it, and drops what does not
+match exactly as it drops an expired one. `ErrorBoundary` sits inside the shell
+and around the page, so the navigation, the account menu and the sandbox label
+survive a fault on one screen; it renders the same `Explanation` a backend
+failure gets, plus a control that forgets what the tab has saved and reloads,
+which is the way out of a stash the page cannot read.
+
+**Evidence.** `apps/web/src/components/ErrorBoundary.tsx`,
+`apps/web/src/lib/survives-sign-in.ts` (`sameShape`), `apps/web/src/App.tsx`;
+three unit tests.
+
+## F-219 · The quote-fee scale in the API description was wrong · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit checking the ticket's scales against the
+description it is built from.
+
+`NativeQuote.asset_decimals` said "Fees and prices are always Credits, at
+price_scale". `internal/nativemarket/curve.go` takes both fees out of the Credit
+amount, so they carry the Credit asset's six decimals, while `effective_price`
+is a ratio computed at `PriceScale`, which is eighteen. A reader who believed
+the description would render a fee twelve orders of magnitude too small.
+
+**Fix.** The description says which figures are on which scale, and names the
+consequence of confusing them. Description only — no behaviour, no schema — and
+both generated outputs re-run so the committed files match.
+
+**Evidence.** `openapi/openapi.yaml` (`NativeQuote`),
+`internal/gen/api/api.gen.go`, `packages/generated-client/src/schema.d.ts`.
+
+## F-220 · Two honesty checks settled the network after reading the page · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend audit.
+
+"a simulated surface on the public site says it is an example" and "a page
+showing Credits says what a Credit is" both read `document.body.innerText` and
+then waited for `networkidle`. Both therefore tested the page as it was during
+its own fetches — an example composition the live list was about to replace, or
+a Credit figure that had not arrived. The harmless-looking direction is the
+dangerous one: a check that passes because the thing it polices had not rendered
+yet leaves a real page unchecked.
+
+**Fix.** The wait moves above the read in both.
+
+**Evidence.** `apps/web/e2e/honesty.spec.ts`.
 ## F-185 · Any authenticated person could end the API process by closing a stream · PRODUCTIZATION · P1 · FIXED
 
 **Found by** the agents-notifications adversarial audit (goal §54), reproduced

@@ -35,7 +35,7 @@
  * `GET /v1/auth/login`), so the callback usually lands on the page the customer
  * asked for and never passes through here at all.
  */
-import { useEffect, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 import { useTermsState } from "./api/queries.ts";
@@ -43,20 +43,14 @@ import { POLICY_PAGES } from "./content/policies/index.ts";
 import { AppShell } from "./components/AppShell.tsx";
 import { Boot } from "./components/Boot.tsx";
 import { Explanation, Loading } from "./components/DataState.tsx";
+import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { clearSignInPending, signInPending } from "./lib/survives-sign-in.ts";
 import { signInPathFor, useSession } from "./session.tsx";
 
 import { Activity } from "./pages/activity/Activity.tsx";
-import { AgentDetail } from "./pages/agents/AgentDetail.tsx";
-import { AgentNew } from "./pages/agents/AgentNew.tsx";
-import { AgentsList } from "./pages/agents/AgentsList.tsx";
 import { Verify } from "./pages/verify/Verify.tsx";
 import { Withdraw } from "./pages/withdraw/Withdraw.tsx";
 import { Home } from "./pages/home/Home.tsx";
-import { CreateAsset } from "./pages/markets/CreateAsset.tsx";
-import { MarketDetail } from "./pages/markets/MarketDetail.tsx";
-import { Markets } from "./pages/markets/Markets.tsx";
-import { Products } from "./pages/markets/Products.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { Portfolio } from "./pages/portfolio/Portfolio.tsx";
 import { BuyCredits } from "./pages/credits/BuyCredits.tsx";
@@ -80,6 +74,42 @@ import { ProductMarkets } from "./pages/public/ProductMarkets.tsx";
 import { Security } from "./pages/public/Security.tsx";
 import { SignIn } from "./pages/public/SignIn.tsx";
 import { SiteFrame } from "./pages/public/SiteChrome.tsx";
+
+/* --------------------------------------------------------------------------
+ * The two areas that are fetched when they are opened
+ *
+ * Everything else in this application is one bundle on purpose: a customer who
+ * signs in is going to see the dashboard, and splitting the screen they are
+ * already waiting for buys nothing but a second round trip in front of their
+ * balance.
+ *
+ * Markets and agents are different, and for a reason that is about weight
+ * rather than taste. The markets area carries `src/charts/` — the candle
+ * geometry and the plot — which nothing else in the product imports and which
+ * a customer who never opens a market never needs; the agents area carries the
+ * strategy compiler's browser-side document, effects and hash. Together they
+ * are the difference between a first load inside the interface's stated budget
+ * and one over it, and both are reached by a deliberate navigation, which is
+ * exactly the moment a short fetch is affordable.
+ *
+ * The fallback is `Loading`, the same component every slow read in this
+ * application uses, so a chunk arriving late looks like what it is rather than
+ * like a blank page. Nothing here is preloaded on a hover: a prefetch is a
+ * request the customer did not make, and this product does not make those.
+ * ------------------------------------------------------------------------ */
+const Markets = lazy(async () => ({ default: (await import("./pages/markets/Markets.tsx")).Markets }));
+const MarketDetail = lazy(async () => ({
+  default: (await import("./pages/markets/MarketDetail.tsx")).MarketDetail,
+}));
+const Products = lazy(async () => ({ default: (await import("./pages/markets/Products.tsx")).Products }));
+const CreateAsset = lazy(async () => ({
+  default: (await import("./pages/markets/CreateAsset.tsx")).CreateAsset,
+}));
+const AgentsList = lazy(async () => ({ default: (await import("./pages/agents/AgentsList.tsx")).AgentsList }));
+const AgentNew = lazy(async () => ({ default: (await import("./pages/agents/AgentNew.tsx")).AgentNew }));
+const AgentDetail = lazy(async () => ({
+  default: (await import("./pages/agents/AgentDetail.tsx")).AgentDetail,
+}));
 
 /** Where a signed-in visitor to `/` ends up when nothing else was requested. */
 const HOME = "/home";
@@ -206,7 +236,21 @@ function RequireSession(): ReactNode {
           {session.error !== undefined && session.error !== null && (
             <Explanation error={session.error} onRetry={session.refetch} />
           )}
-          <Outlet />
+          {/* Inside the shell, around the page. A render that throws used to
+              unmount the entire application and leave a blank document —
+              nothing to read, nothing to press, and the same result on every
+              reload. Here the navigation, the account menu and the sandbox
+              label survive, so a fault on one screen leaves the rest of the
+              product usable and the customer somewhere to go.
+
+              It is OUTSIDE the Suspense boundary deliberately: a chunk that
+              fails to load throws, and that is a fault the customer needs
+              explained with a control, not a fallback that spins for ever. */}
+          <ErrorBoundary what="This page">
+            <Suspense fallback={<Loading label="Loading this section…" />}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </AppShell>
       </OnboardingGate>
     </SessionBoundary>

@@ -44,7 +44,8 @@ export type SituationId =
   | "payout-delayed"
   | "session-expired"
   | "network-offline"
-  | "step-up-required";
+  | "step-up-required"
+  | "request-changed";
 
 /**
  * What the customer should do next.
@@ -218,6 +219,23 @@ export const SITUATIONS: readonly Situation[] = [
       "account and nothing has been submitted twice.",
     recovery: { kind: "retry", label: "Try again" },
     codes: ["UNREACHABLE"],
+  },
+  {
+    // Not one of §11's fifteen, because §11 lists what happens to a CUSTOMER
+    // and this is what happens when the app mishandles its own idempotency
+    // key: it sent a key the backend had already recorded against a different
+    // body, so the backend refused rather than guess which request was meant.
+    // The correct fix is to stop it happening (`lib/idempotency.ts`), and it is
+    // on this list anyway because a defect that reaches a customer must still
+    // leave them somewhere to go. Without a sentence and a recovery it renders
+    // as a dead end on top of an order that did not happen.
+    id: "request-changed",
+    name: "This order changed while it was being placed",
+    sentence:
+      "Something about this order moved between the last attempt and this one, so the backend " +
+      "refused it rather than replay the earlier request. Nothing was filled and no Credits moved.",
+    recovery: { kind: "requote", label: "Take a new quote" },
+    codes: ["INVALID_IDEMPOTENCY_REUSE"],
   },
   {
     id: "step-up-required",

@@ -93,6 +93,22 @@ test("a stablecoin between 0.95 and 1.05 gets three decimals so a depeg is visib
   assert.equal(formatMoney("1.2500", { stablecoin: true }).head, "1.25");
 });
 
+test("the stablecoin band applies to base units as well as to decimals", () => {
+  // The band is a property of the value. A stablecoin that arrives as
+  // `{base, scale}` is the same holding as one that arrives as a decimal, and
+  // a depeg that is visible in one form and not the other is the design system
+  // saying two different things about one number.
+  assert.equal(figureText(formatUnits("999000", 6, { stablecoin: true })), "0.999");
+  assert.equal(figureText(formatUnits("1000400", 6, { stablecoin: true })), "1.000");
+  // Without the flag the whole exact value is still shown, as before.
+  assert.equal(figureText(formatUnits("999000", 6)), "0.999000");
+  // Outside the band nothing changes.
+  assert.equal(figureText(formatUnits("1250000", 6, { stablecoin: true })), "1.250000");
+  // The symbol and the exact text survive the band.
+  assert.equal(formatUnits("999000", 6, { stablecoin: true, symbol: "USDC" }).exact, "0.999000 USDC");
+  assert.equal(figureText(formatUnits("999000", 6, { stablecoin: true, symbol: "USDC" })), "0.999 USDC");
+});
+
 test("at or above one the figure is two decimals, grouped, truncated", () => {
   assert.equal(figureText(formatMoney("1234.56")), "1,234.56");
   assert.equal(figureText(formatMoney("1234567.891")), "1,234,567.89");
@@ -124,6 +140,19 @@ test("a count is never abbreviated", () => {
   assert.equal(formatCount("1104").abbreviated, false);
   assert.equal(figureText(formatCount("0")), "0");
   assert.equal(formatCount("0").sign, "");
+});
+
+test("a count carries the unit its caller named, in the figure and in the exact text", () => {
+  // A rate of "100" says nothing without "Credits" after it, and `Figure`
+  // accepts `symbol` on every kind — so the count formatter honours it rather
+  // than dropping it silently.
+  assert.equal(figureText(formatCount("100", { symbol: "Credits" })), "100 Credits");
+  assert.equal(formatCount("100", { symbol: "Credits" }).exact, "100 Credits");
+  assert.equal(formatCount("100", { symbol: "Credits" }).abbreviated, false);
+  // No symbol is still a bare count, which is what every other caller wants.
+  assert.equal(figureText(formatCount("100")), "100");
+  // And a negative count keeps its sign in front of the digits, not the unit.
+  assert.equal(figureText(formatCount("-7", { symbol: "runs" })), `${MINUS}7 runs`);
 });
 
 test("a percentage is signed with U+2212, two decimals below 100 and none above", () => {

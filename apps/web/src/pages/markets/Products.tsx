@@ -3,7 +3,7 @@
  *
  * The other half of "things other people made, priced in Credits". Its logic is
  * unchanged from the screen it replaces; what changed is that every figure now
- * goes through `Figure` rather than through `Money.tsx`, the listings sit on
+ * goes through `Figure` — the one formatter the application has — the listings sit on
  * `PanelCard`, the two order histories are `DataTable`, and a refused purchase
  * is rendered as a refusal rather than as a fault.
  *
@@ -22,7 +22,6 @@
  * retries at a different price.
  */
 import { useState, type ReactNode } from "react";
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import {
   useInternalOrders,
@@ -36,6 +35,7 @@ import { DataTable, type Column } from "../../components/DataTable.tsx";
 import { AsyncPanel, EmptyState } from "../../components/DataState.tsx";
 import { FormField } from "../../components/Field.tsx";
 import { Figure } from "../../components/Figure.tsx";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import {
   Disclosure,
   Field,
@@ -51,9 +51,7 @@ import { useActiveAccountId } from "../../session.tsx";
 import { MarketsNav } from "./MarketsNav.tsx";
 import { TradeRefusal } from "./TradeRefusal.tsx";
 import "../../styles/markets.css";
-
-/** The scale a Credit is held at. See the note in `Markets.tsx`. */
-const CREDIT_DECIMALS = 6;
+import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 
 /** The product kinds, with what each one actually is. */
 const KINDS: ReadonlyArray<{ readonly value: string; readonly label: string }> = [
@@ -198,6 +196,8 @@ function ProductRow(props: {
 }): ReactNode {
   const { product } = props;
   const purchase = usePurchaseProduct();
+  // One key per product, so two listings on the same screen cannot share one.
+  const key = useIdempotencyKey(`products.buy.${product.product_id}`);
   const mine = product.seller_account_id === props.accountId;
 
   return (
@@ -288,15 +288,25 @@ function ProductRow(props: {
           busy={purchase.isPending}
           busyLabel="Buying…"
           onClick={() => {
-            purchase.mutate({
-              productId: product.product_id,
-              accountId: props.accountId,
-              // The price the customer is looking at, sent back to the backend.
-              // If it has changed, the purchase is refused rather than charged
-              // at the new one.
-              expectedPrice: product.price,
-              idempotencyKey: newIdempotencyKey(),
-            });
+            purchase.mutate(
+              {
+                productId: product.product_id,
+                accountId: props.accountId,
+                // The price the customer is looking at, sent back to the
+                // backend. If it has changed, the purchase is refused rather
+                // than charged at the new one.
+                expectedPrice: product.price,
+                // Minted on the first press and reused on every later press of
+                // the same purchase, which is the whole point of the header: a
+                // reply lost in transit must not become a second purchase. A
+                // new price means a different request, so the signature carries
+                // it and the key is minted again.
+                idempotencyKey: key.forRequest(
+                  requestSignature([product.product_id, props.accountId, product.price]),
+                ),
+              },
+              { onSuccess: () => { key.clear(); } },
+            );
           }}
         >
           Buy for Credits

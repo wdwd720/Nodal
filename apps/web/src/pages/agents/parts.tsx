@@ -29,9 +29,7 @@ import { Figure } from "../../components/Figure.tsx";
 import { Field, FieldGrid, StatusBadge, type Tone } from "../../components/Layout.tsx";
 import { CREDITS_DISCLOSURE } from "../../lib/honesty.ts";
 import { formatInstant } from "../../lib/time.ts";
-
-/** Credits are held at six decimal places, exactly as the ledger holds them. */
-export const CREDIT_DECIMALS = 6;
+import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 
 /** Every Credit figure on these screens. Exact base units in, tabular figure out. */
 export function Credits(props: {

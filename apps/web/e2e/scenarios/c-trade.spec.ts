@@ -31,9 +31,25 @@
  * It never fakes a pass.
  */
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
+import { chooseIdentity } from "../onboarding.ts";
 import { NARROW_HEIGHT, NARROW_WIDTH } from "../routes.ts";
+import { CREDIT_DECIMALS } from "../../src/lib/credits.ts";
+
+/** A context with no session at all, for the operator sign-in below. */
+const SIGNED_OUT = { cookies: [], origins: [] };
+
+/**
+ * What a same-origin write from the app itself carries.
+ *
+ * `page.request` shares the browser context's cookies but is not a page, so it
+ * sends no `Sec-Fetch-Site` and no `Origin`, and the API's CSRF middleware
+ * refuses it — correctly. Setting the header the app's own fetch would send is
+ * what makes these requests a test of the BUSINESS rule rather than a
+ * rediscovery of the cross-site one.
+ */
+const SAME_ORIGIN = { "Sec-Fetch-Site": "same-origin" } as const;
 
 interface MarketRow {
   market_id: string;
@@ -98,9 +114,6 @@ async function tradableMarket(page: Page): Promise<MarketRow | undefined> {
 function credits(whole: string, scale: number): string {
   return `${whole}${"0".repeat(scale)}`;
 }
-
-/** The Credit scale the application renders at. */
-const CREDIT_DECIMALS = 6;
 
 /** What this scenario spends, in whole Credits. Small, so it can run twice. */
 const SPEND = "10";
@@ -443,16 +456,123 @@ function decimalOf(baseUnits: string, scale: number): string {
   return `${padded.slice(0, cut)}.${padded.slice(cut)}`;
 }
 
-test("a market that refuses a side says which rule refused it", async ({ page }) => {
-  // Goal §47 and USER_JOURNEY §11: a paused market is a REFUSAL, not a fault,
+/**
+ * Puts one market into CLOSE_ONLY, through the control an operator would use.
+ *
+ * Nothing is faked and no row is written behind the API's back. This is the
+ * real path: an operator with `native_market:halt` proposes a
+ * NATIVE_MARKET_CLOSE_ONLY action against the market, and executes it.
+ * `internal/admin/kinds.go` makes the three stopping controls single-operator
+ * with a short expiry, on the argument that a halt at 3am must not wait for a
+ * second person — so there is no approval step to drive, only a step-up, which
+ * the development provider asserts through its MFA link exactly as a real one
+ * would through a passkey.
+ *
+ * The operator drives it in their own browser context. It has to be a separate
+ * one: the suite's stored session is a customer, the customer cannot reach
+ * `/v1/admin/actions`, and a test that signed the customer out to borrow their
+ * tab would be testing something else by the end of it.
+ *
+ * WHAT THIS CANNOT UNDO. Coming back is `NATIVE_MARKET_RESUME`, which is dual
+ * control with an approve-side permission no standing role holds — restarting a
+ * market after an incident is deliberately two awake people, and no test should
+ * be able to shortcut that. So the market chosen below is the LAST in the
+ * discovery ordering rather than the first: every other spec here reaches for
+ * the first ACTIVE market it can find, and this one takes the one furthest from
+ * them and leaves it closed for the rest of the run.
+ */
+async function closeOneMarket(browser: Browser, marketId: string): Promise<boolean> {
+  const context = await browser.newContext({ storageState: SIGNED_OUT });
+  const operator = await context.newPage();
+  try {
+    await operator.goto("/v1/auth/login?step_up=true");
+    await chooseIdentity(operator, { identity: "operations", mfa: true, waitFor: /127\.0\.0\.1:\d+\// });
+
+    const proposed = await operator.request.post("/v1/admin/actions", {
+      headers: { ...SAME_ORIGIN, "Idempotency-Key": `c-trade-close-${String(Date.now())}` },
+      data: {
+        kind: "NATIVE_MARKET_CLOSE_ONLY",
+        target_type: "native_market",
+        target_id: marketId,
+        reason: "browser suite: proving the refusal a stopped market renders",
+      },
+    });
+    // 403 is not a fault: an operator ROLE comes from the operator directory
+    // and never from a role claim, so signing in as the identity named
+    // `operations` does not make anybody an operator. See the skip below.
+    if (proposed.status() === 403) return false;
+    expect(
+      proposed.status(),
+      `an operator with native_market:halt may propose the stop: ${await proposed.text()}`,
+    ).toBe(201);
+    const action = (await proposed.json()) as { readonly id: string; readonly requires_dual: boolean };
+    expect(action.requires_dual, "a stopping control is one operator's call").toBe(false);
+
+    const executed = await operator.request.post(`/v1/admin/actions/${action.id}/execute`, {
+      headers: { ...SAME_ORIGIN, "Idempotency-Key": `c-trade-exec-${String(Date.now())}` },
+      data: { note: "browser suite" },
+    });
+    expect(executed.status(), `the action executes: ${await executed.text()}`).toBe(200);
+    return true;
+  } finally {
+    await context.close();
+  }
+}
+
+test("a market that refuses a side says which rule refused it", async ({ browser, page }) => {
+  // Goal §47 and USER_JOURNEY §11: a stopped market is a REFUSAL, not a fault,
   // and the ticket replaces the control with the reason rather than rendering a
   // form nobody can send.
+  //
+  // This used to skip. Every market a seeded deployment has is ACTIVE, so the
+  // skip fired on every run there has ever been and the assertions below have
+  // never executed once — a test that looks like coverage in a report and is
+  // not. A route exists to change that, so the test uses it.
   const response = await page.request.get("/v1/native-markets?limit=50");
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { markets: MarketRow[] };
-  const paused = body.markets.find((market) => market.market_status !== "ACTIVE");
-  test.skip(paused === undefined, "every market in this deployment is open");
-  const target = paused as MarketRow;
+  let target = body.markets.find((market) => market.market_status !== "ACTIVE");
+
+  if (target === undefined) {
+    // Closing a market cannot be undone from here, so there has to be one left
+    // for the specs that need to trade. One market and this stays a skip — and
+    // says which fact made it one.
+    test.skip(
+      body.markets.length < 2,
+      `this deployment has ${String(body.markets.length)} market(s), all ACTIVE; stopping the only ` +
+        "one would leave the trading scenarios nothing to trade, and NATIVE_MARKET_RESUME is dual " +
+        "control with an approve-side permission no standing role holds, so this test cannot put " +
+        "it back",
+    );
+    const last = body.markets[body.markets.length - 1] as MarketRow;
+    const closed = await closeOneMarket(browser, last.market_id);
+
+    // The one thing this test cannot supply for itself. An operator role is
+    // read from the operator directory and NEVER from a role claim in a token,
+    // which is the point of `internal/operatorroles` — so the development
+    // identity named `operations` is a customer until the deployment says
+    // otherwise. Exactly one setting says it:
+    //
+    //   CP_AUTH_BOOTSTRAP_OPERATORS=devidp|dev:operations=OPERATIONS
+    //
+    // on the API this suite runs against. With it, everything below executes
+    // against a market this test stopped through the real control. Without it,
+    // this is the honest skip, and it names the setting rather than saying
+    // "every market in this deployment is open" — which was true of every run
+    // there has ever been and told nobody what to do about it.
+    test.skip(
+      !closed,
+      "the API under test declares no operator, so no principal here may stop a market; set " +
+        "CP_AUTH_BOOTSTRAP_OPERATORS=devidp|dev:operations=OPERATIONS on it and this test drives " +
+        "the real NATIVE_MARKET_CLOSE_ONLY control instead of skipping",
+    );
+
+    const after = await page.request.get(`/v1/native-markets/${last.market_id}/summary`);
+    expect(after.ok(), "the market reads back after the stop").toBeTruthy();
+    const summary = (await after.json()) as { readonly market: MarketRow };
+    expect(summary.market.market_status, "the operator's action moved the market").toBe("CLOSE_ONLY");
+    target = summary.market;
+  }
 
   await page.goto(`/markets/${target.market_id}`);
   const ticket = page.locator('section.panel[aria-label="Trade"]');

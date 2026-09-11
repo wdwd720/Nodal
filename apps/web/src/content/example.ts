@@ -28,9 +28,6 @@
  * the example data somewhere it is named for what it is.
  */
 
-/** Credits are recorded at six decimal places. */
-export const CREDIT_DECIMALS = 6;
-
 export interface ExampleBalance {
   readonly label: string;
   readonly note: string;

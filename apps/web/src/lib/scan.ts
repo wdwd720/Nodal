@@ -38,6 +38,17 @@ function walk(dir: string, out: string[]): void {
 /**
  * Every source file the guards apply to: the whole app tree plus index.html,
  * minus the guard tests themselves, which necessarily quote what they forbid.
+ *
+ * The audit reproductions are on that list for exactly the same reason and no
+ * other. `src/lib/audit-frontend.test.ts` asserts that the sentence
+ * UI_UX_SYSTEM §4 bans appears nowhere, and it cannot make that assertion
+ * without writing the sentence down three times — once in the pattern and twice
+ * in the paragraph saying why; `e2e/audit-frontend.spec.ts` explains in prose
+ * which numeric constructor it is avoiding and why. A rule that could not tell
+ * a citation from a use would force both files to be vague about what they are
+ * testing, which is the opposite of what a reproduction is for. Every file that
+ * is not a guard — every page, every component, every other spec — is still
+ * scanned, which is the whole surface these rules were ever about.
  */
 export function sourceFiles(): SourceFile[] {
   const found: string[] = [];
@@ -46,7 +57,13 @@ export function sourceFiles(): SourceFile[] {
   const e2e = join(APP_ROOT, "e2e");
   walk(e2e, found);
 
-  const excluded = new Set(["src/lib/source-scan.test.ts", "src/lib/honesty.test.ts", "e2e/honesty.spec.ts"]);
+  const excluded = new Set([
+    "src/lib/source-scan.test.ts",
+    "src/lib/honesty.test.ts",
+    "src/lib/audit-frontend.test.ts",
+    "e2e/honesty.spec.ts",
+    "e2e/audit-frontend.spec.ts",
+  ]);
   return found
     .map((full) => ({
       path: relative(APP_ROOT, full).split(sep).join("/"),

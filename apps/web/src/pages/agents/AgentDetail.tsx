@@ -27,12 +27,12 @@
  */
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import { useAgent, useAgentAction, type Agent, type AgentAction } from "../../api/queries.ts";
 import { Button, LinkButton } from "../../components/Button.tsx";
 import { EmptyState, Explanation } from "../../components/DataState.tsx";
 import { Figure } from "../../components/Figure.tsx";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import {
   Disclosure,
   Field,
@@ -116,6 +116,9 @@ const ACTIONS: readonly AgentAction[] = ["enable", "pause", "resume", "disable",
 function Lifecycle(props: { readonly agent: Agent; readonly accountId: string }): ReactNode {
   const { agent, accountId } = props;
   const act = useAgentAction();
+  // One key per agent. The signature below carries the action and the reason,
+  // so pausing and then disabling the same agent are two requests.
+  const actionKey = useIdempotencyKey(`agents.action.${agent.id}`);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState<AgentAction | undefined>(undefined);
 
@@ -159,16 +162,30 @@ function Lifecycle(props: { readonly agent: Agent; readonly accountId: string })
               busyLabel="Working…"
               onClick={() => {
                 setPending(action);
-                act.mutate({
-                  agentId: agent.id,
-                  accountId,
-                  action,
-                  ...(reason.trim() === "" ? {} : { reason: reason.trim() }),
-                  // Minted here, at the confirmation, so a retry after a
-                  // stronger sign-in replays this decision instead of making a
-                  // second one.
-                  idempotencyKey: newIdempotencyKey(),
-                });
+                act.mutate(
+                  {
+                    agentId: agent.id,
+                    accountId,
+                    action,
+                    ...(reason.trim() === "" ? {} : { reason: reason.trim() }),
+                    // Minted at the first confirmation and REUSED while the
+                    // decision is the same one, so a retry after a stronger
+                    // sign-in or a lost reply replays this decision instead of
+                    // making a second. Changing the action, or the reason
+                    // recorded with it, is a different decision and mints a new
+                    // key.
+                    idempotencyKey: actionKey.forRequest(
+                      requestSignature([agent.id, action, reason.trim()]),
+                    ),
+                  },
+                  // On SUCCESS only. A failed attempt keeps the key, so
+                  // pressing the same action again is a retry of the same
+                  // request rather than a second decision — which is the whole
+                  // reason the key exists. Changing the action, or the reason
+                  // recorded with it, changes the signature and mints a new one
+                  // without anybody having to remember to.
+                  { onSuccess: () => { actionKey.clear(); } },
+                );
               }}
             >
               {ACTION_LABELS[action]}

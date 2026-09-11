@@ -35,10 +35,12 @@
  * app did not initiate would be lost. Writing through costs one small string
  * per keystroke and makes the promise unconditional.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 /** Namespace, so nothing else in the origin can collide with a draft. */
 const PREFIX = "nodal.form.";
+/** Everything this module owns. `clearAllFormState` removes all of it. */
+const NAMESPACE = "nodal.";
 /** Set while a sign-in navigation is in flight, so `/` knows not to flash. */
 const PENDING_KEY = "nodal.sign-in-pending";
 
@@ -134,20 +136,98 @@ export function stashFormState(key: string, value: unknown): void {
  * Reading removes: a draft that survives being read would be re-applied to the
  * next visit to the same form, which is how a customer ends up submitting an
  * amount they typed an hour ago.
+ *
+ * `accepts` is how a caller says what shape it stashed. Everything here arrives
+ * as `unknown` from a JSON parse of a string in the browser's own storage,
+ * which a previous build wrote, a different build reads, and a person with the
+ * developer tools open can edit. Casting that to `T` and handing it to a page
+ * is how a stash whose `amount` is no longer a string reaches the BigInt
+ * constructor and takes the whole application down with it: a blank screen, no
+ * message, on every load until the tab is closed. A value that does not match
+ * is dropped exactly as an expired one is. The form opens empty, which is a
+ * small loss, and the alternative is not a bigger loss but a broken product.
  */
-export function takeFormState<T>(key: string): T | undefined {
+export function takeFormState<T>(
+  key: string,
+  accepts?: (value: unknown) => value is T,
+): T | undefined {
   const entry = memory.get(key) ?? readMirror(key);
   memory.delete(key);
   dropMirror(key);
   if (entry === undefined) return undefined;
   if (now() - entry.at > STASH_TTL_MS) return undefined;
+  if (accepts !== undefined) return accepts(entry.value) ? entry.value : undefined;
   return entry.value as T;
+}
+
+/**
+ * True when `candidate` has the same shape as `template`.
+ *
+ * The default check, for the callers that have not written a narrower one. It
+ * is structural on purpose: every key the initial value declares must be
+ * present with the same JavaScript type, recursively through plain objects and
+ * arrays, and anything extra is ignored so a stash written by yesterday's build
+ * still opens today's form. What it catches is the case that matters, which is
+ * a field that is no longer the type the page is about to use.
+ */
+export function sameShape<T>(template: T, candidate: unknown): candidate is T {
+  if (template === null || template === undefined) return true;
+  if (Array.isArray(template)) {
+    if (!Array.isArray(candidate)) return false;
+    const first: unknown = template[0];
+    if (first === undefined) return true;
+    return candidate.every((item: unknown) => sameShape(first, item));
+  }
+  if (typeof template === "object") {
+    if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+      return false;
+    }
+    const row = candidate as Record<string, unknown>;
+    return Object.entries(template as Record<string, unknown>).every(
+      ([field, expected]) => field in row && sameShape(expected, row[field]),
+    );
+  }
+  return typeof candidate === typeof template;
 }
 
 /** Forgets a kept value without reading it. Called once a submit succeeds. */
 export function clearFormState(key: string): void {
   memory.delete(key);
   dropMirror(key);
+}
+
+/**
+ * Forgets everything this module holds, in the tab and in its mirror.
+ *
+ * Signing out is the shared-computer case this module's own header describes:
+ * the mirror "is scoped to the one tab and dies with it, so a shared computer
+ * does not hand the next person a form". Signing out does not kill the tab.
+ * Without this, the next person to use it opened Withdraw and found the
+ * previous customer's amount already typed, and the stashed payout destination
+ * id with it, for the thirty minutes of the TTL.
+ *
+ * Every `nodal.`-prefixed key goes, not only `nodal.form.`: the sign-in marker
+ * belongs to the session that is ending too. Nothing else in the origin uses
+ * the prefix, which is what the namespace is for, so this cannot take somebody
+ * else's value with it.
+ */
+export function clearAllFormState(): void {
+  memory.clear();
+  const store = session();
+  if (store === undefined) return;
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < store.length; i = i + 1) {
+      const key = store.key(i);
+      if (key !== null && key.startsWith(NAMESPACE)) doomed.push(key);
+    }
+    // Collected first and removed after: removing during the walk shifts the
+    // indices under it and leaves every other key behind.
+    for (const key of doomed) store.removeItem(key);
+  } catch {
+    // Storage denied. The in-tab map is already empty, and that is the copy
+    // that could have been handed to the next person in this tab.
+  }
 }
 
 /** How many drafts are held. For tests and for the security page. */
@@ -242,24 +322,37 @@ export interface SurvivingState<T> {
  * writes through. `clear()` on success is what stops a completed purchase from
  * pre-filling the next one.
  */
-export function useSurvivesSignIn<T>(key: string, initial: T): SurvivingState<T> {
+export function useSurvivesSignIn<T>(
+  key: string,
+  initial: T,
+  accepts?: (value: unknown) => value is T,
+): SurvivingState<T> {
   // The recovery happens once, during the first render, so the first paint
   // already shows what the customer typed rather than an empty field that
   // fills in a tick later.
   const recoveredRef = useRef<boolean | undefined>(undefined);
   const [value, setValue] = useState<T>(() => {
-    const kept = takeFormState<T>(key);
+    // A caller that supplied no narrower check still gets the structural one:
+    // recovering a value of the wrong shape is never what a page wants, and
+    // the default is derived from the initial value the caller already passed.
+    const check =
+      accepts ?? ((candidate: unknown): candidate is T => sameShape(initial, candidate));
+    const kept = takeFormState<T>(key, check);
     recoveredRef.current = kept !== undefined;
+    // Put straight back, HERE, in the same breath as the read.
+    //
+    // A recovered value has to survive being recovered — a customer bounced to
+    // sign in twice must not lose it the second time — and doing that in an
+    // effect looked equivalent until a page became a `React.lazy` route. React
+    // discards the first render of a suspended tree and renders it again when
+    // the chunk lands, and a discarded render's effects never run: the read
+    // took the draft, the effect that would have put it back went with the
+    // render, and the form the customer came back to was empty. Recovering is
+    // idempotent this way whatever React does with the render it happens in,
+    // which is the only property that makes it safe.
+    if (kept !== undefined) stashFormState(key, kept);
     return kept === undefined ? initial : kept;
   });
-
-  // A recovered value is put straight back, so that a customer who is bounced
-  // to sign-in twice does not lose it the second time.
-  useEffect(() => {
-    if (recoveredRef.current === true) stashFormState(key, value);
-    // Runs once per key: the write-through in `set` covers every later change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
 
   const set = useCallback(
     (next: T) => {

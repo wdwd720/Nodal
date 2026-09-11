@@ -41,26 +41,11 @@ import { FormField } from "../../components/Field.tsx";
 import { Disclosure, Page, Panel, Pill } from "../../components/Layout.tsx";
 import { fromBaseUnits } from "../../lib/format.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
-import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../../lib/honesty.ts";
+import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE, SANDBOX_TIER_NOTE } from "../../lib/honesty.ts";
 import { MarketsNav } from "./MarketsNav.tsx";
 import { SORTS, STATUS_FILTERS, UNSTABLE_SORT_NOTE, statusCopy } from "./copy.ts";
 import "../../styles/markets.css";
-
-/**
- * The scale a Credit is held at.
- *
- * It is a constant because the markets projection does not carry it: the row
- * names `credit_asset_id` but not that asset's decimals, so there is nothing to
- * read it from. Six is what the rest of this application already assumes and
- * what the economy seeder writes. It is recorded as a gap rather than hidden:
- * a deployment that minted Credits at another scale would render every Credit
- * figure on this page wrong by a factor of ten to the difference.
- *
- * Note what this is NOT used for. A price is at the market's own `price_scale`
- * and an asset quantity at its own `asset_decimals`, both of which every row
- * carries. Using this for either of those was F-44.
- */
-const CREDIT_DECIMALS = 6;
+import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 
 /** One page of results, and where the cursor stack has got to. */
 interface Paging {
@@ -370,12 +355,7 @@ function MarketList(props: {
 
       {!page.stable && <p className="field-note">{UNSTABLE_SORT_NOTE}</p>}
 
-      {props.sandbox && (
-        <p className="field-note">
-          This deployment is a sandbox tier, so every figure on this page is simulated. Nothing here
-          is anybody&apos;s money and no trade on it moves value anywhere.
-        </p>
-      )}
+      {props.sandbox && <p className="field-note">{SANDBOX_TIER_NOTE}</p>}
 
       <div className="form-actions">
         {props.paging.history.length === 0 ? (

@@ -11,11 +11,13 @@ import { test } from "node:test";
 
 import {
   STASH_TTL_MS,
+  clearAllFormState,
   clearFormState,
   clearSignInPending,
   dropMemoryForTest,
   isLocalPath,
   markSignInStarted,
+  sameShape,
   setClockForTest,
   signInPending,
   stashFormState,
@@ -38,6 +40,18 @@ function installStorage(options?: { readonly throws?: boolean }): Map<string, st
     removeItem(key: string): void {
       if (options?.throws === true) throw new Error("denied");
       backing.delete(key);
+    },
+    // The index half of the Storage interface, which `clearAllFormState` walks
+    // because there is no other way to ask a Storage what is in it. Modelled
+    // exactly as the browser behaves, including the part that matters: removing
+    // during a walk shifts every later index down by one.
+    get length(): number {
+      if (options?.throws === true) throw new Error("denied");
+      return backing.size;
+    },
+    key(index: number): string | null {
+      if (options?.throws === true) throw new Error("denied");
+      return [...backing.keys()][index] ?? null;
     },
   };
   (globalThis as { window?: unknown }).window = { sessionStorage: storage };
@@ -148,5 +162,119 @@ test("the sign-in marker is set and cleared", () => {
   assert.equal(signInPending(), true);
   clearSignInPending();
   assert.equal(signInPending(), false);
+  removeStorage();
+});
+
+/* --------------------------------------------------------------------------
+ * Signing out
+ * ------------------------------------------------------------------------ */
+
+test("signing out forgets every draft this tab holds, and the sign-in marker", () => {
+  // The shared-computer case this module's header is written about. The tab
+  // does not die when a session ends, so something has to empty it.
+  const backing = installStorage();
+  stashFormState("withdraw.amount", { amount: "1234", destinationId: "dest-7" });
+  stashFormState("buy-credits.draft", { amount: "50.00", key: "k" });
+  markSignInStarted();
+  backing.set("someone-elses.key", "not ours");
+  assert.equal(stashedFormCount(), 2);
+
+  clearAllFormState();
+
+  assert.equal(stashedFormCount(), 0, "the in-tab map is empty");
+  assert.deepEqual(
+    [...backing.keys()].filter((key) => key.startsWith("nodal.")),
+    [],
+    "no nodal-prefixed key survives the sign-out",
+  );
+  assert.equal(signInPending(), false, "the sign-in marker goes with the session");
+  assert.equal(backing.get("someone-elses.key"), "not ours", "and nothing else is touched");
+
+  // And the value really is gone rather than merely dropped from the map: a
+  // full-page navigation would otherwise recover it from the mirror.
+  dropMemoryForTest();
+  assert.equal(takeFormState("withdraw.amount"), undefined);
+  removeStorage();
+});
+
+test("a browser that denies storage still signs out cleanly", () => {
+  installStorage({ throws: true });
+  stashFormState("withdraw.amount", { amount: "1234" });
+  assert.doesNotThrow(() => {
+    clearAllFormState();
+  });
+  assert.equal(stashedFormCount(), 0, "the in-tab copy is gone, which is the one that could leak");
+  removeStorage();
+});
+
+/* --------------------------------------------------------------------------
+ * What comes back out of storage
+ * ------------------------------------------------------------------------ */
+
+test("a recovered draft of the wrong shape is dropped rather than cast", () => {
+  // `sessionStorage` is a string a previous build wrote and a person with the
+  // developer tools open can edit. A page that casts it and hands it to the
+  // BigInt constructor blanks the whole application on every load until the tab
+  // is closed, with no message and nothing to click.
+  installStorage();
+  const template = { amount: "", side: "BUY", toleranceBps: 100 };
+
+  stashFormState("ticket", { amount: 25, side: "BUY", toleranceBps: 100 });
+  assert.equal(
+    takeFormState("ticket", (value): value is typeof template => sameShape(template, value)),
+    undefined,
+    "a numeric amount is not the string shape the page will parse",
+  );
+
+  stashFormState("ticket", { amount: "25", side: "BUY" });
+  assert.equal(
+    takeFormState("ticket", (value): value is typeof template => sameShape(template, value)),
+    undefined,
+    "a missing field is a different shape too",
+  );
+
+  // What does match comes back untouched, extra fields and all: a stash written
+  // by yesterday's build still opens today's form.
+  stashFormState("ticket", { amount: "25", side: "SELL", toleranceBps: 50, leftover: "x" });
+  assert.deepEqual(
+    takeFormState("ticket", (value): value is typeof template => sameShape(template, value)),
+    { amount: "25", side: "SELL", toleranceBps: 50, leftover: "x" },
+  );
+  removeStorage();
+});
+
+test("the shape check reads through objects and arrays", () => {
+  assert.equal(sameShape({ a: "" }, { a: "x" }), true);
+  assert.equal(sameShape({ a: "" }, { a: 1 }), false);
+  assert.equal(sameShape({ a: "" }, null), false);
+  assert.equal(sameShape({ a: "" }, []), false);
+  assert.equal(sameShape({ a: { b: 0 } }, { a: { b: 7 } }), true);
+  assert.equal(sameShape({ a: { b: 0 } }, { a: { b: "7" } }), false);
+  assert.equal(sameShape({ ids: [""] }, { ids: ["a", "b"] }), true);
+  assert.equal(sameShape({ ids: [""] }, { ids: ["a", 2] }), false);
+  assert.equal(sameShape({ ids: [""] }, { ids: [] }), true);
+  // An empty template says nothing about the element type, so it accepts any
+  // array. That is deliberate: a template with no example cannot describe one.
+  assert.equal(sameShape({ ids: [] }, { ids: [1, "two"] }), true);
+  assert.equal(sameShape("", "text"), true);
+  assert.equal(sameShape("", 3), false);
+});
+
+test("recovering a draft is idempotent, because a discarded render must not eat it", () => {
+  // React discards the first render of a suspended tree — which is every
+  // `React.lazy` route — and renders it again when the chunk lands. The read
+  // that recovers a draft happens in that render, so it has to be safe to
+  // happen twice: the first one took the value and the second one found
+  // nothing, and the customer came back from a step-up to an empty form.
+  installStorage();
+  stashFormState("create-asset.draft", { name: "Round trip asset" });
+
+  const first = takeFormState<{ name: string }>("create-asset.draft");
+  assert.deepEqual(first, { name: "Round trip asset" });
+  // What the hook now does in the same breath as the read.
+  if (first !== undefined) stashFormState("create-asset.draft", first);
+
+  // The render that actually mounts reads the same value rather than nothing.
+  assert.deepEqual(takeFormState("create-asset.draft"), { name: "Round trip asset" });
   removeStorage();
 });

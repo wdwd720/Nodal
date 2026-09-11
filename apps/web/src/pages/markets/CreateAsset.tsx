@@ -15,8 +15,9 @@
  * confirmation mints its idempotency key at the moment of confirming, so a
  * double-click cannot publish two assets.
  *
- * What changed in the restyle: every figure goes through `Figure` rather than
- * `Money.tsx`, the inputs are `FormField` so an error is tied to its control
+ * What changed in the restyle: every figure goes through `Figure` — the one
+ * formatter, now that the earlier one is deleted — the inputs are `FormField`
+ * so an error is tied to its control
  * with `aria-describedby` rather than sitting in a list above the form, and a
  * refused creation is rendered as a refusal rather than as a fault.
  *
@@ -29,7 +30,6 @@
  *     separate decision made by somebody else.
  */
 import { useState, type ReactNode } from "react";
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import { useCreateNativeAsset, type NativeAsset } from "../../api/queries.ts";
 import { Button, LinkButton } from "../../components/Button.tsx";
@@ -50,6 +50,7 @@ import {
   NATIVE_ASSET_RISK,
   NATIVE_PRICE_NOTE,
 } from "../../lib/honesty.ts";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import { useSurvivesSignIn } from "../../lib/survives-sign-in.ts";
 import { useActiveAccountId } from "../../session.tsx";
 import { TradeRefusal } from "./TradeRefusal.tsx";
@@ -142,6 +143,10 @@ export function CreateAsset(): ReactNode {
    */
   const kept = useSurvivesSignIn<Draft>("create-asset.draft", EMPTY);
   const draft = kept.value;
+  // One key for this creation, minted at the confirmation and held against the
+  // draft it was minted for, so a double press publishes one asset and an
+  // edited draft publishes a different one.
+  const createKey = useIdempotencyKey("create-asset.key");
   const [reviewing, setReviewing] = useState(false);
   const [touched, setTouched] = useState(false);
   const create = useCreateNativeAsset();
@@ -184,16 +189,28 @@ export function CreateAsset(): ReactNode {
                 maxSupply: draft.maxSupply,
                 creatorAllocation: draft.creatorAllocation === "" ? "0" : draft.creatorAllocation,
                 decimals: ASSET_DECIMALS,
-                // Minted at the moment of confirmation, never on render: a
-                // retry of the same confirmation must never make a second
-                // asset.
-                idempotencyKey: newIdempotencyKey(),
+                // Minted at the moment of confirmation, never on render, and
+                // REUSED when the same confirmation is pressed again — which is
+                // what makes the sentence above true. A fresh key per press
+                // would have made a second press a second asset, which is
+                // precisely what it claims cannot happen.
+                idempotencyKey: createKey.forRequest(
+                  requestSignature([
+                    accountId,
+                    draft.name.trim(),
+                    draft.symbol,
+                    draft.description.trim(),
+                    draft.maxSupply,
+                    draft.creatorAllocation === "" ? "0" : draft.creatorAllocation,
+                  ]),
+                ),
               },
               // Only a draft that was actually created is forgotten. A failed
               // attempt keeps everything, because the customer is about to try
               // again with it.
               {
                 onSuccess: () => {
+                  createKey.clear();
                   kept.clear();
                 },
               },

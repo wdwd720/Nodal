@@ -38,6 +38,7 @@ import {
   formatMoney,
   formatPercent,
   formatUnits,
+  fromBaseUnits,
   type Figure as FigureData,
 } from "../lib/format.ts";
 
@@ -82,6 +83,12 @@ function exactDecimal(value: ExactValue): string {
   return value.decimal ?? value.base;
 }
 
+/** A percentage's exact decimal, whichever of the two exact forms it arrived in. */
+function percentDecimal(value: ExactValue): string {
+  if (value.base !== undefined) return fromBaseUnits(value.base, value.scale);
+  return value.decimal;
+}
+
 /** Turns the props into a formatted figure, or reports why it could not. */
 function compute(props: FigureProps): FigureData | MoneyFormatError {
   const symbol = props.symbol === undefined ? {} : { symbol: props.symbol };
@@ -111,7 +118,11 @@ function compute(props: FigureProps): FigureData | MoneyFormatError {
         if (props.value === null || props.value === undefined) {
           return absentFigure(props.absent);
         }
-        return formatPercent(exactDecimal(props.value), { signed: props.signed !== false });
+        // Base units are digits with the point still to move. Reading them as a
+        // decimal would render five per cent as five hundred, which is the one
+        // arithmetic mistake a percentage can make that nobody would question
+        // on sight.
+        return formatPercent(percentDecimal(props.value), { signed: props.signed !== false });
       }
       case "bps": {
         if (props.bps === null || props.bps === undefined) {
@@ -123,7 +134,7 @@ function compute(props: FigureProps): FigureData | MoneyFormatError {
         if (props.count === null || props.count === undefined) {
           return absentFigure(props.absent);
         }
-        return formatCount(props.count);
+        return formatCount(props.count, symbol);
       }
     }
   } catch (error) {

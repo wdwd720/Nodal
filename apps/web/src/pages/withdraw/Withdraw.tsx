@@ -75,13 +75,12 @@ import { Skeleton } from "../../components/Skeleton.tsx";
 import { EMPTY_STATES, situationForCode } from "../../lib/errors.ts";
 import { CREDITS_DISCLOSURE, PROVENANCE_NOTE } from "../../lib/honesty.ts";
 import { parseQuantityInput } from "../../lib/money.ts";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import { useSurvivesSignIn } from "../../lib/survives-sign-in.ts";
 import { formatInstant, secondsUntil } from "../../lib/time.ts";
 import { useActiveAccountId } from "../../session.tsx";
 import { Destinations } from "./Destinations.tsx";
-
-/** Credits are held at six decimal places, exactly as the ledger holds them. */
-const CREDIT_DECIMALS = 6;
+import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 
 /** How often a request that is still moving is re-read from the backend. */
 const FOLLOW_MS = 2_000;
@@ -621,7 +620,7 @@ export function Withdraw(): ReactNode {
    * customer unsure whether a payout exists, and the only way to make the retry
    * safe is to retry the SAME request. A new key would be a second request.
    */
-  const confirmKey = useSurvivesSignIn<string>("withdraw.confirm-key", "");
+  const confirmKey = useIdempotencyKey("withdraw.confirm-key");
   const [following, setFollowing] = useState<string | undefined>(undefined);
 
   const tick = useTick(quote.data !== undefined);
@@ -726,6 +725,18 @@ export function Withdraw(): ReactNode {
                 </Field>
               </FieldGrid>
 
+              {/* TWO segments, because the API reports two and they are exactly
+                  the whole: `ineligible` IS `gross - payout_eligible`
+                  (`internal/eligibility/withdrawal.go`), so these two account
+                  for every Credit and nothing is drawn twice.
+
+                  `frozen` is not a third part. A frozen lot is a disputed lot,
+                  no payout policy permits one, and it is therefore already
+                  inside `ineligible` — drawing it beside the other two made the
+                  bar claim more than the whole it was drawn against, and made
+                  the frozen Credits look like value held back twice. It is a
+                  figure beside the bar instead, with the sentence that says
+                  where in the picture it lives. */}
               <SegmentedBar
                 caption="Your Credits by what may leave"
                 scale={CREDIT_DECIMALS}
@@ -743,18 +754,27 @@ export function Withdraw(): ReactNode {
                     key: "ineligible",
                     label: "Not eligible",
                     baseUnits: data.ineligible,
-                    explanation: "Held back by the policy, for the reasons listed below.",
+                    explanation:
+                      "Everything else you hold, held back by the policy for the reasons listed below.",
                     texture: "hatch",
-                  },
-                  {
-                    key: "frozen",
-                    label: "Frozen",
-                    baseUnits: data.frozen,
-                    explanation: "Held because of a dispute or an adjustment on this account.",
-                    texture: "sparse",
                   },
                 ]}
               />
+
+              <FieldGrid columns={2}>
+                <Field
+                  label="Frozen"
+                  note="Held because of a dispute or an adjustment on this account. It is inside the ineligible part of the bar above rather than beside it: no payout policy permits a disputed lot to leave, so freezing value cannot make it eligible or add to what you hold."
+                >
+                  <Credits base={data.frozen} />
+                </Field>
+                <Field
+                  label="Spendable"
+                  note="A different question with a different answer: what may be used inside Nodal now. Spending and withdrawing are not the same permission."
+                >
+                  <Credits base={data.spendable} />
+                </Field>
+              </FieldGrid>
 
               <FieldGrid columns={3}>
                 <Field label="Anything at all" note="The composed answer, not one of its parts.">
@@ -985,17 +1005,28 @@ export function Withdraw(): ReactNode {
               busy={create.isPending}
               busyLabel="Requesting…"
               onClick={() => {
-                // Minted here, at the confirmation, and kept: a retry after a
-                // sign-in must repeat THIS request rather than make a second.
-                const key = confirmKey.value === "" ? newIdempotencyKey() : confirmKey.value;
-                confirmKey.set(key);
+                // Minted here, at the confirmation, and kept for exactly as
+                // long as the request it belongs to: a retry after a sign-in
+                // must repeat THIS request rather than make a second, and a
+                // confirmation after a NEW quote must not replay the old one.
+                // Both matter here — a quote expires in seconds, so every route
+                // back to this button comes through a fresh `quote_id`, and a
+                // key kept across that is a 409 about a header on the one
+                // screen where a customer is committing to move value.
                 create.mutate(
                   {
                     accountId,
                     amount: live.gross_quantity,
                     destinationId: live.destination_id,
                     quoteId: live.quote_id,
-                    idempotencyKey: key,
+                    idempotencyKey: confirmKey.forRequest(
+                      requestSignature([
+                        accountId,
+                        live.quote_id,
+                        live.destination_id,
+                        live.gross_quantity,
+                      ]),
+                    ),
                   },
                   {
                     onSuccess: (request) => {

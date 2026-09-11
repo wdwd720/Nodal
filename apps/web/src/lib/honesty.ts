@@ -207,3 +207,16 @@ export const PROVENANCE_NOTE =
 export const PAYOUT_NOT_APPROVED =
   "No payout path is approved in this deployment. That is a decision about the product, not about " +
   "your account, and no amount of Credits changes it.";
+
+/**
+ * The standing sentence a sandbox tier owes every page that shows a figure.
+ *
+ * `GET /v1/version` answers `sandbox_tier`; nothing infers it from an
+ * environment name. It lives here, in one place, because it was written once on
+ * `/markets` and nowhere else, and the result was that the same market moved by
+ * the same amount read as the internal economy on Home and as a simulation two
+ * clicks away. A temperature that changes with the page is not a temperature.
+ */
+export const SANDBOX_TIER_NOTE =
+  "This deployment is a sandbox tier, so every figure on this page is simulated. Nothing here is " +
+  "anybody's money and no trade on it moves value anywhere.";

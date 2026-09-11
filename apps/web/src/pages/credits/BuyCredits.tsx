@@ -41,12 +41,13 @@
  * # The idempotency key is minted at confirm, and survives a sign-in
  *
  * It is created when the customer presses the button that starts a payment,
- * never on render, and it is written through `useSurvivesSignIn` with the
- * amount — so a session that expires mid-purchase comes back to the same
- * amount and the same key, and the retry cannot make a second payment.
+ * never on render, and it is held against the amount it was minted for — so a
+ * session that expires mid-purchase comes back to the same amount and the same
+ * key, and the retry cannot make a second payment, while a customer who changes
+ * their mind about the amount gets a new key rather than a 409 about a header
+ * they have never heard of.
  */
 import { useState, type ReactNode } from "react";
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import { explain } from "../../api/problem.ts";
 import {
@@ -75,6 +76,7 @@ import {
 import { CREDITS_DISCLOSURE, PROVENANCE_NOTE } from "../../lib/honesty.ts";
 import { parseUsdAmountInput } from "../../lib/money.ts";
 import { readPublishableKey } from "../../lib/stripe.ts";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import { useSurvivesSignIn } from "../../lib/survives-sign-in.ts";
 import { useActiveAccountId } from "../../session.tsx";
 import { PaymentForm, categorySentence, type ProviderOutcome } from "./PaymentForm.tsx";
@@ -198,8 +200,14 @@ export function BuyCredits(): ReactNode {
   // Both survive a sign-in round trip: the amount so the customer does not
   // retype it, and the key so a retry after re-authentication is the same
   // request rather than a second payment.
+  //
+  // The key is held WITH the amount it was minted for. Kept across a change of
+  // amount it is worse than useless: the backend compares the body it recorded,
+  // finds a different `amount_minor`, and answers 409 — on the payment screen,
+  // about a header, with no recovery on the page, to somebody who has done
+  // nothing but change their mind about how much to buy.
   const typed = useSurvivesSignIn<string>("buy-credits.amount", "");
-  const key = useSurvivesSignIn<string>("buy-credits.key", "");
+  const key = useIdempotencyKey("buy-credits.key");
 
   const [purchase, setPurchase] = useState<CreditPurchase | undefined>(undefined);
   const [outcome, setOutcome] = useState<ProviderOutcome | undefined>(undefined);
@@ -289,6 +297,7 @@ export function BuyCredits(): ReactNode {
           <ChooseAmount
             policy={pricing.data}
             typed={typed}
+            onAmountChanged={key.clear}
             busy={start.isPending}
             error={start.error}
             onRetry={() => {
@@ -296,16 +305,17 @@ export function BuyCredits(): ReactNode {
             }}
             onConfirm={(amountMinor) => {
               // The key is minted HERE — at the moment of confirmation — and
-              // kept, so every retry of this same confirmation reuses it.
-              // Never on render.
-              const existing = key.value === "" ? newIdempotencyKey() : key.value;
-              key.set(existing);
+              // reused for every retry of THIS amount. Never on render, and
+              // never carried across to a different one.
+              const currency = (pricing.data as CreditPricing).currency;
               start.mutate(
                 {
                   accountId,
                   amountMinor,
-                  currency: (pricing.data as CreditPricing).currency,
-                  idempotencyKey: existing,
+                  currency,
+                  idempotencyKey: key.forRequest(
+                    requestSignature([accountId, String(amountMinor), currency]),
+                  ),
                 },
                 {
                   onSuccess: (created) => {
@@ -327,7 +337,7 @@ export function BuyCredits(): ReactNode {
             onStartOver={() => {
               setPurchase(undefined);
               setOutcome(undefined);
-              key.set("");
+              key.clear();
               typed.clear();
               start.reset();
             }}
@@ -356,6 +366,8 @@ interface Typed {
 function ChooseAmount(props: {
   readonly policy: CreditPricing;
   readonly typed: Typed;
+  /** Called whenever the amount changes, so the key cannot outlive its body. */
+  readonly onAmountChanged: () => void;
   readonly busy: boolean;
   readonly error: unknown;
   readonly onRetry: () => void;
@@ -410,6 +422,7 @@ function ChooseAmount(props: {
             key={preset}
             variant={minor === preset ? "primary" : "secondary"}
             onClick={() => {
+              props.onAmountChanged();
               typed.set(minorToUsd(preset));
             }}
           >
@@ -430,6 +443,10 @@ function ChooseAmount(props: {
             autoComplete="off"
             value={typed.value}
             onChange={(event) => {
+              // A changed amount is a different purchase. Dropping the key in
+              // the same handler that changes the amount is what keeps the two
+              // from disagreeing.
+              props.onAmountChanged();
               typed.set(event.target.value);
             }}
             {...field}

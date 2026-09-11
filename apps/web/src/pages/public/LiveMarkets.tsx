@@ -36,7 +36,7 @@ import { Panel } from "../../components/Panel.tsx";
 import { StatusBadge } from "../../components/StatusBadge.tsx";
 import { Figure } from "../../components/Figure.tsx";
 import { Skeleton } from "../../components/Skeleton.tsx";
-import { CREDIT_DECIMALS } from "../../content/example.ts";
+import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../../lib/honesty.ts";
 import { ExampleMarkets } from "./ExampleUI.tsx";
 
