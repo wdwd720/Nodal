@@ -72,6 +72,11 @@ receive is four other decisions, each made by a different thing.
                           │                            provider accepts
                           │                            status → VERIFIED
                           ▼
+  POST /v1/me/terms/accept ────────────────────────►  terms_acceptances
+       (WITHDRAWAL_DISCLOSURE, asked HERE and           version + content hash
+        never at signup)                                of the bytes shown
+                          │
+                          ▼
   POST /v1/payouts/quote ──────────────────────────►  payout_quotes
        (gross, fee, net, minimum_ok NET of fees,       expires in 5 minutes
         expiry, what value would leave)
@@ -101,14 +106,58 @@ substitute for another, and the product tells a person which one is refusing.
 | Is this deployment permitted to do it at all? | `capability_gates` (`PAYOUT_RESERVE`, `PAYOUT_SETTLE`) and `legalrouter` | `CAPABILITY_INACTIVE` |
 | Will a provider actually send it? | `payout.Provider.Capabilities` — rails, currencies, countries, minimums, fees | `PROVIDER_UNAVAILABLE`, `MINIMUM_NOT_MET` |
 
-Plus two facts about the person that are not about the money:
-`JURISDICTION_RESTRICTED` (the versioned rule table) and `ACCOUNT_RESTRICTED`
-(a freeze, a compliance hold, a sanctions review).
+Plus three facts about the person that are not about the money:
+`JURISDICTION_RESTRICTED` (the versioned rule table), `ACCOUNT_RESTRICTED` (a
+freeze, a compliance hold, a sanctions review), and `TERMS_NOT_ACCEPTED` — the
+withdrawal disclosure, below.
 
-`GET /v1/me/eligibility` composes all six and reports them per origin bucket,
+`GET /v1/me/eligibility` composes all seven and reports them per origin bucket,
 because eligibility is decided per unit of provenance and not per balance. Two
 people holding "18,450 Credits" can have entirely different withdrawable
 amounts, and that is correct.
+
+### The withdrawal disclosure (§48, D-084)
+
+`WITHDRAWAL_DISCLOSURE` is the one document in `internal/terms` whose
+`Requirement` is `BEFORE_WITHDRAWAL` rather than `AT_ONBOARDING`, because asking
+for it at signup is exactly the frontloading §6 forbids: a person buying Credits
+to spend inside the product has not asked to take anything out and should not be
+made to read a document about it.
+
+It is required at the two points where somebody does ask:
+
+| Surface | What happens without it |
+|---|---|
+| `GET /v1/me/eligibility` | reason `TERMS_NOT_ACCEPTED`, `eligible: false`, and **the withdrawable figures stay true** |
+| `POST /v1/payouts/quote` | `422 TERMS_ACCEPTANCE_REQUIRED`, before the quote is priced or stored |
+| `POST /v1/payouts` | `422 TERMS_ACCEPTANCE_REQUIRED`, before any request row or reservation exists |
+
+Three properties of that are deliberate.
+
+**The refusal is in the domain service, not the handler.** `payout.Service.Create`
+and `payout.Service.Quote` take `DisclosureAccepted` and refuse without it.
+`internal/payout` has more than one way in — a person pressing a button, an
+operator resolving a stuck payout, a retry, a worker — and a check that lived
+only in the HTTP layer would apply to one of them. The field has no "unknown"
+value: `false` refuses, so a caller that forgets to supply it stops a payout
+rather than permitting one.
+
+**The eligibility page still shows the real numbers.** An unsigned disclosure is
+the normal state of everybody who has never withdrawn. Zeroing the buckets would
+tell those people their money is stuck when an unread document is the whole of
+it, so `TERMS_NOT_ACCEPTED` lowers the verdict and changes no figure — the same
+shape `MINIMUM_NOT_MET` already had. It is a next step, like
+`REQUIRES_VERIFICATION`, and the product presents it as one.
+
+**The code is its own.** `TERMS_ACCEPTANCE_REQUIRED` (422) rather than
+`VERIFICATION_REQUIRED`, which would send somebody into an identity flow they
+may already have completed, or `FORBIDDEN`, which says the account may not do
+this at all. The problem carries `documents`, so a client can present exactly
+the ones outstanding and retry.
+
+An acceptance counts only when the version AND the content hash match the bytes
+served now (D-053), so amending the disclosure without bumping its version is a
+document nobody has agreed to — and everybody is asked again.
 
 ---
 

@@ -289,25 +289,41 @@ const unionAll = "\n  UNION ALL\n"
 // $5 limit. The cursor is a keyset over (occurred_at, id), which is why every
 // branch supplies both and why the tiebreak is a uuid rather than an offset:
 // an OFFSET moves under an insert and a keyset does not.
-const feedQuery = `WITH items AS (` +
-	srcCreditPurchase + unionAll +
+// The branches, in three groups.
+//
+// The grouping is for the READER first -- what happened to the value, what
+// happened to the account's standing, what happened to the things it runs --
+// and it is also what keeps test/security's constant-expression scanner able to
+// prove the statement. That analysis walks the concatenation tree and gives up
+// past a depth of 32, and `a + b + c + ...` nests once per operand, so a single
+// flat chain of eighteen branches and seventeen separators is a statement
+// nothing can prove. Three shallow chains joined by a shallow one is the same
+// string and a provable one.
+const feedValueSources = srcCreditPurchase + unionAll +
 	srcCreditReversal + unionAll +
 	srcNativeTrade + unionAll +
 	srcNativeAssetCreated + unionAll +
 	srcPayoutRequested + unionAll +
 	srcPayoutStateChanged + unionAll +
-	srcAdminAdjustment + unionAll +
-	srcVerificationUpdated + unionAll +
+	srcAdminAdjustment
+
+const feedAccountSources = srcVerificationUpdated + unionAll +
 	srcPayoutDestinationAdded + unionAll +
 	srcPayoutDestinationDisabled + unionAll +
 	srcTermsAccepted + unionAll +
 	srcAccountClosureRequested + unionAll +
-	srcAccountClosureDecided + unionAll +
-	srcAgentCreated + unionAll +
+	srcAccountClosureDecided
+
+const feedAgentSources = srcAgentCreated + unionAll +
 	srcAgentPaused + unionAll +
 	srcAgentResumed + unionAll +
 	srcAgentDisabled + unionAll +
-	srcNativeMarketPaused + `
+	srcNativeMarketPaused
+
+const feedQuery = `WITH items AS (` +
+	feedValueSources + unionAll +
+	feedAccountSources + unionAll +
+	feedAgentSources + `
 )
 SELECT kind, occurred_at, id, ref_type, ref_id, status,
        credits::text, money_minor, currency, origin, side, symbol, asset_units::text, demo

@@ -470,8 +470,11 @@ func (a nativeMarketsAdapter) recordRiskRefusal(ctx context.Context, err error) 
 
 type payoutsAdapter struct {
 	deps NativeEconomyDeps
-	db   *db.DB
-	clk  clock.Clock
+	// withdrawal carries the legal registry reader: §48's disclosure is a
+	// withdrawal-journey fact and lives with the rest of them.
+	withdrawal WithdrawalDeps
+	db         *db.DB
+	clk        clock.Clock
 }
 
 func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Request, payout.Decision, error) {
@@ -537,15 +540,24 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 		decision payout.Decision
 	)
 	err = a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		// The withdrawal disclosure, read in the reserving transaction. The
+		// domain refuses without it (payout.disclosureRefusal); this is where
+		// the fact comes from, and asking here rather than on the pool means
+		// the answer cannot change between the question and the reservation.
+		accepted, aerr := a.withdrawal.disclosureAccepted(ctx, tx, r.AccountID)
+		if aerr != nil {
+			return aerr
+		}
 		var cerr error
 		req, decision, cerr = a.deps.Payouts.Create(ctx, tx, payout.CreateRequest{
-			AccountID:      r.AccountID,
-			DestinationID:  r.DestinationID,
-			QuoteID:        r.QuoteID,
-			Quantity:       r.Amount,
-			IdempotencyKey: r.IdempotencyKey,
-			EffectiveAt:    a.clk.Now(),
-			CorrelationID:  r.CorrelationID,
+			AccountID:          r.AccountID,
+			DestinationID:      r.DestinationID,
+			QuoteID:            r.QuoteID,
+			Quantity:           r.Amount,
+			DisclosureAccepted: accepted,
+			IdempotencyKey:     r.IdempotencyKey,
+			EffectiveAt:        a.clk.Now(),
+			CorrelationID:      r.CorrelationID,
 		}, in)
 		return cerr
 	})
@@ -640,7 +652,7 @@ func wireNativeEconomy(p *Ports, d WireDeps) {
 		p.NativeMarkets = nativeMarketsAdapter{deps: n, db: d.DB}
 	}
 	if n.Payouts != nil {
-		p.Payouts = payoutsAdapter{deps: n, db: d.DB, clk: d.Clock}
+		p.Payouts = payoutsAdapter{deps: n, withdrawal: d.Withdrawal, db: d.DB, clk: d.Clock}
 	}
 	if n.Commerce != nil {
 		p.Commerce = commerceAdapter{svc: n.Commerce, db: d.DB, clk: d.Clock, deps: n}

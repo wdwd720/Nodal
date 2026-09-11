@@ -632,8 +632,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			Accounts:         accountRepo,
 			Pricing:          creditPurchases.Service,
 			CreditDecimals:   creditDecimals,
-			Environment:      string(cfg.Env),
-			SandboxTier:      cfg.SandboxTier(),
+			// The legal registry, read at the moment somebody asks to take
+			// value out. §48 puts the withdrawal disclosure there and
+			// deliberately not at signup, so the quote and the payout ask for
+			// it and onboarding does not (D-084).
+			Terms:       profileSvc,
+			Environment: string(cfg.Env),
+			SandboxTier: cfg.SandboxTier(),
 		},
 		// No execution adapter is wired: quote previews answer
 		// PROVIDER_UNAVAILABLE rather than invent a price.

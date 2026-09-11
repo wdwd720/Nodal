@@ -62,6 +62,16 @@ const (
 	// pay this person. It is the honest state of a deployment with no
 	// conversion contract.
 	WithdrawalProviderUnavailable WithdrawalReason = "PROVIDER_UNAVAILABLE"
+	// WithdrawalTermsNotAccepted is the withdrawal disclosure, unsigned. §48
+	// puts it at the moment somebody asks to take value out and deliberately
+	// not at signup, so this is the normal state of a person who has never
+	// withdrawn -- it is a step, like verification, and the product says so.
+	//
+	// It does not zero the buckets. The value IS eligible; what is missing is a
+	// signature, and reporting nothing withdrawable would tell a person their
+	// money is stuck when a document they have not been shown yet is the whole
+	// of it.
+	WithdrawalTermsNotAccepted WithdrawalReason = "TERMS_NOT_ACCEPTED"
 	// WithdrawalMinimumNotMet is eligible value below what the provider will
 	// send. It is judged NET of fees, because sub-minimum dust is destroyed
 	// rather than returned (PROVIDER_BOUNDARY §3).
@@ -89,6 +99,7 @@ var allWithdrawalReasons = []WithdrawalReason{
 	WithdrawalOriginNotWithdrawable,
 	WithdrawalCapabilityInactive,
 	WithdrawalRequiresVerification,
+	WithdrawalTermsNotAccepted,
 	WithdrawalFundingNotSettled,
 	WithdrawalHoldPeriodNotElapsed,
 	WithdrawalMinimumNotMet,
@@ -168,6 +179,16 @@ type WithdrawalInput struct {
 	// per-origin reason, because it is a fact about the exit and not about the
 	// value.
 	DestinationConfigured bool
+
+	// DisclosureAccepted is whether the person has accepted the current
+	// WITHDRAWAL_DISCLOSURE. Like DestinationConfigured it is a fact about the
+	// person and not about the value, so it lowers the verdict and reports a
+	// reason without changing a single bucket.
+	//
+	// It is false when the caller could not establish it, so a deployment that
+	// has not wired the terms registry reports the disclosure as outstanding
+	// rather than silently permitting a withdrawal against an unsigned one.
+	DisclosureAccepted bool
 
 	// Sandbox marks an explanation computed under sandbox policy, a sandbox
 	// verification or a sandbox provider. It is repeated on every response.
@@ -319,6 +340,15 @@ func ExplainWithdrawal(in WithdrawalInput) WithdrawalExplanation {
 		out.Eligible = false
 	} else {
 		out.Eligible = total.IsPositive()
+	}
+	// The disclosure, last, and on the same footing as the minimum: the buckets
+	// keep their amounts and the verdict does not. A person is entitled to see
+	// what would leave BEFORE they are asked to sign the document about value
+	// leaving -- showing them zero until they sign would be the refusal §19
+	// says not to make.
+	if !in.DisclosureAccepted {
+		reasons.add(WithdrawalTermsNotAccepted)
+		out.Eligible = false
 	}
 	out.Reasons = reasons.sorted()
 	return out

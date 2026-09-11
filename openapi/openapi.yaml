@@ -4074,12 +4074,15 @@ components:
       type: string
       description: >-
         A machine-readable reason value cannot leave. Each names something that
-        could change. REQUIRES_VERIFICATION is a NEXT STEP and not a denial, and
-        the product must present it as one.
+        could change. REQUIRES_VERIFICATION and TERMS_NOT_ACCEPTED are NEXT
+        STEPS and not denials, and the product must present them as such:
+        TERMS_NOT_ACCEPTED means the withdrawal disclosure has not been accepted
+        at the version now served, which is the normal state of somebody who has
+        never withdrawn. The eligible figures stay true beside it.
       enum: [REQUIRES_VERIFICATION, ORIGIN_NOT_WITHDRAWABLE, CAPABILITY_INACTIVE,
              JURISDICTION_RESTRICTED, ACCOUNT_RESTRICTED, PROVIDER_UNAVAILABLE,
              MINIMUM_NOT_MET, FUNDING_NOT_SETTLED, HOLD_PERIOD_NOT_ELAPSED,
-             NO_VALUE, POLICY_INVALID]
+             NO_VALUE, POLICY_INVALID, TERMS_NOT_ACCEPTED]
     WithdrawalOriginBucket:
       type: object
       required: [origin, quantity, withdrawable, reasons, payout_allowed, consumption_rank]

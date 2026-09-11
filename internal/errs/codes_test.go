@@ -58,6 +58,7 @@ var expectedStatus = map[errs.Code]int{
 
 	errs.CodeWebhookSignatureInvalid: http.StatusBadRequest,
 	errs.CodeWithdrawalVelocityLimit: http.StatusUnprocessableEntity,
+	errs.CodeTermsAcceptanceRequired: http.StatusUnprocessableEntity,
 
 	errs.CodeSigningRejected:       http.StatusUnprocessableEntity,
 	errs.CodeDelegationNotVerified: http.StatusUnprocessableEntity,

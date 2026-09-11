@@ -105,8 +105,12 @@ type QuoteRequest struct {
 	Currency               string
 	Environment            string
 	Sandbox                bool
-	IdempotencyKey         string
-	Now                    time.Time
+	// DisclosureAccepted says whether the person has accepted the current
+	// WITHDRAWAL_DISCLOSURE. See CreateRequest for why it is an input, and
+	// ErrDisclosureNotAccepted for why a quote is refused rather than priced.
+	DisclosureAccepted bool
+	IdempotencyKey     string
+	Now                time.Time
 }
 
 // Validate checks the request without touching a database or a provider.
@@ -174,6 +178,13 @@ func QuoteFee(c Capabilities, gross money.USD) (money.USD, error) {
 func (s *Service) Quote(ctx context.Context, tx pgx.Tx, r QuoteRequest, dest Destination) (Quote, error) {
 	if err := r.Validate(); err != nil {
 		return Quote{}, err
+	}
+	// Before the price, not after it. A quote is the moment §48 puts the
+	// withdrawal disclosure at -- the person is asking what it would cost to
+	// take value out -- and quoting first and refusing at the commit would show
+	// somebody a number and then tell them they may not have it.
+	if !r.DisclosureAccepted {
+		return Quote{}, disclosureRefusal()
 	}
 	if dest.AccountID != r.AccountID {
 		return Quote{}, errs.New(errs.CodeForbidden, "that payout destination belongs to another account")

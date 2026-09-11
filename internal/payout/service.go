@@ -17,6 +17,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/terms"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -67,6 +68,39 @@ func (s *Service) Provider(name string) (Provider, error) { return s.providers.G
 // answers PROVIDER_UNAVAILABLE rather than inventing a provider.
 func (s *Service) ProviderNames() []string { return s.providers.Names() }
 
+// RequiredDisclosure is the legal document a person must have accepted before
+// value may leave.
+//
+// It is terms.WithdrawalDisclosure, named through the registry rather than as a
+// string, so a rename in the registry is a compile error here rather than a
+// control that silently stops applying.
+var RequiredDisclosure = terms.WithdrawalDisclosure
+
+// disclosureRefusal is the error both entry points raise.
+//
+// # Why this is in the domain service and not only at the boundary
+//
+// §48 puts the withdrawal disclosure at the moment somebody asks to take value
+// out, deliberately NOT at signup. A check that lived only in the HTTP handler
+// would be a control that applies to one of the ways into this package, and
+// this package has several: an operator resolving a stuck payout, a retry, a
+// worker. The refusal belongs where the act is, so every caller meets it.
+//
+// # Why it refuses rather than producing an ineligible Decision
+//
+// A Decision is about WHICH of an account's units may leave, and an ineligible
+// one still creates a payout_requests row. "This person has not agreed to the
+// terms under which value leaves" is not a fact about their units, and a
+// request row standing against it would be a record of an ask that should never
+// have been taken. So it is an error, with a code the surface can act on, and
+// nothing is written.
+func disclosureRefusal() error {
+	return errs.New(errs.CodeTermsAcceptanceRequired,
+		"the withdrawal disclosure has not been accepted at the version now served").
+		WithField("documents", []string{string(RequiredDisclosure)}).
+		WithField("action", "ACCEPT_TERMS")
+}
+
 // Create evaluates eligibility and, if the full amount is eligible, reserves
 // the exact units in one transaction.
 //
@@ -77,6 +111,9 @@ func (s *Service) ProviderNames() []string { return s.providers.Names() }
 func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in EligibilityInput) (Request, Decision, error) {
 	if err := r.Validate(); err != nil {
 		return Request{}, Decision{}, err
+	}
+	if !r.DisclosureAccepted {
+		return Request{}, Decision{}, disclosureRefusal()
 	}
 	if tx == nil {
 		return Request{}, Decision{}, errs.New(errs.CodeInternal, "payout: Create requires a transaction")

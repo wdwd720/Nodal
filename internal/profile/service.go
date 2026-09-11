@@ -261,10 +261,15 @@ func (s *Service) Terms(ctx context.Context, a Actor) (TermsView, error) {
 	return buildTermsView(list), nil
 }
 
-func buildTermsView(list []Acceptance) TermsView {
-	// An acceptance counts only when the version AND the bytes match what is
-	// served now. D-053: a document edited without its version being bumped is
-	// a document nobody has agreed to.
+// acceptedNow is the set of documents a person has accepted at the version AND
+// the bytes served now.
+//
+// D-053: a document edited without its version being bumped is a document
+// nobody has agreed to, so both have to match. It is one function because the
+// terms view and every caller asking "has this been accepted" have to reach the
+// same answer -- two implementations of this rule would eventually disagree
+// about whether somebody signed something.
+func acceptedNow(list []Acceptance) map[terms.DocumentID]time.Time {
 	accepted := make(map[terms.DocumentID]time.Time, len(list))
 	for _, acc := range list {
 		d, ok := terms.Get(acc.DocumentID)
@@ -275,6 +280,37 @@ func buildTermsView(list []Acceptance) TermsView {
 			accepted[acc.DocumentID] = acc.AcceptedAt
 		}
 	}
+	return accepted
+}
+
+// Outstanding returns the documents required at r that this person has not
+// accepted at the bytes now served, in registry order.
+//
+// It takes a Querier rather than opening its own read so a caller already
+// inside a transaction asks the same question about the same snapshot. There is
+// no actor check: this is a fact about one person's acceptances, and the
+// callers are the withdrawal surfaces deciding what to tell that same person.
+//
+// An empty result is the only thing that lets a withdrawal proceed, so the
+// error path returns nothing accepted rather than nothing outstanding: a
+// database failure must not read as consent.
+func (s *Service) Outstanding(ctx context.Context, q db.Querier, userID string, r terms.Requirement) ([]terms.DocumentID, error) {
+	list, err := s.d.Repo.Acceptances(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	accepted := acceptedNow(list)
+	var out []terms.DocumentID
+	for _, d := range terms.RequiredAt(r) {
+		if _, ok := accepted[d.ID]; !ok {
+			out = append(out, d.ID)
+		}
+	}
+	return out, nil
+}
+
+func buildTermsView(list []Acceptance) TermsView {
+	accepted := acceptedNow(list)
 	view := TermsView{Acceptances: list}
 	for _, d := range terms.MustCurrent() {
 		st := DocumentStatus{Document: d}

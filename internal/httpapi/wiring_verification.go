@@ -16,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/terms"
 	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/verification"
 	"github.com/nodal/controlplane/internal/verification/rules"
@@ -55,11 +56,55 @@ type WithdrawalDeps struct {
 	// CreditDecimals is the scale of the Credit asset. It is resolved once at
 	// wiring time from the asset registry rather than assumed to be six.
 	CreditDecimals uint8
+	// Terms reports which legal documents a person still owes. It is what
+	// answers §48's withdrawal disclosure: the document is required at the
+	// moment somebody asks to take value out and deliberately not at signup,
+	// so it is read here rather than at onboarding.
+	//
+	// Nil means nothing can be established, and nothing established means the
+	// disclosure is outstanding: a deployment that has not wired the legal
+	// registry has not obtained anybody's agreement to it, and that is the
+	// direction a mistake must fall.
+	Terms TermsOutstanding
 	// Environment is written onto every quote.
 	Environment string
 	// SandboxTier is cfg.SandboxTier(), carried so a quote can be labelled a
 	// rehearsal even when the provider itself does not say so.
 	SandboxTier bool
+}
+
+// TermsOutstanding reports the documents required at one point in the journey
+// that a person has not accepted at the bytes now served.
+//
+// It is an interface rather than *profile.Service so this package does not
+// acquire the profile domain for one question, and so a test can answer it
+// without a database.
+type TermsOutstanding interface {
+	Outstanding(ctx context.Context, q db.Querier, userID string, r terms.Requirement) ([]terms.DocumentID, error)
+}
+
+// disclosureAccepted reports whether this account's owner has accepted the
+// current WITHDRAWAL_DISCLOSURE.
+//
+// It takes the caller's querier so the question is asked of the same snapshot
+// the payout is being decided in: reading it on the pool while the decision
+// runs in a transaction would be two answers to one question.
+//
+// Every failure path answers false. An error reading the acceptances is not
+// consent, and neither is an unwired registry.
+func (w WithdrawalDeps) disclosureAccepted(ctx context.Context, q db.Querier, accountID accounts.AccountID) (bool, error) {
+	if w.Terms == nil {
+		return false, nil
+	}
+	var owner accounts.UserID
+	if err := q.QueryRow(ctx, `SELECT owner_user_id FROM accounts WHERE id = $1`, accountID).Scan(&owner); err != nil {
+		return false, errs.Wrap(err, errs.CodeInternal, "terms: read account owner")
+	}
+	outstanding, err := w.Terms.Outstanding(ctx, q, owner.String(), terms.BeforeWithdrawal)
+	if err != nil {
+		return false, err
+	}
+	return len(outstanding) == 0, nil
 }
 
 // wireWithdrawal attaches the verification, eligibility and conversion ports
@@ -191,6 +236,11 @@ func (a eligibilityAdapter) Withdrawal(ctx context.Context, accountID accounts.A
 		PayoutEligible: balances.PayoutEligible,
 		Sandbox:        a.withdrawal.SandboxTier,
 	}
+	accepted, err := a.withdrawal.disclosureAccepted(ctx, a.db, accountID)
+	if err != nil {
+		return zero, err
+	}
+	in.DisclosureAccepted = accepted
 	if err := a.applyAccountFacts(ctx, accountID, &in); err != nil {
 		return zero, err
 	}
@@ -507,6 +557,13 @@ func (a conversionAdapter) Quote(ctx context.Context, r CreatePayoutQuote) (payo
 		if dest.AccountID != r.AccountID {
 			return errs.New(errs.CodeNotFound, "no such payout destination")
 		}
+		// Asked inside the quote's own transaction: a person is shown a price
+		// and then asked to commit to it, and both steps have to agree about
+		// whether they have signed the document that governs value leaving.
+		accepted, aerr := a.withdrawal.disclosureAccepted(ctx, tx, r.AccountID)
+		if aerr != nil {
+			return aerr
+		}
 		var qerr error
 		quote, qerr = a.deps.Payouts.Quote(ctx, tx, payout.QuoteRequest{
 			AccountID:              r.AccountID,
@@ -520,6 +577,7 @@ func (a conversionAdapter) Quote(ctx context.Context, r CreatePayoutQuote) (payo
 			Currency:               currencyOf(dest, pricing.Currency),
 			Environment:            a.withdrawal.Environment,
 			Sandbox:                a.withdrawal.SandboxTier || dest.Sandbox,
+			DisclosureAccepted:     accepted,
 			IdempotencyKey:         r.IdempotencyKey,
 			Now:                    a.clk.Now().UTC(),
 		}, dest)
