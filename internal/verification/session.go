@@ -317,6 +317,12 @@ type Session struct {
 	Sandbox             bool
 	FailureReason       string
 	ExpiresAt           *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// ProviderPolledAt is when Service.Poll last called the provider about this
+	// session, or nil when nobody has. It is what makes the per-session minimum
+	// interval a property of the session rather than of whoever is asking: two
+	// people polling one session, or one person with two tabs, share it
+	// (00818, D-133).
+	ProviderPolledAt *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }

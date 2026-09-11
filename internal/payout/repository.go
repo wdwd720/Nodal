@@ -43,7 +43,7 @@ const requestColumns = `id, account_id, destination_id, credit_asset_id, state,
 	coalesce(provider_status,''), idempotency_key, quote_id,
 	coalesce(quote_gross_amount_minor,0), coalesce(quote_fee_amount_minor,0),
 	coalesce(quote_net_amount_minor,0), coalesce(quote_currency,''),
-	coalesce(sandbox,true), coalesce(environment,''),
+	sandbox, coalesce(environment,''),
 	reserved_at, submitted_at, settled_at, coalesce(failure_reason,''), created_at, updated_at`
 
 func scanRequest(row pgx.Row) (Request, error) {

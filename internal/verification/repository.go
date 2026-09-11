@@ -28,16 +28,32 @@ func NewRepository() *Repository { return &Repository{} }
 
 const sessionColumns = `id, user_id, purpose, provider, coalesce(provider_ref,''), status,
 	coalesce(jurisdiction_country,''), coalesce(jurisdiction_region,''), rules_version,
-	environment, sandbox, coalesce(failure_reason,''), expires_at, created_at, updated_at`
+	environment, sandbox, coalesce(failure_reason,''), expires_at, provider_polled_at,
+	created_at, updated_at`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var s Session
 	if err := row.Scan(&s.ID, &s.UserID, &s.Purpose, &s.Provider, &s.ProviderRef, &s.Status,
 		&s.JurisdictionCountry, &s.JurisdictionRegion, &s.RulesVersion,
-		&s.Environment, &s.Sandbox, &s.FailureReason, &s.ExpiresAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&s.Environment, &s.Sandbox, &s.FailureReason, &s.ExpiresAt, &s.ProviderPolledAt,
+		&s.CreatedAt, &s.UpdatedAt); err != nil {
 		return Session{}, err
 	}
 	return s, nil
+}
+
+// MarkProviderPolled records that the provider was asked about this session
+// just now.
+//
+// It is its own small write rather than a field on an Ingest, because the poll
+// that finds NOTHING CHANGED writes nothing else at all -- and that is exactly
+// the poll the interval exists to stop repeating (00818, D-133).
+func (r *Repository) MarkProviderPolled(ctx context.Context, q db.Querier, id SessionID, at time.Time) error {
+	if _, err := q.Exec(ctx,
+		`UPDATE verification_sessions SET provider_polled_at = $2 WHERE id = $1`, id, at.UTC()); err != nil {
+		return mapError(err)
+	}
+	return nil
 }
 
 // OwnerOf returns the user who owns an account. Verification is a property of a

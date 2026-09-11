@@ -207,9 +207,14 @@ func seedPayoutRequest(t *testing.T, c *pgx.Conn, creditAsset id.ID[id.Any]) id.
 	ctx := context.Background()
 	account := seedAccountRow(t, c)
 	reqID := id.New[id.Any]()
+	// `sandbox` and `environment` are stated because 00817 made the first NOT
+	// NULL: the nullable form was read as a rehearsal by the API and as a real
+	// payout by the PROD CHECK, so one of the two was wrong on every row that
+	// had no recorded fact (D-134). TEST is what this fixture is.
 	_, err := c.Exec(ctx, `INSERT INTO payout_requests
-		(id, account_id, credit_asset_id, state, requested_quantity, policy_version, policy_hash, idempotency_key)
-		VALUES ($1, $2, $3, 'DRAFT', 100, 'v1', 'h1', $4)`,
+		(id, account_id, credit_asset_id, state, requested_quantity, policy_version, policy_hash,
+		 idempotency_key, sandbox, environment)
+		VALUES ($1, $2, $3, 'DRAFT', 100, 'v1', 'h1', $4, true, 'TEST')`,
 		reqID, account, creditAsset, "payout-"+reqID.String())
 	require.NoError(t, err)
 	return reqID
