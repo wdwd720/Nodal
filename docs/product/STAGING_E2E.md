@@ -19,7 +19,9 @@ both exist.
   start `cmd/api` as a **sandbox tier** (`CP_ENV=LOCAL`,
   `CP_API_LEGAL_POLICY=SANDBOX`, `CP_API_PAYOUT_POLICY=SANDBOX`,
   `CP_API_ENABLED_CAPABILITIES` and `CP_API_SANDBOX_GATES` listing
-  `CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE`,
+  `CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE,LIVE_AGENT_TRADING`
+  (the last so a level-3 agent grant can exist; the runtime stays
+  NOT_DEPLOYED, so nothing executes),
   `CP_PROVIDER_PAYOUT_NAME=sandbox_payout` with `CP_PROVIDER_PAYOUT_MODE=sandbox`,
   `CP_API_DEMO_DATA=true` so the API seeds the demo catalogue at boot through
   its own wired services (D-115; `go run ./scripts/demodata` is the same

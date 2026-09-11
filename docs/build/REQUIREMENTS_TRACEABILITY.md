@@ -58,9 +58,9 @@ Rule: never mark VERIFIED without a passing test or operational evidence named i
 | State | Count |
 |---|---|
 | NOT_STARTED | 16 |
-| IN_PROGRESS | 60 |
+| IN_PROGRESS | 59 |
 | IMPLEMENTED | 62 |
-| VERIFIED | 270 |
+| VERIFIED | 271 |
 | BLOCKED_EXTERNAL | 15 |
 | DEFERRED_OUT_OF_SCOPE | 18 |
 | **Total rows** | 441 |
