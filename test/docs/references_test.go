@@ -197,10 +197,15 @@ func citationUnits(body string) []citationUnit {
 			}
 			para := strings.Join(lines[start:i], "\n")
 			if strings.TrimSpace(para) != "" {
+				// Prose is excused by the planned vocabulary but is never held
+				// to "the path must be absent": a paragraph that DISCUSSES a
+				// planned column, or names an identifier with "planned" in it,
+				// would otherwise be blamed for every path it cites. The
+				// must-be-absent half belongs to a cell in a Planned column,
+				// where the word is a claim about that cell's own path.
 				out = append(out, citationUnit{
 					text:    para,
 					excused: absencePhrase.MatchString(para) || plannedPhrase.MatchString(para),
-					planned: plannedPhrase.MatchString(para) && !absencePhrase.MatchString(para),
 				})
 			}
 			i--
