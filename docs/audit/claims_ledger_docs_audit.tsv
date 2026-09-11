@@ -3895,6 +3895,7 @@ docs/build/REQUIREMENTS_TRACEABILITY.md	661	testname	TestProp_PositionQuantityIs
 docs/build/REQUIREMENTS_TRACEABILITY.md	662	testname	TestGetMePortfolio_StatesItsAsOfAndItsTemperatures	grep for func TestGetMePortfolio_StatesItsAsOfAndItsTemperatures over *_test.go	HOLDS	
 docs/build/REQUIREMENTS_TRACEABILITY.md	662	testname	TestTemperature_SimulatedWinsOverEverything	grep for func TestTemperature_SimulatedWinsOverEverything over *_test.go	HOLDS	
 docs/build/REQUIREMENTS_TRACEABILITY.md	664	path	internal/activity	ls internal/activity	HOLDS	
+docs/build/REQUIREMENTS_TRACEABILITY.md	664	prose	R-PG-016-1 (IN_PROGRESS): internal/activity with seven kinds; verification, profile, security and agent kinds are not declared yet	internal/activity declares 18 kinds, ten of them those	FAILS	F-docs-8
 docs/build/REQUIREMENTS_TRACEABILITY.md	664	testname	TestEveryKindHasASource	grep for func TestEveryKindHasASource over *_test.go	HOLDS	
 docs/build/REQUIREMENTS_TRACEABILITY.md	664	testname	TestEveryKindHasASummaryTemplate	grep for func TestEveryKindHasASummaryTemplate over *_test.go	HOLDS	
 docs/build/REQUIREMENTS_TRACEABILITY.md	664	testname	TestEverySourceIsInTheCompiledQuery	grep for func TestEverySourceIsInTheCompiledQuery over *_test.go	HOLDS	
@@ -4431,6 +4432,7 @@ docs/security/SECURITY.md	195	testname	TestInstallReleaseTool_ChecksumMismatch	g
 docs/security/SECURITY.md	195	testname	TestInstallReleaseTool_UnverifiableRequiresFlag	grep for func TestInstallReleaseTool_UnverifiableRequiresFlag over *_test.go	HOLDS	
 docs/security/SECURITY.md	199	gosymbol	internal/event/topics.go	go symbol selector, not a path	UNCHECKABLE	
 docs/security/SECURITY.md	199	path	migrations/00010_identity_accounts.sql	ls migrations/00010_identity_accounts.sql	HOLDS	
+docs/security/SECURITY.md	199	prose	security_events: no writer exists, nothing on disk records a security event yet	internal/identity/login.go, internal/funding/service.go, internal/signing/repository.go and internal/webhook/handler.go all INSERT INTO security_events; R-130-1 in the traceability matrix lists all four	FAILS	F-docs-4
 docs/security/SECURITY.md	201	gosymbol	internal/observability/metrics.go	go symbol selector, not a path	UNCHECKABLE	
 docs/security/SECURITY.md	207	path	test/security/{idor,cross_tenant}_test.go	ls test/security/{idor,cross_tenant}_test.go	HOLDS	absent, and the paragraph says so
 docs/security/SECURITY.md	207	prose	planned: test/security/{idor,cross_tenant}_test.go	test/security/idor_test.go declares eight TestIDOR functions	FAILS	F-docs-4

@@ -385,10 +385,53 @@ func absenceClaims() []absenceClaim {
 	}
 }
 
+// writerClaims are absences about CODE rather than about a directory. Same
+// defect, and the sharpest instance of it: SECURITY.md §12 says in bold that
+// nothing on disk records a security event, while REQUIREMENTS_TRACEABILITY's
+// R-130-1 -- IN_PROGRESS, in the other document a reviewer reads -- lists the
+// four packages that do. Two documents in the same tree, opposite answers, and
+// the security one is the one somebody scores posture from.
+type writerClaim struct {
+	doc, sentence, what string
+	writers             []string // files that must contain `INSERT INTO <what>`
+}
+
+func writerClaims() []writerClaim {
+	return []writerClaim{
+		{"docs/security/SECURITY.md",
+			"**no writer exists** — nothing on disk records a security event yet",
+			"security_events",
+			[]string{"internal/identity/login.go", "internal/funding/service.go",
+				"internal/signing/repository.go", "internal/webhook/handler.go"}},
+	}
+}
+
 func TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
 	var problems []string
+	for _, c := range writerClaims() {
+		body := read(t, root, c.doc)
+		if !strings.Contains(body, c.sentence) {
+			problems = append(problems, c.doc+" no longer contains the sentence this check reads: "+
+				strconv.Quote(c.sentence))
+			continue
+		}
+		var found []string
+		for _, f := range c.writers {
+			src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f)))
+			if err != nil {
+				continue
+			}
+			if strings.Contains(string(src), "INSERT INTO "+c.what) {
+				found = append(found, f)
+			}
+		}
+		if len(found) > 0 {
+			problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
+				" says nothing writes "+c.what+"; "+strings.Join(found, ", ")+" do")
+		}
+	}
 	for _, c := range absenceClaims() {
 		body := read(t, root, c.doc)
 		if !strings.Contains(body, c.sentence) {
@@ -542,6 +585,21 @@ func TestAuditDocs_TheActivityFeedIsDescribedAsItIsBuilt(t *testing.T) {
 	if len(kinds) != 7 {
 		problems = append(problems, inv+":"+strconv.Itoa(lineOf(invBody, seven))+
 			" says the timeline has seven kinds; internal/activity declares "+strconv.Itoa(len(kinds)))
+	}
+
+	// (d) The traceability row that keeps R-PG-016-1 at IN_PROGRESS. The brief's
+	// other half: a row whose status says PARTIAL must not be quietly complete.
+	// This one is held open by an evidence cell that is simply out of date, and
+	// the counts in the summary table are computed from statuses, so a row kept
+	// IN_PROGRESS by a stale sentence understates the whole matrix.
+	const trace = "docs/build/REQUIREMENTS_TRACEABILITY.md"
+	traceBody := read(t, root, trace)
+	const stale = "Verification, profile, security and agent kinds are the documented extension point and are not declared yet"
+	require(t, strings.Contains(traceBody, stale), "%s no longer carries the sentence this check reads", trace)
+	if len(present) > 0 {
+		problems = append(problems, trace+":"+strconv.Itoa(lineOf(traceBody, stale))+
+			" (R-PG-016-1, IN_PROGRESS) says those kinds are not declared yet; "+
+			strconv.Itoa(len(present))+" of them are")
 	}
 
 	sort.Strings(problems)
