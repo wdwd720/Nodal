@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/strategy"
+	"github.com/nodal/controlplane/internal/strategy/ir"
 )
 
 // These tests need an isolated database, for the reason internal/agent's own
@@ -229,6 +230,16 @@ func (f *fixture) create(ctx context.Context, level agentauthority.Level, name s
 		AccountID: f.accountID, StrategyID: f.strategyID, StrategyVersionID: f.versionID,
 		Name: name, Level: level, Limits: fixtureLimits(f.t, f.assetID),
 	})
+}
+
+// missingAgentError is the error an id that names nothing produces, so the test
+// above can assert that a stranger gets the identical answer rather than
+// merely a 404 of its own.
+func (f *fixture) missingAgentError(t *testing.T) error {
+	t.Helper()
+	_, err := f.svc.Get(f.stranger(), agent.NewAgentID())
+	require.Error(t, err)
+	return err
 }
 
 func fixtureLimits(t *testing.T, assetID string) Limits {
@@ -481,15 +492,20 @@ func TestIntegration_OnlyTheOwnerActsOnTheirAgent(t *testing.T) {
 	v, err := f.create(f.owner(), agentauthority.LevelRecommendation, "mine")
 	require.NoError(t, err)
 
+	// NOT_FOUND rather than FORBIDDEN: to a principal who does not own it, this
+	// agent does not exist. FORBIDDEN told a stranger that the id they guessed
+	// names a real agent, and 404 on the next one told them it does not.
 	_, err = f.svc.Act(f.stranger(), ActRequest{AgentID: v.Agent.ID, Action: ActionEnable})
 	require.Error(t, err)
 	e, _ := errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
 
 	_, err = f.svc.Get(f.stranger(), v.Agent.ID)
 	require.Error(t, err)
 	e, _ = errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
+	assert.Equal(t, errs.CodeOf(f.missingAgentError(t)), e.Code,
+		"a stranger's answer is the same as the answer for an id that does not exist")
 
 	// An operator cannot enable somebody's agent either, whatever they hold.
 	_, err = f.svc.Act(f.operator(), ActRequest{AgentID: v.Agent.ID, Action: ActionEnable})
@@ -700,15 +716,17 @@ func TestIntegration_AStrangerCannotReadOrCompileSomebodyElsesStrategy(t *testin
 	})
 	require.NoError(t, err)
 
+	// Not yours is not found: the id itself is a fact about somebody else's
+	// account, and Compile answers the same way because it reads first.
 	_, err = f.strategies.Get(f.stranger(), st.ID)
 	require.Error(t, err)
 	e, _ := errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
 
 	_, err = f.strategies.Compile(f.stranger(), st.ID, "req-"+newUUID(), "")
 	require.Error(t, err)
 	e, _ = errs.As(err)
-	assert.Equal(t, errs.CodeForbidden, e.Code)
+	assert.Equal(t, errs.CodeNotFound, e.Code)
 }
 
 // ---------------------------------------------------------------- helpers --
@@ -748,11 +766,19 @@ func successResult(t *testing.T, sid strategy.StrategyID) strategy.Result {
 	t.Helper()
 	vid := strategy.NewVersionID()
 	aid := strategy.NewAttemptID()
+	// A real document and its real hash. The fixture used to return a nil IR
+	// and the word "irhash", which a compiler cannot produce and which
+	// persist now refuses: the hash is what every later comparison is made
+	// against, so one that does not describe its document makes all of them
+	// agree about nothing (F-189).
+	doc := &ir.IR{SchemaVersion: ir.SchemaVersion}
+	hash, err := ir.SemanticHash(doc)
+	require.NoError(t, err)
 	return strategy.Result{
 		Outcome: strategy.OutcomeSuccess,
 		Version: &strategy.Version{
-			ID: vid, StrategyID: sid, Version: 1, SchemaVersion: 1,
-			IRHash: bytes32("irhash"), EffectSet: []string{"READ_MARKET_DATA"},
+			ID: vid, StrategyID: sid, Version: 1, SchemaVersion: ir.SchemaVersion,
+			IR: doc, IRHash: hash, EffectSet: []string{"READ_MARKET_DATA"},
 			Status: strategy.StatusCompiled, SourceKind: "NATURAL_LANGUAGE", SourceHash: bytes32("src"),
 			CompilerVersion: "fake/1", RiskPolicy: "risk/v1", RiskPolicyHash: bytes32("risk"),
 			HumanReadable: "buy the dip, in words a person can check", BuiltAt: time.Now().UTC(),

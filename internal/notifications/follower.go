@@ -262,12 +262,10 @@ func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub
 				break
 			}
 		}
-		if err := markPending(ctx, tx, s.name, newAt); err != nil {
-			return err
-		}
 		written := 0
 		// The lap first, so the emits run in the order the rows happened.
-		for _, c := range append(behind, ahead...) {
+		for i, c := range append(behind, ahead...) {
+			newRow := i >= len(behind) // past the cursor: this pass is its first
 			fresh := 0
 			for _, n := range c.Notify {
 				em, err := f.producer.Emit(ctx, tx, n)
@@ -280,12 +278,18 @@ func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub
 				}
 			}
 			written += fresh
-			// A signal rides with the fact it accompanies. A row the lap has
-			// already told everybody about is not announced a second time:
-			// otherwise every pass would republish an invalidation for every
-			// row of the last two minutes, and a client would refetch the same
-			// resource every fifteen seconds for as long as the window held it.
-			if fresh > 0 || len(c.Notify) == 0 {
+			// A signal rides with the fact it accompanies, on the pass that
+			// WROTE the notifications for it. A row the lap has already told
+			// everybody about is not announced a second time: otherwise every
+			// pass would republish an invalidation for every row of the last
+			// two minutes, and a client would refetch the same resource every
+			// fifteen seconds for as long as the window held it (F-190). A
+			// change that names nobody -- a market pause whose participants
+			// have all been told, or one with no participants at all -- is
+			// signalled once, on the pass that first passes the row; from the
+			// lap re-read it is silent, because "fresh == 0 and nobody to tell"
+			// is exactly what a re-read looks like (D-118).
+			if fresh > 0 || (len(c.Notify) == 0 && newRow) {
 				signals = append(signals, c.Signal...)
 			}
 		}
@@ -343,19 +347,10 @@ func loadCursor(ctx context.Context, q db.Querier, name string) (time.Time, stri
 	}
 }
 
-func markPending(ctx context.Context, q db.Querier, name string, at time.Time) error {
-	_, err := q.Exec(ctx,
-		`UPDATE notification_follower_cursors SET pending_at = $2 WHERE source = $1`, name, at.UTC())
-	if err != nil {
-		return fmt.Errorf("record the pass in flight: %w", err)
-	}
-	return nil
-}
-
 func saveCursor(ctx context.Context, q db.Querier, name string, at time.Time, rowID string, written int) error {
 	_, err := q.Exec(ctx,
 		`UPDATE notification_follower_cursors
-		    SET last_at = $2, last_id = $3::uuid, pending_at = NULL, emitted = emitted + $4
+		    SET last_at = $2, last_id = $3::uuid, emitted = emitted + $4
 		  WHERE source = $1`, name, at.UTC(), rowID, written)
 	if err != nil {
 		return fmt.Errorf("advance the cursor: %w", err)

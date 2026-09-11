@@ -570,10 +570,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 	// --- realtime ----------------------------------------------------------
 	// The hub is mounted so the endpoint honors Last-Event-ID, heartbeats and
-	// per-client cleanup. No producer is attached: the event bus adapter lives
-	// in a package this binary does not yet depend on, so the stream carries
-	// heartbeats only until it is wired. It is never authoritative either way
-	// (PART 109).
+	// per-client cleanup. The producer is the notification follower, wired
+	// forty lines below; this comment used to say "no producer is attached ...
+	// the stream carries heartbeats only until it is wired", and it went on
+	// saying it after the wiring landed, in the file that does the wiring
+	// (F-191). The stream is never authoritative either way (PART 109).
 	hub := stream.NewHub(1024, log)
 	// The stream re-checks its session on every heartbeat. Without it a stolen
 	// cookie's stream kept delivering after the victim logged out, after an
@@ -590,8 +591,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 
 	// ---- notifications ----------------------------------------------------
 	//
-	// The producer no longer missing (F-69, and the "NO PRODUCER IS ATTACHED"
-	// note above). Two halves:
+	// The producer no longer missing (F-69). Two halves:
 	//
 	//   1. a follower that reads the transition tables domain services already
 	//      write -- credit fundings, payout requests, native fills and market

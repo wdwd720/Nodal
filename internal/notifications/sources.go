@@ -337,11 +337,10 @@ func readMarketPauses(ctx context.Context, q db.Querier, at time.Time, rowID str
 
 	out := make([]Change, 0, len(pauses))
 	for _, p := range pauses {
-		// Everyone who has ever traded this market. The fan-out is bounded by
-		// the launch tier's own account ceiling (CP_CAPACITY_MAX_ACCOUNTS), so
-		// it is not capped here: a cap would silently leave some holders
-		// untold, which is worse than a slow pass.
-		holders, err := marketParticipants(ctx, q, p.marketID)
+		// Everyone who has ever traded this market and has not been told yet,
+		// up to MaxPauseFanOut in one pass. See marketParticipants.
+		holders, err := marketParticipants(ctx, q, p.marketID,
+			DedupKey(KindNativeMarketPaused, Ref{Type: "native_market", ID: p.marketID}, p.transitionID))
 		if err != nil {
 			return nil, err
 		}
@@ -377,10 +376,58 @@ type participant struct {
 	accountID accounts.AccountID
 }
 
-func marketParticipants(ctx context.Context, q db.Querier, marketID string) ([]participant, error) {
+// suppressibleKind is the kind name for a preference filter, or NULL when the
+// kind cannot be switched off. The NULL turns the clause off rather than
+// filtering on a preference Emit would ignore, so a kind that becomes
+// unsuppressible tomorrow cannot silently start skipping people here.
+func suppressibleKind(k Kind) any {
+	if !k.Suppressible() {
+		return nil
+	}
+	return string(k)
+}
+
+// MaxPauseFanOut bounds how many people one market pause notifies in one pass
+// (D-107).
+//
+// The old comment here said the fan-out was "bounded by the launch tier's own
+// account ceiling (CP_CAPACITY_MAX_ACCOUNTS)". That variable may be zero --
+// capacity.Budget documents zero as "no ceiling of this kind", which is how a
+// paid tier turns the infrastructure ceilings off -- and config validation
+// requires it to be stated only in STAGING and PROD. So on any other tier the
+// bound was nothing at all, and one pause on a popular market was one
+// transaction holding a pool connection while it wrote a notification per
+// holder (F-192).
+//
+// Five hundred is a pass, not a limit on who is told. The query skips whoever
+// already has this pause's notification, so consecutive passes drain the
+// remainder while the transition row is still inside the follower's lap, and
+// the dedup key makes re-reading it free. It is compiled in rather than
+// configured for D-086's reason: this is a property of the tier's one process,
+// not a risk determination somebody should be able to change in a dashboard.
+const MaxPauseFanOut = 500
+
+// marketParticipants lists who to tell about one market pause: everyone who has
+// ever traded it, minus whoever has already been told (dedupKey), minus whoever
+// switched this kind off, oldest user id first, capped at MaxPauseFanOut.
+//
+// The two exclusions are what make the cap safe to page across passes. Without
+// the first, every pass would return the same first five hundred for as long as
+// the lap re-reads the row. Without the second, a holder who switched the kind
+// off -- who never gets a row, so the first exclusion never excludes them --
+// would occupy a place in that five hundred forever and starve whoever sorts
+// after them.
+func marketParticipants(ctx context.Context, q db.Querier, marketID, dedupKey string) ([]participant, error) {
 	rows, err := q.Query(ctx, `SELECT DISTINCT a.owner_user_id, f.account_id
 		FROM native_market_fills f JOIN accounts a ON a.id = f.account_id
-		WHERE f.market_id = $1::uuid`, marketID)
+		WHERE f.market_id = $1::uuid
+		  AND NOT EXISTS (SELECT 1 FROM notifications n
+		                   WHERE n.user_id = a.owner_user_id AND n.dedup_key = $2)
+		  AND ($3::text IS NULL OR NOT EXISTS (SELECT 1 FROM notification_preferences p
+		                   WHERE p.user_id = a.owner_user_id AND p.kind = $3::text
+		                     AND p.channel = $4 AND p.enabled = false))
+		ORDER BY a.owner_user_id
+		LIMIT $5`, marketID, dedupKey, suppressibleKind(KindNativeMarketPaused), ChannelInApp, MaxPauseFanOut)
 	if err != nil {
 		return nil, fmt.Errorf("read market participants: %w", err)
 	}
@@ -492,15 +539,27 @@ func accountStatusBody(status, reason string) string {
 // New sessions
 // ---------------------------------------------------------------------------
 
+// AuditRoute is the caller's own security trail, where the exact address of a
+// sign-in is served from. That table is partitioned by month and dropped by the
+// retention pass, so the new-session notification names the route rather than
+// carrying the address into a row nothing can delete (D-106).
+const AuditRoute = "/v1/me/audit"
+
 // readNewSessions follows security_events rather than the sessions table.
 // A session row is UPDATEd -- last_seen_at moves on every request -- so it is
 // not an append-only log and a cursor over it would re-read every active
 // session forever. The 'login' security event is written in the same
 // transaction as the session it describes (internal/identity), is immutable,
 // and is the durable record the retention policy deliberately keeps.
+
 func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID string, limit int) ([]Change, error) {
+	// The address is masked in SQL, so the exact one is never read into this
+	// process at all: /24 for IPv4 and /48 for IPv6, which is the coarsest
+	// thing that still says "this is not where I live". The masking cannot be
+	// forgotten downstream because there is nothing downstream to forget it.
 	rows, err := q.Query(ctx, `SELECT e.occurred_at, e.id::text, e.user_id, e.session_id::text,
-			coalesce(host(e.ip), ''), coalesce(e.user_agent, '')
+			coalesce(network(set_masklen(e.ip, CASE WHEN family(e.ip) = 4 THEN 24 ELSE 48 END))::text, ''),
+			coalesce(e.user_agent, '')
 		FROM security_events e
 		WHERE `+keysetOn("e.occurred_at", "e.id")+`
 		  AND e.kind = 'login' AND e.user_id IS NOT NULL AND e.session_id IS NOT NULL
@@ -513,15 +572,26 @@ func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID stri
 	var out []Change
 	for rows.Next() {
 		var (
-			occurredAt         time.Time
-			eventID, sessionID string
-			ip, userAgent      string
-			userID             accounts.UserID
+			occurredAt          time.Time
+			eventID, sessionID  string
+			ipPrefix, userAgent string
+			userID              accounts.UserID
 		)
-		if err := rows.Scan(&occurredAt, &eventID, &userID, &sessionID, &ip, &userAgent); err != nil {
+		if err := rows.Scan(&occurredAt, &eventID, &userID, &sessionID, &ipPrefix, &userAgent); err != nil {
 			return nil, fmt.Errorf("read login security events: %w", err)
 		}
-		body := "A new session was created for your account. If this was not you, sign out every session from Settings and sign in again."
+		// What a person needs to recognise their own sign-in, and not one
+		// character more: this row can never be deleted by anybody (the
+		// notifications guard refuses DELETE for every role), while the trail
+		// it was copied from is dropped a month at a time. See device.go.
+		device := deviceSummary(userAgent)
+		data := map[string]any{"session_id": sessionID, "exact_address_at": AuditRoute}
+		if ipPrefix != "" {
+			data["ip_prefix"] = ipPrefix
+		}
+		if device != "" {
+			data["device"] = device
+		}
 		out = append(out, Change{
 			At:    occurredAt,
 			RowID: eventID,
@@ -529,13 +599,11 @@ func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID stri
 				UserID:     userID,
 				Kind:       KindSecurityNewSession,
 				Title:      "New sign-in to your account",
-				Body:       body,
+				Body:       newSessionBody(device, ipPrefix),
 				Ref:        Ref{Type: "session", ID: sessionID},
 				Occurrence: eventID,
 				OccurredAt: occurredAt,
-				// The address and the agent are the person's own, and they are
-				// what makes "was this me?" answerable at all.
-				Data: mustJSON(map[string]any{"session_id": sessionID, "ip": ip, "user_agent": userAgent}),
+				Data:       mustJSON(data),
 			}},
 		})
 	}

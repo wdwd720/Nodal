@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -294,6 +295,13 @@ func (s *StrategyService) Get(ctx context.Context, strategyID string) (Strategy,
 		return Strategy{}, errs.Wrap(err, errs.CodeInternal, "agents: read strategy")
 	}
 	if err := s.requireRead(ctx, st.AccountID); err != nil {
+		// Not yours is not found, for the reason agents.notYours gives: a
+		// FORBIDDEN here tells a stranger their guessed id names a real
+		// strategy, and the IR under it is the thing this refusal protects.
+		if errors.Is(err, security.ErrCrossTenant) {
+			return Strategy{}, errs.New(errs.CodeNotFound, "agents: no such strategy").
+				WithField("strategy_id", strategyID)
+		}
 		return Strategy{}, err
 	}
 	return st, nil
@@ -376,7 +384,7 @@ func (s *StrategyService) Compile(ctx context.Context, strategyID, requestID, co
 	if err != nil {
 		return CompileOutcome{}, err
 	}
-	return s.persist(ctx, sid, requestID, res, p, correlationID)
+	return s.persist(ctx, sid, requestID, nextVersion, res, p, correlationID)
 }
 
 // recordUnavailable writes the attempt that says no compiler exists.
@@ -426,9 +434,29 @@ func (s *StrategyService) recordUnavailable(ctx context.Context, sid strategy.St
 // and that pair is the bound on how many times one request may be retried, so a
 // backend returning an id of its own could widen it or collide with another
 // user's.
-func (s *StrategyService) persist(ctx context.Context, sid strategy.StrategyID, requestID string, res strategy.Result,
-	p security.Principal, correlationID string,
+//
+// The same reasoning applies to everything else the backend returns, and until
+// F-189 it did not: the Version was written verbatim. A CompilerBackend is a
+// SEAM -- ADR-0029 declares it, *strategy.Compiler satisfies it today, and
+// whatever a later deployment wires satisfies it tomorrow -- so a backend could
+// return a version naming a DIFFERENT account's strategy, at a version number
+// nobody reserved, already ACCEPTED, with an ir_hash that describes no
+// document, and this service would write it and point the victim's strategy at
+// it. checkVersion and checkAttempt are the boundary: what the backend is
+// trusted for is the IR, and every identifier around it is this service's.
+func (s *StrategyService) persist(ctx context.Context, sid strategy.StrategyID, requestID string, nextVersion int,
+	res strategy.Result, p security.Principal, correlationID string,
 ) (CompileOutcome, error) {
+	if res.Version != nil {
+		if err := checkVersion(sid, nextVersion, res.Version); err != nil {
+			return CompileOutcome{}, err
+		}
+	}
+	for _, a := range res.Attempts {
+		if err := checkAttempt(sid, a); err != nil {
+			return CompileOutcome{}, err
+		}
+	}
 	var out CompileOutcome
 	err := s.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		if res.Version != nil {
@@ -471,6 +499,67 @@ func (s *StrategyService) persist(ctx context.Context, sid strategy.StrategyID, 
 		}
 	}
 	return out, nil
+}
+
+// compilerRefusal is the code a backend's own output is refused with. It is
+// INTERNAL and not VALIDATION_FAILED because the caller did nothing wrong: the
+// user asked for a compile and the thing this deployment wired answered with
+// something it is not allowed to say.
+func compilerRefusal(format string, a ...any) error {
+	return errs.Newf(errs.CodeInternal, "agents: the compiler backend returned "+format, a...)
+}
+
+// checkVersion refuses a compiled version that is not the one this service
+// asked for.
+//
+// Four questions, and every one of them is about an identifier this service
+// issued rather than about the IR:
+//
+//   - StrategyID: the version must be a version of the strategy that was
+//     compiled. Without this a backend writes under any strategy it can name,
+//     including one belonging to an account the caller cannot read.
+//   - Version: the number reserved by nextVersionNumber before the call. A
+//     backend choosing its own could take a number that is already somebody
+//     else's history, or skip the sequence the review flow reads.
+//   - Status: COMPILED. ACCEPTED is the record of a PERSON reading the strategy
+//     and approving it (00500 pairs it with accepted_by_user_id), and a backend
+//     that could return it would be approving on the user's behalf, which is
+//     exactly what goal SS18's review step exists to stop.
+//   - IRHash: the semantic hash of the IR that came with it. The hash is what
+//     every later comparison -- the lineage, the parity fixtures, an audit of
+//     "is this the document you approved" -- is made against, so a hash that
+//     does not describe the document makes all of them agree about nothing.
+func checkVersion(sid strategy.StrategyID, nextVersion int, v *strategy.Version) error {
+	if v.StrategyID != sid {
+		return compilerRefusal("a version of strategy %s from a compile of strategy %s", v.StrategyID, sid)
+	}
+	if v.Version != nextVersion {
+		return compilerRefusal("version number %d where %d was reserved", v.Version, nextVersion)
+	}
+	if v.Status != strategy.StatusCompiled {
+		return compilerRefusal("a version already in status %s; only a person accepts a strategy", v.Status)
+	}
+	want, err := ir.SemanticHash(v.IR)
+	if err != nil {
+		return compilerRefusal("a version whose IR cannot be hashed: %v", err)
+	}
+	if !bytes.Equal(want, v.IRHash) {
+		return compilerRefusal("an ir_hash that does not describe its own IR (%s, want %s)",
+			hex(v.IRHash), hex(want))
+	}
+	return nil
+}
+
+// checkAttempt refuses an attempt that is not an attempt at this strategy, or
+// that claims a number past the ceiling compile_attempts itself enforces.
+func checkAttempt(sid strategy.StrategyID, a strategy.Attempt) error {
+	if a.StrategyID != sid {
+		return compilerRefusal("an attempt at strategy %s from a compile of strategy %s", a.StrategyID, sid)
+	}
+	if a.AttemptNo < 1 || a.AttemptNo > strategy.HardMaxAttempts {
+		return compilerRefusal("attempt number %d, outside 1..%d", a.AttemptNo, strategy.HardMaxAttempts)
+	}
+	return nil
 }
 
 func (s *StrategyService) insertVersion(ctx context.Context, tx pgx.Tx, v *strategy.Version) error {
@@ -590,7 +679,10 @@ func (s *StrategyService) ownerActor(ctx context.Context, accountID string) (sec
 	if err := security.RequireAt(ctx, security.PermStrategyWrite, s.clk.Now); err != nil {
 		return security.Principal{}, authError(err)
 	}
-	if err := security.RequireAccount(ctx, accountID); err != nil {
+	// The owner-only twin: account:read_any is a read capability and writing
+	// somebody's strategy is not a read (ADR-0022's rule, and the reason
+	// RequireAccountOwner exists).
+	if err := security.RequireAccountOwner(ctx, accountID); err != nil {
 		return security.Principal{}, authError(err)
 	}
 	return p, nil
@@ -610,7 +702,8 @@ func (s *StrategyService) requireRead(ctx context.Context, accountID string) err
 	if err := security.RequireAt(ctx, security.PermStrategyRead, s.clk.Now); err != nil {
 		return authError(err)
 	}
-	if err := security.RequireAccount(ctx, accountID); err != nil {
+	// An operator is answered above. A customer reads their own.
+	if err := security.RequireAccountOwner(ctx, accountID); err != nil {
 		return authError(err)
 	}
 	return nil

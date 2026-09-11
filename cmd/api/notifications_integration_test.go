@@ -55,42 +55,61 @@ func TestIntegration_NotificationResumeReadsTheTableNotTheBuffer(t *testing.T) {
 	}
 	ctx = security.WithPrincipal(ctx, principal)
 
+	// Three notifications about things that happened an hour ago, written now.
+	// The gap between the two instants is the whole subject of D-104: a resume
+	// filtered on the occurrence would have answered every one of these with
+	// "you are up to date".
 	base := time.Now().UTC().Add(-time.Hour)
 	producer := notifications.NewProducer(time.Now, false)
+	written := make([]notifications.Notification, 0, 3)
 	for i := 0; i < 3; i++ {
 		at := base.Add(time.Duration(i) * time.Minute)
 		require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
-			_, eerr := producer.Emit(ctx, tx, notifications.Notification{
+			out, eerr := producer.Emit(ctx, tx, notifications.Notification{
 				UserID: user.ID, Kind: notifications.KindSystem,
 				Title: "Announcement", Body: "Something happened.",
 				Occurrence: string(rune('a' + i)), OccurredAt: at,
 			})
+			if eerr == nil {
+				written = append(written, out.Notification)
+			}
 			return eerr
 		}))
 	}
+	require.Len(t, written, 3)
 
 	resume := notificationResume(d)
 
-	// The instant the FIRST notification was written at: the two after it are
-	// what a client reconnecting from there missed.
-	missed, truncated, err := resume(ctx, principal, base)
+	// The instant the FIRST notification was WRITTEN at: the two after it are
+	// what a client reconnecting from there missed. It is inserted_at that
+	// decides, not created_at -- every one of these occurred an hour ago.
+	missed, truncated, err := resume(ctx, principal, written[0].InsertedAt)
 	require.NoError(t, err)
 	assert.False(t, truncated)
 	require.Len(t, missed, 2)
 	for i, e := range missed {
 		assert.Equal(t, stream.TypeNotification, e.Type)
 		assert.Equal(t, user.ID.String(), e.UserID)
-		assert.Equal(t, stream.EventIDAt(e.OccurredAt), e.ID,
-			"the replayed id must encode its own instant, so a client that disconnects mid-replay resumes from where it got to")
+		assert.Equal(t, stream.EventIDAt(written[i+1].InsertedAt), e.ID,
+			"the replayed id must encode the instant the row was written, which is what Since filters on, "+
+				"so a client that disconnects mid-replay resumes from where it got to and never moves backwards")
 		var payload map[string]any
 		require.NoError(t, json.Unmarshal(e.Data, &payload))
 		assert.Equal(t, "SYSTEM", payload["kind"])
 		assert.Equal(t, "Announcement", payload["title"])
 		assert.NotContains(t, payload, "body", "a stream event carries identifiers and a title, never the body")
 		if i > 0 {
-			assert.False(t, e.OccurredAt.Before(missed[i-1].OccurredAt), "oldest first")
+			assert.False(t, e.ID < missed[i-1].ID, "oldest first")
 		}
 	}
+
+	// F-186 stated directly: a cursor past every one of these occurrences, but
+	// before they were written, misses nothing. Under the old filter this
+	// returned an empty list and the person was never told.
+	behind, _, err := resume(ctx, principal, base.Add(3*time.Minute))
+	require.NoError(t, err)
+	assert.Len(t, behind, 3,
+		"a notification written after the cursor is returned however old the thing it describes is")
 
 	// Caught up: nothing to replay.
 	missed, _, err = resume(ctx, principal, time.Now().UTC())
