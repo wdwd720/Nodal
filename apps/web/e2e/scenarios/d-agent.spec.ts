@@ -295,11 +295,12 @@ test("an incomplete strategy compiles to STRUCTURED_CONSTRAINTS_REQUIRED, naming
   // Straight to the API, because the FORM will not let a strategy be recorded
   // with fields missing — which is itself the courtesy being tested elsewhere.
   // What is under test here is the backend refusing to fill anything in.
+  const strategyName = uniqueName("Stated nothing");
   const recorded = await page.request.post("/v1/strategies", {
     headers: { ...SAME_ORIGIN, "Idempotency-Key": `d-agent-bare-${String(Date.now())}` },
     data: {
       account_id: id,
-      name: uniqueName("Stated nothing"),
+      name: strategyName,
       description: "Do something clever with my money.",
     },
   });
@@ -335,10 +336,20 @@ test("an incomplete strategy compiles to STRUCTURED_CONSTRAINTS_REQUIRED, naming
     expect(named, `${field} is named`).toContain(field);
   }
 
-  // And the page renders the refusal with the code and the fields, rather than
-  // an error.
+  // And the page renders that refusal — the stable code and the fields — rather
+  // than an error, which is the half a request-level assertion cannot prove.
   await page.goto("/agents/new");
-  await expect(page.getByText("STRUCTURED_CONSTRAINTS_REQUIRED", { exact: true })).toHaveCount(0);
+  // The disclosure is always visible — it is an <aside>, not a <details> — so
+  // the strategy recorded above is one click away.
+  await page.getByRole("button", { name: `Continue with “${strategyName}”` }).click();
+  await page.getByRole("button", { name: "Compile this strategy" }).click();
+  await expect(page.getByText("This description was not turned into a strategy.")).toBeVisible();
+  await expect(page.getByText("STRUCTURED_CONSTRAINTS_REQUIRED", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("The compiler could not decide these, and it never guesses:")).toBeVisible();
+  for (const field of ["universe.instrument", "risk_limits.max_single_trade_usd", "mode"]) {
+    await expect(page.getByText(field, { exact: false }).first(), `${field} is named on the page`).toBeVisible();
+  }
+  await expect(page.getByText("There is nothing to review")).toBeVisible();
 });
 
 test("Scenario D: state a strategy, compile it, review it, accept it, then create at level 1 and level 3", async ({
