@@ -196,13 +196,30 @@ func (s *Server) DeleteSessionsSessionId(ctx context.Context, request api.Delete
 //
 // The API's own root is a 404 problem document, so "/" is only right when the
 // web app is served from the API's origin. When the app has its own origin the
-// deployment names it, and a local return-to path -- always a path, never a
-// URL; internal/identity refuses anything else -- is resolved beneath that
-// origin rather than beneath the API's. Neither input is the user's, so this
-// is not an open redirect: the base is configuration and the path is what the
-// login service recorded.
+// deployment names it, and a local return-to path is resolved beneath that
+// origin rather than beneath the API's.
+//
+// # Why the path is checked here as well
+//
+// The sentence this comment used to end with -- "Neither input is the user's,
+// so this is not an open redirect: the base is configuration and the path is
+// what the login service recorded" -- was half true and therefore wrong. The
+// base is configuration. The path is the CALLER's `return_to`, recorded
+// verbatim by internal/identity, and that service's guard rejected "//host"
+// and accepted "/\host". With CP_AUTH_POST_LOGIN_URL empty -- an optional
+// variable, which no rule required until now -- the Location header on the
+// callback that sets the session cookie was the caller's string, and a browser
+// resolves "/\evil.example" through the authority state to
+// https://evil.example/ (F-146).
+//
+// identity.IsLocalPath now refuses those at the door. This is the second
+// refusal, at the point of use, because a redirect built from a stored value
+// should not depend on the writer of that value having been careful: the row
+// could predate the guard, or arrive by some other path tomorrow. Anything
+// that is not a plain local path becomes "/", which is always safe and, on a
+// deployment with a base, is the app's own home.
 func postLoginDestination(base, returnTo string) string {
-	if returnTo == "" {
+	if returnTo == "" || !identity.IsLocalPath(returnTo) {
 		returnTo = "/"
 	}
 	if base == "" {
