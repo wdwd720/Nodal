@@ -214,11 +214,13 @@ refusal naming that floor rather than at a settled rehearsal payout; a real
 settled purchase is what would change it. The third audit round found six
 (one P1: the reservation still consumed by origin while the decision was per
 lot — the same invariant at a third layer; three P2; two P3), against
-thirteen and eleven: flattening, not flat. `fix/withdrawal-3` closes the P1
-where the units actually move (the payout takes exactly the lots its decision
-evaluated, D-136; the allocation record carries the floor) and makes
-provenance a set of root origins judged in full by whatever policy applies
-(D-138); a narrow fourth round audits only that fix *(pending)*.
+thirteen and eleven: flattening, not flat. `fix/withdrawal-3` is merged (`58d49c2`): the
+payout takes exactly the lots its decision evaluated and the allocation
+record carries the floor (D-136); the floor is computed from the provenance
+roots and a parent row written after a descendant is refused (D-137);
+provenance is a set of root origins judged in full by whatever policy applies
+(D-138); a reserved payout that cannot be sent says why, where its holder can
+read it (D-139). A narrow fourth round audits only that fix *(pending)*.
 
 ## 13 · Conversion
 
@@ -305,9 +307,9 @@ Results: green in the full integration run (58 packages) and
 
 ## 19 · Restore
 
-`make restore-drill` after every merge: the latest at migration **00818 —
+`make restore-drill` after every merge: the latest at migration **00822 —
 OK, 160 tables, row counts identical, 0 accounts with balance drift, journal
-hashes equal, one live state change on the restored database, 12.1 s**
+hashes equal, one live state change on the restored database, 12.2 s**
 (`docs/operations/BACKUP_RESTORE.md`, held to the migration head by
 `TestDocs_CountsMatchTheCode`). Class: `LIVE_OBSERVED`.
 
