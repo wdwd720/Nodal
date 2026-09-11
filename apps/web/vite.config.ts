@@ -51,6 +51,15 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    sourcemap: true,
+    /**
+     * "hidden", not true.
+     *
+     * The maps are still WRITTEN — a stack trace from a production error can be
+     * symbolicated by whoever holds `dist/` — but no `//# sourceMappingURL=`
+     * comment is emitted, so a browser never fetches one and the CDN never
+     * serves the app's readable source to a visitor. `true` published the whole
+     * frontend, comments included, beside the bundle.
+     */
+    sourcemap: "hidden",
   },
 });
