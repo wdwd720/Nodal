@@ -67,14 +67,13 @@ func TestAuditAgnot_LastEventIDSkipsNotificationsWrittenBehindThePublishInstant(
 	}
 
 	now := time.Now().UTC()
-	t1 := now.Add(-5 * time.Minute)  // N1 happened five minutes ago
-	publishAt := now.Add(-time.Hour) // irrelevant placeholder, replaced below
+	t1 := now.Add(-5 * time.Minute) // N1 happened five minutes ago
 
 	n1 := emitAt("n1", t1)
 
 	// The follower publishes N1 one tick later. Hub.Publish stamps the id from
 	// the hub's own clock, not from n1.OccurredAt.
-	publishAt = t1.Add(30 * time.Second)
+	publishAt := t1.Add(30 * time.Second)
 	hub := stream.NewHub(64, nil)
 	hub.UseClock(func() time.Time { return publishAt })
 	pub := hubPublisher{hub: hub}

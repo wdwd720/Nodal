@@ -529,17 +529,18 @@ func accountStatusBody(status, reason string) string {
 // New sessions
 // ---------------------------------------------------------------------------
 
+// AuditRoute is the caller's own security trail, where the exact address of a
+// sign-in is served from. That table is partitioned by month and dropped by the
+// retention pass, so the new-session notification names the route rather than
+// carrying the address into a row nothing can delete (D-106).
+const AuditRoute = "/v1/me/audit"
+
 // readNewSessions follows security_events rather than the sessions table.
 // A session row is UPDATEd -- last_seen_at moves on every request -- so it is
 // not an append-only log and a cursor over it would re-read every active
 // session forever. The 'login' security event is written in the same
 // transaction as the session it describes (internal/identity), is immutable,
 // and is the durable record the retention policy deliberately keeps.
-// AuditRoute is where the exact address of a sign-in is served from: the
-// caller's own security trail, which is partitioned by month and dropped by
-// the retention pass. The new-session notification names it rather than
-// carrying the address (D-106).
-const AuditRoute = "/v1/me/audit"
 
 func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID string, limit int) ([]Change, error) {
 	// The address is masked in SQL, so the exact one is never read into this
