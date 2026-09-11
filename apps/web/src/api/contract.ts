@@ -1251,7 +1251,7 @@ export function validatedVerificationProfile<T>(raw: unknown, path: string): T {
 
 export const startedVerificationSpec: Spec = {
   required: { session: "object", sandbox: "boolean" },
-  optional: { hosted_url: "string", expires_at: "timestamp", sandbox_control_path: "string" },
+  optional: { hosted_url: "string", resume: "string", expires_at: "timestamp", sandbox_control_path: "string" },
 };
 
 export function validatedStartedVerification<T>(raw: unknown, path: string): T {
@@ -1335,6 +1335,7 @@ export const payoutDestinationSpec: Spec = {
     masked_display: "string",
     currency: "string",
     country: "string",
+    region: "string",
     usable: "boolean",
     verified_at: "timestamp",
   },

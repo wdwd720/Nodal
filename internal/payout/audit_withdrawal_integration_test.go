@@ -607,6 +607,161 @@ func TestAuditWV_AProceedsLotSettlesWhenItsFundingDoesAndNotBefore(t *testing.T)
 		"value whose funding is under dispute is frozen while the dispute runs")
 }
 
+// ---------------------------------------------------------------------------
+// F-226/F-wv-4 — the compliance facts GET /v1/me/eligibility refuses on are read by
+// nothing on the conversion path.
+//
+// ADR-0025 names "verified, and sanctions is under review" as the state a real
+// screening produces most often after clear, and
+// VERIFICATION_AND_WITHDRAWAL.md §3 lists ACCOUNT_RESTRICTED ("a freeze, a
+// compliance hold, a sanctions review") among the seven decisions between
+// Credits and money. payout.EligibilityInput had a field for none of them and
+// payout.Service.Create read none of those columns (D-120).
+// ---------------------------------------------------------------------------
+
+func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
+	f := newAuditFixture(t)
+	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1_000_000_000)
+
+	// A provider answer of the shape ADR-0025 describes: the document, the age
+	// and the jurisdiction pass, the sanctions screen is clear, and the
+	// political-exposure screen is a hit. sanctionsStateFrom maps that to
+	// REVIEW; EvidenceSatisfies(PAYOUT_KYC) is satisfied because PEP is not one
+	// of the four, so the profile reaches VERIFIED.
+	svc, repo := newAuditVerificationService(t, f.clk)
+	session := newAuditSession(t, repo, f.user)
+	ingested, err := svc.Ingest(f.ctx, testDB, session, verification.Result{
+		ProviderRef: session.ProviderRef,
+		Status:      verification.SessionApproved,
+		RawStatus:   "audit_approved",
+		Sandbox:     true,
+		AgeAtLeast:  verifysandbox.AttestsAgeAtLeast,
+		Jurisdiction: rules.Jurisdiction{
+			Country: session.JurisdictionCountry, Region: session.JurisdictionRegion,
+		},
+		Checks: []verification.CheckResult{
+			{Kind: verification.CheckIdentityDocument, Outcome: verification.OutcomePass, Detail: "AUDIT"},
+			{Kind: verification.CheckAge, Outcome: verification.OutcomePass, Detail: "AUDIT"},
+			{Kind: verification.CheckJurisdiction, Outcome: verification.OutcomePass, Detail: "AUDIT"},
+			{Kind: verification.CheckSanctions, Outcome: verification.OutcomePass, Detail: "AUDIT"},
+			{Kind: verification.CheckPEP, Outcome: verification.OutcomeFail, Detail: "AUDIT_PEP_HIT"},
+		},
+	}, "audit fixture: a provider decision with a political-exposure hit", "audit")
+	require.NoError(t, err)
+	require.Equal(t, verification.SessionApproved, ingested.Status)
+
+	profile, err := compliance.NewRepository(audit.NewWriter()).Get(f.ctx, testDB, f.user)
+	require.NoError(t, err)
+	require.Equal(t, compliance.SanctionsReview, profile.SanctionsState,
+		"fixture check: the screen is under review")
+	state, _, _, err := repo.ProfileState(f.ctx, testDB, f.user)
+	require.NoError(t, err)
+	require.Equal(t, verification.StateVerified, state,
+		"fixture check: the identity state is VERIFIED, which is the point")
+
+	// The level the payout path resolves, from the same resolver cmd/api wires.
+	resolver, err := verification.NewResolver(
+		verification.StaticBase(valuedomain.VerificationNodalIdentity), repo, testDB, f.clk,
+	)
+	require.NoError(t, err)
+	level, err := resolver.Level(f.ctx, f.account)
+	require.NoError(t, err)
+	require.Equal(t, valuedomain.VerificationPayoutKYC, level,
+		"fixture check: the resolver reports PAYOUT_KYC, because PEP is not required for it")
+
+	// What the person is told.
+	exp := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
+		Policy:      valuedomain.SandboxPolicy(),
+		Verified:    level,
+		ActiveCaps:  map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
+		PolicyValid: true,
+		Holdings: []eligibility.OriginHolding{{
+			Origin:   valuedomain.OriginPurchased,
+			Quantity: money.QuantityFromInt64(1_000_000_000),
+			Finality: valuedomain.FinalitySettled,
+		}},
+		Gross:                 money.QuantityFromInt64(1_000_000_000),
+		Spendable:             money.QuantityFromInt64(1_000_000_000),
+		JurisdictionSupported: true,
+		ProviderAvailable:     true,
+		DestinationConfigured: true,
+		DisclosureAccepted:    true,
+		// Exactly what httpapi.eligibilityAdapter.applyAccountFacts appends.
+		AccountRestrictions: []string{"SANCTIONS_" + string(profile.SanctionsState)},
+	})
+	require.Contains(t, exp.Reasons, eligibility.WithdrawalAccountRestricted)
+	require.False(t, exp.Eligible)
+	require.Equal(t, "0", exp.WithdrawableNow.String(),
+		"fixture check: the eligibility page says nothing may leave")
+
+	// What the conversion request does, with the same facts the eligibility
+	// page answered from -- read from the same compliance profile, in the
+	// transaction that would reserve the value (D-120).
+	quote, qerr := f.quote(1_000_000_000)
+	require.NoError(t, qerr)
+
+	var (
+		req payout.Request
+		dec payout.Decision
+	)
+	in := f.sandboxInput()
+	in.Verified = level
+	in.SanctionsState = profile.SanctionsState
+	in.AccountRestrictions = append([]string(nil), profile.Restrictions...)
+	dest := f.destination
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var cerr error
+			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
+				Quantity:           money.QuantityFromInt64(1_000_000_000),
+				ProviderTerms:      f.terms(),
+				Environment:        "TEST",
+				DisclosureAccepted: true,
+				IdempotencyKey:     "audit-sanctions-" + uuid.NewString(),
+				EffectiveAt:        f.clk.Now(),
+			}, in)
+			return cerr
+		}))
+	assert.NotEqual(t, payout.StateVerified, req.State,
+		"F-226: an account under an open sanctions review reserved %s Credits for payout, "+
+			"while GET /v1/me/eligibility reported ACCOUNT_RESTRICTED and 0 withdrawable",
+		req.ReservedQuantity.String())
+	assert.Equal(t, "0", req.ReservedQuantity.String())
+	assert.Contains(t, dec.ReasonStrings(), string(payout.ReasonAccountRestricted),
+		"the conversion path gives the reason the eligibility page gives")
+
+	// And the two other facts on the same input, each on its own, because §21
+	// says they must be able to refuse independently.
+	for _, tc := range []struct {
+		name   string
+		mutate func(*payout.EligibilityInput)
+		reason valuedomain.PermitReason
+	}{
+		{"an unsupported jurisdiction", func(i *payout.EligibilityInput) {
+			i.JurisdictionSupported = false
+		}, payout.ReasonJurisdictionRestricted},
+		{"a restriction recorded against the account", func(i *payout.EligibilityInput) {
+			i.AccountRestrictions = []string{"OPERATOR_HOLD"}
+		}, payout.ReasonAccountRestricted},
+		{"a screen nobody has answered", func(i *payout.EligibilityInput) {
+			i.SanctionsState = ""
+		}, payout.ReasonAccountRestricted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			probe := f.sandboxInput()
+			probe.Verified = level
+			probe.AccountID = f.account
+			probe.Requested = money.QuantityFromInt64(1_000_000)
+			tc.mutate(&probe)
+			d, eerr := payout.NewEngine(f.credits).Evaluate(f.ctx, testDB, probe)
+			require.NoError(t, eerr)
+			assert.False(t, d.Sufficient())
+			assert.Contains(t, d.ReasonStrings(), string(tc.reason))
+		})
+	}
+}
+
 // newAuditVerificationService builds the verification service a sandbox tier
 // runs, on the fixture's clock.
 func newAuditVerificationService(t *testing.T, clk clock.Clock) (*verification.Service, *verification.Repository) {

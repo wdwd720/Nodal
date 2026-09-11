@@ -83,11 +83,34 @@ test("a direct POST /v1/payouts is refused for the same reason the page gives", 
   const before = await page.request.get(`/v1/payouts?account_id=${accountId}`);
   const countBefore = ((await before.json()) as { readonly items: readonly unknown[] }).items.length;
 
-  // Correct in every other respect: a real account, a well-formed amount, a
-  // fresh idempotency key and the header the app's own fetch sends.
+  // A payout names the quote the customer was shown, and it is required
+  // (D-119): without one there is no fee and no minimum to judge the payout
+  // against, which is how a payout below the provider's published minimum was
+  // once reserved and settled with the fee never taken.
+  const noQuote = await page.request.post("/v1/payouts", {
+    headers: { ...SAME_ORIGIN, "Idempotency-Key": `e-noquote-${String(Date.now())}` },
+    data: { account_id: accountId, amount: "1000000" },
+  });
+  expect(noQuote.status(), "a payout with no quote is refused").toBeGreaterThanOrEqual(400);
+  const noQuoteProblem = (await noQuote.json()) as {
+    readonly code?: string;
+    readonly fields?: Record<string, unknown>;
+  };
+  expect(noQuoteProblem.code).toBe("VALIDATION_FAILED");
+  expect(JSON.stringify(noQuoteProblem)).toContain("quote_id");
+
+  // And with the request otherwise correct in every respect -- a real account, a
+  // well-formed amount, a well-formed quote id, a fresh idempotency key and the
+  // header the app's own fetch sends -- the refusal is still verification's.
+  // The route decides that before it ever looks at the quote, which is what
+  // makes the page not the gate.
   const response = await page.request.post("/v1/payouts", {
     headers: { ...SAME_ORIGIN, "Idempotency-Key": `e-direct-${String(Date.now())}` },
-    data: { account_id: accountId, amount: "1000000" },
+    data: {
+      account_id: accountId,
+      amount: "1000000",
+      quote_id: "00000000-0000-4000-8000-000000000001",
+    },
   });
 
   expect(response.status(), "the API refuses an unverified payout").toBeGreaterThanOrEqual(400);

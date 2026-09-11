@@ -138,6 +138,40 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   expect(usable?.provider, "the provider is the rehearsal one").toBe("sandbox_payout");
   expect(usable?.sandbox, "the destination is labelled a rehearsal").toBe(true);
 
+  // 2b · And the provider is asked about the recipient, always (D-122).
+  //
+  // `country` used to be optional, and the provider was asked only when the
+  // client supplied one -- so the same body with "country":"FR" came back 503
+  // RECIPIENT_COUNTRY_UNSUPPORTED and the body WITHOUT the field came back 201
+  // with status VERIFIED. Both probes run after the step-up above, so neither
+  // refusal is a step-up wearing another code.
+  const noCountry = await seller.request.post("/v1/me/payout-destinations", {
+    headers: { ...SAME_ORIGIN, "Idempotency-Key": `f-nocountry-${String(Date.now())}` },
+    data: { account_id: sellerId, kind: "BANK", provider_token: "sbx_tok_nocountry" },
+  });
+  expect(noCountry.status(), await noCountry.text()).toBe(400);
+  expect(JSON.stringify(await noCountry.json())).toContain("country");
+
+  const unsupported = await seller.request.post("/v1/me/payout-destinations", {
+    headers: { ...SAME_ORIGIN, "Idempotency-Key": `f-fr-${String(Date.now())}` },
+    data: {
+      account_id: sellerId, kind: "BANK", provider_token: "sbx_tok_fr",
+      currency: "USD", country: "FR",
+    },
+  });
+  expect(
+    unsupported.status(),
+    "a destination the provider has said it cannot pay is refused",
+  ).toBeGreaterThanOrEqual(400);
+  expect(JSON.stringify(await unsupported.json())).toContain("RECIPIENT_COUNTRY_UNSUPPORTED");
+
+  const after = await seller.request.get(`/v1/me/payout-destinations?account_id=${sellerId}`);
+  const afterRows = (await after.json()) as ReadonlyArray<{ readonly country?: string }>;
+  expect(
+    afterRows.some((row) => row.country === "FR"),
+    "a refused destination is not registered",
+  ).toBe(false);
+
   const balanceBefore = await creditBalance(seller, sellerId);
   const payoutsBefore = await seller.request.get(`/v1/payouts?account_id=${sellerId}`);
   const countBefore = ((await payoutsBefore.json()) as { readonly items: readonly unknown[] }).items
@@ -170,20 +204,27 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   expect(promotional?.payout_allowed, "a promotional grant never leaves").toBe(false);
   expect(BigInt(promotional?.withdrawable ?? "1")).toBe(0n);
 
-  // # Why nothing is withdrawable here even so
+  // # What holds value back here, and what no longer does
   //
   // Every Credit on a seeded deployment is UNFUNDED: `scripts/seedeconomy`
   // grants them PROMOTIONAL and unfunded on purpose, because nobody paid for
-  // them. An earning derived from spending them inherits that, so the permitted
-  // origin above is held by FUNDING_NOT_SETTLED — the engine refusing to let
-  // value leave that nothing ever funded. It is the correct answer and it is
-  // the second half of the same rule: the policy permits the ORIGIN and the
-  // finality still refuses.
+  // them. This spec used to explain the refusal by saying an earning "inherits
+  // that" — it did not. internal/commerce and internal/nativemarket minted
+  // every earning REVERSIBLE unconditionally, and the only writer that promotes
+  // a lot out of REVERSIBLE reads `credit_fundings.lot_id`, which an earning has
+  // never had. So the refusal was not the finality model working; it was F-230,
+  // and no earning on any deployment could ever be withdrawn.
   //
-  // Making this branch fall the other way needs a real Credit purchase (the
-  // provider path scenario B owns) and a settlement window that has closed. The
-  // spec follows whichever answer the tier gives rather than asserting one it
-  // cannot produce.
+  // D-124 makes an earning as final as what paid for it: it records the lots it
+  // was funded from and is minted at the least final finality among them. An
+  // earning funded by an UNFUNDED grant is therefore UNFUNDED and
+  // payout-eligible, and one funded by a card payment inside its dispute window
+  // is REVERSIBLE until `credit.Service.SettleDerived` promotes it — which is
+  // what FUNDING_NOT_SETTLED has always claimed and could not deliver.
+  //
+  // The spec still follows whichever answer the tier gives rather than
+  // asserting one it cannot produce: what the seeded catalogue sells, and
+  // therefore what funds the sale, is not this scenario's subject.
   const holdsUnfunded = eligible.buckets.some((bucket) =>
     bucket.reasons.includes("FUNDING_NOT_SETTLED"),
   );
@@ -288,15 +329,54 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
     expect(slice.origin, "only an origin the policy permits is consumed").not.toBe("PROMOTIONAL");
   }
 
-  // 7 · And it stops here. Nothing in this build hands a reserved request to a
-  // provider, so it never reaches PROVIDER_PENDING and the rehearsal provider's
-  // ten-second settlement is never asked for. The page says the state it is
-  // actually in rather than implying movement.
+  // 7 · And then the sweep takes it. `cmd/api/payoutsweep.go` (D-085) hands a
+  // reserved request to the provider every fifteen seconds and asks about it
+  // five seconds later; the rehearsal provider settles ten seconds after it
+  // accepts. So the provider leg happens on its own, without this file touching
+  // the database.
+  //
+  // This spec used to assert the request "stops at VERIFIED" and say that
+  // nothing in this build hands a reserved request to a provider. That was true
+  // when it was written and had stopped being true: the assertion passed only
+  // because it read the state immediately, before the first tick (F-250). What
+  // is asserted now is what the deployment actually does, observed rather than
+  // assumed, with a bounded wait.
+  const seen = new Set<string>([followed.state]);
+  let final = followed.state;
+  for (let attempt = 0; attempt < 24 && final !== "SETTLED" && final !== "FAILED"; attempt += 1) {
+    const poll = await seller.request.get(`/v1/payouts/${request?.payout_id ?? ""}`);
+    const body = (await poll.json()) as { readonly state: string };
+    final = body.state;
+    seen.add(final);
+    if (final === "SETTLED" || final === "FAILED") break;
+    await seller.waitForTimeout(5000);
+  }
   expect(
-    ["VERIFIED", "ELIGIBILITY_CHECK", "DRAFT"],
-    "a reserved request waits rather than being submitted by this build",
-  ).toContain(followed.state);
-  await expect(seller.getByRole("region", { name: "This request" })).toContainText(followed.state);
+    ["VERIFIED", "SUBMITTED", "PROVIDER_PENDING", "SETTLED"],
+    `the request went as far as the rehearsal provider takes it; states seen: ${[...seen].join(" → ")}`,
+  ).toContain(final);
+
+  // And no value moved anywhere real. The payout is labelled a rehearsal on the
+  // row itself rather than by asking what the provider happens to be today
+  // (F-232), the provider is the rehearsal one, and the page says the state the
+  // request is actually in.
+  const settled = await seller.request.get(`/v1/payouts/${request?.payout_id ?? ""}`);
+  const settledBody = (await settled.json()) as {
+    readonly state: string;
+    readonly sandbox?: boolean;
+    readonly provider?: string;
+  };
+  expect(settledBody.sandbox, "the payout is labelled a rehearsal").toBe(true);
+  if (settledBody.provider !== undefined && settledBody.provider !== "") {
+    expect(settledBody.provider, "the rehearsal provider is the one it went to").toBe(
+      "sandbox_payout",
+    );
+  }
+  await seller.goto("/withdraw");
+  await seller.waitForLoadState("networkidle");
+  await expect(seller.getByRole("region", { name: "This request" })).toContainText(
+    settledBody.state,
+  );
 
   await seller.context().close();
 });

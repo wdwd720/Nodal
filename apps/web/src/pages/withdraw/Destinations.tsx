@@ -91,6 +91,7 @@ interface DestinationDraft {
   readonly label: string;
   readonly currency: string;
   readonly country: string;
+  readonly region: string;
 }
 
 const EMPTY: DestinationDraft = {
@@ -99,6 +100,7 @@ const EMPTY: DestinationDraft = {
   label: "",
   currency: "",
   country: "",
+  region: "",
 };
 
 /** Picks a declared kind back out of a select without trusting the string. */
@@ -134,6 +136,11 @@ export function Destinations(props: {
   const [adding, setAdding] = useState(draft.recovered);
 
   const tokenOk = draft.value.token.trim().length > 0;
+  // Required, and checked here so the button says why rather than the server
+  // saying it after a round trip: the provider is asked whether it can pay a
+  // recipient in this country before the destination is registered at all, and
+  // it cannot be asked about a country nobody stated (D-122).
+  const countryOk = /^[A-Za-z]{2}$/.test(draft.value.country.trim());
   const { onChoose } = props;
 
   return (
@@ -261,7 +268,7 @@ export function Destinations(props: {
           className="form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!tokenOk) return;
+            if (!tokenOk || !countryOk) return;
             const body = {
               accountId: props.accountId,
               kind: draft.value.kind,
@@ -269,6 +276,7 @@ export function Destinations(props: {
               displayLabel: draft.value.label.trim(),
               currency: draft.value.currency.trim().toUpperCase(),
               country: draft.value.country.trim().toUpperCase(),
+              region: draft.value.region.trim().toUpperCase(),
             };
             add.mutate(
               {
@@ -281,6 +289,7 @@ export function Destinations(props: {
                     body.displayLabel,
                     body.currency,
                     body.country,
+                    body.region,
                   ]),
                 ),
               },
@@ -358,15 +367,37 @@ export function Destinations(props: {
               />
             )}
           </FormField>
-          <FormField label="Country" hint="Two letters, if the provider needs one.">
+          <FormField
+            label="Country"
+            hint="Two letters, and required: the provider is asked whether it can pay somebody there before this is registered."
+          >
             {(field) => (
               <input
                 className="input"
                 type="text"
                 maxLength={2}
+                required
+                autoComplete="country"
                 value={draft.value.country}
                 onChange={(event) => {
                   draft.set({ ...draft.value, country: event.target.value });
+                }}
+                {...field}
+              />
+            )}
+          </FormField>
+          <FormField
+            label="State or region"
+            hint="Some providers pay a country but not every part of it. If yours does, this is asked for and the registration is refused without it."
+          >
+            {(field) => (
+              <input
+                className="input"
+                type="text"
+                maxLength={6}
+                value={draft.value.region}
+                onChange={(event) => {
+                  draft.set({ ...draft.value, region: event.target.value });
                 }}
                 {...field}
               />
@@ -376,12 +407,18 @@ export function Destinations(props: {
           {add.isError && <Explanation error={add.error} onRetry={add.reset} />}
 
           <div className="form-actions">
-            {tokenOk ? (
+            {tokenOk && countryOk ? (
               <Button variant="primary" submit busy={add.isPending} busyLabel="Registering…">
                 Register this destination
               </Button>
             ) : (
-              <Button disabledReason="Paste the provider's token for the destination. Nodal has nowhere to put an account number.">
+              <Button
+                disabledReason={
+                  tokenOk
+                    ? "Say which country this pays into. The provider is asked whether it can pay somebody there, and it cannot be asked about a country nobody stated."
+                    : "Paste the provider's token for the destination. Nodal has nowhere to put an account number."
+                }
+              >
                 Register this destination
               </Button>
             )}

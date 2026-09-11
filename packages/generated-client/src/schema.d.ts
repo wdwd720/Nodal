@@ -5053,7 +5053,8 @@ export interface components {
         };
         CreatePayoutDestination: {
             account_id: components["schemas"]["UUID"];
-            country?: string;
+            /** @description ISO 3166-1 alpha-2, and REQUIRED. The provider is asked whether it can pay a recipient there before the destination is registered; without it the question was skipped entirely and a destination the provider had said it could not pay was accepted and marked VERIFIED (D-122). */
+            country: string;
             currency?: string;
             display_label?: string;
             /** @enum {string} */
@@ -5061,6 +5062,8 @@ export interface components {
             masked_display?: string;
             /** @description The provider's token for the destination, or on a sandbox tier a sandbox handle. An input that looks like an account number, a card number, an IBAN, a private key or a seed phrase is REFUSED, not stored: Nodal never holds one. */
             provider_token: string;
+            /** @description The subdivision within country, without its country prefix. Required whenever the provider publishes excluded subdivisions for that country, and refused VALIDATION_FAILED when it is missing there: "we do not know which state" is not "any state". */
+            region?: string;
         };
         CreatePayoutQuote: {
             account_id: components["schemas"]["UUID"];
@@ -5072,8 +5075,8 @@ export interface components {
             account_id: components["schemas"]["UUID"];
             amount: components["schemas"]["Quantity"];
             destination_id?: components["schemas"]["UUID"];
-            /** @description The quote from POST /payouts/quote that the customer was shown. When present it is consumed in the same transaction that reserves the value, so one quote funds exactly one payout, and an expired or already-used quote refuses the request before anything is decided about the money. It must name the same destination and the same gross amount. */
-            quote_id?: components["schemas"]["UUID"];
+            /** @description The quote from POST /payouts/quote that the customer was shown, and it is REQUIRED. It is consumed in the same transaction that reserves the value, so one quote funds exactly one payout, and an expired or already-used quote refuses the request before anything is decided about the money. It must name the same destination and the same gross amount. Without it there is no fee and no minimum to judge the payout against, which is how a payout below the provider's published minimum was reserved and settled with the fee never taken (D-119). */
+            quote_id: components["schemas"]["UUID"];
         };
         CreateStrategyRequest: {
             account_id: components["schemas"]["UUID"];
@@ -5832,6 +5835,8 @@ export interface components {
             /** @description What a person recognises, such as "••••4242". Never the whole number. */
             masked_display?: string;
             provider: string;
+            /** @description The subdivision this pays into, where the provider distinguishes them. */
+            region?: string;
             sandbox: boolean;
             status: components["schemas"]["PayoutDestinationStatus"];
             /** @description Whether a payout may be sent here right now. */
@@ -5895,12 +5900,27 @@ export interface components {
             policy_version: string;
             /** @description What value is leaving, in the order it leaves (§23). A payout does not take "500 Credits"; it takes specific units from specific provenance lots, and this is which. */
             provenance?: components["schemas"]["PayoutProvenanceSlice"][];
-            /** @description The pre-commitment quote this payout was created against, when there was one. */
+            /** @description The payout provider this request was claimed for, once it has been. */
+            provider?: string;
+            /** @description The pre-commitment quote this payout was created against. */
             quote_id?: components["schemas"]["UUID"];
+            quoted_currency?: string;
+            /** Format: int64 */
+            quoted_fee_amount_minor?: number;
+            /**
+             * Format: int64
+             * @description The gross the customer was shown, in minor units of quoted_currency. Recorded on the request rather than re-derived, so a fee schedule repriced later cannot change what this payout says it sent.
+             */
+            quoted_gross_amount_minor?: number;
+            /**
+             * Format: int64
+             * @description What the customer was told would reach them. It is what the provider is instructed to send.
+             */
+            quoted_net_amount_minor?: number;
             requested_quantity: components["schemas"]["Quantity"];
             required_verification?: string;
             reserved_quantity: components["schemas"]["Quantity"];
-            /** @description True when this payout is a rehearsal against a sandbox provider. */
+            /** @description True when this payout was a rehearsal. It is recorded on the request at creation, from the provider's availability and the deployment's own tier, rather than read from today's provider mode -- so the list, the create response and the by-id read agree, and a deployment that swaps its provider does not silently relabel its history (D-096's treatment, F-232). */
             sandbox?: boolean;
             settled_quantity?: components["schemas"]["Quantity"];
             /** @enum {string} */
@@ -6165,8 +6185,10 @@ export interface components {
         };
         StartedVerification: {
             expires_at?: components["schemas"]["Timestamp"];
-            /** @description Single-use and short-lived. It is returned here and stored nowhere. On a sandbox tier it is a `sandbox:` reference rather than a page, because there is no hosted flow to visit. */
+            /** @description Single-use and short-lived. It is returned here and stored nowhere -- not even in the idempotency record, which is why a REPLAY of the same Idempotency-Key answers with the session and no link, and with `resume` saying so (D-125). On a sandbox tier it is a `sandbox:` reference rather than a page, because there is no hosted flow to visit. */
             hosted_url?: string;
+            /** @description Present instead of `hosted_url` when this answer is a replay of an Idempotency-Key whose link was not kept. It tells the client what to do: start a new session, under a new key, to get another link. */
+            resume?: string;
             sandbox: boolean;
             /** @description Present only for a rehearsal session. It is where a sandbox operator chooses the outcome explicitly, and its presence is what makes a sandbox session visibly a rehearsal. */
             sandbox_control_path?: string;
