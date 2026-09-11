@@ -17,7 +17,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { APP_ROUTES, NARROW_HEIGHT, NARROW_WIDTH, PUBLIC_ROUTES } from "./routes.ts";
+import { APP_ROUTES, NARROW_HEIGHT, NARROW_WIDTH, ONBOARDING_ROUTES, PUBLIC_ROUTES } from "./routes.ts";
 
 const SIGNED_OUT = { cookies: [], origins: [] };
 
@@ -58,6 +58,27 @@ for (const route of APP_ROUTES) {
     expect(await violations(page), `${route.path} accessibility violations`).toEqual([]);
   });
 }
+
+for (const route of ONBOARDING_ROUTES) {
+  test(`${route.path} has no automatically detectable WCAG A/AA violation`, async ({ page }) => {
+    await page.goto(route.path);
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
+    await expect(page.locator("h1")).toHaveCount(1);
+    expect(await violations(page), `${route.path} accessibility violations`).toEqual([]);
+  });
+}
+
+test("onboarding does not scroll sideways on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: NARROW_WIDTH, height: NARROW_HEIGHT });
+  for (const route of ONBOARDING_ROUTES) {
+    await page.goto(route.path);
+    await expect(page.locator("h1")).toHaveCount(1);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `${route.path} does not scroll horizontally at 375px`).toBeLessThanOrEqual(1);
+  }
+});
 
 test("no public page scrolls sideways on a phone", async ({ browser }) => {
   // Goal §31. The one element allowed to be wider than the viewport is a table,
