@@ -130,13 +130,13 @@ func toAPICreditPurchase(f credit.Funding, sandbox bool) api.CreditPurchase {
 		AmountMinor:    f.PaidAmount.Minor(),
 		Currency:       f.PaidCurrency,
 		Provider:       f.Provider,
-		CreatedAt:      &f.CreatedAt,
+		CreatedAt:      ptr(f.CreatedAt.UTC()),
 	}
 	if f.ReversibleAt != nil {
-		out.ReversibleAt = f.ReversibleAt
+		out.ReversibleAt = timePtr(f.ReversibleAt)
 	}
 	if f.SettledAt != nil {
-		out.SettledAt = f.SettledAt
+		out.SettledAt = timePtr(f.SettledAt)
 	}
 	if f.FailureReason != "" {
 		out.FailureReason = &f.FailureReason
