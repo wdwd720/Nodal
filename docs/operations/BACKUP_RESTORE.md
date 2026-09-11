@@ -41,7 +41,7 @@ This line said 89 tables and version 604 until F-54. That was a hundred and elev
 
 The drill runs only against `127.0.0.1`/`localhost` and refuses any other host (`internal/testkit/localdb`).
 
-## 2. Production design (AWS, pending Terraform)
+## 2. Production design (AWS; written in Terraform, never applied)
 
 | Concern | Design | Evidence required before claiming |
 |---|---|---|
@@ -52,7 +52,7 @@ The drill runs only against `127.0.0.1`/`localhost` and refuses any other host (
 | Evidence archive | S3 with Object Lock (compliance mode) for audit archives; versioning + replication for raw evidence; restore drill includes fetching and re-hashing a sample of archived objects | archive verification job output |
 | Secrets | restored instance receives new credentials from Secrets Manager; old credentials rotated | rotation log |
 
-RTO/RPO are **not** claimed until a staging drill has been run and measured (PART 205).
+The design above is in `infra/terraform/modules/rds` (encryption at rest, Multi-AZ, backup retention, deletion protection, all as variables) and `modules/s3-evidence`; none of it has been applied against a real account, so every cell of the Evidence column is still owed (EB-012). RTO/RPO are **not** claimed until a staging drill has been run and measured (PART 205).
 
 ## 3. Runbook: restoring production (procedure, unexercised)
 
@@ -66,4 +66,4 @@ RTO/RPO are **not** claimed until a staging drill has been run and measured (PAR
 
 ## 4. Related
 
-`scripts/restoredrill`, `internal/testkit/localdb`, `docs/operations/DISASTER_RECOVERY.md` (pending), `docs/runbooks/database-corruption.md` (pending), BLOCKERS EB-012.
+`scripts/restoredrill`, `internal/testkit/localdb`, `docs/operations/DISASTER_RECOVERY.md`, `docs/runbooks/database-corruption.md`, BLOCKERS EB-012.

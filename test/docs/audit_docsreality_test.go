@@ -352,12 +352,12 @@ type absenceClaim struct {
 }
 
 func absenceClaims() []absenceClaim {
-	return []absenceClaim{
-		{"docs/operations/BACKUP_RESTORE.md",
-			"`docs/operations/DISASTER_RECOVERY.md` (pending)", "docs/operations/DISASTER_RECOVERY.md"},
-		{"docs/operations/BACKUP_RESTORE.md",
-			"`docs/runbooks/database-corruption.md` (pending)", "docs/runbooks/database-corruption.md"},
-	}
+	// Empty, and that is the finding: every stated absence this audit found in
+	// these three documents was contradicted by the tree. The rows live on in
+	// retiredAbsenceClaims below, where they say the claim may not come back.
+	// A new row belongs here the moment a document states an absence that is
+	// load-bearing for a reader -- the check is the list, not the emptiness.
+	return []absenceClaim{}
 }
 
 // retiredAbsenceClaims are the sentences above that have been FIXED. A fixed
@@ -387,6 +387,12 @@ func retiredAbsenceClaims() []absenceClaim {
 		{"docs/threat-model/THREAT_MODEL.md",
 			"`internal/{signing, wallet, execution, reconciliation, settlement, quote, instruments, intent, agent, strategy, model, prediction}`, every worker binary |",
 			"internal/signing"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"`docs/operations/DISASTER_RECOVERY.md` (pending)", "docs/operations/DISASTER_RECOVERY.md"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"`docs/runbooks/database-corruption.md` (pending)", "docs/runbooks/database-corruption.md"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"## 2. Production design (AWS, pending Terraform)", "infra/terraform/modules/rds"},
 	}
 }
 
@@ -429,6 +435,14 @@ func presenceClaims() []absenceClaim {
 		{"docs/threat-model/THREAT_MODEL.md",
 			"`nativemarket.ConservativeSafetyPolicy()` sets `circuit_breaker_move_bps: 0`",
 			"internal/nativemarket/safety.go"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"`docs/operations/DISASTER_RECOVERY.md`, `docs/runbooks/database-corruption.md`, BLOCKERS EB-012.",
+			"docs/operations/DISASTER_RECOVERY.md"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"`docs/operations/DISASTER_RECOVERY.md`, `docs/runbooks/database-corruption.md`, BLOCKERS EB-012.",
+			"docs/runbooks/database-corruption.md"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"The design above is in `infra/terraform/modules/rds`", "infra/terraform/modules/rds"},
 	}
 }
 
