@@ -117,7 +117,8 @@ func TestExplainWithdrawal_TheSandboxPolicyPerOrigin(t *testing.T) {
 		valuedomain.OriginAgentServiceEarning:   true,
 		valuedomain.OriginMarketCreatorEarning:  true,
 		valuedomain.OriginMarketTradingProceeds: true,
-		valuedomain.OriginCompetitionReward:     true,
+		// COMPETITION_REWARD is deliberately absent: a prize is a grant and a
+		// grant never leaves (D-095, F-157).
 	}
 	var total int64
 	for _, o := range valuedomain.AllOrigins() {

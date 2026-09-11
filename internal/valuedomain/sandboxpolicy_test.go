@@ -17,11 +17,26 @@ func TestSandboxPolicy(t *testing.T) {
 	assert.NotEqual(t, DefaultPolicyVersion, p.Version)
 	assert.Len(t, p.Rules, len(AllOrigins()), "every origin has a rule")
 
-	for _, o := range []CreditOrigin{OriginPromotional, OriginRefund, OriginAdminAdjustment, OriginProviderSettlement} {
-		assert.False(t, p.Rules[o].PayoutAllowed, "%s must never be withdrawable, sandbox or not", o)
+	// Every origin, not a sample. The sample was how COMPETITION_REWARD spent
+	// its life withdrawable while the document said six origins were (F-157):
+	// a test that names three permitted origins and four closed ones passes
+	// whatever the other four do.
+	withdrawable := map[CreditOrigin]bool{
+		OriginPurchased:             true,
+		OriginCreatorEarning:        true,
+		OriginDataSaleEarning:       true,
+		OriginAgentServiceEarning:   true,
+		OriginMarketCreatorEarning:  true,
+		OriginMarketTradingProceeds: true,
 	}
-	for _, o := range []CreditOrigin{OriginPurchased, OriginMarketTradingProceeds, OriginCreatorEarning} {
+	require.Len(t, withdrawable, 6,
+		"docs/product/CREDIT_ECONOMY.md section 4: PURCHASED and the five earning origins")
+	for _, o := range AllOrigins() {
 		r := p.Rules[o]
+		if !withdrawable[o] {
+			assert.False(t, r.PayoutAllowed, "%s must never be withdrawable, sandbox or not", o)
+			continue
+		}
 		assert.True(t, r.PayoutAllowed, o)
 		assert.Equal(t, CapPayoutReserve, r.RequiredCapability, o)
 		assert.Equal(t, VerificationPayoutKYC, r.RequiredVerification, o)

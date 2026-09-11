@@ -21,10 +21,11 @@ import (
 // AGENT_SERVICE_EARNING, MARKET_CREATOR_EARNING and MARKET_TRADING_PROCEEDS.
 // So the document describes six permitted origins.
 //
-// SandboxPolicy permits seven. COMPETITION_REWARD -- "a prize or reward from a
-// platform competition" (origin.go:50), a grant by every definition the package
-// uses, and not EarnedByUser() -- is withdrawable.
-func TestAudit_SandboxPolicyPermitsAnOriginTheDocumentSaysItRefuses(t *testing.T) {
+// SandboxPolicy permitted seven. COMPETITION_REWARD -- "a prize or reward from
+// a platform competition" (origin.go), a grant by every definition the package
+// uses, and not EarnedByUser() -- was withdrawable. D-095 marks it closed, and
+// the assertion that pinned it is inverted below rather than deleted.
+func TestAudit_SandboxPolicyPermitsOnlyTheOriginsTheDocumentLists(t *testing.T) {
 	t.Parallel()
 	p := SandboxPolicy()
 
@@ -43,8 +44,8 @@ func TestAudit_SandboxPolicyPermitsAnOriginTheDocumentSaysItRefuses(t *testing.T
 		}
 	}
 
-	assert.True(t, p.Rule(OriginCompetitionReward).PayoutAllowed,
-		"COMPETITION_REWARD is withdrawable under SandboxPolicy")
+	assert.False(t, p.Rule(OriginCompetitionReward).PayoutAllowed,
+		"COMPETITION_REWARD was withdrawable under SandboxPolicy and is a grant")
 	assert.False(t, OriginCompetitionReward.EarnedByUser(),
 		"and it is not one of the earning origins the document names")
 
@@ -52,4 +53,6 @@ func TestAudit_SandboxPolicyPermitsAnOriginTheDocumentSaysItRefuses(t *testing.T
 		assert.True(t, documented[o],
 			"SandboxPolicy permits %s, which docs/product/CREDIT_ECONOMY.md section 4 does not list", o)
 	}
+	assert.Len(t, permitted, len(documented),
+		"the document lists six permitted origins and the policy must permit exactly those")
 }

@@ -34,7 +34,6 @@ func SandboxPolicy() Policy {
 			OriginAgentServiceEarning:   withdrawable,
 			OriginMarketCreatorEarning:  withdrawable,
 			OriginMarketTradingProceeds: withdrawable,
-			OriginCompetitionReward:     withdrawable,
 			// Granted, refunded, adjusted or provider-settled value is never
 			// withdrawable, even in a sandbox: a promotional grant that could
 			// leave the system would be the first rule somebody copied.
@@ -42,6 +41,16 @@ func SandboxPolicy() Policy {
 			OriginRefund:             closed,
 			OriginAdminAdjustment:    closed,
 			OriginProviderSettlement: closed,
+			// A competition prize is a grant (D-095, F-157). Nobody paid for
+			// it and nobody earned it -- COMPETITION_REWARD is not
+			// EarnedByUser(), and origin.go calls it "a prize or reward from a
+			// platform competition" -- so it belongs with the grants and not
+			// with the six origins docs/product/CREDIT_ECONOMY.md section 4
+			// lists. It was withdrawable here, which is the rule above stated
+			// and then broken one line later: a platform that can mint prizes
+			// and let them leave has a payout path whose only gate is a
+			// competition it runs itself.
+			OriginCompetitionReward: closed,
 		},
 	}
 }
