@@ -719,11 +719,21 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Logger:       log,
 		BuildVersion: config.BuildVersion,
 		StepUpMaxAge: cfg.Auth.StepUpMaxAge,
-		// No publisher. Activity and notifications are wired by the composition
-		// root when those surfaces exist; internal/agents deliberately imports
-		// neither, so what a user is told about an agent stays those packages'
-		// decision rather than a property of the lifecycle.
-		Events: nil,
+		// The publisher, which is an adapter in THIS package and not an import
+		// in internal/agents (D-073, D-083). It emits one notification, for one
+		// case: an agent somebody other than its owner stopped. It writes in a
+		// transaction of its own after the agent transaction committed, and
+		// keys on the agent_pauses row through the same exported helpers the
+		// notification follower uses, so the follower's next pass finds the row
+		// already there and tells nobody twice.
+		//
+		// The timeline needs no publisher at all: internal/activity owns no
+		// table and reads agents, agent_pauses and agent_lifecycle_transitions
+		// directly, so an agent action is on somebody's timeline because it
+		// happened rather than because a hook fired.
+		Events: agentNotifier{
+			db: database, producer: notificationProducer, hub: hubPublisher{hub: hub}, log: log,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agents: %w", err)

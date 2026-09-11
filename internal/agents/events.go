@@ -77,6 +77,16 @@ type Event struct {
 	// Runtime is what is actually evaluating the agent, which on a deployment
 	// with no agent worker is NOT_DEPLOYED regardless of State.
 	Runtime RuntimeStatus
+	// PauseID names the agent_pauses row an EventAgentPaused or
+	// EventAgentResumed event is about, and is empty for every other kind.
+	//
+	// It is here so a consumer can key on the PAUSE rather than on the agent. A
+	// second pause of the same agent is a second thing that happened and has to
+	// be a second telling; the same pause read twice -- by a low-latency
+	// publisher and by a follower re-reading its own window -- is one. Without
+	// this field a consumer would have to go and look the row up, which is a
+	// query that can race the resume that closes it.
+	PauseID string
 	// ActorType is USER for an owner action and OPERATOR for an admin one.
 	ActorType string
 	ActorID   string

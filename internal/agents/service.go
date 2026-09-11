@@ -218,7 +218,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (View, error) {
 		return View{}, err
 	}
 	view = s.withRuntime(view)
-	s.publish(ctx, EventAgentCreated, view, p, "agent created", req.CorrelationID, now)
+	s.publish(ctx, EventAgentCreated, view, p, agent.PauseID{}, "agent created", req.CorrelationID, now)
 	return view, nil
 }
 
@@ -335,16 +335,17 @@ func (s *Service) Act(ctx context.Context, req ActRequest) (View, error) {
 
 	now := s.clk.Now().UTC()
 	var kind EventKind
+	var pauseID agent.PauseID
 	err = s.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		current, lerr := s.store.LockAgent(ctx, tx, req.AgentID)
 		if lerr != nil {
 			return lerr
 		}
-		k, aerr := s.apply(ctx, tx, current, v.Grant, p, req.Action, reason, req.CorrelationID, now)
+		k, pid, aerr := s.apply(ctx, tx, current, v.Grant, p, req.Action, reason, req.CorrelationID, now)
 		if aerr != nil {
 			return aerr
 		}
-		kind = k
+		kind, pauseID = k, pid
 		updated, gerr := s.store.Get(ctx, tx, req.AgentID)
 		if gerr != nil {
 			return gerr
@@ -356,32 +357,37 @@ func (s *Service) Act(ctx context.Context, req ActRequest) (View, error) {
 		return View{}, err
 	}
 	v = s.withRuntime(v)
-	s.publish(ctx, kind, v, p, reason, req.CorrelationID, now)
+	s.publish(ctx, kind, v, p, pauseID, reason, req.CorrelationID, now)
 	return s.withPause(ctx, v)
 }
 
 // apply is the state machine, and the only place it lives.
+//
+// The second return is the agent_pauses row a pause opened, or the one a resume
+// closed, and is empty for every other action. It travels on the event so a
+// consumer can key on the pause rather than on the agent.
 func (s *Service) apply(ctx context.Context, tx pgx.Tx, a agent.Agent, g Grant, p security.Principal,
 	action Action, reason, correlationID string, now time.Time,
-) (EventKind, error) {
+) (EventKind, agent.PauseID, error) {
 	switch action {
 	case ActionEnable:
-		return EventAgentEnabled, s.enable(ctx, tx, a, g, p, reason, correlationID, now)
+		return EventAgentEnabled, agent.PauseID{}, s.enable(ctx, tx, a, g, p, reason, correlationID, now)
 
 	case ActionPause:
-		return EventAgentPaused, s.pause(ctx, tx, a, p, agent.PauseOwnerRequest, reason, correlationID, now)
+		pauseID, err := s.pause(ctx, tx, a, p, agent.PauseOwnerRequest, reason, correlationID, now)
+		return EventAgentPaused, pauseID, err
 
 	case ActionResume:
 		if a.State != agent.StatePaused {
-			return "", errs.Newf(errs.CodeInvalidStateTransition, "agents: this agent is %s, not paused", a.State).
+			return "", agent.PauseID{}, errs.Newf(errs.CodeInvalidStateTransition, "agents: this agent is %s, not paused", a.State).
 				WithField("state", string(a.State))
 		}
 		if !agent.CanTransition(a.State, a.Stage.State()) {
-			return "", errs.Newf(errs.CodeInvalidStateTransition, "agents: cannot resume from %s to %s", a.State, a.Stage).
+			return "", agent.PauseID{}, errs.Newf(errs.CodeInvalidStateTransition, "agents: cannot resume from %s to %s", a.State, a.Stage).
 				WithField("from", string(a.State)).WithField("to", string(a.Stage))
 		}
 		if err := s.store.ClosePause(ctx, tx, a.ID, now, p.ActorType, p.SubjectID, reason); err != nil {
-			return "", err
+			return "", agent.PauseID{}, err
 		}
 		if err := s.store.ApplyLifecycle(ctx, tx, LifecycleChange{
 			AgentID: a.ID, From: a, ToState: a.Stage.State(), ToStage: a.Stage,
@@ -389,24 +395,24 @@ func (s *Service) apply(ctx context.Context, tx pgx.Tx, a agent.Agent, g Grant, 
 			RiskPolicyVersion: a.RiskPolicyVersion, ActorType: p.ActorType, ActorID: p.SubjectID,
 			Reason: reason, BuildVersion: s.build, CorrelationID: correlationID, OccurredAt: now,
 		}); err != nil {
-			return "", err
+			return "", agent.PauseID{}, err
 		}
-		return EventAgentResumed, nil
+		return EventAgentResumed, agent.PauseID{}, nil
 
 	case ActionDisable:
 		if a.State.IsTerminal() {
-			return "", errs.Newf(errs.CodeInvalidStateTransition, "agents: this agent is already %s", a.State).
+			return "", agent.PauseID{}, errs.Newf(errs.CodeInvalidStateTransition, "agents: this agent is already %s", a.State).
 				WithField("state", string(a.State))
 		}
 		if !agent.CanTransition(a.State, agent.StateRevoked) {
-			return "", errs.Newf(errs.CodeInvalidStateTransition, "agents: cannot disable from %s", a.State).
+			return "", agent.PauseID{}, errs.Newf(errs.CodeInvalidStateTransition, "agents: cannot disable from %s", a.State).
 				WithField("from", string(a.State))
 		}
 		// A disabled agent that was paused leaves no open pause behind: a pause
 		// nobody can ever resume is a row that outlives its meaning.
 		if a.State == agent.StatePaused {
 			if err := s.store.ClosePause(ctx, tx, a.ID, now, p.ActorType, p.SubjectID, "agent disabled"); err != nil {
-				return "", err
+				return "", agent.PauseID{}, err
 			}
 		}
 		if err := s.store.ApplyLifecycle(ctx, tx, LifecycleChange{
@@ -415,22 +421,22 @@ func (s *Service) apply(ctx context.Context, tx pgx.Tx, a agent.Agent, g Grant, 
 			ActorType: p.ActorType, ActorID: p.SubjectID, Reason: reason,
 			BuildVersion: s.build, CorrelationID: correlationID, OccurredAt: now,
 		}); err != nil {
-			return "", err
+			return "", agent.PauseID{}, err
 		}
-		return EventAgentDisabled, nil
+		return EventAgentDisabled, agent.PauseID{}, nil
 
 	case ActionArchive:
 		if !a.State.IsTerminal() && a.State != agent.StateFailed {
-			return "", errs.Newf(errs.CodeInvalidStateTransition,
+			return "", agent.PauseID{}, errs.Newf(errs.CodeInvalidStateTransition,
 				"agents: disable this agent before archiving it; it is %s", a.State).
 				WithField("state", string(a.State))
 		}
 		if err := s.store.ArchiveGrant(ctx, tx, a.ID, now); err != nil {
-			return "", err
+			return "", agent.PauseID{}, err
 		}
-		return EventAgentArchived, nil
+		return EventAgentArchived, agent.PauseID{}, nil
 	}
-	return "", errs.Newf(errs.CodeValidationFailed, "agents: %q is not an action", action)
+	return "", agent.PauseID{}, errs.Newf(errs.CodeValidationFailed, "agents: %q is not an action", action)
 }
 
 // enable moves the agent onto the first rung at which it may be evaluated.
@@ -542,16 +548,17 @@ func (s *Service) requireExecutionCapability(ctx context.Context, q db.Querier, 
 		WithField("gate_reason", reason)
 }
 
-// pause opens an agent_pauses row and moves the agent to PAUSED.
+// pause opens an agent_pauses row and moves the agent to PAUSED. It returns the
+// id of the row it opened, which is what the event keys on.
 func (s *Service) pause(ctx context.Context, tx pgx.Tx, a agent.Agent, p security.Principal,
 	code agent.PauseReason, reason, correlationID string, now time.Time,
-) error {
+) (agent.PauseID, error) {
 	if a.State == agent.StatePaused {
-		return errs.New(errs.CodeConflict, "agents: this agent is already paused").
+		return agent.PauseID{}, errs.New(errs.CodeConflict, "agents: this agent is already paused").
 			WithField("state", string(a.State))
 	}
 	if !agent.CanTransition(a.State, agent.StatePaused) {
-		return errs.Newf(errs.CodeInvalidStateTransition, "agents: cannot pause from %s", a.State).
+		return agent.PauseID{}, errs.Newf(errs.CodeInvalidStateTransition, "agents: cannot pause from %s", a.State).
 			WithField("from", string(a.State))
 	}
 	req := agent.PauseRequest{
@@ -564,21 +571,25 @@ func (s *Service) pause(ctx context.Context, tx pgx.Tx, a agent.Agent, p securit
 		CorrelationID:    correlationID,
 	}
 	if err := req.Validate(); err != nil {
-		return err
+		return agent.PauseID{}, err
 	}
+	pauseID := agent.NewPauseID()
 	if err := s.store.OpenPause(ctx, tx, agent.Pause{
-		ID: agent.NewPauseID(), AgentID: a.ID, ReasonCode: code, Reason: reason,
+		ID: pauseID, AgentID: a.ID, ReasonCode: code, Reason: reason,
 		OpenOrdersPolicy: agent.LeaveOpenOrders, PausedByActorType: p.ActorType,
 		PausedByActorID: p.SubjectID, PausedAt: now, CorrelationID: correlationID,
 	}); err != nil {
-		return err
+		return agent.PauseID{}, err
 	}
-	return s.store.ApplyLifecycle(ctx, tx, LifecycleChange{
+	if err := s.store.ApplyLifecycle(ctx, tx, LifecycleChange{
 		AgentID: a.ID, From: a, ToState: agent.StatePaused, ToStage: a.Stage, ToMode: a.Mode,
 		StrategyVersionID: a.StrategyVersionID, RiskPolicyVersion: a.RiskPolicyVersion,
 		ActorType: p.ActorType, ActorID: p.SubjectID, Reason: reason,
 		BuildVersion: s.build, CorrelationID: correlationID, OccurredAt: now,
-	})
+	}); err != nil {
+		return agent.PauseID{}, err
+	}
+	return pauseID, nil
 }
 
 // AdminPause is the operator's pause: same table, same transition, different
@@ -607,14 +618,17 @@ func (s *Service) AdminPause(ctx context.Context, agentID agent.AgentID, reason,
 
 	now := s.clk.Now().UTC()
 	var v View
+	var pauseID agent.PauseID
 	err := s.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		current, lerr := s.store.LockAgent(ctx, tx, agentID)
 		if lerr != nil {
 			return lerr
 		}
-		if err := s.pause(ctx, tx, current, p, agent.PauseOperator, reason, correlationID, now); err != nil {
-			return err
+		pid, perr := s.pause(ctx, tx, current, p, agent.PauseOperator, reason, correlationID, now)
+		if perr != nil {
+			return perr
 		}
+		pauseID = pid
 		updated, gerr := s.store.Get(ctx, tx, agentID)
 		if gerr != nil {
 			return gerr
@@ -626,7 +640,7 @@ func (s *Service) AdminPause(ctx context.Context, agentID agent.AgentID, reason,
 		return View{}, err
 	}
 	v = s.withRuntime(v)
-	s.publish(ctx, EventAgentPaused, v, p, reason, correlationID, now)
+	s.publish(ctx, EventAgentPaused, v, p, pauseID, reason, correlationID, now)
 	return s.withPause(ctx, v)
 }
 
@@ -698,8 +712,16 @@ func (s *Service) requireOwnership(ctx context.Context, accountID string) error 
 	return nil
 }
 
+// publish hands one event to whatever the composition root wired, AFTER the
+// transaction that made it true committed.
+//
+// Outside the transaction on purpose, and this is the half that matters: an
+// agent that could not be paused because a notification failed would be a
+// control defeated by a mailbox. A consumer that needs the telling to be a fact
+// of a transaction opens its own -- the event describes a row that is already
+// committed, so there is nothing it can say that did not happen.
 func (s *Service) publish(ctx context.Context, kind EventKind, v View, p security.Principal,
-	reason, correlationID string, now time.Time,
+	pauseID agent.PauseID, reason, correlationID string, now time.Time,
 ) {
 	if s.events == nil || kind == "" {
 		return
@@ -708,6 +730,9 @@ func (s *Service) publish(ctx context.Context, kind EventKind, v View, p securit
 		Kind: kind, AgentID: v.Agent.ID, AccountID: v.Agent.AccountID, AgentName: v.Agent.Name,
 		State: v.Agent.State, Runtime: v.Runtime, ActorType: string(p.ActorType), ActorID: p.SubjectID,
 		Reason: reason, CorrelationID: correlationID, OccurredAt: now,
+	}
+	if !pauseID.IsZero() {
+		e.PauseID = pauseID.String()
 	}
 	if err := s.events.Publish(ctx, e); err != nil && s.log != nil {
 		// Swallowed on purpose: an agent that could not be paused because a
