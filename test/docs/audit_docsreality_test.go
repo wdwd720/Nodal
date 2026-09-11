@@ -816,10 +816,12 @@ func TestAuditDocs_TheDesignSystemDescribesTheShellThatShipped(t *testing.T) {
 
 	var problems []string
 
+	// §10.8 and §10.9, corrected. Each sentence is pinned, and each is checked
+	// against the shell rather than against the brief it was written from.
 	claims := []struct{ sentence, why string }{
-		{"**8. Search and notifications are not in the shell.**", "notifications"},
-		{`the shell offers "Add funds"`, "addfunds"},
-		{"No endpoint in this\ndeployment sells Credits", "sells"},
+		{"**8. Search is not in the shell; notifications are.**", "notifications"},
+		{"`AppShell.tsx` declares `PRIMARY_ACTIONS` as **Buy Credits**", "buycredits"},
+		{"`POST /v1/payments`\nsells Credits and `GET /v1/credits/pricing` publishes the rate", "sells"},
 	}
 	for _, c := range claims {
 		require(t, strings.Contains(body, c.sentence),
@@ -827,46 +829,99 @@ func TestAuditDocs_TheDesignSystemDescribesTheShellThatShipped(t *testing.T) {
 		at := doc + ":" + strconv.Itoa(lineOf(body, c.sentence))
 		switch c.why {
 		case "notifications":
-			if strings.Contains(shellSrc, `label: "Notifications"`) {
-				problems = append(problems, at+" says notifications are not in the shell; "+
-					"AppShell.tsx declares a Notifications destination and renders an unread count")
+			if !strings.Contains(shellSrc, `label: "Notifications"`) {
+				problems = append(problems, at+" says notifications are in the shell; "+
+					"AppShell.tsx declares no Notifications destination")
 			}
-		case "addfunds":
-			if strings.Contains(shellSrc, `label: "Buy Credits"`) {
-				problems = append(problems, at+` says the shell offers "Add funds"; AppShell.tsx labels it `+
-					`"Buy Credits", and USER_JOURNEY.md forbids "add funds" by name`)
+			if strings.Contains(shellSrc, `label: "Search"`) {
+				problems = append(problems, at+" says search is not in the shell; AppShell.tsx declares it")
+			}
+		case "buycredits":
+			if !strings.Contains(shellSrc, `label: "Buy Credits"`) {
+				problems = append(problems, at+` says the shell offers "Buy Credits"; AppShell.tsx does not`)
 			}
 		case "sells":
-			served := servedRoutes(t, root)
-			for _, p := range served["POST"] {
+			mounted := false
+			for _, p := range servedRoutes(t, root)["POST"] {
 				if p == "/payments" {
-					problems = append(problems, at+" says no endpoint in this deployment sells Credits; "+
-						"POST /v1/payments is mounted and GET /v1/credits/pricing publishes the rate")
+					mounted = true
 				}
+			}
+			if !mounted {
+				problems = append(problems, at+" says POST /v1/payments sells Credits; it is not mounted")
 			}
 		}
 	}
 
-	// §11's remaining work lists two items that are done.
-	done := []struct{ sentence, evidence string }{
-		{"put `SegmentedBar` on Home, once the backend response that carries the whole is settled",
-			"apps/web/src/pages/home/Home.tsx"},
-		{"replace the generic `Explanation` with `Refusal`", "apps/web/src/components/Refusal.tsx"},
+	// The phrase USER_JOURNEY forbids by name may appear in docs/product only in
+	// the sentence that forbids it. The design system is where a copywriter
+	// looks the product's vocabulary up, which is what made this one expensive.
+	const forbidding = `**Buy Credits** (never "add funds")`
+	uj := read(t, root, "docs/product/USER_JOURNEY.md")
+	require(t, strings.Contains(uj, forbidding),
+		"USER_JOURNEY.md no longer forbids the phrase on one line, so no grep can find it")
+	err = filepath.WalkDir(filepath.Join(root, "docs", "product"), func(path string, d os.DirEntry, werr error) error {
+		if werr != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+			return werr
+		}
+		src, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if !strings.Contains(strings.ToLower(line), "add funds") || strings.Contains(line, forbidding) {
+				continue
+			}
+			rel, _ := filepath.Rel(root, path)
+			problems = append(problems, filepath.ToSlash(rel)+":"+strconv.Itoa(i+1)+
+				` uses the phrase "add funds", which USER_JOURNEY forbids by name`)
+		}
+		return nil
+	})
+	require(t, err == nil, "walking docs/product: %v", err)
+
+	// §11's remaining work: two items that were done stayed on the list, and the
+	// screen count it opens with predates most of the app.
+	done := []struct{ sentence, evidence, why string }{
+		{"put `SegmentedBar` on Home", "apps/web/src/pages/home/Home.tsx", "SegmentedBar"},
+		{"replace the generic `Explanation` with `Refusal`", "apps/web/src/components/Refusal.tsx", "Refusal"},
 	}
 	for _, d := range done {
-		require(t, strings.Contains(body, d.sentence), "%s no longer contains %q", doc, d.sentence)
+		if !strings.Contains(body, d.sentence) {
+			continue // struck from the list, which is the fix
+		}
 		src, rerr := os.ReadFile(filepath.Join(root, filepath.FromSlash(d.evidence)))
 		if rerr != nil {
 			continue
 		}
-		if strings.Contains(d.sentence, "SegmentedBar") && strings.Contains(string(src), "SegmentedBar") {
-			problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, d.sentence))+
-				" lists putting SegmentedBar on Home as still to do; Home.tsx renders one")
+		switch d.why {
+		case "SegmentedBar":
+			if strings.Contains(string(src), "SegmentedBar") {
+				problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, d.sentence))+
+					" lists putting SegmentedBar on Home as still to do; Home.tsx renders one")
+			}
+		case "Refusal":
+			if !exists(root, "apps/web/src/components/Explanation.tsx") {
+				problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, d.sentence))+
+					" lists replacing the generic Explanation as still to do; Explanation.tsx is gone and Refusal.tsx is there")
+			}
 		}
-		if strings.Contains(d.sentence, "Explanation") && !exists(root, "apps/web/src/components/Explanation.tsx") {
-			problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, d.sentence))+
-				" lists replacing the generic Explanation as still to do; Explanation.tsx is gone and Refusal.tsx is there")
-		}
+	}
+	const screens = "`apps/web/src/pages` now holds forty-one page\nmodules"
+	require(t, strings.Contains(body, screens), "%s no longer states the page count this check reads", doc)
+	pages := 0
+	require(t, filepath.WalkDir(filepath.Join(root, "apps", "web", "src", "pages"),
+		func(path string, d os.DirEntry, werr error) error {
+			if werr != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".tsx") ||
+				strings.Contains(d.Name(), ".test.") {
+				return werr
+			}
+			pages++
+			return nil
+		}) == nil, "walking apps/web/src/pages")
+	if numberWord(pages) != "forty-one" {
+		problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, screens))+
+			" says forty-one page modules; apps/web/src/pages holds "+strconv.Itoa(pages))
 	}
 
 	sort.Strings(problems)
@@ -1183,6 +1238,16 @@ func numberWord(n int) string {
 		"sixteen", "seventeen", "eighteen", "nineteen", "twenty"}
 	if n >= 0 && n < len(words) {
 		return words[n]
+	}
+	tens := map[int]string{2: "twenty", 3: "thirty", 4: "forty", 5: "fifty",
+		6: "sixty", 7: "seventy", 8: "eighty", 9: "ninety"}
+	if n < 100 {
+		if t, ok := tens[n/10]; ok {
+			if n%10 == 0 {
+				return t
+			}
+			return t + "-" + words[n%10]
+		}
 	}
 	return strconv.Itoa(n)
 }

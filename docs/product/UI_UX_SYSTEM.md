@@ -740,32 +740,39 @@ PART 14 lists them; nothing in the current sixteen screens has data to feed them
 primitive with no caller is a primitive designed against an imagined API. They are named
 here as work for the page-by-page rebuild.
 
-**8. Search and notifications are not in the shell.** §7, `AppShell`.
+**8. Search is not in the shell; notifications are.** §7, `AppShell`. The markets search
+does not exist yet, so no control for it is rendered — a control that does nothing is a
+defect, and `AppShell.tsx` says so where it declares the destinations. Notifications joined
+once `GET /v1/me/notifications/unread-count` existed: the bell carries the unread count and
+nothing else, because a notification carries identifiers and state names, never a balance.
 
-**9. "Buy Credits" is not a shell action.**
-The brief's primary actions are "Buy Credits" and "Withdraw". No endpoint in this
-deployment sells Credits — that is a decision, not a bug — so the shell offers "Add funds"
-and "Withdraw", both of which reach a screen that explains its own state.
+**9. Both primary actions are in the shell, under the brief's own words.**
+`AppShell.tsx` declares `PRIMARY_ACTIONS` as **Buy Credits** (`/buy-credits`) and
+**Withdraw** (`/withdraw`), each rendered only once its page exists. `POST /v1/payments`
+sells Credits and `GET /v1/credits/pricing` publishes the rate, so the earlier text here —
+that no endpoint in this deployment sells Credits, and that the shell therefore says "Add
+funds" — was wrong twice: about the deployment, and about the vocabulary. `USER_JOURNEY.md`
+forbids that phrase by name, and this document is where a copywriter looks the vocabulary
+up.
 
 ---
 
 ## 11. What is left for the page-by-page rebuild
 
-The sixteen existing screens were **not** rewritten. They were restyled by the token layer
+Written when the app was sixteen screens restyled by the token layer rather than rewritten,
 and given temperatures where the temperature is unambiguous (Home's balance panels are
-`real`; every Lab panel is `simulated`). Their logic, their copy and their disclosures are
-untouched.
+`real`; every Lab panel is `simulated`). `apps/web/src/pages` now holds forty-one page
+modules over thirty-one routes, most of them written against this system rather than
+restyled into it, so the list below is what is left across all of them rather than a rebuild
+of sixteen.
 
 Still to do, per screen, against the definition of done in PART 26:
 
 - render every figure through `Figure`. `Money.tsx` — a second formatter that predated the
   ladder in §6 — and `MintIdentity.tsx` were deleted unused with `Tabs` (D-113);
 - replace one-line loading labels with shape-accurate `Skeleton` regions;
-- replace the generic `Explanation` with `Refusal` wherever the backend's answer is a
-  refusal rather than a fault, and delete the disabled-form pattern where one survives;
 - move dense listings onto `DataTable` and give the market tables the `economy`
   temperature and the 34px row;
-- put `SegmentedBar` on Home, once the backend response that carries the whole is settled;
 - build `Ladder`, `Envelope` and `SplitBar` when a screen has data for them;
 - add the visual-regression test PART 25 asks for — one that fails when a simulated surface
   gains chroma, or when a real-capital figure gains an animation.

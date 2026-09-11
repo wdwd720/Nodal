@@ -8,10 +8,12 @@ reconciled against the deployed staging site and every step is marked with
 its Chrome evidence in `STAGING_E2E.md`.
 
 Vocabulary the whole product uses: **Credits** (internal platform value; never
-"balance in your account", never "deposit"), **Buy Credits** (never "add
-funds"), **Withdraw** (a request that a licensed provider may settle; never
-"cash out"), **verified** (a level, not a badge of approval), **sandbox**
-(anything a sandbox tier produced, labelled everywhere).
+"balance in your account", never "deposit"), **Buy Credits** (never "add funds"),
+**Withdraw** (a request that a licensed provider may settle; never "cash out"),
+**verified** (a level, not a badge of approval), **sandbox** (anything a sandbox
+tier produced, labelled everywhere). Each forbidden phrase is written here on one
+line so a grep can find it: a case-insensitive search of `docs/product/` and
+`apps/web/src` for any of them should return this sentence and nothing else.
 
 ## 0. The public site (unauthenticated)
 
