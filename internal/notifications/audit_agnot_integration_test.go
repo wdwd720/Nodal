@@ -17,36 +17,41 @@ import (
 	"github.com/nodal/controlplane/internal/notifications"
 )
 
-// F-agnot: the follower's cursor can never pass a two-minute window that holds
-// more rows than one batch, so a burst of >= DefaultBatch (200) rows inside
-// DefaultLap (2 minutes) wedges that source permanently.
+// F-agnot (the follower cursor wedge, fixed on fix/platform as F-167): a burst
+// of more rows than one batch inside one lap used to pin the cursor at the
+// 200th row of its own re-read window, forever. runSource now drains from the
+// cursor itself and re-reads the lap separately (D-097), so a burst is told in
+// as many passes as it needs and the cursor only ever moves forward.
 //
-// runSource reads from (cursor - lap) with LIMIT batch and then sets the cursor
-// to the LAST row it read. When the lap window already holds a full batch, the
-// last row it read is BEHIND the cursor it started from, so the cursor moves
-// backwards; the next pass reads the same prefix again and stops in the same
-// place. Every row after the batch boundary -- and every row written
-// afterwards, forever -- is never turned into a notification.
-func TestAuditAgnot_ABurstWedgesTheFollowerCursorForever(t *testing.T) {
+// The fixture is stamped in the PAST on purpose. Every test in this package
+// shares one database and the cursor is one row per source; a row stamped in
+// the future stays ahead of every later test's cursor until the clock catches
+// up, and a working follower keeps advancing to it -- which is how this test's
+// first version, stamped up to 26 seconds ahead, made two follower tests after
+// it report a cursor that was not theirs. Ten minutes behind, the rows are
+// outside every later lap and touch nothing.
+func TestAuditAgnot_ABurstDoesNotWedgeTheFollowerCursor(t *testing.T) {
 	d := openDB(t)
 	ctx := context.Background()
 	uid := newUser(t, d)
 	acct := newAccount(t, d, uid)
 	f := newFollower()
 
-	// Start the cursor where a running process would have it.
+	// Create the cursor rows, then stand this source's cursor ten minutes ago.
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
-	start, _, _ := cursorOf(t, d, "credit_funding_transitions")
+	start := time.Now().Add(-10 * time.Minute)
+	_, err = d.Exec(ctx, `UPDATE notification_follower_cursors SET last_at = $1, last_id =
+		'00000000-0000-0000-0000-000000000000' WHERE source = 'credit_funding_transitions'`, start.UTC())
+	require.NoError(t, err)
 
-	// 250 captures inside one 2-minute lap: more than DefaultBatch (200).
+	// 250 captures inside 25 seconds, nine minutes ago: more than DefaultBatch
+	// (200) inside one lap, all ahead of the cursor.
 	const burst = 250
-	base := time.Now().Add(time.Second)
-	ids := make([]string, 0, burst)
+	base := time.Now().Add(-9 * time.Minute)
 	for i := 0; i < burst; i++ {
 		fundingID := aCreditFunding(t, d, acct)
-		ids = append(ids, aTransition(t, d, fundingID, "CREATED", "CAPTURED",
-			base.Add(time.Duration(i)*100*time.Millisecond)))
+		aTransition(t, d, fundingID, "CREATED", "CAPTURED", base.Add(time.Duration(i)*100*time.Millisecond))
 	}
 
 	rec := &recorder{}
@@ -54,40 +59,38 @@ func TestAuditAgnot_ABurstWedgesTheFollowerCursorForever(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 200, n, "one pass drains one batch")
 	after1, _, _ := cursorOf(t, d, "credit_funding_transitions")
-	t.Logf("cursor: start=%s afterFirstPass=%s", start, after1)
+	require.True(t, after1.After(start), "the first pass moved the cursor forward")
 
-	// Every later pass reads the same prefix again and the cursor never moves.
-	for pass := 2; pass <= 6; pass++ {
-		rec := &recorder{}
-		n, err := f.RunOnce(ctx, d, rec)
+	// The second pass drains the rest; the ones after it find nothing and
+	// leave the cursor where it stands. It never goes backwards.
+	n, err = f.RunOnce(ctx, d, &recorder{})
+	require.NoError(t, err)
+	assert.Equal(t, burst-200, n, "the second pass drains the remainder of the burst")
+	after2, _, _ := cursorOf(t, d, "credit_funding_transitions")
+	assert.True(t, after2.After(after1), "the second pass moved the cursor past the batch boundary")
+	for pass := 3; pass <= 6; pass++ {
+		n, err := f.RunOnce(ctx, d, &recorder{})
 		require.NoError(t, err)
 		at, _, _ := cursorOf(t, d, "credit_funding_transitions")
-		t.Logf("pass %d: wrote %d, cursor=%s", pass, n, at)
-		assert.Equal(t, 0, n, "pass %d wrote nothing: it is re-reading rows it already emitted", pass)
-		assert.True(t, at.Equal(after1), "pass %d: the cursor is stuck at %s", pass, at)
+		assert.Zero(t, n, "pass %d found nothing new", pass)
+		assert.True(t, at.Equal(after2), "pass %d moved a cursor that had nothing to move for: %s", pass, at)
 	}
 
-	// The 50 rows past the batch boundary were never told to anybody.
 	var told int
 	require.NoError(t, d.QueryRow(ctx,
 		`SELECT count(*) FROM notifications WHERE user_id = $1 AND kind = 'CREDIT_PURCHASE_CAPTURED'`, uid).Scan(&told))
-	assert.Equal(t, burst, told,
-		"every capture in the burst should eventually be notified; %d of %d were", told, burst)
+	assert.Equal(t, burst, told, "every capture in the burst is notified; %d of %d were", told, burst)
 
-	// And nothing written AFTER the burst is ever seen again either.
+	// And a capture written after the burst is seen on the next pass.
 	late := aCreditFunding(t, d, acct)
-	lateTransition := aTransition(t, d, late, "CREATED", "CAPTURED", base.Add(10*time.Minute))
-	for pass := 0; pass < 3; pass++ {
-		_, err := f.RunOnce(ctx, d, &recorder{})
-		require.NoError(t, err)
-	}
+	aTransition(t, d, late, "CREATED", "CAPTURED", base.Add(5*time.Minute))
+	n, err = f.RunOnce(ctx, d, &recorder{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "a capture after the burst is reported on the next pass")
 	var seen int
 	require.NoError(t, d.QueryRow(ctx,
 		`SELECT count(*) FROM notifications WHERE user_id = $1 AND data->>'funding_id' = $2`, uid, late).Scan(&seen))
-	assert.Equal(t, 1, seen,
-		"a capture written after the burst is never notified: the source is wedged (transition %s)", lateTransition)
-
-	_ = ids
+	assert.Equal(t, 1, seen)
 }
 
 // F-agnot: the two-minute lap re-publishes every data.changed signal it
