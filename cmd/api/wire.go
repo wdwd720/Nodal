@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/activity"
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/agents"
 	"github.com/nodal/controlplane/internal/alert"
@@ -419,6 +420,18 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	nativeAssetSvc := nativeasset.NewService(clk, nil)
 	nativeMarketSvc := nativemarket.NewService(ledgerSvc, creditSvc, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
+	// ---- market safety and the risk policy at boot (product goal SS47) ----
+	// The market-safety policy in force: the newest recorded version, or the
+	// compiled-in conservative one where none has been recorded. It is a real
+	// policy either way, so a deployment that has decided nothing still refuses
+	// an order that would move a market by a quarter.
+	nativeMarketSvc.SetSafety(nativemarket.NewSafetyStore())
+	// And the GLOBAL risk policy, which internal/nativemarket requires before
+	// it will evaluate any internal trade at all. Non-PROD only; see
+	// riskPolicyAtBoot for why PROD stays manual.
+	if err := riskPolicyAtBoot(ctx, database, cfg, clk, log); err != nil {
+		return nil, fmt.Errorf("risk policy at boot: %w", err)
+	}
 
 	// Payout providers. A registry built with allowSandbox=false refuses any
 	// provider with no contract reference, which is the programmatic assertion
@@ -600,6 +613,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 				CreditPurchases: creditPurchases.Service,
 			}),
 		),
+		// ---- markets, charts, portfolio and activity (M) ----
+		MarketSurfaces: httpapi.MarketSurfacesDeps{
+			RiskPolicies: risk.NewStore(),
+			// On a sandbox tier no value is real by construction (ADR-0023),
+			// so every amount these surfaces return is SIMULATED and says so.
+			ActivityFeed: activity.NewFeed(cfg.SandboxTier()),
+			Simulated:    cfg.SandboxTier(),
+		},
 		IdempotencyTTL: httpapi.DefaultIdempotencyTTL,
 	})
 	if err != nil {
@@ -657,6 +678,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	ports.Agents = agentSvc
 	ports.Strategies = strategySvc
+
+	// ---- sandbox demo data (product goal SS51) ----
+	// Refused outside a sandbox tier, and refused in PROD three times over.
+	// A failure is logged, never fatal: an empty markets page is a nuisance,
+	// a deployment that will not start is an outage.
+	demoDataAtBoot(ctx, cfg, demoSeedDeps{
+		DB: database, Assets: nativeAssetSvc, Markets: nativeMarketSvc, Credits: creditSvc, Clock: clk,
+	}, log)
 
 	// Provider webhooks. The map is keyed by the provider name in the path, so
 	// POST /v1/webhooks/stripe_credit reaches the Credit purchase pipeline and

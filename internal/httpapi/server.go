@@ -63,8 +63,14 @@ type Ports struct {
 	NativeMarkets NativeMarketsPort
 	Payouts       PayoutsPort
 	Commerce      CommercePort
-	Health        HealthPort
-	Idempotency   IdempotencyPort
+	// Market discovery, charts, the portfolio and the activity timeline
+	// (product goal SS12-16, 35, 47). Nil answers UNSUPPORTED like every
+	// other port here.
+	MarketData   MarketDataPort
+	Portfolio    PortfolioPort
+	ActivityFeed ActivityFeedPort
+	Health       HealthPort
+	Idempotency  IdempotencyPort
 	// ---- profile, terms and account lifecycle ----
 	// A nil port answers UNSUPPORTED on the /me/profile, /me/terms-acceptances,
 	// /me/account and /admin/users routes, and leaves GET /v1/me answering

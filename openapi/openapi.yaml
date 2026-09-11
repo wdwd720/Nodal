@@ -1395,6 +1395,129 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  # ---- native markets: discovery, charts and the tape (M) ----
+  /native-markets:
+    get:
+      tags: [native-economy]
+      summary: Discover internal markets (product goal §12, §35)
+      description: >-
+        One page of the markets list. `sort` chooses the ordering; only NEWEST is
+        stable under paging, because every other key is a live figure that moves
+        when somebody trades, and the response says which it was. `q` searches the
+        asset's name, symbol and description in PostgreSQL — there is no external
+        index, and a market's identity is never a display name.
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - in: query
+          name: status
+          description: Repeat to include several statuses. Absent means every status.
+          schema:
+            type: array
+            items: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
+        - { in: query, name: creator_account_id, schema: { $ref: "#/components/schemas/UUID" } }
+        - { in: query, name: q, schema: { type: string, maxLength: 128 } }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [NEWEST, VOLUME_24H, CHANGE_24H, LIQUIDITY, PRICE], default: NEWEST }
+      responses:
+        "200":
+          description: Page of market summaries
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeMarketPage" } } }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/summary:
+    get:
+      tags: [native-economy]
+      summary: Everything the asset detail / trading screen needs (product goal §13)
+      description: >-
+        The same summary row the list returns, plus the safety limits in force and
+        the holder concentration. It is a separate read from GET
+        /native-markets/{marketId} so the trade screen and the markets page share
+        one projection and cannot disagree about a price or a volume.
+      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+      responses:
+        "200":
+          description: Market detail
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeMarketDetail" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/candles:
+    get:
+      tags: [native-economy]
+      summary: OHLCV over a bounded window, computed from the market's own prints (§14)
+      description: >-
+        Buckets with no trades are ABSENT rather than filled forward: §14 asks for
+        an honest empty state, and a flat-filled candle invents a trade that did
+        not happen. `from` and `to` are both required and the window is bounded to
+        1500 buckets.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: query, name: interval, required: true, schema: { type: string, enum: ["1m", "5m", "15m", "1h", "1d"] } }
+        - { in: query, name: from, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { in: query, name: to, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
+      responses:
+        "200":
+          description: Candles, oldest first
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeCandlePage" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  /native-markets/{marketId}/trades:
+    get:
+      tags: [native-economy]
+      summary: The public tape — recent prints, newest first (§13)
+      description: >-
+        No account identity appears here. A tape says what the market did; who did
+        it is somebody else's position.
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Recent prints
+          content: { application/json: { schema: { $ref: "#/components/schemas/NativeTradePage" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  # ---- portfolio and activity (M) ----
+  /me/portfolio:
+    get:
+      tags: [native-economy]
+      summary: Credit balance, native positions and P&L, with an explicit as-of (§15, §46)
+      description: >-
+        The Credit balance breakdown comes from the credit service; the positions
+        come from the invariant-checked read model that migration 00772 maintains
+        from the fills. Unrealised P&L is marked at each market's marginal price at
+        `as_of`, which is stated rather than implied.
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+      responses:
+        "200":
+          description: Portfolio
+          content: { application/json: { schema: { $ref: "#/components/schemas/Portfolio" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  /me/activity:
+    get:
+      tags: [native-economy]
+      summary: The unified activity timeline (§16)
+      parameters:
+        - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - in: query
+          name: kind
+          description: Repeat to include several kinds. Absent means every kind.
+          schema:
+            type: array
+            items: { $ref: "#/components/schemas/ActivityFeedKind" }
+      responses:
+        "200":
+          description: Page of activity
+          content: { application/json: { schema: { $ref: "#/components/schemas/ActivityFeedPage" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     sessionCookie:
@@ -3198,3 +3321,317 @@ components:
           items: { type: string }
         detail: { type: string }
         version: { $ref: "#/components/schemas/StrategyVersion" }
+    # ---- native markets: discovery, charts, portfolio, activity (M) ----
+    NativeMarketSummary:
+      type: object
+      description: >-
+        One market as the markets page and the trade screen see it. Every price is
+        an exact integer at price_scale and every quantity is base units; nothing
+        here is a float and nothing is a display string.
+      required:
+        [market_id, asset_id, credit_asset_id, name, symbol, market_status, asset_status,
+         creator_account_id, last_price, price_scale, asset_decimals, virtual_credit_reserve,
+         initial_asset_reserve, real_credit_reserve, asset_reserve, liquidity_credits,
+         circulating_supply, max_supply, credit_volume_24h, trades_24h,
+         platform_fee_bps, creator_fee_bps, demo, created_at]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        credit_asset_id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        symbol: { type: string }
+        description: { type: string }
+        image_url: { type: string }
+        market_status: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
+        asset_status: { type: string, enum: [DRAFT, PENDING_REVIEW, ACTIVE, CLOSE_ONLY, HALTED, DELISTED, REJECTED] }
+        moderation_state: { type: string, enum: [PENDING, APPROVED, REJECTED, FLAGGED] }
+        creator_account_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            The creator's account id, which is the handle placeholder. A display
+            name belongs to the profile domain and is joined later; inventing one
+            here would be a second source for it.
+        last_price:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: The MARGINAL price -- what the next base unit costs -- at price_scale.
+        price_scale: { type: integer, description: Decimal places every price here carries }
+        reference_price_24h: { $ref: "#/components/schemas/Quantity" }
+        change_24h_bps:
+          type: integer
+          format: int64
+          description: Signed move over the last 24 hours. Meaningless unless has_24h_change.
+        has_24h_change:
+          type: boolean
+          description: >-
+            False when the market has not traded in the window, which is a
+            different fact from having moved nothing.
+        credit_volume_24h: { $ref: "#/components/schemas/Quantity" }
+        trades_24h: { type: integer, format: int64 }
+        virtual_credit_reserve: { $ref: "#/components/schemas/Quantity" }
+        initial_asset_reserve: { $ref: "#/components/schemas/Quantity" }
+        real_credit_reserve:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: R -- the only Credits in this pool that could ever be paid out.
+        asset_reserve: { $ref: "#/components/schemas/Quantity" }
+        liquidity_credits:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: V + R, the depth the curve prices against.
+        circulating_supply: { $ref: "#/components/schemas/Quantity" }
+        max_supply: { $ref: "#/components/schemas/Quantity" }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        platform_fee_bps: { $ref: "#/components/schemas/BPS" }
+        creator_fee_bps: { $ref: "#/components/schemas/BPS" }
+        state_version: { type: integer, format: int64 }
+        demo:
+          type: boolean
+          description: >-
+            This object was created by the sandbox demo seeder. It exists only on a
+            sandbox tier and represents nothing.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        activated_at: { $ref: "#/components/schemas/Timestamp" }
+
+    NativeMarketPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [markets, sort, stable]
+          properties:
+            markets: { type: array, items: { $ref: "#/components/schemas/NativeMarketSummary" } }
+            sort: { type: string, enum: [NEWEST, VOLUME_24H, CHANGE_24H, LIQUIDITY, PRICE] }
+            stable:
+              type: boolean
+              description: >-
+                Whether paging this ordering sees every market exactly once. Only
+                NEWEST does; the others rank by figures that move when somebody
+                trades.
+
+    MarketSafetyLimits:
+      type: object
+      description: >-
+        The limits in force on this market right now (product goal section 47), from
+        two documents: the market-safety policy, which is about the venue, and the
+        risk kernel's GLOBAL policy, which is about an account.
+      required: [safety_policy_version]
+      properties:
+        safety_policy_version: { type: string }
+        max_price_impact_bps: { $ref: "#/components/schemas/BPS" }
+        max_slippage_bps: { $ref: "#/components/schemas/BPS" }
+        circuit_breaker_move_bps: { type: integer, format: int64 }
+        circuit_breaker_window_seconds: { type: integer }
+        min_opening_liquidity_credits: { $ref: "#/components/schemas/Quantity" }
+        creator_may_buy_own_asset: { type: boolean }
+        risk_policy_version: { type: string }
+        max_native_market_concentration_bps: { $ref: "#/components/schemas/BPS" }
+        max_creator_concentration_bps: { $ref: "#/components/schemas/BPS" }
+
+    NativeMarketDetail:
+      type: object
+      required: [market, limits_in_force]
+      properties:
+        market: { $ref: "#/components/schemas/NativeMarketSummary" }
+        limits_in_force: { $ref: "#/components/schemas/MarketSafetyLimits" }
+        top_holders:
+          type: array
+          description: Holder concentration, which is the number a buyer most needs to see
+          items:
+            type: object
+            required: [account_id, quantity]
+            properties:
+              account_id: { $ref: "#/components/schemas/UUID" }
+              quantity: { $ref: "#/components/schemas/Quantity" }
+
+    NativeCandle:
+      type: object
+      required: [open_time, open, high, low, close, credit_volume, asset_volume, trades]
+      properties:
+        open_time: { $ref: "#/components/schemas/Timestamp" }
+        open: { $ref: "#/components/schemas/Quantity" }
+        high: { $ref: "#/components/schemas/Quantity" }
+        low: { $ref: "#/components/schemas/Quantity" }
+        close: { $ref: "#/components/schemas/Quantity" }
+        credit_volume: { $ref: "#/components/schemas/Quantity" }
+        asset_volume: { $ref: "#/components/schemas/Quantity" }
+        trades: { type: integer, format: int64 }
+
+    NativeCandlePage:
+      type: object
+      required: [market_id, interval, from, to, price_scale, asset_decimals, candles]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        interval: { type: string, enum: ["1m", "5m", "15m", "1h", "1d"] }
+        from: { $ref: "#/components/schemas/Timestamp" }
+        to: { $ref: "#/components/schemas/Timestamp" }
+        price_scale: { type: integer }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        candles:
+          type: array
+          description: Oldest first. A bucket with no trades is absent, never filled forward.
+          items: { $ref: "#/components/schemas/NativeCandle" }
+
+    NativeTradePrint:
+      type: object
+      description: One public print. It carries no account identity, by design.
+      required: [seq, side, effective_price, spot_price_after, credit_volume, asset_volume, printed_at]
+      properties:
+        seq: { type: integer, format: int64 }
+        side: { type: string, enum: [BUY, SELL] }
+        effective_price: { $ref: "#/components/schemas/Quantity" }
+        spot_price_before: { $ref: "#/components/schemas/Quantity" }
+        spot_price_after: { $ref: "#/components/schemas/Quantity" }
+        credit_volume: { $ref: "#/components/schemas/Quantity" }
+        asset_volume: { $ref: "#/components/schemas/Quantity" }
+        printed_at: { $ref: "#/components/schemas/Timestamp" }
+
+    NativeTradePage:
+      type: object
+      required: [market_id, price_scale, asset_decimals, trades]
+      properties:
+        market_id: { $ref: "#/components/schemas/UUID" }
+        price_scale: { type: integer }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        trades: { type: array, items: { $ref: "#/components/schemas/NativeTradePrint" } }
+
+    SignedQuantity:
+      type: string
+      pattern: '^-?[0-9]+$'
+      description: >-
+        An exact base-unit amount that may be negative. A loss is a real outcome,
+        so P&L is signed where a balance is not.
+
+    ValueTemperature:
+      type: string
+      enum: [ECONOMY, REAL, SIMULATED]
+      description: >-
+        What KIND of value an amount is (product goal section 46). ECONOMY is
+        closed-loop Nodal Credits and native assets; REAL is money at a payment
+        provider; SIMULATED is a sandbox tier or a demo object, where nothing moves
+        anywhere. The three are never synonyms and are never rendered as one number.
+
+    PortfolioPosition:
+      type: object
+      description: >-
+        One native position. quantity, cost_basis_credits, realized_pnl_credits and
+        fees_paid_credits are the read model migration 00772 maintains from the
+        fills; market_value_credits and unrealized_pnl_credits are computed at
+        as_of from the market's marginal price.
+      required:
+        [asset_id, symbol, quantity, cost_basis_credits, realized_pnl_credits,
+         fees_paid_credits, market_value_credits, unrealized_pnl_credits, total_pnl_credits,
+         price_scale, asset_decimals, temperature]
+      properties:
+        asset_id: { $ref: "#/components/schemas/UUID" }
+        market_id: { $ref: "#/components/schemas/UUID" }
+        symbol: { type: string }
+        name: { type: string }
+        market_status: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
+        quantity: { $ref: "#/components/schemas/Quantity" }
+        cost_basis_credits: { $ref: "#/components/schemas/Quantity" }
+        average_cost_credits:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Cost of one base unit at price_scale. Absent on a closed position.
+        spot_price: { $ref: "#/components/schemas/Quantity" }
+        market_value_credits: { $ref: "#/components/schemas/Quantity" }
+        realized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        unrealized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        total_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        fees_paid_credits: { $ref: "#/components/schemas/Quantity" }
+        units_bought_total: { $ref: "#/components/schemas/Quantity" }
+        units_sold_total: { $ref: "#/components/schemas/Quantity" }
+        allocation_units:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Units granted to the creator at the mint, at zero cost.
+        fill_count: { type: integer, format: int64 }
+        price_scale: { type: integer }
+        asset_decimals: { type: integer, minimum: 0, maximum: 18 }
+        temperature: { $ref: "#/components/schemas/ValueTemperature" }
+        demo: { type: boolean }
+        first_acquired_at: { $ref: "#/components/schemas/Timestamp" }
+        last_trade_at: { $ref: "#/components/schemas/Timestamp" }
+
+    PortfolioTotals:
+      type: object
+      required:
+        [cost_basis_credits, market_value_credits, unrealized_pnl_credits,
+         realized_pnl_credits, total_pnl_credits, fees_paid_credits,
+         position_count, open_position_count]
+      properties:
+        cost_basis_credits: { $ref: "#/components/schemas/Quantity" }
+        market_value_credits: { $ref: "#/components/schemas/Quantity" }
+        unrealized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        realized_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        total_pnl_credits: { $ref: "#/components/schemas/SignedQuantity" }
+        fees_paid_credits: { $ref: "#/components/schemas/Quantity" }
+        position_count: { type: integer }
+        open_position_count: { type: integer }
+
+    Portfolio:
+      type: object
+      required: [account_id, as_of, temperature, credits, positions, totals]
+      properties:
+        account_id: { $ref: "#/components/schemas/UUID" }
+        as_of:
+          allOf: [{ $ref: "#/components/schemas/Timestamp" }]
+          description: >-
+            The instant every mark-to-market figure here was computed at. A number
+            on a screen that does not say when it was true is a number nobody can
+            act on.
+        temperature:
+          allOf: [{ $ref: "#/components/schemas/ValueTemperature" }]
+          description: The temperature of this deployment's Credits as a whole.
+        credits: { $ref: "#/components/schemas/CreditBalance" }
+        positions: { type: array, items: { $ref: "#/components/schemas/PortfolioPosition" } }
+        totals: { $ref: "#/components/schemas/PortfolioTotals" }
+
+    ActivityFeedKind:
+      type: string
+      enum:
+        [CREDIT_PURCHASE, CREDIT_REVERSAL, NATIVE_TRADE, NATIVE_ASSET_CREATED,
+         PAYOUT_REQUESTED, PAYOUT_STATE_CHANGED, ADMIN_ADJUSTMENT]
+      description: >-
+        The closed set of activity kinds. A domain joins the feed by adding a
+        Source and a summary template in internal/activity; see that package's
+        doc.go for the extension point.
+
+    ActivityAmount:
+      type: object
+      required: [unit, value, temperature]
+      properties:
+        unit:
+          type: string
+          enum: [CREDITS, MONEY_MINOR, ASSET_UNITS]
+          description: >-
+            How to read `value`. CREDITS is Credit base units, MONEY_MINOR is minor
+            units of `currency`, ASSET_UNITS is base units of `symbol`.
+        value: { $ref: "#/components/schemas/SignedQuantity" }
+        currency: { type: string }
+        symbol: { type: string }
+        origin: { $ref: "#/components/schemas/CreditOrigin" }
+        temperature: { $ref: "#/components/schemas/ValueTemperature" }
+
+    ActivityFeedItem:
+      type: object
+      required: [id, kind, occurred_at, summary, reference, amounts, simulated]
+      properties:
+        id: { type: string }
+        kind: { $ref: "#/components/schemas/ActivityFeedKind" }
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        summary:
+          type: string
+          description: Built on the server from a fixed template per kind, never from user text.
+        status: { type: string }
+        amounts: { type: array, items: { $ref: "#/components/schemas/ActivityAmount" } }
+        reference:
+          type: object
+          required: [type, id]
+          properties:
+            type: { type: string }
+            id: { type: string }
+        simulated: { type: boolean }
+
+    ActivityFeedPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ActivityFeedItem" } }

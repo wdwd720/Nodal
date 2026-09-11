@@ -26,6 +26,7 @@ import (
 	"github.com/nodal/controlplane/internal/intent"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/money"
+	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/notifications"
 	"github.com/nodal/controlplane/internal/provider/stripecredit"
 	"github.com/nodal/controlplane/internal/quote"
@@ -115,8 +116,13 @@ type fixtures struct {
 	webhook     *fakeWebhook
 	idem        *fakeIdempotency
 	stream      http.Handler
-	notifs      *fakeNotifications
-	meAudit     *fakeMeAudit
+
+	// The product read surfaces (product goal SS12-16).
+	marketData   *fakeMarketData
+	portfolio    *fakePortfolio
+	activityFeed *fakeActivityFeed
+	notifs       *fakeNotifications
+	meAudit      *fakeMeAudit
 }
 
 func newFixtures() *fixtures {
@@ -196,9 +202,17 @@ func newFixtures() *fixtures {
 		health:    &fakeHealth{},
 		webhook:   &fakeWebhook{status: http.StatusOK},
 		idem:      newFakeIdempotency(),
-		stream:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, ": keepalive\n\n") }),
-		notifs:    &fakeNotifications{},
-		meAudit:   &fakeMeAudit{},
+		marketData: &fakeMarketData{
+			page:    nativemarket.MarketPage{Markets: []nativemarket.MarketSummary{sampleMarketSummary()}, Stable: true},
+			detail:  sampleMarketDetail(),
+			candles: sampleCandles(),
+			trades:  sampleTape(),
+		},
+		portfolio:    &fakePortfolio{view: samplePortfolio()},
+		activityFeed: &fakeActivityFeed{page: sampleActivityFeed()},
+		stream:       http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, ": keepalive\n\n") }),
+		notifs:       &fakeNotifications{},
+		meAudit:      &fakeMeAudit{},
 	}
 }
 
@@ -211,6 +225,7 @@ func (f *fixtures) ports() Ports {
 		Withdrawals: f.withdrawals, Gates: f.gates, KillSwitches: f.kill,
 		AdminActions: f.adminActs, Providers: f.providers, Reconciliation: f.reconcile,
 		Health: f.health, Idempotency: f.idem,
+		MarketData: f.marketData, Portfolio: f.portfolio, ActivityFeed: f.activityFeed,
 		// Keyed by the constant the service actually registers under, not by a
 		// literal. F-124 changed that key from "stripe" to "stripe_credit" and
 		// this harness kept the old one, so every webhook test in this package

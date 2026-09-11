@@ -41,6 +41,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/demo"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
@@ -157,6 +158,14 @@ func registry() []pair {
 		{table: "ledger_accounts", constraint: "ledger_accounts_code_check", source: "ledger.AllCodes()", values: str(ledger.AllCodes())},
 		{table: "native_assets", constraint: "native_assets_status_check", source: "nativeasset.AllStatuses()", values: str(nativeasset.AllStatuses())},
 		{table: "native_markets", constraint: "native_markets_status_check", source: "nativemarket.AllStatuses()", values: str(nativemarket.AllStatuses())},
+
+		// Paired 2026-09-10 with the market's product surface. The two side
+		// checks were both in the unpaired inventory because no Go list
+		// declared BUY/SELL; nativemarket.AllSides() now does, so they leave
+		// it. demo_seed_rows is new and arrives paired.
+		{table: "native_market_fills", constraint: "native_market_fills_side_check", source: "nativemarket.AllSides()", values: str(nativemarket.AllSides())},
+		{table: "native_market_prints", constraint: "native_market_prints_side_check", source: "nativemarket.AllSides()", values: str(nativemarket.AllSides())},
+		{table: "demo_seed_rows", constraint: "demo_seed_rows_kind_check", source: "demo.AllKinds()", values: str(demo.AllKinds())},
 		{table: "payout_requests", constraint: "payout_requests_state_check", source: "payout.AllStates()", values: str(payout.AllStates())},
 		{table: "payout_destinations", constraint: "payout_destinations_kind_check", source: "payout.AllDestinationKinds()", values: str(payout.AllDestinationKinds())},
 		{table: "reconciliation_records", constraint: "reconciliation_records_kind_check", source: "reconciliation.AllKinds()", values: str(reconciliation.AllKinds())},
@@ -519,7 +528,6 @@ var unpaired = []string{
 	"native_assets.native_assets_content_moderation_state_check",
 	"native_market_alerts.native_market_alerts_kind_check",
 	"native_market_alerts.native_market_alerts_severity_check",
-	"native_market_fills.native_market_fills_side_check",
 	"native_market_quotes.native_market_quotes_side_check",
 	"orders.orders_side_check",
 	"payout_destinations.payout_destinations_status_check",
