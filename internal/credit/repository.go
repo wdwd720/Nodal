@@ -69,16 +69,18 @@ func buildConsumptionOrderSQL() string {
 
 // openLotsQuery selects an account's open lots in consumption order.
 //
-// $3 is "require spendable finality" and $4 is the allowed-origin set; a null
-// or empty set means no origin restriction. Expressing both as parameters of
-// one constant statement is what lets test/security prove the statement is not
-// assembled from anything a request supplied.
+// $3 is "require spendable finality", $4 is the allowed-origin set and $5 is
+// the allowed-lot set; a null or empty set means no restriction of that kind.
+// Expressing all three as parameters of one constant statement is what lets
+// test/security prove the statement is not assembled from anything a request
+// supplied.
 const openLotsQuery = `SELECT ` + lotColumns + `
 	  FROM credit_lots l
 	  JOIN credit_lot_state st ON st.lot_id = l.id
 	 WHERE l.account_id = $1 AND l.asset_id = $2 AND st.remaining_quantity > 0
 	   AND ($3::boolean = false OR st.finality IN ('UNFUNDED','REVERSIBLE','SETTLED'))
 	   AND ($4::text[] IS NULL OR cardinality($4::text[]) = 0 OR l.origin = ANY($4::text[]))
+	   AND ($5::uuid[] IS NULL OR cardinality($5::uuid[]) = 0 OR l.id = ANY($5::uuid[]))
 	 ORDER BY ` + consumptionOrderSQL + `, l.created_at, l.id`
 
 // accountLotsQuery is every lot an account holds, in the same order.
@@ -133,7 +135,7 @@ func scanLot(row pgx.Row) (Lot, error) {
 func (s *Service) openLotsForUpdate(
 	ctx context.Context, tx pgx.Tx,
 	accountID accounts.AccountID, assetID assets.AssetID,
-	requireSpendable bool, allowedOrigins []valuedomain.CreditOrigin,
+	requireSpendable bool, allowedOrigins []valuedomain.CreditOrigin, allowedLots []LotID,
 ) ([]Lot, error) {
 	// Both filters are PARAMETERS of one constant statement rather than
 	// fragments concatenated into a built one. An earlier version assembled
@@ -148,7 +150,14 @@ func (s *Service) openLotsForUpdate(
 			origins = append(origins, string(o))
 		}
 	}
-	args := []any{accountID, assetID, requireSpendable, origins}
+	var lots []string
+	if len(allowedLots) > 0 {
+		lots = make([]string, 0, len(allowedLots))
+		for _, l := range allowedLots {
+			lots = append(lots, l.String())
+		}
+	}
+	args := []any{accountID, assetID, requireSpendable, origins, lots}
 	// Serialise spenders on this account's Credits before reading the lots.
 	//
 	// `FOR UPDATE OF st` would be the obvious way and is not available: the

@@ -235,7 +235,8 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 	if err != nil {
 		return nil, err
 	}
-	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID, r.RequireSpendableFinality, r.AllowedOrigins)
+	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID,
+		r.RequireSpendableFinality, r.AllowedOrigins, r.LotIDs)
 	if err != nil {
 		return nil, err
 	}

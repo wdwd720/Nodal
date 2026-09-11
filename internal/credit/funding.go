@@ -140,8 +140,19 @@ var fundingTransitions = map[FundingState][]FundingState{
 	FundingCaptured:   {FundingReversible, FundingFailed, FundingManualReview},
 	FundingReversible: {FundingSettled, FundingDisputed, FundingReversed, FundingRefunded, FundingManualReview},
 	// A card network can dispute a payment a processor already calls settled.
-	FundingSettled:  {FundingDisputed, FundingRefunded, FundingManualReview},
-	FundingDisputed: {FundingSettled, FundingReversed, FundingManualReview},
+	FundingSettled: {FundingDisputed, FundingRefunded, FundingManualReview},
+	// DISPUTED -> REVERSIBLE is how a dispute that did not take the money ends
+	// (D-094, F-155). It is not DISPUTED -> SETTLED: settlement means the
+	// reversibility window closed, which is a fact about a clock and a policy,
+	// and a dispute closing in our favour is not that fact. The funding returns
+	// to the window it was already in -- 00743's trigger coalesces
+	// reversible_at, so re-entering REVERSIBLE cannot restart the clock -- and
+	// SettleDue remains the only thing that settles anything.
+	//
+	// DISPUTED -> SETTLED stays legal so that an operator resolving a review
+	// and a provider that reports settlement after a dispute are still
+	// representable; nothing in this binary now takes that edge on its own.
+	FundingDisputed: {FundingReversible, FundingSettled, FundingReversed, FundingManualReview},
 	// An operator resolving a review may send the funding anywhere a provider
 	// event could legitimately have sent it -- with one exception. There is no
 	// resolution to SETTLED. Settlement means the dispute window closed, which
@@ -446,12 +457,15 @@ func (s *Service) MintFrom(ctx context.Context, tx pgx.Tx, id FundingID, effecti
 // ReverseResult describes what a chargeback actually did.
 type ReverseResult struct {
 	// Destroyed is the value clawed back out of the account's Credit balance.
+	// It is what the reversed funding's own lot still held, never units from
+	// anywhere else.
 	Destroyed money.Quantity
-	// Deficit is what the account had already spent and therefore owes. It is
-	// the uncollateralised hole PART XI is about, made visible and collectable
-	// instead of absorbed silently.
+	// Deficit is what the account had already spent OUT OF THAT LOT and
+	// therefore owes. It is the uncollateralised hole PART XI is about, made
+	// visible and collectable instead of absorbed silently.
 	Deficit money.Quantity
-	// LotIDs are the provenance lots the reversal touched.
+	// LotIDs are the provenance lots the reversal touched, which is the
+	// reversed funding's lot and nothing else.
 	LotIDs []LotID
 }
 
@@ -517,16 +531,26 @@ func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effect
 		return ReverseResult{}, err
 	}
 
-	// What the account can actually give back is bounded by its balance, not
-	// by what the lot still records: the user may have spent Credits from
-	// other lots too.
-	balance, err := s.creditBalance(ctx, tx, f.AccountID, assetID)
-	if err != nil {
-		return ReverseResult{}, err
-	}
-	amount := lot.Quantity
-	covered := balance.Min(amount)
-	shortfall := amount.Sub(covered)
+	// What a clawback may destroy is what THIS funding's lot still holds, and
+	// nothing else.
+	//
+	// It used to be min(account balance, lot quantity), consumed with no lot
+	// restriction -- so Consume walked the account's lots in CONSUMPTION order
+	// and took whatever sorted first, which is a promotional grant before a
+	// purchase every time. A cardholder charging back a $10 purchase destroyed
+	// a grant the platform had given them, the charged-back lot kept its units
+	// and was stamped REVERSED, and the account was left holding CREDIT_BALANCE
+	// it could never spend, withdraw or clear. Provenance still reconciled,
+	// which is why nothing caught it (F-152).
+	//
+	// The units this funding minted are in exactly two places: still in its
+	// lot, or already spent. The first are destroyed; the second are the
+	// DEFICIT the account owes. Splitting it that way needs no balance read --
+	// the lot's own remaining quantity is the answer, and it can never exceed
+	// the account's CREDIT_BALANCE because the provenance invariant says the
+	// sum of remaining lot quantities IS that balance.
+	covered := lot.Remaining
+	shortfall := lot.Quantity.Sub(covered)
 
 	custBalance := ledger.CustomerAccount(f.AccountID, ledger.CodeCreditBalance, assetID)
 	custIssuance := ledger.CustomerAccount(f.AccountID, ledger.CodeCreditIssuance, assetID)
@@ -551,17 +575,32 @@ func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effect
 		if err != nil {
 			return ReverseResult{}, err
 		}
-		// Consume against the reversal so the lots record where the destroyed
-		// units came from. Finality is not required to be spendable here: a
-		// clawback must work on disputed value too.
-		if _, err := s.Consume(ctx, tx, ConsumeRequest{
+		// Consume against the reversal so the lot records where the destroyed
+		// units went. LotIDs pins it to the reversed funding's own lot, which
+		// is the whole of F-152: without it Consume walks consumption order and
+		// destroys somebody's grant. Finality is not required to be spendable
+		// here -- a clawback must work on disputed value too -- and the lot is
+		// about to be stamped REVERSED, so it must be reachable while it still
+		// is not.
+		allocs, cerr := s.Consume(ctx, tx, ConsumeRequest{
 			AccountID:   f.AccountID,
 			Quantity:    covered,
 			JournalTxID: post.TransactionID,
 			Reference:   Reference{Type: "credit_funding_reversal", ID: f.ID.String()},
 			Reason:      reason,
-		}); err != nil {
-			return ReverseResult{}, err
+			LotIDs:      []LotID{lot.ID},
+		})
+		if cerr != nil {
+			return ReverseResult{}, cerr
+		}
+		// One lot was offered and it held exactly `covered`, so one allocation
+		// for the whole amount is the only possible outcome. Asserting it here
+		// means a future change to lot selection cannot quietly spread a
+		// clawback across lots it was never about.
+		if len(allocs) != 1 || allocs[0].LotID != lot.ID || allocs[0].Quantity.Cmp(covered) != 0 {
+			return ReverseResult{}, errs.Newf(errs.CodeInternal,
+				"credit: a reversal of funding %s consumed %d allocations instead of its own lot",
+				f.ID, len(allocs))
 		}
 	}
 	if shortfall.IsPositive() {
@@ -605,6 +644,30 @@ func (s *Service) SettleFunding(ctx context.Context, tx pgx.Tx, id FundingID, re
 		return nil
 	}
 	return s.SetFinality(ctx, tx, *f.LotID, valuedomain.FinalitySettled,
+		Reference{Type: "credit_funding", ID: f.ID.String()}, reason)
+}
+
+// UnfreezeFunding returns a funding whose dispute did not take the money to
+// REVERSIBLE, and unfreezes the Credits with it.
+//
+// The two halves have to happen together for the same reason DisputeFunding's
+// do: a funding row that says REVERSIBLE over a lot still marked DISPUTED would
+// report the value as spendable on every operator screen while the ledger
+// refused to spend it.
+//
+// It deliberately does not settle. See D-094 and fundingTransitions.
+func (s *Service) UnfreezeFunding(ctx context.Context, tx pgx.Tx, id FundingID, reason string) error {
+	f, err := s.Funding(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.AdvanceFunding(ctx, tx, id, FundingReversible, reason, ""); err != nil {
+		return err
+	}
+	if f.LotID == nil {
+		return nil
+	}
+	return s.SetFinality(ctx, tx, *f.LotID, valuedomain.FinalityReversible,
 		Reference{Type: "credit_funding", ID: f.ID.String()}, reason)
 }
 
