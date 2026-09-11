@@ -9,16 +9,28 @@
  * base-unit integer to a double at the edge of this application and trusting a
  * dependency with the one invariant the product is built on. Two hundred lines
  * of SVG keep the conversion where `geometry.ts` can bound it, and keep the
- * marks describable to a screen reader, which is not something the libraries
- * do at all.
+ * marks describable to a screen reader, which is not something the libraries do
+ * at all.
+ *
+ * # Why the axis labels are HTML and the marks are SVG
+ *
+ * The plot stretches to whatever column it lands in, from a 1200px desktop to a
+ * 375px phone. A label drawn INSIDE a stretched viewBox stretches with it: the
+ * first version of this drew its prices as SVG text, and at 375px they came out
+ * under five pixels tall — present, and unreadable, which goal §31 asks for the
+ * opposite of. So the geometry scales and the type does not. The marks are SVG
+ * with `vector-effect="non-scaling-stroke"`, so a wick stays one pixel wide at
+ * every width, and the labels are HTML positioned as a percentage of the plot,
+ * so they are set at a real font size whatever the viewport is.
  *
  * # What this component is not allowed to do
  *
  * It never formats a figure. Every string it draws — the axis labels, the
- * per-candle readout, the caption — arrives as a prop, already formatted by
+ * per-bucket readout, the caption — arrives as a prop, already formatted by
  * `lib/format.ts` OUTSIDE this directory. `source-scan.test.ts` enforces that:
- * nothing under `src/charts/` may import the money or format modules, and every
- * `<text>` element here renders a bare prop reference and nothing else.
+ * nothing under `src/charts/` may import the money or format modules, every
+ * text-bearing expression here renders one bare property read, and the word
+ * "Credits" may not appear in this directory at all.
  *
  * # Accessibility
  *
@@ -27,9 +39,9 @@
  *
  *   - the whole thing is a `<figure>` with a `<figcaption>` stating the open,
  *     high, low, close and volume of the VISIBLE range as text;
- *   - the plot itself is a focusable `role="img"` with the same summary as its
- *     accessible description, so it is reachable by keyboard rather than being
- *     a region a mouse can inspect and a keyboard cannot;
+ *   - the plot is a focusable `role="img"` described by that same caption, so
+ *     it is reachable by keyboard rather than being a region a mouse can
+ *     inspect and a keyboard cannot;
  *   - arrow keys walk the buckets and each one announces its own readout
  *     through a polite live region — the same sentence a pointer reveals;
  *   - direction is drawn in two channels, hollow-and-positive against
@@ -43,20 +55,32 @@ import { useCallback, useId, useState, type KeyboardEvent, type ReactNode } from
 import type { CandleGeometrySet } from "./geometry.ts";
 import "./chart.css";
 
-/** A horizontal price line, already labelled by the caller. */
+/**
+ * A horizontal price line, already labelled by the caller.
+ *
+ * `label` is a ReactNode and not a string, which is the point. A price at
+ * eighteen decimal places is unreadable written out and ambiguous written
+ * short: the design system renders it as a leading-zero run in a smaller digit,
+ * and that notation only survives as markup. So the PAGE renders the figure
+ * with the `Figure` primitive it already owns and hands the result here, and
+ * this component positions something it cannot read and did not compose.
+ */
 export interface PriceTick {
+  /** Stable identity for the tick. Never derived from the rendered label. */
+  readonly key: string;
   readonly y: number;
-  readonly label: string;
+  readonly label: ReactNode;
 }
 
-/** A time marker along the bottom, already labelled by the caller. */
+/** A time marker along the bottom. Times are short, so this one is text. */
 export interface TimeTick {
+  readonly key: string;
   readonly x: number;
   readonly label: string;
 }
 
 export interface CandleChartProps {
-  /** The plot's accessible name, e.g. "AGENT price, 1 hour buckets". */
+  /** The plot's accessible name, e.g. "AGENT price, 1h periods". */
   readonly label: string;
   /**
    * The whole range in words, for the accessible description and the caption.
@@ -68,14 +92,7 @@ export interface CandleChartProps {
   readonly geometry: CandleGeometrySet;
   readonly priceTicks: readonly PriceTick[];
   readonly timeTicks: readonly TimeTick[];
-  /** Extra content for the caption: the exact figures, as the caller renders them. */
-  readonly caption?: ReactNode;
 }
-
-/** Room for the price labels down the right-hand edge, in viewBox units. */
-const GUTTER = 52;
-/** Room for the time labels along the bottom. */
-const FOOTER = 16;
 
 export function CandleChart(props: CandleChartProps): ReactNode {
   const base = useId();
@@ -106,11 +123,14 @@ export function CandleChart(props: CandleChartProps): ReactNode {
   );
 
   const box = geometry.box;
-  const width = box.width + GUTTER;
-  const height = box.height + box.volumeHeight + FOOTER;
+  const height = box.height + box.volumeHeight;
   const volumeTop = box.height;
   const readout = selected === undefined ? "" : (props.readouts[selected] ?? "");
   const crosshair = selected === undefined ? undefined : geometry.candles[selected];
+
+  /** A coordinate as a percentage of the plot, for an HTML label over it. */
+  const down = (y: number): string => `${String((y * 100) / height)}%`;
+  const across = (x: number): string => `${String((x * 100) / box.width)}%`;
 
   return (
     <figure className="chart-figure">
@@ -122,108 +142,124 @@ export function CandleChart(props: CandleChartProps): ReactNode {
         tabIndex={0}
         onKeyDown={onKeyDown}
       >
-        <svg
-          className="chart-svg"
-          viewBox={`0 0 ${String(width)} ${String(height)}`}
-          focusable="false"
-          aria-hidden="true"
-        >
-          {props.priceTicks.map((tick) => (
-            <g key={tick.label + String(tick.y)}>
+        <div className="chart-plot">
+          <svg
+            className="chart-svg"
+            viewBox={`0 0 ${String(box.width)} ${String(height)}`}
+            preserveAspectRatio="none"
+            focusable="false"
+            aria-hidden="true"
+          >
+            {props.priceTicks.map((tick) => (
               <line
+                key={tick.key}
                 className="chart-grid-line"
+                vectorEffect="non-scaling-stroke"
                 x1={0}
                 x2={box.width}
                 y1={tick.y}
                 y2={tick.y}
               />
-              <text className="chart-axis-label" x={box.width + 4} y={tick.y + 3}>
-                {tick.label}
-              </text>
-            </g>
-          ))}
+            ))}
 
-          <line
-            className="chart-separator"
-            x1={0}
-            x2={box.width}
-            y1={volumeTop}
-            y2={volumeTop}
-          />
-
-          {geometry.candles.map((candle, index) => {
-            const classes = [
-              candle.direction === "up" ? "chart-up" : "chart-down",
-              index === selected ? "chart-selected" : "",
-            ]
-              .filter((part) => part !== "")
-              .join(" ");
-            return (
-              <g
-                key={candle.key}
-                className={classes}
-                onPointerEnter={() => {
-                  setSelected(index);
-                }}
-              >
-                <line
-                  className="chart-wick"
-                  x1={candle.x}
-                  x2={candle.x}
-                  y1={candle.highY}
-                  y2={candle.lowY}
-                />
-                <rect
-                  className="chart-body"
-                  x={candle.x - candle.halfWidth}
-                  y={candle.bodyY}
-                  width={candle.halfWidth * 2}
-                  height={candle.bodyHeight}
-                />
-                <rect
-                  className="chart-volume"
-                  x={candle.x - candle.halfWidth}
-                  y={volumeTop + candle.volumeY}
-                  width={candle.halfWidth * 2}
-                  height={candle.volumeHeight}
-                />
-              </g>
-            );
-          })}
-
-          {crosshair !== undefined && (
             <line
-              className="chart-crosshair"
-              x1={crosshair.x}
-              x2={crosshair.x}
-              y1={0}
-              y2={volumeTop + box.volumeHeight}
+              className="chart-separator"
+              vectorEffect="non-scaling-stroke"
+              x1={0}
+              x2={box.width}
+              y1={volumeTop}
+              y2={volumeTop}
             />
-          )}
 
-          {props.timeTicks.map((tick) => (
-            <text
-              key={tick.label + String(tick.x)}
-              className="chart-axis-label"
-              x={tick.x}
-              y={height - 4}
-            >
-              {tick.label}
-            </text>
-          ))}
-        </svg>
+            {geometry.candles.map((candle, index) => {
+              const classes = [
+                candle.direction === "up" ? "chart-up" : "chart-down",
+                index === selected ? "chart-selected" : "",
+              ]
+                .filter((part) => part !== "")
+                .join(" ");
+              return (
+                <g
+                  key={candle.key}
+                  className={classes}
+                  onPointerEnter={() => {
+                    setSelected(index);
+                  }}
+                >
+                  <line
+                    className="chart-wick"
+                    vectorEffect="non-scaling-stroke"
+                    x1={candle.x}
+                    x2={candle.x}
+                    y1={candle.highY}
+                    y2={candle.lowY}
+                  />
+                  <rect
+                    className="chart-body"
+                    vectorEffect="non-scaling-stroke"
+                    x={candle.x - candle.halfWidth}
+                    y={candle.bodyY}
+                    width={candle.halfWidth * 2}
+                    height={candle.bodyHeight}
+                  />
+                  <rect
+                    className="chart-volume"
+                    vectorEffect="non-scaling-stroke"
+                    x={candle.x - candle.halfWidth}
+                    y={volumeTop + candle.volumeY}
+                    width={candle.halfWidth * 2}
+                    height={candle.volumeHeight}
+                  />
+                </g>
+              );
+            })}
+
+            {crosshair !== undefined && (
+              <line
+                className="chart-crosshair"
+                vectorEffect="non-scaling-stroke"
+                x1={crosshair.x}
+                x2={crosshair.x}
+                y1={0}
+                y2={height}
+              />
+            )}
+          </svg>
+
+          <div className="chart-price-axis" aria-hidden="true">
+            {props.priceTicks.map((tick) => (
+              <span
+                key={tick.key}
+                className="chart-axis-label"
+                style={{ top: down(tick.y) }}
+              >
+                {tick.label}
+              </span>
+            ))}
+          </div>
+
+          <div className="chart-time-axis" aria-hidden="true">
+            {props.timeTicks.map((tick) => (
+              <span
+                key={tick.key}
+                className="chart-axis-label"
+                style={{ left: across(tick.x) }}
+              >
+                {tick.label}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       <p className="chart-readout" role="status" aria-live="polite">
         {readout}
       </p>
       <p className="chart-hint">
-        Focus the plot and use the arrow keys to read each bucket; Escape clears the
-        selection.
+        Focus the plot and use the arrow keys to read each period; Escape clears the selection.
       </p>
       <figcaption className="chart-caption" id={summaryId}>
         {props.summary}
-        {props.caption}
       </figcaption>
     </figure>
   );

@@ -136,25 +136,33 @@ test("nothing in the chart directory can format a figure", () => {
   );
 });
 
-test("a chart mark renders a supplied label and never a composed one", () => {
-  // Rule two. Every <text> element in a chart renders one bare property read —
-  // `{tick.label}` — and nothing else: no call, no template literal, no
-  // concatenation. A mark can only ever say what the caller already said.
+test("a chart renders a supplied label and never a composed one", () => {
+  // Rule two. Every text-bearing expression in a chart is ONE bare property
+  // read — `{tick.label}`, `{props.summary}` — and nothing else: no call, no
+  // template literal, no concatenation. A chart can only ever say what the
+  // caller already said, which is what makes the float allowlist survivable.
+  //
+  // It reads `>{ ... }<` rather than a specific element because the axis labels
+  // moved out of SVG and into HTML when it turned out that text inside a
+  // stretched viewBox renders at five pixels on a phone. The rule is about
+  // where a string comes from, not about which tag it lands in.
+  const bareRead = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
   const offenders: string[] = [];
   for (const file of chartCode()) {
-    const marks = file.text.match(/<text\b[\s\S]*?<\/text>/g) ?? [];
-    for (const mark of marks) {
-      const open = mark.indexOf(">");
-      const body = mark.slice(open + 1, mark.lastIndexOf("</text>")).trim();
-      if (!/^\{[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*\}$/.test(body)) {
-        offenders.push(`${file.path}: <text> renders ${JSON.stringify(body)}`);
+    // `[^{}]*` skips anything with a nested brace — a `.map()` body, a
+    // conditional with an attribute in it — because those render elements
+    // rather than text, and their own text children are matched on their own.
+    for (const [, expression] of file.text.matchAll(/>\s*\{([^{}]*)\}\s*</g)) {
+      const read = (expression ?? "").trim();
+      if (!bareRead.test(read)) {
+        offenders.push(`${file.path}: renders ${JSON.stringify(read)} as text`);
       }
     }
   }
   assert.deepEqual(
     offenders,
     [],
-    `a chart mark renders a supplied label and nothing else:\n${offenders.join("\n")}`,
+    `a chart renders a supplied label and nothing else:\n${offenders.join("\n")}`,
   );
 });
 

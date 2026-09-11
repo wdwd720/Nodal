@@ -48,6 +48,7 @@ import { Button } from "../../components/Button.tsx";
 import { FormField } from "../../components/Field.tsx";
 import { Figure } from "../../components/Figure.tsx";
 import { Disclosure, Field, FieldGrid, Panel } from "../../components/Layout.tsx";
+import { fromBaseUnits } from "../../lib/format.ts";
 import { parseQuantityInput } from "../../lib/money.ts";
 import { TOLERANCES, meetsMinimum, minimumOutput } from "../../lib/min-output.ts";
 import { secondsUntil } from "../../lib/time.ts";
@@ -392,7 +393,7 @@ function Confirm(props: {
             value={
               quote.effective_price === undefined || quote.price_scale === undefined
                 ? null
-                : { base: quote.effective_price, scale: quote.price_scale }
+                : { decimal: fromBaseUnits(quote.effective_price, quote.price_scale) }
             }
             symbol="Credits"
             absent="not reported"
@@ -519,7 +520,7 @@ function Filled(props: {
             value={
               fill.effective_price === undefined || fill.price_scale === undefined
                 ? null
-                : { base: fill.effective_price, scale: fill.price_scale }
+                : { decimal: fromBaseUnits(fill.effective_price, fill.price_scale) }
             }
             symbol="Credits"
             absent="not reported"

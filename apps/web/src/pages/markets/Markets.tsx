@@ -284,10 +284,14 @@ function MarketList(props: {
       key: "price",
       header: "Last price",
       numeric: true,
+      // A price goes through the money ladder rather than being written out:
+      // at a price scale of eighteen the exact fraction is twenty digits wide
+      // and would push this column past a phone. `Figure` applies the ladder to
+      // a DECIMAL value, so the point is moved by `format.ts` first.
       cell: (market) => (
         <Figure
           kind="money"
-          value={{ base: market.last_price, scale: market.price_scale }}
+          value={{ decimal: fromBaseUnits(market.last_price, market.price_scale) }}
           symbol="Credits"
         />
       ),

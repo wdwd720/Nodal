@@ -63,7 +63,13 @@ import {
   Panel,
   Pill,
 } from "../../components/Layout.tsx";
-import { figureText, formatCount, formatUnits, percentOfTotal } from "../../lib/format.ts";
+import {
+  figureText,
+  formatCount,
+  formatUnits,
+  fromBaseUnits,
+  percentOfTotal,
+} from "../../lib/format.ts";
 import { formatInstant } from "../../lib/time.ts";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE, CREDITS_DISCLOSURE } from "../../lib/honesty.ts";
 import { useActiveAccountId } from "../../session.tsx";
@@ -85,6 +91,24 @@ const CREDIT_DECIMALS = 6;
 
 /** The plot, in viewBox units. It scales to whatever column it lands in. */
 const PLOT = { width: 720, height: 240, volumeHeight: 60 };
+
+/**
+ * A price, as the value the money ladder should be applied to.
+ *
+ * A price on an internal market is an integer at `price_scale`, which is
+ * eighteen, so writing it out in full is a zero, a point, four zeros and
+ * fourteen more digits. At the emphasised size that is over three hundred
+ * pixels of digits, and it pushed the trade screen sideways on a phone. `Figure` applies section 6's ladder -- four significant digits,
+ * with a leading-zero run in a smaller digit -- only to a DECIMAL value, so the
+ * point is moved here, by `format.ts`, and the ladder does the rest.
+ *
+ * Quantities do not go through this. An asset amount is exact and is rendered
+ * exact, because a truncated holding is a different claim from a shortened
+ * price.
+ */
+function price(baseUnits: string, scale: number): { readonly decimal: string } {
+  return { decimal: fromBaseUnits(baseUnits, scale) };
+}
 
 const WIDE = "(min-width: 768px)";
 
@@ -199,7 +223,7 @@ export function MarketDetail(): ReactNode {
                     <br />
                     <Figure
                       kind="money"
-                      value={{ base: data.market.last_price, scale: data.market.price_scale }}
+                      value={price(data.market.last_price, data.market.price_scale)}
                       symbol="Credits"
                     />
                   </span>
@@ -270,7 +294,7 @@ function Overview(props: {
         >
           <Figure
             kind="money"
-            value={{ base: market.last_price, scale: market.price_scale }}
+            value={price(market.last_price, market.price_scale)}
             symbol="Credits"
             big
           />
@@ -440,14 +464,20 @@ function Chart(props: {
   const geometry = candleGeometry(inputs, PLOT);
   const summary = summariseRange(inputs);
 
-  // Every label is formatted HERE, outside `src/charts/`, and handed to the plot
-  // as an opaque string. The chart never sees a scale and cannot compose one.
-  const price = (baseUnits: string): string =>
-    figureText(formatUnits(baseUnits, scale, { compact: true }));
+  // Every label is produced HERE, outside `src/charts/`. The plot positions
+  // them and never sees a scale, so it cannot compose a figure of its own.
+  //
+  // The axis labels are rendered ELEMENTS rather than strings: a price at scale
+  // eighteen only fits an axis in the ladder's leading-zero notation, and that
+  // notation is markup -- `figureText` collapses it into digits that read as a
+  // different number. Prose gets the exact written-out form instead, below,
+  // where there is room for it and no notation to misread.
+  const exact = (baseUnits: string): string => figureText(formatUnits(baseUnits, scale));
 
   const priceTicks: PriceTick[] = geometry.grid.map((line) => ({
+    key: line.baseUnits,
     y: line.y,
-    label: price(line.baseUnits),
+    label: <Figure kind="money" value={price(line.baseUnits, scale)} compact />,
   }));
 
   const last = geometry.candles.length - 1;
@@ -458,13 +488,17 @@ function Chart(props: {
     const source = inputs[index];
     if (placed === undefined || source === undefined) continue;
     if (timeTicks.some((tick) => tick.x === placed.x)) continue;
-    timeTicks.push({ x: placed.x, label: axisTime(source.openTime, props.daily) });
+    timeTicks.push({
+      key: source.openTime,
+      x: placed.x,
+      label: axisTime(source.openTime, props.daily),
+    });
   }
 
   const readouts = inputs.map(
     (candle) =>
-      `${formatInstant(candle.openTime)} — open ${price(candle.open)}, high ${price(candle.high)}, ` +
-      `low ${price(candle.low)}, close ${price(candle.close)} Credits; volume ` +
+      `${formatInstant(candle.openTime)} — open ${exact(candle.open)}, high ${exact(candle.high)}, ` +
+      `low ${exact(candle.low)}, close ${exact(candle.close)} Credits; volume ` +
       `${figureText(formatUnits(candle.creditVolume, CREDIT_DECIMALS, { compact: true }))} Credits ` +
       `over ${figureText(formatCount(candle.trades))} trades.`,
   );
@@ -473,8 +507,8 @@ function Chart(props: {
     summary === undefined
       ? "There is nothing in this window to summarise."
       : `${figureText(formatCount(inputs.length))} periods, from ${formatInstant(summary.firstOpenTime)} ` +
-        `to ${formatInstant(summary.lastOpenTime)}. Open ${price(summary.open)}, high ` +
-        `${price(summary.high)}, low ${price(summary.low)}, close ${price(summary.close)} Credits. ` +
+        `to ${formatInstant(summary.lastOpenTime)}. Open ${exact(summary.open)}, high ` +
+        `${exact(summary.high)}, low ${exact(summary.low)}, close ${exact(summary.close)} Credits. ` +
         `Volume ${figureText(formatUnits(summary.creditVolume, CREDIT_DECIMALS, { compact: true }))} ` +
         `Credits over ${figureText(formatCount(summary.trades))} trades.`;
 
@@ -766,7 +800,7 @@ function Tape(props: { readonly marketId: string; readonly simulated: boolean })
               cell: (print) => (
                 <Figure
                   kind="money"
-                  value={{ base: print.effective_price, scale: page.price_scale }}
+                  value={price(print.effective_price, page.price_scale)}
                   symbol="Credits"
                 />
               ),
@@ -801,7 +835,7 @@ function Tape(props: { readonly marketId: string; readonly simulated: boolean })
               cell: (print) => (
                 <Figure
                   kind="money"
-                  value={{ base: print.spot_price_after, scale: page.price_scale }}
+                  value={price(print.spot_price_after, page.price_scale)}
                   symbol="Credits"
                 />
               ),

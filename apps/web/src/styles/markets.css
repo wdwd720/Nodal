@@ -211,6 +211,19 @@
   }
 }
 
+/* ------------------------------------------------------- the chart labels -- */
+
+/*
+ * An axis label is a rendered figure, not a string: a price at eighteen decimal
+ * places only fits an axis in the ladder notation, and that notation is markup.
+ * So the label carries the same tabular type as every other figure, at the
+ * smallest size in the scale.
+ */
+.chart-axis-label .figure,
+.chart-axis-label .num {
+  font-size: var(--text-2xs);
+}
+
 /* ------------------------------------------------------------- the holders -- */
 
 .holder-share {

@@ -10,6 +10,11 @@
  * rise is drawn hollow in `--pos`, a fall solid in `--neg`. Hue alone fails a
  * colourblind reader; fill survives it, and both survive `forced-colors`, where
  * the OS discards the hues and leaves the stroke and the fill.
+ *
+ * THE GEOMETRY SCALES AND THE TYPE DOES NOT. The plot stretches to its column,
+ * so its strokes carry `vector-effect: non-scaling-stroke` and its labels are
+ * HTML positioned over it rather than text inside the stretched viewBox. Text
+ * drawn inside would be under five pixels tall on a phone.
  */
 
 .chart-figure {
@@ -17,13 +22,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .chart-frame {
-  /* The plot scales to the column rather than scrolling: a chart a reader has
-     to scroll sideways to see the end of is a chart that hides the last price,
-     which on a phone is the one price they came for. */
   width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--surface);
@@ -35,15 +39,54 @@
   outline-offset: var(--focus-offset);
 }
 
+/*
+ * The plot and its two axes. The right and bottom padding is the gutter the
+ * labels sit in, so a label can never overlap a mark.
+ */
+.chart-plot {
+  position: relative;
+  padding-right: 62px;
+  padding-bottom: 16px;
+}
+
 .chart-svg {
-  /* Uniform scaling: the viewBox keeps its aspect ratio, so a wick is one pixel
-     wide at every width. `min-height` gives a phone a plot tall enough to read
-     without distorting the drawing to get it. */
   display: block;
   width: 100%;
-  height: auto;
-  min-height: 200px;
-  overflow: visible;
+  /* Tall enough to read on a phone, never taller than a column on a desktop. */
+  height: clamp(180px, 34vw, 280px);
+}
+
+.chart-price-axis {
+  position: absolute;
+  inset: 0 0 16px auto;
+  width: 60px;
+}
+
+.chart-price-axis .chart-axis-label {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.chart-time-axis {
+  position: absolute;
+  right: 62px;
+  bottom: 0;
+  left: 0;
+  height: 14px;
+}
+
+.chart-time-axis .chart-axis-label {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.chart-axis-label {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .chart-grid-line {
@@ -51,13 +94,8 @@
   stroke-width: 1;
 }
 
-.chart-axis-label {
-  fill: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: 10px;
-}
-
-.chart-wick {
+.chart-wick,
+.chart-body {
   stroke-width: 1;
 }
 
@@ -77,10 +115,6 @@
 
 .chart-down .chart-body {
   fill: var(--neg);
-}
-
-.chart-body {
-  stroke-width: 1;
 }
 
 .chart-up .chart-volume {
