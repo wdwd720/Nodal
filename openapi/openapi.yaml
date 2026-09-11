@@ -2205,7 +2205,7 @@ components:
 
     CreatePayoutRequest:
       type: object
-      required: [account_id, amount]
+      required: [account_id, amount, quote_id]
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         amount: { $ref: "#/components/schemas/Quantity" }
@@ -2213,12 +2213,14 @@ components:
         quote_id:
           allOf: [{ $ref: "#/components/schemas/UUID" }]
           description: >-
-            The quote from POST /payouts/quote that the customer was shown.
-            When present it is consumed in the same transaction that reserves
+            The quote from POST /payouts/quote that the customer was shown, and
+            it is REQUIRED. It is consumed in the same transaction that reserves
             the value, so one quote funds exactly one payout, and an expired or
             already-used quote refuses the request before anything is decided
             about the money. It must name the same destination and the same
-            gross amount.
+            gross amount. Without it there is no fee and no minimum to judge the
+            payout against, which is how a payout below the provider's published
+            minimum was reserved and settled with the fee never taken (D-119).
 
     PayoutRequest:
       type: object
@@ -2252,7 +2254,21 @@ components:
         failure_reason: { type: string }
         quote_id:
           allOf: [{ $ref: "#/components/schemas/UUID" }]
-          description: The pre-commitment quote this payout was created against, when there was one.
+          description: The pre-commitment quote this payout was created against.
+        quoted_gross_amount_minor:
+          type: integer
+          format: int64
+          description: >-
+            The gross the customer was shown, in minor units of
+            quoted_currency. Recorded on the request rather than re-derived, so
+            a fee schedule repriced later cannot change what this payout says it
+            sent.
+        quoted_fee_amount_minor: { type: integer, format: int64 }
+        quoted_net_amount_minor:
+          type: integer
+          format: int64
+          description: What the customer was told would reach them. It is what the provider is instructed to send.
+        quoted_currency: { type: string }
         provenance:
           type: array
           items: { $ref: "#/components/schemas/PayoutProvenanceSlice" }

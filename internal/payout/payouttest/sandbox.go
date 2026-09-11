@@ -47,6 +47,11 @@ type Sandbox struct {
 	crashNext bool
 
 	submits int
+
+	// last is the request the provider was actually handed. A fake that does
+	// not keep it cannot demonstrate what it was told, and "what was the
+	// provider told" turned out to be the question worth asking (F-225).
+	last payout.SubmitRequest
 }
 
 // NewSandbox returns a sandbox provider with no contract reference, which is
@@ -107,7 +112,7 @@ func (s *Sandbox) TimeoutNext() {
 // "do not resubmit" branch got wrong. The only other way to produce it was for
 // a test to write the state by hand, which migration 00807 rightly refuses:
 // PAYOUT_STATUS_UNKNOWN -> SUBMITTED is an edge the state machine does not have
-// and a fixture should not have been able to forge (F-226).
+// and a fixture should not have been able to forge (F-225).
 func (s *Sandbox) CrashNext() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -139,11 +144,26 @@ func (s *Sandbox) Attempts() int {
 	return s.submits
 }
 
+// LastRequest is the SubmitRequest this provider was last handed.
+func (s *Sandbox) LastRequest() payout.SubmitRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.last
+}
+
 // Submit sends a payout, idempotently.
+//
+// It validates what it was given first, and returns the refusal rather than
+// paying. A real provider does the same thing in its own words; a fake that
+// accepted an empty instruction would hide exactly the defect F-225 was.
 func (s *Sandbox) Submit(_ context.Context, req payout.SubmitRequest) (payout.SubmitResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.last = req
 	s.submits++
+	if err := req.Validate(); err != nil {
+		return payout.SubmitResult{}, err
+	}
 
 	if existing, ok := s.byKey[req.IdempotencyKey]; ok {
 		// The defining behaviour: the same key is the same payout, always.

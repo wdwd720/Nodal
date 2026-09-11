@@ -13,6 +13,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
@@ -21,6 +22,7 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/payout"
+	"github.com/nodal/controlplane/internal/payout/payouttest"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
@@ -49,7 +51,21 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 		valuedomain.CapPayoutReserve: true, valuedomain.CapPayoutSettle: true,
 	})
 	credits := credit.NewService(led, clk)
-	svc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk,
+	// A provider that can be quoted against, because a payout names the quote
+	// the customer was shown (D-119) and a quote is computed from a provider's
+	// published fee model.
+	provider := payouttest.NewSandbox("sandbox").WithCapabilities(payout.Capabilities{
+		SupportsBankPayout: true, SupportsLookup: true,
+		Currencies:        []string{"USD"},
+		Availability:      payout.AvailabilitySandbox,
+		FeeModelPublished: true,
+		FeeFlat:           money.USDFromMinor(25),
+		FeeBasisPoints:    money.BPS(25),
+		FeeModelVersion:   "ITEST-PLACEHOLDER-NOT-A-PRICE",
+	})
+	registry := payout.NewRegistry(true)
+	require.NoError(t, registry.Register(provider))
+	svc := payout.NewService(led, credits, payout.NewEngine(credits), registry, clk,
 		killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository())
 
 	owner := newPayoutAccount(t, pool)
@@ -66,11 +82,45 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 	issueCredits(t, pool, credits, clk, owner, "1000")
 	before := creditBalance(t, pool, owner, creditAsset, ledger.CodeCreditBalance)
 
-	var request payout.Request
+	var (
+		request payout.Request
+		dest    payout.Destination
+	)
 	require.NoError(t, pool.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
+			d, derr := svc.CreateDestination(ctx, tx, payout.Destination{
+				AccountID: owner, Kind: payout.DestinationBank, Provider: "sandbox",
+				ProviderReference: "dest-" + id.New[id.Any]().String(),
+				DisplayLabel:      "Test bank", Currency: "USD",
+			})
+			if derr != nil {
+				return derr
+			}
+			if d, derr = svc.SetDestinationStatus(ctx, tx, d.ID, payout.DestinationVerified); derr != nil {
+				return derr
+			}
+			dest = d
+			quote, qerr := svc.Quote(ctx, tx, payout.QuoteRequest{
+				AccountID: owner, DestinationID: d.ID,
+				Quantity:               money.QuantityFromInt64(400),
+				CreditsPerMajorUnit:    1,
+				MinorUnitsPerMajorUnit: 100,
+				CreditDecimals:         0,
+				PricingVersion:         "cancel-itest-pricing-v1",
+				PolicyVersion:          "cancel-itest-v1",
+				Currency:               "USD",
+				Environment:            "TEST",
+				DisclosureAccepted:     true,
+				IdempotencyKey:         "quote-" + id.New[id.Any]().String(),
+				Now:                    clk.Now(),
+			}, d)
+			if qerr != nil {
+				return qerr
+			}
 			r, _, cerr := svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: owner, Quantity: money.QuantityFromInt64(400),
+				AccountID: owner, DestinationID: &d.ID, QuoteID: &quote.ID,
+				Quantity:           money.QuantityFromInt64(400),
+				ProviderTerms:      payout.TermsFrom(provider.Capabilities()),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "cancel-itest-" + id.New[id.Any]().String(),
 				EffectiveAt:        clk.Now(),
@@ -78,6 +128,7 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 			request = r
 			return cerr
 		}))
+	_ = dest
 	require.Equal(t, payout.StateVerified, request.State, "the fixture needs a reserved request to cancel")
 	require.Equal(t, "400", request.ReservedQuantity.String())
 	require.Equal(t, "600", creditBalance(t, pool, owner, creditAsset, ledger.CodeCreditBalance).String(),
@@ -120,6 +171,10 @@ func payoutInputAllowing(clk clock.Clock) payout.EligibilityInput {
 		Verified:   valuedomain.VerificationPayoutKYC,
 		ActiveCaps: map[valuedomain.CapabilityKey]bool{cap: true},
 		Now:        clk.Now().Add(48 * time.Hour),
+		// The compliance facts, stated: none of them has a permissive zero
+		// value, so an account in good standing has to say that it is (D-120).
+		SanctionsState:        compliance.SanctionsClear,
+		JurisdictionSupported: true,
 		// No destination is required to reserve; the destination question is
 		// about where value GOES, and this request never gets that far.
 		DestinationVerified: true, ProviderSupports: true,

@@ -530,17 +530,29 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 	// failing later with a foreign-key error.
 	destinationVerified := false
 	providerSupports := false
+	terms, terr := a.deploymentTerms()
+	if terr != nil {
+		return payout.Request{}, payout.Decision{}, terr
+	}
 	if r.DestinationID != nil {
 		dest, derr := a.deps.Payouts.Destination(ctx, a.db, *r.DestinationID)
 		if derr != nil {
 			return payout.Request{}, payout.Decision{}, derr
 		}
 		if dest.AccountID != r.AccountID {
-			return payout.Request{}, payout.Decision{}, errs.New(errs.CodeForbidden,
-				"that payout destination belongs to another account")
+			// NOT_FOUND, not FORBIDDEN. Every sibling -- DisableDestination,
+			// conversionAdapter.Quote, GET /payouts/{id} since F-41 -- answers
+			// NOT_FOUND for somebody else's row, and a distinguishable refusal
+			// is a membership oracle: anyone could learn which destination ids
+			// exist by asking (F-233, F-41's rule).
+			return payout.Request{}, payout.Decision{}, errs.New(errs.CodeNotFound,
+				"no such payout destination")
 		}
 		destinationVerified = dest.Status.Usable()
 		providerSupports = a.providerSupports(dest)
+		if p, perr := a.deps.Payouts.Provider(dest.Provider); perr == nil {
+			terms = payout.TermsFrom(p.Capabilities())
+		}
 	}
 
 	in := payout.EligibilityInput{
@@ -565,12 +577,25 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 		if aerr != nil {
 			return aerr
 		}
+		// The compliance facts, read from the same repository the eligibility
+		// page reads and in the transaction that reserves the value, so an
+		// account under an open sanctions review cannot be told it may withdraw
+		// nothing and have its whole balance reserved anyway (F-226, D-120).
+		facts, ferr := a.withdrawal.complianceFacts(ctx, tx, r.AccountID)
+		if ferr != nil {
+			return ferr
+		}
+		in.SanctionsState = facts.Sanctions
+		in.AccountRestrictions = facts.Restrictions
+		in.JurisdictionSupported = facts.JurisdictionSupported
+
 		var cerr error
 		req, decision, cerr = a.deps.Payouts.Create(ctx, tx, payout.CreateRequest{
 			AccountID:          r.AccountID,
 			DestinationID:      r.DestinationID,
 			QuoteID:            r.QuoteID,
 			Quantity:           r.Amount,
+			ProviderTerms:      terms,
 			DisclosureAccepted: accepted,
 			IdempotencyKey:     r.IdempotencyKey,
 			EffectiveAt:        a.clk.Now(),
@@ -579,6 +604,26 @@ func (a payoutsAdapter) Create(ctx context.Context, r CreatePayout) (payout.Requ
 		return cerr
 	})
 	return req, decision, err
+}
+
+// deploymentTerms are the published terms of the one payout provider this
+// deployment runs, for the case where the request names no destination to
+// resolve a provider from.
+//
+// A deployment with no provider has no terms, and a payout judged against no
+// terms is a payout judged against nothing: the refusal is the honest state of a
+// system with no conversion contract (BLOCKERS B-01, B-06).
+func (a payoutsAdapter) deploymentTerms() (payout.ProviderTerms, error) {
+	names := a.deps.Payouts.ProviderNames()
+	if len(names) != 1 {
+		return payout.ProviderTerms{}, errs.New(errs.CodeProviderUnavailable,
+			"this deployment has no payout provider, so there is nothing a payout could be priced against")
+	}
+	p, err := a.deps.Payouts.Provider(names[0])
+	if err != nil {
+		return payout.ProviderTerms{}, err
+	}
+	return payout.TermsFrom(p.Capabilities()), nil
 }
 
 // providerSupports asks the configured provider whether it can actually pay

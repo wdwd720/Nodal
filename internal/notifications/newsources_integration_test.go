@@ -165,7 +165,7 @@ func TestIntegration_AVerificationDecisionTellsThePersonItIsAbout(t *testing.T) 
 
 	mustExec(t, d, `INSERT INTO compliance_profiles (user_id, identity_state) VALUES ($1, 'UNVERIFIED')`, uid)
 	// Every step, because migration 00806 holds the schema to the §20 edge set:
-	// nothing reaches VERIFIED except from PENDING (F-224). Only the last row is
+	// nothing reaches VERIFIED except from PENDING (F-227). Only the last row is
 	// news, which is what the assertion below is about.
 	for _, edge := range [][2]string{{"UNVERIFIED", "STARTED"}, {"STARTED", "PENDING"}} {
 		mustExec(t, d, `INSERT INTO compliance_profile_transitions

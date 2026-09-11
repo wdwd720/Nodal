@@ -203,23 +203,39 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 	// anything having been decided about the money. It is also what makes a
 	// quote fund exactly one payout: the row is locked here and the same
 	// transaction carries the reservation.
-	var quote *Quote
-	if r.QuoteID != nil && !r.QuoteID.IsZero() {
-		consumed, qerr := s.consumeQuote(ctx, tx, *r.QuoteID, r.AccountID, r.EffectiveAt)
-		if qerr != nil {
-			return Request{}, Decision{}, qerr
-		}
-		if r.DestinationID == nil || *r.DestinationID != consumed.DestinationID {
-			return Request{}, Decision{}, errs.New(errs.CodeValidationFailed,
-				"that quote was given for a different destination")
-		}
-		if consumed.GrossQuantity.Cmp(r.Quantity) != 0 {
-			return Request{}, Decision{}, errs.New(errs.CodeValidationFailed,
-				"that quote was given for a different amount").
-				WithField("quoted", consumed.GrossQuantity.String()).
-				WithField("requested", r.Quantity.String())
-		}
-		quote = &consumed
+	//
+	// Validate has already refused a request with no quote (D-119), so there is
+	// no branch here that a missing one could take -- which was the whole shape
+	// of F-224: the minimum and the fee lived inside `if r.QuoteID != nil` and
+	// a request that named no quote met neither.
+	quote, err := s.consumeQuote(ctx, tx, *r.QuoteID, r.AccountID, r.EffectiveAt)
+	if err != nil {
+		return Request{}, Decision{}, err
+	}
+	if r.DestinationID == nil || *r.DestinationID != quote.DestinationID {
+		return Request{}, Decision{}, errs.New(errs.CodeValidationFailed,
+			"that quote was given for a different destination").
+			WithField("field", "destination_id")
+	}
+	if quote.GrossQuantity.Cmp(r.Quantity) != 0 {
+		return Request{}, Decision{}, errs.New(errs.CodeValidationFailed,
+			"that quote was given for a different amount").
+			WithField("quoted", quote.GrossQuantity.String()).
+			WithField("requested", r.Quantity.String())
+	}
+	// The provider's minimum, judged NET of fees and against what the provider
+	// publishes TODAY. consumeQuote has already refused a quote whose own
+	// minimum_ok was false; this is the other direction -- a minimum raised
+	// between the quote and the commit -- and it is why the terms are an input
+	// to this call rather than a number copied onto the quote row.
+	if minimum := r.ProviderTerms.MinimumAmount.Minor(); quote.NetAmountMinor < minimum {
+		return Request{}, Decision{}, errs.Newf(errs.CodeValidationFailed,
+			"this payout would net %d and the provider will not send less than %d",
+			quote.NetAmountMinor, minimum).
+			WithField("refusal", string(ReasonMinimumNotMet)).
+			WithField("net_amount_minor", quote.NetAmountMinor).
+			WithField("minimum_amount_minor", minimum).
+			WithField("currency", quote.Currency)
 	}
 
 	in.AccountID = r.AccountID
@@ -245,24 +261,23 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 		PolicyHash: decision.PolicyHash, EligibilityReasons: decision.ReasonStrings(),
 		VerificationLevel: in.Verified, IdempotencyKey: r.IdempotencyKey,
 	}
-	var destID any
-	if r.DestinationID != nil {
-		destID = *r.DestinationID
-	}
-	var quoteID any
-	if quote != nil {
-		quoteID = quote.ID
-		req.QuoteID = &quote.ID
-	}
+	req.QuoteID = &quote.ID
+	req.QuoteGrossAmountMinor = quote.GrossAmountMinor
+	req.QuoteFeeAmountMinor = quote.FeeAmountMinor
+	req.QuoteNetAmountMinor = quote.NetAmountMinor
+	req.QuoteCurrency = quote.Currency
 	err = tx.QueryRow(ctx,
 		`INSERT INTO payout_requests
 		   (id, account_id, destination_id, credit_asset_id, state, requested_quantity,
-		    policy_version, policy_hash, eligibility_reasons, verification_level, idempotency_key, quote_id)
-		 VALUES ($1,$2,$3,$4,'ELIGIBILITY_CHECK',$5::numeric,$6,$7,$8,$9,$10,$11)
+		    policy_version, policy_hash, eligibility_reasons, verification_level, idempotency_key, quote_id,
+		    quote_gross_amount_minor, quote_fee_amount_minor, quote_net_amount_minor, quote_currency)
+		 VALUES ($1,$2,$3,$4,'ELIGIBILITY_CHECK',$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 		 RETURNING created_at, updated_at`,
-		req.ID, req.AccountID, destID, req.CreditAssetID, req.RequestedQuantity.String(),
+		req.ID, req.AccountID, *r.DestinationID, req.CreditAssetID, req.RequestedQuantity.String(),
 		req.PolicyVersion, req.PolicyHash, reasons, string(req.VerificationLevel),
-		req.IdempotencyKey, quoteID).Scan(&req.CreatedAt, &req.UpdatedAt)
+		req.IdempotencyKey, quote.ID,
+		quote.GrossAmountMinor, quote.FeeAmountMinor, quote.NetAmountMinor, quote.Currency).
+		Scan(&req.CreatedAt, &req.UpdatedAt)
 	if err != nil {
 		return Request{}, Decision{}, mapError(err)
 	}
@@ -363,6 +378,12 @@ func (s *Service) CompleteVerification(ctx context.Context, tx pgx.Tx, requestID
 }
 
 // reserve moves the approved units out of the spendable domain.
+//
+// What is reserved is the GROSS: the quote's fee is taken out of the amount
+// that leaves, not added to it, so the units the customer gives up are exactly
+// the units they asked to convert and the provider's fee is inside them. A
+// reservation of the net would leave the fee spendable and the account short at
+// settlement (D-119).
 //
 // Consumption is restricted to exactly the origins the decision approved, so
 // lot selection cannot stray outside it even though the two run a moment apart
@@ -481,8 +502,9 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 	// because phase two is outside any transaction. Nothing serialised the
 	// external call.
 	var (
-		req     Request
-		claimed bool
+		req       Request
+		claimed   bool
+		submitReq SubmitRequest
 	)
 	err = d.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		r, err := s.forUpdate(ctx, tx, requestID)
@@ -511,6 +533,22 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 			return err
 		}
 		key := "nodal-payout-" + r.ID.String()
+		// What the provider is about to be told, assembled in the transaction
+		// that claims the request and refused BEFORE the claim if it is not an
+		// instruction anybody could act on.
+		//
+		// It used to be `SubmitRequest{IdempotencyKey: ..., Reference: ...,
+		// Amount: money.USD{}}` -- no amount, no destination, no currency, no
+		// kind -- and the request still reached SETTLED with the whole reserved
+		// quantity posted as having left the system (F-226). Building it here
+		// rather than after the claim means a request that cannot be described
+		// to a provider stays in VERIFIED with its value reserved, instead of
+		// being claimed under a committed key nobody can act on.
+		built, berr := s.submitRequestFor(ctx, tx, r, key)
+		if berr != nil {
+			return berr
+		}
+		submitReq = built
 		if _, err := tx.Exec(ctx,
 			`UPDATE payout_requests SET provider = $2, provider_idempotency_key = $3, submitted_at = $4
 			  WHERE id = $1`, r.ID, providerName, key, s.clk.Now()); err != nil {
@@ -533,12 +571,47 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 
 	// Phase two: the external call. Everything from here is recoverable from
 	// the key committed above.
-	result, callErr := provider.Submit(ctx, SubmitRequest{
-		IdempotencyKey: req.ProviderIdempotencyKey,
-		Reference:      req.ID.String(),
-		Amount:         money.USD{}, // conversion to external value happens above this layer
-	})
+	result, callErr := provider.Submit(ctx, submitReq)
 	return s.applyProviderResult(ctx, d, req.ID, providerName, result, callErr)
+}
+
+// submitRequestFor builds the instruction a provider is given, from the
+// destination and the quote the request was created against.
+//
+// The amount is the quote's NET, in the quote's currency: the gross is what the
+// customer gave up and the fee is inside it, so the net is what the provider is
+// asked to send. Both are recorded on the request, so this reads a fact rather
+// than recomputing one against a fee schedule that may since have moved.
+func (s *Service) submitRequestFor(ctx context.Context, tx pgx.Tx, r Request, key string) (SubmitRequest, error) {
+	if r.DestinationID == nil || r.DestinationID.IsZero() {
+		return SubmitRequest{}, errs.New(errs.CodeInvalidStateTransition,
+			"this payout names no destination, so there is nobody to pay").
+			WithField("payout_id", r.ID.String())
+	}
+	dest, err := s.Destination(ctx, tx, *r.DestinationID)
+	if err != nil {
+		return SubmitRequest{}, err
+	}
+	if dest.AccountID != r.AccountID {
+		// Not reachable through Create, which refuses a quote for another
+		// account's destination. Said here anyway, because this is the last
+		// place before value is sent somewhere.
+		return SubmitRequest{}, errs.New(errs.CodeForbidden,
+			"this payout names a destination that belongs to another account").
+			WithField("payout_id", r.ID.String())
+	}
+	out := SubmitRequest{
+		IdempotencyKey:       key,
+		Reference:            r.ID.String(),
+		DestinationReference: dest.ProviderReference,
+		DestinationKind:      dest.Kind,
+		Amount:               money.USDFromMinor(r.QuoteNetAmountMinor),
+		Currency:             r.QuoteCurrency,
+	}
+	if err := out.Validate(); err != nil {
+		return SubmitRequest{}, err
+	}
+	return out, nil
 }
 
 // applyProviderResult records what a provider said and moves the request.
@@ -1093,7 +1166,7 @@ func (s *Service) OpenRequests(ctx context.Context, q db.Querier, olderThan time
 // the VERIFIED step, settling is the SETTLED step, returning a reservation is
 // the FAILED or REJECTED step -- so the two were always one event, and writing
 // them as one is what stops a quantity being rewritten beside a lawful move
-// (F-226).
+// (F-229).
 //
 // A nil pointer means "this change says nothing about that number", which is
 // what an ordinary state move says; the trigger leaves the column alone.

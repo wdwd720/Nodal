@@ -27,8 +27,12 @@ import (
 // quotableProvider gives the fixture's sandbox provider the two things a quote
 // needs: an availability that says it can be used at all, and a PUBLISHED fee
 // model. The default sandbox in payouttest has neither, deliberately -- an
-// adapter nobody has read against a contract reports nothing -- so a quote
-// against it refuses, which is its own assertion below.
+// adapter nobody has read against a contract reports nothing, which
+// TestCapabilities_ZeroValueSupportsNothing asserts on the type itself.
+//
+// newFixture calls this, because a payout now names a quote and a quote needs a
+// provider that can be quoted from (D-119). The explicit calls below stay: they
+// say what the test depends on rather than inheriting it.
 func quotableProvider(f *fixture) {
 	f.provider.WithCapabilities(payout.Capabilities{
 		SupportsBankPayout: true,
@@ -71,6 +75,7 @@ func (f *fixture) createWithQuote(amount int64, quoteID payout.QuoteID, in payou
 			dest := f.destination
 			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest, QuoteID: &quoteID, Quantity: q(amount),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: f.clk.Now(),
 			}, in)

@@ -405,7 +405,7 @@ func (s *Service) Ingest(ctx context.Context, database *db.DB, session Session, 
 		// It used to be written first, and migration 00806 is why the order is
 		// now load-bearing: a check row attaches only to a session in a status a
 		// provider ANSWER produces, because four PASS rows against a session
-		// nobody was ever sent to made the resolver report PAYOUT_KYC (F-224).
+		// nobody was ever sent to made the resolver report PAYOUT_KYC (F-227).
 		// Nothing else depends on the order -- the path walked above is computed
 		// from the two statuses and never from the checks.
 		for _, c := range sortedChecks(result.Checks) {

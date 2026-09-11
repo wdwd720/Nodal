@@ -253,7 +253,7 @@ func TestIntegration_ASandboxOutcomeCannotExistInProd(t *testing.T) {
 		VALUES ($1,$2,'PAYOUT_KYC','a_real_provider','CREATED','v1','PROD',false)`, sessionID, userID)
 	require.NoError(t, err)
 	// Evidence attaches only to a session a provider has answered (00806,
-	// F-224), so the session is walked to PROCESSING before a check is hung on
+	// F-227), so the session is walked to PROCESSING before a check is hung on
 	// it. The sandbox CHECK below is what this test is about, and it is a table
 	// CHECK: it is evaluated after the BEFORE trigger that asks this question,
 	// so both refusals are still distinguishable.

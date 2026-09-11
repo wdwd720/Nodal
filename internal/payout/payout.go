@@ -292,12 +292,22 @@ type Request struct {
 
 	IdempotencyKey string
 	QuoteID        *QuoteID
-	ReservedAt     *time.Time
-	SubmittedAt    *time.Time
-	SettledAt      *time.Time
-	FailureReason  string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+
+	// The price the customer was shown, recorded on the request rather than
+	// left to be re-derived from a fee schedule that may since have been
+	// repriced (00808, D-119). Zero when the row predates the quote becoming
+	// required.
+	QuoteGrossAmountMinor int64
+	QuoteFeeAmountMinor   int64
+	QuoteNetAmountMinor   int64
+	QuoteCurrency         string
+
+	ReservedAt    *time.Time
+	SubmittedAt   *time.Time
+	SettledAt     *time.Time
+	FailureReason string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Allocation is one lot slice a payout reserved.
@@ -311,19 +321,71 @@ type Allocation struct {
 	CreatedAt time.Time
 }
 
+// ProviderTerms are the published numbers a payout has to be judged against:
+// what the provider will charge, and the smallest payout it will send.
+//
+// They are an input rather than a lookup for the reason everything else in this
+// package is one -- the caller already has the provider's capabilities, a second
+// lookup could disagree with the first, and a decision made in March has to be
+// replayable in June against the inputs it was made with.
+//
+// There is no permissive zero value. `FeeModelPublished` false is not a fee of
+// zero; it is the absence of an answer, and `CreateRequest.Validate` refuses it,
+// so a caller that forgets to supply the terms stops a payout rather than
+// letting one through unpriced.
+type ProviderTerms struct {
+	// FeeModelPublished is whether the adapter read a fee schedule out of a
+	// real contract or a published price list.
+	FeeModelPublished bool
+	// FeeFlat and FeeBasisPoints are the two halves of one payout's fee.
+	FeeFlat        money.USD
+	FeeBasisPoints money.BPS
+	// FeeModelVersion identifies the schedule those numbers came from.
+	FeeModelVersion string
+	// MinimumAmount is the smallest payout the provider will send, judged NET
+	// of fees because sub-minimum dust is destroyed rather than returned
+	// (PROVIDER_BOUNDARY §3). A zero minimum is "the provider publishes none".
+	MinimumAmount money.USD
+}
+
+// TermsFrom reads the terms out of a provider's published capabilities, so no
+// caller assembles them field by field and none can assemble a wrong one.
+func TermsFrom(c Capabilities) ProviderTerms {
+	return ProviderTerms{
+		FeeModelPublished: c.FeeModelPublished,
+		FeeFlat:           c.FeeFlat,
+		FeeBasisPoints:    c.FeeBasisPoints,
+		FeeModelVersion:   c.FeeModelVersion,
+		MinimumAmount:     c.MinimumAmount,
+	}
+}
+
 // CreateRequest asks for a payout.
 type CreateRequest struct {
 	AccountID     accounts.AccountID
 	DestinationID *DestinationID
 	Quantity      money.Quantity
 
-	// QuoteID names the pre-commitment quote the customer was shown. It is
-	// optional in this type and required by the HTTP surface, and the reason
-	// for the difference is that an operator resolving a stuck payout has no
-	// quote to name while a person pressing a button in a browser always does.
-	// When it is present the quote is consumed inside the same transaction, so
-	// a quote can fund exactly one payout.
+	// QuoteID names the pre-commitment quote the customer was shown, and it is
+	// REQUIRED.
+	//
+	// It used to be optional here and optional on POST /v1/payouts, with a
+	// comment saying an operator resolving a stuck payout has no quote to name.
+	// That was false: the route is accountScopeWrite, and an operator resolves
+	// through ResolveManualReview, which creates nothing. What it bought
+	// instead was a payout below the provider's published minimum, reserved and
+	// settled with the fee never taken, because the whole minimum-and-fee branch
+	// of Create sat inside `if r.QuoteID != nil` (F-224, D-119).
+	//
+	// The quote is consumed inside the same transaction that reserves the value,
+	// so one quote funds exactly one payout.
 	QuoteID *QuoteID
+
+	// ProviderTerms are what the provider publishes TODAY. The quote records
+	// what it published when the customer was shown a number; Create judges the
+	// minimum against both, so a minimum raised between the quote and the
+	// commit refuses rather than sending something the provider will bounce.
+	ProviderTerms ProviderTerms
 
 	// DisclosureAccepted says whether the person has accepted the current
 	// WITHDRAWAL_DISCLOSURE. It is an input rather than a lookup, like every
@@ -354,6 +416,19 @@ func (r CreateRequest) Validate() error {
 	}
 	if r.EffectiveAt.IsZero() {
 		return errs.New(errs.CodeValidationFailed, "a payout needs effective_at")
+	}
+	if r.QuoteID == nil || r.QuoteID.IsZero() {
+		return errs.New(errs.CodeValidationFailed,
+			"a payout names the quote the customer was shown").
+			WithField("field", "quote_id")
+	}
+	if !r.ProviderTerms.FeeModelPublished {
+		// Not a fee of zero. A caller that has not read a fee schedule out of a
+		// real contract cannot say what would reach the customer, and promising
+		// a net amount nobody agreed is worse than refusing.
+		return errs.New(errs.CodeProviderUnavailable,
+			"this payout provider has not published a fee model, so no payout can be judged against it").
+			WithField("fee_model", "UNPUBLISHED")
 	}
 	return nil
 }

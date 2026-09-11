@@ -4,7 +4,7 @@ package verification_test
 
 // Reproduction for the withdrawal-verification audit (goal §54, F-wv-7), kept
 // after the fix and inverted: every assertion below asserted the defect when it
-// was written and asserts the closed hole now (F-224, D-121, migration 00806).
+// was written and asserts the closed hole now (F-227, D-121, migration 00806).
 //
 // docs/product/VERIFICATION_AND_WITHDRAWAL.md §4:
 //
@@ -62,7 +62,7 @@ func TestAuditWV_TheProfileTransitionTableConstrainsWhichEdgesAreLegal(t *testin
 		uuid.New(), userID, verifiedAt, verifiedAt.Add(365*24*time.Hour))
 
 	require.Error(t, err,
-		"F-224: the database accepted an edge §20 does not have, and the trigger wrote VERIFIED "+
+		"F-227: the database accepted an edge §20 does not have, and the trigger wrote VERIFIED "+
 			"and a CLEAR sanctions screen from it")
 	assert.Equal(t, "AD001", db.SQLState(err), "got %v", err)
 	assert.Contains(t, err.Error(), "COMPLIANCE_TRANSITION_ILLEGAL_EDGE")
@@ -105,7 +105,7 @@ func TestAuditWV_TheProfileTransitionTableConstrainsWhichEdgesAreLegal(t *testin
 		VALUES ($1,$2,'CREATED','APPROVED','SYSTEM','audit-probe','no provider was ever called')`,
 		uuid.New(), sessionID)
 	require.Error(t, serr,
-		"F-224: a verification session went CREATED -> APPROVED in one INSERT; "+
+		"F-227: a verification session went CREATED -> APPROVED in one INSERT; "+
 			"verification.CanTransitionSession has no such edge")
 	assert.Equal(t, "AD001", db.SQLState(serr), "got %v", serr)
 	assert.Contains(t, serr.Error(), "VERIFICATION_TRANSITION_ILLEGAL_EDGE")
@@ -130,6 +130,6 @@ func TestAuditWV_TheProfileTransitionTableConstrainsWhichEdgesAreLegal(t *testin
 	level, lerr := resolver.Level(ctx, accountID)
 	require.NoError(t, lerr)
 	assert.NotEqual(t, "PAYOUT_KYC", string(level),
-		"F-224: PAYOUT_KYC was reached with no provider, no hosted flow and no decision; "+
+		"F-227: PAYOUT_KYC was reached with no provider, no hosted flow and no decision; "+
 			"the evidence rule rested on rows cp_app may INSERT freely")
 }

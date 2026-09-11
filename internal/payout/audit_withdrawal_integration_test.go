@@ -28,6 +28,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/eligibility"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
@@ -160,16 +161,59 @@ func newAuditFixture(t *testing.T) *auditFixture {
 }
 
 // sandboxInput is the eligibility input a sandbox tier composes: the sandbox
-// payout policy, PAYOUT_KYC, and the two payout capabilities active.
+// payout policy, PAYOUT_KYC, the two payout capabilities active, and the
+// compliance facts httpapi reads from the same repository the eligibility page
+// reads (D-120). They are stated here because none of them has a permissive
+// zero value: an input that left them out would block, which is the direction
+// F-226 made this fall.
 func (f *auditFixture) sandboxInput() payout.EligibilityInput {
 	return payout.EligibilityInput{
-		Policy:              valuedomain.SandboxPolicy(),
-		Verified:            valuedomain.VerificationPayoutKYC,
-		ActiveCaps:          map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
-		Now:                 f.clk.Now(),
-		DestinationVerified: true,
-		ProviderSupports:    true,
+		Policy:                valuedomain.SandboxPolicy(),
+		Verified:              valuedomain.VerificationPayoutKYC,
+		ActiveCaps:            map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
+		Now:                   f.clk.Now(),
+		DestinationVerified:   true,
+		ProviderSupports:      true,
+		SanctionsState:        compliance.SanctionsClear,
+		JurisdictionSupported: true,
 	}
+}
+
+// quote is the pre-commitment quote a payout now names (D-119). The pricing is
+// the deployment's: one hundred Credits to the dollar, six decimals.
+func (f *auditFixture) quote(qty int64) (payout.Quote, error) {
+	var out payout.Quote
+	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			dest, derr := f.svc.Destination(ctx, tx, f.destination)
+			if derr != nil {
+				return derr
+			}
+			var qerr error
+			out, qerr = f.svc.Quote(ctx, tx, payout.QuoteRequest{
+				AccountID: f.account, DestinationID: f.destination,
+				Quantity:               money.QuantityFromInt64(qty),
+				CreditsPerMajorUnit:    100,
+				MinorUnitsPerMajorUnit: 100,
+				CreditDecimals:         6,
+				PricingVersion:         "audit-pricing-v1",
+				PolicyVersion:          valuedomain.SandboxPolicyVersion,
+				Currency:               "USD",
+				Environment:            "TEST",
+				Sandbox:                true,
+				DisclosureAccepted:     true,
+				IdempotencyKey:         "audit-quote-" + uuid.NewString(),
+				Now:                    f.clk.Now(),
+			}, dest)
+			return qerr
+		})
+	return out, err
+}
+
+// terms are what the recording provider publishes: a 25c + 25bp fee and a
+// $1.00 minimum.
+func (f *auditFixture) terms() payout.ProviderTerms {
+	return payout.TermsFrom(f.provider.Capabilities())
 }
 
 func (f *auditFixture) issue(origin valuedomain.CreditOrigin, fin valuedomain.FundingFinality, qty int64) credit.Lot {
@@ -207,71 +251,86 @@ func TestAuditWV_APayoutBelowTheProviderMinimumIsReservedAndSettledWithoutAQuote
 	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 50_000_000)
 
 	// The quote says so, in as many words.
-	var quote payout.Quote
-	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-		func(ctx context.Context, tx pgx.Tx) error {
-			dest, err := f.svc.Destination(ctx, tx, f.destination)
-			if err != nil {
-				return err
-			}
-			quote, err = f.svc.Quote(ctx, tx, payout.QuoteRequest{
-				AccountID: f.account, DestinationID: f.destination,
-				Quantity:               money.QuantityFromInt64(50_000_000),
-				CreditsPerMajorUnit:    100,
-				MinorUnitsPerMajorUnit: 100,
-				CreditDecimals:         6,
-				PricingVersion:         "audit-pricing-v1",
-				PolicyVersion:          valuedomain.SandboxPolicyVersion,
-				Currency:               "USD",
-				Environment:            "TEST",
-				Sandbox:                true,
-				DisclosureAccepted:     true,
-				IdempotencyKey:         "audit-quote-" + uuid.NewString(),
-				Now:                    f.clk.Now(),
-			}, dest)
-			return err
-		}))
+	quote, err := f.quote(50_000_000)
+	require.NoError(t, err)
 	require.False(t, quote.MinimumOK,
 		"fixture check: this amount must be below the provider minimum for the test to mean anything")
 	require.Equal(t, int64(100), quote.MinimumAmountMinor)
 	require.Equal(t, int64(25), quote.NetAmountMinor)
 
-	// The same amount, requested without naming the quote.
-	var (
-		req payout.Request
-		dec payout.Decision
-	)
+	// The same amount, requested without naming the quote. It used to reach
+	// VERIFIED with the value reserved and then SETTLED, because the whole
+	// minimum-and-fee branch of Create sat inside `if r.QuoteID != nil`; the
+	// quote is required now and there is no such branch (F-224, D-119).
 	dest := f.destination
-	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+	var noQuoteErr error
+	require.Error(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var err error
-			req, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
+			_, _, noQuoteErr = f.svc.Create(ctx, tx, payout.CreateRequest{
 				AccountID: f.account, DestinationID: &dest,
 				Quantity:           money.QuantityFromInt64(50_000_000),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "audit-noquote-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
 			}, f.sandboxInput())
-			return err
+			return noQuoteErr
 		}))
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(noQuoteErr))
+	assert.Contains(t, noQuoteErr.Error(), "quote",
+		"F-224: a payout that named no quote met neither the minimum nor the fee")
 
-	assert.False(t, dec.Sufficient(),
-		"a payout the provider will not send because it is below the published minimum must not be eligible; "+
-			"the quote refuses it and the conversion request does not ask")
-	assert.NotEqual(t, payout.StateVerified, req.State,
-		"F-wv-1: a sub-minimum payout reached VERIFIED with the value reserved")
+	// And naming the quote does not get round it either: the quote itself is
+	// refused at consumption, so nothing is reserved and nothing is created.
+	var withQuoteErr error
+	require.Error(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, _, withQuoteErr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
+				Quantity:           money.QuantityFromInt64(50_000_000),
+				ProviderTerms:      f.terms(),
+				DisclosureAccepted: true,
+				IdempotencyKey:     "audit-subminimum-" + uuid.NewString(),
+				EffectiveAt:        f.clk.Now(),
+			}, f.sandboxInput())
+			return withQuoteErr
+		}))
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(withQuoteErr))
 
-	if req.State == payout.StateVerified {
-		// The rest of the journey, so the report can say how far it goes.
-		submitted, serr := f.svc.Submit(f.ctx, testDB, req.ID, f.provider.Name())
-		require.NoError(t, serr)
-		t.Logf("F-wv-1: sub-minimum payout reached %s with reserved=%s; provider fee %d bp + %d flat was never charged",
-			submitted.State, submitted.ReservedQuantity.String(),
-			int(f.provider.caps.FeeBasisPoints), f.provider.caps.FeeFlat.Minor())
-		assert.NotEqual(t, payout.StateSettled, submitted.State,
-			"F-wv-1: a sub-minimum payout settled, and the fee the quote priced was never taken: "+
-				"reserved %s, quote net %d minor", submitted.ReservedQuantity.String(), quote.NetAmountMinor)
-	}
+	var rows int
+	require.NoError(t, testDB.QueryRow(f.ctx,
+		`SELECT count(*) FROM payout_requests WHERE account_id = $1`, f.account).Scan(&rows))
+	assert.Zero(t, rows,
+		"F-224: a sub-minimum payout reached VERIFIED with the value reserved and then SETTLED, "+
+			"and the fee the quote priced was never taken")
+
+	// The other direction, which is why the minimum is an input to Create and
+	// not a number copied onto the quote: a quote that was above the minimum
+	// when it was given, against a provider that has since raised it.
+	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1_000_000_000)
+	ok, err := f.quote(200_000_000) // $2.00 gross, $1.70 net after the fee
+	require.NoError(t, err)
+	require.True(t, ok.MinimumOK, "fixture check: this one is above the published minimum")
+
+	raised := f.terms()
+	raised.MinimumAmount = money.USDFromMinor(500)
+	var raisedErr error
+	require.Error(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			_, _, raisedErr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest, QuoteID: &ok.ID,
+				Quantity:           money.QuantityFromInt64(200_000_000),
+				ProviderTerms:      raised,
+				DisclosureAccepted: true,
+				IdempotencyKey:     "audit-raised-" + uuid.NewString(),
+				EffectiveAt:        f.clk.Now(),
+			}, f.sandboxInput())
+			return raisedErr
+		}))
+	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(raisedErr))
+	raisedDetail, ok2 := errs.As(raisedErr)
+	require.True(t, ok2)
+	assert.Equal(t, string(payout.ReasonMinimumNotMet), raisedDetail.Fields["refusal"])
 }
 
 // ---------------------------------------------------------------------------
@@ -288,21 +347,31 @@ func TestAuditWV_TheProviderIsToldTheAmountAndTheDestination(t *testing.T) {
 	f := newAuditFixture(t)
 	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1_000_000_000)
 
+	quote, err := f.quote(500_000_000) // 500 Credits = $5.00 gross
+	require.NoError(t, err)
+	require.True(t, quote.MinimumOK)
+	require.Positive(t, quote.NetAmountMinor)
+
 	var req payout.Request
 	dest := f.destination
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var err error
-			req, _, err = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest,
-				Quantity:           money.QuantityFromInt64(500_000_000), // 500 Credits = $5.00
+			var cerr error
+			req, _, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
+				Quantity:           money.QuantityFromInt64(500_000_000),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "audit-submit-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
 			}, f.sandboxInput())
-			return err
+			return cerr
 		}))
 	require.Equal(t, payout.StateVerified, req.State)
+	// The GROSS is reserved: the fee comes out of what leaves rather than being
+	// added to it, so the units the customer gives up are the units they asked
+	// to convert (D-119).
+	assert.Equal(t, "500000000", req.ReservedQuantity.String())
 
 	settled, err := f.svc.Submit(f.ctx, testDB, req.ID, f.provider.Name())
 	require.NoError(t, err)
@@ -310,24 +379,27 @@ func TestAuditWV_TheProviderIsToldTheAmountAndTheDestination(t *testing.T) {
 		"fixture check: the recording provider settles immediately")
 
 	got := f.provider.last
-	assert.NotZero(t, got.Amount.Minor(),
-		"F-wv-2: the provider was instructed to pay %d minor units for a payout of %s Credits",
-		got.Amount.Minor(), settled.ReservedQuantity.String())
+	assert.Equal(t, quote.NetAmountMinor, got.Amount.Minor(),
+		"F-225: the provider is told the quote's NET -- what the customer was told would reach them")
+	assert.Equal(t, "USD", got.Currency)
 	assert.NotEmpty(t, got.DestinationReference,
-		"F-wv-2: the provider was given no destination reference, so it was told to pay nobody")
-	assert.NotEmpty(t, string(got.DestinationKind),
-		"F-wv-2: the provider was given no destination kind")
-	assert.NotEmpty(t, got.Currency,
-		"F-wv-2: the provider was given no currency")
+		"F-225: the provider was given no destination reference, so it was told to pay nobody")
+	assert.Equal(t, payout.DestinationBank, got.DestinationKind)
+	assert.Equal(t, req.ID.String(), got.Reference)
 
-	// And the ledger recorded the value as having left.
+	// And the instruction is refused at the type, so no adapter can be handed
+	// an empty one however it was assembled.
+	require.Error(t, payout.SubmitRequest{IdempotencyKey: "k", Reference: "r"}.Validate())
+
+	// The ledger recorded the value as having left, which is what makes the
+	// instruction above the thing that had to be right.
 	var external string
 	require.NoError(t, testDB.QueryRow(f.ctx,
 		`SELECT coalesce((SELECT b.balance FROM ledger_accounts la
 		    JOIN ledger_balances b ON b.ledger_account_id = la.id
 		   WHERE la.owner_type='PLATFORM' AND la.code=$1 AND la.asset_id=$2), 0)::text`,
 		string(ledger.CodePayoutSettled), f.creditAsset).Scan(&external))
-	t.Logf("F-wv-2: PAYOUT_SETTLED platform balance after a payout the provider was told nothing about: %s", external)
+	assert.Equal(t, "500000000", external)
 }
 
 // ---------------------------------------------------------------------------
@@ -363,12 +435,17 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 
 	var dec payout.Decision
 	dest := f.destination
+	// 500 Credits: $5.00 gross, which clears the provider's $1.00 minimum, so
+	// the refusal under test is the finality's and not the minimum's.
+	quote, qerr := f.quote(500_000_000)
+	require.NoError(t, qerr)
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			_, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest,
-				Quantity:           money.QuantityFromInt64(100_000_000),
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
+				Quantity:           money.QuantityFromInt64(500_000_000),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "audit-earning-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
@@ -491,17 +568,28 @@ func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
 	require.Equal(t, "0", exp.WithdrawableNow.String(),
 		"fixture check: the eligibility page says nothing may leave")
 
-	// What the conversion request does.
-	var req payout.Request
+	// What the conversion request does, with the same facts the eligibility
+	// page answered from -- read from the same compliance profile, in the
+	// transaction that would reserve the value (D-120).
+	quote, err := f.quote(1_000_000_000)
+	require.NoError(t, err)
+
+	var (
+		req payout.Request
+		dec payout.Decision
+	)
 	in := f.sandboxInput()
 	in.Verified = level
+	in.SanctionsState = profile.SanctionsState
+	in.AccountRestrictions = append([]string(nil), profile.Restrictions...)
 	dest := f.destination
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			var cerr error
-			req, _, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest,
+			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
 				Quantity:           money.QuantityFromInt64(1_000_000_000),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "audit-sanctions-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
@@ -509,15 +597,41 @@ func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
 			return cerr
 		}))
 	assert.NotEqual(t, payout.StateVerified, req.State,
-		"F-wv-4: an account under an open sanctions review reserved %s Credits for payout, "+
+		"F-226: an account under an open sanctions review reserved %s Credits for payout, "+
 			"while GET /v1/me/eligibility reported ACCOUNT_RESTRICTED and 0 withdrawable",
 		req.ReservedQuantity.String())
+	assert.Equal(t, "0", req.ReservedQuantity.String())
+	assert.Contains(t, dec.ReasonStrings(), string(payout.ReasonAccountRestricted),
+		"the conversion path gives the reason the eligibility page gives")
 
-	if req.State == payout.StateVerified {
-		submitted, serr := f.svc.Submit(f.ctx, testDB, req.ID, f.provider.Name())
-		require.NoError(t, serr)
-		assert.NotEqual(t, payout.StateSettled, submitted.State,
-			"F-wv-4: the payout reached %s under an open sanctions review", submitted.State)
+	// And the two other facts on the same input, each on its own, because §21
+	// says they must be able to refuse independently.
+	for _, tc := range []struct {
+		name   string
+		mutate func(*payout.EligibilityInput)
+		reason valuedomain.PermitReason
+	}{
+		{"an unsupported jurisdiction", func(i *payout.EligibilityInput) {
+			i.JurisdictionSupported = false
+		}, payout.ReasonJurisdictionRestricted},
+		{"a restriction recorded against the account", func(i *payout.EligibilityInput) {
+			i.AccountRestrictions = []string{"OPERATOR_HOLD"}
+		}, payout.ReasonAccountRestricted},
+		{"a screen nobody has answered", func(i *payout.EligibilityInput) {
+			i.SanctionsState = ""
+		}, payout.ReasonAccountRestricted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			probe := f.sandboxInput()
+			probe.Verified = level
+			probe.AccountID = f.account
+			probe.Requested = money.QuantityFromInt64(1_000_000)
+			tc.mutate(&probe)
+			d, eerr := payout.NewEngine(f.credits).Evaluate(f.ctx, testDB, probe)
+			require.NoError(t, eerr)
+			assert.False(t, d.Sufficient())
+			assert.Contains(t, d.ReasonStrings(), string(tc.reason))
+		})
 	}
 }
 
@@ -615,12 +729,15 @@ func TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase(t *test
 	var req payout.Request
 	dest := f.destination
 	in := f.sandboxInput()
+	quote, qerr := f.quote(500_000_000)
+	require.NoError(t, qerr)
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			var cerr error
 			req, _, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest,
-				Quantity:           money.QuantityFromInt64(100_000_000),
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID,
+				Quantity:           money.QuantityFromInt64(500_000_000),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "audit-sqledge-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
@@ -649,7 +766,7 @@ func TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase(t *test
 			return uerr
 		})
 	require.Error(t, err,
-		"F-226: cp_app moved a REJECTED conversion request to SETTLED with a forged provider "+
+		"F-229: cp_app moved a REJECTED conversion request to SETTLED with a forged provider "+
 			"reference and a settled quantity, with no ledger posting and no allocation")
 	assert.Equal(t, "AD001", db.SQLState(err), "got %v", err)
 	assert.Contains(t, err.Error(), "PAYOUT_TRANSITION_ILLEGAL_EDGE")
@@ -685,12 +802,15 @@ func TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase(t *test
 	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1_000_000_000)
 	var lawful payout.Request
 	dest2 := f.destination
+	okQuote, oerr := f.quote(500_000_000)
+	require.NoError(t, oerr)
 	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			var cerr error
 			lawful, _, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest2,
-				Quantity:           money.QuantityFromInt64(100_000_000),
+				AccountID: f.account, DestinationID: &dest2, QuoteID: &okQuote.ID,
+				Quantity:           money.QuantityFromInt64(500_000_000),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "audit-sqledge-ok-" + uuid.NewString(),
 				EffectiveAt:        f.clk.Now(),
@@ -699,7 +819,7 @@ func TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase(t *test
 		}))
 	require.Equal(t, payout.StateVerified, lawful.State,
 		"the trigger that writes the state refused a move the state machine has")
-	assert.Equal(t, "100000000", lawful.ReservedQuantity.String(),
+	assert.Equal(t, "500000000", lawful.ReservedQuantity.String(),
 		"the reservation must reach the row through the transition that carries it")
 }
 

@@ -331,7 +331,7 @@ func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
 		// cp_payout_apply_state_transition from the transition row, because a
 		// column grant on `state` plus an edge binding that never asked whether
 		// the edge exists let cp_app move a REJECTED request to SETTLED with a
-		// forged provider reference (F-226).
+		// forged provider reference (F-229).
 		"payout_requests": {
 			"eligibility_reasons", "failure_reason", "policy_hash", "policy_version",
 			"provider", "provider_idempotency_key", "submitted_at", "verification_level",

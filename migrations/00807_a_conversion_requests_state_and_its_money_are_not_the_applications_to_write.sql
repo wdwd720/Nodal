@@ -15,7 +15,7 @@
 -- That binding asks whether a transition row exists naming the state the
 -- request is really in. It never asks whether the edge that row describes is one
 -- `internal/payout.CanTransition` has. So one transaction, as `cp_app`,
--- committed (F-226/F-wv-6):
+-- committed (F-229/F-wv-6):
 --
 --     INSERT INTO payout_request_transitions
 --         (..., from_state, to_state, ...) VALUES (..., 'REJECTED', 'SETTLED', ...);
@@ -182,11 +182,11 @@ GRANT UPDATE (
 ) ON payout_requests TO cp_app;
 
 COMMENT ON TABLE payout_request_state_edges IS
-    'The legal edges of the payout state machine, populated from payout.StateEdges() and held identical to it by test/integration/enums. cp_payout_apply_state_transition refuses a transition row whose edge is not here; no role but cp_migrate may write it (00807, F-226).';
+    'The legal edges of the payout state machine, populated from payout.StateEdges() and held identical to it by test/integration/enums. cp_payout_apply_state_transition refuses a transition row whose edge is not here; no role but cp_migrate may write it (00807, F-229).';
 COMMENT ON FUNCTION cp_payout_apply_state_transition() IS
-    'Writes payout_requests.state and the money beside it -- reserved, settled, their instants, and the provider''s reference and status -- from the transition row. cp_app holds UPDATE on the decision and provider-slot columns only, so inserting the transition row is the only way a conversion request moves or a quantity changes (00807, F-42, F-226).';
+    'Writes payout_requests.state and the money beside it -- reserved, settled, their instants, and the provider''s reference and status -- from the transition row. cp_app holds UPDATE on the decision and provider-slot columns only, so inserting the transition row is the only way a conversion request moves or a quantity changes (00807, F-42, F-229).';
 COMMENT ON COLUMN payout_request_transitions.settled_quantity IS
-    'What this change settled, or NULL when it says nothing about the number. Written onto payout_requests by cp_payout_apply_state_transition; cp_app holds no UPDATE on that column (00807, F-226).';
+    'What this change settled, or NULL when it says nothing about the number. Written onto payout_requests by cp_payout_apply_state_transition; cp_app holds no UPDATE on that column (00807, F-229).';
 
 -- +goose Down
 SELECT 1; -- protected: reverting returns a conversion request's state and its money columns to the application's reach

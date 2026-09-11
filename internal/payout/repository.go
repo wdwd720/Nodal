@@ -41,6 +41,8 @@ const requestColumns = `id, account_id, destination_id, credit_asset_id, state,
 	policy_version, policy_hash, eligibility_reasons, verification_level,
 	coalesce(provider,''), coalesce(provider_idempotency_key,''), coalesce(provider_reference,''),
 	coalesce(provider_status,''), idempotency_key, quote_id,
+	coalesce(quote_gross_amount_minor,0), coalesce(quote_fee_amount_minor,0),
+	coalesce(quote_net_amount_minor,0), coalesce(quote_currency,''),
 	reserved_at, submitted_at, settled_at, coalesce(failure_reason,''), created_at, updated_at`
 
 func scanRequest(row pgx.Row) (Request, error) {
@@ -54,6 +56,7 @@ func scanRequest(row pgx.Row) (Request, error) {
 		&requested, &reserved, &settled,
 		&r.PolicyVersion, &r.PolicyHash, &reasons, &verification,
 		&r.Provider, &r.ProviderIdempotencyKey, &r.ProviderReference, &r.ProviderStatus, &r.IdempotencyKey, &r.QuoteID,
+		&r.QuoteGrossAmountMinor, &r.QuoteFeeAmountMinor, &r.QuoteNetAmountMinor, &r.QuoteCurrency,
 		&r.ReservedAt, &r.SubmittedAt, &r.SettledAt, &r.FailureReason,
 		&r.CreatedAt, &r.UpdatedAt); err != nil {
 		return Request{}, err

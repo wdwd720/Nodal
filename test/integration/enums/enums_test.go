@@ -299,7 +299,7 @@ func TestIntegration_EveryDeclaredEnumMatchesItsCheck(t *testing.T) {
 // 00741 ask only whether a transition row names the state the entity is really
 // in -- never whether the edge that row describes is one the state machine has,
 // which let `UNVERIFIED -> VERIFIED`, `CREATED -> APPROVED` and
-// `REJECTED -> SETTLED` commit in one INSERT (F-224, F-226).
+// `REJECTED -> SETTLED` commit in one INSERT (F-224, F-229).
 type edgeTable struct {
 	table   string
 	fromCol string

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/admin"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/nativeasset"
@@ -228,8 +229,26 @@ func (h *domainAHarness) stuckPayout(t *testing.T) payout.Request {
 	require.NoError(t, h.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
+			// A payout names the quote the customer was shown (D-119).
+			quote, qerr := h.payouts.Quote(ctx, tx, payout.QuoteRequest{
+				AccountID: h.creator, DestinationID: dest.ID, Quantity: qq("400"),
+				CreditsPerMajorUnit:    1,
+				MinorUnitsPerMajorUnit: 100,
+				CreditDecimals:         0,
+				PricingVersion:         "httpapi-itest-pricing-v1",
+				PolicyVersion:          policy.Version,
+				Currency:               "USD",
+				Environment:            "TEST",
+				DisclosureAccepted:     true,
+				IdempotencyKey:         "quote-" + uuid.NewString(),
+				Now:                    h.clk.Now(),
+			}, dest)
+			if qerr != nil {
+				return qerr
+			}
 			req, decision, err = h.payouts.Create(ctx, tx, payout.CreateRequest{
-				AccountID: h.creator, DestinationID: &dest.ID, Quantity: qq("400"),
+				AccountID: h.creator, DestinationID: &dest.ID, QuoteID: &quote.ID, Quantity: qq("400"),
+				ProviderTerms:      payout.TermsFrom(h.payoutProv.Capabilities()),
 				DisclosureAccepted: true,
 				IdempotencyKey:     "payout-" + uuid.NewString(), EffectiveAt: h.clk.Now(),
 			}, payout.EligibilityInput{
@@ -237,6 +256,8 @@ func (h *domainAHarness) stuckPayout(t *testing.T) payout.Request {
 				ActiveCaps:          map[valuedomain.CapabilityKey]bool{payoutCreatorEarnings: true},
 				Now:                 h.clk.Now().Add(48 * time.Hour),
 				DestinationVerified: true, ProviderSupports: true,
+				SanctionsState:        compliance.SanctionsClear,
+				JurisdictionSupported: true,
 			})
 			return err
 		}))

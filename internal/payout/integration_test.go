@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
+	"github.com/nodal/controlplane/internal/compliance"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
@@ -183,7 +184,48 @@ func newFixture(t *testing.T) *fixture {
 			f.destination = d.ID
 			return nil
 		}))
+	// A payout names the quote the customer was shown (D-119), so the fixture's
+	// provider has to be one a quote can be computed from: an availability that
+	// says it can be used at all, and a PUBLISHED fee model. payouttest's
+	// default has neither, deliberately -- an adapter nobody has read against a
+	// contract reports nothing -- and that property is asserted on the type
+	// itself in payout_test.go rather than by leaving every fixture unquotable.
+	quotableProvider(f)
 	return f
+}
+
+// quoteThrough makes the pre-commitment quote a payout is required to name.
+//
+// The pricing is the fixture's own: one Credit is one major unit, so every
+// amount these tests use prices to a positive number of minor units and the
+// quote's "is this above the provider's minimum" branch is exercised on real
+// arithmetic rather than on a rounding artefact.
+func (f *fixture) quoteThrough(ctx context.Context, tx pgx.Tx, amount int64) (payout.Quote, error) {
+	dest, err := f.svc.Destination(ctx, tx, f.destination)
+	if err != nil {
+		return payout.Quote{}, err
+	}
+	return f.svc.Quote(ctx, tx, payout.QuoteRequest{
+		AccountID:              f.account,
+		DestinationID:          f.destination,
+		Quantity:               q(amount),
+		CreditsPerMajorUnit:    1,
+		MinorUnitsPerMajorUnit: 100,
+		CreditDecimals:         0,
+		PricingVersion:         "itest-pricing-v1",
+		PolicyVersion:          "payout-policy-itest",
+		Currency:               "USD",
+		Environment:            "TEST",
+		DisclosureAccepted:     true,
+		IdempotencyKey:         "quote-" + uuid.NewString(),
+		Now:                    f.clk.Now(),
+	}, dest)
+}
+
+// terms are what the fixture's provider publishes. Create judges the minimum
+// against them, and refuses a caller that supplies none (D-119).
+func (f *fixture) terms() payout.ProviderTerms {
+	return payout.TermsFrom(f.provider.Capabilities())
 }
 
 // issue mints a lot of a given provenance.
@@ -212,6 +254,12 @@ func (f *fixture) input() payout.EligibilityInput {
 		Now:                 f.clk.Now().Add(48 * time.Hour),
 		DestinationVerified: true,
 		ProviderSupports:    true,
+		// The compliance facts, stated rather than defaulted. None of them has
+		// a permissive zero value: a screen nobody answered and a jurisdiction
+		// nobody established both block, which is what F-226 made true, so a
+		// fixture for an account in good standing has to say so (D-120).
+		SanctionsState:        compliance.SanctionsClear,
+		JurisdictionSupported: true,
 	}
 }
 
@@ -222,10 +270,15 @@ func (f *fixture) create(amount int64, in payout.EligibilityInput) (payout.Reque
 	)
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var err error
 			dest := f.destination
+			quote, qerr := f.quoteThrough(ctx, tx, amount)
+			if qerr != nil {
+				return qerr
+			}
+			var err error
 			req, dec, err = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: f.account, DestinationID: &dest, Quantity: q(amount),
+				AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(amount),
+				ProviderTerms: f.terms(),
 				// The withdrawal disclosure, accepted. The tests that are about
 				// the disclosure itself set it false; every other test in this
 				// file is about eligibility and provenance, and an unsigned
@@ -638,8 +691,17 @@ func TestIntegration_CreateIsIdempotent(t *testing.T) {
 		require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 			func(ctx context.Context, tx pgx.Tx) error {
 				dest := f.destination
+				// A fresh quote each time, because a repeat of the same request
+				// is a repeat of the whole request. The key is what makes the
+				// second one a replay; the second quote is simply never
+				// consumed, which is the honest shape of a retry.
+				quote, qerr := f.quoteThrough(ctx, tx, 250)
+				if qerr != nil {
+					return qerr
+				}
 				r, _, err := f.svc.Create(ctx, tx, payout.CreateRequest{
-					AccountID: f.account, DestinationID: &dest, Quantity: q(250),
+					AccountID: f.account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(250),
+					ProviderTerms:      f.terms(),
 					DisclosureAccepted: true,
 					IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 				}, f.input())
@@ -1065,12 +1127,21 @@ func (f *fixture) createWithKey(account accounts.AccountID, key string, amount i
 	)
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			var cerr error
 			dest := f.destination
 			in := f.input()
 			in.AccountID = account
+			// The quote is always the fixture account's, whoever `account` is.
+			// A second account reusing the key never reaches the quote: Create
+			// compares the key's owner first and refuses there, which is the
+			// property this helper exists for (F-106).
+			quote, qerr := f.quoteThrough(ctx, tx, amount)
+			if qerr != nil {
+				return qerr
+			}
+			var cerr error
 			req, dec, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
-				AccountID: account, DestinationID: &dest, Quantity: q(amount),
+				AccountID: account, DestinationID: &dest, QuoteID: &quote.ID, Quantity: q(amount),
+				ProviderTerms:      f.terms(),
 				DisclosureAccepted: true,
 				IdempotencyKey:     key, EffectiveAt: f.clk.Now(),
 			}, in)
@@ -1149,7 +1220,7 @@ func TestIntegration_ASecondSubmitDoesNotCallTheProviderAgain(t *testing.T) {
 	// The crash is produced rather than forged. An earlier version wrote the
 	// state by hand, which meant the fixture was asserting against a row no
 	// crash could actually leave -- and migration 00807 now refuses it, because
-	// PAYOUT_STATUS_UNKNOWN -> SUBMITTED is not an edge (F-226).
+	// PAYOUT_STATUS_UNKNOWN -> SUBMITTED is not an edge (F-229).
 	f.provider.CrashNext()
 	require.Panics(t, func() { _, _ = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox") },
 		"fixture check: the provider takes the payout and the process then dies")

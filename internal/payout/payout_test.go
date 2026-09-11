@@ -203,13 +203,34 @@ func TestProviderStatus_UnknownIsALegitimateAnswer(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCreateRequest_Validate(t *testing.T) {
+	quoteID := NewQuoteID()
 	base := CreateRequest{
 		AccountID:      accounts.NewAccountID(),
 		Quantity:       money.QuantityFromInt64(100),
+		QuoteID:        &quoteID,
+		ProviderTerms:  ProviderTerms{FeeModelPublished: true, MinimumAmount: money.USDFromMinor(100)},
 		IdempotencyKey: "k",
 		EffectiveAt:    time.Now(),
 	}
 	require.NoError(t, base.Validate())
+
+	// D-119: a payout names the quote the customer was shown, and it is judged
+	// against terms somebody published. Neither has a permissive zero value,
+	// because the version of this type that did let a sub-minimum payout be
+	// reserved and settled with the fee never taken (F-224).
+	t.Run("no quote", func(t *testing.T) {
+		r := base
+		r.QuoteID = nil
+		require.Error(t, r.Validate())
+		r.QuoteID = &QuoteID{}
+		require.Error(t, r.Validate(), "a zero quote id names no quote")
+	})
+	t.Run("no published fee model", func(t *testing.T) {
+		r := base
+		r.ProviderTerms = ProviderTerms{}
+		require.Error(t, r.Validate(),
+			"an unpublished fee model is the absence of an answer, not a fee of zero")
+	})
 
 	t.Run("no account", func(t *testing.T) {
 		r := base

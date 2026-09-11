@@ -25,7 +25,7 @@
 -- `expires_at` and a CLEAR sanctions screen from it, with no provider, no
 -- session and no decision. `verification_session_transitions` was the same
 -- shape: `CREATED -> APPROVED` in one row, for a session the provider had never
--- been called for (F-224/F-wv-7).
+-- been called for (F-227/F-wv-7).
 --
 -- ## The remedy: the edge set becomes a table the database can read
 --
@@ -272,11 +272,11 @@ CREATE TRIGGER verification_checks_have_a_session
     FOR EACH ROW EXECUTE FUNCTION cp_verification_check_has_a_session();
 
 COMMENT ON TABLE compliance_profile_state_edges IS
-    'The legal edges of the §20 verification state machine, populated from verification.StateEdges() and held identical to it by test/integration/enums. cp_compliance_apply_state_transition refuses a transition row whose edge is not here; no role but cp_migrate may write it (00806, F-224).';
+    'The legal edges of the §20 verification state machine, populated from verification.StateEdges() and held identical to it by test/integration/enums. cp_compliance_apply_state_transition refuses a transition row whose edge is not here; no role but cp_migrate may write it (00806, F-227).';
 COMMENT ON TABLE verification_session_status_edges IS
-    'The legal edges of the verification SESSION state machine, populated from verification.SessionEdges(). cp_verification_apply_status_transition refuses a row whose edge is not here, which is what stops CREATED -> APPROVED in one INSERT (00806, F-224).';
+    'The legal edges of the verification SESSION state machine, populated from verification.SessionEdges(). cp_verification_apply_status_transition refuses a row whose edge is not here, which is what stops CREATED -> APPROVED in one INSERT (00806, F-227).';
 COMMENT ON FUNCTION cp_verification_check_has_a_session() IS
-    'A verification_checks row names the session''s own provider and attaches only to a session in a status a provider answer produces. Without it, four PASS rows against a session nobody was ever sent to made the resolver report PAYOUT_KYC (00806, F-224).';
+    'A verification_checks row names the session''s own provider and attaches only to a session in a status a provider answer produces. Without it, four PASS rows against a session nobody was ever sent to made the resolver report PAYOUT_KYC (00806, F-227).';
 
 -- +goose Down
 SELECT 1; -- protected: reverting returns the verification state machines to being edge sets no database object reads

@@ -187,7 +187,10 @@ func (s *Service) Quote(ctx context.Context, tx pgx.Tx, r QuoteRequest, dest Des
 		return Quote{}, disclosureRefusal()
 	}
 	if dest.AccountID != r.AccountID {
-		return Quote{}, errs.New(errs.CodeForbidden, "that payout destination belongs to another account")
+		// NOT_FOUND, not FORBIDDEN: a distinguishable refusal is a membership
+		// oracle, and every sibling on this resource answers NOT_FOUND
+		// (F-233, F-41's rule).
+		return Quote{}, errs.New(errs.CodeNotFound, "no such payout destination")
 	}
 	provider, err := s.providers.Get(dest.Provider)
 	if err != nil {

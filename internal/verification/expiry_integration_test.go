@@ -38,7 +38,7 @@ func verifiedProfile(t *testing.T, d *db.DB, expiresAt time.Time) accounts.UserI
 	// Every step of the way, because migration 00806 now holds the schema to
 	// the same edge set internal/verification has: a fixture that jumped
 	// straight to VERIFIED was writing an edge §20 does not have, which is the
-	// thing F-224 was about.
+	// thing F-227 was about.
 	from := verification.StateUnverified
 	for _, step := range verification.Path(verification.StateUnverified, verification.StateVerified) {
 		var verified, expires any
