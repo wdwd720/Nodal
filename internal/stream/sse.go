@@ -251,13 +251,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
-		case e, ok := <-sub.Events():
-			if !ok {
-				// Dropped as a slow consumer: tell the client to resync and end.
+		case <-sub.Done():
+			// The hub removed this subscriber. When that was the slow-consumer
+			// drop, the client is behind and is told to resync; any other
+			// removal ends the stream quietly. The departure arrives as a
+			// closed `done` rather than a closed event channel, because closing
+			// the channel a publisher sends on panics the publisher (F-185).
+			if sub.Dropped() {
 				_ = writeEvent(w, Event{ID: 0, Type: TypeResync, OccurredAt: time.Now().UTC()})
 				flusher.Flush()
-				return
 			}
+			return
+		case e := <-sub.Events():
 			if err := writeEvent(w, e); err != nil {
 				return
 			}

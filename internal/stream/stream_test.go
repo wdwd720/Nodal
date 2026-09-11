@@ -108,15 +108,39 @@ func TestHub_ResumeAndResync(t *testing.T) {
 	assert.Empty(t, replay)
 }
 
+// A subscriber that does not read is still dropped, and now SAYS so.
+//
+// The drop used to be signalled by closing the subscriber's channel, which is
+// the one thing a hub must never do to a channel it also sends on: the close
+// raced Publish's send and panicked the publishing goroutine (F-185). The
+// property is unchanged -- one stalled client cannot back-pressure the
+// publisher -- and it is reported by Done plus Dropped instead.
 func TestHub_SlowSubscriberDropped(t *testing.T) {
 	hub := NewHub(16, nil)
 	s, _ := hub.Subscribe(customer("acct-a"), 0, 1)
 	hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"})
-	hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"}) // buffer full → dropped after 50 ms
+	hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"}) // buffer full → dropped after the grace
 	_, open := <-s.Events()
 	assert.True(t, open, "first event delivered")
-	_, open = <-s.Events()
-	assert.False(t, open, "channel closed for the slow subscriber")
+	select {
+	case <-s.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the slow subscriber was never dropped")
+	}
+	assert.True(t, s.Dropped(), "the drop is reported explicitly, not by closing a channel a publisher sends on")
+
+	// And the hub no longer holds it: a publish after the drop reaches nobody
+	// and returns immediately.
+	done := make(chan struct{})
+	go func() {
+		hub.Publish(Event{Type: TypeOrderTransitioned, AccountID: "acct-a"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a publish after the drop is still waiting on the dropped subscriber")
+	}
 }
 
 func TestHub_AttachToMemoryBus(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nodal/controlplane/internal/event"
@@ -174,10 +175,48 @@ func EventTime(id uint64) (time.Time, bool) {
 	return time.UnixMilli(int64(ms)).UTC(), true
 }
 
+// Subscriber is one connected client's view of the hub.
+//
+// # Why its channel is never closed
+//
+// It used to be: Unsubscribe closed Subscriber.ch under the hub's lock while
+// Publish sent on the same channel outside it. A client disconnecting while an
+// event was being published therefore raced a send on a closed channel, which
+// panics -- in the PUBLISHING goroutine, which in cmd/api is the notification
+// follower's ticker. Any authenticated person could end the process by closing
+// a stream at the wrong moment (F-185).
+//
+// A channel has one writer and many possible readers here, and the writer is
+// the only party that may close it. So the channel is never closed at all.
+// Departure is a second channel, `done`, closed once by Unsubscribe AFTER the
+// subscriber has been removed from the hub: a publisher selects on it and
+// stops, a reader selects on it and ends the stream, and nothing sends on
+// anything a close can reach.
 type Subscriber struct {
 	principal security.Principal
 	ch        chan Event
+	done      chan struct{}
+	closeOnce sync.Once
+	// dropped says the hub removed this subscriber because it was not reading
+	// fast enough, as opposed to the stream ending for any other reason. It was
+	// previously inferred from a closed channel, which is exactly the signal
+	// that cannot be given safely.
+	dropped atomic.Bool
 }
+
+// Events returns the subscriber's channel. It is never closed; use Done to
+// learn that the subscriber has been removed.
+func (s *Subscriber) Events() <-chan Event { return s.ch }
+
+// Done is closed when the hub has removed this subscriber, for any reason.
+func (s *Subscriber) Done() <-chan struct{} { return s.done }
+
+// Dropped reports whether the removal was the slow-consumer drop rather than an
+// ordinary departure. It is only meaningful once Done is closed.
+func (s *Subscriber) Dropped() bool { return s.dropped.Load() }
+
+// finish removes the subscriber's last tie to the hub, exactly once.
+func (s *Subscriber) finish() { s.closeOnce.Do(func() { close(s.done) }) }
 
 // NewHub returns a hub retaining up to capacity events for resume.
 func NewHub(capacity int, log *slog.Logger) *Hub {
@@ -288,18 +327,45 @@ func (h *Hub) Publish(e Event) Event {
 		subs = append(subs, s)
 	}
 	h.mu.Unlock()
+	if len(subs) == 0 {
+		return e
+	}
+	// One timer for the whole fan-out, reset per subscriber. The old form built
+	// a time.After channel for every subscriber on every publish, each of which
+	// stays alive -- and holds its own runtime timer -- for the full 50ms even
+	// when the send succeeded immediately.
+	timer := time.NewTimer(slowConsumerGrace)
+	defer timer.Stop()
 	for _, s := range subs {
 		if !e.visibleTo(s.principal) {
 			continue
 		}
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(slowConsumerGrace)
 		select {
 		case s.ch <- e:
-		case <-time.After(50 * time.Millisecond):
+		case <-s.done:
+			// The client went away between the snapshot and the send. This is
+			// the ordinary end of every stream, and it is the case that used to
+			// panic this goroutine.
+		case <-timer.C:
+			s.dropped.Store(true)
 			h.Unsubscribe(s)
 		}
 	}
 	return e
 }
+
+// slowConsumerGrace is how long a publish waits for one subscriber's buffer
+// before treating that subscriber as gone. It bounds what one stalled client
+// can do to the goroutine publishing: a follower pass fanning out to N
+// subscribers can be delayed by at most N times this, and no longer.
+const slowConsumerGrace = 50 * time.Millisecond
 
 // Subscribe registers a subscriber. Events with id > afterID still in the
 // buffer are replayed first; if afterID predates the buffer, a resync event
@@ -308,7 +374,7 @@ func (h *Hub) Subscribe(p security.Principal, afterID uint64, bufferSize int) (*
 	if bufferSize <= 0 {
 		bufferSize = 256
 	}
-	s := &Subscriber{principal: p, ch: make(chan Event, bufferSize)}
+	s := &Subscriber{principal: p, ch: make(chan Event, bufferSize), done: make(chan struct{})}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var replay []Event
@@ -335,18 +401,21 @@ func (h *Hub) Subscribe(p security.Principal, afterID uint64, bufferSize int) (*
 	return s, replay
 }
 
-// Unsubscribe removes a subscriber and closes its channel.
+// Unsubscribe removes a subscriber and signals its departure.
+//
+// The order matters: the subscriber leaves the map first, so no publish started
+// after this point can select it, and `done` is closed second, so a publish
+// already parked on the send is released. Nothing closes the event channel --
+// see Subscriber.
 func (h *Hub) Unsubscribe(s *Subscriber) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if _, ok := h.subs[s]; ok {
-		delete(h.subs, s)
-		close(s.ch)
+	if s == nil {
+		return
 	}
+	h.mu.Lock()
+	delete(h.subs, s)
+	h.mu.Unlock()
+	s.finish()
 }
-
-// Events returns the subscriber's channel.
-func (s *Subscriber) Events() <-chan Event { return s.ch }
 
 // ParseLastEventID parses the SSE resume cursor.
 func ParseLastEventID(s string) (uint64, error) {

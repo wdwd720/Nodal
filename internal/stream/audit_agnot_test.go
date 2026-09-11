@@ -5,22 +5,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/nodal/controlplane/internal/security"
 )
 
-// F-agnot: Hub.Publish sends on a subscriber's channel OUTSIDE h.mu, while
-// Hub.Unsubscribe closes that same channel UNDER h.mu. A disconnecting client
-// (Handler.ServeHTTP's `defer h.hub.Unsubscribe(sub)`) therefore races a
-// concurrent Publish, and a send on a closed channel panics.
+// F-185 (was TestAuditAgnot_PublishPanicsWhenASubscriberDisconnectsMidSend on
+// audit/agents-notifications @ 8a69aaa, which asserted the panic below).
+//
+// Hub.Publish sent on a subscriber's channel OUTSIDE h.mu while Hub.Unsubscribe
+// closed that same channel UNDER h.mu. A disconnecting client
+// (Handler.ServeHTTP's `defer h.hub.Unsubscribe(sub)`) therefore raced a
+// concurrent Publish, and a send on a closed channel panics -- in the
+// PUBLISHING goroutine, which in cmd/api is the notification follower's ticker.
+// An unrecovered panic there takes the whole API process down, and any
+// authenticated person could cause it by closing a stream at the right moment.
 //
 // The window is made deterministic here by filling the subscriber's channel so
-// Publish is parked in its 50ms select; in production the same collision
-// happens whenever a publish lands while a browser is going away.
-//
-// The panic occurs in the PUBLISHING goroutine, which in cmd/api is the
-// notification follower's ticker goroutine. An unrecovered panic there takes
-// the whole API process down.
-func TestAuditAgnot_PublishPanicsWhenASubscriberDisconnectsMidSend(t *testing.T) {
+// Publish is parked in its grace-period select; in production the same
+// collision happens whenever a publish lands while a browser is going away.
+// Publish must now return, having delivered nothing, and must not panic.
+func TestAuditAgnot_PublishSurvivesASubscriberDisconnectingMidSend(t *testing.T) {
 	h := NewHub(16, nil)
 	p := security.Principal{SubjectID: "u1", ActorType: security.ActorUser, AccountIDs: []string{"a1"}}
 
@@ -32,12 +37,14 @@ func TestAuditAgnot_PublishPanicsWhenASubscriberDisconnectsMidSend(t *testing.T)
 	var (
 		wg        sync.WaitGroup
 		recovered any
+		returned  = make(chan struct{})
 	)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer close(returned)
 		defer func() { recovered = recover() }()
-		// Parks in `select { case s.ch <- e: case <-time.After(50ms): }`.
+		// Parks in `select { case s.ch <- e: case <-s.done: case <-timer.C: }`.
 		h.Publish(Event{Type: TypeNotification, UserID: "u1"})
 	}()
 
@@ -47,15 +54,28 @@ func TestAuditAgnot_PublishPanicsWhenASubscriberDisconnectsMidSend(t *testing.T)
 	h.Unsubscribe(sub)
 
 	wg.Wait()
-	if recovered == nil {
-		t.Fatalf("expected Publish to panic on a closed subscriber channel; it did not")
+	if recovered != nil {
+		t.Fatalf("Hub.Publish panicked when a subscriber disconnected mid-send: %v", recovered)
 	}
-	t.Logf("Hub.Publish panicked: %v", recovered)
+	select {
+	case <-returned:
+	default:
+		t.Fatal("Publish had not returned after the subscriber left")
+	}
+	// The departure is a closed `done`, not a closed event channel: the channel
+	// a publisher sends on is never closed by anybody.
+	select {
+	case <-sub.Done():
+	default:
+		t.Fatal("Unsubscribe did not signal the subscriber's departure")
+	}
+	assert.False(t, sub.Dropped(), "an ordinary disconnection is not the slow-consumer drop")
 }
 
 // The same defect without a full channel: an ordinary connect/disconnect churn
-// against a live publisher. Run with -race; the detector reports the
-// close/send pair on Subscriber.ch, and the process panics when the send wins.
+// against a live publisher. Run with -race; the detector used to report the
+// close/send pair on Subscriber.ch, and the process panicked when the send won.
+// Nothing closes that channel any more, so both are gone.
 func TestAuditAgnot_PublishRacesAnOrdinaryDisconnect(t *testing.T) {
 	h := NewHub(64, nil)
 	p := security.Principal{SubjectID: "u1", ActorType: security.ActorUser}
