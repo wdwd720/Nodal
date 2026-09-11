@@ -288,14 +288,17 @@ func TestAudit_EffectingAClosureChecksNothingFinancial(t *testing.T) {
 	assert.Equal(t, "0", before.Blockers.CreditBalance)
 
 	// One unsettled payout is enough. It is born ELIGIBILITY_CHECK (00737):
+	// `sandbox` and `environment` are stated because 00817 made the first NOT
+	// NULL -- the nullable form was read two different ways by two readers
+	// (D-134) -- and this fixture is a rehearsal on a TEST tier.
 	// reservation, submission and settlement are each a transition, and a
 	// request sitting at the start is exactly what this blocker is about.
 	creditAsset := creditAssetID(t, f)
 	payoutID := id.New[id.Any]().String()
 	_, err = f.db.Pool().Exec(ctx,
 		`INSERT INTO payout_requests (id, account_id, credit_asset_id, state, requested_quantity,
-		     policy_version, policy_hash, idempotency_key)
-		 VALUES ($1, $2, $3, 'ELIGIBILITY_CHECK', 500, 'v1', 'hash', $4)`,
+		     policy_version, policy_hash, idempotency_key, sandbox, environment)
+		 VALUES ($1, $2, $3, 'ELIGIBILITY_CHECK', 500, 'v1', 'hash', $4, true, 'TEST')`,
 		payoutID, acct.ID, creditAsset, "idem-"+payoutID)
 	require.NoError(t, err)
 

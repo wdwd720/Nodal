@@ -515,8 +515,14 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 	// The tier this request was MADE on, read off the row. It used to be
 	// answered only by the by-id read, from today's provider mode, so the same
 	// payout was a rehearsal on one screen and unlabelled on two others
-	// (F-232). A row with no recorded fact reads as a rehearsal, because an
-	// unrecorded mode cannot be asserted to be real.
+	// (F-232).
+	//
+	// There is no "no recorded fact" case any more. The column was nullable and
+	// this reader treated NULL as a rehearsal while the PROD CHECK treated it as
+	// a real payout, so one of the two was wrong on every pre-00810 row and
+	// nothing could say which; 00817 made it NOT NULL and backfilled the rows
+	// that had no fact as rehearsals, on the ground that no PROD deployment of
+	// this system has ever existed (D-134).
 	out.Sandbox = ptr(r.Sandbox)
 	if r.Provider != "" {
 		out.Provider = ptr(r.Provider)

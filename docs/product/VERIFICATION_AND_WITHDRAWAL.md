@@ -330,10 +330,40 @@ two answers.
 The consequence for a withdrawal, stated plainly because it is the opposite of
 the intuition: among the origins a policy PERMITS, the most restricted permitted
 one leaves first — purchased value before earnings. An origin the policy forbids
-is **never selected at all**, so it can never appear in what left. §23's
-requirement — *do not allow: nonwithdrawable source → trade → magically
-payout-eligible balance* — therefore holds by construction rather than by a
-check somebody could forget.
+is **never selected at all**, so it can never appear in what left.
+
+### The half lot selection does not answer (D-131)
+
+This section used to end by saying that §23's requirement — *do not allow:
+nonwithdrawable source → trade → magically payout-eligible balance* — "holds by
+construction rather than by a check somebody could forget", on the strength of
+the SELECTION argument above. It did not. Selection decides which of the lots an
+account HOLDS may leave; §23 is about a TRANSFORMATION that produces a new lot of
+a different origin. A trader holding only `PROMOTIONAL` Credits buys into a
+market and sells back out, and what they hold afterwards is
+`MARKET_TRADING_PROCEEDS` — an origin the sandbox policy permits — which lot
+selection then correctly selects (F-261).
+
+What makes §23 hold is the ORIGIN FLOOR: every lot carries the most restricted
+origin anywhere in its provenance, inherited from its parents at mint the way its
+finality is, and `valuedomain.Policy.Permits` releases a lot only when it
+releases BOTH the lot's origin and its floor. A grant round-tripped through a
+market is still a grant. `credit_lot_state.origin_floor` is trigger-maintained
+and the application may only read it; `cp_credit_origin_floor_rank` and
+`valuedomain.CreditOrigin.Restriction()` are held identical by
+`TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`.
+
+`GET /v1/me/eligibility` reports the floor on the bucket as `origin_floor`
+whenever it differs from the origin, because `ORIGIN_NOT_PAYOUT_ELIGIBLE` on a
+bucket of trading proceeds is an answer nobody can act on: what a person needs to
+read is that the value came from a promotional grant. `verification_would_suffice`
+is never set on such a bucket — verifying will not release it, and saying
+otherwise is the refusal §19 forbids, dressed as encouragement.
+
+The pooled reserve of a native market is drawn down WORST FIRST (D-132) for the
+same reason: a pool is fungible, so "whose Credits left" is a choice, and any
+choice but the worst hands a seller better provenance than the pool actually
+holds.
 
 ---
 
@@ -394,10 +424,30 @@ deployment, and this page's `FUNDING_NOT_SETTLED` — which `internal/eligibilit
 documents as a reason waiting fixes — was shown on value whose finality nothing
 could move (F-230). D-124 makes a derived lot record the lots that funded it and
 take the least final finality among them, and `credit.Service.SettleDerived`
-promotes it when they settle. An earning funded by a sandbox tier's UNFUNDED
-grants is payout-eligible at birth; one funded by a card payment inside its
-dispute window waits for that payment, which is what the reason has always
-claimed.
+promotes it when they settle.
+
+**And it is reachable for the right value, which is not the same claim.** The
+sentence that stood here said "an earning funded by a sandbox tier's UNFUNDED
+grants is payout-eligible at birth". It was true and it was the defect: a grant
+is an origin no policy in this build releases, so an earning funded by one is
+§23's forbidden round trip and D-131 closes it by giving every lot an origin
+floor (§7, F-261). What is reachable end to end on a sandbox tier is the journey
+that starts with a PURCHASE: a person buys Credits, the payment clears, they sell
+something or trade, and the proceeds carry a `PURCHASED` floor that
+`SandboxPolicy` releases at PAYOUT_KYC. That is the journey the browser suite
+drives and the one the sandbox fixtures fund.
+
+An earning funded by a card payment inside its dispute window still waits for
+that payment, which is what `FUNDING_NOT_SETTLED` has always claimed; and a
+seller drawn against another trader's reversible contribution waits for THAT
+payment (D-132), which is the same reason one person further away.
+
+**What is still genuinely blocked here.** Nothing in this section: the floor and
+the draw-down order are code, and they are built. B-02 remains what decides
+whether any `PayoutAllowed: true` rule exists in a persisted policy at all, and
+until counsel answers it `DefaultPolicy` forbids every origin — which the floor
+does not change, because a floor can only ever refuse more than the origin alone
+would.
 
 ---
 

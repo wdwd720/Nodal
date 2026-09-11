@@ -92,7 +92,7 @@ const accountLotsQuery = `SELECT ` + lotColumns + `
 const lotColumns = `l.id, l.account_id, l.asset_id, l.origin, l.initial_finality, l.quantity::text,
 	 coalesce(l.funding_reference_type,''), coalesce(l.funding_reference_id,''), l.journal_transaction_id,
 	 l.issued_by_actor_type, l.issued_by_actor_id, l.reason, l.created_at,
-	 st.remaining_quantity::text, st.finality, st.version`
+	 st.remaining_quantity::text, st.finality, st.origin_floor, st.version`
 
 func scanLot(row pgx.Row) (Lot, error) {
 	var (
@@ -100,12 +100,12 @@ func scanLot(row pgx.Row) (Lot, error) {
 		qty, remaining     string
 		refType, refID     string
 		origin, initialFin string
-		finality           string
+		finality, floor    string
 	)
 	if err := row.Scan(&l.ID, &l.AccountID, &l.AssetID, &origin, &initialFin, &qty,
 		&refType, &refID, &l.JournalTxID,
 		&l.IssuedByActorType, &l.IssuedByActorID, &l.Reason, &l.CreatedAt,
-		&remaining, &finality, &l.Version); err != nil {
+		&remaining, &finality, &floor, &l.Version); err != nil {
 		return Lot{}, err
 	}
 	var err error
@@ -118,6 +118,7 @@ func scanLot(row pgx.Row) (Lot, error) {
 	l.Origin = valuedomain.CreditOrigin(origin)
 	l.InitialFinality = valuedomain.FundingFinality(initialFin)
 	l.Finality = valuedomain.FundingFinality(finality)
+	l.OriginFloor = valuedomain.CreditOrigin(floor)
 	if refType != "" {
 		l.FundingReference = &Reference{Type: refType, ID: refID}
 	}

@@ -230,8 +230,23 @@ func (s *Service) RecordLot(ctx context.Context, tx pgx.Tx, r RecordLotRequest) 
 	}
 	lot.CreatedAt = lot.CreatedAt.UTC()
 	lot.Version = 1
+	// A lot with no parents has its own origin as its floor, which is what
+	// 00816's cp_credit_lot_open just wrote.
+	lot.OriginFloor = lot.Origin
 	if err := s.recordParents(ctx, tx, lot.ID, r.Parents); err != nil {
 		return Lot{}, err
+	}
+	if len(r.Parents) > 0 {
+		// Read back rather than recomputed here. The floor is lowered by a
+		// trigger as each parent row lands, for the same reason the finality
+		// column is trigger-written: it is not the application's to assert, and
+		// a Go copy of the rule is a second implementation that eventually
+		// disagrees with the one the database enforces (D-131).
+		if err := tx.QueryRow(ctx,
+			`SELECT origin_floor FROM credit_lot_state WHERE lot_id = $1`, lot.ID).
+			Scan(&lot.OriginFloor); err != nil {
+			return Lot{}, mapError(err)
+		}
 	}
 	return lot, nil
 }

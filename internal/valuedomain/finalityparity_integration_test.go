@@ -107,3 +107,72 @@ func yesNo(b bool) string {
 	}
 	return "no"
 }
+
+// The origin-floor ordering, compared across the two languages that hold it
+// (D-131, F-261).
+//
+// Migration 00816's `cp_credit_origin_floor_rank` decides which parent's floor
+// a derived lot inherits, and `CreditOrigin.Restriction()` decides what
+// `Policy.Permits` does with the answer. A disagreement would mean a lot whose
+// floor the database computed one way and the engine judged another -- which is
+// the F-14/F-40 shape the test above exists for, one table along.
+//
+// It is exhaustive over the declared origins, and it includes an origin nothing
+// declares, because "the most restricted thing there is" has to be the answer
+// for a value nobody recognises in both languages.
+func TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs(t *testing.T) {
+	requireEnv(t)
+	all := AllOrigins()
+	require.NotEmpty(t, all, "no origins declared; this test would compare nothing")
+
+	var disagreements []string
+	seen := map[OriginRestriction]int{}
+	for _, o := range append(all, CreditOrigin("NOT_AN_ORIGIN")) {
+		var sqlRank int
+		require.NoError(t, testDB.QueryRow(t.Context(),
+			`SELECT cp_credit_origin_floor_rank($1)`, string(o)).Scan(&sqlRank))
+		goRank := int(o.Restriction())
+		seen[o.Restriction()]++
+		if goRank != sqlRank {
+			disagreements = append(disagreements,
+				fmt.Sprintf("%s: Go says %d, SQL says %d", o, goRank, sqlRank))
+		}
+	}
+	sort.Strings(disagreements)
+	assert.Empty(t, disagreements,
+		"%d origin(s) are ranked differently by Go and by SQL; the database computes a lot's "+
+			"origin_floor from the SQL ranking and valuedomain.Policy.Permits judges it with the Go "+
+			"one, so a disagreement is a floor nobody can explain:\n  %v",
+		len(disagreements), disagreements)
+
+	// A negative control: a ranking that put every origin in one bucket would
+	// agree with any other such ranking and would order nothing.
+	assert.Greater(t, len(seen), 1, "every origin has the same restriction; the ordering is vacuous")
+
+	// And the whole ordering, not only the ranks: the tie-break is the origin's
+	// own name in both languages, so "the most restricted of these" is one
+	// answer whichever side computes it.
+	rows, err := testDB.Query(t.Context(),
+		`SELECT o FROM unnest($1::text[]) AS o
+		  ORDER BY cp_credit_origin_floor_rank(o), o`, originStrings(all))
+	require.NoError(t, err)
+	defer rows.Close()
+	var sqlOrder []string
+	for rows.Next() {
+		var o string
+		require.NoError(t, rows.Scan(&o))
+		sqlOrder = append(sqlOrder, o)
+	}
+	require.NoError(t, rows.Err())
+	assert.Equal(t, originStrings(OriginsByRestriction()), sqlOrder,
+		"the database and valuedomain order the origins differently, so a derived lot's floor "+
+			"depends on which of them computed it")
+}
+
+func originStrings(in []CreditOrigin) []string {
+	out := make([]string, 0, len(in))
+	for _, o := range in {
+		out = append(out, string(o))
+	}
+	return out
+}

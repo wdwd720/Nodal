@@ -140,6 +140,37 @@ session must be in a status only a provider ANSWER produces. The residual —
 further check rows on a session that HAS been answered — is recorded in D-121
 with the privilege change that would close it.
 
+00806 left one exemption: a transition row whose endpoints are the SAME state
+skips the edge check, because 00796's birth screen writes exactly one. What the
+exemption actually bought was a row that changes everything EXCEPT the state, and
+00731's binding cannot see it — it compares `old_val` to `new_val` and returns
+NULL when they are not distinct. A `VERIFIED -> VERIFIED` row carrying
+`expires_at` therefore renewed, for as long as the writer liked, a validity
+window a provider decided once and that `ExpireOverdue` and `Resolver` both read
+(F-265). Migration 00815 narrows it to the one row it was for: a same-state row
+must carry a sanctions screen and must not carry `verified_at`, `expires_at`, a
+provider, a provider reference or a session, and the apply function leaves both
+timestamps alone on such a row rather than trusting the refusal to have found
+them NULL.
+
+### 3b. A poll is a call to a provider (migration 00818)
+
+`GET /v1/me/verification/sessions/{id}` calls `Provider.Get` on every request
+whose session is not terminal, and it is a GET, so the transport budget that
+applies is the General class — 600 a minute per principal. One signed-in person
+could therefore make this deployment call an identity provider six hundred times
+a minute, against pricing and rate limits that are the provider's.
+
+`verification_sessions.provider_polled_at` records when the provider was last
+asked, and a poll inside `verification.PollMinimumInterval` (ten seconds) answers
+from the recorded status and calls nobody. It is an interval on the SESSION
+rather than a tighter rate-limit class because a budget is per principal — two
+tabs are two budgets and the provider sees the sum — and because a poll inside
+the interval does not need to be REFUSED: the answer is already on the row. The
+write happens before the call, in its own committed transaction, so a crash
+between the two cannot leave a provider that was asked and a record that says it
+was not (D-133).
+
 ### 4. Age, jurisdiction and sanctions are versioned rule tables in code
 
 `internal/verification/rules` holds them, as data with a version string that is

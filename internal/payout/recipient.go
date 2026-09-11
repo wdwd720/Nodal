@@ -63,6 +63,27 @@ const (
 	RefusalProfileIncomplete RecipientRefusal = "RECIPIENT_PROFILE_INCOMPLETE"
 )
 
+// RecipientKindIndividual is the recipient kind every caller in this build
+// asks about.
+//
+// Nodal has one kind of account holder today: a person. The vocabulary is the
+// provider's, `Capabilities.RecipientKinds` carries the list it accepts, and a
+// business payout is a product decision nobody has made -- so the value is
+// named once here rather than written as a literal at each of the three places
+// that ask, which is how one of them ends up asking a different question from
+// the others (F-269).
+const RecipientKindIndividual = "individual"
+
+// RefusalCodes is the string form of a refusal list, for an error field or a
+// response.
+func RefusalCodes(rs []RecipientRefusal) []string {
+	out := make([]string, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, string(r))
+	}
+	return out
+}
+
 var recipientRefusalRank = map[RecipientRefusal]int{
 	RefusalProfileIncomplete:  0,
 	RefusalProductUnavailable: 1,

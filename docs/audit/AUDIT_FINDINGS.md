@@ -216,6 +216,17 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-256 | P3 | PRODUCTIZATION | fixed | The compiler seam had no RefsLoader anywhere, so the pair it requires could never be satisfied |
 | F-257 | P2 | PRODUCTIZATION | fixed | The seeded GLOBAL risk policy permitted no venue, so no strategy naming any venue could ever have compiled |
 | F-258 | P3 | PRODUCTIZATION | residual | A strategy version's status is written by the application with no transition table behind it |
+| F-259 | P1 | PRODUCTIZATION | fixed | payout_destinations was the one state machine in this area with no legal-edge table, so one INSERT brought a destination back from DISABLED to VERIFIED |
+| F-260 | P1 | PRODUCTIZATION | fixed | SettleDerived's candidate set never shrank, so promotion and freezing both starved after the hundredth derived lot |
+| F-261 | P1 | PRODUCTIZATION | fixed | A grant the policy forbids became withdrawable value by a market round trip, because a derived lot inherited finality and not origin |
+| F-262 | P1 | PRODUCTIZATION | fixed | The pooled reserve was drawn down FIFO, so a reversible purchase was laundered into payout-eligible proceeds by an earlier contributor's settled Credits |
+| F-263 | P2 | PRODUCTIZATION | fixed | A payout was submitted to a destination the holder had disabled, because Submit checked ownership and nothing else |
+| F-264 | P2 | PRODUCTIZATION | fixed | 00807's same-state exemption wrote the money and a forged provider_reference onto a request with no state change, and PO001 never fired |
+| F-265 | P2 | PRODUCTIZATION | fixed | The same exemption on 00806 renewed a verification's validity window with a row that licensed no change |
+| F-266 | P2 | PRODUCTIZATION | fixed | One credit_lot_parents INSERT promoted an unrelated REVERSIBLE lot, because nothing bound a parent row to its lot's mint |
+| F-267 | P3 | PRODUCTIZATION | fixed | redactForStorage failed open: it returned the sentinel for "keep the whole body" on the two branches that exist to keep a credential out |
+| F-268 | P3 | PRODUCTIZATION | fixed | PROVIDER_BOUNDARY §3b named a service method as a provider method and omitted two the interface has |
+| F-269 | P3 | PRODUCTIZATION | fixed | A quote was priced for a recipient the provider cannot pay, and the refusal at commit consumed the quote |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -11216,3 +11227,433 @@ leave says why.
 **Evidence.** STATIC_PROOF: `apps/web/e2e/scenarios/f-verified-sandbox.spec.ts`
 steps 3 and 7. TEST_E2E: the withdraw and verification specs against a
 sandbox-tier API on ports 18230 and 18231.
+
+
+## F-259 · `payout_destinations` was the one state machine in this area with no legal-edge table · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the second withdrawal-verification audit (goal §54), reproduced as
+`TestAuditWV2_ADestinationCannotReturnFromDisabledOrRejected`.
+
+00806 says of the two tables it creates that "a transition table that records
+edges constrains none", and 00807 repeats the treatment for `payout_requests`,
+each listing its siblings: 00761 `compliance_profiles.identity_state`, 00762
+`verification_sessions.status`, 00763 `payout_destinations.status`. Three of the
+four got an edge table and an AD001 in their apply function. The fourth did not.
+`cp_destination_apply_status_transition()` wrote `status` and `verified_at` from
+whatever the transition row said and consulted nothing, and 00731's deferred
+binding asks only whether a transition row names the status the destination is
+really in — which such a row does.
+
+So one INSERT as `cp_app`, naming `DISABLED -> VERIFIED`, brought back the row
+that says where somebody's money goes, with a fresh `verified_at`, after its
+holder had disabled it. §25 marks disabling a destination step-up-protected
+precisely because it is what a person does when a destination is compromised.
+`internal/payout.destinationTransitions` says the opposite in a comment: "A
+destination never returns from DISABLED or REJECTED."
+
+**Fix.** D-121 amended. 00814 creates `payout_destination_status_edges`,
+populated from a new exported `payout.DestinationStateEdges()`, with 00806's
+explicit `REVOKE ALL … GRANT SELECT` — the ALTER DEFAULT PRIVILEGES in this
+schema hands SELECT to `cp_readonly` and `cp_ops` without a GRANT being written
+— and replaces the apply function with one that refuses an edge the table does
+not have. There is deliberately no same-state exemption: no destination status is
+a legal successor of itself, so a same-state row is one `internal/payout` did not
+write. `test/integration/enums` gains the fourth `edgeTables()` entry, so D-121's
+"held identical by the enum suite" covers every edge set in this area.
+
+**Evidence.** STATIC_PROOF: `migrations/00814_*.sql`,
+`internal/payout/destination.go`. TEST_INT:
+`TestAuditWV2_ADestinationCannotReturnFromDisabledOrRejected`,
+`TestIntegration_EveryLegalEdgeTableMatchesItsGoTable`.
+
+## F-260 · `SettleDerived`'s candidate set never shrank, so both directions starved after the hundredth derived lot · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_TheDerivedSweepReachesEveryLotAndNotOnlyTheOldestBatch`.
+
+The candidate query was `finality IN ('REVERSIBLE','SETTLED') AND EXISTS (a
+parent row) ORDER BY lot_id LIMIT $1`. A lot the pass PROMOTES goes REVERSIBLE →
+SETTLED and stays in the predicate; a lot that was payout-eligible at birth was
+never out of it. So the set only ever grew, and `ORDER BY lot_id` on UUIDv7s is
+chronological: the sweep returned the OLDEST `limit` derived lots on every pass,
+for ever. `cmd/api` runs it at `settleBatch = 100`, so the hundred-and-first
+derived lot a deployment ever mints was never examined again, whatever happened
+to its parents.
+
+Both directions starve. Promotion starving is F-230 — "no earned Credit could
+ever reach a payout-eligible funding finality" — restored by the sweep written to
+fix it. Freezing starving is worse and quieter: an earning whose funding was
+charged back stays spendable and payout-eligible. It arrives at a volume any real
+deployment passes in its first week.
+
+**Fix.** D-124 amended. The predicate selects only lots a pass would MOVE: a
+REVERSIBLE lot none of whose parents is below a payout-eligible finality, or a
+lot with a DISPUTED or REVERSED parent (and a lot already DISPUTED is out of the
+`IN ('REVERSIBLE','SETTLED')` filter, so the freeze direction converges too). It
+also excludes any lot with a `credit_fundings` row: those are `SettleFunding`'s,
+and a funded lot that acquired a parent row is either an external purchase or the
+forgery F-266 was. The two finality lists are passed in from `valuedomain` rather
+than written as SQL literals, so `PayoutEligible()` and the query cannot diverge.
+00816 adds `credit_fundings (lot_id)` for the new NOT EXISTS.
+
+**Evidence.** STATIC_PROOF: `internal/credit/derived.go`,
+`migrations/00816_*.sql`. TEST_INT:
+`TestAuditWV2_TheDerivedSweepReachesEveryLotAndNotOnlyTheOldestBatch`,
+`TestIntegration_TheDerivedSweepPromotesMoreLotsThanItsBatchAcrossPasses`,
+`TestIntegration_TheDerivedSweepFreezesBeyondItsBatchToo` (both at
+`settleBatch = 100`, the deployment's own number).
+
+## F-261 · A grant the policy forbids became withdrawable value by a market round trip · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_AGrantThePolicyForbidsCannotBeTradedIntoWithdrawableValue`.
+
+A trader holding only `PROMOTIONAL`/`UNFUNDED` Credits buys into a native market
+and sells back out. The proceeds are `MARKET_TRADING_PROCEEDS` — an origin
+`SandboxPolicy` marks withdrawable — at `UNFUNDED`, which `PayoutEligible()`
+admits, and `payout.Engine.Evaluate` is `Sufficient()` at PAYOUT_KYC.
+
+Goal §23 forbids the shape in as many words: "nonwithdrawable source → trade →
+magically payout-eligible balance unless the eventual external/legal/provider
+policy explicitly allows it". `SandboxPolicy` closes `PROMOTIONAL` with the
+sentence "a promotional grant that could leave the system would be the first rule
+somebody copied", and `CREDIT_ECONOMY.md` §4 says promotional value "can never
+leave this system under any policy in this build".
+
+Before D-124 the pattern was unreachable by accident: proceeds were minted
+REVERSIBLE for ever, so `PayoutEligible()` was false whatever the origin. D-124
+made a derived lot inherit its parents' FINALITY and nothing else, and opened it
+— and two shipped tests then asserted the opening as correct:
+`TestIntegration_ASandboxTraderEarnsProceedsThatCanReachAPayout` drove exactly
+this round trip as the journey, and
+`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` had been narrowed away
+from the claim its own name makes.
+
+**Fix.** D-131. Every lot carries an ORIGIN FLOOR
+(`credit_lot_state.origin_floor`, 00816), trigger-maintained like the finality: a
+lot with no parents has its own origin, a derived lot has the most restricted
+floor among its parents. "Most restricted" is defined once in `valuedomain` —
+closed under both policies < closed under one < permitted — and mirrored by
+`cp_credit_origin_floor_rank`, which
+`TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs` holds identical.
+`Policy.Permits` releases a lot only when it releases BOTH the origin and the
+floor, and an unstated floor is `UNKNOWN_ORIGIN`. `ExplainWithdrawal` reports the
+floor and the route renders it as `origin_floor`, so a person reads that the
+value came from a promotional grant rather than a word about the trade.
+
+The two tests that asserted the opening are corrected in place with the reason in
+their own comments: the demo test is restored to the strong form — every seeded
+lot, under both policies, through `Policy.Permits` — and the journey test is
+funded with a settled purchase, because what F-230 is about (an earning funded by
+PERMITTED value must reach a payout) survives the change.
+
+**Residual, and it is a change in what the browser suite can reach.** Everything
+a seeded tier hands out is a grant (`scripts/seedeconomy`, deliberately), so
+after this fix nothing earned on a seeded tier can be withdrawn and the browser
+journey's settled-conversion leg is unreachable there. Producing a PURCHASED lot
+behind a recorded funding needs a credit-purchase adapter, and the only one
+refuses a fake mode by design. `f-verified-sandbox.spec.ts` now asserts that the
+refusal is the origin FLOOR, named, so the suite proves the rule instead of
+tolerating an unexplained no; the withdrawable case is driven end to end by the
+Go suites. D-131's second residual records what would close it.
+
+**Evidence.** STATIC_PROOF: `migrations/00816_*.sql`,
+`internal/valuedomain/originfloor.go`, `internal/valuedomain/policy.go`.
+TEST_INT: `TestAuditWV2_AGrantThePolicyForbidsCannotBeTradedIntoWithdrawableValue`,
+`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave`,
+`TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`. TEST_UNIT:
+`TestPolicy_PermitsReadsTheFloorAsWellAsTheOrigin`,
+`TestOriginRestriction_AgreesWithEveryPolicyInThisBuild`.
+
+## F-262 · The pooled reserve was drawn down FIFO, so an earlier contributor's settled Credits laundered a reversible purchase · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_TheFirstContributorsFinalityIsHandedToTheNextSeller`.
+
+`internal/nativemarket/poolprovenance.go` drew `native_market_credit_sources`
+down with `ORDER BY created_at, id`. A pool is fungible, so "whose Credits left"
+is a choice, and arrival order makes the choice that hands a seller the BEST
+provenance the pool happens to hold. A pays in 40,000 settled Credits; B pays in
+40,000 a card issuer can still take back, sells back less than A put in, and is
+minted proceeds funded by A's SETTLED contribution — payout-eligible at birth —
+while B's own reversible Credits stay in the pool for whoever sells next.
+
+That is the route D-124 says the finality model exists to close, reached through
+somebody else's money. The shipped
+`TestIntegration_ProceedsOfAReversiblePurchaseAreReversible` asserts the rule in
+as many words and missed this because its market had ONE contributor, so FIFO
+handed the trader back their own lot.
+
+**Fix.** D-132. Open sources are consumed worst first: most restricted origin
+floor, then least final, then oldest. A seller can never be handed provenance
+better than the pool's worst outstanding contribution. The rows are still SELECTed
+and LOCKED in arrival order — two concurrent sales must take the locks in one
+sequence — and the draw order is decided over the rows already held. The shipped
+test is widened to the two-contributor market the auditor drove, and the mirror
+case is added beside it.
+
+**What it costs, recorded in D-132 rather than hidden.** An honest seller into a
+pool that still holds somebody else's reversible contribution receives reversible
+proceeds until it settles, which `SettleDerived` then promotes; somebody else's
+promotional grant in the pool gives them a PROMOTIONAL origin floor, which no
+policy in this build releases and which nothing later moves.
+
+**Evidence.** STATIC_PROOF: `internal/nativemarket/poolprovenance.go`. TEST_INT:
+`TestAuditWV2_TheFirstContributorsFinalityIsHandedToTheNextSeller`,
+`TestIntegration_ProceedsOfAReversiblePurchaseAreReversible`,
+`TestIntegration_AnHonestSellerWaitsForTheWorstContributionToSettle`.
+
+## F-263 · A payout was submitted to a destination the holder had disabled · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_DisablingADestinationStopsAPayoutReservedForIt`.
+
+`payout.Service.Submit` reads the destination in `submitRequestFor` and checked
+exactly one thing about it: that it belongs to the same account. It never asked
+`dest.Status.Usable()`. D-122 says `providerSupports` "re-asks `CanPayRecipient`
+… at the moment value would leave" — but that is `Create`; value leaves at
+`Submit`, and `Submit` asked nothing.
+
+§25 marks both the POST and the DELETE on a destination StepUp, with the stated
+reason that "an attacker who can only remove a destination can still deny a
+person their money". The converse is the one that costs money: a person who
+removes a destination because it was compromised has not stopped the value
+already reserved for it. The window is not seconds — a reserved request waits in
+VERIFIED for as long as a kill switch is active, for as long as the provider is
+unavailable, and for as long as the single web service is spun down, which
+`cmd/api`'s own comments say happens on the launch tier.
+
+**Fix.** `submitRequestFor` refuses a destination that is not `Usable()`, inside
+the claim transaction and before the transition to SUBMITTED, which gives the
+kill switch's shape: the request stays in VERIFIED with its value reserved and no
+provider idempotency key committed, and the refusal carries the destination and
+its status. It is deliberately not a move to FAILED — returning the reservation on
+the strength of a fact the person can undo by re-registering is deciding for
+them.
+
+The cost of the refusal is a request whose value is held until somebody cancels
+it, so the act that caused it now says what it stranded:
+`payout.Service.OpenRequestsForDestination` lists the non-terminal requests
+pointing at a destination (from `State.Terminal()`, not a repeated SQL list),
+`conversionAdapter.DisableDestination` reads them inside the disabling
+transaction, and `DELETE /v1/me/payout-destinations/{id}` returns them as the
+additive optional `open_payout_ids`. The disable is never refused for having open
+requests: a removal an attacker can block by starting a payout is not a control,
+and `POST /v1/payouts/{id}/cancel` already exists for the holder.
+
+**Evidence.** STATIC_PROOF: `internal/payout/service.go`,
+`internal/payout/repository.go`, `internal/httpapi/wiring_verification.go`.
+TEST_INT: `TestAuditWV2_DisablingADestinationStopsAPayoutReservedForIt`,
+`TestIntegration_DisablingADestinationNamesTheRequestsItStranded`. TEST_UNIT:
+`TestDeleteMePayoutDestinations_NamesThePayoutsItStranded`.
+
+## F-264 · 00807's same-state exemption wrote the money and a forged provider reference onto a request with no state change · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_ASameStateTransitionRowCannotWriteTheMoney`.
+
+`cp_payout_apply_state_transition()` skipped the edge check when
+`NEW.from_state IS NOT DISTINCT FROM NEW.to_state` — copied from 00806, where a
+same-state row is 00796's birth screen and is legitimate. There is no such row
+for a payout: `transitionWith` returns early when `req.State == to`, so
+`internal/payout` never writes one. What the exemption bought was a row that
+writes `reserved_quantity`, `settled_quantity`, `settled_at`,
+`provider_reference` and `provider_status` while the state stays exactly where it
+was — and 00731's deferred binding returns NULL without checking anything,
+because `old_val IS NOT DISTINCT FROM new_val`.
+
+A `VERIFIED -> REJECTED` row inserted onto an already-REJECTED request therefore
+rendered to its holder as a settled payout of the whole amount, with no ledger
+posting, no allocation, and `provider_reference = 'forged-by-cp_app'` — the
+column 00807 took out of `cp_app`'s UPDATE grant for being the provider's word.
+
+The second half is the reservation invariant: `cp_payout_reservation_balanced`
+(PO001) is a constraint trigger on `payout_allocations`, so a `reserved_quantity`
+written with no allocation rows behind it never touched the table the trigger
+fires on and was compared to nothing.
+
+**Fix.** D-123 amended. 00815 drops the same-state exemption for
+`payout_requests` outright, and adds `payout_requests_reservation_backed` — the
+PO001 comparison anchored where the quantity is written. Both sides are re-read
+at COMMIT rather than taken from NEW, because a deferred constraint trigger
+replays each row event with the values it had at the time and an ordinary
+`Create` passes through `reserved = 0` with the allocations already written.
+`settled_quantity` needs no clause of its own: 00713's CHECK already says it
+cannot exceed the reservation.
+
+**Evidence.** STATIC_PROOF: `migrations/00815_*.sql`. TEST_INT:
+`TestAuditWV2_ASameStateTransitionRowCannotWriteTheMoney`,
+`TestIntegration_TheWithdrawnInvariantsAreStillEnforced` (whose old positive
+control is now a PO001 refusal, because a reservation with no allocations behind
+it is no longer a legal write).
+
+## F-265 · The same exemption on 00806 renewed a verification's validity window · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_ASameStateRowCannotRenewAVerification`.
+
+D-121's stated residual was that a same-state row "can still carry a sanctions
+screening decision". It also carried `expires_at`:
+
+```sql
+expires_at = CASE WHEN NEW.to_state = 'VERIFIED'
+                  THEN coalesce(NEW.expires_at, expires_at) ELSE expires_at END
+```
+
+so a `VERIFIED -> VERIFIED` row moved the window of a decision a provider made
+once, for as long as the writer liked, with no session, no provider and no state
+change. `verification.Service.ExpireOverdue` and `verification.Resolver` both
+read that column, so the renewal is what decides whether somebody is still
+PAYOUT_KYC.
+
+**Fix.** D-121 amended. 00815 restricts the same-state path to the one row 00796
+needs: such a row must carry `to_sanctions_state` and must not carry
+`verified_at`, `expires_at`, a provider, a provider reference or a session. The
+apply function also leaves both timestamps exactly as the profile holds them on a
+same-state row, rather than relying on the refusal having found them NULL —
+without that, the existing coalesce could still put `occurred_at` into a NULL
+`verified_at`. Both writers of a same-state row pass unchanged: 00796's
+birth-screen trigger and `compliance.Repository.screen`, which carries a
+correlation id and nothing else. `verification.Repository.TransitionProfile`
+returns early when the state has not moved, so it writes none.
+
+D-121's residual now reads exactly: a same-state row may still change the
+SANCTIONS SCREEN, which is what those two writers write and what 00796's own edge
+flag binds; nothing else rides on it.
+
+**Evidence.** STATIC_PROOF: `migrations/00815_*.sql`,
+`internal/compliance/profile.go`, `internal/verification/repository.go`.
+TEST_INT: `TestAuditWV2_ASameStateRowCannotRenewAVerification`.
+
+## F-266 · One `credit_lot_parents` INSERT promoted an unrelated REVERSIBLE lot · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_AParentRowCannotPromoteAPurchaseThatHasNotSettled`.
+
+00809 granted `SELECT, INSERT ON credit_lot_parents TO cp_app` because the rows
+are written at mint. Nothing bound an INSERT to the mint: not to the transaction
+that created the lot, not to the account, not to anything. And `SettleDerived`'s
+candidate query asked only "REVERSIBLE or SETTLED, and has a parent row" — never
+whether the lot was a derived one or had a `credit_fundings` row of its own. So
+one INSERT naming anybody's settled lot as the parent of a card payment inside
+its dispute window promoted that payment to payout-eligible, without the
+protected `finality` column ever being written directly.
+
+**Fix.** D-124 amended. 00816 adds a BEFORE INSERT trigger (CR005):
+the CHILD lot must have been created in this transaction —
+`credit_lots.created_at` defaults to `now()`, which is
+`transaction_timestamp()` — and the PARENT must be a lot the child's own journal
+transaction CONSUMED, a lot recorded as a source of a market's pooled reserve
+(the native-market sell case, where the credits leaving the pool were paid in by
+other people in earlier transactions), or another lot of the same account.
+`SettleDerived`'s predicate also refuses any lot with a `credit_fundings` row
+outright (F-260).
+
+**Residuals, stated precisely.** Inside the transaction that creates a lot,
+`cp_app` may still name as a parent any lot of the same account, or any lot ever
+paid into any market's pool — the row does not name a market, so the trigger
+cannot tell which draw-down funded which mint. That is not a laundering route,
+and the reason is worth stating: both derived rules take the WORST parent — least
+final finality, most restricted origin floor — so naming an EXTRA parent can only
+make a lot LESS withdrawable. The direction that could launder is OMITTING a
+parent, which no INSERT trigger can see; what guards that is that the three mint
+sites are the only writers, and that a funded lot is no longer a derived
+candidate at all. Second residual: two transactions could in principle share a
+`transaction_timestamp()`; closing that would mean recording a transaction id on
+every lot, which is a column on a financial-history table for a case nobody can
+construct.
+
+**Evidence.** STATIC_PROOF: `migrations/00816_*.sql`,
+`internal/credit/derived.go`. TEST_INT:
+`TestAuditWV2_AParentRowCannotPromoteAPurchaseThatHasNotSettled`.
+
+## F-267 · `redactForStorage` failed open, on the branch its own comment calls the safe direction · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_RedactForStorageDoesNotFallBackToTheWholeBody`.
+
+`redactForStorage` returns `nil` on the two branches that exist to refuse a
+response nobody could inspect — a body that does not parse, and a redacted
+document that does not marshal — under a comment saying "an empty record replays
+as no body, which is the safe direction". `CommandResult.stored()` reads nil as
+"there is nothing special to store, keep Body". So both branches stored the whole
+answer, credential and all, by the code that exists to keep it out.
+
+It is not reachable from today's routes, because every command response is a
+struct that marshals to a JSON object. It is one response type away: a route that
+returns a list, a string or `null` gets the fail-open, and
+`TestNoNeverStoredFieldReachesTheIdempotencyRecord` drives three command routes,
+none of which can take the branch.
+
+**Fix.** D-135. Both branches return an explicit `[]byte("{}")`, and so does a
+body that parses as a bare `null` — it carries no field to strip and is not a
+document either. The added unit test drives all four uninspectable shapes through
+`stored()` and checks the ordinary object path and the no-op path are unchanged.
+
+**Evidence.** STATIC_PROOF: `internal/httpapi/neverstored.go`. TEST_UNIT:
+`TestAuditWV2_RedactForStorageDoesNotFallBackToTheWholeBody`,
+`TestRedactForStorageStoresNothingRecognisableWhenItCannotInspectABody`.
+
+## F-268 · `PROVIDER_BOUNDARY.md` §3b named a service method as a provider method and omitted two the interface has · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_ProviderBoundaryNamesTheShippedInterfaceMethods`.
+
+§3b is the section F-234's own fix wrote to say "what the shipped interfaces
+ACTUALLY ARE". It said `verification.Provider` is "`Name`, `Capabilities`,
+`Start`, `Poll` and `ParseWebhook`". The interface is `Name`, `Capabilities`,
+`Start`, `Get`, `Resume` and `ParseWebhook`. `Poll` is the SERVICE's method
+(`verification.Service.Poll` calls `provider.Get`); `Resume` is shipped, is
+listed in §3a as a design target, and is not listed in the "gap between 3a and
+3b" paragraph — so a reader who trusts §3b concludes that resuming a hosted
+session is still to be built. That is the exact failure F-234 was: "A design
+document that reads as an inventory is worse than no document, because the
+difference is only discovered by somebody who assumed it."
+
+**Fix.** §3b is a table of the shipped methods, and the auditor's reflection test
+is kept: it walks both interfaces and fails when the section names a method they
+do not have or omits one they do. Nothing else held §3b to the code —
+`TestDocs_EveryPathTheyNameExists` checks route paths and
+`TestDocs_CountsMatchTheCode` checks numbered claims, and neither reads a method
+list.
+
+**Evidence.** STATIC_PROOF: `docs/product/PROVIDER_BOUNDARY.md` §3b,
+`internal/verification/provider.go`. TEST_UNIT:
+`TestAuditWV2_ProviderBoundaryNamesTheShippedInterfaceMethods`.
+
+## F-269 · A quote was priced for a recipient the provider cannot pay, and the refusal at commit consumed the quote · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the second withdrawal-verification audit, reproduced as
+`TestAuditWV2_AQuoteIsNotGivenForARecipientTheProviderCannotPay`.
+
+`payout.Service.Quote` asked the provider three questions — availability, the
+destination KIND and the CURRENCY — and never `CanPayRecipient`, which is the
+question D-122 added because "a question skipped when the answer is missing is
+not asking early, it is not asking".
+`httpapi.conversionAdapter.Quote` then evaluated the provenance beside the price
+with `ProviderSupports: true` hardcoded, three lines under a comment promising
+that the facts are read in the transaction "so the provenance shown beside a
+quote is the provenance the commit would actually consume rather than an
+optimistic one".
+
+The consequence is a person shown a gross, a fee, a net and the list of lots that
+would leave, for a payout `POST /v1/payouts` refuses — and the refusal CONSUMES
+the quote, so the request lands terminal in REJECTED and the price they were
+shown is spent. It is reached when a provider narrows `ExcludedRegions` after a
+destination was registered, which is the only way the two can disagree now that
+`AddDestination` asks the question.
+
+**Fix.** `Quote` asks `CanPayRecipient` from the destination's stored country and
+region, refusing with the destination route's own words and error shape —
+`RECIPIENT_COUNTRY_UNSUPPORTED` / `RECIPIENT_REGION_EXCLUDED` as
+PROVIDER_UNAVAILABLE, and an unknown region as VALIDATION_FAILED, because that is
+something the caller can supply rather than a refusal of the person.
+`providerSupports` becomes `providerSupportsDestination`, a function both call
+sites use, and the quote passes its real answer instead of `true`. The recipient
+kind and the refusal-code rendering are named once in `internal/payout`, so the
+three places that ask cannot ask different questions.
+
+**Evidence.** STATIC_PROOF: `internal/payout/quote.go`,
+`internal/payout/recipient.go`, `internal/httpapi/wiring_verification.go`,
+`internal/httpapi/wiring_native.go`. TEST_INT:
+`TestAuditWV2_AQuoteIsNotGivenForARecipientTheProviderCannotPay`.

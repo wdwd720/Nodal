@@ -312,9 +312,14 @@ type Request struct {
 	QuoteNetAmountMinor   int64
 	QuoteCurrency         string
 
-	// Sandbox is whether this was a rehearsal, as recorded at creation. A row
-	// written before 00810 has no recorded fact and reads as a rehearsal,
-	// because an unrecorded mode cannot be asserted to be real.
+	// Sandbox is whether this was a rehearsal, as recorded at creation.
+	//
+	// The column is NOT NULL since 00817. It was nullable, and the two readers
+	// of the NULL disagreed: the API rendered it as a rehearsal and the PROD
+	// CHECK read it as a real payout, so one of them was wrong on every
+	// pre-00810 row and nothing could say which. The rows that had no recorded
+	// fact were backfilled true on the ground that no PROD deployment of this
+	// system has ever existed (D-134).
 	Sandbox     bool
 	Environment string
 

@@ -60,6 +60,7 @@ import (
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/strategy/ir"
 	"github.com/nodal/controlplane/internal/terms"
+	"github.com/nodal/controlplane/internal/valuedomain"
 	"github.com/nodal/controlplane/internal/verification"
 )
 
@@ -141,6 +142,14 @@ func registry() []pair {
 		// list because credit_fundings.provider_mode is its column, and builds
 		// it from internal/config's constants so the two cannot drift.
 		{table: "credit_fundings", constraint: "credit_fundings_provider_mode_check", source: "credit.AllProviderModes()", values: credit.AllProviderModes()},
+		// The credit origin, in the two places the schema holds it: the lot's
+		// own origin and the ORIGIN FLOOR 00816 computes from its parents
+		// (D-131). credit_lots.origin was on the unpaired inventory below --
+		// "an inventory, not an allow-list: the right number is zero" -- and
+		// pairing the new column without pairing the one it mirrors would have
+		// left the list one longer than it needed to be.
+		{table: "credit_lots", constraint: "credit_lots_origin_check", source: "valuedomain.AllOrigins()", values: str(valuedomain.AllOrigins())},
+		{table: "credit_lot_state", constraint: "credit_lot_state_origin_floor_check", source: "valuedomain.AllOrigins()", values: str(valuedomain.AllOrigins())},
 		{table: "deposits", constraint: "deposits_status_check", source: "funding.AllStatuses()", values: str(funding.AllStatuses())},
 		{table: "execution_attempts", constraint: "execution_attempts_finality_check", source: "execution.AllFinalityLevels()", values: str(execution.AllFinalityLevels())},
 		{table: "execution_attempts", constraint: "execution_attempts_status_check", source: "execution.AllAttemptStatuses()", values: str(execution.AllAttemptStatuses())},
@@ -333,6 +342,17 @@ func edgeTables() []edgeTable {
 		{
 			table: "payout_request_state_edges", fromCol: "from_state", toCol: "to_state",
 			source: "payout.StateEdges()", edges: payout.StateEdges(),
+		},
+		// The fourth. 00763 gave payout_destinations.status the rest of the
+		// F-42 treatment and no edge table, so its apply function consulted
+		// nothing and one INSERT moved a destination the holder had disabled
+		// back to VERIFIED (F-259). 00814 is the table; this is the pairing
+		// that keeps it honest, and it is what makes D-121's "held identical by
+		// the enum suite" true of every edge set in this area rather than of
+		// three of the four.
+		{
+			table: "payout_destination_status_edges", fromCol: "from_status", toCol: "to_status",
+			source: "payout.DestinationStateEdges()", edges: payout.DestinationStateEdges(),
 		},
 	}
 }
@@ -658,7 +678,6 @@ var unpaired = []string{
 	"credit_lot_events.credit_lot_events_kind_check",
 	"credit_lot_events.credit_lot_events_to_finality_check",
 	"credit_lots.credit_lots_initial_finality_check",
-	"credit_lots.credit_lots_origin_check",
 	"data_sources.data_sources_dedup_strategy_check",
 	"data_sources.data_sources_historical_use_permitted_check",
 	"data_sources.data_sources_kind_check",

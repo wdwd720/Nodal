@@ -266,6 +266,7 @@ func (e *Engine) shortfallReasons(ctx context.Context, q db.Querier, in Eligibil
 	for _, lot := range lots {
 		ok, reasons := in.Policy.Permits(valuedomain.PermitInput{
 			Origin:      lot.Origin,
+			OriginFloor: lot.OriginFloor,
 			Finality:    lot.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    in.Verified,

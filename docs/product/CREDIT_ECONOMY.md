@@ -230,7 +230,7 @@ A payout is the only exit, and it does not reserve "500 Credits" — it reserves
 returns exactly what it took. Without that, a user could launder a promotional
 grant into an earning by reserving a payout and cancelling it.
 
-Three independent things must all say yes:
+Four independent things must all say yes:
 
 1. **Finality.** `REVERSIBLE`, `DISPUTED` and `REVERSED` value can never be paid
    out, whatever the policy says.
@@ -247,14 +247,38 @@ Three independent things must all say yes:
      was withdrawable here until D-095, which is the sentence above stated and
      then broken one line later, and it gave a platform a payout path gated only
      by a competition it runs itself (F-157).
-3. **Capabilities and verification.** The permitted origins require
+3. **The origin FLOOR** (`credit_lot_state.origin_floor`, D-131). Value minted
+   out of other value carries the most restricted origin anywhere in its
+   provenance, and the policy must permit the floor as well as the origin. A lot
+   nothing funded has its own origin as its floor; a derived lot — trading
+   proceeds, a creator earning, a marketplace sale, the platform's fee on any of
+   them — inherits the most restricted floor among the lots consumed to fund it,
+   at the moment it is minted, and nothing later raises it.
+
+   Without it the rule above was true of a grant and false of a grant that had
+   been traded: proceeds of a `PROMOTIONAL` lot are `MARKET_TRADING_PROCEEDS`,
+   which `SandboxPolicy` permits, at `UNFUNDED`, which `PayoutEligible()`
+   admits. That is goal §23's forbidden pattern — nonwithdrawable source, trade,
+   payout-eligible balance — and it was reachable (F-261).
+4. **Capabilities and verification.** The permitted origins require
    `PAYOUT_RESERVE` ACTIVE and a verification level the account actually holds.
 
 So: **promotional, refunded, adjusted, provider-settled and prize value can never
-leave this system under any policy in this build.** That is what makes the sandbox
-demo catalogue safe — its Credits are `PROMOTIONAL`, spendable inside the
-product and unable to leave it
-(`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave`).
+leave this system under any policy in this build — nor can anything minted out of
+them.** That is what makes the sandbox demo catalogue safe: its Credits are
+`PROMOTIONAL`, and every earning, fee and sale proceeds a demo trade produces has
+`PROMOTIONAL` as its origin floor, so all of it is spendable inside the product
+and unable to leave it, whatever it is traded into
+(`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave`, which asks
+`Policy.Permits` about every seeded lot under both policies).
+
+What the floor costs, said here rather than discovered: a person who buys with a
+promotional grant and sells at a profit cannot withdraw the profit either, and a
+seller into a native market whose pool still holds somebody else's grant is drawn
+against that grant and inherits its floor (D-132). The alternative — splitting a
+lot into a withdrawable part and a granted part — is a second provenance model on
+top of the ledger's, and its first question, which part is the profit, has no
+answer.
 
 `GET /v1/credits/balance` and `GET /v1/me/portfolio` never return one number.
 They return gross, spendable, frozen, reversed, payout-eligible and ineligible,
@@ -344,6 +368,17 @@ Stated so nobody has to discover it:
 - **No Credit purchase has ever been made against a live provider.**
   `CREDIT_PURCHASE` is not ACTIVE in any deployment; see
   `docs/build/BLOCKERS.md` and `docs/audit/LAUNCH_GATE_MATRIX.md`.
+- **The origin floor is a MINIMUM, and it never rises.** A lot's floor is fixed
+  when the lot is minted and nothing moves it — not a settlement, not a policy
+  version persisted through the approval path, not a later trade. That is the
+  conservative direction and it is the same property `credit_lots.origin`
+  already has; there is deliberately no operation that "cleans" provenance,
+  because one would be the first thing somebody asked for (D-131).
+- **A pool draw-down is worst-first, and the wait it causes is not a refusal.**
+  A seller drawn against somebody else's REVERSIBLE contribution receives
+  reversible proceeds until that contribution settles, at which point
+  `credit.Service.SettleDerived` promotes them. A seller drawn against somebody
+  else's GRANT inherits a promotional floor, and that does not move (D-132).
 
 ## Evidence
 

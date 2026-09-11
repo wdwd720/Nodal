@@ -137,7 +137,34 @@ later from something that may have moved:
   and settled with the fee never taken (F-224, D-119).
 - **whether it was a rehearsal** — `sandbox` and `environment` (00810), written
   at creation. The by-id read used to answer that question from today's provider
-  mode and the other two surfaces did not answer it at all (F-232).
+  mode and the other two surfaces did not answer it at all (F-232). `sandbox` was
+  NULLABLE, so that a row written before 00810 would not be asserted to have been
+  a real payout — and the two readers of the NULL then disagreed: the API rendered
+  it as a rehearsal and the PROD CHECK's `coalesce(sandbox, false)` read it as
+  real and exempted the row from the rule the constraint exists to state. 00817
+  makes the column NOT NULL, drops the coalesce, and backfills the rows that had
+  no recorded fact as rehearsals on the stated ground that no PROD deployment of
+  this system has ever existed — a ground the migration CHECKS rather than
+  assumes (D-134).
+
+00807's own copy of 00806's same-state exemption had the same shape and carried
+the money: a `VERIFIED -> REJECTED` row onto an already-REJECTED request changed
+no state and wrote both quantities, both instants, `provider_status` and a forged
+`provider_reference` — the column this decision revoked for being the provider's
+word. There is no legitimate same-state payout row, because `transitionWith`
+returns early, so 00815 drops the exemption outright. It also anchors the PO001
+reservation invariant on `payout_requests`: the trigger that compares a
+reservation to its allocations fired only on `payout_allocations`, so a quantity
+with nothing behind it was compared to nothing (F-264, D-123 amended).
+
+A third thing the destination's own state machine records, because 00763 had
+given it everything but this: `payout_destination_status_edges` (00814), so an
+apply function that consulted no edge set can no longer bring a destination back
+from DISABLED to VERIFIED on one INSERT (F-259). And `Submit` asks whether the
+destination is still usable before it hands anything to a provider: a person who
+removes a destination because it was compromised had not stopped the value
+already reserved for it, and the removal now answers which requests it stranded
+(F-263).
 
 ### 3. Provenance is a read model, and the order is not the intuitive one
 
@@ -155,9 +182,16 @@ answers.
 The consequence for a withdrawal: among the origins a policy PERMITS, the most
 restricted permitted one leaves first — purchased value before earnings — and an
 origin the policy forbids is never selected at all, so it can never appear in
-what left. That is §23's real requirement ("do not allow: nonwithdrawable source
-→ trade → magically payout-eligible balance") holding by construction rather
-than by a check.
+what left.
+
+That is NOT all of §23's requirement, and this paragraph used to claim it was.
+Selection decides which of the lots an account HOLDS may leave; §23 is about a
+TRANSFORMATION that produces a lot of a different origin, and a grant traded into
+`MARKET_TRADING_PROCEEDS` is a lot selection then correctly selects (F-261). What
+makes §23 hold is the ORIGIN FLOOR: every lot carries the most restricted origin
+in its provenance, inherited at mint, and the policy must release the floor as
+well as the origin (D-131). `GET /v1/me/eligibility` reports it as `origin_floor`
+so the refusal names the grant rather than the trade.
 
 ## Why this and not the alternatives
 

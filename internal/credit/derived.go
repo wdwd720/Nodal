@@ -164,6 +164,73 @@ func (s *Service) ParentsOf(ctx context.Context, q db.Querier, lotID LotID) ([]L
 	return out, mapError(rows.Err())
 }
 
+// settleDerivedCandidates selects the derived lots that CAN MOVE on this pass.
+//
+// The predicate used to be `finality IN ('REVERSIBLE','SETTLED') AND EXISTS (a
+// parent row)`, which never shrank: a lot this pass promoted went REVERSIBLE ->
+// SETTLED and stayed in it, and a lot that was payout-eligible at birth was
+// never out of it. With `ORDER BY st.lot_id` on UUIDv7s -- which are
+// chronological -- the sweep returned the OLDEST `limit` derived lots on every
+// pass, for ever. cmd/api runs it at 100, so the hundred-and-first derived lot a
+// deployment ever minted was never examined again, whatever happened to its
+// parents. That is F-230's outcome restored by the sweep written to fix it, at a
+// volume any real deployment passes in its first week (F-260).
+//
+// Now a lot is a candidate only if this pass would do something to it:
+//
+//   - it is REVERSIBLE and NO parent is below a payout-eligible finality, so
+//     the promotion branch will move it; or
+//   - some parent is DISPUTED or REVERSED, so the freeze branch will. A lot
+//     already DISPUTED is not REVERSIBLE or SETTLED, so it is out of the set by
+//     the first clause and the freeze direction converges too.
+//
+// And never a lot with a `credit_fundings` row. Those belong to SettleFunding,
+// which keys on exactly that column; a funded lot that acquired a parent row is
+// either the mint of an externally funded purchase or the forgery F-266 was, and
+// in neither case is this sweep the thing that should move it.
+//
+// The two finality lists are passed in from valuedomain rather than written as
+// SQL literals, so `PayoutEligible()` and this query cannot come to disagree.
+const settleDerivedCandidates = `
+	SELECT st.lot_id, st.finality
+	  FROM credit_lot_state st
+	 WHERE st.finality IN ('REVERSIBLE','SETTLED')
+	   AND EXISTS (SELECT 1 FROM credit_lot_parents p WHERE p.lot_id = st.lot_id)
+	   AND NOT EXISTS (SELECT 1 FROM credit_fundings f WHERE f.lot_id = st.lot_id)
+	   AND (
+	        (st.finality = 'REVERSIBLE'
+	         AND NOT EXISTS (
+	             SELECT 1 FROM credit_lot_parents p
+	               JOIN credit_lot_state ps ON ps.lot_id = p.parent_lot_id
+	              WHERE p.lot_id = st.lot_id
+	                AND NOT (ps.finality = ANY($2::text[]))))
+	     OR EXISTS (
+	             SELECT 1 FROM credit_lot_parents p
+	               JOIN credit_lot_state ps ON ps.lot_id = p.parent_lot_id
+	              WHERE p.lot_id = st.lot_id
+	                AND ps.finality = ANY($3::text[]))
+	   )
+	 ORDER BY st.lot_id
+	 LIMIT $1`
+
+// payoutEligibleFinalities is valuedomain's answer, as a SQL array.
+func payoutEligibleFinalities() []string {
+	var out []string
+	for _, f := range valuedomain.AllFinalities() {
+		if f.PayoutEligible() {
+			out = append(out, string(f))
+		}
+	}
+	return out
+}
+
+// frozenFinalities are the ones that freeze a lot derived from them. They are
+// the two SettleDerived's freeze branch acts on, named once here and read by
+// the predicate that decides which lots it is worth looking at.
+func frozenFinalities() []string {
+	return []string{string(valuedomain.FinalityDisputed), string(valuedomain.FinalityReversed)}
+}
+
 // SettleDerivedResult is what one pass of SettleDerived did.
 type SettleDerivedResult struct {
 	// Promoted is how many derived lots reached a payout-eligible finality
@@ -207,13 +274,8 @@ func (s *Service) SettleDerived(ctx context.Context, tx pgx.Tx, limit int) (Sett
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := tx.Query(ctx,
-		`SELECT st.lot_id, st.finality
-		   FROM credit_lot_state st
-		  WHERE st.finality IN ('REVERSIBLE','SETTLED')
-		    AND EXISTS (SELECT 1 FROM credit_lot_parents p WHERE p.lot_id = st.lot_id)
-		  ORDER BY st.lot_id
-		  LIMIT $1`, limit)
+	rows, err := tx.Query(ctx, settleDerivedCandidates,
+		limit, payoutEligibleFinalities(), frozenFinalities())
 	if err != nil {
 		return out, mapError(err)
 	}

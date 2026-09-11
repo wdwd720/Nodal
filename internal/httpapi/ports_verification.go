@@ -68,7 +68,13 @@ type ConversionPort interface {
 	AddDestination(ctx context.Context, r AddPayoutDestination) (payout.Destination, error)
 	// DisableDestination stops using one. It is a disable rather than a
 	// delete: a destination value has left through is financial history.
-	DisableDestination(ctx context.Context, accountID accounts.AccountID, id payout.DestinationID) (payout.Destination, error)
+	// It also answers which conversion requests still point at the destination
+	// and have not finished. Each of those is refused at submission from the
+	// moment the destination stops being usable and stays VERIFIED with its
+	// value reserved, so the holder has to be told which payouts to cancel
+	// rather than left to find out that their money is held for a destination
+	// they removed (F-263).
+	DisableDestination(ctx context.Context, accountID accounts.AccountID, id payout.DestinationID) (payout.Destination, []payout.RequestID, error)
 	// Quote is the pre-commitment call: gross, fee, net and an expiry, plus
 	// the provenance the payout would draw on.
 	Quote(ctx context.Context, r CreatePayoutQuote) (payout.Quote, []payout.ProvenanceSlice, error)

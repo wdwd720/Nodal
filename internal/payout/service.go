@@ -623,6 +623,34 @@ func (s *Service) submitRequestFor(ctx context.Context, tx pgx.Tx, r Request, ke
 			"this payout names a destination that belongs to another account").
 			WithField("payout_id", r.ID.String())
 	}
+	// The destination has to still be one value may leave to, asked HERE and not
+	// only at Create.
+	//
+	// Create asked once, through the eligibility engine's DestinationVerified
+	// input, and Submit asked nothing at all -- so a person who removed a
+	// destination because it was compromised had not stopped the value already
+	// reserved for it, and the next sweep handed the provider the token they had
+	// just taken away (F-263). The window is not seconds: a reserved request
+	// waits in VERIFIED for as long as a kill switch is active, for as long as
+	// the provider is unavailable, and for as long as the single web service is
+	// spun down.
+	//
+	// Refusing here, inside the claim transaction and before the transition to
+	// SUBMITTED, gives the kill switch's shape: the transaction rolls back, the
+	// request stays in VERIFIED with its value reserved and no provider
+	// idempotency key committed, and the holder can cancel it or register a
+	// destination and ask again. It is deliberately NOT a move to FAILED --
+	// that would return the reservation on the strength of a fact the person can
+	// undo by re-registering, and a sweep that fails a payout every time a
+	// destination is disabled is a sweep that decides for them.
+	if !dest.Status.Usable() {
+		return SubmitRequest{}, errs.Newf(errs.CodeInvalidStateTransition,
+			"this payout names a destination that is %s, so it can no longer receive value; "+
+				"cancel the payout or point it at a destination that can", dest.Status).
+			WithField("payout_id", r.ID.String()).
+			WithField("destination_id", dest.ID.String()).
+			WithField("destination_status", string(dest.Status))
+	}
 	out := SubmitRequest{
 		IdempotencyKey:       key,
 		Reference:            r.ID.String(),

@@ -2,6 +2,7 @@ package nativemarket
 
 import (
 	"context"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,8 +29,41 @@ import (
 //
 // So the pool keeps the record the ledger keeps for everybody else.
 // `native_market_credit_sources` holds one row per lot paid into this market's
-// reserve, and the sell side draws them down in arrival order. The parents of a
+// reserve, and the sell side draws them down WORST FIRST. The parents of a
 // sale's proceeds are exactly the rows it drew down.
+//
+// # Why worst first, and what it costs (D-132, F-262)
+//
+// It was arrival order, which is the intuitive answer and the wrong one. A pool
+// is fungible, so "whose Credits left" is a choice rather than a fact, and FIFO
+// makes the choice that hands a seller the BEST provenance the pool happens to
+// be holding:
+//
+//	A pays in 40,000 settled Credits. B pays in 40,000 a card issuer can still
+//	take back, sells back less than A put in, and is minted proceeds funded by
+//	A's settled contribution -- payout-eligible at birth. B's own reversible
+//	Credits stay in the pool, waiting to be handed to whoever sells next.
+//
+// That is the laundering route D-124 says the whole finality model exists to
+// close, reached through somebody else's money instead of through the seller's
+// own. So the draw-down is ordered by how BAD a contribution is: most
+// restricted origin floor first, then least final, then oldest. A seller can
+// never be handed provenance better than the pool's worst outstanding
+// contribution.
+//
+// The cost is real and is not hidden: an honest seller paying into a pool that
+// still holds somebody else's reversible contribution receives REVERSIBLE
+// proceeds until that contribution settles, and somebody else's promotional
+// grant in the pool gives them a promotional ORIGIN FLOOR, which no policy in
+// this build releases. `credit.Service.SettleDerived` promotes the first when
+// the contribution settles; the second does not move, because an origin floor
+// is inherited with finality (D-131).
+//
+// Fail closed is the architecture's rule and this is what it looks like when it
+// is inconvenient. The alternative -- pro-rata provenance, where a sale draws a
+// slice of every outstanding contribution -- gives every seller a floor as bad
+// as the pool's worst anyway AND multiplies the parent rows by the number of
+// contributors, so it is worse in both directions.
 
 // recordPoolSources records what a buy paid into the market's reserve.
 //
@@ -58,7 +92,7 @@ func (s *Service) recordPoolSources(
 	return nil
 }
 
-// drawPoolSources takes `amount` out of the market's recorded reserve, oldest
+// drawPoolSources takes `amount` out of the market's recorded reserve, WORST
 // contribution first, and returns the lots it drew down.
 //
 // `covered` is how much of `amount` the record accounted for. A shortfall is
@@ -72,8 +106,14 @@ func (s *Service) drawPoolSources(
 	if !amount.IsPositive() {
 		return nil, money.Quantity{}, nil
 	}
+	// Read and LOCKED in arrival order, which is deliberate and is not the
+	// draw-down order below: two concurrent sales against one market must take
+	// the same row locks in the same sequence or they deadlock, and arrival
+	// order is the one ordering that cannot change while a transaction is
+	// running. The order value leaves in is decided afterwards, in memory, over
+	// the rows this already holds.
 	rows, qerr := tx.Query(ctx,
-		`SELECT src.id, src.lot_id, src.remaining::text, st.finality
+		`SELECT src.id, src.lot_id, src.remaining::text, st.finality, st.origin_floor
 		   FROM native_market_credit_sources src
 		   JOIN credit_lot_state st ON st.lot_id = src.lot_id
 		  WHERE src.market_id = $1 AND src.remaining > 0
@@ -85,8 +125,10 @@ func (s *Service) drawPoolSources(
 	type open struct {
 		id        uuid.UUID
 		lot       credit.LotID
+		seq       int
 		remaining money.Quantity
 		finality  valuedomain.FundingFinality
+		floor     valuedomain.CreditOrigin
 	}
 	var sources []open
 	for rows.Next() {
@@ -94,10 +136,11 @@ func (s *Service) drawPoolSources(
 			o   open
 			raw string
 		)
-		if serr := rows.Scan(&o.id, &o.lot, &raw, &o.finality); serr != nil {
+		if serr := rows.Scan(&o.id, &o.lot, &raw, &o.finality, &o.floor); serr != nil {
 			rows.Close()
 			return nil, money.Quantity{}, mapError(serr)
 		}
+		o.seq = len(sources)
 		v, perr := money.ParseQuantity(raw)
 		if perr != nil {
 			rows.Close()
@@ -111,6 +154,20 @@ func (s *Service) drawPoolSources(
 	if rerr := rows.Err(); rerr != nil {
 		return nil, money.Quantity{}, mapError(rerr)
 	}
+
+	// Worst first (D-132). Most restricted origin floor, then least final, then
+	// oldest -- `seq` is the arrival order the query returned, so the last key
+	// is the FIFO the first two override rather than a re-read of the clock.
+	sort.SliceStable(sources, func(i, j int) bool {
+		a, b := sources[i], sources[j]
+		if a.floor != b.floor {
+			return valuedomain.MoreRestricted(a.floor, b.floor)
+		}
+		if a.finality != b.finality {
+			return valuedomain.LessFinal(a.finality, b.finality)
+		}
+		return a.seq < b.seq
+	})
 
 	remaining := amount
 	byLot := map[credit.LotID]int{}

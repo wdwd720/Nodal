@@ -291,11 +291,38 @@ func (s *Service) resume(ctx context.Context, database *db.DB, session Session, 
 	}, nil
 }
 
+// PollMinimumInterval is how long a session's recorded status stands before
+// this service will call the provider about it again.
+//
+// The route that reaches Poll is a GET, so the transport budget that applies to
+// it is the General class -- 600 a minute per principal on the deployment, 6000
+// under the browser suite -- and every one of those requests was a call to an
+// identity provider whose pricing and rate limits are written in the provider's
+// contract and not in ours (D-133).
+//
+// Ten seconds, chosen rather than inherited: a hosted identity check takes tens
+// of seconds to minutes to come back, and a provider that answers faster than
+// that is answering faster than the person can read the screen. A poll inside
+// the interval is answered from the session's recorded status, which is the
+// answer the last call got.
+//
+// It bounds calls PER SESSION rather than per principal, because that is the
+// quantity a provider contract is written in: two people polling one session,
+// or one person with two tabs, share the interval. It does not apply to
+// IngestWebhook, which is a provider volunteering a decision.
+const PollMinimumInterval = 10 * time.Second
+
 // Poll asks the provider what happened and ingests the answer.
 //
 // It is the reconciliation half of PROVIDER_BOUNDARY §3's rule: never trust the
 // redirect. A customer arriving at the return URL says they came back, not that
 // they passed, and a webhook is never the sole source of truth.
+//
+// A poll inside PollMinimumInterval of the last one answers from the session's
+// recorded status without calling anybody. That is not a refusal and is not
+// rate limiting: the answer is the one the last call got, the route is the one
+// a person watching a spinner hits, and answering it from the record is both
+// better behaviour and fewer provider calls than a 429 would be.
 func (s *Service) Poll(ctx context.Context, database *db.DB, accountID accounts.AccountID, sessionID SessionID) (Session, error) {
 	owner, err := s.owner(ctx, database, accountID)
 	if err != nil {
@@ -320,6 +347,24 @@ func (s *Service) Poll(ctx context.Context, database *db.DB, accountID accounts.
 	}
 	if session.ProviderRef == "" {
 		return session, nil
+	}
+	now := s.deps.Clock.Now().UTC()
+	if session.ProviderPolledAt != nil && now.Sub(session.ProviderPolledAt.UTC()) < PollMinimumInterval {
+		// Asked within the interval. The status on the row is what the last
+		// call returned, and returning it is the whole answer.
+		return session, nil
+	}
+	// Recorded BEFORE the call, and in its own committed transaction, for the
+	// reason the payout provider's idempotency key is written before its call:
+	// a process that dies between the write and the response must not leave a
+	// provider that was asked and a record that says it was not. The cost of
+	// the ordering is one extra call's worth of interval after a crash, which
+	// is the direction to be wrong in.
+	if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			return s.deps.Repo.MarkProviderPolled(ctx, tx, session.ID, now)
+		}); err != nil {
+		return Session{}, err
 	}
 	result, err := provider.Get(ctx, session.ProviderRef)
 	if err != nil {

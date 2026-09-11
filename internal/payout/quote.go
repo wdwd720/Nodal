@@ -209,6 +209,47 @@ func (s *Service) Quote(ctx context.Context, tx pgx.Tx, r QuoteRequest, dest Des
 		return Quote{}, errs.Newf(errs.CodeProviderUnavailable,
 			"the payout provider %q does not pay in %s", provider.Name(), r.Currency)
 	}
+	// And whether it can pay this RECIPIENT, from the country and subdivision
+	// the destination stored.
+	//
+	// It used to ask three questions -- availability, the destination kind, the
+	// currency -- and not the fourth, which is the one D-122 added because "a
+	// question skipped when the answer is missing is not asking early, it is not
+	// asking". So a provider that narrowed its ExcludedRegions after a
+	// destination was registered priced a payout it would refuse, the person was
+	// shown a gross, a fee, a net and the lots that would leave, and POST
+	// /v1/payouts then refused the commit AND consumed the quote on the way out
+	// -- so asking again cost another quote and was refused again (F-269).
+	//
+	// The same question the destination route asks, in the same words, so the
+	// two cannot disagree about one provider fact. The refusal is here rather
+	// than at the commit because a quote is a statement about what would happen,
+	// and a price for something that cannot happen is not one.
+	if ok, refusals := caps.CanPayRecipient(RecipientProfile{
+		Kind: RecipientKindIndividual, Country: dest.Country, Region: dest.Region,
+	}); !ok {
+		code := errs.CodeProviderUnavailable
+		detail := "the payout provider " + provider.Name() +
+			" does not pay recipients in " + dest.Country
+		for _, refusal := range refusals {
+			switch refusal {
+			case RefusalProfileIncomplete, RefusalRegionUnknown:
+				// Not the provider's fault and not a refusal of this person:
+				// something the destination does not say. A destination
+				// registered before the provider published exclusions for its
+				// country has no region, and "we do not know which state" is
+				// not "any state".
+				code = errs.CodeValidationFailed
+				detail = "this payout provider excludes some subdivisions of " + dest.Country +
+					", so a destination there has to say which one it pays into; " +
+					"register the destination again with its subdivision"
+			}
+		}
+		return Quote{}, errs.New(code, detail).
+			WithField("destination_id", dest.ID.String()).
+			WithField("provider", provider.Name()).
+			WithField("refusals", RefusalCodes(refusals))
+	}
 
 	gross, err := creditsToMoney(r.Quantity, r.CreditDecimals, r.CreditsPerMajorUnit, r.MinorUnitsPerMajorUnit)
 	if err != nil {

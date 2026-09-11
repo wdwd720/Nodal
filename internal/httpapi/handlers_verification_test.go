@@ -97,17 +97,28 @@ func newFakeEligibility() *fakeEligibility {
 		ActiveCaps: map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
 		Holdings: []eligibility.OriginHolding{
 			{
-				Origin: valuedomain.OriginPurchased, Quantity: money.QuantityFromInt64(5000),
+				Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
+				Quantity: money.QuantityFromInt64(5000),
 				Finality: valuedomain.FinalitySettled, HeldDays: 30,
 			},
 			{
-				Origin: valuedomain.OriginPromotional, Quantity: money.QuantityFromInt64(9000),
+				Origin: valuedomain.OriginPromotional, OriginFloor: valuedomain.OriginPromotional,
+				Quantity: money.QuantityFromInt64(9000),
+				Finality: valuedomain.FinalityUnfunded, HeldDays: 30,
+			},
+			// The bucket D-131 is about: proceeds of the grant above. Its own
+			// origin is one the sandbox policy releases and its floor is not,
+			// so the route has to render the floor or the refusal reads as a
+			// statement about the trade.
+			{
+				Origin: valuedomain.OriginMarketTradingProceeds, OriginFloor: valuedomain.OriginPromotional,
+				Quantity: money.QuantityFromInt64(2000),
 				Finality: valuedomain.FinalityUnfunded, HeldDays: 30,
 			},
 		},
 		PolicyValid: true,
-		Gross:       money.QuantityFromInt64(14000),
-		Spendable:   money.QuantityFromInt64(14000),
+		Gross:       money.QuantityFromInt64(16000),
+		Spendable:   money.QuantityFromInt64(16000),
 
 		JurisdictionSupported: true,
 		ProviderAvailable:     true,
@@ -127,7 +138,11 @@ type fakeConversion struct {
 	added        AddPayoutDestination
 	quote        payout.Quote
 	provenance   []payout.ProvenanceSlice
-	err          error
+	// openAfterDisable is what DisableDestination reports as still pointing at
+	// the destination. The real adapter reads it inside the disabling
+	// transaction (F-263).
+	openAfterDisable []payout.RequestID
+	err              error
 }
 
 func newFakeConversion() *fakeConversion {
@@ -169,10 +184,10 @@ func (f *fakeConversion) AddDestination(_ context.Context, r AddPayoutDestinatio
 	return f.destinations[0], nil
 }
 
-func (f *fakeConversion) DisableDestination(context.Context, accounts.AccountID, payout.DestinationID) (payout.Destination, error) {
+func (f *fakeConversion) DisableDestination(context.Context, accounts.AccountID, payout.DestinationID) (payout.Destination, []payout.RequestID, error) {
 	d := f.destinations[0]
 	d.Status = payout.DestinationDisabled
-	return d, f.err
+	return d, f.openAfterDisable, f.err
 }
 
 func (f *fakeConversion) Quote(context.Context, CreatePayoutQuote) (payout.Quote, []payout.ProvenanceSlice, error) {
@@ -318,6 +333,20 @@ func TestGetMeEligibility_ExplainsPerOrigin(t *testing.T) {
 	assert.Contains(t, promotional["reasons"], "ORIGIN_NOT_WITHDRAWABLE")
 	assert.NotContains(t, promotional, "verification_would_suffice",
 		"verifying does not make a promotional grant withdrawable, and the product must not imply it does")
+	assert.NotContains(t, promotional, "origin_floor",
+		"a bucket whose floor is its own origin does not repeat itself")
+
+	// The bucket D-131 is about. Its own origin is one the sandbox policy
+	// releases; its floor is the grant that funded it, and the answer has to
+	// name the grant or the refusal reads as a statement about the trade.
+	proceeds := byOrigin["MARKET_TRADING_PROCEEDS"]
+	require.NotNil(t, proceeds)
+	assert.Equal(t, "PROMOTIONAL", proceeds["origin_floor"],
+		"the person has to be able to read where the value came from, not only that it cannot leave")
+	assert.Contains(t, proceeds["reasons"], "ORIGIN_NOT_WITHDRAWABLE")
+	assert.Equal(t, "0", proceeds["withdrawable"])
+	assert.NotContains(t, proceeds, "verification_would_suffice",
+		"verifying does not release a grant that has been traded, and the product must not imply it does")
 }
 
 // The destination surface takes a provider token and refuses the thing the
@@ -352,6 +381,55 @@ func TestPostMePayoutDestinations_RefusesRawAccountNumbers(t *testing.T) {
 	assert.Equal(t, true, body["sandbox"])
 	assert.NotContains(t, res.Body.String(), "sandbox-handle-checking-001",
 		"the provider token is a credential for moving money and is never echoed")
+}
+
+// Disabling a destination names the payouts it has just stranded (F-263,
+// D-132's sibling decision).
+//
+// payout.Service.Submit now refuses a destination that is not Usable(), which
+// is what stops the sweep from handing a provider the token a person removed
+// because it was compromised. The cost of that refusal is that the request
+// stays in VERIFIED with its value held out of the balance until somebody
+// cancels it -- so the response to the removal says which requests those are.
+// A person who is not told has money that has simply gone quiet.
+//
+// The disable itself is never refused for having open requests: §25 makes
+// removing a destination the act of somebody whose destination is compromised,
+// and a removal an attacker can block by starting a payout is not a control.
+func TestDeleteMePayoutDestinations_NamesThePayoutsItStranded(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	stranded := []payout.RequestID{payout.NewRequestID(), payout.NewRequestID()}
+	h.ports.conversion.openAfterDisable = stranded
+
+	dest := h.ports.conversion.destinations[0].ID.String()
+	res := h.do(http.MethodDelete, "/v1/me/payout-destinations/"+dest+accountQuery(), nil,
+		"Idempotency-Key", "dest-disable-0001")
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+
+	body := res.raw()
+	assert.Equal(t, "DISABLED", body["status"])
+	assert.Equal(t, false, body["usable"])
+	ids, ok := body["open_payout_ids"].([]any)
+	require.Truef(t, ok, "the response does not say what the removal stranded: %s", res.Body.String())
+	require.Len(t, ids, 2)
+	for _, want := range stranded {
+		assert.Contains(t, ids, want.String())
+	}
+}
+
+// And it says nothing when there is nothing to say, rather than an empty list
+// a client has to interpret.
+func TestDeleteMePayoutDestinations_SaysNothingWhenNothingIsStranded(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.ports.conversion.openAfterDisable = nil
+
+	dest := h.ports.conversion.destinations[0].ID.String()
+	res := h.do(http.MethodDelete, "/v1/me/payout-destinations/"+dest+accountQuery(), nil,
+		"Idempotency-Key", "dest-disable-0002")
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	assert.NotContains(t, res.Body.String(), "open_payout_ids")
 }
 
 // A destination says where it pays into, and the route refuses one that does

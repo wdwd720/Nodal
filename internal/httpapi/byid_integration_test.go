@@ -95,6 +95,10 @@ func TestIntegration_AForeignPayoutIsIndistinguishableFromAnAbsentOne(t *testing
 
 // seedPayoutRow writes a payout request for an account directly, because this
 // test is about the read.
+//
+// `sandbox` is stated because 00817 made it NOT NULL: the nullable form was read
+// as a rehearsal by the API and as a real payout by the PROD CHECK, so one of
+// the two was wrong on every row that had no recorded fact (D-134).
 func seedPayoutRow(t *testing.T, d *db.DB, account accounts.AccountID) string {
 	t.Helper()
 	asset := commerceCreditAsset(t, d)
@@ -102,8 +106,8 @@ func seedPayoutRow(t *testing.T, d *db.DB, account accounts.AccountID) string {
 	_, err := d.Exec(t.Context(),
 		`INSERT INTO payout_requests
 		   (id, account_id, credit_asset_id, requested_quantity, reserved_quantity, state,
-		    policy_version, policy_hash, idempotency_key, created_at, updated_at)
-		 VALUES ($1,$2,$3,1,0,'DRAFT','itest','itest',$4, now(), now())`,
+		    policy_version, policy_hash, idempotency_key, sandbox, environment, created_at, updated_at)
+		 VALUES ($1,$2,$3,1,0,'DRAFT','itest','itest',$4, true, 'TEST', now(), now())`,
 		id, account.String(), asset.String(), "seed-"+id)
 	require.NoError(t, err, "seeding a payout row")
 	return id

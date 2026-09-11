@@ -790,9 +790,9 @@ Five migrations, 00806–00810. Architecture: D-119 … D-125, ADR-0025, ADR-002
 | 00807 | `payout_request_transitions` (altered) | gains `reserved_quantity`, `settled_quantity`, `reserved_at`, `settled_at`, `provider_reference`, `provider_status` | the trigger writes all six onto `payout_requests`; NULL means the row says nothing about that number |
 | 00807 | `payout_requests` (altered) | UPDATE revoked from `cp_app`; column grant back for `provider`, `provider_idempotency_key`, `submitted_at`, `verification_level`, `policy_version`, `policy_hash`, `eligibility_reasons`, `failure_reason` | F-42 treatment: the state and the money are the transition row's to write |
 | 00808 | `payout_requests` (altered) | gains `quote_gross_amount_minor`, `quote_fee_amount_minor`, `quote_net_amount_minor`, `quote_currency` | written once at INSERT; three CHECKs: all four or none, the fee is inside the gross, a price names its quote |
-| 00809 | `credit_lot_parents` | which lots were consumed to fund a derived lot, and how much of each | append-only; a lot may not be its own parent |
-| 00809 | `native_market_credit_sources` | the credit lots paid into a market's pooled reserve, drawn down in arrival order when credits leave it | `cp_app` may write `remaining` and nothing else |
-| 00810 | `payout_requests` (altered) | gains `sandbox`, `environment` | `CHECK (NOT coalesce(sandbox,false) OR environment IS DISTINCT FROM 'PROD')`; NULL is a row written before this migration and renders as a rehearsal |
+| 00809 | `credit_lot_parents` | which lots were consumed to fund a derived lot, and how much of each | append-only; a lot may not be its own parent; since 00816 a row may only be written in the transaction that created the lot (F-266) |
+| 00809 | `native_market_credit_sources` | the credit lots paid into a market's pooled reserve, drawn down WORST FIRST when credits leave it — most restricted origin floor, then least final, then oldest (D-132 superseded arrival order) | `cp_app` may write `remaining` and nothing else |
+| 00810 | `payout_requests` (altered) | gains `sandbox`, `environment` | `CHECK (NOT sandbox OR environment IS DISTINCT FROM 'PROD')` since 00817, which made the column NOT NULL: the nullable form was read as a rehearsal by the API and as a real payout by the CHECK (D-134) |
 | 00810 | `payout_destinations` (altered) | gains `region` | required wherever the provider publishes excluded subdivisions for the country |
 
 ### Functions
@@ -833,3 +833,79 @@ No route is added. What changes:
   which three packages had their own copy of.
 - `profile.Repository.LockHoldings` — the lock an account closure takes before it
   reads its financial blockers (F-249).
+
+
+## Addendum — 2026-09-11: what the SECOND withdrawal-verification audit changed (F-259 … F-269)
+
+Five migrations, 00814–00818. Architecture: D-131 … D-135, dated amendments to
+D-121, D-123 and D-124, ADR-0025 §3a/§3b, ADR-0026 §2a/§3,
+`docs/product/CREDIT_ECONOMY.md` §4 and §7,
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §7 and §9.
+
+Six of the eleven findings are defects in the FIRST round's own remediation,
+which is why every entry below names what it supersedes.
+
+### Tables and columns
+
+| Migration | Table | What it holds | State machine |
+|---|---|---|---|
+| 00814 | `payout_destination_status_edges` | the legal edges of the §25 destination machine, from `payout.DestinationStateEdges()` | read by `cp_destination_apply_status_transition`; SELECT only for every role but `cp_migrate`; NO same-state exemption |
+| 00816 | `credit_lot_state` (altered) | gains `origin_floor`, NOT NULL, CHECKed against the eleven declared origins | trigger-maintained like `finality`; `cp_app` holds SELECT only; backfilled from each lot's provenance roots |
+| 00816 | `credit_fundings` (index) | `credit_fundings_lot_idx` on `(lot_id) WHERE lot_id IS NOT NULL` | what `SettleDerived`'s new `NOT EXISTS` needs |
+| 00817 | `payout_requests` (altered) | `sandbox` becomes NOT NULL; the PROD CHECK drops its `coalesce` | rows with no recorded fact backfilled `true`, on a ground the migration checks before it acts |
+| 00818 | `verification_sessions` (altered) | gains `provider_polled_at` | `cp_app` gets UPDATE on this column and nothing else |
+
+### Functions and triggers
+
+| Migration | Function | What it does |
+|---|---|---|
+| 00814 | `cp_destination_apply_status_transition()` (replaced) | refuses an edge that is not in `payout_destination_status_edges` (AD001), then writes `status` and `verified_at` as before |
+| 00815 | `cp_payout_apply_state_transition()` (replaced) | the same-state exemption removed: every payout transition row must name an edge the table has |
+| 00815 | `cp_payout_request_reservation_backed()` | CONSTRAINT TRIGGER on `payout_requests`, deferred: `reserved_quantity` must equal the outstanding allocations. Both sides re-read at COMMIT, not taken from NEW (PO001) |
+| 00815 | `cp_compliance_apply_state_transition()` (replaced) | a same-state row must carry a sanctions screen and must not carry `verified_at`, `expires_at`, a provider, a provider reference or a session; it never touches either timestamp |
+| 00816 | `cp_credit_origin_floor_rank(text)` | how restricted an origin is across this build's policies: 0 released by none, 1 by some, 2 by all. Mirrors `valuedomain.CreditOrigin.Restriction()` |
+| 00816 | `cp_credit_lot_open()` (replaced) | opens the projection with the lot's own origin as its floor |
+| 00816 | `cp_credit_lot_parent_is_written_at_mint()` | BEFORE INSERT on `credit_lot_parents` (CR005): the lot must have been created in this transaction, and the parent must be one it consumed, a market pool source, or another lot of the same account |
+| 00816 | `cp_credit_lot_apply_origin_floor()` | AFTER INSERT on `credit_lot_parents`: lowers the lot's floor to the most restricted among ALL its parents, recomputed rather than folded |
+
+Every new definer pins `search_path = pg_catalog, public, pg_temp`. Custom
+SQLSTATEs: `AD001` for the transition refusals, `PO001` for the reservation
+invariant, `CR005` for the provenance binding (new, in `internal/credit`'s
+family beside CR001, CR003 and CR004).
+
+### Routes and contract changes
+
+No route is added. Two additive optional response fields:
+
+| Route | Change |
+|---|---|
+| `DELETE /v1/me/payout-destinations/{destinationId}` | the response gains `open_payout_ids`: the conversion requests that still point at the destination and are not finished. Present only when there are some (F-263). |
+| `GET /v1/me/eligibility` | each bucket gains `origin_floor`, present only when it differs from `origin`: what the value ultimately came from, so a refusal names the grant rather than the trade (D-131). |
+| `GET /v1/me/verification/sessions/{id}` | unchanged in shape. A poll within ten seconds of the last one now answers from the recorded status and calls no provider (D-133). |
+
+### Go surfaces other domains may read
+
+- `payout.DestinationStateEdges()` — the destination transition table as flat
+  from/to pairs, which is what 00814 is held against.
+- `payout.Service.OpenRequestsForDestination` — the non-terminal conversion
+  requests pointing at a destination, from `State.Terminal()` rather than a
+  repeated SQL list.
+- `payout.RecipientKindIndividual`, `payout.RefusalCodes` — the recipient kind
+  and the refusal rendering the three places that ask `CanPayRecipient` share.
+- `valuedomain.CreditOrigin.Restriction()`, `valuedomain.MoreRestricted`,
+  `valuedomain.MostRestrictedOrigin`, `valuedomain.OriginsByRestriction()` — the
+  origin-floor ordering, defined once and mirrored in SQL.
+- `credit.Lot.OriginFloor`, `eligibility.OriginHolding.OriginFloor`,
+  `eligibility.OriginBucket.OriginFloor`, `valuedomain.PermitInput.OriginFloor`
+  — the floor as it travels from the projection to the answer a person reads.
+  None of them has a permissive zero value: an unstated floor is UNKNOWN_ORIGIN.
+- `verification.PollMinimumInterval`, `verification.Session.ProviderPolledAt`,
+  `verification.Repository.MarkProviderPolled` — the per-session poll interval.
+
+### What did NOT change
+
+No new capability gate, no new environment variable, no new error code, no new
+route, no change to the ledger or the lot event stream. `DefaultPolicy` still
+releases no origin, so the origin floor changes nothing about what a
+non-sandbox deployment may pay out — a floor can only ever refuse more than the
+origin alone would.
