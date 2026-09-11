@@ -2,18 +2,25 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/agents"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/provider/compilersandbox"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/strategy"
 	"github.com/nodal/controlplane/internal/strategy/ir"
 )
@@ -268,4 +275,132 @@ func priceToolAtBoot(ctx context.Context, database *db.DB, cfg *config.Config, l
 			"consequence", "a strategy compiled on this tier declares a dependency on this row; nothing evaluates it and no adapter is deployed")
 	}
 	return nil
+}
+
+// sandboxVenuePolicyAtBoot lists the venues a sandbox tier actually has in its
+// GLOBAL risk policy's venue allowlist (F-257).
+//
+// # The absence
+//
+// `risk.DefaultGlobalPolicyJSON` sets `"allowed_venues": []`, and its own
+// comment says why: "the venue allowlist is empty, so no trade is allowed
+// anywhere until venues are listed explicitly". An explicit empty list allows
+// nothing, which is the correct fail-closed default and is exactly what
+// `riskPolicyAtBoot` records on every non-PROD deployment.
+//
+// Nothing ever listed a venue. `scripts/riskpolicy -rules` is a person running
+// a command with a file nobody has written, and the RISK_COMPAT stage of the
+// compiler refuses any strategy whose envelope or intent names a venue outside
+// the allowlist. So a compiled strategy version could never have existed on any
+// deployment of this build -- not for want of a compiler, but because the
+// policy in force permitted no venue, and the refusal would have arrived
+// blaming the user's strategy for naming the only venue the deployment lists.
+//
+// # What this does
+//
+// On a sandbox tier, and nowhere else, it records a GLOBAL policy version whose
+// allowlist is the venue codes the registry itself holds in a status that may
+// take new actions. It widens nothing else: every limit, every ceiling and
+// every other allowlist is copied from the policy already in force.
+//
+// It is a decision, and it is recorded as one -- a new, immutable, append-only
+// policy version with a SYSTEM actor and a reason that says what it is, through
+// the same `risk.Store.RecordPolicy` an operator's command calls. PROD is
+// refused, and so is any deployment that is not a sandbox tier: a production
+// venue allowlist is a risk-desk decision about where money may go, and a
+// process that widened it at boot because it found a row in a table would be
+// the control-that-looks-decided this whole audit is against.
+func sandboxVenuePolicyAtBoot(ctx context.Context, database *db.DB, cfg *config.Config, clk clock.Clock, log *slog.Logger) error {
+	if !cfg.SandboxTier() || cfg.Env == config.EnvProd {
+		return nil
+	}
+	now := clk.Now().UTC()
+	store := risk.NewStore()
+	current, _, err := store.EffectivePolicy(ctx, database, "", "", now)
+	if err != nil {
+		if errors.Is(err, risk.ErrNoPolicy) {
+			// Nothing to widen. riskPolicyAtBoot records the starter policy
+			// before this runs; a deployment with none has a bigger problem
+			// than its venue allowlist and says so on every trade.
+			return nil
+		}
+		return fmt.Errorf("sandbox venue policy: %w", err)
+	}
+
+	venues, err := loadVenues(ctx, database)
+	if err != nil {
+		return err
+	}
+	codes := make([]string, 0, len(venues))
+	for code, v := range venues {
+		if v.Status.AllowsNewActions() {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+	if len(codes) == 0 || coversAll(current.AllowedVenues, codes) {
+		return nil
+	}
+
+	next := current
+	next.AllowedVenues = codes
+	if verr := next.Validate(risk.ScopeGlobal); verr != nil {
+		return fmt.Errorf("sandbox venue policy: %w", verr)
+	}
+	rules, err := next.CanonicalJSON()
+	if err != nil {
+		return fmt.Errorf("sandbox venue policy: %w", err)
+	}
+	// Derived from the rules, like riskPolicyAtBoot's: the version names WHAT
+	// was recorded, so a second boot with the same venues is a CONFLICT on the
+	// unique version rather than a second row saying the same thing.
+	version := "sandbox-venues-" + next.Hash()[:12]
+
+	ctx = security.WithPrincipal(ctx, security.Principal{
+		SubjectID: "config:bootstrap", ActorType: security.ActorSystem, AuthTime: now,
+	})
+	err = database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
+		_, rerr := store.RecordPolicy(ctx, tx, risk.PolicyRecord{
+			Scope:       risk.ScopeGlobal,
+			Version:     version,
+			Rules:       rules,
+			EffectiveAt: now,
+			ActorType:   security.ActorSystem,
+			ActorID:     "config:bootstrap",
+			Reason: "this is a sandbox tier and the GLOBAL policy's venue allowlist was empty, which permits no " +
+				"venue at all, so no strategy could be compiled and no internal trade could name a venue. The " +
+				"allowlist is now the venues this deployment's own registry lists. Every other limit is unchanged. " +
+				"A production allowlist is a risk-desk decision recorded with `go run ./scripts/riskpolicy -rules`.",
+		})
+		return rerr
+	})
+	switch {
+	case err == nil:
+		log.Warn("widened the GLOBAL risk policy's venue allowlist to this sandbox tier's own venues",
+			"version", version, "venues", strings.Join(codes, ","), "environment", string(cfg.Env),
+			"consequence", "a strategy compiled here may name these venues; nothing else about the policy changed and PROD is never widened this way")
+		return nil
+	case errs.CodeOf(err) == errs.CodeConflict:
+		return nil
+	default:
+		return fmt.Errorf("sandbox venue policy: %w", err)
+	}
+}
+
+// coversAll reports whether every code is already in the allowlist. A nil
+// allowlist means "unconstrained by this scope", which covers everything.
+func coversAll(allowed, codes []string) bool {
+	if allowed == nil {
+		return true
+	}
+	have := make(map[string]struct{}, len(allowed))
+	for _, a := range allowed {
+		have[a] = struct{}{}
+	}
+	for _, c := range codes {
+		if _, ok := have[c]; !ok {
+			return false
+		}
+	}
+	return true
 }

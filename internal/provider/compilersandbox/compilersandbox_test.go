@@ -294,13 +294,12 @@ func TestTheSameInputCompilesToTheSameDocument(t *testing.T) {
 func TestAnUnstatedStrategyIsRefusedByName(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name  string
-		body  json.RawMessage
-		field string
+		name string
+		body json.RawMessage
 	}{
-		{"no constraints at all", json.RawMessage(`{}`), "constraints"},
-		{"null", json.RawMessage(`null`), "constraints"},
-		{"empty body", json.RawMessage(``), "constraints"},
+		{"no constraints at all", json.RawMessage(`{}`)},
+		{"null", json.RawMessage(`null`)},
+		{"empty body", json.RawMessage(``)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -310,8 +309,18 @@ func TestAnUnstatedStrategyIsRefusedByName(t *testing.T) {
 			assert.Equal(t, []string{agents.StructuredConstraintsRequired}, res.Codes)
 			require.Len(t, res.Attempts, 1)
 			assert.Equal(t, strategy.StagePrompt, res.Attempts[0].StageReached)
-			require.NotEmpty(t, res.Clarifications)
-			assert.Contains(t, res.Clarifications[0], tc.field)
+			// Not "say more": every field that was needed, named, once.
+			joined := ""
+			for _, sentence := range res.Clarifications {
+				joined += sentence + "|"
+			}
+			for _, field := range []string{
+				"universe.instrument", "universe.venue", "entry.kind", "exit.kind",
+				"risk_limits.max_single_trade_usd", "capital_limit.min_allocation_usd",
+				"frequency.interval_minutes", "mode",
+			} {
+				assert.Contains(t, joined, field)
+			}
 		})
 	}
 }

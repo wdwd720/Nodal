@@ -141,14 +141,14 @@ func (m Missing) String() string { return m.Field + ": " + m.Detail }
 // field that silently did not apply.
 //
 // A decode failure is reported as a single Missing on the whole document,
-// because a body that will not parse has no fields to report against.
+// because a body that will not parse has no fields to report against. An ABSENT
+// document is not a decode failure: it decodes to the zero value, and Validate
+// then names every field that was needed -- which is what somebody who stated
+// no strategy at all has to be told, once, rather than "say more".
 func Decode(raw json.RawMessage) (StructuredStrategy, []Missing) {
 	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || bytes.Equal(trimmed, []byte("{}")) {
-		return StructuredStrategy{}, []Missing{{
-			Field:  "constraints",
-			Detail: "no structured strategy was stated; this compiler reads the fields you fill in and never your description",
-		}}
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return StructuredStrategy{}, nil
 	}
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()

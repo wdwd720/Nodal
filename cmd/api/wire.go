@@ -818,6 +818,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err := priceToolAtBoot(ctx, database, cfg, log); err != nil {
 		return nil, fmt.Errorf("price tool at boot: %w", err)
 	}
+	if err := sandboxVenuePolicyAtBoot(ctx, database, cfg, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox venue policy at boot: %w", err)
+	}
 	structuredCompiler, err := sandboxStrategyCompiler(cfg, clk, log)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox strategy compiler: %w", err)
