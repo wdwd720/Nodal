@@ -603,11 +603,20 @@ test("journey 9 · a rehearsal verification, an eligible earning, a quote and a 
       (b.root_origins ?? []).includes("PROMOTIONAL"),
   );
   expect(grantBehindIt.length, "the seeded balance is a promotional grant").toBeGreaterThan(0);
+  const describe = (b: { readonly origin: string; readonly origin_floor?: string; readonly finality?: string }) =>
+    `${b.origin}/${b.origin_floor ?? "?"}/${b.finality ?? "?"}`;
+  // The claim is about the money. `payout_allowed` is the policy's rule for the
+  // bucket's own ORIGIN and not the verdict on the bucket: an earning a grant
+  // funded carries an origin the policy permits and is refused by its FLOOR,
+  // which is the whole of D-131. So nothing a grant is behind may leave, and the
+  // per-origin rule is asserted where it is the rule that applies.
   expect(
-    grantBehindIt
-      .filter((b) => b.payout_allowed)
-      .map((b) => `${b.origin}/${b.origin_floor ?? "?"}/${b.finality ?? "?"}`),
-    "a promotional grant never leaves, whichever provenance carries it",
+    grantBehindIt.filter((b) => BigInt(b.withdrawable) > 0n).map(describe),
+    "nothing a promotional grant funded may leave, whichever provenance carries it",
+  ).toEqual([]);
+  expect(
+    grantBehindIt.filter((b) => b.origin === "PROMOTIONAL" && b.payout_allowed).map(describe),
+    "and the policy's rule for the grant's own origin refuses it outright",
   ).toEqual([]);
 
   const withdrawable = state.buckets.find((b) => BigInt(b.withdrawable) > 0n);

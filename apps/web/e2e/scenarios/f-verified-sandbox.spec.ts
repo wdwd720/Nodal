@@ -232,11 +232,22 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
     (bucket) => bucket.origin === "PROMOTIONAL" || bucket.origin_floor === "PROMOTIONAL",
   );
   expect(fromAGrant.length, "the seeded balance is a promotional grant").toBeGreaterThan(0);
+  // The claim is about the money. `payout_allowed` is the policy's rule for the
+  // bucket's own ORIGIN and not the verdict on the bucket: an earning a grant
+  // funded carries an origin the policy permits and is refused by its FLOOR
+  // (D-131). So nothing a grant is behind may leave, and the per-origin rule is
+  // asserted where it is the rule that applies.
   expect(
     fromAGrant
-      .filter((bucket) => bucket.payout_allowed || BigInt(bucket.withdrawable) > 0n)
+      .filter((bucket) => BigInt(bucket.withdrawable) > 0n)
       .map((bucket) => `${bucket.origin}/${bucket.origin_floor ?? "?"}`),
-    "a promotional grant never leaves, whichever provenance carries it",
+    "nothing a promotional grant funded may leave, whichever provenance carries it",
+  ).toEqual([]);
+  expect(
+    fromAGrant
+      .filter((bucket) => bucket.origin === "PROMOTIONAL" && bucket.payout_allowed)
+      .map((bucket) => `${bucket.origin}/${bucket.origin_floor ?? "?"}`),
+    "and the policy's rule for the grant's own origin refuses it outright",
   ).toEqual([]);
 
   // # What holds value back on a SEEDED tier, and why that is the rule working
