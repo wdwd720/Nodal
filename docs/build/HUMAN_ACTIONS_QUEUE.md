@@ -46,6 +46,14 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Why:** the goal's §2 orders the push after the secrets exist, because `9906c9f` validates both at boot and would fail its health check without them (Render would keep the old build live, but the failed deploy is avoidable).
 - **Unblocks:** live verification of `/v1/healthz`, `/v1/readyz`, `/v1/version` (config hash, and `build_version` — which reports the pushed commit as of F-142; before that it was the literal `dev` for every build ever deployed, so the comparison this step promises could not be made) — tell Claude "secrets set, main pushed" and it verifies and records the evidence in `docs/audit/PRODUCTION_EVIDENCE_INDEX.md`.
 - If the push asks for credentials, sign in to GitHub in the credential prompt (account that owns `wdwd720/Nodal`).
+- **Already done by Claude (2026-09-10 23:49 PDT):** the `productization` branch is pushed to `origin` as a safe checkpoint (§63) and draft PR **#1** (https://github.com/wdwd720/Nodal/pull/1) is open so CI runs on Linux against it. Neither deploys anything: Render deploys `main` only, and a draft PR merges nothing. The PR body says the order.
+
+## 3b. Merge the productization PR (OPEN, after 3 has verified)
+
+- **Where:** https://github.com/wdwd720/Nodal/pull/1 → **Ready for review** → **Merge** (a merge commit, not a squash: the branch's history is the audit trail the registers cite by hash).
+- **When:** only after item 3's verification passed on `9906c9f`, and only when Claude has merged the last two fix branches (`fix/withdrawal`, `fix/docs`) and refreshed the PR — the PR body and `docs/build/MASTER_BUILD_STATE.md` "RESUME HERE" both say whether that has happened.
+- **Why:** merging deploys the productization build to STAGING (the API from `render.yaml`'s `nodal-api`, and creates the static site `nodal-web`), which is what §2's live verification and item 4's CNAME need.
+- **Unblocks:** items 4 and 6; the §56 browser walk of the live staging system.
 
 ## 4. GoDaddy: CNAME for the web app (OPEN, later — after `nodal-web` exists on Render)
 
