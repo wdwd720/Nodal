@@ -192,6 +192,8 @@ func TestSourceNames_AreTheTablesTheFollowerReads(t *testing.T) {
 		"native_market_transitions",
 		"account_status_transitions",
 		"security_events_login",
+		"compliance_profile_transitions",
+		"agent_pauses",
 	}, f.SourceNames())
 }
 
@@ -235,6 +237,84 @@ func TestStateMappings_CoverEveryStateTheColumnAdmitsOrDeliberatelyDoNot(t *test
 	}
 	assert.Equal(t, []string{"CLOSE_ONLY", "DELISTED", "FROZEN", "HALTED"}, sortedCopy(pausedStatuses))
 	assert.Equal(t, []string{"CLOSED", "FROZEN", "RESTRICTED"}, sortedCopy(restrictedStatuses))
+
+	// The ten verification states §20 names. Three are deliberately silent
+	// because they are a provider session the person is standing in front of.
+	verificationSilent := []string{"UNVERIFIED", "STARTED", "PENDING"}
+	for _, st := range verificationSilent {
+		_, mapped := verificationKinds[st]
+		assert.Falsef(t, mapped, "%s is listed as deliberately silent and is also mapped", st)
+	}
+	assert.Len(t, verificationKinds, 10-len(verificationSilent),
+		"every verification state is either mapped or deliberately silent")
+	for _, k := range verificationKinds {
+		assert.True(t, k.IsProduct())
+	}
+}
+
+// TestVerificationCopy_AnExpiredDecisionIsNotARejection.
+//
+// The two land in the same inbox, a year apart, and one of them is a judgement
+// about the person while the other is a clock. D-061 makes that distinction in
+// the resolver; this is the distinction in the words.
+func TestVerificationCopy_AnExpiredDecisionIsNotARejection(t *testing.T) {
+	t.Parallel()
+	expiredTitle, expiredBody := verificationCopy("EXPIRED", false)
+	assert.Equal(t, "Your identity verification expired", expiredTitle)
+	assert.Contains(t, expiredBody, "not a rejection")
+	assert.Contains(t, expiredBody, "verify again")
+
+	rejectedTitle, _ := verificationCopy("REJECTED", false)
+	assert.NotEqual(t, expiredTitle, rejectedTitle)
+
+	// Every mapped state has copy of its own, and none of it names a provider.
+	seen := map[string]bool{}
+	for state := range verificationKinds {
+		title, body := verificationCopy(state, false)
+		require.NotEmpty(t, title)
+		require.NotEmpty(t, body)
+		assert.Falsef(t, seen[title], "%s reuses another state's title", state)
+		seen[title] = true
+		assert.NotContains(t, strings.ToLower(body), "provider")
+	}
+
+	// ADR-0023: a rehearsal says it is one, in the words a person reads,
+	// because Producer stamps the row's sandbox flag from the DEPLOYMENT and a
+	// sandbox verification on a tier that labels nothing else would otherwise
+	// look exactly like an approval.
+	_, sandboxBody := verificationCopy("VERIFIED", true)
+	assert.Contains(t, sandboxBody, "SANDBOX")
+	assert.Contains(t, sandboxBody, "not an approval")
+}
+
+// TestAgentPauseCopy_NamesTheReasonAndNotThePerson.
+func TestAgentPauseCopy_NamesTheReasonAndNotThePerson(t *testing.T) {
+	t.Parallel()
+	title, body := AgentPauseCopy("OPERATOR", "a compliance review")
+	assert.Equal(t, "Your agent was paused by Nodal", title)
+	assert.Contains(t, body, "a compliance review")
+	assert.NotContains(t, body, "op-1")
+
+	killTitle, _ := AgentPauseCopy("KILL_SWITCH", "")
+	assert.Contains(t, killTitle, "kill switch")
+
+	// Every reason code agent_pauses admits produces a sentence; an unknown one
+	// falls back to a true statement rather than to the code.
+	for _, code := range []string{
+		"OWNER_REQUEST", "OPERATOR", "KILL_SWITCH", "BUDGET_EXHAUSTED", "MODEL_UNAVAILABLE",
+		"DATA_GAP", "RISK_VIOLATION", "RECONCILIATION_MISMATCH", "SECURITY",
+	} {
+		gotTitle, gotBody := AgentPauseCopy(code, "")
+		assert.NotEmpty(t, gotTitle)
+		assert.NotContains(t, gotTitle, code)
+		assert.NotEmpty(t, gotBody)
+	}
+
+	assert.Equal(t, Ref{Type: "agent_pause", ID: "p-1"}, AgentPauseRef("p-1"))
+	// cmd/api and the follower key on the pause ROW, so a second pause of the
+	// same agent is a second notification and the same pause is never two.
+	assert.NotEqual(t, DedupKey(KindAgentPaused, AgentPauseRef("p-1"), "p-1"),
+		DedupKey(KindAgentPaused, AgentPauseRef("p-2"), "p-2"))
 }
 
 func sortedCopy(in []string) []string {

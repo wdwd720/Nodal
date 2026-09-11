@@ -10,7 +10,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 )
 
-// The six sources. Each one is a query over rows a domain service already
+// The eight sources. Each one is a query over rows a domain service already
 // wrote, a mapping from a state name to a kind, and the copy a person reads.
 //
 // Nothing here computes a figure. Quantities are cast to text in SQL and
@@ -530,6 +530,251 @@ func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID stri
 		})
 	}
 	return out, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Verification decisions (D-082)
+// ---------------------------------------------------------------------------
+
+// verificationKinds maps a financial verification state to the kind it
+// notifies as. Seven of the ten states are here; UNVERIFIED, STARTED and
+// PENDING are not, and that is the whole of the editorial decision.
+//
+// STARTED and PENDING are the machinery of a provider session the person is
+// standing in front of: they already know, and telling them "we are thinking
+// about it" every time a provider moves an internal state would make the one
+// message that matters -- the decision -- arrive in a queue of noise.
+// UNVERIFIED is where everybody starts.
+//
+// EXPIRED is here and is deliberately NOT a failure message. A decision that
+// aged out of its validity window is not a rejection (D-061), and the copy has
+// to say the difference, because the two land in the same inbox.
+var verificationKinds = map[string]Kind{
+	"REQUIRED":          KindVerificationUpdated,
+	"NEEDS_INFORMATION": KindVerificationUpdated,
+	"VERIFIED":          KindVerificationUpdated,
+	"REJECTED":          KindVerificationUpdated,
+	"EXPIRED":           KindVerificationUpdated,
+	"RESTRICTED":        KindVerificationUpdated,
+	"SUSPENDED":         KindVerificationUpdated,
+}
+
+// readVerificationUpdates follows compliance_profile_transitions.
+//
+// The notification is addressed to the PERSON and carries no account id.
+// Verification is a property of a person -- somebody with three accounts
+// verifies once and all three see the same level -- so joining `accounts` here
+// would produce three Emit calls that the unique index then collapses into one,
+// and the one that survived would name whichever account sorted first.
+//
+// The sandbox flag rides in the data rather than on the row: Producer stamps
+// notifications.sandbox from the DEPLOYMENT (a sandbox tier labels everything
+// it writes and a live one may label nothing), so a rehearsal decision says so
+// in the words a person reads instead.
+func readVerificationUpdates(ctx context.Context, q db.Querier, at time.Time, rowID string, limit int) ([]Change, error) {
+	rows, err := q.Query(ctx, `SELECT t.occurred_at, t.id::text, t.user_id, t.to_state,
+			coalesce(t.reason, ''), coalesce(t.correlation_id, ''), coalesce(vs.sandbox, false)
+		FROM compliance_profile_transitions t
+		LEFT JOIN verification_sessions vs ON vs.id = t.session_id
+		WHERE `+keysetOn("t.occurred_at", "t.id")+` AND t.to_state = ANY($3::text[])
+		ORDER BY t.occurred_at, t.id LIMIT $4`,
+		at.UTC(), nullable(rowID), keysOf(verificationKinds), limit)
+	if err != nil {
+		return nil, fmt.Errorf("read compliance profile transitions: %w", err)
+	}
+	defer rows.Close()
+	var out []Change
+	for rows.Next() {
+		var (
+			occurredAt            time.Time
+			transitionID, toState string
+			reason, correlationID string
+			sandbox               bool
+			userID                accounts.UserID
+		)
+		if err := rows.Scan(&occurredAt, &transitionID, &userID, &toState,
+			&reason, &correlationID, &sandbox); err != nil {
+			return nil, fmt.Errorf("read compliance profile transitions: %w", err)
+		}
+		title, body := verificationCopy(toState, sandbox)
+		out = append(out, Change{
+			At:    occurredAt,
+			RowID: transitionID,
+			Notify: []Notification{{
+				UserID: userID,
+				Kind:   KindVerificationUpdated,
+				Title:  title,
+				Body:   body,
+				// The reference is the person's own profile: there is one, it
+				// is what the surface refetches, and a provider reference or a
+				// session id would put a vendor's identifier in a customer's
+				// inbox (PROVIDER_BOUNDARY SS1 role B).
+				Ref:           Ref{Type: "compliance_profile", ID: userID.String()},
+				Occurrence:    transitionID,
+				CorrelationID: correlationID,
+				OccurredAt:    occurredAt,
+				Data: mustJSON(map[string]any{
+					"to_state": toState,
+					"sandbox":  sandbox,
+				}),
+			}},
+			Signal: []Signal{
+				{UserID: userID.String(), Scope: ScopeVerification},
+				// A verification level is an input to withdrawal eligibility,
+				// and the eligibility page is the one a person is most likely
+				// to be staring at while this arrives.
+				{UserID: userID.String(), Scope: ScopeEligibility},
+			},
+		})
+	}
+	return out, rows.Err()
+}
+
+// verificationCopy. Nothing here names a provider, quotes a provider's reason,
+// or restates a sub-check: Nodal stores a decision and a reference, and what a
+// customer is told is the decision.
+func verificationCopy(state string, sandbox bool) (title, body string) {
+	switch state {
+	case "VERIFIED":
+		title, body = "Your identity is verified",
+			"Your identity verification completed. What you can do with your balance is on the withdraw page."
+	case "EXPIRED":
+		title, body = "Your identity verification expired",
+			"Verification decisions are valid for a year and this one has reached the end of its window. "+
+				"This is not a rejection: you can verify again whenever you want to."
+	case "REJECTED":
+		title, body = "Your identity verification was not approved",
+			"The check did not complete in your favour. Your balance is unchanged; what changes is what may leave the platform."
+	case "NEEDS_INFORMATION":
+		title, body = "Your identity verification needs more information",
+			"The check stopped and needs something more from you before it can continue."
+	case "RESTRICTED":
+		title, body = "Your verification carries a restriction",
+			"Your identity is established and something limits what it permits. The withdraw page says which."
+	case "SUSPENDED":
+		title, body = "Your identity verification is suspended",
+			"Verification is stopped pending a review. Your balance is unchanged."
+	default: // REQUIRED
+		title, body = "Identity verification is needed",
+			"Something you asked for needs your identity verified first. Nothing else about your account changed."
+	}
+	if sandbox {
+		body += " This was a SANDBOX rehearsal: no provider assessed anybody and this is not an approval."
+	}
+	return title, body
+}
+
+// ---------------------------------------------------------------------------
+// Agent pauses (D-083)
+// ---------------------------------------------------------------------------
+
+// readAgentPauses follows agent_pauses, and deliberately not every row of it.
+//
+// An owner who pauses their own agent pressed the button; a notification saying
+// what they just did is the noise that teaches people to ignore the inbox. What
+// a person cannot know without being told is that somebody ELSE stopped their
+// agent -- an operator, the kill switch, a budget, a risk violation -- so the
+// predicate is the pause's own actor type, and it is the same predicate
+// cmd/api's publisher uses so the two cannot disagree about who hears what.
+//
+// It orders on paused_at, which never moves. agent_pauses IS updated -- a
+// resume stamps resumed_at -- so a cursor over updated_at would re-read every
+// pause forever, which is the mistake readNewSessions documents avoiding.
+const agentPauseActorPredicate = `ap.paused_by_actor_type <> 'USER'`
+
+func readAgentPauses(ctx context.Context, q db.Querier, at time.Time, rowID string, limit int) ([]Change, error) {
+	rows, err := q.Query(ctx, `SELECT ap.paused_at, ap.id::text, a.owner_user_id, ag.account_id,
+			ap.agent_id::text, ap.reason_code, ap.reason, coalesce(ap.correlation_id, '')
+		FROM agent_pauses ap
+		JOIN agents ag ON ag.id = ap.agent_id
+		JOIN accounts a ON a.id = ag.account_id
+		WHERE `+keysetOn("ap.paused_at", "ap.id")+` AND `+agentPauseActorPredicate+`
+		ORDER BY ap.paused_at, ap.id LIMIT $3`,
+		at.UTC(), nullable(rowID), limit)
+	if err != nil {
+		return nil, fmt.Errorf("read agent pauses: %w", err)
+	}
+	defer rows.Close()
+	var out []Change
+	for rows.Next() {
+		var (
+			pausedAt                      time.Time
+			pauseID, agentID              string
+			reasonCode, reason, correlate string
+			userID                        accounts.UserID
+			accountID                     accounts.AccountID
+		)
+		if err := rows.Scan(&pausedAt, &pauseID, &userID, &accountID,
+			&agentID, &reasonCode, &reason, &correlate); err != nil {
+			return nil, fmt.Errorf("read agent pauses: %w", err)
+		}
+		title, body := AgentPauseCopy(reasonCode, reason)
+		out = append(out, Change{
+			At:    pausedAt,
+			RowID: pauseID,
+			Notify: []Notification{{
+				UserID:        userID,
+				AccountID:     accountPtr(accountID),
+				Kind:          KindAgentPaused,
+				Title:         title,
+				Body:          body,
+				Ref:           AgentPauseRef(pauseID),
+				Occurrence:    pauseID,
+				CorrelationID: correlate,
+				OccurredAt:    pausedAt,
+				Data: mustJSON(map[string]any{
+					"agent_id":    agentID,
+					"pause_id":    pauseID,
+					"reason_code": reasonCode,
+				}),
+			}},
+			Signal: []Signal{{UserID: userID.String(), Scope: ScopeAgent, Ref: agentID}},
+		})
+	}
+	return out, rows.Err()
+}
+
+// AgentPauseRef and AgentPauseCopy are exported because cmd/api emits the same
+// notification for the same pause row the instant it is written, and the
+// follower emits it up to a tick later as the safety net. They agree on the
+// ref, the occurrence and therefore the dedup key by construction rather than
+// by two people writing the same string twice.
+//
+// The pause ROW is the reference rather than the agent, because a second pause
+// of the same agent is a second thing that happened and has to be a second
+// notification.
+func AgentPauseRef(pauseID string) Ref { return Ref{Type: "agent_pause", ID: pauseID} }
+
+// AgentPauseCopy is what the agent's owner reads.
+//
+// The reason the person who acted supplied is quoted and the person is not
+// named -- the same rule accountStatusBody follows, for the same reason: an
+// operator's identifier is not a customer's business, and the reason is.
+func AgentPauseCopy(reasonCode, reason string) (title, body string) {
+	switch reasonCode {
+	case "KILL_SWITCH":
+		title, body = "Your agent was stopped by a kill switch",
+			"Trading was stopped platform-wide and your agent stopped with it."
+	case "OPERATOR":
+		title, body = "Your agent was paused by Nodal",
+			"An operator paused your agent. You can resume it yourself once the reason is resolved."
+	case "BUDGET_EXHAUSTED":
+		title, body = "Your agent paused: its budget is used up",
+			"Your agent reached the spending ceiling you granted it and stopped."
+	case "RISK_VIOLATION":
+		title, body = "Your agent was paused by a risk control",
+			"A risk limit stopped your agent before it could act further."
+	case "SECURITY":
+		title, body = "Your agent was paused for a security reason",
+			"Your agent was stopped pending a security review."
+	default:
+		title, body = "Your agent was paused",
+			"Your agent stopped acting. Nothing it already did is affected."
+	}
+	if r := strings.TrimSpace(reason); r != "" {
+		body += " Reason recorded: " + r + "."
+	}
+	return title, body
 }
 
 // keysOf returns a map's keys as a sorted-enough []string for = ANY(). Order
