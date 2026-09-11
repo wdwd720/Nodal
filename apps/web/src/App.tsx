@@ -41,7 +41,10 @@ import {
 import { signInPathFor, useSession } from "./session.tsx";
 
 import { Activity } from "./pages/Activity.tsx";
-import { Agents } from "./pages/Agents.tsx";
+import { AgentDetail } from "./pages/agents/AgentDetail.tsx";
+import { AgentNew } from "./pages/agents/AgentNew.tsx";
+import { AgentsList } from "./pages/agents/AgentsList.tsx";
+import { Withdraw } from "./pages/withdraw/Withdraw.tsx";
 import { CreateAsset } from "./pages/CreateAsset.tsx";
 import { Home } from "./pages/Home.tsx";
 import { Marketplace } from "./pages/Marketplace.tsx";
@@ -204,7 +207,10 @@ export function App(): ReactNode {
             own pages; the route is D-077's and does not change with it. */}
         <Route path="/markets/products" element={<Marketplace />} />
         <Route path="/create-asset" element={<CreateAsset />} />
-        <Route path="/agents" element={<Agents />} />
+        <Route path="/agents" element={<AgentsList />} />
+        <Route path="/agents/new" element={<AgentNew />} />
+        <Route path="/agents/:agentId" element={<AgentDetail />} />
+        <Route path="/withdraw" element={<Withdraw />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/settings" element={<Settings />} />

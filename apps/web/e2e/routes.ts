@@ -53,6 +53,13 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/markets/products", heading: "Marketplace", nav: "Products" },
   { path: "/create-asset", heading: "Create asset", nav: "Create asset" },
   { path: "/agents", heading: "Agents", nav: "Agents" },
+  // No `nav`: the create flow is reached from the agents page rather than the
+  // rail, because it is an action and not a destination.
+  { path: "/agents/new", heading: "Create an agent" },
+  // Withdraw is a primary action rather than a destination, and it is in the
+  // rail for everybody — including the accounts that cannot use it, which is
+  // the point of goal §19.
+  { path: "/withdraw", heading: "Withdraw", nav: "Withdraw" },
   { path: "/portfolio", heading: "Portfolio", nav: "Portfolio" },
   { path: "/activity", heading: "Activity", nav: "Activity" },
   // No `nav`: Settings is reached from the account menu rather than the rail,
