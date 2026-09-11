@@ -42,6 +42,7 @@ import { useState, type ReactNode } from "react";
 
 import {
   useMeActivity,
+  useVersion,
   type ActivityAmount,
   type ActivityFeed,
   type ActivityFeedItem,
@@ -57,7 +58,7 @@ import { StatusBadge } from "../../components/StatusBadge.tsx";
 import { Temp, temperatureOf } from "../../components/Temperature.tsx";
 import { CREDIT_DECIMALS, minorStringToUsd } from "../../lib/credits.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
-import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK } from "../../lib/honesty.ts";
+import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, SANDBOX_TIER_NOTE } from "../../lib/honesty.ts";
 import { formatInstant } from "../../lib/time.ts";
 import { useActiveAccountId } from "../../session.tsx";
 
@@ -96,6 +97,12 @@ function routeFor(type: string, id: string): string | undefined {
 
 export function Activity(): ReactNode {
   const accountId = useActiveAccountId();
+  // The feed marks a row simulated from the API's own answer, which is right
+  // for a row. It cannot answer the question the reader is actually asking on
+  // a rehearsal deployment — "is any of this real?" — so the tier is read here
+  // and says so once, in words, above the feed.
+  const version = useVersion();
+  const sandbox = version.data?.sandbox_tier === true;
   const [kinds, setKinds] = useState<readonly ActivityFeedKind[]>([]);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const feed = useMeActivity({
@@ -127,6 +134,8 @@ export function Activity(): ReactNode {
       title="Activity"
       lead="Everything that has happened to this account, newest first. Each row is the server's own summary of one event."
     >
+      {sandbox && <p className="field-note">{SANDBOX_TIER_NOTE}</p>}
+
       <Panel
         title="What to show"
         description="No filter means every kind. Choosing none is the same as choosing all, because a feed of nothing is not a filter anybody wants."
@@ -177,7 +186,7 @@ export function Activity(): ReactNode {
           {(page: ActivityFeed) => (
             <div className="stack">
               {page.items.map((item) => (
-                <Row key={item.id} item={item} />
+                <Row key={item.id} item={item} sandbox={sandbox} />
               ))}
               <div className="form-actions">
                 {cursor !== undefined && (
@@ -270,13 +279,19 @@ function Amount(props: { readonly amount: ActivityAmount }): ReactNode {
   );
 }
 
-function Row(props: { readonly item: ActivityFeedItem }): ReactNode {
+function Row(props: {
+  readonly item: ActivityFeedItem;
+  /** The deployment is a rehearsal, so every row on it is. */
+  readonly sandbox: boolean;
+}): ReactNode {
   const { item } = props;
   const to = routeFor(item.reference.type, item.reference.id);
   // The row's own temperature is the strongest of its amounts: a row with one
   // simulated figure in it is a simulated row, because that is the claim a
   // reader takes away from it.
-  const rowTemp = item.simulated
+  const rowTemp = props.sandbox
+    ? "simulated"
+    : item.simulated
     ? "simulated"
     : item.amounts.some((a) => temperatureOf(a.temperature) === "simulated")
       ? "simulated"

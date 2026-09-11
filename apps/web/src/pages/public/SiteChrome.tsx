@@ -21,6 +21,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 
 import { API_ORIGIN } from "../../api/client.ts";
 import { useVersion } from "../../api/queries.ts";
+import { SandboxLine } from "../../components/SandboxLine.tsx";
 import { BrandLockup } from "../../components/Brand.tsx";
 import { IconButton, LinkButton } from "../../components/Button.tsx";
 import { Sheet } from "../../components/Dialog.tsx";
@@ -229,11 +230,20 @@ function SiteFoot(): ReactNode {
  * supplies the landmarks.
  */
 export function SiteFrame(props: { readonly children: ReactNode }): ReactNode {
+  const version = useVersion();
   return (
     <div className="site">
       <a className="skip-link" href="#main">
         Skip to main content
       </a>
+      {/* Above the chrome, on every public page. `USER_JOURNEY.md` §0 promises
+          this label on the landing page, and the promise is worth more here
+          than inside the application: somebody signed out is deciding whether
+          this is a real product, and every sentence on the site reads as one
+          until something says the deployment is a rehearsal. The footer has
+          been reading `/v1/version` for the build tag the whole time and
+          throwing `sandbox_tier` away. */}
+      <SandboxLine sandbox={version.data?.sandbox_tier} />
       <SiteHead />
       <main id="main" tabIndex={-1} className="site-main">
         {props.children}

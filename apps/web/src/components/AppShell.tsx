@@ -43,8 +43,8 @@
  *
  * The same is true of every entry in `DESTINATIONS` and `ACCOUNT_LINKS`.
  */
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 
 import { useSignOut, useUnreadCount } from "../api/queries.ts";
 import { RISK_FOOTER } from "../lib/honesty.ts";
@@ -56,6 +56,7 @@ import { Button, IconButton, LinkButton } from "./Button.tsx";
 import { StatusBadge } from "./StatusBadge.tsx";
 import { Dialog, Sheet } from "./Dialog.tsx";
 import { Field, FieldGrid } from "./Field.tsx";
+import { SandboxLine } from "./SandboxLine.tsx";
 import { StreamBadge, useEventStream } from "./StreamStatus.tsx";
 import { ToastProvider } from "./Toast.tsx";
 
@@ -142,6 +143,45 @@ function useMediaQuery(query: string): boolean {
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "nav-link nav-link-active" : "nav-link";
+}
+
+/**
+ * Moves focus into the new page when the address changes.
+ *
+ * A client-side navigation replaces the document's content and leaves focus
+ * where it was — on the link that was clicked, which is now in a rail beside a
+ * page nobody announced. A screen-reader user is told nothing happened; a
+ * keyboard user's next Tab resumes in the navigation rather than at the top of
+ * what they just asked for, so reaching the first control on the page means
+ * walking the whole rail again. It is the one thing a single-page application
+ * takes away from a browser that nothing else puts back.
+ *
+ * `#main` has `tabIndex={-1}` already, because the skip link needs it. Focusing
+ * it is therefore the same landing place a visitor gets from "Skip to main
+ * content", which keeps the two behaviours identical instead of inventing a
+ * second idea of where a page begins.
+ *
+ * It is deliberately skipped on the FIRST render: a fresh page load already has
+ * focus at the top of the document, and stealing it there would move a visitor
+ * who has not asked for anything — and would fight the browser's own restore of
+ * a scroll position and a focused element on a back navigation.
+ */
+function useFocusOnRouteChange(): void {
+  const { pathname } = useLocation();
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    const main = document.getElementById("main");
+    if (main === null) return;
+    main.focus({ preventScroll: true });
+    // The new page starts at its own top. Without this a long page navigated
+    // to from halfway down another one opens in the middle of itself.
+    window.scrollTo({ top: 0, left: 0 });
+  }, [pathname]);
 }
 
 function Sections(props: { readonly onNavigate?: () => void }): ReactNode {
@@ -291,33 +331,10 @@ function NotificationBell(props: { readonly enabled: boolean }): ReactNode {
   );
 }
 
-/**
- * The standing sandbox statement.
- *
- * `GET /v1/version` says whether this deployment is a sandbox tier; the client
- * never infers it from the environment name, because a build that guessed would
- * label the wrong deployment — and the only thing worse than an unlabelled
- * rehearsal is a real deployment labelled as one. An absent flag means the API
- * did not say, and that is not "sandbox" either.
- *
- * It is part of the document rather than a dismissible banner. A rehearsal a
- * customer can dismiss is a rehearsal they will forget they are in.
- */
-function SandboxLine(props: { readonly sandbox: boolean | undefined }): ReactNode {
-  if (props.sandbox !== true) return null;
-  return (
-    <p className="sandbox-line" role="note">
-      <span className="sandbox-word">Sandbox</span>
-      <span>
-        Credits, verification and payouts here are rehearsals; nothing moves real value.
-      </span>
-    </p>
-  );
-}
-
 export function AppShell(props: { readonly children: ReactNode }): ReactNode {
   const session = useSession();
   const version = useVersion();
+  useFocusOnRouteChange();
   const stream = useEventStream(session.signedIn);
   const wide = useMediaQuery(WIDE);
   const [menuOpen, setMenuOpen] = useState(false);

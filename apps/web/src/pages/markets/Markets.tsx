@@ -41,7 +41,7 @@ import { FormField } from "../../components/Field.tsx";
 import { Disclosure, Page, Panel, Pill } from "../../components/Layout.tsx";
 import { fromBaseUnits } from "../../lib/format.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
-import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../../lib/honesty.ts";
+import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE, SANDBOX_TIER_NOTE } from "../../lib/honesty.ts";
 import { MarketsNav } from "./MarketsNav.tsx";
 import { SORTS, STATUS_FILTERS, UNSTABLE_SORT_NOTE, statusCopy } from "./copy.ts";
 import "../../styles/markets.css";
@@ -370,12 +370,7 @@ function MarketList(props: {
 
       {!page.stable && <p className="field-note">{UNSTABLE_SORT_NOTE}</p>}
 
-      {props.sandbox && (
-        <p className="field-note">
-          This deployment is a sandbox tier, so every figure on this page is simulated. Nothing here
-          is anybody&apos;s money and no trade on it moves value anywhere.
-        </p>
-      )}
+      {props.sandbox && <p className="field-note">{SANDBOX_TIER_NOTE}</p>}
 
       <div className="form-actions">
         {props.paging.history.length === 0 ? (

@@ -18,7 +18,7 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useAgents, type Agent, type AgentList } from "../../api/queries.ts";
+import { useAgents, useVersion, type Agent, type AgentList } from "../../api/queries.ts";
 import { LinkButton } from "../../components/Button.tsx";
 import { AsyncPanel } from "../../components/DataState.tsx";
 import { DataTable } from "../../components/DataTable.tsx";
@@ -27,6 +27,7 @@ import { Skeleton } from "../../components/Skeleton.tsx";
 import { EMPTY_STATES } from "../../lib/errors.ts";
 import { formatInstant } from "../../lib/time.ts";
 import { useActiveAccountId } from "../../session.tsx";
+import { SANDBOX_TIER_NOTE } from "../../lib/honesty.ts";
 import { AgentStatus, AuthorityLadder, Credits, CreditsNote } from "./parts.tsx";
 
 function runtimeWord(agent: Agent): string {
@@ -38,6 +39,11 @@ function runtimeWord(agent: Agent): string {
 export function AgentsList(): ReactNode {
   const accountId = useActiveAccountId();
   const agents = useAgents(accountId);
+  // The same tier answer `/markets` reads. An agent's budget and its loss stop
+  // are Credits, and on a rehearsal deployment they are rehearsal Credits — so
+  // the panels that show them carry the same temperature the market pages do.
+  const version = useVersion();
+  const sandbox = version.data?.sandbox_tier === true;
   const navigate = useNavigate();
 
   return (
@@ -50,9 +56,12 @@ export function AgentsList(): ReactNode {
         </LinkButton>
       }
     >
+      {sandbox && <p className="field-note">{SANDBOX_TIER_NOTE}</p>}
+
       <Panel
         title="Your agents"
         description="What each one may do, what it has been granted, and what is actually evaluating it."
+        temp={sandbox ? "simulated" : "economy"}
       >
         <AsyncPanel
           query={agents}
@@ -137,6 +146,7 @@ export function AgentsList(): ReactNode {
       <Panel
         title="Authority levels"
         description="What each level means, and which ones this deployment permits."
+        temp={sandbox ? "simulated" : "economy"}
       >
         <AsyncPanel
           query={agents}

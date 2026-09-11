@@ -41,6 +41,7 @@ import {
   useCreditBalance,
   useMarketDiscovery,
   useMeActivity,
+  useVersion,
   usePortfolio,
   type ActivityFeed,
   type Agent,
@@ -63,7 +64,7 @@ import { StatusBadge } from "../../components/StatusBadge.tsx";
 import { Temp, temperatureOf } from "../../components/Temperature.tsx";
 import { CREDIT_DECIMALS } from "../../lib/credits.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
-import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, PROVENANCE_NOTE } from "../../lib/honesty.ts";
+import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, PROVENANCE_NOTE, SANDBOX_TIER_NOTE } from "../../lib/honesty.ts";
 import { formatInstant } from "../../lib/time.ts";
 import { useActiveAccountId } from "../../session.tsx";
 
@@ -103,6 +104,15 @@ function PrimaryActions(): ReactNode {
 
 export function Home(): ReactNode {
   const accountId = useActiveAccountId();
+  // Read once, here, and passed down. A sandbox tier is simulated value
+  // throughout — which is why `/markets` desaturates every figure on it — and
+  // this page was showing the same markets, the same Credits and the same
+  // agents at `economy`. Two temperatures for one deployment is worse than
+  // either one alone: it teaches the reader that the desaturation means
+  // something about the market rather than about the tier.
+  const version = useVersion();
+  const sandbox = version.data?.sandbox_tier === true;
+  const temp = sandbox ? "simulated" : "economy";
   const credits = useCreditBalance(accountId);
   const agents = useAgents(accountId);
   const portfolio = usePortfolio(accountId);
@@ -129,11 +139,15 @@ export function Home(): ReactNode {
       lead="Every figure here was computed by the backend. Nothing on this page adds two kinds of value together."
       actions={<PrimaryActions />}
     >
+      {/* The tier, in words, once. The temperatures below say the same thing
+          in colour, and colour alone is not a claim a reader can quote. */}
+      {sandbox && <p className="field-note">{SANDBOX_TIER_NOTE}</p>}
+
       {/* 1. Credits. */}
       <Panel
         title="Credits"
         description="What this account holds inside Nodal, and what may be done with each part of it."
-        temp="economy"
+        temp={temp}
       >
         <AsyncPanel
           query={credits}
@@ -155,13 +169,13 @@ export function Home(): ReactNode {
           condition on the DATA rather than a layout preference: a portfolio
           panel reading zero on an account that has never traded teaches
           somebody that they lost something. */}
-      <PortfolioModules query={portfolio} />
+      <PortfolioModules query={portfolio} sandbox={sandbox} />
 
       {/* 4. Active agents. */}
       <Panel
         title="Agents"
         description="What is acting on this account's behalf, and the authority each one was granted."
-        temp="economy"
+        temp={temp}
       >
         <AsyncPanel
           query={agents}
@@ -184,7 +198,7 @@ export function Home(): ReactNode {
       <Panel
         title="Markets"
         description="The biggest moves over the last 24 hours, in the ordering the backend applied."
-        temp="economy"
+        temp={temp}
       >
         <AsyncPanel
           query={movers}
@@ -204,7 +218,7 @@ export function Home(): ReactNode {
       <Panel
         title="Recent activity"
         description="The last few things that happened, each as the backend summarised it."
-        temp="economy"
+        temp={temp}
       >
         <AsyncPanel
           query={recent}
@@ -250,7 +264,10 @@ export function Home(): ReactNode {
  */
 function PortfolioModules(props: {
   readonly query: ReturnType<typeof usePortfolio>;
+  /** The deployment's own answer, so this page and `/markets` agree. */
+  readonly sandbox: boolean;
 }): ReactNode {
+  const temp = props.sandbox ? "simulated" : "economy";
   const data = props.query.data;
   // Nothing at all while it loads: a panel that appears and then vanishes is
   // worse than one that arrives late, and this panel's whole point is that its
@@ -267,7 +284,7 @@ function PortfolioModules(props: {
       <Panel
         title="Portfolio value"
         description="What the markets would pay for these positions at the instant below. Not Credits, and never added to them."
-        temp={temperatureOf(data.temperature)}
+        temp={props.sandbox ? "simulated" : temperatureOf(data.temperature)}
         asOf={data.as_of}
         actions={
           <LinkButton to="/portfolio" variant="secondary">
@@ -309,7 +326,7 @@ function PortfolioModules(props: {
       <Panel
         title="Holdings"
         description="The largest positions by market value, as the backend ordered them."
-        temp="economy"
+        temp={temp}
         asOf={data.as_of}
       >
         <DataTable<PortfolioPosition>
