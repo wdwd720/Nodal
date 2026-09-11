@@ -143,8 +143,8 @@ func submitReservedPayouts(ctx context.Context, database *db.DB, svc *payout.Ser
 		log.ErrorContext(ctx, "payout submission sweep failed to read", "error", err.Error())
 		return
 	}
-	submitted, held := 0, 0
-	heldReason := ""
+	submitted, held, skipped := 0, 0, 0
+	heldReason, skippedReason := "", ""
 	for _, r := range pending {
 		if ctx.Err() != nil {
 			return
@@ -155,8 +155,24 @@ func submitReservedPayouts(ctx context.Context, database *db.DB, svc *payout.Ser
 			submitted++
 			log.InfoContext(ctx, "payout submitted", "payout_id", r.ID.String(), "state", string(out.State))
 		case errs.CodeOf(serr) == errs.CodeInvalidStateTransition:
-			// Something moved it between the read and the call -- a cancel, or
-			// another instance's pass. Not this pass's problem.
+			// Not submittable right now. Two causes, and they look the same from
+			// here: something moved it between the read and the call (a cancel,
+			// or another instance's pass), or the destination it names has
+			// stopped being usable because the holder removed it (F-263).
+			//
+			// Neither is this pass's problem and neither stops the rest. The
+			// first is transient; the second is not, and it is the reason this
+			// branch counts and reports instead of returning silently. A request
+			// pointing at a removed destination holds the person's value
+			// reserved until they cancel it, and a sweep that says nothing about
+			// it every fifteen seconds for ever is how that goes unnoticed. The
+			// person was told at the moment they removed the destination -- the
+			// disable response names the requests it stranded -- and this is the
+			// operator's half of the same fact.
+			skipped++
+			if skippedReason == "" {
+				skippedReason = serr.Error()
+			}
 			continue
 		case errs.CodeOf(serr) == errs.CodeKillSwitchActive,
 			errs.CodeOf(serr) == errs.CodeAccountFrozen,
@@ -185,6 +201,16 @@ func submitReservedPayouts(ctx context.Context, database *db.DB, svc *payout.Ser
 		log.WarnContext(ctx, "payouts were held by an emergency control or an account status",
 			"held", held, "first_reason", heldReason,
 			"consequence", "the Credits stay reserved and the pass after the release submits them")
+	}
+	if skipped > 0 {
+		// INFO rather than WARN: a request moved between the read and the call
+		// is ordinary, and an alarm for it is one an operator learns to ignore.
+		// The reason is carried so the persistent case -- a destination the
+		// holder removed -- is readable rather than inferred from a count.
+		log.InfoContext(ctx, "payouts were not submittable on this pass",
+			"skipped", skipped, "first_reason", skippedReason,
+			"consequence", "the Credits stay reserved; a request whose destination was removed stays "+
+				"there until its holder cancels it or points it at a usable one")
 	}
 	if submitted > 0 {
 		log.InfoContext(ctx, "payout submission sweep complete", "submitted", submitted)
