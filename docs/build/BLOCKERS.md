@@ -455,3 +455,29 @@ is claimed. What the research adds to the register above, all human actions:
 The contract Nodal builds against all of them has no primitive by which Nodal
 itself converts Credits to money; it instructs a licensed provider. That is a
 deliberate property of the architecture, not a gap.
+## Verification and the conversion request — checkpoint 2026-09-10
+
+The software behind goal §19–§25 is built: the financial verification state
+machine, the sub-check evidence model, the versioned age/jurisdiction/sanctions
+rule tables, the composite verification resolver, the per-origin withdrawal
+eligibility explanation, payout destinations, the pre-commitment quote and the
+provenance read model. It is exercised end to end on a sandbox tier against a
+provider that decides nothing on its own. See
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §9 for the full table.
+
+**No new blocker was created.** What follows narrows two existing ones and adds
+one standing operational obligation.
+
+| Item | Sharpens | Why external |
+|---|---|---|
+| B-06 narrows to "no contracted identity vendor", not "no code". `verification.Provider` is the contract, `verification_sessions` and `verification_checks` are the store, and `verification.Resolver` reaches PAYOUT_KYC and ENHANCED from a provider decision plus the sub-checks that justify it. What is missing is an account, accepted terms, a data-processing agreement and a retention decision with Veriff, Persona or Sumsub. | B-06 | Account creation and a contract. A human action. |
+| B-01/B-05 narrows the same way for the conversion side. The registry refuses a provider with no contract reference, and a quote refuses a provider with no published fee model — so the honest state of a deployment with no conversion contract is `PROVIDER_UNAVAILABLE` on every eligibility bucket, which is what it reports. | B-01, B-05 | A licensed provider must accept the closed-loop-until-withdrawal model. Only that provider can say. |
+| **Keeping the sanctions denylist current is an operational obligation, not a property of the code.** `internal/verification/rules` holds the comprehensively-sanctioned jurisdictions as of this date, versioned as `verification-rules-v1-us-only`. OFAC's list changes; nothing in this repository watches it. A person or a scheduled review has to. | B-02 | The authoritative list is OFAC's, and reading it is somebody's job. |
+| Which United States subdivisions restrict a closed-loop credit that becomes convertible at withdrawal is still unanswered, so the restricted-regions map is EMPTY and says so in a comment. A payout rail's own exclusions (Stripe stablecoin: NY, HI; Bridge: NY) are applied separately from the provider's capabilities, because they are facts about a rail rather than about a person. | B-02 | Counsel. |
+| The self-custody USDC destination flow of §25 — wallet connect, ownership proof, a signed nonce, a verified address, a cooldown — is **not started**, deliberately. `DestinationCryptoWallet` exists as a kind and `Capabilities.SupportsExternalWallet` and `SupportedNetworks` exist as the questions an adapter must answer, so the seam is open. Building the challenge-and-signature flow with no contracted crypto rail to send to would be code completion standing in for an external dependency, which the goal forbids. | B-05, B-10 | No crypto payout rail is contracted. |
+
+Two things that must not be described as blocked, because they are built,
+tested against a real database and reachable end to end on a sandbox tier: the
+verification state machine, and the conversion-request surface. BLOCKED_EXTERNAL
+is for software that is complete and an external item that is genuinely
+unavailable (goal PART 167); it is never for missing code.

@@ -41,6 +41,8 @@ The set of ADRs is the one required by goal PART 210.
 | [0021](0021-who-may-read-personal-data.md) | Personal data is encrypted in the application or not stored, and a role with no use for it cannot read it | Accepted | 121 | — |
 | [0022](0022-one-identity-source-of-truth.md) | One identity source of truth: ZITADEL authenticates, Neon owns the Nodal user; no second authentication system | Accepted | 4 (product goal §3) | — |
 | [0023](0023-the-sandbox-tier.md) | The sandbox tier: one declaration, refused in PROD, lets a non-production deployment exercise every gated surface without approving anything | Accepted | 4 (product goal §9) | — |
+| [0025](0025-verification-is-provider-hosted-and-evidence-based.md) | Verification is provider-hosted, evidence-based, and never touches a Credit | Accepted | 4 (product goal §20, §21, §24) | D-057, D-058, D-059, D-061; B-02, B-06 |
+| [0026](0026-the-conversion-request-is-payout-requests.md) | The conversion request is `payout_requests`, with a destination, a quote and its provenance | Accepted | 4 (product goal §19, §22, §23, §25) | D-060, D-062; B-01, B-05, B-09 |
 
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.
