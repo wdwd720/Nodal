@@ -501,7 +501,15 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 		// differ by REVERSIBLE, which is precisely the value a card issuer can
 		// still reclaim.
 		RequirePayoutFinality: true,
-		LotIDs:                credit.EligibleLotIDs(d.Lots),
+		// Always declared, whatever the decision approved. A decision that
+		// approved no lots produces an empty set, and until F-281 an empty set
+		// was read as "no restriction" -- so a reservation whose decision
+		// approved nothing would have taken whatever sorted first in consumption
+		// order. `Decision.Sufficient()` stands in front of that today and is a
+		// guard in a different package; the instruction this sends is now
+		// unambiguous on its own.
+		RestrictToLots: true,
+		LotIDs:         credit.EligibleLotIDs(d.Lots),
 	})
 	if err != nil {
 		return Request{}, err

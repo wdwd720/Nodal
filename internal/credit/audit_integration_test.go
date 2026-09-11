@@ -113,8 +113,8 @@ func TestAudit_ChargebackOfSpentCreditsBooksADeficitAndTakesNoOtherLot(t *testin
 	purchased := *f.fundingRow(t, funding).LotID
 
 	// The user spends exactly the purchased lot. Consumption order takes the
-	// grant first, so the spend has to name the origin to reach the purchase.
-	_, err := f.spend(1000, valuedomain.OriginPurchased)
+	// grant first, so the spend has to name the LOT to reach the purchase.
+	_, err := f.spendLots(1000, purchased)
 	require.NoError(t, err)
 
 	var res ReverseResult

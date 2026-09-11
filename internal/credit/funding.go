@@ -647,7 +647,9 @@ func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effect
 			JournalTxID: post.TransactionID,
 			Reference:   Reference{Type: "credit_funding_reversal", ID: f.ID.String()},
 			Reason:      reason,
-			LotIDs:      []LotID{lot.ID},
+
+			RestrictToLots: true,
+			LotIDs:         []LotID{lot.ID},
 		})
 		if cerr != nil {
 			return ReverseResult{}, cerr

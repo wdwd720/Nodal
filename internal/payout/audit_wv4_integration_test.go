@@ -340,6 +340,7 @@ func TestAuditWV4_AnEmptyLotRestrictionIsNoRestrictionAndTheAssertionDoesNotFire
 				// Exactly what `payout.Service.reserve` passes.
 				RequireSpendableFinality: true,
 				RequirePayoutFinality:    true,
+				RestrictToLots:           true,
 				LotIDs:                   credit.EligibleLotIDs(nil),
 			})
 			return err
@@ -504,6 +505,7 @@ func (f *auditFixture) consumeAll(t *testing.T, lot credit.LotID) {
 				Reference:                credit.Reference{Type: "audit_wv4_drain", ID: uuid.NewString()},
 				Reason:                   "wv4: spend a funding lot so the payout draws on its proceeds",
 				RequireSpendableFinality: true,
+				RestrictToLots:           true,
 				LotIDs:                   []credit.LotID{lot},
 			})
 			return err
@@ -675,7 +677,8 @@ func TestAuditWV4_ALotThatMovedAfterTheDecisionRefusesRatherThanSubstituting(t *
 				Reference:                credit.Reference{Type: "payout_request", ID: uuid.NewString()},
 				Reason:                   "reserved against a payout request",
 				RequireSpendableFinality: true, RequirePayoutFinality: true,
-				LotIDs: credit.EligibleLotIDs(d.Lots),
+				RestrictToLots: true,
+				LotIDs:         credit.EligibleLotIDs(d.Lots),
 			})
 			return cerr
 		})
@@ -704,7 +707,8 @@ func TestAuditWV4_AForeignLotIdInTheSetReachesNothing(t *testing.T) {
 				Reference:                credit.Reference{Type: "payout_request", ID: uuid.NewString()},
 				Reason:                   "reserved against a payout request",
 				RequireSpendableFinality: true, RequirePayoutFinality: true,
-				LotIDs: []credit.LotID{theirs.ID},
+				RestrictToLots: true,
+				LotIDs:         []credit.LotID{theirs.ID},
 			})
 			return cerr
 		})
@@ -761,11 +765,17 @@ func TestAuditWV4_ThePreviewAndTheRecordAgreeAboutWhatLeaves(t *testing.T) {
 	}
 }
 
-// `ConsumeRequest.AllowedOrigins` is now set by nothing. D-136 left it in place
-// with a comment saying it "is no longer what a payout reservation uses"; it is
-// no longer what anything uses. It is the coarse filter whose coarseness was
+// `ConsumeRequest.AllowedOrigins` was set by nothing. D-136 left it in place
+// with a comment saying it "is no longer what a payout reservation uses"; it was
+// no longer what anything used. It was the coarse filter whose coarseness was
 // F-270, still reachable by any future caller, and — like `LotIDs` — reading an
 // empty slice as "no restriction" rather than "nothing".
+//
+// INVERTED from the reproduction, which asserted that setters existed to be
+// found. The field is gone (F-281), so the walk finds none, and this test stays
+// as the guard the finding asked for: the day somebody adds an origin filter
+// back, it has to be declared the way the lot restriction is rather than
+// inferred from a slice's length.
 func TestAuditWV4_TheOriginFilterIsNowSetByNothing(t *testing.T) {
 	root := repoRoot(t)
 	var setters []string
@@ -795,11 +805,20 @@ func TestAuditWV4_TheOriginFilterIsNowSetByNothing(t *testing.T) {
 		}
 		return nil
 	}))
-	assert.NotEmpty(t, setters,
-		"F-wv4-4 (second half): ConsumeRequest.AllowedOrigins is set by no production caller. "+
-			"It is the filter F-270 was about, kept because removing a field is a wider change "+
-			"than a fix agent should make — and a filter nothing sets is a filter nobody will "+
-			"notice going wrong. Setters found: %v", setters)
+	assert.Empty(t, setters,
+		"F-wv4-4 (second half): ConsumeRequest.AllowedOrigins was set by no production caller. "+
+			"It was the filter F-270 was about, and a filter nothing sets is a filter nobody "+
+			"notices going wrong — it read an empty slice as 'no restriction' exactly as the lot "+
+			"set did. It has been removed rather than fixed. Setters found: %v", setters)
+
+	// And the field itself is gone from the request, not merely unused: a
+	// consume is restricted by lot or not at all.
+	credits, rerr := os.ReadFile(filepath.Join(root, "internal", "credit", "types.go")) // #nosec G304 -- a path built from the repository root
+	require.NoError(t, rerr)
+	assert.NotContains(t, string(credits), "AllowedOrigins",
+		"the coarse origin filter is not a field of ConsumeRequest any more (F-281)")
+	assert.Contains(t, string(credits), "RestrictToLots",
+		"and the restriction that remains is DECLARED rather than inferred from a slice's length")
 }
 
 // repoRoot walks up from the working directory to the module root.

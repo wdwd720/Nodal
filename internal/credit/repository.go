@@ -69,11 +69,22 @@ func buildConsumptionOrderSQL() string {
 
 // openLotsQuery selects an account's open lots in consumption order.
 //
-// $3 is "require spendable finality", $4 is the allowed-origin set, $5 is the
-// allowed-lot set and $6 is "require payout-eligible finality"; a null or empty
-// set means no restriction of that kind. Expressing all four as parameters of
-// one constant statement is what lets test/security prove the statement is not
+// $3 is "require spendable finality", $4 is the allowed-lot set and $5 is
+// "require payout-eligible finality". Expressing all three as parameters of one
+// constant statement is what lets test/security prove the statement is not
 // assembled from anything a request supplied.
+//
+// NULL is the whole of "unrestricted" for $4, and an EMPTY array is restricted
+// to nothing. There is no `cardinality(...) = 0` escape any more: it read a
+// restriction to no lots as no restriction, so a consume carrying the lot set of
+// a decision that approved nothing took whatever sorted first in consumption
+// order -- a promotional grant, every time (F-281). The two cases are different
+// instructions and the statement now answers them differently.
+//
+// There is no origin filter either. It was the coarse one F-270 was about -- a
+// decision is made per LOT and an origin is not a lot -- and after D-136 no
+// caller set it. A filter nothing sets is a filter nobody notices going wrong,
+// and it read an empty set the same permissive way (F-281).
 //
 // The two finality filters are separate rather than one level, because they are
 // two different questions about the same lot and a reservation asks the second:
@@ -85,9 +96,8 @@ const openLotsQuery = `SELECT ` + lotColumns + `
 	  JOIN credit_lot_state st ON st.lot_id = l.id
 	 WHERE l.account_id = $1 AND l.asset_id = $2 AND st.remaining_quantity > 0
 	   AND ($3::boolean = false OR st.finality IN ('UNFUNDED','REVERSIBLE','SETTLED'))
-	   AND ($6::boolean = false OR st.finality IN ('UNFUNDED','SETTLED'))
-	   AND ($4::text[] IS NULL OR cardinality($4::text[]) = 0 OR l.origin = ANY($4::text[]))
-	   AND ($5::uuid[] IS NULL OR cardinality($5::uuid[]) = 0 OR l.id = ANY($5::uuid[]))
+	   AND ($5::boolean = false OR st.finality IN ('UNFUNDED','SETTLED'))
+	   AND ($4::uuid[] IS NULL OR l.id = ANY($4::uuid[]))
 	 ORDER BY ` + consumptionOrderSQL + `, l.created_at, l.id`
 
 // accountLotsQuery is every lot an account holds, in the same order.
@@ -159,30 +169,29 @@ func originsOf(in []string) []valuedomain.CreditOrigin {
 func (s *Service) openLotsForUpdate(
 	ctx context.Context, tx pgx.Tx,
 	accountID accounts.AccountID, assetID assets.AssetID,
-	requireSpendable, requirePayoutFinality bool,
-	allowedOrigins []valuedomain.CreditOrigin, allowedLots []LotID,
+	requireSpendable, requirePayoutFinality, restrictToLots bool,
+	allowedLots []LotID,
 ) ([]Lot, error) {
-	// Both filters are PARAMETERS of one constant statement rather than
-	// fragments concatenated into a built one. An earlier version assembled
+	// Every filter is a PARAMETER of one constant statement rather than a
+	// fragment concatenated into a built one. An earlier version assembled
 	// the WHERE clause from literals, which was safe and was not provably
 	// safe, and test/security proves every statement in the repository is
 	// built from constants precisely so that nobody has to take "safe" on
 	// trust.
-	var origins []string
-	if len(allowedOrigins) > 0 {
-		origins = make([]string, 0, len(allowedOrigins))
-		for _, o := range allowedOrigins {
-			origins = append(origins, string(o))
-		}
-	}
+	//
+	// `lots` stays nil when no restriction was declared, which the statement
+	// reads as NULL and therefore as "every lot". When one WAS declared it is a
+	// non-nil array of exactly what the caller named, empty included: a consume
+	// restricted to no lots selects no lots and fails for want of Credits, which
+	// is the honest answer to "take these" when "these" is nothing (F-281).
 	var lots []string
-	if len(allowedLots) > 0 {
+	if restrictToLots {
 		lots = make([]string, 0, len(allowedLots))
 		for _, l := range allowedLots {
 			lots = append(lots, l.String())
 		}
 	}
-	args := []any{accountID, assetID, requireSpendable, origins, lots, requirePayoutFinality}
+	args := []any{accountID, assetID, requireSpendable, lots, requirePayoutFinality}
 	// Serialise spenders on this account's Credits before reading the lots.
 	//
 	// `FOR UPDATE OF st` would be the obvious way and is not available: the
