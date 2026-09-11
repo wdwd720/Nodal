@@ -288,10 +288,22 @@ func TestConsumeRequest_Validate(t *testing.T) {
 		require.Error(t, err, "consumption must name the posting that moved the units")
 		require.Contains(t, err.Error(), "journal transaction")
 	})
-	t.Run("unknown allowed origin", func(t *testing.T) {
+	t.Run("lots named without a declared restriction", func(t *testing.T) {
+		// The origin filter this subtest used to check is gone: nothing set it
+		// and it read an empty set as "no restriction" (F-281). What replaces
+		// it is the ambiguity that mattered -- a caller that names lots and does
+		// not say they are the whole set is refused rather than guessed at.
 		r := base
-		r.AllowedOrigins = []valuedomain.CreditOrigin{"NOPE"}
+		r.LotIDs = []LotID{NewLotID()}
 		require.Error(t, r.Validate())
+		r.RestrictToLots = true
+		require.NoError(t, r.Validate())
+	})
+	t.Run("a declared restriction to nothing is a request, not a mistake", func(t *testing.T) {
+		r := base
+		r.RestrictToLots = true
+		require.NoError(t, r.Validate(),
+			"restricted to no lots is well formed; it takes nothing and fails for want of Credits")
 	})
 	t.Run("zero quantity", func(t *testing.T) {
 		r := base

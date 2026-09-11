@@ -71,6 +71,16 @@ func toAPIProvenance(slices []payout.ProvenanceSlice) []api.PayoutProvenanceSlic
 		if s.OriginFloor != "" {
 			item.OriginFloor = ptr(api.CreditOrigin(s.OriginFloor))
 		}
+		// The whole set, not only its minimum. The floor is the most restricted
+		// root, so two different provenances share one whenever they share their
+		// most restricted member, and the policy reads the set (D-138, D-141).
+		if len(s.RootOrigins) > 0 {
+			roots := make([]api.CreditOrigin, 0, len(s.RootOrigins))
+			for _, r := range s.RootOrigins {
+				roots = append(roots, api.CreditOrigin(r))
+			}
+			item.RootOrigins = &roots
+		}
 		if s.Returned {
 			item.Returned = ptr(true)
 		}

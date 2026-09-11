@@ -347,8 +347,22 @@ type Request struct {
 }
 
 // Blocked reports whether something the holder has to act on is stopping this
-// request. It is a convenience for a renderer: the reason is the answer.
-func (r Request) Blocked() bool { return r.BlockedReason != "" }
+// request RIGHT NOW. It is a convenience for a renderer: the reason is the
+// answer.
+//
+// The state is half of it. The reason stays on the row after the request stops
+// moving -- a cancellation does not erase why the payout could not be sent, and
+// `TestIntegration_APayoutRefusedAtSubmitSaysWhyAndTellsItsHolder` asserts that
+// it does not -- so a reader that looked only at the string told the holder of
+// a REJECTED request with a reserved quantity of zero that "its Credits are
+// still reserved and still yours" (F-279).
+//
+// VERIFIED is the only state in which the sentence is true: it is the state a
+// reserved payout waits in, the state `recordBlocked` writes the reason in, and
+// the state `Cancel` releases the reservation out of. Everything else is either
+// a payout that has been handed to a provider, where the obstacle is no longer
+// the holder's to act on, or one that has finished.
+func (r Request) Blocked() bool { return r.BlockedReason != "" && r.State == StateVerified }
 
 // Allocation is one lot slice a payout reserved.
 type Allocation struct {
@@ -362,6 +376,15 @@ type Allocation struct {
 	// one out of a settled purchase and one out of a promotional grant, are the
 	// same origin and are not the same value (D-136, F-270).
 	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin these units ultimately came from. It is what
+	// the policy actually reads -- a lot is released only when the policy
+	// releases its own origin and every root (D-138) -- and the floor is only
+	// the most restricted of them, so two different sets share a floor whenever
+	// they share a minimum. Recorded rather than joined for: 00820's own reason
+	// for recording the floor is that this table is the only reader that can
+	// answer "what actually left" after the lot has been consumed (D-141,
+	// F-282).
+	RootOrigins []valuedomain.CreditOrigin
 	Quantity    money.Quantity
 	Returned    bool
 	CreatedAt   time.Time

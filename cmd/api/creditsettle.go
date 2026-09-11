@@ -232,9 +232,9 @@ func settleDerivedOnce(ctx context.Context, database *db.DB, credits *credit.Ser
 		// Shutdown, not a failure.
 	case err != nil:
 		log.ErrorContext(ctx, "derived credit settlement sweep failed", "error", err.Error())
-	case res.Promoted > 0 || res.Frozen > 0:
+	case res.Promoted > 0 || res.Frozen > 0 || res.Thawed > 0:
 		log.InfoContext(ctx, "derived credit settlement sweep complete",
-			"promoted", res.Promoted, "frozen", res.Frozen)
+			"promoted", res.Promoted, "frozen", res.Frozen, "thawed", res.Thawed)
 	}
 }
 

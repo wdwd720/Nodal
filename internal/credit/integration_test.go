@@ -178,8 +178,20 @@ func (f *fixture) issue(origin valuedomain.CreditOrigin, fin valuedomain.Funding
 }
 
 // spend posts a single-domain movement of Credits out of the account and
-// consumes the matching lots, exactly as a real spend does.
-func (f *fixture) spend(qty int64, allowed ...valuedomain.CreditOrigin) ([]Allocation, error) {
+// consumes the matching lots, exactly as a real spend does. Unrestricted: it
+// takes whatever consumption order offers.
+func (f *fixture) spend(qty int64) ([]Allocation, error) {
+	return f.spendFrom(qty, false, nil)
+}
+
+// spendLots is the same movement restricted to exact lots, which is what a
+// clawback and a payout reservation do. Naming no lot is a real instruction and
+// takes nothing (F-281).
+func (f *fixture) spendLots(qty int64, lots ...LotID) ([]Allocation, error) {
+	return f.spendFrom(qty, true, lots)
+}
+
+func (f *fixture) spendFrom(qty int64, restrict bool, lots []LotID) ([]Allocation, error) {
 	var allocs []Allocation
 	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		res, err := f.led.Post(ctx, tx, ledger.Posting{
@@ -202,7 +214,8 @@ func (f *fixture) spend(qty int64, allowed ...valuedomain.CreditOrigin) ([]Alloc
 			Reference:                Reference{Type: "test_spend", ID: uuid.NewString()},
 			Reason:                   "test spend",
 			RequireSpendableFinality: true,
-			AllowedOrigins:           allowed,
+			RestrictToLots:           restrict,
+			LotIDs:                   lots,
 		})
 		return err
 	})
@@ -270,22 +283,49 @@ func TestIntegration_ConsumptionTakesTheMostRestrictedValueFirst(t *testing.T) {
 	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
 }
 
-func TestIntegration_ConsumptionCanBeRestrictedToApprovedOrigins(t *testing.T) {
+// The restriction used to be by ORIGIN. It is by LOT: a decision is made per
+// lot and an origin is not a lot, so two lots of one origin were one origin and
+// a decision approving a settled purchase was filled from a reversible one
+// (D-136, F-270). The origin filter was left in place with nothing setting it
+// and has now been removed (F-281); this is the same property in the mechanism
+// that survived.
+func TestIntegration_ConsumptionCanBeRestrictedToApprovedLots(t *testing.T) {
 	f := newFixture(t)
 	f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 1000)
 	earning := f.issue(valuedomain.OriginCreatorEarning, valuedomain.FinalitySettled, 100)
 
-	allocs, err := f.spend(100, valuedomain.OriginCreatorEarning)
+	allocs, err := f.spendLots(100, earning.ID)
 	require.NoError(t, err)
 	require.Len(t, allocs, 1)
 	require.Equal(t, earning.ID, allocs[0].LotID,
-		"a payout restricted to creator earnings must not quietly take the promotional grant")
+		"a payout restricted to a creator's earning must not quietly take the promotional grant")
 
-	// And it cannot exceed what those origins hold, even though the account
-	// has plenty of other Credits.
-	_, err = f.spend(50, valuedomain.OriginCreatorEarning)
+	// And it cannot exceed what those lots hold, even though the account has
+	// plenty of other Credits.
+	_, err = f.spendLots(50, earning.ID)
 	require.Error(t, err)
 	require.Equal(t, errs.CodeInsufficientBuyingPower, errs.CodeOf(err))
+}
+
+// A restriction to NO lots takes nothing. It is the input a decision that
+// approved nothing produces, and reading it as "no restriction" made the one
+// consume with no filter also the one with no assertion behind it (F-281).
+func TestIntegration_ARestrictionToNoLotsTakesNothing(t *testing.T) {
+	f := newFixture(t)
+	grant := f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 1000)
+	purchase := f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1000)
+
+	_, err := f.spendLots(100)
+	require.Error(t, err, "a consume restricted to nothing must take nothing")
+	require.Equal(t, errs.CodeInsufficientBuyingPower, errs.CodeOf(err))
+
+	for _, lot := range []LotID{grant.ID, purchase.ID} {
+		after, lerr := f.svc.Lot(f.ctx, testDB, lot)
+		require.NoError(t, lerr)
+		require.Equal(t, "1000", after.Remaining.String(),
+			"nothing was taken from lot %s", lot)
+	}
+	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
 }
 
 func TestIntegration_DisputedValueIsNotSpendable(t *testing.T) {

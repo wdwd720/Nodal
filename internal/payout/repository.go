@@ -156,7 +156,8 @@ func (s *Service) allocations(ctx context.Context, q db.Querier, id RequestID, i
 		where += ` AND NOT returned`
 	}
 	rows, err := q.Query(ctx,
-		`SELECT id, request_id, lot_id, origin, origin_floor, quantity::text, returned, created_at
+		`SELECT id, request_id, lot_id, origin, origin_floor, root_origins, quantity::text,
+		        returned, created_at
 		   FROM payout_allocations WHERE `+where+` ORDER BY created_at, id`, id)
 	if err != nil {
 		return nil, mapError(err)
@@ -168,14 +169,16 @@ func (s *Service) allocations(ctx context.Context, q db.Querier, id RequestID, i
 			a           Allocation
 			origin      string
 			originFloor string
+			roots       []string
 			qty         string
 		)
-		if err := rows.Scan(&a.ID, &a.RequestID, &a.LotID, &origin, &originFloor, &qty,
+		if err := rows.Scan(&a.ID, &a.RequestID, &a.LotID, &origin, &originFloor, &roots, &qty,
 			&a.Returned, &a.CreatedAt); err != nil {
 			return nil, mapError(err)
 		}
 		a.Origin = valuedomain.CreditOrigin(origin)
 		a.OriginFloor = valuedomain.CreditOrigin(originFloor)
+		a.RootOrigins = originsOf(roots)
 		v, perr := money.ParseQuantity(qty)
 		if perr != nil {
 			return nil, errs.Wrap(perr, errs.CodeInternal, "payout: allocation quantity is not an integer")

@@ -271,7 +271,7 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 		return nil, err
 	}
 	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID,
-		r.RequireSpendableFinality, r.RequirePayoutFinality, r.AllowedOrigins, r.LotIDs)
+		r.RequireSpendableFinality, r.RequirePayoutFinality, r.RestrictToLots, r.LotIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,12 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 	// field come apart -- which is exactly the kind of drift that let a payout
 	// consume by origin while its decision was made per lot (D-136, F-270). It
 	// refuses; it does not correct.
-	if len(r.LotIDs) > 0 {
+	//
+	// It runs whenever a restriction was DECLARED, which is the half that was
+	// missing: guarded by `len(r.LotIDs) > 0`, the check was absent on exactly
+	// the input the filter was absent on, so a consume restricted to nothing was
+	// unrestricted and unasserted (F-281).
+	if r.RestrictToLots {
 		allowed := make(map[LotID]bool, len(r.LotIDs))
 		for _, l := range r.LotIDs {
 			allowed[l] = true
@@ -318,7 +323,8 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 		}
 		allocs = append(allocs, Allocation{
 			LotID: lot.ID, Origin: lot.Origin, OriginFloor: lot.OriginFloor,
-			Finality: lot.Finality, Quantity: take, EventID: ev,
+			RootOrigins: append([]valuedomain.CreditOrigin(nil), lot.RootOrigins...),
+			Finality:    lot.Finality, Quantity: take, EventID: ev,
 		})
 		remaining = remaining.Sub(take)
 	}

@@ -171,6 +171,12 @@ type Allocation struct {
 	// different fact from one whose provenance is a promotional grant, however
 	// identical the origin column looks (D-136, F-270).
 	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin the lot's provenance bottoms out in, at the
+	// moment the units were taken. It travels beside the floor because the
+	// floor is only the most restricted of them, and two different sets share a
+	// floor whenever they share a minimum -- while `valuedomain.Policy.Permits`
+	// reads the whole set (D-138, F-282).
+	RootOrigins []valuedomain.CreditOrigin
 	Finality    valuedomain.FundingFinality
 	Quantity    money.Quantity
 	EventID     LotEventID
@@ -342,13 +348,25 @@ type ConsumeRequest struct {
 	// could be filled from a reversible one of the same origin (D-136, F-270).
 	RequirePayoutFinality bool
 
-	// AllowedOrigins, when non-empty, restricts consumption to these origins.
+	// RestrictToLots declares that LotIDs is the WHOLE set this consume may
+	// draw on, whatever is in it -- including nothing.
 	//
-	// It is the coarse filter, and it is no longer what a payout reservation
-	// uses: a decision is made per LOT and an origin is not a lot. See LotIDs.
-	AllowedOrigins []valuedomain.CreditOrigin
+	// It exists because "restricted to no lots" and "not restricted" are
+	// different instructions and a slice cannot tell them apart. The filter read
+	// `cardinality($5) = 0 OR ...`, so an empty set selected every lot the
+	// account held, and the post-selection assertion was guarded by
+	// `len(r.LotIDs) > 0`, so the one input on which the filter was absent was
+	// also the one on which the check was. A decision that approved NOTHING
+	// produces exactly that empty set (F-281).
+	//
+	// Declared rather than inferred, so a caller that means "these lots" says so
+	// and a caller that names lots without declaring the restriction is refused
+	// by Validate rather than quietly unrestricted.
+	RestrictToLots bool
 
-	// LotIDs, when non-empty, restricts consumption to these exact lots.
+	// LotIDs are the exact lots this consume may draw on when RestrictToLots is
+	// set. An empty set is a real answer: it takes nothing, and the consume
+	// fails for want of Credits with the required provenance.
 	//
 	// A clawback is the case it exists for. A chargeback reverses ONE funding,
 	// and the units it must destroy are the units THAT funding minted -- not
@@ -384,10 +402,12 @@ func (r ConsumeRequest) Validate() error {
 	if !r.Reference.Valid() {
 		return errs.New(errs.CodeValidationFailed, "credit: consume requires a financial event reference")
 	}
-	for _, o := range r.AllowedOrigins {
-		if !o.Valid() {
-			return errs.Newf(errs.CodeValidationFailed, "credit: unknown allowed origin %q", o)
-		}
+	if len(r.LotIDs) > 0 && !r.RestrictToLots {
+		// Naming lots without declaring the restriction is how a caller ends up
+		// with an unrestricted consume it believes is a restricted one. There is
+		// no reading of this request that is safe to guess at.
+		return errs.New(errs.CodeValidationFailed,
+			"credit: consume named lots without declaring RestrictToLots")
 	}
 	for i, l := range r.LotIDs {
 		if l.IsZero() {

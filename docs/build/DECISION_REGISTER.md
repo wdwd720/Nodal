@@ -1418,6 +1418,25 @@ promotes only from REVERSIBLE. Un-freezing automatically would be a sweep
 deciding that somebody else's dispute ended well, and this build has no evidence
 it could read to decide that.
 
+**Amended 2026-09-11 (fourth withdrawal audit, F-278).** The residual above is
+closed: D-140 builds the thaw this decision left out, and the sentence "un-freezing
+automatically would be a sweep deciding that somebody else's dispute ended well"
+was answering the wrong question.
+
+The sweep does not decide anything about a dispute. It reads what the LOTS say,
+which is what every other direction of this sweep does: a derived lot's finality
+is the least final among its parents, and when no parent is frozen any more, the
+lot's own frozen state is the stale fact. Deciding that a dispute ended well is
+`UnfreezeFunding`'s job and it is driven by an external event, exactly as
+`DisputeFunding` is; what was missing was that nothing carried its outcome
+DOWNWARDS to the lots the freeze had reached. D-094 promised that mirror for
+funded value, and D-124 never built it for derived value.
+
+What stays true is the other half of the residual: value that was actually taken
+back does not come back. A REVERSED parent is terminal, so the thaw clause —
+which requires that NO parent is still frozen — never selects its children, and
+they stay frozen for ever by design.
+
 ## D-125 — The idempotency record keeps what may be kept, not the whole answer (2026-09-11, product goal §54, F-231)
 
 **Problem.** `runCommand` marshals a command's whole response into
@@ -1909,6 +1928,33 @@ it at mint and 00819 makes it independent of insertion order.
 `TestIntegration_AMixedBalanceDrawsOnlyTheLotTheDecisionApproved`,
 `TestIntegration_ProvenanceReportsTwoFloorsOfOneOriginSeparately`.
 
+**Amended 2026-09-11 (fourth withdrawal audit, F-281).** Two of this decision's
+sentences were true of every set except the empty one.
+
+"The restriction is a parameter of the one constant statement `openLotsQuery` is"
+and "`Consume` asserts on the way out that every lot it selected is in the set"
+both stopped holding when the set was EMPTY. The statement read `cardinality($5)
+= 0 OR ...`, so a restriction to no lots selected every lot the account held, and
+the assertion was guarded by `len(r.LotIDs) > 0`, so the one input on which the
+filter was absent was also the one on which the check was. `reserve` passes
+`credit.EligibleLotIDs(d.Lots)`, and a decision that approved nothing produces
+exactly that empty set; what an unrestricted consume takes first is a promotional
+grant.
+
+So the restriction is DECLARED rather than inferred from a slice's length:
+`ConsumeRequest.RestrictToLots` beside `LotIDs`, nil for "unrestricted" and a
+non-null array — empty included — for "exactly these". The cardinality escape is
+gone, the assertion runs whenever a restriction is declared, `reserve` always
+declares one, and naming lots without declaring the restriction is refused by
+`Validate` rather than guessed at.
+
+`ConsumeRequest.AllowedOrigins` is deleted. This decision left it in place with a
+comment saying it "is no longer what a payout reservation uses"; it was no longer
+what anything used, it was the coarse filter F-270 was about, and it read an
+empty slice the same permissive way. A filter nothing sets is a filter nobody
+notices going wrong. `credit.EligibleOrigins` stays: it reports what KIND of
+value a decision draws on and is not a filter.
+
 ## D-137 — A floor is computed from the provenance roots, and a lot's provenance is closed before anything derives from it (2026-09-11, product goal §23, §54, F-271)
 
 **Problem.** 00816's trigger computes a child's floor from its parents' CURRENT
@@ -1972,6 +2018,31 @@ is corrected by this decision and by D-138.
 **Evidence.** F-271. `migrations/00819_a_floor_is_computed_from_the_roots_and_provenance_is_a_set.sql`;
 `TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted`,
 `TestAuditWV3_AParentRowStillCannotBeWrittenAfterTheMint`.
+
+**Amended 2026-09-11 (fourth withdrawal audit, F-283).** The recursion's answer
+for a cycle is NULL, and this decision's backfill read that as "no parents".
+
+The UNION makes the recursion terminate on a cycle rather than recurse, which is
+what 00819's comment promises. What it terminates with is nothing:
+`cp_credit_lot_root_origins` aggregates the reachable nodes that are nobody's
+child, and in a cycle every node is somebody's child. The backfill then read that
+through `coalesce(..., ARRAY[the lot's own origin])` — the mint-time rule for a
+lot with no parents, applied to a lot that HAS them — which for trading proceeds
+out of a promotional grant writes root_origins = {MARKET_TRADING_PROCEEDS} and
+floors it there. That is the permissive direction, in the migration whose whole
+subject is that a floor must be conservative. The trigger path fails closed on
+the same input with CREDIT_PARENT_ROOTLESS; only the backfill substituted.
+
+Migration 00825 refuses to migrate while any lot has parent rows and no
+computable root, and `cp_credit_lots_without_computable_roots()` names them. A
+migration that cannot compute a provenance has two honest options — stop, or
+write down a guess — and a guess about where value came from is the one thing
+this model may never make. There is no automatic repair, because every automatic
+one would have to choose which edge of the cycle is the lie.
+
+The case is reachable only in data restored from a deployment that ran on 00816
+to 00818, where `cp_credit_lot_parent_has_no_descendant_yet` did not exist: this
+decision's own ordering rule is what makes a cycle unwritable now.
 
 ## D-138 — Provenance is a set, not a rank (2026-09-11, product goal §23, §54, F-275)
 
@@ -2117,3 +2188,179 @@ unsendable.
 `cmd/api/wire.go`, `apps/web/src/pages/withdraw/Withdraw.tsx`;
 `TestIntegration_APayoutRefusedAtSubmitSaysWhyAndTellsItsHolder`,
 `TestIntegration_ABlockedPayoutRecordsItsReasonWithNoNotifierWired`.
+
+**Amended 2026-09-11 (fourth withdrawal audit, F-279).** Consequence 3 above —
+"`blocked_reason` survives cancellation. Why a payout could not be sent is part
+of its history" — is right about the RECORD and was taken as licence by the
+readers.
+
+`Request.Blocked()` asked only whether the string was non-empty, `toAPIPayout`
+emitted the field on any state, and the Withdraw page rendered two present-tense
+sentences with no state test. A cancelled request therefore said "this withdrawal
+cannot be sent … its Credits are still reserved and still yours" beside a
+Reserved figure of zero, under a State badge reading REJECTED, above a Cancel
+control the page had already removed. So the record keeps the fact and the read
+reports it only while it is true: `Blocked()` is the string AND the state,
+VERIFIED being the only state in which the sentence is true, and the page renders
+the panel under the same condition as the Cancel control rather than relying on
+the API's discipline.
+
+Migration 00823 adds the database's half, which 00822 left out: cp_app held
+UPDATE on `(blocked_reason, blocked_at)` with no state predicate, and
+`recordBlocked`'s own `AND state = 'VERIFIED'` was the only thing holding the
+column. A BEFORE UPDATE trigger now refuses a write of a NEW reason onto a
+request whose state has no outgoing edge in `payout_request_state_edges` —
+terminal read from the state machine rather than listed a fourth time — and
+refuses it with AD001 rather than silently affecting no rows, because a write
+that quietly does nothing is how a caller comes to believe something was
+recorded. The Go writer stays narrower than the database's floor (VERIFIED versus
+non-terminal) on purpose: the schema refuses what can never be true, and the
+service decides what it is willing to say.
+
+## D-140 — A dispute the platform won thaws what its freeze reached (2026-09-11, product goal §54, F-278)
+
+**Problem.** D-124 freezes a derived lot when a lot it was derived from is
+DISPUTED or REVERSED. Nothing ever unfroze one. `SettleDerived`'s promotion
+clause opens `st.finality = 'REVERSIBLE'` and a frozen lot is not; its freeze
+clause opens "not already frozen" and a frozen lot is; and no other writer can
+reach a lot with no `credit_fundings` row — `SettleFunding`, `UnfreezeFunding` and
+`DisputeFunding` all key on that column, no operator route moves a lot's
+finality, and `credit_lot_state` is a projection `cp_app` may only SELECT. So
+`UnfreezeFunding` returned the card to its window and then to SETTLED, and the
+earning derived from it stayed DISPUTED for ever: neither spendable nor
+payout-eligible, with the eligibility page reporting FUNDING_NOT_SETTLED — the
+reason whose own declaration says "waiting fixes it" (F-230, F-278).
+
+**Chosen.** A third clause in `settleDerivedCandidates`: a derived lot at a
+frozen finality it can legally leave, none of whose parents is still frozen,
+moved to the finality `DerivedFinality(parents)` yields NOW — SETTLED when every
+parent is payout-eligible, REVERSIBLE otherwise. Both are legal edges out of
+DISPUTED. The frozen finalities the clause opens are computed from
+`finalityTransitions` (`thawableFinalities()`), so the clause that selects a lot
+and the table that decides whether the move is legal cannot come apart. The pass
+counts thaws separately from promotions and freezes, and `cmd/api` logs all
+three.
+
+**Why derived rather than chosen.** Four alternatives.
+
+*Leave it, as D-124's residual proposed.* The residual's reasoning was that
+"un-freezing automatically would be a sweep deciding that somebody else's dispute
+ended well". The sweep decides nothing of the kind: it reads what the LOTS say,
+which is what its other two directions do. Whether the dispute ended well is
+`UnfreezeFunding`'s answer, driven by an external event exactly as
+`DisputeFunding` is. What was missing was that nothing carried that answer
+downwards.
+
+*Return the lot to the finality it was minted at.* A lot minted UNFUNDED cannot
+go back: `finalityTransitions` has no DISPUTED → UNFUNDED edge, and adding one
+would give this sweep a way to un-fund value. SETTLED and UNFUNDED are the same
+answer to every reader that matters — `Spendable()` and `PayoutEligible()` admit
+both — and SETTLED is the one that is true of a lot whose whole provenance has
+finished moving.
+
+*Thaw to REVERSIBLE always, and let the promotion clause finish.* It is one pass
+slower and, worse, it is a claim: REVERSIBLE says "something external can still
+take this back", and when every parent is payout-eligible that is false. The
+finality a derived lot carries is the least final among its parents, and the thaw
+answers the same question the mint does.
+
+*An operator route that unfreezes a lot by hand.* A route that moves a lot's
+finality with no event behind it is the thing this whole model exists to prevent,
+and it would need a reviewer, a reason and an audit trail to do what the parents
+already say.
+
+**Consequences.**
+
+1. A lot whose funding was REVERSED stays frozen for ever, and that is the
+   design: REVERSED is terminal, so a reversed parent is frozen for ever, and the
+   clause requires that no parent is frozen. Thawing its children would be the
+   ledger releasing value it has already lost.
+2. A lot with two frozen parents thaws only when both are resolved. The clause is
+   about ALL of them, like every other direction of this sweep.
+3. The thaw reaches one level per pass, as the freeze does: a grandchild thaws the
+   pass after its parent.
+4. The lot leaves the candidate predicate the moment it moves — to SETTLED, which
+   neither the promotion clause nor the thaw clause opens, or to REVERSIBLE with a
+   parent that is not payout-eligible, which the promotion clause does not open —
+   so F-260's starvation property holds in the new direction. A batch of 100
+   thaws, then the hundred-and-first, then nothing.
+5. F-230's sentence is true again: for a dispute the platform wins, waiting does
+   fix it.
+
+**Residuals.** A lot frozen by a REVERSED parent is inaccessible in both
+directions for ever, which is deliberate and is D-124's recorded residual rather
+than a new one: taking value back from a third party who earned it and may have
+spent it is a posting kind this ledger does not have. Nothing tells that holder
+why, beyond FUNDING_NOT_SETTLED, and a reason that named the dispute would be
+telling one customer about another's chargeback.
+
+**Evidence.** F-278. `internal/credit/derived.go`, `cmd/api/creditsettle.go`;
+`TestAuditWV4_ADerivedLotFrozenByADisputeIsNeverThawedWhenTheDisputeIsWon`,
+`TestIntegration_ADisputeWonThawsTheEarningsDerivedFromIt`,
+`TestIntegration_ALotFrozenByAReversedParentIsNeverThawed`,
+`TestIntegration_AFrozenLotWithOneParentStillFrozenIsNotThawed`,
+`TestIntegration_TheThawReachesMoreLotsThanItsBatchAndThenStops`,
+`TestIntegration_TheThawClauseOpensOnlyTheEdgesTheTableHas`.
+
+## D-141 — A payout's record carries the whole provenance it drew on (2026-09-11, product goal §23, §54, F-282)
+
+**Problem.** `payout_allocations` records the origin and the floor (00820), and
+D-138 moved the permission itself onto the root SET: a lot is released only when
+the policy releases its own origin AND every origin its provenance bottoms out
+in. The floor is the most restricted root, so two different sets share a floor
+whenever they share a minimum — {CREATOR_EARNING} and {CREATOR_EARNING,
+PURCHASED} both floor at CREATOR_EARNING. Under the policy B-02 can come back
+with, one of those may leave and the other may not, and the record and
+`GET /v1/payouts/{id}` reported them as one provenance.
+
+**Chosen.** `root_origins text[]` on `payout_allocations` (00824), NOT NULL,
+non-empty, CHECKed against the declared origins and with `origin_floor =
+ANY(root_origins)`; backfilled from `credit_lot_state` by the argument 00820
+already makes — a lot's provenance is fixed at mint and independent of insertion
+order, so the set now is the set then. `credit.Allocation` carries the set the
+units were taken from, `reserve` writes it, and `payout.ProvenanceSlice` folds by
+(origin, floor, set) with the set on the contract as an additive optional field,
+mirroring `WithdrawalOriginBucket`.
+
+**Why derived rather than chosen.** Three alternatives.
+
+*Join to `credit_lot_state` at read time.* The fact is not lost — `lot_id`
+references `credit_lots` and a root set never moves — so a join answers it. But
+00820's own reason for recording the floor is that this table is the only reader
+that can answer "what actually left" after the lot has been consumed, and a
+reader who has to know to join is a reader who will one day not. An auditor
+reading the table alone would conclude there was one provenance where there are
+two.
+
+*Record only the set and drop the floor.* The floor is what a screen shows and
+what an ordering sorts by, and 00819's CHECK makes it one of the roots. Dropping
+a column that is a projection of another to avoid duplication would cost every
+reader the display answer to save a hundred bytes.
+
+*Leave the fold at (origin, floor) and report the set only on the allocation.*
+Then the page and the record would disagree, which is the shape F-272 was.
+
+**Consequences.**
+
+1. A payout drawn on two provenances that share a floor is two slices, and the
+   preview and the record still agree because both fold on the same key.
+2. The withdraw page's provenance table is keyed on the whole identity and names
+   what funded each slice, for the reason F-280 gives one surface along.
+3. Additive contract field: `root_origins` on `PayoutProvenanceSlice`.
+4. The column is a RECORD and not a control. What stops the wrong lot being
+   reserved is the lot restriction (D-136, as amended by F-281).
+
+**Residuals.** The set is copied at reservation rather than joined, so a lot whose
+root set could change after reservation would leave the copy stale. Nothing can:
+a parent row may only be written at mint (00816) and only while the lot is
+nobody's parent (00819), so a root set is immutable once written. The copy is
+stated to be a historical record for exactly that reason.
+
+**Evidence.** F-282.
+`migrations/00824_a_payout_records_the_whole_provenance_it_drew_on.sql`,
+`internal/payout/provenance.go`, `internal/payout/repository.go`,
+`internal/payout/service.go`, `internal/credit/types.go`,
+`internal/httpapi/handlers_payout_destinations.go`, `openapi/openapi.yaml`,
+`apps/web/src/pages/withdraw/Withdraw.tsx`;
+`TestAuditWV4_TheAllocationRecordFoldsTwoRootSetsIntoOneProvenance`,
+`TestAuditWV4_ThePreviewAndTheRecordAgreeAboutWhatLeaves`.

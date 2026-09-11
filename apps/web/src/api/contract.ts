@@ -1301,6 +1301,20 @@ export function validatedStartedVerification<T>(raw: unknown, path: string): T {
   return value;
 }
 
+/**
+ * One bucket of the eligibility answer.
+ *
+ * The four optional provenance fields are what makes a bucket a PROVENANCE
+ * rather than an origin: the API returns one per (origin, origin floor, root
+ * set, finality), so more than one bucket can carry the same `origin` and the
+ * page keys, renders and explains each row by all four. They are optional
+ * because the schema declares them optional -- a deployment ahead of this
+ * client may omit one -- and naming them here is what makes the browser notice
+ * the day one stops arriving in a shape it can read (F-280).
+ *
+ * `root_origins` is an array of strings rather than a field kind, so it is
+ * checked by `validatedEligibility` beside each bucket's `reasons`.
+ */
 export const withdrawalOriginBucketSpec: Spec = {
   required: {
     origin: "string",
@@ -1314,6 +1328,9 @@ export const withdrawalOriginBucketSpec: Spec = {
     required_capability: "string",
     min_hold_days: "integer",
     verification_would_suffice: "boolean",
+    origin_floor: "string",
+    refused_root: "string",
+    finality: "string",
   },
 };
 
@@ -1354,8 +1371,16 @@ export function validatedEligibility<T>(raw: unknown, path: string): T {
   const buckets = record["buckets"];
   if (Array.isArray(buckets)) {
     buckets.forEach((bucket, index) => {
-      const reasons = (bucket as Record<string, unknown>)["reasons"];
-      validatedStrings(reasons, `${path}.buckets[${String(index)}].reasons`);
+      const fields = bucket as Record<string, unknown>;
+      validatedStrings(fields["reasons"], `${path}.buckets[${String(index)}].reasons`);
+      // The set of origins this bucket's value bottoms out in. The policy
+      // releases a bucket only when it releases every one of them, and the page
+      // renders them, so a malformed set is a contract violation rather than a
+      // row that quietly renders nothing (D-138, F-280).
+      const roots = fields["root_origins"];
+      if (roots !== undefined && roots !== null) {
+        validatedStrings(roots, `${path}.buckets[${String(index)}].root_origins`);
+      }
     });
   }
   return value;
@@ -1382,9 +1407,18 @@ export const payoutDestinationSpec: Spec = {
   },
 };
 
+/**
+ * One provenance's contribution to a payout.
+ *
+ * A provenance is an origin, a floor AND a root set: two slices can share the
+ * first two and differ in the third, because the floor is the most restricted
+ * root and two sets share a minimum whenever they share their most restricted
+ * member. The policy reads the set, so the record reports it (D-141).
+ * `root_origins` is an array of strings and is checked beside the slice.
+ */
 export const payoutProvenanceSliceSpec: Spec = {
   required: { origin: "string", quantity: "quantity", consumption_rank: "integer" },
-  optional: { returned: "boolean" },
+  optional: { returned: "boolean", origin_floor: "string" },
 };
 
 /**
@@ -1442,6 +1476,10 @@ export function validatedPayout<T>(raw: unknown, path: string): T {
     if (!Array.isArray(slices)) throw new ContractViolation(`${path}.provenance`, "expected an array");
     slices.forEach((slice, index) => {
       validated<unknown>(slice, payoutProvenanceSliceSpec, `${path}.provenance[${String(index)}]`);
+      const roots = (slice as Record<string, unknown>)["root_origins"];
+      if (roots !== undefined && roots !== null) {
+        validatedStrings(roots, `${path}.provenance[${String(index)}].root_origins`);
+      }
     });
   }
   const reasons = record["eligibility_reasons"];

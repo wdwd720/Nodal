@@ -501,7 +501,15 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 		// differ by REVERSIBLE, which is precisely the value a card issuer can
 		// still reclaim.
 		RequirePayoutFinality: true,
-		LotIDs:                credit.EligibleLotIDs(d.Lots),
+		// Always declared, whatever the decision approved. A decision that
+		// approved no lots produces an empty set, and until F-281 an empty set
+		// was read as "no restriction" -- so a reservation whose decision
+		// approved nothing would have taken whatever sorted first in consumption
+		// order. `Decision.Sufficient()` stands in front of that today and is a
+		// guard in a different package; the instruction this sends is now
+		// unambiguous on its own.
+		RestrictToLots: true,
+		LotIDs:         credit.EligibleLotIDs(d.Lots),
 	})
 	if err != nil {
 		return Request{}, err
@@ -514,10 +522,11 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 	// constraint, so the order inside the transaction does not matter.
 	for _, a := range allocs {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, origin_floor, quantity)
-			 VALUES ($1,$2,$3,$4,$5,$6::numeric)`,
+			`INSERT INTO payout_allocations
+			     (id, request_id, lot_id, origin, origin_floor, root_origins, quantity)
+			 VALUES ($1,$2,$3,$4,$5,$6::text[],$7::numeric)`,
 			NewAllocationID(), req.ID, a.LotID, string(a.Origin), string(a.OriginFloor),
-			a.Quantity.String()); err != nil {
+			originStrings(a.RootOrigins), a.Quantity.String()); err != nil {
 			return Request{}, mapError(err)
 		}
 	}

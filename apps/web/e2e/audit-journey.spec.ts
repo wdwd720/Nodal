@@ -578,6 +578,9 @@ test("journey 9 · a rehearsal verification, an eligible earning, a quote and a 
     readonly withdrawable_now: string;
     readonly buckets: ReadonlyArray<{
       readonly origin: string;
+      readonly origin_floor?: string;
+      readonly root_origins?: readonly string[];
+      readonly finality?: string;
       readonly quantity: string;
       readonly withdrawable: string;
       readonly payout_allowed: boolean;
@@ -587,8 +590,34 @@ test("journey 9 · a rehearsal verification, an eligible earning, a quote and a 
 
   // The promotional grant never leaves, whatever else is true. This is the rule
   // the whole per-origin design exists for.
-  const promotional = state.buckets.find((b) => b.origin === "PROMOTIONAL");
-  expect(promotional?.payout_allowed, "a promotional grant never leaves").toBe(false);
+  //
+  // Not a `find` on the origin. Since F-272 the answer carries one bucket per
+  // (origin, origin floor, root set, finality), so `origin` is not unique and a
+  // `find` answers about whichever provenance happens to sort first. The rule is
+  // about the VALUE: every bucket a grant is anywhere behind must be refused,
+  // including trading proceeds whose floor is the grant (F-280).
+  const grantBehindIt = state.buckets.filter(
+    (b) =>
+      b.origin === "PROMOTIONAL" ||
+      b.origin_floor === "PROMOTIONAL" ||
+      (b.root_origins ?? []).includes("PROMOTIONAL"),
+  );
+  expect(grantBehindIt.length, "the seeded balance is a promotional grant").toBeGreaterThan(0);
+  const describe = (b: { readonly origin: string; readonly origin_floor?: string; readonly finality?: string }) =>
+    `${b.origin}/${b.origin_floor ?? "?"}/${b.finality ?? "?"}`;
+  // The claim is about the money. `payout_allowed` is the policy's rule for the
+  // bucket's own ORIGIN and not the verdict on the bucket: an earning a grant
+  // funded carries an origin the policy permits and is refused by its FLOOR,
+  // which is the whole of D-131. So nothing a grant is behind may leave, and the
+  // per-origin rule is asserted where it is the rule that applies.
+  expect(
+    grantBehindIt.filter((b) => BigInt(b.withdrawable) > 0n).map(describe),
+    "nothing a promotional grant funded may leave, whichever provenance carries it",
+  ).toEqual([]);
+  expect(
+    grantBehindIt.filter((b) => b.origin === "PROMOTIONAL" && b.payout_allowed).map(describe),
+    "and the policy's rule for the grant's own origin refuses it outright",
+  ).toEqual([]);
 
   const withdrawable = state.buckets.find((b) => BigInt(b.withdrawable) > 0n);
   if (withdrawable === undefined) {
@@ -686,11 +715,21 @@ test("journey 10 · the request is handed to the rehearsal provider and nothing 
     const answer = (await eligibility.json()) as {
       readonly withdrawable_now: string;
       readonly reasons: readonly string[];
-      readonly buckets: ReadonlyArray<{ readonly origin: string; readonly reasons: readonly string[] }>;
+      readonly buckets: ReadonlyArray<{
+        readonly origin: string;
+        readonly origin_floor?: string;
+        readonly reasons: readonly string[];
+      }>;
     };
+    // Named by provenance rather than by origin: two buckets can carry one
+    // origin and two different reasons, and a skip message that folded them
+    // would be the read surface's version of the bug F-272 fixed.
     const per = answer.buckets
       .filter((bucket) => bucket.reasons.length > 0)
-      .map((bucket) => `${bucket.origin}=${bucket.reasons.join("/")}`)
+      .map(
+        (bucket) =>
+          `${bucket.origin}(from ${bucket.origin_floor ?? bucket.origin})=${bucket.reasons.join("/")}`,
+      )
       .join(" ");
     test.skip(
       true,

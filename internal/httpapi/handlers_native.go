@@ -482,7 +482,15 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 	// Why a RESERVED payout cannot be sent, which is not a failure and not a
 	// state: the value is still reserved and cancelling is what releases it
 	// (F-277). The Withdraw page renders it beside the Cancel control.
-	if r.BlockedReason != "" {
+	//
+	// `Blocked()` and not the string, because the string outlives the state it
+	// describes. The reason stays on the row after a cancellation -- why
+	// somebody's value could not be sent is part of its history -- and emitting
+	// it regardless of state put "this withdrawal cannot be sent ... its Credits
+	// are still reserved" into the same payload as REJECTED and a reserved
+	// quantity of zero (F-279). The record keeps the fact; the read reports it
+	// only while it is true.
+	if r.Blocked() {
 		out.BlockedReason = ptr(r.BlockedReason)
 		if r.BlockedAt != nil {
 			out.BlockedAt = ptr(r.BlockedAt.UTC())

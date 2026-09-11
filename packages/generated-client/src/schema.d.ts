@@ -5936,7 +5936,7 @@ export interface components {
          */
         PayoutDestinationStatus: "UNVERIFIED" | "VERIFIED" | "REJECTED" | "DISABLED";
         /** @description One provenance's contribution to a payout (§23). The order is the consumption order: among the origins a policy permits, the most restricted permitted one leaves first.
-         *     A provenance is an origin AND an origin floor. Two slices can carry the same `origin` and different `origin_floor` values -- trading proceeds out of a settled purchase and trading proceeds out of a promotional grant are one origin and are not one kind of money -- and they are reported separately rather than summed (D-136). */
+         *     A provenance is an origin, an origin floor AND a root set. Two slices can carry the same `origin` and different `origin_floor` values -- trading proceeds out of a settled purchase and trading proceeds out of a promotional grant are one origin and are not one kind of money -- and two more can share both and differ in `root_origins`, which is what the policy actually reads. All of them are reported separately rather than summed (D-136, D-141). */
         PayoutProvenanceSlice: {
             consumption_rank: number;
             origin: components["schemas"]["CreditOrigin"];
@@ -5945,6 +5945,8 @@ export interface components {
             quantity: components["schemas"]["Quantity"];
             /** @description True for a slice a cancellation gave back to the exact lots it came from. */
             returned?: boolean;
+            /** @description Every origin these units ultimately came from. It is what the payout policy reads -- value is released only when the policy releases its own origin and all of these -- and `origin_floor` is the most restricted of it. Two slices can share an origin AND a floor and differ here, because the floor is a minimum and two sets share a minimum whenever they share their most restricted member; they are reported separately rather than summed (D-141). */
+            root_origins?: components["schemas"]["CreditOrigin"][];
         };
         /** @description What the provider said a payout would cost, before anybody committed. Both sides are exact integers; there is no rate field holding a decimal. */
         PayoutQuote: {

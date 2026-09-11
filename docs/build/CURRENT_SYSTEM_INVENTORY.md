@@ -994,3 +994,65 @@ table in Go or in SQL. It is the residual D-121 records, confirmed again by
 `TestAuditWV3_TheSanctionsScreenResidualIsStillReachable` and left open: the
 edges a sanctions machine needs are a compliance decision that belongs to
 whoever answers B-02.
+
+
+## Addendum — 2026-09-11: what the FOURTH withdrawal-verification audit changed (F-278 … F-283)
+
+Three migrations, 00823–00825. Architecture: D-140 and D-141, dated amendments
+to D-124, D-136, D-137 and D-139, `docs/product/CREDIT_ECONOMY.md` §2 and §4,
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §7 and §9.
+
+The round was narrow by design: it audited the THIRD round's fix rather than the
+area, and found six defects, one of them a P1 that predates the round and that
+the round's own widening made more reachable. Fifteen reproductions were left
+behind; eight of them are probes that passed and are kept so a fifth round need
+not re-run them.
+
+### Tables and columns
+
+| Migration | Table | What it holds | State machine |
+|---|---|---|---|
+| 00823 | `payout_requests` (unaltered; a trigger added) | nothing new is stored | `cp_payout_blocked_reason_is_not_history()` refuses a write of a NEW `blocked_reason` onto a request whose state has no outgoing edge in `payout_request_state_edges` (AD001). The reason still survives a cancellation as history; what is refused is acquiring one afterwards |
+| 00824 | `payout_allocations` (altered) | gains `root_origins text[]`, NOT NULL, non-empty, CHECKed against the eleven declared origins, with `origin_floor = ANY(root_origins)` | a RECORD of what left, backfilled from `credit_lot_state`; the permission answers the set (D-138), and the floor is only its most restricted member |
+| 00825 | none | nothing is stored | a migration-time refusal: the schema does not move while any lot has parent rows and no computable provenance root (CR005) |
+
+### Functions and triggers
+
+| Migration | Function | What it does |
+|---|---|---|
+| 00823 | `cp_payout_blocked_reason_is_not_history()` | BEFORE UPDATE on `payout_requests`, under a WHEN clause that fires only on a write that CHANGES the reason to something non-null. Terminal is read from the edge table rather than listed again; the refusal raises AD001 rather than silently affecting no rows |
+| 00824 | — | no function; the column and two CHECKs |
+| 00825 | `cp_credit_lots_without_computable_roots()` | every lot that has parent rows and no reachable provenance root, which on this schema means a cycle in `credit_lot_parents`. Empty on any database this build wrote; a restore from 00816–00818 can make it non-empty, and 00825's DO block raises CR005 while it is |
+
+No new SQLSTATE: AD001 is the administrative-authority family (00806, 00807) and
+CR005 is `internal/credit`'s provenance family (00816, 00819).
+
+### Routes and contract changes
+
+No route is added, and no route is removed. One additive optional response
+field, and one field's emission narrowed:
+
+| Route | Change |
+|---|---|
+| `GET /v1/payouts/{id}`, `POST /v1/payouts`, `POST /v1/payouts/quote` | each provenance slice gains `root_origins`, and the slices fold by (origin, floor, root set): two provenances that share a floor are two lines, because the floor is a minimum and the policy reads the set (D-141). |
+| `GET /v1/payouts/{id}`, `GET /v1/payouts` | `blocked_reason` and `blocked_at` are emitted only while the request is VERIFIED — the one state in which "its Credits are still reserved" is true. The columns keep the fact; the read reports it while it holds (D-139 as amended). |
+
+### Go surfaces other domains may read
+
+- `credit.ConsumeRequest.RestrictToLots` — declares that `LotIDs` is the whole
+  set a consume may draw on, empty included. `credit.ConsumeRequest.AllowedOrigins`
+  is REMOVED: nothing set it, and it read an empty slice as "no restriction".
+- `credit.Allocation.RootOrigins` — the provenance set the units were taken from,
+  beside the floor.
+- `credit.SettleDerivedResult.Thawed` — how many derived lots came back out of a
+  freeze on that pass, counted separately from promotions and freezes.
+- `payout.Allocation.RootOrigins`, `payout.ProvenanceSlice.RootOrigins`.
+- `payout.Request.Blocked()` now reads the state as well as the reason.
+
+### What did NOT change
+
+No new capability gate, no new environment variable, no new error code, no new
+route, no change to the ledger or the lot event stream. `DefaultPolicy` still
+releases no origin. The thaw adds no edge to `finalityTransitions`: it uses the
+two DISPUTED already has, and REVERSED still has none — a lot whose funding was
+actually taken back stays frozen for ever, which is D-124's recorded residual.
