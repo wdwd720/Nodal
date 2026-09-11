@@ -210,8 +210,17 @@ budget). The forbidden vocabulary (§59/§60) is a test (`honesty.spec.ts`).
 ## 16 · Chrome evidence
 
 **Locally:** the merged Playwright suite against a sandbox-tier API on a fresh
-database with demo markets — 154 passed, 3 skipped with stated reasons — and
-the browser end-to-end auditor's step-by-step journey *(pending its report)*.
+database with demo markets — 154 passed, 4 skipped with stated reasons at
+`60de57d` — and the browser end-to-end auditor's twelve journeys
+(`audit-journey.spec.ts`, `audit-surface.spec.ts`, branch `audit/e2e-browser`):
+public site, sign-up, terms, the sandbox line, Buy Credits' no-key branch, a
+buy and a sell with the balance moving by the exact amount, portfolio and
+activity with and without the stream, agents with levels 4–6 disabled by name,
+Withdraw's explanation, verification through the sandbox provider, 375 px on
+eight routes, sign-out — all proven; the conversion request itself is not
+reachable until earned Credits can settle (F-e2e-1 = F-wv-3, on
+`fix/withdrawal`). The deployed CSP was applied to the real bundle for the
+first time and produced no violation.
 **Live staging:** *not yet observed* — the deployment waits on the human queue;
 this session's Chrome was used only to read the Stripe dashboard's publishable
 key and GitHub's billing page. Class: `LIVE_OBSERVED` (local),
@@ -223,7 +232,9 @@ Opened by this goal: **F-134–F-223, ninety findings** (1 P0, 12 P1, 40 P2, 37
 P3), all FIXED with regression tests, from eight adversarial audits by agents
 that had not written the area. Wave B: withdrawal-verification 11 (4 P1) →
 `fix/withdrawal`; docs-vs-reality 14 (6 P2) → `fix/docs`; browser end-to-end
-*(pending)*. Current open: the wave-B findings until their branches merge
+6 (1 P1, the same defect as the withdrawal audit's F-wv-3, and 5 P3) → two
+fixed on `productization` (F-251, F-252), one to each fix branch (F-250,
+F-253), one duplicate, one closed by the auditor's own test landing. Current open: the wave-B findings until their branches merge
 *(pending)*. The register: `docs/audit/AUDIT_FINDINGS.md`; the P0/P1 list:
 `docs/audit/LAUNCH_GATE_MATRIX.md` "What the productization wave changed".
 
