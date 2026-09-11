@@ -405,7 +405,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// runCreditSettlement for why this is acceptable in the API process and
 	// what it deliberately does not become responsible for.
 	if creditPurchases.Service != nil {
-		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg.Credit.SettlementWindow, log)
+		go runCreditSettlement(ctx, database, creditPurchases.Service, cfg, log)
 	}
 	// The same answer for the same reason: this deployment has one process, so
 	// the periodic work belongs in it. Two passes, both needing cp_ops:
@@ -446,6 +446,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 	payoutEngine := payout.NewEngine(creditSvc)
 	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+	// Submit and Reconcile had no caller anywhere in cmd/, so a reserved payout
+	// sat in VERIFIED forever with the customer's Credits held in
+	// PAYOUT_RESERVED and the provider never told. See runPayoutSweeps for why
+	// these run here, why fifteen seconds, and why neither pass owns any of the
+	// crash-safety (D-085).
+	go runPayoutSweeps(ctx, database, payoutSvc, clk, log)
 
 	// ---- verification (goal PARTS 19-25) ---------------------------------
 	//

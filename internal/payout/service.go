@@ -1089,3 +1089,38 @@ func mapError(err error) error {
 	}
 	return errs.Wrap(err, errs.CodeInternal, "payout: database error")
 }
+
+// AwaitingSubmission returns reserved payouts that have not been handed to a
+// provider yet, oldest first.
+//
+// VERIFIED is the state Create leaves a fully-reserved request in and the only
+// state Submit accepts. A request sitting here holds the customer's Credits in
+// PAYOUT_RESERVED: the money has left their spendable balance and has not gone
+// anywhere, which is the worst place for it to stop.
+//
+// `olderThan` bounds it to requests created before that instant, so a sweep
+// never races the transaction that is still creating one.
+func (s *Service) AwaitingSubmission(ctx context.Context, q db.Querier, olderThan time.Time, limit int) ([]Request, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := q.Query(ctx,
+		`SELECT `+requestColumns+`
+		   FROM payout_requests
+		  WHERE state = 'VERIFIED' AND reserved_at IS NOT NULL AND created_at < $1
+		  ORDER BY created_at
+		  LIMIT $2`, olderThan.UTC(), limit)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	var out []Request
+	for rows.Next() {
+		r, err := scanRequest(rows)
+		if err != nil {
+			return nil, mapError(err)
+		}
+		out = append(out, r)
+	}
+	return out, mapError(rows.Err())
+}

@@ -85,6 +85,37 @@ They agree, and `test/integration/enums` keeps them agreeing.
 `FundingFinality.Spendable()` and `.PayoutEligible()` are the two functions;
 the second is a *floor*, and origin policy applies on top of it.
 
+### How long REVERSIBLE lasts, and the sandbox tier (D-086)
+
+`REVERSIBLE` becomes `SETTLED` when the reversibility window closes.
+`credit.PurchaseService.SettleDue` makes that move and `cmd/api` sweeps on a
+ticker, because the launch tier deploys no worker to do it (F-90) and a
+deployment where nothing settles turns the money-at-risk ceiling into a lifetime
+cumulative cap.
+
+The window is `CP_CREDIT_SETTLEMENT_WINDOW`, 720 hours on STAGING, and it is
+right: it is the card chargeback window, and a captured payment really is
+reversible for that long.
+
+On a **sandbox tier** it is two minutes, compiled in and keyed off
+`cfg.SandboxTier()`. The reason is the sentence at the top of this section read
+in the other direction: only `SETTLED` value is payout-eligible under any policy
+in this build, including the sandbox one, so with the real window nothing bought
+on the tier whose entire purpose is rehearsing the product could ever be
+withdrawn — and the failure was invisible, because it is a clock rather than a
+refusal. Two minutes is long enough to observe `REVERSIBLE`, which matters and
+which a rehearsal must not skip, and short enough that a person testing the
+product does not go and do something else. The sweep ticks every twenty seconds
+there, because a two-minute window swept every fifteen minutes is a
+fifteen-minute window.
+
+It is not a second environment variable, for the reason `CreditConfig` already
+gives for the real one: a risk determination read straight from the environment
+is outside `scripts/configcheck` and outside the configuration hash. A sandbox
+window is not a risk determination at all — nothing was charged and nothing can
+be charged back — so it is a property of the tier, stated once in
+`cmd/api/creditsettle.go`, where PROD is refused by construction (ADR-0023).
+
 ---
 
 ## 3. What a Credit can do inside the product
