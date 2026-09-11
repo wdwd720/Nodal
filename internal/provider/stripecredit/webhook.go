@@ -224,6 +224,11 @@ func disputeEvent(out credit.PurchaseEvent, ev event) (credit.PurchaseEvent, err
 // string: Stripe can withdraw funds while a dispute is still under review, and
 // the funding must reflect where the money is rather than where the
 // paperwork is.
+//
+// Three outcomes leave the money with us and they are not the same fact. A
+// dispute won and funds reinstated are DISPUTE_WON; an early-fraud-warning
+// inquiry closing is DISPUTE_LIFTED. Both return the funding to REVERSIBLE,
+// because neither of them is the closing of the reversibility window (D-094).
 func disputeStatus(eventType, status string) (credit.PurchaseStatus, bool) {
 	switch eventType {
 	case EventDisputeCreated:
@@ -240,8 +245,13 @@ func disputeStatus(eventType, status string) (credit.PurchaseStatus, bool) {
 			return credit.PurchaseDisputeWon, true
 		case "warning_closed":
 			// An early-warning notice that closed without becoming a dispute.
-			// Nothing moved and nothing is owed.
-			return credit.PurchaseDisputeWon, true
+			// Nothing moved and nothing is owed -- and nothing is final
+			// either: Stripe is explicit that an inquiry is not a dispute and
+			// that a chargeback may still follow one, so the money is exactly
+			// as reversible as it was before the notice arrived. It used to be
+			// DISPUTE_WON, which was SETTLED, which is payout eligibility
+			// (F-155).
+			return credit.PurchaseDisputeLifted, true
 		}
 	}
 	return "", false

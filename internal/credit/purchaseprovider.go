@@ -171,9 +171,37 @@ const (
 	// which is before the Credits are minted; a funding that has been through
 	// a dispute minted its Credits long ago, and sending it back to CAPTURED
 	// would be a backwards transition the state machine correctly refuses.
-	// Surviving a dispute is the strongest evidence a card payment can
-	// produce that the money is ours, which is why it maps to SETTLED.
+	//
+	// It maps to REVERSIBLE, not to SETTLED, and that is D-094. Winning a
+	// dispute is strong evidence that the money is ours; it is not the fact
+	// SETTLED records, which is that the reversibility window has CLOSED. A
+	// card can be disputed more than once, and the same scheme rules that let
+	// the first dispute arrive still apply the day after the second is won. The
+	// package already refuses to let an operator assert SETTLED for exactly
+	// this reason -- "an operator who could assert it by hand could make value
+	// payout-eligible by closing a ticket" -- and a card network closing a
+	// dispute in our favour is not more entitled to that than an operator is.
+	// SettleDue, reading reversible_at against the configured window, stays the
+	// only thing that settles, and 00743's trigger stamps reversible_at once,
+	// so the funding returns to the window it was already in rather than
+	// restarting it.
 	PurchaseDisputeWon PurchaseStatus = "DISPUTE_WON"
+
+	// PurchaseDisputeLifted: a card-network INQUIRY closed without ever
+	// becoming a dispute. The freeze lifts and nothing else changes.
+	//
+	// Stripe calls it `charge.dispute.closed` with status `warning_closed`, and
+	// it was mapped to DISPUTE_WON -- which, when DISPUTE_WON meant SETTLED,
+	// promoted a payment minutes old straight to payout eligibility without its
+	// reversibility window having closed (F-155). An early-fraud warning is not
+	// a dispute, no money moved, and a chargeback may still follow it: the
+	// money is exactly as reversible as it was before the inquiry opened.
+	//
+	// It is a status of its own rather than a second spelling of DISPUTE_WON
+	// because the two are different provider facts. They reach the same funding
+	// state today, and a deployment reading its transition rows can still tell
+	// which of them happened.
+	PurchaseDisputeLifted PurchaseStatus = "DISPUTE_LIFTED"
 	// PurchaseManualReview: the provider said something this binary does not
 	// understand. It is a legitimate answer and must not be collapsed into
 	// any of the others.
@@ -184,7 +212,7 @@ var allPurchaseStatuses = []PurchaseStatus{
 	PurchaseCreated, PurchasePaymentMethodRequired, PurchaseAuthenticationRequired,
 	PurchaseProcessing, PurchaseAuthorized, PurchaseSucceeded, PurchaseFailed,
 	PurchaseCanceled, PurchaseRefunded, PurchaseDisputed, PurchaseChargeback,
-	PurchaseDisputeWon, PurchaseManualReview,
+	PurchaseDisputeWon, PurchaseDisputeLifted, PurchaseManualReview,
 }
 
 // AllPurchaseStatuses returns every declared status in declaration order.
@@ -234,8 +262,10 @@ func FundingStateFor(s PurchaseStatus) (FundingState, bool) {
 		// A lost dispute is a reversal: the money is gone. REVERSED is what
 		// the funding lifecycle calls that, and Reverse is what has to run.
 		return FundingReversed, true
-	case PurchaseDisputeWon:
-		return FundingSettled, true
+	case PurchaseDisputeWon, PurchaseDisputeLifted:
+		// The freeze lifts and the money goes back into the window it was
+		// already in. Nothing but SettleDue settles a funding (D-094).
+		return FundingReversible, true
 	case PurchaseManualReview:
 		return FundingManualReview, true
 	}

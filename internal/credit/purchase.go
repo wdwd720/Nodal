@@ -531,6 +531,17 @@ func (s *PurchaseService) apply(ctx context.Context, tx pgx.Tx, f Funding, to Fu
 			return "", err
 		}
 
+	case FundingReversible:
+		// A dispute or an inquiry that closed without taking the money.
+		// Advances AND unfreezes the lot, which is the half that matters here:
+		// value nobody is disputing any more has to become spendable again.
+		// The funding returns to the reversibility window it was already in --
+		// it does not settle, and nothing a provider says settles anything
+		// (D-094).
+		if err := s.credits.UnfreezeFunding(ctx, tx, f.ID, reason); err != nil {
+			return "", err
+		}
+
 	case FundingReversed:
 		// Advances AND claws back. Reverse destroys what remains and books
 		// the rest as a recorded DEFICIT; it deliberately does not unwind the

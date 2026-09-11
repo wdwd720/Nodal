@@ -24,18 +24,22 @@ import (
 // leaves the lot it DID reverse holding units nobody can ever use.
 // ---------------------------------------------------------------------------
 
-// Service.reverseTo computes `covered = min(accountBalance, lot.Quantity)` and
-// then calls Consume with no AllowedOrigins and no lot restriction
-// (funding.go:519-566). Consume walks the account's lots in CONSUMPTION order
-// -- promotional first, purchased fourth (repository.go:33) -- so the units it
-// destroys are whichever lots sort first, not the lot the chargeback is about.
-// The funding's own lot is then stamped REVERSED with its remaining quantity
-// untouched.
+// Service.reverseTo computed `covered = min(accountBalance, lot.Quantity)` and
+// then called Consume with no AllowedOrigins and no lot restriction. Consume
+// walks the account's lots in CONSUMPTION order -- promotional first, purchased
+// fourth -- so the units it destroyed were whichever lots sorted first, not the
+// lot the chargeback was about. The funding's own lot was then stamped REVERSED
+// with its remaining quantity untouched.
 //
-// The account is left holding CREDIT_BALANCE it can never spend, never
+// The account was left holding CREDIT_BALANCE it could never spend, never
 // withdraw and never clear, and a promotional grant that had nothing to do with
-// the disputed card payment has been seized instead.
-func TestAudit_ChargebackDestroysADifferentLotThanTheOneItReverses(t *testing.T) {
+// the disputed card payment had been seized instead.
+//
+// Inverted for F-152: the assertions that recorded the grant at zero and the
+// reversed lot at 300 are kept, the other way round. A clawback destroys what
+// its own lot still holds and books what was already spent out of that lot as
+// the recorded DEFICIT.
+func TestAudit_ChargebackDestroysTheLotItReverses(t *testing.T) {
 	f := newFixture(t)
 
 	// A 300-unit promotional grant the platform gave this user. It is
@@ -70,11 +74,12 @@ func TestAudit_ChargebackDestroysADifferentLotThanTheOneItReverses(t *testing.T)
 	purchasedAfter, err := f.svc.Lot(f.ctx, testDB, purchased)
 	require.NoError(t, err)
 
-	// What actually happened.
-	assert.Equal(t, "0", grantAfter.Remaining.String(),
-		"the promotional grant was consumed by a chargeback of a card payment it did not fund")
-	assert.Equal(t, "300", purchasedAfter.Remaining.String(),
-		"300 units of the CHARGED BACK purchase survive")
+	// What happens. The grant was untouched -- it did not fund this payment --
+	// and the charged-back lot is empty.
+	assert.Equal(t, "300", grantAfter.Remaining.String(),
+		"the promotional grant did not fund the card payment and is not taken by its chargeback")
+	assert.Equal(t, "0", purchasedAfter.Remaining.String(),
+		"the CHARGED BACK purchase keeps nothing")
 	assert.Equal(t, valuedomain.FinalityReversed, purchasedAfter.Finality)
 
 	// The account's books afterwards.
@@ -82,25 +87,53 @@ func TestAudit_ChargebackDestroysADifferentLotThanTheOneItReverses(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "300", after.String())
 	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account),
-		"provenance still reconciles, which is why nothing catches this")
+		"provenance reconciles, as it did before -- the defect was never a divergence")
 
 	bal := f.balancesFor(t, valuedomain.SandboxPolicy(), valuedomain.VerificationPayoutKYC)
 
-	// The invariant this breaks. A chargeback must claw back the units the
-	// reversed funding minted; it must not take units from an unrelated lot,
-	// and it must not leave the reversed lot holding spendable-looking balance.
+	// The invariant. A chargeback claws back the units the reversed funding
+	// minted; it does not take units from an unrelated lot, and it does not
+	// leave the reversed lot holding spendable-looking balance.
 	assert.Equal(t, "300", bal.Gross.String(),
 		"GET /v1/credits/balance reports a gross balance of 300")
-	assert.Equal(t, "0", bal.Spendable.String(),
-		"none of which can be spent")
-	assert.Equal(t, "300", bal.Reversed.String(),
-		"because all 300 units are stranded inside the REVERSED lot")
-
-	// The user should have been left with their 300-unit grant, spendable.
+	assert.Equal(t, "0", bal.Reversed.String(),
+		"nothing is stranded inside the REVERSED lot")
 	assert.Equal(t, "300", bal.Spendable.String(),
-		"the user is entitled to keep the 300 promotional units the chargeback did not fund; "+
-			"instead the grant was destroyed and 300 dead units of the reversed purchase remain "+
-			"on the account and in SUM(CREDIT_BALANCE) forever")
+		"the user keeps the 300 promotional units the chargeback did not fund, and they are spendable")
+}
+
+// The other half of F-152: what a chargeback does when the purchase HAS been
+// spent. The funding's own lot is empty, so there is nothing to destroy and the
+// whole amount is the recorded DEFICIT -- and the grant that was sitting beside
+// it is still not touched.
+func TestAudit_ChargebackOfSpentCreditsBooksADeficitAndTakesNoOtherLot(t *testing.T) {
+	f := newFixture(t)
+	grant := f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 300)
+	funding := f.mintedFunding(t, 1000)
+	purchased := *f.fundingRow(t, funding).LotID
+
+	// The user spends exactly the purchased lot. Consumption order takes the
+	// grant first, so the spend has to name the origin to reach the purchase.
+	_, err := f.spend(1000, valuedomain.OriginPurchased)
+	require.NoError(t, err)
+
+	var res ReverseResult
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var rerr error
+			res, rerr = f.svc.Reverse(ctx, tx, funding, f.clk.Now(), "chargeback received")
+			return rerr
+		}))
+
+	assert.Equal(t, "0", res.Destroyed.String(), "there was nothing left in the lot to destroy")
+	assert.Equal(t, "1000", res.Deficit.String(), "all of it was spent, so all of it is owed")
+	assert.Equal(t, []LotID{purchased}, res.LotIDs)
+
+	grantAfter, err := f.svc.Lot(f.ctx, testDB, grant.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "300", grantAfter.Remaining.String(),
+		"a deficit is recorded against the account; it is not collected out of an unrelated grant")
+	require.NoError(t, f.svc.VerifyProvenance(f.ctx, testDB, f.account))
 }
 
 // ---------------------------------------------------------------------------
@@ -276,25 +309,29 @@ func TestAudit_AnAbandonedCheckoutNeverLeavesTheAtRiskCeiling(t *testing.T) {
 // window having closed.
 // ---------------------------------------------------------------------------
 
-// stripecredit.disputeStatus maps charge.dispute.closed with status
-// "warning_closed" to credit.PurchaseDisputeWon (webhook.go:230-236), and
-// FundingStateFor maps PurchaseDisputeWon to FundingSettled
-// (purchaseprovider.go:237). SettleFunding then promotes the lot
+// stripecredit.disputeStatus mapped charge.dispute.closed with status
+// "warning_closed" to credit.PurchaseDisputeWon, and FundingStateFor mapped
+// PurchaseDisputeWon to FundingSettled. SettleFunding then promoted the lot
 // REVERSIBLE -> SETTLED, which is what FundingFinality.PayoutEligible() reads.
 //
 // "warning_closed" is the close of an early-fraud-warning INQUIRY. Stripe's own
 // documentation is explicit that an inquiry is not a dispute and that a
-// chargeback may still follow it; the adapter's comment agrees -- "an
-// early-warning notice that closed without becoming a dispute". The money is
-// therefore exactly as reversible as it was before the inquiry opened, and the
-// funding is now SETTLED: the state credit.FundingState documents as "the money
-// is ours", that internal/capacity stops counting as money at risk, and that
-// docs/product/CREDIT_ECONOMY.md says means "the funding is final".
+// chargeback may still follow it; the adapter's comment agreed -- "an
+// early-warning notice that closed without becoming a dispute". The money was
+// therefore exactly as reversible as it had been before the inquiry opened, and
+// the funding was SETTLED: the state credit.FundingState documents as "the
+// money is ours", that internal/capacity stops counting as money at risk, and
+// that docs/product/CREDIT_ECONOMY.md says means "the funding is final".
 //
 // ManualResolution refuses to let an operator assert SETTLED for precisely this
 // reason ("an operator who could assert it by hand could make value
-// payout-eligible by closing a ticket"). A card network inquiry can.
-func TestAudit_AnInquiryThatClosesSettlesTheFundingBeforeItsWindow(t *testing.T) {
+// payout-eligible by closing a ticket"). A card network inquiry could.
+//
+// Inverted for F-155 and D-094: warning_closed is DISPUTE_LIFTED, a won dispute
+// is DISPUTE_WON, and both return the funding to REVERSIBLE -- the window it
+// was already in, since 00743 stamps reversible_at once. SettleDue is the only
+// thing that settles.
+func TestAudit_AnInquiryThatClosesUnfreezesTheFundingAndDoesNotSettleIt(t *testing.T) {
 	f := newPurchaseFixture(t)
 
 	p := f.start(t, "inquiry", 10_000)
@@ -304,6 +341,7 @@ func TestAudit_AnInquiryThatClosesSettlesTheFundingBeforeItsWindow(t *testing.T)
 	require.Equal(t, FundingReversible, minted.State)
 	require.NotNil(t, minted.ReversibleAt)
 	require.NotNil(t, minted.LotID)
+	openedAt := *minted.ReversibleAt
 
 	// charge.dispute.created for an early-fraud-warning inquiry.
 	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputed, "inq-e2", 10_000))
@@ -313,17 +351,24 @@ func TestAudit_AnInquiryThatClosesSettlesTheFundingBeforeItsWindow(t *testing.T)
 
 	// charge.dispute.closed, status "warning_closed": the inquiry was closed
 	// without becoming a dispute. Nothing moved; nothing is final.
-	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputeWon, "inq-e3", 10_000))
+	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputeLifted, "inq-e3", 10_000))
 
-	settled := f.funding(t, p.Funding.ID)
+	lifted := f.funding(t, p.Funding.ID)
 	lot, err := f.svc.Lot(f.ctx, testDB, *minted.LotID)
 	require.NoError(t, err)
 
-	assert.Equal(t, FundingSettled, settled.State)
-	assert.Equal(t, valuedomain.FinalitySettled, lot.Finality)
-	assert.True(t, lot.Finality.PayoutEligible())
+	assert.Equal(t, FundingReversible, lifted.State, "the freeze lifts; nothing settles")
+	assert.Equal(t, valuedomain.FinalityReversible, lot.Finality)
+	assert.False(t, lot.Finality.PayoutEligible(),
+		"an inquiry that closed must not make a card payment inside its dispute window withdrawable")
+	assert.True(t, lot.Finality.Spendable(), "and the value stops being frozen")
+	require.NotNil(t, lifted.ReversibleAt)
+	assert.True(t, lifted.ReversibleAt.Equal(openedAt),
+		"the funding returns to the window it was in; re-entering REVERSIBLE does not restart the clock")
+	assert.Nil(t, lifted.SettledAt)
 
-	// The window has not closed: the sweep would not have settled this.
+	// The window has not closed, and the sweep -- the only thing that settles
+	// -- still finds nothing due.
 	var n int
 	require.NoError(t, f.tx(func(tx pgx.Tx) error {
 		var serr error
@@ -332,22 +377,60 @@ func TestAudit_AnInquiryThatClosesSettlesTheFundingBeforeItsWindow(t *testing.T)
 	}))
 	assert.Zero(t, n, "SettleDue finds nothing due; the money is minutes old")
 
-	// And the balance API now reports it as withdrawable on a sandbox tier.
+	// The balance API reports it as not withdrawable, even on a sandbox tier
+	// whose policy permits PURCHASED.
 	bal := f.balancesForAccount(t, valuedomain.SandboxPolicy(), valuedomain.VerificationPayoutKYC)
-	assert.Equal(t, "10000", bal.PayoutEligible.String(),
-		"an inquiry that closed made a card payment inside its dispute window payout-eligible")
+	assert.Equal(t, "0", bal.PayoutEligible.String())
+	assert.Equal(t, creditsForDollars(t, f, 100).String(), bal.Spendable.String())
 
-	// It is also no longer counted as money at risk.
-	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: 200_000}, f.clk.Now)
+	// And it is still counted as money at risk, which is what a reversible
+	// payment is.
+	guard, err := capacity.NewGuard(capacity.Budget{MaxAtRiskMinor: 10_000_000}, f.clk.Now)
 	require.NoError(t, err)
-	var r capacity.Reading
+	var before, after capacity.Reading
 	require.NoError(t, f.tx(func(tx pgx.Tx) error {
 		var merr error
-		r, merr = guard.Measure(f.ctx, tx)
+		before, merr = guard.Measure(f.ctx, tx)
 		return merr
 	}))
-	assert.NotContains(t, []int64{10_000}, r.AtRiskMinor%100_000,
-		"SETTLED is excluded from the money-at-risk ceiling by design")
+	require.NoError(t, f.tx(func(tx pgx.Tx) error {
+		_, serr := f.svcP.SettleDue(f.ctx, tx, time.Nanosecond, 100)
+		return serr
+	}))
+	require.NoError(t, f.tx(func(tx pgx.Tx) error {
+		var merr error
+		after, merr = guard.Measure(f.ctx, tx)
+		return merr
+	}))
+	assert.Equal(t, before.AtRiskMinor-10_000, after.AtRiskMinor,
+		"settling -- and only settling -- is what takes it out of the money-at-risk ceiling")
+}
+
+// The same rule for the outcome that IS a dispute won (D-094). A card network
+// finding in our favour is strong evidence the money is ours; it is not the
+// closing of the reversibility window, and another dispute can follow it.
+func TestAudit_AWonDisputeReturnsTheFundingToItsWindowRatherThanSettlingIt(t *testing.T) {
+	f := newPurchaseFixture(t)
+
+	p := f.start(t, "won", 10_000)
+	f.deliver(t, event(p.Funding.ProviderReference, PurchaseSucceeded, "won-e1", 10_000))
+	minted := f.funding(t, p.Funding.ID)
+	require.NotNil(t, minted.LotID)
+
+	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputed, "won-e2", 10_000))
+	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputeWon, "won-e3", 10_000))
+
+	got := f.funding(t, p.Funding.ID)
+	assert.Equal(t, FundingReversible, got.State)
+	assert.Nil(t, got.SettledAt, "only SettleDue writes settled_at")
+
+	// And a second dispute is still representable, which is the reason.
+	f.deliver(t, event(p.Funding.ProviderReference, PurchaseDisputed, "won-e4", 10_000))
+	again := f.funding(t, p.Funding.ID)
+	assert.Equal(t, FundingDisputed, again.State)
+	lot, err := f.svc.Lot(f.ctx, testDB, *minted.LotID)
+	require.NoError(t, err)
+	assert.Equal(t, valuedomain.FinalityDisputed, lot.Finality)
 }
 
 // ---------------------------------------------------------------------------
