@@ -109,16 +109,22 @@ type Ports struct {
 // Options configures the server. Everything here comes from internal/config in
 // the composition root; nothing is read from the environment by this package.
 type Options struct {
-	Env               config.Environment
-	BuildVersion      string
-	ConfigHash        string
-	PublicBaseURL     string
-	CORSOrigins       []string
-	TrustedProxyCIDRs []string
-	MaxBodyBytes      int64
-	CookieName        string
-	CookieDomain      string
-	CookieSecure      bool
+	Env          config.Environment
+	BuildVersion string
+	ConfigHash   string
+	// SandboxTier says whether this deployment is a sandbox tier (ADR-0023);
+	// CreditPurchaseSandbox whether the Credit purchase provider is anything
+	// but live. Both are published so the UI labels temperatures from what
+	// the API says rather than from where it was loaded.
+	SandboxTier           bool
+	CreditPurchaseSandbox bool
+	PublicBaseURL         string
+	CORSOrigins           []string
+	TrustedProxyCIDRs     []string
+	MaxBodyBytes          int64
+	CookieName            string
+	CookieDomain          string
+	CookieSecure          bool
 	// PostLoginURL is where the OIDC callback sends the browser once the
 	// session cookie is set. Empty means the API's own root. When the web app
 	// lives on another origin this is its origin; a local return-to path,

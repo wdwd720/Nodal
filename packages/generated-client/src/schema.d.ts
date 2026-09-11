@@ -3748,6 +3748,8 @@ export interface paths {
                             build_version: string;
                             config_hash: string;
                             environment: string;
+                            /** @description True when this deployment is a sandbox tier (ADR-0023). Everything it mints, verifies or pays is a rehearsal; the UI labels the whole product accordingly. */
+                            sandbox_tier?: boolean;
                         };
                     };
                 };
@@ -4283,6 +4285,8 @@ export interface components {
              * @description When the reversibility window opened. The settlement window is measured from here.
              */
             reversible_at?: string;
+            /** @description True when the provider this purchase runs through is not a live one: the card was a test card and the Credits it mints are sandbox value. The UI renders such a figure at the simulated temperature and says so; the flag is the deployment's provider mode, not a claim about the person. */
+            sandbox?: boolean;
             /** Format: date-time */
             settled_at?: string;
             /**

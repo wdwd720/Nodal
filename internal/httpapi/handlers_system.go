@@ -41,6 +41,7 @@ func (s *Server) GetVersion(_ context.Context, _ api.GetVersionRequestObject) (a
 		BuildVersion: s.opts.BuildVersion,
 		ConfigHash:   s.opts.ConfigHash,
 		Environment:  string(s.opts.Env),
+		SandboxTier:  &s.opts.SandboxTier,
 	}, nil
 }
 
