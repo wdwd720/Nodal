@@ -25,17 +25,39 @@ import (
 	"github.com/nodal/controlplane/internal/terms"
 )
 
+// testCoolingOff is long enough that a test which must still be INSIDE the wait
+// cannot fall out of it on a slow machine.
 const testCoolingOff = 10 * time.Minute
 
+// testShortCoolingOff is what a test that has to get PAST the wait uses.
+//
+// Migration 00798 measures the cooling-off period against the database's own
+// clock and bounds a transition row's occurred_at to a small skew around it, so
+// a fake clock advanced past the wait no longer effects anything -- which is the
+// defect F-174 recorded, and these fixtures relied on it. A test that needs the
+// wait to be over therefore waits it out for real, in a fixture where "for real"
+// is a fraction of a second, and moves the service clock by the same amount so
+// the two agree.
+const testShortCoolingOff = 300 * time.Millisecond
+
 type fixture struct {
-	svc      *profile.Service
-	db       *db.DB
-	clk      *clock.Fake
-	repo     *accounts.Repository
-	sessions *auth.Manager
+	svc        *profile.Service
+	db         *db.DB
+	clk        *clock.Fake
+	repo       *accounts.Repository
+	sessions   *auth.Manager
+	coolingOff time.Duration
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T) *fixture { return newFixtureWithCoolingOff(t, testCoolingOff) }
+
+// newEffectableFixture is newFixture for a test that has to reach EFFECTED. Use
+// f.passCoolingOff to get there.
+func newEffectableFixture(t *testing.T) *fixture {
+	return newFixtureWithCoolingOff(t, testShortCoolingOff)
+}
+
+func newFixtureWithCoolingOff(t *testing.T, coolingOff time.Duration) *fixture {
 	t.Helper()
 	url := os.Getenv("CP_TEST_DATABASE_URL")
 	if url == "" {
@@ -50,10 +72,20 @@ func newFixture(t *testing.T) *fixture {
 	repo := accounts.NewRepository()
 	svc, err := profile.New(profile.Deps{
 		DB: d, Repo: profile.NewRepository(), Accounts: repo, Audit: audit.NewWriter(),
-		Clock: clk, Sessions: mgr, CoolingOff: testCoolingOff,
+		Clock: clk, Sessions: mgr, CoolingOff: coolingOff,
 	})
 	require.NoError(t, err)
-	return &fixture{svc: svc, db: d, clk: clk, repo: repo, sessions: mgr}
+	return &fixture{svc: svc, db: d, clk: clk, repo: repo, sessions: mgr, coolingOff: coolingOff}
+}
+
+// passCoolingOff waits out this fixture's cooling-off period on the wall clock
+// and moves the service clock with it, so the service and the database agree
+// about the wait being over.
+func (f *fixture) passCoolingOff(t *testing.T) {
+	t.Helper()
+	d := f.coolingOff + 50*time.Millisecond
+	time.Sleep(d)
+	f.clk.Advance(d)
 }
 
 // newUser creates a user, their CUSTOMER account and one live session, the way
@@ -457,7 +489,7 @@ func TestIntegration_Closure_CannotBeEffectedBeforeTheCoolingOffPeriod(t *testin
 }
 
 func TestIntegration_Closure_EffectingClosesTheUserTheAccountsAndTheSessions(t *testing.T) {
-	f := newFixture(t)
+	f := newEffectableFixture(t)
 	ctx := context.Background()
 	actor, user, acct := f.newUser(t)
 	op := f.operator(t)
@@ -467,7 +499,7 @@ func TestIntegration_Closure_EffectingClosesTheUserTheAccountsAndTheSessions(t *
 	require.NotNil(t, view.Closure)
 	requestID := view.Closure.ID
 
-	f.clk.Advance(testCoolingOff + time.Minute)
+	f.passCoolingOff(t)
 	admin, err := f.svc.Decide(ctx, op, actor.UserID, profile.DecisionEffect, "the cooling-off period has passed")
 	require.NoError(t, err)
 	assert.Equal(t, "CLOSED", admin.UserStatus)

@@ -211,6 +211,21 @@ func registry() []pair {
 		{table: "terms_acceptances", constraint: "terms_acceptances_document_id_check", source: "terms.AllDocumentIDs()", values: str(terms.AllDocumentIDs())},
 		{table: "account_closure_requests", constraint: "account_closure_requests_state_check", source: "profile.AllClosureStates()", values: str(profile.AllClosureStates())},
 		{table: "operator_roles", constraint: "operator_roles_role_check", source: "operatorroles.Directory()", values: str(operatorroles.Directory())},
+
+		// Paired 2026-09-10 with migration 00798, which put both account
+		// lifecycle EDGE SETS in the schema. These two are not lists of values
+		// but lists of PAIRS, written as `(from, to) IN ((..),(..))`, which
+		// PostgreSQL renders as ROW(..) = ANY (ARRAY[ROW('A','B'), ...]) -- so
+		// checkLiterals reads them as a flat from,to,from,to sequence and the Go
+		// halves are flattened the same way. Order is not compared (both sides
+		// are sorted), so the comparison is of the multiset of endpoints, which
+		// is exactly what diverging edge sets change.
+		{table: "account_closure_request_transitions", constraint: "account_closure_request_transitions_edge_check", source: "profile.ClosureEdges()", values: profile.ClosureEdges()},
+		{table: "user_status_transitions", constraint: "user_status_transitions_edge_check", source: "profile.UserStatusEdges()", values: profile.UserStatusEdges()},
+
+		// Paired with migration 00799, which gave the operator directory the
+		// transition table every other authority-bearing table already had.
+		{table: "operator_role_transitions", constraint: "operator_role_transitions_action_check", source: "operatorroles.AllTransitionActions()", values: str(operatorroles.AllTransitionActions())},
 		// The agent management surface (00786). agent_grants.authority_level is
 		// deliberately NOT here: it is an integer range CHECK mirroring
 		// agentauthority.MaxSupportedLevel, not a list of string literals, and

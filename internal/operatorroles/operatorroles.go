@@ -91,22 +91,60 @@ const GrantReason = "bootstrap: declared by CP_AUTH_BOOTSTRAP_OPERATORS"
 const AuditAction = "operator_role.bootstrapped"
 
 // Directory returns the roles the operator directory may name: every declared
-// role except BREAK_GLASS.
+// role except BREAK_GLASS and CUSTOMER.
 //
 // It is the Go half of the pair test/integration/enums holds against
 // operator_roles_role_check, and it is derived from security.AllRoles rather
 // than typed out, so a role added to the matrix cannot be silently absent here.
+//
+// The two exclusions are different facts. BREAK_GLASS is a role this table may
+// not grant: it is time-boxed by construction and a standing row would hand one
+// principal both sides of dual control. CUSTOMER is not an operator role at all
+// -- it is what internal/identity gives a principal the directory says nothing
+// about -- and naming it here produces a session whose ActorType is OPERATOR
+// carrying only customer permissions, so that person's own terms acceptance is
+// recorded as one an operator made on their behalf (00759, F-181).
 func Directory() []security.Role {
 	all := security.AllRoles()
 	out := make([]security.Role, 0, len(all))
 	for _, r := range all {
-		if r == security.RoleBreakGlass {
+		if r == security.RoleBreakGlass || r == security.RoleCustomer {
 			continue
 		}
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
+}
+
+// TransitionAction is what a row in operator_role_transitions does to the grant
+// it names. Migration 00799 holds the same list in a CHECK and
+// test/integration/enums keeps them identical.
+type TransitionAction string
+
+// The transition actions. There is no "GRANT": a grant is the INSERT that
+// creates the row, and its provenance columns are fixed there.
+const (
+	// ActionRevoke ends a grant. It is one-way: 00799 refuses to un-revoke,
+	// and restoring authority means a new grant with its own reason.
+	ActionRevoke TransitionAction = "REVOKE"
+	// ActionSetExpiry time-boxes a live grant.
+	ActionSetExpiry TransitionAction = "SET_EXPIRY"
+)
+
+// AllTransitionActions returns every declared action, in declaration order.
+func AllTransitionActions() []TransitionAction {
+	return []TransitionAction{ActionRevoke, ActionSetExpiry}
+}
+
+// Valid reports whether a is declared.
+func (a TransitionAction) Valid() bool {
+	for _, v := range AllTransitionActions() {
+		if v == a {
+			return true
+		}
+	}
+	return false
 }
 
 // Declaration is one bootstrap entry: an identity, and the role it is given.
@@ -166,6 +204,9 @@ func ParseDeclarations(raw string) ([]Declaration, error) {
 		case d.Role == security.RoleBreakGlass:
 			return nil, errs.New(errs.CodeValidationFailed,
 				"operatorroles: BREAK_GLASS is a time-boxed elevation granted by an approved admin action, never a standing role; declaring it here would hand one principal both sides of dual control")
+		case d.Role == security.RoleCustomer:
+			return nil, errs.New(errs.CodeValidationFailed,
+				"operatorroles: CUSTOMER is not an operator role; it is what a principal this directory says nothing about already is, and declaring it issues an OPERATOR session with no operator permissions whose holder's own consent is recorded as given on their behalf")
 		}
 		if _, ok := allowed[d.Role]; !ok {
 			return nil, errs.Newf(errs.CodeValidationFailed, "operatorroles: %q is not a role the operator directory may name", d.Role)

@@ -39,11 +39,11 @@ const (
 	// live, STAGING is the provider's sandbox.
 	RuleProviderModeMatchesEnv Rule = "PROVIDER_MODE_MATCHES_ENV"
 	// RuleBootstrapOperators rejects a CP_AUTH_BOOTSTRAP_OPERATORS declaration
-	// that does not parse, and in PROD one that is anything other than empty or
-	// exactly one ADMIN. The variable exists to make a deployment's FIRST
-	// operator possible; a PROD deployment carrying a staff list in an
-	// environment variable would have replaced a reviewable directory with an
-	// unreviewable one (ADR-0024).
+	// that does not parse, and in STAGING or PROD one that is anything other
+	// than empty or exactly one ADMIN. The variable exists to make a
+	// deployment's FIRST operator possible; an internet-reachable deployment
+	// carrying a staff list in an environment variable would have replaced a
+	// reviewable directory with an unreviewable one (ADR-0024 §5).
 	RuleBootstrapOperators Rule = "BOOTSTRAP_OPERATORS"
 	// RuleCapabilityNameDeclared rejects a name in
 	// CP_API_ENABLED_CAPABILITIES or CP_API_SANDBOX_GATES that internal/gates
@@ -833,11 +833,19 @@ func (c *Config) Validate() error {
 	if prodLike && c.Auth.DebugAuthEnabled {
 		add(RuleNoDebugAuth, "Auth.DebugAuthEnabled", "must be false in STAGING/PROD")
 	}
+	// prodLike, not EnvProd. STAGING is an internet-reachable deployment with
+	// PROD's cookie topology -- which is why RuleNoDebugAuth, RuleCookieHostOnly
+	// and RuleCookieSecure, the three rules either side of this one, are all
+	// prodLike -- and the grant this variable writes is permanent: removing the
+	// declaration stops it being re-offered and revokes nothing (ADR-0024 §3).
+	// A STAGING deployment could therefore stand up an unbounded staff
+	// directory in an environment variable, which is exactly the thing the PROD
+	// narrowing exists to prevent (F-180).
 	if decls, err := operatorroles.ParseDeclarations(c.Auth.BootstrapOperators); err != nil {
 		add(RuleBootstrapOperators, "Auth.BootstrapOperators", err.Error())
-	} else if env == EnvProd && !operatorroles.IsSafeForProduction(decls) {
+	} else if prodLike && !operatorroles.IsSafeForProduction(decls) {
 		add(RuleBootstrapOperators, "Auth.BootstrapOperators",
-			"a PROD deployment may declare nothing here, or exactly one ADMIN: the variable makes a first operator possible, and every grant after that is a decision a person makes in the directory, with a reason attached")
+			"a STAGING or PROD deployment may declare nothing here, or exactly one ADMIN: the variable makes a first operator possible, and every grant after that is a decision a person makes in the directory, with a reason attached")
 	}
 	// A cookie Domain removes the __Host- prefix, and the prefix is the whole
 	// binding.

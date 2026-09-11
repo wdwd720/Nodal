@@ -5,9 +5,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -220,17 +222,13 @@ func qq(s string) money.Quantity {
 // every control below acts on.
 func (h *domainAHarness) launchMarket(t *testing.T, creditAsset assets.AssetID) {
 	t.Helper()
-	// The TAIL of a UUIDv7, not the head: the head is time-ordered, so two
-	// assets created in the same millisecond would collide on the symbol and
-	// the registry would refuse the second with SYMBOL_TAKEN.
-	raw := strings.ReplaceAll(id.New[id.Any]().String(), "-", "")
-	suffix := raw[len(raw)-6:]
+	suffix := uniqueSuffix()
 	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			a, _, err := h.nativeAssets.CreateDraft(ctx, tx, nativeasset.CreateRequest{
 				CreatorAccountID: h.creator,
 				Name:             "Adminable " + suffix,
-				Symbol:           "AD" + suffix[:4],
+				Symbol:           "AD" + suffix,
 				Description:      "a test asset for the admin workflows",
 				Supply: nativeasset.SupplyModel{
 					MaxSupply:         qq("1000000000000000"),
@@ -644,20 +642,38 @@ func TestIntegration_ADeploymentWithoutTheInternalEconomyRegistersNoExecutors(t 
 	}
 }
 
+// uniqueSuffix returns six characters that are unique within a run and unlikely
+// to repeat across runs, for the name and symbol of a test asset.
+//
+// The TAIL of a UUIDv7, not the head: the head is time-ordered, so two assets
+// created in the same millisecond would share it. The counter is what makes the
+// answer unique rather than merely improbable: four hex characters is 65,536
+// values and this package creates enough assets per run for the birthday bound
+// to put a SYMBOL_TAKEN collision at roughly one run in fifty. A flake at that
+// rate is a test suite people learn to re-run (F-184).
+func uniqueSuffix() string {
+	raw := strings.ReplaceAll(id.New[id.Any]().String(), "-", "")
+	n := assetCounter.Add(1)
+	return fmt.Sprintf("%s%02x", raw[len(raw)-4:], n%256)
+}
+
+// assetCounter numbers the assets this package creates. Each integration run
+// gets its own database, so the counter only has to be unique within one.
+var assetCounter atomic.Uint32
+
 // --- helpers for the launch chain -------------------------------------------
 
 // newAsset creates one DRAFT asset with a unique name and symbol.
 func (h *domainAHarness) newAsset(t *testing.T) nativeasset.Asset {
 	t.Helper()
-	raw := strings.ReplaceAll(id.New[id.Any]().String(), "-", "")
-	suffix := raw[len(raw)-6:]
+	suffix := uniqueSuffix()
 	var out nativeasset.Asset
 	require.NoError(t, h.db.InTx(t.Context(), db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			a, _, err := h.nativeAssets.CreateDraft(ctx, tx, nativeasset.CreateRequest{
 				CreatorAccountID: h.creator,
 				Name:             "Launchable " + suffix,
-				Symbol:           "LA" + suffix[:4],
+				Symbol:           "LA" + suffix,
 				Description:      "an asset for the launch chain",
 				Supply: nativeasset.SupplyModel{
 					MaxSupply:         qq("1000000000000000"),

@@ -159,6 +159,17 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-174 | P2 | PRODUCTIZATION | fixed | The closure cooling-off period was measured against a timestamp the INSERTing role chose, so a row stamped in the future effected a closure inside the wait |
+| F-175 | P2 | PRODUCTIZATION | fixed | The operator directory -- the only source of operator authority -- was freely rewritable by the application role, so a revocation did not stay revoked and a role could be rewritten in place |
+| F-176 | P2 | PRODUCTIZATION | fixed | Both account-lifecycle edge sets existed only in Go: a terminal closure request could be walked back and a CLOSED user reopened |
+| F-177 | P2 | PRODUCTIZATION | fixed | A step-up login minted a second session and left the first live, so the credential the step-up defends against still worked; auth.Manager.Rotate had no caller |
+| F-178 | P2 | PRODUCTIZATION | fixed | The /me self-scoping proof walked path patterns only, and a state-changing GET that named its account in the query string was scoped with the read-grade helper |
+| F-179 | P2 | PRODUCTIZATION | fixed | Effecting a closure consulted no balance, no open payout and no open position, and the operator's decision surface carried none of the three |
+| F-180 | P3 | PRODUCTIZATION | fixed | STAGING accepted an unbounded standing operator directory declared in an environment variable; only PROD was narrowed |
+| F-181 | P3 | PRODUCTIZATION | fixed | CUSTOMER was a nameable operator-directory role, and declaring it recorded a person's own consent as given on their behalf by an operator |
+| F-182 | P3 | PRODUCTIZATION | fixed | The login-state refusal described an attack when the likely cause is a second sign-in tab |
+| F-183 | P3 | PRODUCTIZATION | fixed | The privacy notice said security events are removed on a schedule; the retention variable is 0 by default and nothing purges them |
+| F-184 | P3 | PRODUCTIZATION | fixed | A test asset symbol drew four hex characters from a UUID tail, which collides on SYMBOL_TAKEN about one run in fifty |
 | F-136 | P1 | PRODUCTIZATION | fixed | The blueprint handed the internet-facing API the schema-owner DSN, under a name the test that forbids it did not know |
 | F-137 | P1 | PRODUCTIZATION | fixed | STAGING booted with no alert destination and no PII keyring: both rules were satisfied by the reference, and three documents said it could not |
 | F-138 | P2 | PRODUCTIZATION | fixed | The blueprint's secret scan read one service of two, and nothing pinned the static site's CSP, HSTS, SPA rewrite or domain |
@@ -7478,6 +7489,371 @@ before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
 
+## F-174 · A cooling-off period was measured against a timestamp its caller chose · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_ClosureCoolingOffIsMeasuredAgainstACallerSuppliedTimestamp`.
+
+Migration 00758 states the property: the closure cooling-off period is "enforced
+by the trigger below, not only by the service, because the whole point of a
+cooling-off period is that it survives a bug in code that is in a hurry".
+`cp_closure_request_apply_transition` compared `NEW.occurred_at` against
+`cooling_off_until` -- and `occurred_at` is a column the INSERTing role chooses.
+One statement, `INSERT ... occurred_at = now() + interval '400 days'`, effected a
+closure fourteen days early; the wall clock was never consulted at all. The
+whole invariant was the caller's own timestamp compared with a column.
+
+The second half of the same defect is that nothing bounded the stamp. It is the
+audit record of when an actor acted, on a table whose rows are the evidence for
+"who closed this account and why", and it could say anything.
+
+**Fix.** Migration 00798. The wait is compared against `statement_timestamp()`,
+a value no caller supplies -- the statement's clock rather than `now()`'s
+transaction clock, so a transaction that began before the wait ended cannot
+effect a closure it could not have effected when it wrote the row. A BEFORE
+INSERT trigger, `cp_transition_stamp_is_honest`, requires `occurred_at` to be
+within two minutes of the database clock in either direction; that bound is
+clock skew between the application host and the database and nothing else.
+
+The fixtures that effected a closure by advancing a fake clock past the wait
+were relying on the defect. They wait it out on the wall clock now, in a fixture
+whose cooling-off period is a fraction of a second.
+
+**Evidence.** `migrations/00798_a_cooling_off_period_is_measured_by_the_clock.sql`;
+`internal/profile` `TestAudit_ClosureCoolingOffIsMeasuredAgainstACallerSuppliedTimestamp`
+(inverted: both the future-stamped forgery and an honestly-stamped one inside
+the wait are refused, and the request stays PENDING),
+`TestIntegration_Closure_CannotBeEffectedBeforeTheCoolingOffPeriod`,
+`TestIntegration_Closure_EffectingClosesTheUserTheAccountsAndTheSessions`.
+
+## F-175 · The operator directory was freely rewritable by the application role · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_TheOperatorDirectoryIsRewritableByTheApplicationRole`.
+
+`operator_roles` is the only source of operator authority in this system:
+ADR-0022 put Nodal's authority in Neon, ADR-0024 made this table the one thing
+the login path reads, and `internal/identity` takes a role from nothing else. It
+carried migration 00010's blanket `GRANT SELECT, INSERT, UPDATE` -- the one
+authority-bearing table that never got the treatment 00744 gave `accounts`,
+00757 gave `users` and 00758 gave `account_closure_requests`.
+
+Nothing in Go has ever updated it, so the grant served nothing and cost three
+things. A revocation did not stay revoked, which is the opposite of what
+ADR-0024 §3 promises (the promise was made about the bootstrap INSERT while the
+column itself stayed writable). A `SUPPORT_READ_ONLY` row could become `ADMIN`
+in place while `granted_by`, `granted_at` and `reason` went on describing the
+grant somebody actually made. And nothing recorded that any of it happened:
+there was no transition table for the directory at all.
+
+**Fix.** Migration 00799, D-100. `operator_role_transitions` is append-only,
+carries the actor, the reason and the correlation id, and names the grant it is
+about by the directory's own primary key; a SECURITY DEFINER trigger writes
+`revoked_at` / `expires_at` from the row, so the record and the change cannot
+come apart. `cp_operator_role_provenance_is_immutable` refuses any change to who
+was granted what, by whom, when and why, refuses un-revoking a grant and refuses
+moving a revoked grant's expiry -- whoever makes it, including the migration
+role. `cp_app` loses UPDATE and keeps it on `reason` alone, because PostgreSQL
+requires UPDATE on one column for `SELECT ... FOR UPDATE` (00744) and that is a
+column the trigger will not let anybody change.
+
+**Evidence.**
+`migrations/00799_a_revoked_operator_role_stays_revoked.sql`;
+`internal/profile` `TestAudit_TheOperatorDirectoryIsRewritableByTheApplicationRole`
+(inverted: the bare UPDATE is refused 42501, a transition row revokes, and
+neither the application nor the owner can undo it);
+`test/integration/migrations` `TestIntegration_OperatorDirectoryAuthority`;
+`test/integration/enums` (`operator_role_transitions_action_check` against
+`operatorroles.AllTransitionActions()`); `internal/identity`
+`TestIntegration_Bootstrap_DoesNotRestoreARevokedGrant`.
+
+## F-176 · Both account-lifecycle edge sets existed only in Go · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_TheClosureStateMachineHasNoEdgeSetInTheDatabase` and
+`TestAudit_AClosedUserCanBeReopenedByTheApplicationRole`.
+
+`internal/profile` declares both state machines -- `closureTransitions`, and the
+four legal `users.status` edges 00757's own header spells out in words. The
+schema enforced only that a transition row DESCRIBES the change it makes
+(00726's edge binding); it never asked whether the change was legal.
+
+So the application role could insert `EFFECTED -> CANCELLED` and move a terminal
+closure request, and because `decided_at` and `decided_reason` are coalesced the
+row then said CANCELLED for the reason the EFFECT was given. And it could insert
+`CLOSED -> ACTIVE` and reopen a closed account, which 00757 says has "no edge out
+of it, here or in Go" and that "nothing in the product needs it today, so the
+schema does not quietly permit it".
+
+**Fix.** Migration 00798 adds a CHECK constraint on each transition table
+carrying the edge set as pairs. A CHECK rather than a branch in the apply
+function for three reasons, stated in the migration: it refuses at the INSERT
+where the mistake is (00760's argument); it is readable by
+`pg_get_constraintdef`, which is what lets `test/integration/enums` hold it
+against the Go list, and a branch inside a function body can be compared with
+nothing; and a second copy inside the function would be unreachable and would
+make every failure ambiguous about which rule fired (F-53). `profile.ClosureEdges`
+and `profile.UserStatusEdges` are the Go halves, derived from the transition maps
+rather than typed out. `Repository.TransitionUserStatus` refuses the same move in
+Go, with the domain's own error.
+
+**Evidence.**
+`migrations/00798_a_cooling_off_period_is_measured_by_the_clock.sql`;
+`internal/profile` `TestAudit_TheClosureStateMachineHasNoEdgeSetInTheDatabase`,
+`TestAudit_AClosedUserCanBeReopenedByTheApplicationRole` (both inverted);
+`test/integration/enums` `TestIntegration_EveryDeclaredEnumMatchesItsCheck`
+(`account_closure_request_transitions_edge_check`,
+`user_status_transitions_edge_check`).
+
+## F-177 · A step-up login minted a second session and left the first live · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_StepUpLoginLeavesThePreviousSessionLiveAndUsable`.
+
+PART 192 requires session rotation on privilege change, and `auth.Manager.Rotate`
+is the mechanism for it -- with no caller anywhere in the repository. A step-up
+login IS a privilege change: it raises the session's `AuthTime` and `AMR`, and it
+is the thing a person is asked to do before closing their account or registering
+a payout destination.
+
+`identity.Complete` called `Sessions.Issue`, so the pre-step-up session stayed
+live, kept its own full absolute lifetime and remained a usable credential
+carrying the WEAKER authentication. A stolen cookie survived the step-up that
+exists to defend against it. The user's own security page counted one browser
+that stepped up as two devices.
+
+**Fix.** D-101. The callback reads the session the browser already holds from
+`httpmw.SessionFrom` and hands it to `identity.Complete`, which rotates when the
+replacement really is the same login moving forward -- the same subject, the same
+actor type, and a session the store still accepts. `Rotate` revokes the old
+session and keeps its absolute `ExpiresAt`, so rotation cannot extend a login. A
+cold step-up has nothing to rotate from and issues. A step-up offered somebody
+else's session issues rather than rotating, so this is never a way to end a
+stranger's login. A live break-glass elevation survives with its role, because
+it is bounded by the clock and ending an emergency because somebody
+re-authenticated more strongly would be the wrong way round.
+
+**Evidence.** `internal/identity/login.go` (`issueOrRotate`),
+`internal/httpapi/handlers_auth.go`;
+`internal/identity` `TestAudit_StepUpLoginLeavesThePreviousSessionLiveAndUsable`
+(inverted: the old session is revoked, the new one records `RotatedFrom`, the
+absolute expiry is unchanged, the old token no longer authenticates and the
+subject holds one live session), `TestAudit_AColdStepUpIssuesAndAStrangersSessionIsNotRotated`;
+`internal/httpapi` `TestAudit_TheCallbackHandsTheCurrentSessionToTheLoginService`.
+
+## F-178 · The /me invariant was proved where the identifier was not · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_MeRoutesNameAnAccountInTheQueryStringWhereTheInvariantTestCannotSee`
+and `TestAudit_TheMeAllowlistCommentIsWrongAboutVerificationSessions`.
+
+`handlers_profile.go` claimed cross-tenant access on `/me` is unrepresentable:
+"there is no identifier in the path, and the subject comes from the request
+principal". The proof, `TestProfile_NoSelfServiceRouteTakesAnIdentifier`, walked
+chi route PATTERNS looking for a `{` -- one of the three places an identifier can
+be. Ten `/v1/me` operations name an account in the query string or the body.
+
+One of them mattered. `GetMeVerificationSessionsSessionId` is a GET that CHANGES
+STATE -- `Poll` asks the provider and records the answer -- and it resolved its
+account with `accountScope`, the read-grade helper that `security.RequireAccount`
+lets any holder of `account:read_any` satisfy for any account in the system. A
+`SUPPORT_READ_ONLY` operator, the least-privileged staff role, could drive
+another person's verification forward: the F-102 shape, on the one route the
+`/me` proof could not see.
+
+The second half is the allowlist comment beside it, which read "a session is
+loaded under the caller's profile; another person's id is not found". The first
+clause was true and the second was not, because the account the session was
+loaded under came from the overridable helper.
+
+**Fix.** `accountScopeWrite` on that handler, and `stateChangingGETs` in
+`accountscope_test.go` is where a GET that writes has to say so. The invariant is
+proved from the generated contract now:
+`TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor` walks
+`api.StrictServerInterface`, requires every `/me` operation carrying an
+`AccountId` in `Params` or `Body` to appear in `meOperationsNamingAnAccount` with
+the helper that resolves it and why, refuses an entry for an operation that no
+longer takes one, and scans the handler source to check that each entry's claimed
+helper is the one the handler calls -- which is exactly what the wrong comment
+was. The path walk stays, because a path parameter is a field on the request
+struct rather than in `Params` or `Body`.
+
+The five remaining reads keep `accountScope`, and that is a decision rather than
+an oversight: `account:read_any` is the operator read override this system grants
+on purpose, to a role a person was given in a directory with a reason attached,
+the same facts are on the admin plane, and nothing behind those five moves.
+
+**Evidence.** `internal/httpapi/handlers_verification.go`,
+`handlers_profile_test.go` (`meOperationsNamingAnAccount`),
+`accountscope_test.go` (`stateChangingGETs`);
+`internal/httpapi` `TestAudit_MeRoutesNameAnAccountInTheQueryStringWhereTheInvariantTestCannotSee`,
+`TestAudit_TheMeAllowlistCommentIsWrongAboutVerificationSessions`,
+`TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor`,
+`TestAccountScope_TheWriteHelperIsActuallyUsed` (all inverted or extended).
+
+## F-179 · Effecting a closure consulted nothing financial · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_EffectingAClosureChecksNothingFinancial` and
+`TestAudit_TheClosureDecisionSurfaceCarriesNoFinancialFact`.
+
+EFFECT is the one irreversible operator action on the support surface: it writes
+`users.status = CLOSED`, closes every account the person owns and revokes every
+session, after which `identity.Complete` refuses the login. Whatever the account
+still holds is then unreachable by the person who owns it.
+
+`profile.Decide` checked exactly three things: that a PENDING request exists,
+that the operator is not its subject, and that the cooling-off period had passed.
+It read no balance, no open payout request and no open position -- and neither did
+`AdminUserView`, so the operator could not have consulted them either. Migration
+00758 and `internal/profile/closure.go` both say REFUSED exists for "an unsettled
+payout, an open dispute, or a balance to deal with first", and the operator was
+given none of those three facts.
+
+**Fix.** D-102. `Repository.ClosureBlockers` reads the three in ONE statement --
+one, because three round trips could report a balance from before a payout
+reserved against it -- across every account the person owns: the gross Credit
+balance (the sum of remaining lot quantities, which is what `credit.Balances`
+calls Gross and what `credit.VerifyProvenance` pins to the ledger), payout
+requests not in a terminal state, and native positions holding a non-zero
+quantity. `Decide(EFFECT)` refuses with `INVALID_STATE_TRANSITION` naming the
+blocker, and `AdminUserView` carries the same read, so the surface the operator
+decides from and the check that refuses the decision cannot disagree. The admin
+console states all three above the form and stops offering EFFECT while any of
+them stands.
+
+It is not a veto on leaving: a blocker means REFUSE with a reason the person is
+shown, and they ask again once it is dealt with.
+
+**Evidence.** `internal/profile/closure.go` (`ClosureBlockers`), `repo.go`
+(`closureBlockersSQL`), `account.go`; `openapi/openapi.yaml`
+(`AdminUserView.closure_blockers`); `apps/admin/src/views/accounts.ts`;
+`internal/profile` `TestAudit_EffectingAClosureChecksNothingFinancial`,
+`TestAudit_EffectingAClosureIsRefusedWhileCreditsRemain`,
+`TestAudit_EffectingAClosureIsRefusedWhileAPositionIsOpen`,
+`TestClosureBlockers_TheTerminalPayoutStatesAreThePayoutPackages`,
+`TestClosureBlockers_ClearIsTheAbsenceOfAllThree`; `internal/httpapi`
+`TestAudit_TheClosureDecisionSurfaceCarriesNoFinancialFact` (inverted).
+
+## F-180 · STAGING accepted an unbounded bootstrap operator declaration · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_StagingAcceptsAnUnboundedBootstrapDeclaration`.
+
+`RuleBootstrapOperators` narrowed `CP_AUTH_BOOTSTRAP_OPERATORS` on
+`env == EnvProd` alone, while every sibling auth rule in the same block --
+`RuleNoDebugAuth`, `RuleCookieHostOnly`, `RuleCookieSecure` -- is `prodLike`.
+STAGING is an internet-reachable deployment with the same cookie topology, and
+the grant this variable writes is permanent: by ADR-0024 §3, removing the
+declaration stops it being re-offered and revokes nothing. So a STAGING
+deployment could stand up an unbounded standing staff directory in an
+environment variable, which is the thing the PROD narrowing exists to prevent.
+
+**Fix.** `prodLike`, and ADR-0024 §5 amended to say STAGING and PROD with the
+reason. `HUMAN_ACTIONS_QUEUE.md` item 5 already declares exactly one ADMIN, so no
+deployment blueprint changes.
+
+**Evidence.** `internal/config/validate.go`; `internal/config`
+`TestAudit_StagingAcceptsAnUnboundedBootstrapDeclaration` (inverted, and with the
+control it must not break: STAGING still accepts one ADMIN);
+`docs/adr/0024-how-a-principal-becomes-an-operator.md` §5.
+
+## F-181 · CUSTOMER was a nameable operator-directory role · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_TheOperatorDirectoryMayNameCUSTOMER`.
+
+`operatorroles.Directory()` was derived as "every declared role except
+BREAK_GLASS", and migration 00760's CHECK held the same list. Both admitted
+`CUSTOMER`, which is not an operator role: it is what `internal/identity` gives a
+principal the directory says nothing about.
+
+`identity.Complete` decides the actor type from WHETHER the directory returned
+anything, not from what it returned. So a `CUSTOMER` row produced a session whose
+`ActorType` is OPERATOR carrying only customer permissions -- and that person's
+own terms acceptance was then written with `actor_type = 'OPERATOR'`, which
+migration 00759 documents as meaning "an acceptance recorded on somebody's behalf
+by an operator". The record of their consent said somebody else gave it, and
+their own audit events said the same.
+
+**Fix.** Migration 00800 drops it from the CHECK; `Directory()` excludes it
+beside BREAK_GLASS and the package doc says the two exclusions are different
+facts; `ParseDeclarations` refuses it by name with the reason rather than
+reporting an unknown role, which would read as a typo. No row can exist to
+migrate: nothing but the bootstrap declaration writes this table.
+
+**Evidence.** `migrations/00800_the_operator_directory_does_not_name_a_customer.sql`,
+`internal/operatorroles/operatorroles.go`; `internal/config`
+`TestAudit_TheOperatorDirectoryMayNameCUSTOMER` (inverted);
+`internal/operatorroles` `TestDirectory_IsEveryRoleExceptBreakGlassAndCustomer`,
+`TestParseDeclarations_RefusesCustomer`; `test/integration/enums`
+(`operator_roles_role_check` against `operatorroles.Directory()`);
+ADR-0024 §4.
+
+## F-182 · The login-state refusal described an attack when what happened was two tabs · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), reproduced by
+`TestAudit_ASecondLoginInvalidatesTheFirstTabsFlow`.
+
+`httpmw.SetLoginState` writes one cookie name at `Path=/`, so a second
+`GET /v1/auth/login` overwrites the first flow's digest. Two sign-in tabs, or a
+sign-in started and then a step-up begun beside it, leave the older tab's
+callback answering `401 UNAUTHENTICATED: this sign-in did not start in this
+browser; start again from the beginning`.
+
+**Decision D-103: keep one slot and change the copy.** One slot is F-87's
+control and it is what makes a planted callback unusable; a per-flow cookie would
+be a larger change to the thing that is working. The message was the defect: it
+named the attack as the only explanation when a second tab is the common case by
+a long way, and a person who reads it has been told, wrongly, that something
+attacked them.
+
+**Fix.** `this sign-in did not start in this browser, or a newer sign-in
+replaced it; start again`.
+
+**Evidence.** `internal/httpapi/handlers_auth.go`; `internal/httpapi`
+`TestAudit_ASecondLoginInvalidatesTheFirstTabsFlow` (the control's assertion is
+unchanged -- the callback is still refused -- and the expectation moved to the
+copy).
+
+## F-183 · The privacy notice said security events are removed on a schedule · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54).
+
+The notice's retention paragraph read "Transient records -- sessions, login
+attempts, security events -- are removed on a schedule."
+`CP_RETENTION_SECURITY_EVENT_DAYS` is 0 by default, which `cmd/api`'s retention
+pass reads as pruning being off, and nothing else purges `security_events`. Two
+of the three were true.
+
+**Fix.** The paragraph says which is which, and says that no retention period has
+been chosen for security events rather than implying one exists. The document
+version is bumped to `2026-09-10.2`, which changes every document's content hash
+and re-asks every user to accept. That is the mechanism working rather than a
+cost of using it: a notice that describes the system differently is a different
+notice, and acceptance is recorded against the bytes shown.
+
+**Evidence.** `internal/terms/documents/privacy_policy.md`,
+`internal/terms/terms.go` (`Version`); `internal/terms`
+`TestRegistry_EveryDeclaredDocumentLoads`,
+`TestRegistry_ContentHashesAreDistinctAndLineEndingIndependent`.
+
+## F-184 · A test asset symbol collided about one run in fifty · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the accounts-auth adversarial audit (goal §54), incidental to it.
+
+`internal/httpapi/domaina_admin_integration_test.go` built a native asset symbol
+from four hex characters of a UUIDv7 tail. Four hex characters is 65,536 values,
+and the package creates enough assets per run for the birthday bound to put a
+`SYMBOL_TAKEN` refusal at roughly one run in fifty. A flake at that rate is a
+test suite people learn to re-run.
+
+**Fix.** `uniqueSuffix` keeps the random tail and appends a per-run counter, so
+the answer is unique within a run rather than merely improbable.
+
+**Evidence.** `internal/httpapi/domaina_admin_integration_test.go`
+(`uniqueSuffix`); `internal/httpapi` `TestIntegration_EveryStoppingControlIsOneOperator`,
+`TestIntegration_ResumingAMarketTakesTwoPeople`.
 ## F-136 · The blueprint handed the internet-facing API the schema-owner DSN, under a name the test that forbids it did not know · PRODUCTIZATION · P1 · FIXED
 
 **Found by** the config-deploy audit (goal §54), reading `render.yaml` against

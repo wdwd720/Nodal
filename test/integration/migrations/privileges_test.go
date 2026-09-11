@@ -330,3 +330,63 @@ func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
 	// would report an empty set for every table and pass by comparing nothing.
 	assert.NotEmpty(t, granted("payout_requests"), "the privilege query returned nothing; it is not looking at the catalogue")
 }
+
+// TestIntegration_OperatorDirectoryAuthority pins the privilege half of
+// migration 00799.
+//
+// `operator_roles` is the only source of operator authority in this system
+// (ADR-0022, ADR-0024) and it carried 00010's blanket `GRANT SELECT, INSERT,
+// UPDATE` until 00799 -- the one authority-bearing table that never got the
+// treatment 00744 gave `accounts`, 00757 gave `users` and 00758 gave
+// `account_closure_requests`. With it, a revocation did not stay revoked and a
+// role could be rewritten in place while `granted_by`, `granted_at` and `reason`
+// went on describing the grant somebody actually made (F-175).
+//
+// A later migration that re-granted UPDATE on the directory, or INSERT on
+// nothing at all, would put that back, and fails here.
+func TestIntegration_OperatorDirectoryAuthority(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	admin := connect(t, migrateURL)
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+
+	colPriv := func(table, col, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT has_column_privilege('cp_app', $1, $2, $3)`, "public."+table, col, p).Scan(&ok))
+		return ok
+	}
+	for _, col := range []string{"user_id", "role", "granted_by", "granted_at", "expires_at", "revoked_at"} {
+		assert.False(t, colPriv("operator_roles", col, "UPDATE"),
+			"cp_app must not UPDATE operator_roles.%s: it decides who is an operator and for how long", col)
+	}
+	// The single exception, and it is inert: PostgreSQL requires UPDATE on at
+	// least one column for SELECT ... FOR UPDATE (00744), and
+	// cp_operator_role_provenance_is_immutable refuses any change to `reason`
+	// whoever makes it. The grant buys a row lock and nothing else.
+	assert.True(t, colPriv("operator_roles", "reason", "UPDATE"),
+		"cp_app needs UPDATE on one column to take a row lock on a grant")
+
+	tablePriv := func(role, table, p string) bool {
+		var ok bool
+		require.NoError(t, admin.QueryRow(ctx,
+			`SELECT has_table_privilege($1, $2, $3)`, role, "public."+table, p).Scan(&ok))
+		return ok
+	}
+	assert.True(t, tablePriv("cp_app", "operator_roles", "INSERT"),
+		"the bootstrap declaration writes the first grant (ADR-0024 §2)")
+	assert.True(t, tablePriv("cp_app", "operator_role_transitions", "INSERT"),
+		"a revocation is a row the application can write; the trigger makes the change")
+	for _, p := range []string{"UPDATE", "DELETE"} {
+		assert.False(t, tablePriv("cp_app", "operator_role_transitions", p),
+			"operator_role_transitions is append-only; cp_app must not %s", p)
+	}
+
+	var owner string
+	var secDef bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT pg_get_userbyid(p.proowner), p.prosecdef
+		FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = 'public' AND p.proname = 'cp_operator_role_apply_transition'`).Scan(&owner, &secDef))
+	assert.Equal(t, "cp_migrate", owner, "the directory's authority must be owned by the migration role")
+	assert.True(t, secDef, "cp_operator_role_apply_transition must be SECURITY DEFINER")
+}

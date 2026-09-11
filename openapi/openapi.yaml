@@ -3200,7 +3200,7 @@ components:
         current_session_id: { $ref: "#/components/schemas/UUID" }
     AdminUserView:
       type: object
-      required: [user_id, user_status, idp_issuer, idp_subject, email_verified, created_at, accounts, restrictions, active_sessions, audit_stream, verification]
+      required: [user_id, user_status, idp_issuer, idp_subject, email_verified, created_at, accounts, restrictions, active_sessions, audit_stream, verification, closure_blockers]
       description: >-
         Read only. There is no field here an operator can write, and the only
         mutation the support surface offers is deciding a closure request the
@@ -3238,6 +3238,37 @@ components:
           properties:
             known: { type: boolean }
             level: { type: string }
+        closure_blockers:
+          type: object
+          required: [clear, credit_balance, open_payout_requests, open_native_positions, reasons]
+          description: >-
+            What this person accounts still hold, across every account they own.
+            Effecting a closure is irreversible and puts whatever is left out of
+            their reach, so the decision surface carries the three facts the
+            refusal exists for and the service refuses EFFECT while any of them
+            stands. A blocker means REFUSE with a reason, never a permanent no.
+          properties:
+            clear:
+              type: boolean
+              description: Nothing financial stands in the way of effecting.
+            credit_balance:
+              type: string
+              description: >-
+                The gross Credit balance in base units, as a decimal string.
+                Gross and not spendable a disputed or frozen lot is still value
+                that belongs to this person.
+            open_payout_requests:
+              type: integer
+              description: Payout requests that have not reached a terminal state.
+            open_native_positions:
+              type: integer
+              description: Native-asset positions still holding a non-zero quantity.
+            reasons:
+              type: array
+              items: { type: string }
+              description: >-
+                One sentence per blocker, in a fixed order, written for the
+                operator deciding and for the person who will read the refusal.
     ClosureDecision:
       type: object
       required: [decision, reason]

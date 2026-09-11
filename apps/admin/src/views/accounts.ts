@@ -524,16 +524,30 @@ function closurePanel(ctx: ViewContext, view: AdminUserView): HTMLElement {
     );
   }
 
-  const decisions = availableDecisions(request);
+  const blockers = view.closure_blockers;
+  const decisions = availableDecisions(request, view);
   const refusal = closureRefusal(ctx, view, request);
   if (refusal) {
-    return panel("Closure request", "Open, and not yours to decide.", summary, notice("info", refusal));
+    return panel(
+      "Closure request",
+      "Open, and not yours to decide.",
+      summary,
+      closureBlockerFields(view),
+      notice("info", refusal),
+    );
   }
 
   return panel(
     "Closure request",
     "Open. Cancelling withdraws it on the person's behalf; refusing declines it with a reason they will see; effecting it closes the account.",
     summary,
+    closureBlockerFields(view),
+    blockers.clear
+      ? null
+      : notice(
+          "warn",
+          `EFFECT is not offered: ${blockers.reasons.join("; ")}. The service refuses it for the same reason. REFUSE is the decision to record — the person is shown the reason and can ask again once it is dealt with.`,
+        ),
     request.effectable
       ? null
       : notice(
@@ -580,9 +594,38 @@ function closurePanel(ctx: ViewContext, view: AdminUserView): HTMLElement {
   );
 }
 
-/** CANCEL and REFUSE always; EFFECT only once the cooling-off period passed. */
-function availableDecisions(request: NonNullable<AdminUserView["closure_request"]>): string[] {
-  return request.effectable ? ["CANCEL", "REFUSE", "EFFECT"] : ["CANCEL", "REFUSE"];
+/**
+ * What this person's accounts still hold, stated above the form rather than
+ * discovered by the refusal.
+ *
+ * Effecting a closure is the one irreversible action on this surface: it closes
+ * every account the person owns and revokes every session, after which the login
+ * is refused, so whatever is left is out of their reach. Migration 00758 and
+ * `internal/profile` both say REFUSED exists for "an unsettled payout, an open
+ * dispute, or a balance to deal with first", and the operator used to be shown
+ * none of those three facts (F-179).
+ */
+function closureBlockerFields(view: AdminUserView): HTMLElement {
+  const b = view.closure_blockers;
+  return fields(
+    field("Credit balance", isQuantity(b.credit_balance) ? groupDigits(b.credit_balance) : b.credit_balance),
+    field("Open payout requests", String(b.open_payout_requests)),
+    field("Open native positions", String(b.open_native_positions)),
+  );
+}
+
+/**
+ * CANCEL and REFUSE always; EFFECT only once the cooling-off period has passed
+ * AND nothing financial stands in the way. Offering an option the service will
+ * refuse teaches an operator that refusals are noise.
+ */
+function availableDecisions(
+  request: NonNullable<AdminUserView["closure_request"]>,
+  view: AdminUserView,
+): string[] {
+  return request.effectable && view.closure_blockers.clear
+    ? ["CANCEL", "REFUSE", "EFFECT"]
+    : ["CANCEL", "REFUSE"];
 }
 
 function isClosureDecision(value: string): value is ClosureDecisionName {

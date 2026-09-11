@@ -220,11 +220,21 @@ func (s *Server) PostMeVerificationSessions(ctx context.Context, request api.Pos
 // that works: the customer's browser comes back from a hosted flow and the
 // server has to find out what happened. It is idempotent — a status that has
 // not moved records nothing — and it never trusts the redirect itself.
+//
+// Because it changes state it is scoped with accountScopeWrite, not with the
+// read-grade helper. The distinction is F-36's: the operator override on
+// accountScope is a READ permission, and using it to authorize a write let an
+// ADMIN act as any customer. This route was the one place a GET could be aimed
+// at somebody else's account and MOVE something -- an operator holding
+// account:read_any drove another person's verification forward, which is the
+// F-102 shape on a route the /me walk could not see because its identifier is a
+// query parameter (F-178). An operator who needs to know where a customer's
+// verification stands reads the admin plane, which does not poll.
 func (s *Server) GetMeVerificationSessionsSessionId(ctx context.Context, request api.GetMeVerificationSessionsSessionIdRequestObject) (api.GetMeVerificationSessionsSessionIdResponseObject, error) {
 	if s.opts.Ports.Verification == nil {
 		return nil, errNotWired("identity verification")
 	}
-	accountID, err := accountScope(ctx, request.Params.AccountId)
+	accountID, err := accountScopeWrite(ctx, request.Params.AccountId)
 	if err != nil {
 		return nil, err
 	}

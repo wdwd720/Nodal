@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -299,6 +301,25 @@ func (s *Service) Decide(ctx context.Context, op Actor, targetUserID string, d C
 					"this closure request cannot be effected until %s", locked.CoolingOffUntil.UTC().Format(time.RFC3339)).
 					WithField("cooling_off_until", locked.CoolingOffUntil.UTC().Format(time.RFC3339))
 			}
+			// The three facts 00758 and this package both name as the reason
+			// REFUSED exists. Effecting past one of them puts value out of
+			// reach of the person it belongs to, permanently, and until F-179
+			// nothing here consulted any of them.
+			//
+			// The refusal names the blocker rather than saying "not now": the
+			// operator has to be able to tell the person what to do about it,
+			// and REFUSE is the decision that carries that reason to them.
+			blockers, berr := s.d.Repo.ClosureBlockers(ctx, tx, targetUserID)
+			if berr != nil {
+				return berr
+			}
+			if !blockers.Clear() {
+				return errs.Newf(errs.CodeInvalidStateTransition,
+					"this closure cannot be effected yet: %s", strings.Join(blockers.Reasons(), "; ")).
+					WithField("credit_balance", blockers.CreditBalance).
+					WithField("open_payout_requests", strconv.Itoa(blockers.OpenPayoutRequests)).
+					WithField("open_native_positions", strconv.Itoa(blockers.OpenNativePositions))
+			}
 		}
 		req, err := s.d.Repo.TransitionClosure(ctx, tx, locked, to, string(op.ActorType), op.UserID, reason, op.CorrelationID, now)
 		if err != nil {
@@ -401,7 +422,13 @@ type AdminUserView struct {
 	Accounts     []accounts.Account
 	Restrictions []Restriction
 	Closure      *ClosureRequest
-	Acceptances  []Acceptance
+	// Blockers is what this person's accounts still hold: a Credit balance, a
+	// payout request that has not reached a terminal state, an open native
+	// position. Decide refuses EFFECT while any of them stands, and this is the
+	// same read, so the surface the operator decides from cannot disagree with
+	// the check that refuses the decision (F-179).
+	Blockers    ClosureBlockers
+	Acceptances []Acceptance
 	// ActiveSessions is how many live sessions the user holds right now.
 	ActiveSessions int
 	// AuditStream names where this user's history is, so a support view links
@@ -449,6 +476,9 @@ func (s *Service) adminUserView(ctx context.Context, q db.Querier, userID string
 		return AdminUserView{}, err
 	}
 	v.Accounts, v.Restrictions, v.Closure = acct.Accounts, acct.Restrictions, acct.Closure
+	if v.Blockers, err = s.d.Repo.ClosureBlockers(ctx, q, userID); err != nil {
+		return AdminUserView{}, err
+	}
 	if v.Acceptances, err = s.d.Repo.Acceptances(ctx, q, userID); err != nil {
 		return AdminUserView{}, err
 	}
