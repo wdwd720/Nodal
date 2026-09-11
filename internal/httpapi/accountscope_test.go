@@ -34,6 +34,24 @@ var (
 	mutatingVerb = regexp.MustCompile(`^(Post|Put|Patch|Delete)`)
 )
 
+// stateChangingGETs are the GET handlers that scope as WRITES, with the reason
+// each one changes state.
+//
+// The rule this file enforces is "a write uses the write helper". The method
+// verb is a proxy for "is this a write", and it is a good one exactly once per
+// repository -- here. GetMeVerificationSessionsSessionId polls the provider and
+// records the outcome, which is the only shape that works when a customer's
+// browser comes back from a provider-hosted flow, and scoping it as a read let
+// any account:read_any holder drive another person's verification forward: the
+// F-102 shape on a route the /me walk could not see, because its identifier is
+// a query parameter rather than a path one (F-183).
+//
+// Adding a name here is admitting a GET that changes something, which needs the
+// argument written down beside it.
+var stateChangingGETs = map[string]string{
+	"GetMeVerificationSessionsSessionId": "polls the verification provider and records what it says",
+}
+
 // readGradeHelpers are every helper in this package that resolves a tenant
 // check through security.RequireAccount, which honours the operator override.
 //
@@ -148,8 +166,8 @@ func TestAccountScope_TheWriteHelperIsActuallyUsed(t *testing.T) {
 		switch {
 		case strings.Contains(line, "accountScopeWrite(ctx"):
 			writes++
-			require.True(t, mutatingVerb.MatchString(fn),
-				"%s is not a mutating handler and should scope as a read", fn)
+			require.True(t, mutatingVerb.MatchString(fn) || stateChangingGETs[fn] != "",
+				"%s is not a mutating handler and should scope as a read, or say here why it is a write", fn)
 		case strings.Contains(line, "accountScope(ctx"):
 			reads++
 		}

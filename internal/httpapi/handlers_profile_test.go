@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -125,19 +127,41 @@ func newKeyed() string { return "prof-" + testSessionID }
 
 // ---------------------------------------------------------------- self-scoping
 
-// The strongest statement this package can make about cross-tenant access is
-// that it is unrepresentable: no /me route takes an identifier, so there is no
-// value a caller could supply to name somebody else.
-// meRoutesNamingTheCallersOwnObject are the exceptions, each one an identifier
-// of an object that belongs to the caller and is read back together with the
-// principal's subject, so the value names one of the caller's own rows or
-// nothing (internal/notifications: a mark-read under another subject is a
+// The claim this package used to make about /me was that cross-tenant access is
+// unrepresentable: no route takes an identifier, so there is no value a caller
+// could supply to name somebody else. It was proved by walking chi route
+// PATTERNS for a `{`.
+//
+// That proof was looking in one of the three places an identifier can be.
+// Ten /v1/me operations name an account in the QUERY STRING or the BODY, where
+// a pattern walk cannot see it, and one of them -- a GET that polls a provider
+// and records the outcome -- resolved it with the read-grade helper, so any
+// holder of account:read_any could drive another person's verification forward
+// (F-183).
+//
+// So the invariant is proved twice now, from the contract rather than the
+// router: TestProfile_NoSelfServiceRouteTakesAnIdentifier for the path, and
+// TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor for the query
+// string and the body. Both are needed, because the generated request object
+// puts a path parameter on the struct itself and the other two inside Params
+// and Body.
+
+// meRoutesNamingTheCallersOwnObject are the /me PATH parameters, each one an
+// identifier of an object that belongs to the caller and is read back together
+// with the principal's subject, so the value names one of the caller's own rows
+// or nothing (internal/notifications: a mark-read under another subject is a
 // not-found, never somebody else's row). Adding a route here needs the same
 // argument in its own package's tests.
 var meRoutesNamingTheCallersOwnObject = map[string]bool{
 	"/v1/me/notifications/{notificationId}/read": true,
 	"/v1/me/payout-destinations/{destinationId}": true, // internal/payout: a destination is loaded by (account, id); another account's id is not found
-	"/v1/me/verification/sessions/{sessionId}":   true, // internal/verification: a session is loaded under the caller's profile; another person's id is not found
+	// internal/verification: a session is loaded under the account
+	// accountScopeWrite resolved, which is ownership only -- so "the caller's
+	// profile" means the caller's, and another person's session id is not
+	// found. It said "loaded under the caller's profile" while the account came
+	// from the read-grade helper, which made the second half of the sentence
+	// true only for a caller with no account:read_any (F-184).
+	"/v1/me/verification/sessions/{sessionId}": true,
 }
 
 func TestProfile_NoSelfServiceRouteTakesAnIdentifier(t *testing.T) {
@@ -159,6 +183,112 @@ func TestProfile_NoSelfServiceRouteTakesAnIdentifier(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, checked, 6, "the walk found no /v1/me routes; this proves nothing")
+}
+
+// meOperationsNamingAnAccount are the /v1/me operations whose Params or Body
+// carry an AccountId, each with the helper that resolves it and why that helper
+// is the right one.
+//
+// Two grades appear here and the difference is the whole control (F-36).
+// accountScopeWrite is ownership only: the caller owns the account or the
+// request is refused, so naming somebody else's is unrepresentable in effect
+// even though it is representable on the wire. accountScope additionally
+// honours account:read_any, which is a deliberate, permission-gated operator
+// READ: the same facts are on the admin plane, the override is a role a person
+// was granted with a reason in a directory, and nothing behind it moves.
+//
+// Nothing may be here with the read-grade helper and a side effect. That
+// combination is what F-183 was.
+var meOperationsNamingAnAccount = map[string]string{
+	// accountScopeWrite -- ownership only, no operator override.
+	"DeleteMePayoutDestinationsDestinationId": "accountScopeWrite: disabling a destination is a write",
+	"PostMePayoutDestinations":                "accountScopeWrite: registering a destination is a write",
+	"PostMeVerificationSessions":              "accountScopeWrite: opening a provider session is a write",
+	"PostMeVerificationSandboxOutcome":        "accountScopeWrite: choosing a rehearsal outcome is a write, and a sandbox tier only",
+	"GetMeVerificationSessionsSessionId":      "accountScopeWrite: a GET that changes state, because Poll ingests the provider's answer; see stateChangingGETs",
+
+	// accountScope -- reads, where account:read_any is the operator override
+	// this system grants on purpose and audits as a role.
+	"GetMeActivity":           "accountScope: a read of the account's own timeline",
+	"GetMeEligibility":        "accountScope: a read of a decision, which it does not make",
+	"GetMePayoutDestinations": "accountScope: a read; the destinations are listed, never exercised",
+	"GetMePortfolio":          "accountScope: a read of positions and balances",
+	"GetMeVerification":       "accountScope: a read of the verification profile; the session route beside it is the one that moves",
+}
+
+// TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor walks the generated
+// contract rather than the router, so an account id is found wherever the
+// operation puts it.
+func TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor(t *testing.T) {
+	t.Parallel()
+	iface := reflect.TypeOf((*api.StrictServerInterface)(nil)).Elem()
+	carries := func(req reflect.Type) bool {
+		for _, field := range []string{"Params", "Body"} {
+			f, ok := req.FieldByName(field)
+			if !ok {
+				continue
+			}
+			ft := f.Type
+			for ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if ft.Kind() != reflect.Struct {
+				continue
+			}
+			if _, found := ft.FieldByName("AccountId"); found {
+				return true
+			}
+		}
+		return false
+	}
+
+	var found []string
+	for i := 0; i < iface.NumMethod(); i++ {
+		m := iface.Method(i)
+		if !strings.HasPrefix(m.Name, "GetMe") && !strings.HasPrefix(m.Name, "PostMe") &&
+			!strings.HasPrefix(m.Name, "DeleteMe") && !strings.HasPrefix(m.Name, "PatchMe") &&
+			!strings.HasPrefix(m.Name, "PutMe") {
+			continue
+		}
+		if !carries(m.Type.In(1)) {
+			continue
+		}
+		found = append(found, m.Name)
+		assert.NotEmptyf(t, meOperationsNamingAnAccount[m.Name],
+			"%s takes an account id in its query string or body and is not accounted for; "+
+				"say which helper resolves it and why that helper is the right one", m.Name)
+	}
+	sort.Strings(found)
+	require.NotEmpty(t, found, "no /me operation carries an account id; the walk is not looking at the contract")
+
+	// And the list cannot outlive the operations: an entry for an operation
+	// that no longer takes an account id is an argument nobody is making.
+	present := make(map[string]bool, len(found))
+	for _, n := range found {
+		present[n] = true
+	}
+	for name := range meOperationsNamingAnAccount {
+		assert.Truef(t, present[name],
+			"%s is accounted for here and no longer takes an account id outside its path", name)
+	}
+
+	// The source-level half: every entry claiming accountScopeWrite uses it,
+	// and every entry claiming accountScope uses that. A comment that describes
+	// a helper the handler does not call is what F-184 was.
+	helper := map[string]string{}
+	forEachHandlerSource(t, func(_, fn, line string, _ int) {
+		switch {
+		case strings.Contains(line, "accountScopeWrite(ctx"):
+			helper[fn] = "accountScopeWrite"
+		case strings.Contains(line, "accountScope(ctx") && helper[fn] == "":
+			helper[fn] = "accountScope"
+		}
+	})
+	for name, why := range meOperationsNamingAnAccount {
+		claimed, _, _ := strings.Cut(why, ":")
+		assert.Equalf(t, claimed, helper[name],
+			"%s is documented as scoping with %s and its source calls %q", name, claimed, helper[name])
+	}
 }
 
 // And the subject the domain sees is the principal's, never anything from the
