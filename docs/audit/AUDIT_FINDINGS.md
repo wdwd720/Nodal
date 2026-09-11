@@ -184,6 +184,10 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-223 | P3 | PRODUCTIZATION | fixed | The demodata command gave its ledger no capability resolver, so it refused every demo trade on a database whose gates were sandbox-active |
 | F-251 | P3 | PRODUCTIZATION | fixed | The agent-detail sweep skipped with a reason that was not the reason, on the route its own finding was about |
 | F-252 | P3 | PRODUCTIZATION | fixed | Two webhook-driven scenarios counted as passes while proving only that an unsigned delivery is refused, and four purchase tests were never registered |
+| F-255 | P2 | PRODUCTIZATION | fixed | A strategy version could never be accepted, so no agent could be created on any deployment even with a working compiler |
+| F-256 | P3 | PRODUCTIZATION | fixed | The compiler seam had no RefsLoader anywhere, so the pair it requires could never be satisfied |
+| F-257 | P2 | PRODUCTIZATION | fixed | The seeded GLOBAL risk policy permitted no venue, so no strategy naming any venue could ever have compiled |
+| F-258 | P3 | PRODUCTIZATION | residual | A strategy version's status is written by the application with no transition table behind it |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -8081,6 +8085,13 @@ F-213 added to the lists -- it has no axe, 375 px or honesty coverage anywhere.
 it one is a product change (a compiler backend on the sandbox tier, or a fixture
 agent from the demo seeder), recorded as a residual rather than done here.
 
+**2026-09-11.** The residual is closed on a sandbox tier: the structured
+compiler (D-129) produces a version, the acceptance route (D-128) makes it
+grantable, and `scenarios/d-agent.spec.ts` creates the agent both sweeps now
+open — so `/agents/:agentId` has axe, 375 px and honesty coverage for the first
+time, and the skip survives only for a deployment with no compiler, where the
+reason is a fact about the configuration rather than about the account.
+
 **Evidence.** `apps/web/e2e/audit-frontend.spec.ts`; `apps/web/e2e/scenarios/d-agent.spec.ts`.
 
 ## F-252 · Two webhook-driven scenarios counted as passes while proving only an unsigned refusal · PRODUCTIZATION · P3 · FIXED
@@ -10106,3 +10117,185 @@ read.
 
 **Evidence.** TEST_UNIT: `TestDocs_EveryPathTheyNameExists`. STATIC_PROOF:
 `docs/adr/0023-the-sandbox-tier.md` Consequences and Evidence sections.
+
+## F-255 · A strategy version could never be accepted, so no agent could ever be created · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the agents-completion wave, by looking for the writer of
+`strategy_versions.status = 'ACCEPTED'` and finding none.
+
+Four controls agreed that an agent may only be created from a strategy version
+its owner read and approved:
+
+* `agents.Service.Create` refuses a version that is not `ACCEPTED` with
+  `accepted_by_user_id` and `accepted_at` set (`internal/agents/service.go`,
+  `requireGrantableVersion`, F-187, D-105);
+* migration 00500 pairs the status and the two columns in a CHECK;
+* `checkVersion` refuses a compiler that returns an `ACCEPTED` version, because
+  "a backend that could return it would be approving on the user's behalf, which
+  is exactly what goal §18's review step exists to stop";
+* ADR-0029 describes the review step as the point of the whole flow.
+
+**Nothing could write the row.** `grep -n "^  /strategies" openapi/openapi.yaml`
+listed `/strategies`, `/strategies/{strategyId}` and
+`/strategies/{strategyId}/compile` and nothing else; `internal/agents` had no
+method that set the status; no SQL anywhere in the tree set it. So on every
+deployment of this build — including one with a working compiler and a full
+registry — a compiled version stayed `COMPILED` forever and
+`requireGrantableVersion` refused every agent with
+`INVALID_STATE_TRANSITION`. The web's step 4 was unreachable by construction,
+and the reason was invisible: the page said "an agent is created from a compiled
+strategy version" and a reader would conclude the compiler was the only thing
+missing.
+
+**Reproduction (before the fix).** Record a strategy; give the service any
+`CompilerBackend` and `RefsLoader`; compile it — a `strategy_versions` row
+appears with status `COMPILED`. Now call `POST /v1/agents` naming that version:
+`INVALID_STATE_TRANSITION`, "read the compiled strategy and accept it before you
+create an agent from it". There is no route, method or statement that does what
+that sentence asks.
+
+**Fix.** `POST /v1/strategies/{strategyId}/versions/{version}/accept` (D-128):
+owner-only, `NOT_FOUND` for a stranger, step-up at the boundary, `Mutating`,
+idempotent, `COMPILED`-only, and the body must echo the `ir_hash` the review
+screen displayed so a stale review cannot accept a newer compile. It writes the
+two columns and the status, records `strategy.version.accepted` on the owner's
+account stream, and grants nothing by itself.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_AnAgentBecomesCreatableOnlyAfterAcceptance`,
+`TestIntegration_AcceptingIsAPersonsActAndItIsRecorded`,
+`TestIntegration_AcceptingNeedsTheHashThatWasRead`,
+`TestIntegration_ASecondAcceptanceIsAReplay`,
+`TestIntegration_OnlyTheOwnerAccepts`,
+`TestIntegration_AVersionThatIsNotCompiledCannotBeAccepted`,
+`TestIntegration_ScenarioDBackendEndToEnd`. TEST_E2E: `scenarios/d-agent.spec.ts`
+"Scenario D: state a strategy, compile it, review it, accept it, then create at
+level 1 and level 3". STATIC_PROOF: `internal/agents/accept.go`;
+`internal/httpapi/authz.go`; `docs/adr/0029-...md` Amendment.
+
+## F-256 · The compiler seam's second half had no implementation anywhere · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same wave, by looking for an implementation of
+`agents.RefsLoader`.
+
+ADR-0029 declared the compiler as two interfaces and said both must be present
+before a compile is attempted, "because a compiler with an EMPTY registry would
+reject every instrument a user named and blame them for it". `CompilerBackend`
+had an implementation from the day it was declared — `*strategy.Compiler`
+satisfies it exactly. `RefsLoader` had none: not in `cmd/api`, not in
+`internal/agents`, not in any test outside the compiler's own fixtures. So
+`CompilerConfigured()` could never answer true, and the sentence "until both
+exist, a strategy cannot be compiled here" described a fact about the tree
+rather than a fact about a deployment's configuration.
+
+The same shape as F-26 a third time: a control that is correct, tested and
+impossible to reach — except that here the unreachable thing was the product
+feature, not the control.
+
+**Fix.** `cmd/api/compiler.go` implements it: instruments through
+`internal/instruments`' repository, venues and tools from their tables, and the
+composed GLOBAL policy with its hash from `internal/risk`, all read through the
+caller's querier at the instant of each compile rather than cached — an
+instrument halted a minute ago must not back a strategy compiled now. It is
+wired only on a sandbox tier, beside the structured compiler (D-129); every
+other deployment keeps `Compiler: nil, Refs: nil` and the honest refusal.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_TheRefsLoaderReadsTheRealRegistry`,
+`TestIntegration_ScenarioDBackendEndToEnd`. STATIC_PROOF:
+`cmd/api/compiler.go`; the agents block of `cmd/api/wire.go`.
+
+## F-257 · The seeded risk policy permitted no venue, so nothing could ever have compiled · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same wave, when the first end-to-end compile against a real
+registry came back `RISK_INCOMPATIBLE` naming the only venue the deployment has.
+
+`risk.DefaultGlobalPolicyJSON` sets `"allowed_venues": []`, and its own comment
+says why: "The venue allowlist is empty, so no trade is allowed anywhere until
+venues are listed explicitly." An explicit empty list allows nothing, which is
+the correct fail-closed default, and it is exactly what `riskPolicyAtBoot`
+records on every non-PROD deployment (D-067) and what
+`go run ./scripts/riskpolicy` records with no `-rules`.
+
+Nothing ever listed a venue. `scripts/riskpolicy -rules` is a person running a
+command with a file nobody has written, and `scripts/seed` registers a venue in
+the INSTRUMENT registry without touching the policy. Meanwhile
+`strategy.riskCompat` refuses any document whose `envelope.venues` or whose
+intent's `allowed_venues` names a venue outside the allowlist.
+
+So even the model-backed compiler ADR-0029 describes could never have produced a
+version on any deployment: the refusal would have arrived at RISK_COMPAT,
+blaming the user's strategy for naming the only venue their deployment lists.
+Nothing caught it because no compiled strategy had ever reached that stage
+against a real policy — the corpus supplies its own allowlist
+(`fixtures_test.go` sets `AllowedVenues: ["JUPITER", "ORCA"]`).
+
+**Fix.** `sandboxVenuePolicyAtBoot` records, on a sandbox tier and nowhere else,
+a GLOBAL policy VERSION whose allowlist is the venue codes the registry itself
+holds in a status that may take new actions. Every other limit is copied from
+the policy in force; it is written through `risk.Store.RecordPolicy`,
+append-only, with a SYSTEM actor and a reason that says what it is, and the
+version is derived from the rules so a second boot is a CONFLICT rather than a
+second row. PROD and every non-sandbox tier are refused: a production venue
+allowlist is a risk-desk decision about where money may go.
+
+**Residual, deliberately.** A deployment that is not a sandbox tier still has an
+empty allowlist and still cannot compile a strategy naming a venue. That is the
+correct failure — it is what "no venue has been approved here" means — and the
+fix for it is an operator recording a policy with `scripts/riskpolicy -rules`.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_ScenarioDBackendEndToEnd` (which fails at RISK_COMPAT without
+the boot step), `TestIntegration_TheRefsLoaderReadsTheRealRegistry`.
+STATIC_PROOF: `cmd/api/compiler.go` (`sandboxVenuePolicyAtBoot`);
+`internal/risk/policy.go` (`DefaultGlobalPolicyJSON`);
+`internal/strategy/validate.go` (`riskCompat`).
+
+## F-258 · A strategy version's status is written by the application with no transition table behind it · PRODUCTIZATION · P3 · RESIDUAL
+
+**Found by** the agents-completion wave, while adding the acceptance route.
+
+Every other state column in this schema follows the F-42 pattern: a transition
+table, a trigger that writes the state from the transition row, and `cp_app`
+holding no UPDATE on the state column. `agents.state`, `payout_requests.state`,
+`deposits.status`, `wallets.status`, `native_markets.status`,
+`compliance_profiles.*_state`, `verification_sessions.status`,
+`account_closure_requests.state` and `trade_intents.status` are each governed
+that way, by migrations 00743 through 00763.
+
+`strategy_versions.status` is not. It is a plain `text` column with a CHECK, and
+the grant is, verbatim, `migrations/00500_strategies.sql:152`:
+
+```sql
+GRANT SELECT, INSERT, UPDATE ON strategies, strategy_versions TO cp_app;
+```
+
+So the application writes `COMPILED → ACCEPTED` with an ordinary UPDATE, and the
+only records of the change are the two columns the CHECK pairs with it
+(`accepted_by_user_id`, `accepted_at`) and the audit event D-128 appends. There
+is no `strategy_version_transitions` row, no edge table licensing the move, and
+no database-level refusal of, say, `REVOKED → ACCEPTED` — only the Go check in
+`agents.StrategyService.Accept`.
+
+**Why it is recorded and not fixed here.** Retro-fitting F-42's treatment means
+a transition table, an edge set, a SECURITY DEFINER trigger, the revocation of
+`cp_app`'s UPDATE and the migration of every existing writer of the column
+(`REJECTED`, `SUPERSEDED` and `REVOKED` have no writer today either, so the edge
+set is partly a design decision about paths nobody has built). The table is
+referenced by predictions, trade intents and financial history, and the
+acceptance route needed to exist before there was any writer to govern. Doing
+both in one wave would have put an untested state machine underneath the one act
+goal §18 requires.
+
+**What holds meanwhile.** 00500's CHECK still refuses an `ACCEPTED` row without
+the person and the instant; 00500's guard trigger still refuses any change to the
+compiled fields, the IR, the hash, the effect set and (since 00812) the `sandbox`
+and `environment` labels; `Accept` refuses any source status but `COMPILED`,
+under `FOR UPDATE`; and every acceptance is on the owner's audit stream.
+
+**Evidence.** STATIC_PROOF: `migrations/00500_strategies.sql` (the grant at line
+152 and the `strategy_versions_guard` trigger); `internal/agents/accept.go`;
+D-128's "Residual" bullet. TEST_INTEGRATION:
+`TestIntegration_AVersionThatIsNotCompiledCannotBeAccepted` is the Go-level
+refusal this residual is about.
+

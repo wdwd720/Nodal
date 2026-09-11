@@ -151,16 +151,53 @@ reason.
 
 ## 8. Agents (Scenario D)
 
-- `/agents`: list; `/agents/new`: describe a strategy in words or structured
-  constraints (`POST /v1/strategies`), compile (`POST
-  /v1/strategies/{id}/compile`; on a tier without a compiler backend the
-  attempt says `COMPILER_UNAVAILABLE` and the page says exactly that),
-  review the compiled version, then create the agent with an authority level
-  (1 observe · 2 propose · 3 execute within limits; 4–6 shown as disabled by
-  policy), a Credits budget, per-trade cap, allowed assets, daily loss stop.
-- `/agents/:id`: status, limits, budget used, runtime status (on staging:
-  evaluator not deployed — stated), decisions/runs when they exist, pause /
-  resume / disable.
+- `/agents`: the list, and the authority ladder shown whole — every declared
+  level, with 4 to 6 rendered as disabled by policy and named with the
+  capability each would need.
+- `/agents/new` is five acts, and each one stays on the page after it is done.
+  1. **State the strategy** (`POST /v1/strategies`). What the form asks for
+     depends on the compiler this deployment has, which `GET /v1/strategies`
+     reports. A deployment whose compiler is **structured** (every sandbox tier,
+     D-129) asks for the strategy field by field: one instrument and one venue
+     from the registry, an entry rule and an exit rule (a comparator on the
+     price against an exact threshold, or "on every evaluation"), the most in
+     one trade, the largest position, the loss that stops it for the day, the
+     smallest allocation it needs, how often it evaluates, the most trade
+     proposals in an hour, and PAPER — shown, not offered, because it is the
+     only mode this build compiles. The description box stays beside all of it
+     and is labelled *recorded, never interpreted*, because on such a
+     deployment it is: the compiler reads the fields and does not read the
+     prose.
+  2. **Compile** (`POST /v1/strategies/{id}/compile`). Every attempt is
+     recorded, successful or not. A tier with no compiler answers
+     `COMPILER_UNAVAILABLE` and the page says exactly that. A structured
+     compiler handed an incomplete strategy answers
+     `STRUCTURED_CONSTRAINTS_REQUIRED` and names **every** field it needed —
+     never "say more", and never a default.
+  3. **Review.** The compiled strategy in words, its effects, its semantic
+     hash, and the compiler's own rationale saying which stated field each part
+     of it came from. A version compiled on a sandbox tier is labelled a
+     rehearsal here and everywhere else it appears.
+  4. **Accept** (`POST /v1/strategies/{id}/versions/{n}/accept`). The act §18
+     requires, and the only way the record of it is written: no compiler can
+     produce an accepted version and no operator can accept one on somebody's
+     behalf. The request carries the `ir_hash` the review screen displayed, so
+     what is approved is the document on the screen. It needs a recent strong
+     sign-in; the round trip keeps the strategy being worked on and everything
+     typed. Accepting grants nothing.
+  5. **Grant** (`POST /v1/agents`): an authority level (0 research · 1
+     recommend · 2 prepare · 3 execute a rule within limits; 4–6 disabled by
+     policy), a Credits budget, a per-trade cap, a daily loss stop, a position
+     share and the assets it may touch. The agent is created **stopped**, and
+     no Credits move.
+- `/agents/:id`: status and authority, the limits granted, the budget used and
+  where that figure came from, and the runtime — which on every tier of this
+  build says the agent is not being evaluated and nothing is scheduled, whether
+  it is enabled or not. Decisions and runs show the honest empty state for the
+  same reason (D-130). `enable` walks the ladder to PAPER and stops; `pause` is
+  the reversible stop and leaves open orders alone; `disable` revokes authority
+  and is final; `archive` only hides a stopped agent. An agent built on a
+  sandbox-compiled strategy says so at the top of its own page.
 
 ## 9. Settings and security
 

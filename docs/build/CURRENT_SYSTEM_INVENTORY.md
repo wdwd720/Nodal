@@ -394,6 +394,53 @@ Schema is at migration **783** after this batch.
 
 Schema is at migration **803** after the fixes.
 
+### The agents-completion wave (2026-09-11)
+
+| Migration | Change |
+|---|---|
+| `00811_a_structured_strategy_is_an_authoring_path.sql` | `STRUCTURED_SANDBOX` added to the `source_kind` CHECK on `strategies`, `strategy_versions` and `compile_attempts`. A document assembled field by field from a declared strategy is not natural language, and recording it as `NATURAL_LANGUAGE` would say a model read somebody's words when none ran (D-129). `ir.AllLineageSources()` is the Go half, paired in `test/integration/enums` |
+| `00812_a_sandbox_compiled_version_says_so_and_cannot_exist_in_prod.sql` | `strategy_versions.sandbox boolean NOT NULL DEFAULT false` and `.environment text NOT NULL DEFAULT ''`; CHECK `source_kind <> 'STRUCTURED_SANDBOX' OR sandbox`; CHECK `NOT sandbox OR (environment <> 'PROD' AND environment <> '')`; both columns added to `strategy_versions_guard`'s immutable set, so `cp_app` — which holds UPDATE for acceptance — cannot clear the label on a row it wrote (ADR-0023, D-129) |
+| `00813_the_constraints_a_person_declared_are_not_part_of_their_description.sql` | `strategies.constraints jsonb NOT NULL DEFAULT '{}'::jsonb`. They were concatenated onto the description, which made "what you wrote" untrue on every screen that shows one back, and left a compiler no way to claim it had not read the prose (D-129) |
+
+Schema is at migration **813** after the wave.
+
+**Routes added:** one.
+
+| Route | Floor | Notes |
+|---|---|---|
+| `POST /v1/strategies/{strategyId}/versions/{version}/accept` | `strategy:write` + **StepUp** | the review step of goal §18, recorded. Owner-only (`NOT_FOUND` for a stranger), `COMPILED`-only, idempotent, and the body must echo the version's `ir_hash`. The only writer of `strategy_versions.status = 'ACCEPTED'` anywhere; before it, no agent could be created on any deployment (F-255, D-128) |
+
+**Reads that changed:** `GET /v1/strategies` and `GET /v1/strategies/{id}` carry
+`compiler: { name, sandbox, structured }` beside the existing
+`compiler_configured`, so the create-agent page knows WHICH compiler answered and
+whether what it produces is a rehearsal. `StrategyVersion` carries `sandbox`,
+`environment`, `accepted_by_user_id` and `accepted_at`; `Agent` carries
+`sandbox`, read from its strategy version rather than stored on the agent;
+`CompileResult` carries `rationale`. `CreateStrategyRequest.constraints` is now a
+declared `StructuredStrategy` schema rather than `additionalProperties: true`.
+
+**Packages added:** one. `internal/provider/compilersandbox` — a sandbox tier's
+structured strategy compiler, beside `payoutsandbox` and `verifysandbox`. It
+compiles only a fully declared strategy, calls no model, reads no natural
+language, and refuses PROD at construction (D-129).
+
+**New failure code:** `STRUCTURED_CONSTRAINTS_REQUIRED`, recorded on a
+`compile_attempts` row with outcome `REJECTED` and `stage_reached PROMPT` when
+this deployment's compiler reads a declared strategy and the one it was handed
+is absent or incomplete. Every field it needed is named in
+`compile_attempts.clarifications` — a column 00500 created and nothing wrote
+until now, along with `explanation`.
+
+**New lineage source:** `STRUCTURED_SANDBOX`.
+
+**Boot steps added (sandbox tier only, all refused in PROD):**
+`priceToolAtBoot` registers the `sandbox_price_spot` READ_MARKET_DATA tool a
+declared price dependency reads through — `tools` had no seeder at all, so every
+compile would have answered `UNKNOWN_TOOL`; `sandboxVenuePolicyAtBoot` records a
+GLOBAL risk policy version whose venue allowlist is the venues the registry
+holds, because the compiled-in policy's allowlist is empty and permits none
+(F-257).
+
 ### Packages
 
 | Package | What it is |
@@ -453,8 +500,8 @@ nothing else.
 distinct from `internal/agent`, which stays an import-restricted agent tree
 (ADR-0029, D-073).
 
-**What still is not exposed over HTTP:** backtests, predictions, agent decision
-history, and agent performance. The first two have no product surface in this
+**What still is not exposed over HTTP (2026-09-11):** backtests, predictions,
+agent decision history, and agent performance. The first two have no product surface in this
 wave; the third exists as immutable `agent_lifecycle_transitions` rows with no
 read route yet; the fourth is not built at all (`internal/backtest` and
 `internal/performance` do not exist).

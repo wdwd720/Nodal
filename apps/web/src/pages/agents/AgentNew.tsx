@@ -598,10 +598,20 @@ export function AgentNew(): ReactNode {
   const description = useSurvivesSignIn<Description>("agents.description", NO_DESCRIPTION);
   const declared = useSurvivesSignIn<StructuredDraft>("agents.structured", NO_STRUCTURED);
   const grant = useSurvivesSignIn<GrantDraft>("agents.grant", NO_GRANT);
-  const [strategy, setStrategy] = useState<Strategy | undefined>(undefined);
+  // WHICH strategy is being worked on survives the round trip too, and it has
+  // to: accepting a version needs a recent strong sign-in, so the one step this
+  // flow cannot finish without leaving the page is the step immediately after
+  // the strategy exists. Coming back to an empty page and starting again would
+  // record a second strategy for the same intent.
+  const chosenStrategy = useSurvivesSignIn<{ readonly id: string }>("agents.chosen", { id: "" });
+  const [local, setStrategyLocal] = useState<Strategy | undefined>(undefined);
   const [accepted, setAccepted] = useState<StrategyVersion | undefined>(undefined);
 
   const strategies = useStrategies(accountId);
+  const setStrategy = (next: Strategy | undefined): void => {
+    setStrategyLocal(next);
+    chosenStrategy.set({ id: next?.id ?? "" });
+  };
   const agents = useAgents(accountId);
   const assets = useAssets();
   const instruments = useInstruments();
@@ -668,6 +678,13 @@ export function AgentNew(): ReactNode {
       </Page>
     );
   }
+
+  // After a sign-in round trip the component state is gone and the list is the
+  // only source left, so the strategy is recovered from it by the id that
+  // survived. The freshly read row is preferred over the local copy for the
+  // same reason: its `current_version` is what the backend has now.
+  const strategy =
+    strategies.data?.items.find((item) => item.id === (local?.id ?? chosenStrategy.value.id)) ?? local;
 
   const compilerConfigured = strategies.data?.compilerConfigured;
   const compiler = strategies.data?.compiler;
@@ -905,8 +922,8 @@ export function AgentNew(): ReactNode {
                     }}
                   />
                   <UsdField
-                    label="Daily loss stop"
-                    hint="It stops for the day once losses reach this."
+                    label="Loss that stops it for the day"
+                    hint="The strategy stops for the day once losses reach this."
                     value={declared.value.maxDailyLoss}
                     onChange={(value) => {
                       declared.set({ ...declared.value, maxDailyLoss: value });
@@ -974,12 +991,16 @@ export function AgentNew(): ReactNode {
                       </select>
                     )}
                   </FormField>
-                  <Field
-                    label="Mode"
-                    note="The only mode this build compiles. Anything that moves value is refused with the reason, never downgraded to this one quietly."
-                  >
-                    <StatusBadge tone="neutral">PAPER</StatusBadge>
-                  </Field>
+                  {/* A Field is a <dt>/<dd> pair and has to live in a <dl>,
+                      which is what FieldGrid is. */}
+                  <FieldGrid columns={2}>
+                    <Field
+                      label="Mode"
+                      note="The only mode this build compiles. Anything that moves value is refused with the reason, never downgraded to this one quietly."
+                    >
+                      <StatusBadge tone="neutral">PAPER</StatusBadge>
+                    </Field>
+                  </FieldGrid>
                 </fieldset>
               </>
             )}
