@@ -16,12 +16,21 @@ both exist.
 - Local recipe (the CI job `web-e2e` in `.github/workflows/ci.yml` is the
   reference): provision a database with `go run ./scripts/testdb -name <n>
   -export`, run `scripts/seed`, `scripts/seedeconomy`, `scripts/riskpolicy`,
-  start `cmd/api` as a **sandbox tier** (`CP_ENV=dev`,
+  start `cmd/api` as a **sandbox tier** (`CP_ENV=LOCAL`,
   `CP_API_LEGAL_POLICY=SANDBOX`, `CP_API_PAYOUT_POLICY=SANDBOX`,
   `CP_API_ENABLED_CAPABILITIES` and `CP_API_SANDBOX_GATES` listing
   `CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE`,
-  `CP_PROVIDER_PAYOUT_NAME=sandbox_payout`, fake or sandbox Stripe), then
-  `pnpm --filter @controlplane/web e2e`.
+  `CP_PROVIDER_PAYOUT_NAME=sandbox_payout` with `CP_PROVIDER_PAYOUT_MODE=sandbox`,
+  `CP_API_DEMO_DATA=true` so the API seeds the demo catalogue at boot through
+  its own wired services (D-115; `go run ./scripts/demodata` is the same
+  seeder as a command and reports "already present" afterwards),
+  `CP_AUTH_BOOTSTRAP_OPERATORS=devidp|dev:operations=OPERATIONS` so the
+  paused-market refusal case can pause a market through the real
+  `NATIVE_MARKET_CLOSE_ONLY` control instead of skipping, the four transport
+  budgets raised to `6000/1m`, `600/1m`, `1200/1m`, `1200/1m` because a
+  single-worker run of 150 cases exceeds the deployment's per-minute classes,
+  and no Stripe key — scenario B reaches the provider-unavailable branch
+  locally, by design), then `pnpm --filter @controlplane/web e2e`.
 - Files: `apps/web/e2e/scenarios/<letter>-<name>.spec.ts`, one per
   scenario; cross-cutting: `e2e/accessibility.spec.ts` (axe on every route,
   375 px no-overflow), `e2e/honesty.spec.ts` (forbidden phrasing, sandbox
