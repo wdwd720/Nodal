@@ -15,7 +15,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-import { NARROW_HEIGHT, NARROW_WIDTH } from "./routes.ts";
+import { APP_ROUTES, DYNAMIC_APP_ROUTES, NARROW_HEIGHT, NARROW_WIDTH, PUBLIC_ROUTES } from "./routes.ts";
 
 const SIGNED_OUT = { cookies: [], origins: [] };
 
@@ -223,16 +223,21 @@ test("F-web: the public site says whether this deployment is a rehearsal", async
  * The application sweeps never check they landed on the page under test
  * ========================================================================== */
 
-test("F-web: the APP_ROUTES sweeps assert nothing that identifies the page", async ({ page }) => {
-  // `accessibility.spec.ts:55` and `controls.spec.ts:94` walk APP_ROUTES
-  // asserting only `h1` count 1. The 404 page satisfies every one of those
-  // assertions, so a route that stopped existing, or a gate that diverted,
-  // would keep the suite green. `RouteUnderTest.heading` exists and neither
-  // application sweep reads it.
+test("F-web: a route that does not exist passes for no route that does", async ({ page }) => {
+  // `accessibility.spec.ts`, `controls.spec.ts` and the reflow sweep used to
+  // walk APP_ROUTES asserting only `h1` count 1, which the 404 page satisfies:
+  // a route that stopped existing, or a gate that diverted, kept the suite
+  // green. They now assert `RouteUnderTest.heading` (F-209). This is the
+  // property that makes that assertion mean something: the page a mistyped
+  // address lands on carries a heading no route under test carries, so a
+  // sweep that lands there fails instead of passing on the wrong page.
   await page.goto("/this-route-does-not-exist");
   await expect(page.locator("h1")).toHaveCount(1);
   const heading = (await page.locator("h1").innerText()).trim();
-  expect(heading, "the sweep's page is the route's page").toBe("Home");
+  expect(heading, "the not-found page names itself").toBe("No such page");
+  for (const route of [...PUBLIC_ROUTES, ...APP_ROUTES, ...DYNAMIC_APP_ROUTES]) {
+    expect(heading, `${route.path}'s heading must not be the not-found page's`).not.toBe(route.heading);
+  }
 });
 
 /* ==========================================================================

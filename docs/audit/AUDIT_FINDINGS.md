@@ -179,6 +179,7 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-218 | P3 | PRODUCTIZATION | fixed | No error boundary anywhere: a malformed stash reaching the BigInt constructor blanked the whole application on every load until the tab was closed |
 | F-219 | P3 | PRODUCTIZATION | fixed | `openapi.yaml` said quote fees are Credits at price_scale; they are at the Credit asset's scale, twelve orders of magnitude apart |
 | F-220 | P3 | PRODUCTIZATION | fixed | Two honesty checks settled the network after reading the page, so they read it mid-fetch |
+| F-221 | P3 | PRODUCTIZATION | fixed | Adding a payout destination minted an idempotency key per press, so a retry registered it twice |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -7968,6 +7969,34 @@ yet leaves a real page unchecked.
 **Fix.** The wait moves above the read in both.
 
 **Evidence.** `apps/web/e2e/honesty.spec.ts`.
+
+## F-221 · Adding a payout destination minted an idempotency key per press · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the frontend fix agent while fixing F-203/F-205/F-208 (one key per
+body), and left for the orchestrator because the page sits in the withdrawal
+area another branch was touching.
+
+`Destinations.tsx` called `newIdempotencyKey()` inside `add.mutate`'s argument,
+so every press of "Add destination" was a new command to the backend. The one
+retry the form is built for -- a network failure or a step-up round trip on the
+first press, whose answer never reached the browser -- therefore registered the
+same destination a second time under a second key, and the customer saw two
+rows for one bank account. (Removing a destination, accepting terms and saving
+the onboarding profile also mint per press; each of those is idempotent by its
+own nature -- a second removal is a no-op, an acceptance is keyed by document,
+an update applied twice is one state -- and they are left as they are.)
+
+**Fix.** `useIdempotencyKey("destinations.add.<account>")` with a
+`requestSignature` over the six fields the backend compares: a retry of the
+same body sends the key it sent before, an edited body mints a new one, and the
+key is cleared on success. The same helper the frontend fix put under the trade
+ticket, Buy Credits, the product purchase, the agent actions and the payout
+confirmation (F-203).
+
+**Evidence.** `apps/web/src/pages/withdraw/Destinations.tsx`,
+`apps/web/src/lib/idempotency.ts`; the e2e-browser audit observes the network
+for the retry shape.
+
 ## F-185 · Any authenticated person could end the API process by closing a stream · PRODUCTIZATION · P1 · FIXED
 
 **Found by** the agents-notifications adversarial audit (goal §54), reproduced

@@ -43,6 +43,7 @@ import { AsyncPanel, Explanation } from "../../components/DataState.tsx";
 import { DataTable } from "../../components/DataTable.tsx";
 import { Disclosure, FormField, Panel, StatusBadge, type Tone } from "../../components/Layout.tsx";
 import { Skeleton } from "../../components/Skeleton.tsx";
+import { requestSignature, useIdempotencyKey } from "../../lib/idempotency.ts";
 import { useSurvivesSignIn } from "../../lib/survives-sign-in.ts";
 import { formatInstant } from "../../lib/time.ts";
 
@@ -115,6 +116,11 @@ export function Destinations(props: {
   const add = useAddDestination();
   const remove = useRemoveDestination();
   const draft = useSurvivesSignIn<DestinationDraft>("withdraw.destination", EMPTY);
+  // One key per body: a retry of the same destination after a network failure
+  // or a step-up sends the key it sent before, and an edited form mints a new
+  // one. Minting at every press registered the destination once per press
+  // when the first press's answer was lost (F-221).
+  const addKey = useIdempotencyKey(`destinations.add.${props.accountId}`);
   /**
    * Open when this mount recovered a draft.
    *
@@ -256,20 +262,31 @@ export function Destinations(props: {
           onSubmit={(event) => {
             event.preventDefault();
             if (!tokenOk) return;
+            const body = {
+              accountId: props.accountId,
+              kind: draft.value.kind,
+              providerToken: draft.value.token.trim(),
+              displayLabel: draft.value.label.trim(),
+              currency: draft.value.currency.trim().toUpperCase(),
+              country: draft.value.country.trim().toUpperCase(),
+            };
             add.mutate(
               {
-                accountId: props.accountId,
-                kind: draft.value.kind,
-                providerToken: draft.value.token.trim(),
-                displayLabel: draft.value.label.trim(),
-                currency: draft.value.currency.trim().toUpperCase(),
-                country: draft.value.country.trim().toUpperCase(),
-                // Minted at confirmation, so the retry after a step-up
-                // registers this destination once rather than twice.
-                idempotencyKey: newIdempotencyKey(),
+                ...body,
+                idempotencyKey: addKey.forRequest(
+                  requestSignature([
+                    body.accountId,
+                    body.kind,
+                    body.providerToken,
+                    body.displayLabel,
+                    body.currency,
+                    body.country,
+                  ]),
+                ),
               },
               {
                 onSuccess: () => {
+                  addKey.clear();
                   draft.clear();
                   setAdding(false);
                 },

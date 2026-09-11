@@ -539,6 +539,10 @@ jobs:
           CP_ENV: LOCAL
           CP_AUTH_MODE: dev
           CP_HTTP_ADDR: 127.0.0.1:18099
+          # One declared operator (ADR-0024), so the suite can pause a demo
+          # market through the real NATIVE_MARKET_CLOSE_ONLY control and prove
+          # the trade ticket's refusal; without it that case skips (F-216).
+          CP_AUTH_BOOTSTRAP_OPERATORS: "devidp|dev:operations=OPERATIONS"
         run: |
           set -euo pipefail
           # The DSNs come from testdb itself rather than being written out by
