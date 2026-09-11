@@ -25,6 +25,8 @@
  * it is what makes these calls a test of the business rule rather than a
  * rediscovery of the cross-site one.
  */
+import { randomUUID } from "node:crypto";
+
 import { expect, type Browser, type Page } from "@playwright/test";
 
 import { chooseIdentity, completeOnboarding } from "./onboarding.ts";
@@ -51,7 +53,9 @@ export const REGION = "CA";
  */
 export function sandboxHandle(): string {
   const stamp = Date.now().toString(36);
-  const tail = Math.random().toString(36).slice(2, 8);
+  // A UUID slice rather than Math.random(): the source scan refuses a float
+  // anywhere under e2e/, and a random hex tail needs no float.
+  const tail = randomUUID().replaceAll("-", "").slice(0, 6);
   return `sandbox-handle-${stamp}-${tail}`;
 }
 
