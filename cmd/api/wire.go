@@ -567,7 +567,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	hub.UseClock(clk.Now)
 	sse.SetResume(notificationResume(database))
 	notificationProducer := notifications.NewProducer(clk.Now, cfg.SandboxTier())
-	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer),
+	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer).WithLogger(log),
 		hubPublisher{hub: hub}, log)
 
 	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)

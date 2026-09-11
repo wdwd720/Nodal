@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -82,16 +83,36 @@ type source struct {
 // UUIDv7 primary key. now() is the transaction's START time, so a transaction
 // that began before the cursor passed and committed after it writes a row the
 // cursor has already gone past. No ordering fixes that. So the follower reads a
-// lap behind its own cursor on every pass, and every notification carries a
-// dedup key derived from the source row's id: the lap finds late rows, and the
-// unique index on (user_id, dedup_key) refuses the ones the lap sees twice. The
-// cursor stops the follower rescanning history; it is not what makes the result
-// correct.
+// lap behind its own cursor, and every notification carries a dedup key derived
+// from the source row's id: the lap finds late rows, and the unique index on
+// (user_id, dedup_key) refuses the ones the lap sees twice. The cursor stops
+// the follower rescanning history; it is not what makes the result correct.
+//
+// # Why the lap is a second read rather than a rewound cursor (F-167)
+//
+// The pass used to be one read, from `cursor - lap`, bounded by `batch`, whose
+// LAST row became the new cursor. That cursor could therefore move BACKWARDS,
+// and it did as soon as one source produced `batch` rows inside one `lap`: the
+// 200th row counted from two minutes behind the cursor is itself behind the
+// cursor, so the next pass re-read the same window, deduplicated all of it, and
+// wrote the same instant back. One ordinary burst -- 120 commands a minute is
+// the rate limit, and readNativeFills has no state filter -- stalled a source
+// for the life of the deployment, silently: the dedup index made the repeated
+// re-read produce nothing, so nothing logged and nothing alerted.
+//
+// So the two jobs the single read was doing are now two reads. The DRAIN reads
+// forward from exactly where the last pass stopped and is the only thing that
+// moves the cursor, which is therefore monotonic by construction. The LAP
+// re-reads the window behind the cursor and moves nothing; it runs only when
+// the drain left room in the batch, because a pass that is still draining a
+// backlog has not caught up to the instant a late commit could hide behind, and
+// re-reads that window on the pass after it catches up.
 type Follower struct {
 	producer *Producer
 	sources  []source
 	lap      time.Duration
 	batch    int
+	log      *slog.Logger
 }
 
 // DefaultLap is how far behind its own cursor each pass re-reads. Two minutes
@@ -111,6 +132,7 @@ func NewFollower(producer *Producer) *Follower {
 		producer: producer,
 		lap:      DefaultLap,
 		batch:    DefaultBatch,
+		log:      slog.Default(),
 		sources: []source{
 			{name: "credit_funding_transitions", read: readCreditFundings},
 			{name: "payout_request_transitions", read: readPayoutRequests},
@@ -122,6 +144,16 @@ func NewFollower(producer *Producer) *Follower {
 			{name: "agent_pauses", read: readAgentPauses},
 		},
 	}
+}
+
+// WithLogger attaches the process's logger and returns f. A follower without
+// one still runs; it reports a stalled-looking pass to the default logger
+// instead of to the one the binary configured.
+func (f *Follower) WithLogger(log *slog.Logger) *Follower {
+	if log != nil {
+		f.log = log
+	}
+	return f
 }
 
 // SourceNames lists the tables the follower reads, for a log line and for the
@@ -185,39 +217,89 @@ func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub
 		if err != nil {
 			return err
 		}
-		readFrom := at.Add(-f.lap)
-		readID := rowID
-		if !readFrom.Equal(at) {
-			// A lap back is a different instant, so the row id that tied-break
-			// that instant no longer applies.
-			readID = ""
-		}
-		changes, err := s.read(ctx, tx, readFrom, readID, f.batch)
+		// The drain. It starts at the cursor itself -- not a lap behind it --
+		// so every row it reads is a row the cursor has not passed, and the
+		// last of them is always ahead of where the cursor stands.
+		ahead, err := s.read(ctx, tx, at, rowID, f.batch)
 		if err != nil {
 			return err
 		}
-		if len(changes) == 0 {
+		// The lap, which moves nothing. Skipped while a backlog is draining:
+		// the drain is not near the head yet, so there is no "just behind the
+		// cursor" for a late commit to hide in, and re-reading that window on
+		// every pass of a long drain would spend the batch on rows everybody
+		// has already been told about.
+		var behind []Change
+		full := len(ahead) >= f.batch
+		if !full && f.lap > 0 {
+			lapped, lerr := s.read(ctx, tx, at.Add(-f.lap), "", f.batch)
+			if lerr != nil {
+				return lerr
+			}
+			// Anything at or after the cursor is what the drain just read.
+			for _, c := range lapped {
+				if notAfterCursor(c, at, rowID) {
+					behind = append(behind, c)
+				}
+			}
+		}
+		if len(ahead) == 0 && len(behind) == 0 {
 			return nil
 		}
-		last := changes[len(changes)-1]
-		if err := markPending(ctx, tx, s.name, last.At); err != nil {
+		// The cursor advances to the last row that is not stamped past the
+		// horizon. A row beyond it is REPORTED -- it exists and somebody needs
+		// to know -- but it does not carry the cursor with it, because a cursor
+		// standing in the future silently skips every row written between now
+		// and then, which is the same permanent, invisible loss the stall was.
+		horizon, err := futureHorizon(ctx, tx, f.lap)
+		if err != nil {
+			return err
+		}
+		newAt, newID := at, rowID
+		for i := len(ahead) - 1; i >= 0; i-- {
+			if !ahead[i].At.After(horizon) {
+				newAt, newID = ahead[i].At, ahead[i].RowID
+				break
+			}
+		}
+		if err := markPending(ctx, tx, s.name, newAt); err != nil {
 			return err
 		}
 		written := 0
-		for _, c := range changes {
+		// The lap first, so the emits run in the order the rows happened.
+		for _, c := range append(behind, ahead...) {
+			fresh := 0
 			for _, n := range c.Notify {
 				em, err := f.producer.Emit(ctx, tx, n)
 				if err != nil {
 					return fmt.Errorf("emit %s for %s: %w", n.Kind, c.RowID, err)
 				}
 				if em.Created {
-					written++
+					fresh++
 					published = append(published, em.Notification)
 				}
 			}
-			signals = append(signals, c.Signal...)
+			written += fresh
+			// A signal rides with the fact it accompanies. A row the lap has
+			// already told everybody about is not announced a second time:
+			// otherwise every pass would republish an invalidation for every
+			// row of the last two minutes, and a client would refetch the same
+			// resource every fifteen seconds for as long as the window held it.
+			if fresh > 0 || len(c.Notify) == 0 {
+				signals = append(signals, c.Signal...)
+			}
 		}
-		return saveCursor(ctx, tx, s.name, last.At, last.RowID, written)
+		// A full drain that told nobody anything has the shape the stall had:
+		// rows going past the cursor, every one of them already known. It is
+		// legitimate after a cursor is wound back by a restore, and it is worth
+		// a line either way -- the defect this replaced was invisible precisely
+		// because a re-read writes nothing.
+		if full && written == 0 {
+			f.log.WarnContext(ctx, "a full notification batch produced no notifications",
+				"source", s.name, "rows", len(ahead), "cursor_at", newAt.UTC().Format(time.RFC3339Nano),
+				"consequence", "the cursor is advancing over rows everybody has already been told about")
+		}
+		return saveCursor(ctx, tx, s.name, newAt, newID, written)
 	})
 	if err != nil {
 		return 0, err
@@ -290,6 +372,43 @@ func keysetOn(atCol, idCol string) string {
 		`(%[1]s > $1::timestamptz OR ($2::text IS NOT NULL AND %[1]s = $1::timestamptz AND %[2]s::text > $2::text))`,
 		atCol, idCol,
 	)
+}
+
+// futureHorizon is how far ahead of the database's own clock the cursor is
+// allowed to stand: half a lap.
+//
+// `occurred_at` defaults to now() and every writer may set it, so one row
+// carrying a wrong clock -- a skewed host, a service passing the wrong
+// instant -- would otherwise drag the cursor to that instant and skip every row
+// written between now and then, permanently and silently. Half a lap is the
+// bound rather than zero because the two clocks are not the same clock: a row
+// stamped milliseconds ahead of the database's now is ordinary, and refusing to
+// advance past it would stall the cursor on ordinary skew. It is half a lap
+// rather than more because the lap re-reads the window BEHIND the cursor, so
+// anything a cursor standing half a lap ahead skipped is still inside the
+// window the next pass re-reads.
+func futureHorizon(ctx context.Context, q db.Querier, lap time.Duration) (time.Time, error) {
+	var now time.Time
+	if err := q.QueryRow(ctx, `SELECT now()`).Scan(&now); err != nil {
+		return time.Time{}, fmt.Errorf("read the database clock: %w", err)
+	}
+	return now.UTC().Add(lap / 2), nil
+}
+
+// notAfterCursor reports whether a change is at or behind the cursor, in the
+// same (instant, row id) order the source queries use. A cursor with no row id
+// stands at the whole instant, so a row AT that instant is behind it.
+func notAfterCursor(c Change, at time.Time, rowID string) bool {
+	switch {
+	case c.At.Before(at):
+		return true
+	case !c.At.Equal(at):
+		return false
+	case rowID == "":
+		return true
+	default:
+		return c.RowID <= rowID
+	}
 }
 
 // nullable turns an empty row id into a SQL NULL for the keyset predicate.

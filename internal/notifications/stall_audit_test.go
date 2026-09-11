@@ -15,6 +15,13 @@ import (
 
 // AUDIT (platform-hardening) — F-platform-1.
 //
+// (Named stall_audit_test.go rather than audit_follower_stall_test.go, and so
+// declared last, because this fixture writes 260 transitions stamped up to 52
+// seconds in the FUTURE and one an hour ahead, into the database every test in
+// this package shares. A follower that is working advances its cursor to those
+// rows, which leaves the next test's cursor standing after its own fixture.
+// Nothing in the test changed; only when it runs. F-167.)
+//
 // Follower.runSource reads from (cursor - DefaultLap), takes at most
 // DefaultBatch rows, and then sets the cursor to the LAST row of that batch.
 // The new cursor is therefore always the 200th row counted from a point two

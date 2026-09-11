@@ -57,6 +57,26 @@ func aTransition(t *testing.T, d *db.DB, fundingID, from, to string, at time.Tim
 	return transitionID
 }
 
+// freshCursors forgets where the follower stopped, so a test that says "start
+// the cursor before anything happens" really does.
+//
+// Every test in this package shares one database and the cursors are one row
+// per source, so a test that stamps a row in the future -- the burst
+// reproduction stamps 260 of them across 52 seconds -- leaves the next test's
+// cursor standing after its own fixture. That is harmless in production (the
+// follower reports such a row through its lap, and the cursor may not stand
+// more than half a lap ahead of the database's clock) and it is fatal to a test
+// that asserts WHERE the cursor ended up. Forgetting the row is the same state
+// a deployment that has never run the follower is in, which is the state each of
+// these tests describes in its first line.
+func freshCursors(t *testing.T, d *db.DB) {
+	t.Helper()
+	_, err := d.Exec(context.Background(),
+		`UPDATE notification_follower_cursors
+		    SET last_at = now(), last_id = '00000000-0000-0000-0000-000000000000', pending_at = NULL`)
+	require.NoError(t, err)
+}
+
 func cursorOf(t *testing.T, d *db.DB, source string) (time.Time, string, *time.Time) {
 	t.Helper()
 	var at time.Time
@@ -101,6 +121,7 @@ func TestIntegration_TheFollowerNotifiesOnceForACapturedPurchase(t *testing.T) {
 	ctx := context.Background()
 
 	// Start the cursor before anything happens, the way a running process does.
+	freshCursors(t, d)
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
 
@@ -154,6 +175,7 @@ func TestIntegration_ACrashBetweenReadingAndEmittingDuplicatesNothing(t *testing
 	f := newFollower()
 	ctx := context.Background()
 
+	freshCursors(t, d)
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
 	fundingID := aCreditFunding(t, d, acct)
@@ -199,6 +221,7 @@ func TestIntegration_TheFollowerFindsARowThatCommittedBehindItsCursor(t *testing
 	f := newFollower()
 	ctx := context.Background()
 
+	freshCursors(t, d)
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
 	fundingID := aCreditFunding(t, d, acct)
@@ -252,6 +275,7 @@ func TestIntegration_ANewSessionTellsThePersonWhoSignedIn(t *testing.T) {
 	f := newFollower()
 	ctx := context.Background()
 
+	freshCursors(t, d)
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
 
@@ -299,6 +323,7 @@ func TestIntegration_AnAccountLeavingActiveTellsItsOwner(t *testing.T) {
 	f := newFollower()
 	ctx := context.Background()
 
+	freshCursors(t, d)
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
 
