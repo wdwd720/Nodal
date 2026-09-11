@@ -222,9 +222,22 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   // And the promotional grant still cannot leave, which is the whole point of
   // deciding per origin rather than per balance: value that was given away does
   // not become withdrawable by being spent and re-earned.
-  const promotional = eligible.buckets.find((bucket) => bucket.origin === "PROMOTIONAL");
-  expect(promotional?.payout_allowed, "a promotional grant never leaves").toBe(false);
-  expect(BigInt(promotional?.withdrawable ?? "1")).toBe(0n);
+  //
+  // Every bucket the grant is behind, not the first one that carries its name.
+  // The answer holds one bucket per (origin, origin floor, root set, finality)
+  // since F-272, so a `find` on the origin would leave a second provenance of
+  // the same origin unasserted -- and the provenance that matters most here is
+  // the one whose ORIGIN is an earning and whose FLOOR is the grant (F-280).
+  const fromAGrant = eligible.buckets.filter(
+    (bucket) => bucket.origin === "PROMOTIONAL" || bucket.origin_floor === "PROMOTIONAL",
+  );
+  expect(fromAGrant.length, "the seeded balance is a promotional grant").toBeGreaterThan(0);
+  expect(
+    fromAGrant
+      .filter((bucket) => bucket.payout_allowed || BigInt(bucket.withdrawable) > 0n)
+      .map((bucket) => `${bucket.origin}/${bucket.origin_floor ?? "?"}`),
+    "a promotional grant never leaves, whichever provenance carries it",
+  ).toEqual([]);
 
   // # What holds value back on a SEEDED tier, and why that is the rule working
   //

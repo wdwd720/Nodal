@@ -178,6 +178,125 @@ function reasonCopy(reason: string): Copy {
   );
 }
 
+/**
+ * An origin in words, for the sentence a person can act on.
+ *
+ * D-131 wrote the origin floor for exactly this: what somebody needs to read is
+ * "this came from a promotional grant", not a word about the trade that moved
+ * it. An origin this page has no phrase for is shown as its own code rather
+ * than guessed at.
+ */
+const ORIGIN_PHRASE: Readonly<Record<string, string>> = {
+  PROMOTIONAL: "a promotional grant",
+  PURCHASED: "a purchase",
+  REFUND: "a refund",
+  CREATOR_EARNING: "a creator earning",
+  DATA_SALE_EARNING: "a data sale",
+  AGENT_SERVICE_EARNING: "an agent service fee",
+  MARKET_CREATOR_EARNING: "a market creator's earning",
+  MARKET_TRADING_PROCEEDS: "trading proceeds",
+  COMPETITION_REWARD: "a competition reward",
+  ADMIN_ADJUSTMENT: "an administrative adjustment",
+  PROVIDER_SETTLEMENT: "a provider settlement",
+};
+
+function originPhrase(origin: string): string {
+  return ORIGIN_PHRASE[origin] ?? `value recorded as ${origin}`;
+}
+
+/** Present, and not an empty string the API sent instead of omitting it. */
+function stated(value: string | undefined): string | undefined {
+  return value === undefined || value === "" ? undefined : value;
+}
+
+/**
+ * The identity of a bucket, which is NOT its origin.
+ *
+ * The API returns one bucket per (origin, origin floor, root set, finality) —
+ * those four are what the payout policy reads about the value itself — so two
+ * rows can carry one origin and two different answers, and the generated
+ * schema says so in as many words. Keying a re-rendered list on the origin
+ * alone is how one row's money figure ends up on another row's provenance
+ * (F-280).
+ */
+function bucketKey(bucket: WithdrawalOriginBucket): string {
+  return [
+    bucket.origin,
+    bucket.origin_floor ?? "",
+    bucket.finality ?? "",
+    (bucket.root_origins ?? []).join("+"),
+  ].join("|");
+}
+
+/**
+ * The provenance a refusal is ABOUT, when it is not the bucket's own origin.
+ *
+ * `refused_root` first, because it is the root THIS policy will not release,
+ * and D-138's whole point is that it is not always the one this build's rank
+ * calls the most restricted. The floor is the fallback: it is the most
+ * restricted root, and on the policies this build ships it is the answer.
+ */
+function refusedProvenance(bucket: WithdrawalOriginBucket): string | undefined {
+  const refused = stated(bucket.refused_root);
+  if (refused !== undefined) return refused;
+  const floor = stated(bucket.origin_floor);
+  return floor === bucket.origin ? undefined : floor;
+}
+
+/**
+ * Why this bucket cannot leave, naming the provenance where the policy's
+ * refusal is about one.
+ *
+ * "The policy does not permit value of this origin to leave" is unactionable on
+ * a bucket of MARKET_TRADING_PROCEEDS that the policy releases: what is refused
+ * is the grant behind it (D-131, D-138, F-280).
+ */
+function bucketReasonSentence(bucket: WithdrawalOriginBucket, reason: string): string {
+  const sentence = reasonCopy(reason).sentence;
+  if (reason !== "ORIGIN_NOT_WITHDRAWABLE") return sentence;
+  const named = refusedProvenance(bucket);
+  if (named === undefined) return sentence;
+  return `${sentence} This value came from ${originPhrase(named)}, and that is what the policy will not release — not the origin it now carries.`;
+}
+
+/**
+ * Where a bucket's value came from, when that is not simply its own origin.
+ *
+ * The column exists because F-272 split one bucket per origin into one per
+ * provenance and left the table with no column that could tell two of them
+ * apart: two rows read MARKET_TRADING_PROCEEDS, one with a positive "May
+ * leave" and one with zero (F-280).
+ */
+function CameFrom(props: { readonly bucket: WithdrawalOriginBucket }): ReactNode {
+  const bucket = props.bucket;
+  const floor = stated(bucket.origin_floor);
+  const roots = bucket.root_origins ?? [];
+  const refused = stated(bucket.refused_root);
+  const elsewhere = roots.filter((root) => root !== bucket.origin);
+  const fallback = floor !== undefined && floor !== bucket.origin ? [floor] : [];
+  const shown = elsewhere.length > 0 ? elsewhere : fallback;
+  if (shown.length === 0 && refused === undefined) {
+    return <span className="absent">nothing else funded it</span>;
+  }
+  return (
+    <span className="cell-prose">
+      {shown.map((root, index) => (
+        <span key={root}>
+          {index > 0 ? " + " : ""}
+          <span className="mono-small">{root}</span>
+          {root === refused ? " (refused)" : ""}
+        </span>
+      ))}
+      {refused !== undefined && !shown.includes(refused) && (
+        <>
+          {shown.length > 0 ? " — refused: " : "refused: "}
+          <span className="mono-small">{refused}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
 /** What each payout state means, and who is acting. */
 const STATE_COPY: Readonly<Record<string, Copy>> = {
   DRAFT: { tone: "neutral", sentence: "Recorded. Eligibility has not been evaluated yet." },
@@ -888,12 +1007,12 @@ export function Withdraw(): ReactNode {
 
               <h3>Where this value came from</h3>
               <DataTable
-                caption="Your Credits by origin, in the order the policy would consume them, with what each bucket is permitted to do"
+                caption="Your Credits by origin and by where that value came from, in the order the policy would consume them, with what each bucket is permitted to do"
                 rows={[...data.buckets].sort(
                   (a: WithdrawalOriginBucket, b: WithdrawalOriginBucket) =>
                     a.consumption_rank - b.consumption_rank,
                 )}
-                rowKey={(bucket: WithdrawalOriginBucket) => bucket.origin}
+                rowKey={bucketKey}
                 columns={[
                   {
                     key: "rank",
@@ -908,6 +1027,11 @@ export function Withdraw(): ReactNode {
                     cell: (bucket: WithdrawalOriginBucket) => (
                       <span className="mono-small">{bucket.origin}</span>
                     ),
+                  },
+                  {
+                    key: "came_from",
+                    header: "Came from",
+                    cell: (bucket: WithdrawalOriginBucket) => <CameFrom bucket={bucket} />,
                   },
                   {
                     key: "held",
@@ -939,13 +1063,22 @@ export function Withdraw(): ReactNode {
                         <span className="absent">nothing in the way</span>
                       ) : (
                         <span className="cell-prose">
-                          {bucket.reasons.map((reason) => reasonCopy(reason).sentence).join(" ")}
+                          {bucket.reasons
+                            .map((reason) => bucketReasonSentence(bucket, reason))
+                            .join(" ")}
                         </span>
                       ),
                   },
                 ]}
               />
               <p className="note">{PROVENANCE_NOTE}</p>
+              <p className="note">
+                One row is one provenance, not one origin: the same origin appears more than once
+                when the value behind it came from different places or is at different stages of
+                funding, and each row is answered on its own. &ldquo;Came from&rdquo; is what
+                funded it, and the origin named after &ldquo;refused&rdquo; is the one this policy
+                will not release.
+              </p>
               <p className="note">
                 The order above is the consumption order: among the origins the policy permits, the
                 most restricted permitted one leaves first. It is the backend's ranking, under

@@ -246,7 +246,8 @@ func TestAuditWV4_TwoRootSetsBehindOneFloorAreTwoBucketsAndTwoAnswers(t *testing
 		ID: credit.NewLotID(), Origin: valuedomain.OriginMarketTradingProceeds,
 		OriginFloor: valuedomain.OriginCreatorEarning,
 		RootOrigins: []valuedomain.CreditOrigin{
-			valuedomain.OriginCreatorEarning, valuedomain.OriginPurchased},
+			valuedomain.OriginCreatorEarning, valuedomain.OriginPurchased,
+		},
 		Finality: valuedomain.FinalitySettled,
 		Quantity: money.QuantityFromInt64(100_000_000), Remaining: money.QuantityFromInt64(100_000_000),
 		CreatedAt: now.Add(-24 * time.Hour),
@@ -329,8 +330,16 @@ func TestAuditWV4_TheWithdrawPageCannotTellTwoBucketsOfOneOriginApart(t *testing
 
 	require.True(t, strings.Contains(page, "Where this value came from"),
 		"fixture check: this is the bucket table F-272 made finer")
-	require.True(t, strings.Contains(page, "rowKey={(bucket: WithdrawalOriginBucket) => bucket.origin}"),
-		"fixture check: the table's React key")
+	// INVERTED from the reproduction, which checked that the table's React key
+	// was `bucket.origin` -- the defect. The key is now the whole provenance,
+	// computed in one place so the page and this check cannot drift; the
+	// assertion below still watches for the old one coming back (F-280).
+	require.True(t, strings.Contains(page, "rowKey={bucketKey}"),
+		"fixture check: the table's React key is the bucket's whole identity")
+	for _, part := range []string{"bucket.origin,", "bucket.origin_floor ??", "bucket.finality ??", "bucket.root_origins ??"} {
+		require.True(t, strings.Contains(page, part),
+			"fixture check: the key is (origin, origin_floor, finality, root_origins); %q is missing", part)
+	}
 
 	// The generated schema says the origin is no longer unique.
 	api := wv4Read(t, filepath.Join(root, "internal", "gen", "api", "api.gen.go"))

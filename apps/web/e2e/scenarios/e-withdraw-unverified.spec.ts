@@ -77,6 +77,93 @@ test("the eligible figure is per origin, and nothing is rendered as a bare total
   await expect(page.getByText("Gross. It is not what can leave.")).toBeVisible();
 });
 
+/**
+ * Two buckets of ONE origin, which is what the eligibility answer has returned
+ * since F-272 and what the table could not tell apart until F-280.
+ *
+ * The API returns one bucket per (origin, origin floor, root set, finality),
+ * because those four are what the payout policy reads about the value itself.
+ * So an account holding trading proceeds out of a purchase and trading proceeds
+ * out of a grant gets two rows with one label, one saying value may leave and
+ * one saying none may, and until this change nothing on the page said which was
+ * which — and the list was keyed on `origin`, which is no longer unique.
+ *
+ * Producing that state through the product would need purchased value behind
+ * one trade and granted value behind another, and every Credit on a seeded tier
+ * is a grant. So the ANSWER is composed here and the PAGE is what is under
+ * test: the figures below are this test's own, they are never written anywhere,
+ * and everything else in the payload is the real one this account got.
+ */
+test("two buckets of one origin render as two rows that say where each came from", async ({
+  page,
+}) => {
+  const accountId = await accountIdOf(page);
+  const real = await page.request.get(`/v1/me/eligibility?account_id=${accountId}`);
+  expect(real.status(), "the real answer is readable").toBe(200);
+  const answer = (await real.json()) as Record<string, unknown>;
+
+  const composed = {
+    ...answer,
+    withdrawable_now: "200000000",
+    buckets: [
+      {
+        origin: "MARKET_TRADING_PROCEEDS",
+        origin_floor: "MARKET_TRADING_PROCEEDS",
+        root_origins: ["MARKET_TRADING_PROCEEDS"],
+        finality: "SETTLED",
+        quantity: "200000000",
+        withdrawable: "200000000",
+        payout_allowed: true,
+        consumption_rank: 6,
+        reasons: [],
+      },
+      {
+        origin: "MARKET_TRADING_PROCEEDS",
+        origin_floor: "PROMOTIONAL",
+        root_origins: ["PROMOTIONAL", "MARKET_TRADING_PROCEEDS"],
+        refused_root: "PROMOTIONAL",
+        finality: "SETTLED",
+        quantity: "150000000",
+        withdrawable: "0",
+        payout_allowed: false,
+        consumption_rank: 6,
+        reasons: ["ORIGIN_NOT_WITHDRAWABLE"],
+      },
+    ],
+  };
+  await page.route("**/v1/me/eligibility**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(composed),
+    });
+  });
+
+  await page.goto("/withdraw");
+  await page.waitForLoadState("networkidle");
+  const breakdown = page.getByRole("group", { name: /Your Credits by origin/ });
+  await expect(breakdown).toBeVisible();
+
+  // Two rows, not one. A page that keyed on the origin would render whichever
+  // of them React reconciled last.
+  const rows = breakdown.getByRole("row").filter({ hasText: "MARKET_TRADING_PROCEEDS" });
+  await expect(rows).toHaveCount(2);
+
+  // The one nothing else funded says so, and its money is the money that may
+  // leave.
+  const own = rows.filter({ hasText: "nothing else funded it" });
+  await expect(own).toHaveCount(1);
+  await expect(own).toContainText("200.00");
+
+  // The one a grant funded names the grant, marks it as the origin this policy
+  // refuses, and explains the refusal in words rather than in the enum.
+  const fromAGrant = rows.filter({ hasText: "PROMOTIONAL" });
+  await expect(fromAGrant).toHaveCount(1);
+  await expect(fromAGrant).toContainText("(refused)");
+  await expect(fromAGrant).toContainText("This value came from a promotional grant");
+  await expect(fromAGrant).toContainText("not the origin it now carries");
+});
+
 test("a direct POST /v1/payouts is refused for the same reason the page gives", async ({ page }) => {
   const accountId = await accountIdOf(page);
 
