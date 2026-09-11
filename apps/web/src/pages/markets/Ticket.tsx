@@ -16,10 +16,19 @@
  *     in exact BigInt base units, rounded towards them (`lib/min-output.ts`).
  *     Defaulting it to the quote would be a tolerance of zero dressed up as a
  *     protection, and would refuse nearly every order.
- *   - THE KEY IS MINTED AT CONFIRMATION, never on render, and it is KEPT. A
- *     session that expires between the press and the answer is scenario J: the
- *     draft and the key survive the sign-in, and the retry is the same request
- *     rather than a second one.
+ *   - THE KEY IS MINTED AT CONFIRMATION, never on render, and it is kept for
+ *     exactly as long as the request it belongs to. A session that expires
+ *     between the press and the answer is scenario J: the draft and the key
+ *     survive the sign-in, and the retry is the same request rather than a
+ *     second one. But a key kept PAST its body is the opposite defect, and it
+ *     reads worse — the backend compares the body it recorded, finds a
+ *     different `quote_id`, and refuses with INVALID_IDEMPOTENCY_REUSE, so a
+ *     customer who has just re-priced and confirmed is told something about a
+ *     header instead of something about their order. Every route back to the
+ *     confirm button goes through a new quote, so the key belongs to the quote
+ *     as much as to the amount: `lib/idempotency.ts` holds it against a
+ *     signature of the whole body and mints a new one the moment any part of
+ *     it changes.
  *   - AFTER A FILL, THE FILL IS SHOWN. Not the quote. They are different
  *     numbers and the quote is the one that did not happen.
  *   - NOTHING HERE COMPUTES A PRICE, A FEE OR A BALANCE. Every figure except
@@ -31,8 +40,6 @@
  * is.
  */
 import { useEffect, useState, type ReactNode } from "react";
-
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import {
   useCreditBalance,
@@ -50,6 +57,7 @@ import { Figure } from "../../components/Figure.tsx";
 import { Disclosure, Field, FieldGrid, Panel } from "../../components/Layout.tsx";
 import { fromBaseUnits } from "../../lib/format.ts";
 import { parseQuantityInput } from "../../lib/money.ts";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import { TOLERANCES, meetsMinimum, minimumOutput } from "../../lib/min-output.ts";
 import { secondsUntil } from "../../lib/time.ts";
 import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK } from "../../lib/honesty.ts";
@@ -67,15 +75,9 @@ interface Draft {
   /** What the customer typed, as they typed it. */
   readonly amount: string;
   readonly toleranceBps: number;
-  /**
-   * Minted at the moment of confirmation and kept until the order is answered.
-   * It survives a sign-in so a retry after re-authenticating is the same
-   * request, which is what stops scenario J double-submitting.
-   */
-  readonly idempotencyKey: string;
 }
 
-const EMPTY: Draft = { side: "BUY", amount: "", toleranceBps: 100, idempotencyKey: "" };
+const EMPTY: Draft = { side: "BUY", amount: "", toleranceBps: 100 };
 
 /** Whole seconds left on a quote, ticking. Undefined when there is no quote. */
 function useCountdown(expiresAt: string | undefined): number | undefined {
@@ -108,6 +110,7 @@ export function Ticket(props: {
   const { market } = props;
   const kept = useSurvivesSignIn<Draft>(`markets.ticket.${market.market_id}`, EMPTY);
   const draft = kept.value;
+  const orderKey = useIdempotencyKey(`markets.ticket.${market.market_id}.key`);
   const quote = useNativeQuote();
   const order = useNativeOrder();
   const credits = useCreditBalance(props.accountId);
@@ -127,7 +130,28 @@ export function Ticket(props: {
   const change = (patch: Partial<Draft>): void => {
     quote.reset();
     order.reset();
-    kept.set({ ...draft, ...patch, idempotencyKey: "" });
+    orderKey.clear();
+    kept.set({ ...draft, ...patch });
+  };
+
+  /**
+   * Ask the market to price it again.
+   *
+   * Both routes to the confirm button come through here, and both discard the
+   * key: a new quote is a new `quote_id`, a new `quote_id` is a different body,
+   * and a different body under the same key is the refusal the customer cannot
+   * do anything about. The key is minted again at the next confirmation, which
+   * is where it belongs.
+   */
+  const requote = (): void => {
+    order.reset();
+    orderKey.clear();
+    quote.mutate({
+      marketId: market.market_id,
+      accountId: props.accountId ?? "",
+      side: draft.side,
+      amount: parsed.ok ? parsed.value : "",
+    });
   };
 
   if (props.accountId === undefined) {
@@ -151,7 +175,8 @@ export function Ticket(props: {
         onAgain={() => {
           order.reset();
           quote.reset();
-          kept.set({ ...draft, amount: "", idempotencyKey: "" });
+          orderKey.clear();
+          kept.set({ ...draft, amount: "" });
         }}
       />
     );
@@ -169,12 +194,7 @@ export function Ticket(props: {
           onSubmit={(event) => {
             event.preventDefault();
             if (!parsed.ok) return;
-            quote.mutate({
-              marketId: market.market_id,
-              accountId: props.accountId ?? "",
-              side: draft.side,
-              amount: parsed.value,
-            });
+            requote();
           }}
         >
           <fieldset className="ticket-side">
@@ -297,37 +317,51 @@ export function Ticket(props: {
             side={draft.side}
             toleranceBps={draft.toleranceBps}
             onTolerance={(bps) => {
+              // The tolerance IS `min_output`, which is in the body. A changed
+              // tolerance is therefore a changed order, not a retry of the last
+              // one — and it does not need a new quote, so the key is dropped
+              // here rather than by `requote`.
               order.reset();
-              kept.set({ ...draft, toleranceBps: bps, idempotencyKey: "" });
+              orderKey.clear();
+              kept.set({ ...draft, toleranceBps: bps });
             }}
             pending={order.isPending}
             error={order.isError ? order.error : undefined}
-            onRequote={() => {
-              order.reset();
-              quote.mutate({
-                marketId: market.market_id,
-                accountId: props.accountId ?? "",
-                side: draft.side,
-                amount: parsed.value,
-              });
-            }}
+            onRequote={requote}
             onConfirm={() => {
-              // Minted here and nowhere else. Reused, not re-minted, when the
-              // same confirmation is retried after a sign-in or a transport
-              // failure — that is what makes the retry idempotent.
-              const key = draft.idempotencyKey === "" ? newIdempotencyKey() : draft.idempotencyKey;
-              kept.set({ ...draft, idempotencyKey: key });
+              const minOutput = minimumOutput(quote.data.expected_output, draft.toleranceBps);
+              // Minted here and nowhere else, against the body the backend will
+              // compare it to. Pressing confirm twice on the SAME order reuses
+              // it — that is the retry idempotency exists for. Confirming after
+              // anything in the body moved mints a new one, because it is a new
+              // order and replaying the old one would fill something nobody
+              // asked for.
+              const key = orderKey.forRequest(
+                requestSignature([
+                  quote.data.quote_id,
+                  draft.side,
+                  parsed.value,
+                  minOutput,
+                ]),
+              );
               order.mutate(
                 {
                   marketId: market.market_id,
                   accountId: props.accountId ?? "",
                   side: draft.side,
                   amount: parsed.value,
-                  minOutput: minimumOutput(quote.data.expected_output, draft.toleranceBps),
+                  minOutput,
                   quoteId: quote.data.quote_id,
                   idempotencyKey: key,
                 },
-                { onSuccess: props.onFilled },
+                {
+                  onSuccess: () => {
+                    // The order is answered; the key has nothing left to
+                    // protect and a kept one would only be able to be wrong.
+                    orderKey.clear();
+                    props.onFilled();
+                  },
+                },
               );
             }}
           />

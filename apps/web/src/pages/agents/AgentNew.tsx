@@ -29,7 +29,6 @@
  */
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import {
   useCompileStrategy,
@@ -60,6 +59,7 @@ import {
 import { Refusal } from "../../components/Refusal.tsx";
 import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK } from "../../lib/honesty.ts";
 import { parseQuantityInput } from "../../lib/money.ts";
+import { useIdempotencyKey, requestSignature } from "../../lib/idempotency.ts";
 import { useSurvivesSignIn } from "../../lib/survives-sign-in.ts";
 import { formatInstant } from "../../lib/time.ts";
 import { useActiveAccountId } from "../../session.tsx";
@@ -281,6 +281,15 @@ export function AgentNew(): ReactNode {
   const compile = useCompileStrategy();
   const createAgent = useCreateAgent();
 
+  // Three commands, three keys, each minted at its own confirmation and kept
+  // only while the body it belongs to is unchanged. They survive the sign-in
+  // round trip with the drafts above, so a session that expires between the
+  // press and the answer comes back to a RETRY of the same request rather than
+  // to a second strategy or a second agent.
+  const strategyKey = useIdempotencyKey("agents.new.strategy.key");
+  const compileKey = useIdempotencyKey("agents.new.compile.key");
+  const agentKey = useIdempotencyKey("agents.new.agent.key");
+
   if (accountId === undefined) {
     return (
       <Page title="Create an agent">
@@ -372,14 +381,23 @@ export function AgentNew(): ReactNode {
                   accountId,
                   name: description.value.name.trim(),
                   description: description.value.text.trim(),
-                  // Minted at the moment of confirmation, so a double submit
-                  // records one strategy and a retry after a sign-in records
-                  // the same one.
-                  idempotencyKey: newIdempotencyKey(),
+                  // Minted at the moment of confirmation and reused for a retry
+                  // of this same text, so a double submit records one strategy
+                  // and a retry after a sign-in records the same one. Editing
+                  // the name or the description is a different strategy, and a
+                  // different strategy gets its own key.
+                  idempotencyKey: strategyKey.forRequest(
+                    requestSignature([
+                      accountId,
+                      description.value.name.trim(),
+                      description.value.text.trim(),
+                    ]),
+                  ),
                 },
                 {
                   onSuccess: (created) => {
                     setStrategy(created);
+                    strategyKey.clear();
                     description.clear();
                   },
                 },
@@ -503,12 +521,27 @@ export function AgentNew(): ReactNode {
               busy={compile.isPending}
               busyLabel="Compiling…"
               onClick={() => {
-                compile.mutate({
-                  strategyId: strategy.id,
-                  // A new key is a new request, which is the right reading:
-                  // asking again is a decision, not a retry of the last one.
-                  idempotencyKey: newIdempotencyKey(),
-                });
+                compile.mutate(
+                  {
+                    strategyId: strategy.id,
+                    // "Try compiling again" is a new DECISION, not a retry of the
+                    // last one — the attempt number the backend records is the
+                    // evidence that it was asked twice — so each attempt carries
+                    // its own key. What the key still buys is the case a fresh one
+                    // would get wrong: a reply lost in transit, where pressing the
+                    // button again must re-send THIS attempt rather than start
+                    // another. So it is minted per attempt and dropped the moment
+                    // the backend answers either way.
+                    idempotencyKey: compileKey.forRequest(
+                      requestSignature([strategy.id, String(compile.data?.attempt_no ?? "")]),
+                    ),
+                  },
+                  {
+                    onSettled: () => {
+                      compileKey.clear();
+                    },
+                  },
+                );
               }}
             >
               {compile.data === undefined ? "Compile this strategy" : "Try compiling again"}
@@ -561,9 +594,30 @@ export function AgentNew(): ReactNode {
                 name: grant.value.agentName.trim(),
                 authorityLevel: grant.value.level,
                 limits,
-                idempotencyKey: newIdempotencyKey(),
+                // The grant IS the body: the version being given authority, the
+                // level, and the three limits. Change any of them and this is a
+                // different agent with different authority, which must never be
+                // created under the key of the last one.
+                idempotencyKey: agentKey.forRequest(
+                  requestSignature([
+                    version.id,
+                    grant.value.agentName.trim(),
+                    String(grant.value.level),
+                    limits.budget_credits,
+                    limits.per_trade_cap_credits,
+                    limits.daily_loss_stop_credits,
+                    String(limits.max_position_share_bps),
+                    [...grant.value.assets].join(","),
+                    JSON.stringify(limits.schedule),
+                  ]),
+                ),
               },
-              { onSuccess: () => grant.clear() },
+              {
+                onSuccess: () => {
+                  agentKey.clear();
+                  grant.clear();
+                },
+              },
             );
           }}
         >
