@@ -43,6 +43,7 @@ import { POLICY_PAGES } from "./content/policies/index.ts";
 import { AppShell } from "./components/AppShell.tsx";
 import { Boot } from "./components/Boot.tsx";
 import { Explanation, Loading } from "./components/DataState.tsx";
+import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { clearSignInPending, signInPending } from "./lib/survives-sign-in.ts";
 import { signInPathFor, useSession } from "./session.tsx";
 
@@ -206,7 +207,15 @@ function RequireSession(): ReactNode {
           {session.error !== undefined && session.error !== null && (
             <Explanation error={session.error} onRetry={session.refetch} />
           )}
-          <Outlet />
+          {/* Inside the shell, around the page. A render that throws used to
+              unmount the entire application and leave a blank document —
+              nothing to read, nothing to press, and the same result on every
+              reload. Here the navigation, the account menu and the sandbox
+              label survive, so a fault on one screen leaves the rest of the
+              product usable and the customer somewhere to go. */}
+          <ErrorBoundary what="This page">
+            <Outlet />
+          </ErrorBoundary>
         </AppShell>
       </OnboardingGate>
     </SessionBoundary>
