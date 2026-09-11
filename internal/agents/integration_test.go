@@ -24,6 +24,7 @@ import (
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/strategy"
+	"github.com/nodal/controlplane/internal/strategy/ir"
 )
 
 // These tests need an isolated database, for the reason internal/agent's own
@@ -765,11 +766,19 @@ func successResult(t *testing.T, sid strategy.StrategyID) strategy.Result {
 	t.Helper()
 	vid := strategy.NewVersionID()
 	aid := strategy.NewAttemptID()
+	// A real document and its real hash. The fixture used to return a nil IR
+	// and the word "irhash", which a compiler cannot produce and which
+	// persist now refuses: the hash is what every later comparison is made
+	// against, so one that does not describe its document makes all of them
+	// agree about nothing (F-189).
+	doc := &ir.IR{SchemaVersion: ir.SchemaVersion}
+	hash, err := ir.SemanticHash(doc)
+	require.NoError(t, err)
 	return strategy.Result{
 		Outcome: strategy.OutcomeSuccess,
 		Version: &strategy.Version{
-			ID: vid, StrategyID: sid, Version: 1, SchemaVersion: 1,
-			IRHash: bytes32("irhash"), EffectSet: []string{"READ_MARKET_DATA"},
+			ID: vid, StrategyID: sid, Version: 1, SchemaVersion: ir.SchemaVersion,
+			IR: doc, IRHash: hash, EffectSet: []string{"READ_MARKET_DATA"},
 			Status: strategy.StatusCompiled, SourceKind: "NATURAL_LANGUAGE", SourceHash: bytes32("src"),
 			CompilerVersion: "fake/1", RiskPolicy: "risk/v1", RiskPolicyHash: bytes32("risk"),
 			HumanReadable: "buy the dip, in words a person can check", BuiltAt: time.Now().UTC(),
