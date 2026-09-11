@@ -111,7 +111,6 @@ open.
 | The wave-B fixes are merged; the withdrawal area's second audit round is running | `fix/withdrawal` (`8a1b701`: F-224–F-234, F-249, F-250; the four P1s on the conversion path closed; earned Credits settle) and `fix/docs` (`b861be4`: F-235–F-248, F-253) are on the branch; the drill is at 00810; the full matrix is re-running | Round two of the withdrawal audit reporting fewer and lower findings than round one ("repeat until findings flatten"), and the matrix green on the merged tree |
 | The productization build has not been deployed to STAGING or seen in a browser there | `api-nodal.actorvia.xyz` serves the pre-productization build; the human queue's items 1–4 gate the deploy and the CNAME | The human's queue, then §2's `healthz`/`readyz`/`version` check and §56's browser walk, recorded in `PRODUCTION_EVIDENCE_INDEX.md` |
 | CI has not run on the productization tree | Actions minutes exhausted (BLOCKED_EXTERNAL row 9) | Queue item 7, then a green run on PR #1 |
-| Scenario D stops at "compile" on every tier: no route accepts a strategy version, so no agent can be created anywhere (F-255), and the compiler seam was never given a registry loader (F-256) | ADR-0029 declared the compiler an honest absence and the acceptance step was never built behind the web's "review" screen | `wt/agents-compiler`: the acceptance route, a sandbox-tier structured compiler that interprets no prose and is refused in PROD, the review-and-accept screen, Scenario D end to end; the runtime stays NOT_DEPLOYED (F-65) and the page says so |
 | The final report (§65) and the `SOFTWARE_COMPLETE` decision | Drafted (`docs/audit/PRODUCTIZATION_FINAL_REPORT.md`) with its pending items named; every input to it is indexed in `PRODUCTION_EVIDENCE_INDEX.md` | Finished after the above, against observed evidence, with the flag set by its own conditions |
 
 ### The pre-productization list (still open)
@@ -213,8 +212,12 @@ section below:
 
 Wave B — the withdrawal-verification area (eleven findings, four P1),
 documentation against the tree (fourteen, none above P2, from a 4,704-row
-claims ledger of which 4,461 held) and the browser end to end — is being fixed
-as this is written; its findings are F-224 onward.
+claims ledger of which 4,461 held) and the browser end to end (six) — is fixed
+and merged; its findings are F-224–F-253. The audits also exposed that no
+route accepted a strategy version and no tier had a compiler, so "Create
+Agent" could never complete (F-255–F-257); the acceptance route and a
+sandbox-tier structured compiler that interprets no prose closed that
+(`4814887`).
 
 ## What the 2026-09-10 audit changed
 

@@ -132,12 +132,26 @@ policy, each naming the capability gate it would need, and the product shows
 them disabled with that sentence. An agent binds only to a strategy version
 its owner owns and accepted (F-187, D-105); the runtime evaluator is
 deliberately without a caller (F-65) and the agent page says so. **What the
-audits exposed:** no route accepted a version and no deployment had a
-compiler, so "Create Agent" could not complete anywhere (F-255, F-256) — the
-acceptance route and a sandbox-tier structured compiler (no prose is
-interpreted; refused in PROD) are on `wt/agents-compiler` *(pending merge)*;
-"inspect decisions" stays the honest empty state on every tier of this build
-because the runtime is not deployed. Class: `STATIC_PROOF`.
+audits exposed and what closed it (`4814887`):** no route accepted a version
+and no deployment had a compiler, so "Create Agent" could not complete
+anywhere (F-255, F-256), and the seeded risk policy permitted no venue, so
+even a model-backed compiler could never have produced a version (F-257).
+Now: `POST /v1/strategies/{id}/versions/{n}/accept` (owner-only, step-up,
+the IR hash echoed, `strategy.version.accepted` on the audit stream —
+D-128); a sandbox-tier **structured** compiler (`internal/provider/
+compilersandbox`, D-129) that accepts one declared grammar — universe,
+entry/exit as a price threshold or an interval, risk limits, capital limit,
+frequency, PAPER mode — refuses unknown fields, names every missing one
+(`STRUCTURED_CONSTRAINTS_REQUIRED`), interprets no prose, calls no model,
+and is refused in PROD at construction, by configuration and by the schema
+(`STRUCTURED_SANDBOX` lineage, `sandbox`/`environment` on the version); a
+review screen showing the rendered strategy before acceptance (§18); Scenario
+D end to end in Playwright (describe → compile → review → accept → create at
+level 1 and 3 → pause → resume → disable). "Inspect decisions" stays the
+honest empty state on every tier of this build because the runtime is not
+deployed (D-130). Residual: `strategy_versions.status` is application-written
+with no transition table (F-258). Class: `STATIC_PROOF` + `LIVE_OBSERVED`
+(local).
 
 ## 10 · Purchases — Stripe sandbox evidence
 
@@ -268,9 +282,9 @@ Results: green in the full integration run (58 packages) and
 
 ## 19 · Restore
 
-`make restore-drill` after every merge: the latest at migration **00810 —
+`make restore-drill` after every merge: the latest at migration **00813 —
 OK, 159 tables, row counts identical, 0 accounts with balance drift, journal
-hashes equal, one live state change on the restored database, 15.1 s**
+hashes equal, one live state change on the restored database, 12.7 s**
 (`docs/operations/BACKUP_RESTORE.md`, held to the migration head by
 `TestDocs_CountsMatchTheCode`). Class: `LIVE_OBSERVED`.
 
