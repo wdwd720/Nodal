@@ -281,6 +281,8 @@ type WithdrawalRequest struct {
 type GatesPort interface {
 	List(ctx context.Context) ([]GateView, error)
 	Act(ctx context.Context, capability gates.Capability, action GateAction, req gates.Proposal, note string) (GateView, error)
+	// History lists the gate's recorded transitions, oldest first.
+	History(ctx context.Context, capability gates.Capability) ([]gates.Transition, error)
 }
 
 // GateAction is one step of the gate state machine.

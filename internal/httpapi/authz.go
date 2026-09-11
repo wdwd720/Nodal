@@ -210,6 +210,7 @@ var operationPolicies = map[string]operationPolicy{
 	"GetAdminAccounts":                 {AnyOf: perms(security.PermAccountReadAny)},
 	"PostAdminAccountsAccountIdStatus": {AnyOf: perms(security.PermAccountFreeze), StepUp: true, Mutating: true},
 	"GetAdminGates":                    {AnyOf: perms(security.PermGateRead)},
+	"GetAdminGatesCapabilityHistory":   {AnyOf: perms(security.PermGateRead)},
 	"PostAdminGatesCapabilityAction": {
 		AnyOf: perms(security.PermGatePropose, security.PermGateApprove), StepUp: true, Mutating: true,
 	},
