@@ -398,3 +398,61 @@ async function completeOnboardingIfOwed(page: Page, displayName: string): Promis
     await page.waitForTimeout(600);
   }
 }
+
+/* ==========================================================================
+ * The kept idempotency key against a body the page itself changes
+ * ========================================================================== */
+
+test("F-web: a second confirmation of the same trade is evaluated, not refused for its key", async ({
+  page,
+}) => {
+  // The ticket mints the key at confirmation and KEEPS it, which is right for a
+  // replay of the SAME request. But every route back to the confirm button goes
+  // through a new quote, and `quote_id` is in the body: the key is unchanged
+  // and the body is not, so the backend answers INVALID_IDEMPOTENCY_REUSE and
+  // the customer is told the wrong thing about their own order for as long as
+  // the amount stays the same.
+  const res = await page.request.get("/v1/native-markets?limit=10");
+  const body = (await res.json()) as {
+    markets: Array<{ market_id: string; market_status: string }>;
+  };
+  const market = body.markets.find((m) => m.market_status === "ACTIVE");
+  test.skip(market === undefined, "no market open for trading");
+
+  await page.goto(`/markets/${market?.market_id ?? ""}`);
+  await expect(page.locator("h1")).toHaveCount(1);
+  await page.waitForLoadState("networkidle");
+
+  // Far beyond the balance: the quote is answered and the ORDER is refused.
+  // That is a refusal the page is built to show, not a fault.
+  await page.getByLabel("Credits to spend").fill("999999");
+  await page.getByRole("button", { name: "Get a quote" }).click();
+  await expect(page.getByRole("button", { name: "Buy with Credits" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.getByRole("button", { name: "Buy with Credits" }).click();
+
+  const first = await page
+    .locator(".refusal, .explain")
+    .first()
+    .innerText({ timeout: 20_000 });
+  expect(
+    /LEDGER_NEGATIVE_BALANCE|INSUFFICIENT/i.test(first),
+    `the first refusal names the real reason: ${first}`,
+  ).toBe(true);
+
+  // Ask the market to price it again — the only thing the page offers that does
+  // not change what is being ordered — and confirm again.
+  await page.getByRole("button", { name: "Get a quote" }).click();
+  await expect(page.getByRole("button", { name: "Buy with Credits" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await page.getByRole("button", { name: "Buy with Credits" }).click();
+  await page.waitForTimeout(2500);
+
+  const second = await page.evaluate(() => document.body.innerText);
+  expect(
+    /INVALID_IDEMPOTENCY_REUSE|used for a different request/i.test(second),
+    "the second confirmation is answered about the trade, not about its idempotency key",
+  ).toBe(false);
+});
