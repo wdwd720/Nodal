@@ -353,15 +353,6 @@ type absenceClaim struct {
 
 func absenceClaims() []absenceClaim {
 	return []absenceClaim{
-		{"docs/threat-model/THREAT_MODEL.md",
-			"`make security`, `make contract` and `make iac-scan` pass on empty directories; no git remote", "test/security"},
-		{"docs/threat-model/THREAT_MODEL.md",
-			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/reconciliation"},
-		{"docs/threat-model/THREAT_MODEL.md",
-			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/settlement"},
-		{"docs/threat-model/THREAT_MODEL.md",
-			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/execution"},
-		{"docs/threat-model/THREAT_MODEL.md", "no Terraform, IAM task roles", "infra/terraform"},
 		{"docs/operations/BACKUP_RESTORE.md",
 			"`docs/operations/DISASTER_RECOVERY.md` (pending)", "docs/operations/DISASTER_RECOVERY.md"},
 		{"docs/operations/BACKUP_RESTORE.md",
@@ -388,6 +379,14 @@ func retiredAbsenceClaims() []absenceClaim {
 		{"docs/security/SECURITY.md",
 			"**no writer exists** — nothing on disk records a security event yet", "security_events"},
 		{"docs/security/SECURITY.md", "much of it is now wrong in the UNDERSTATING direction", "docs/security/SECURITY.md"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`make security`, `make contract` and `make iac-scan` pass on empty directories; no git remote", "test/security"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/reconciliation"},
+		{"docs/threat-model/THREAT_MODEL.md", "no Terraform, IAM task roles", "infra/terraform"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`internal/{signing, wallet, execution, reconciliation, settlement, quote, instruments, intent, agent, strategy, model, prediction}`, every worker binary |",
+			"internal/signing"},
 	}
 }
 
@@ -409,6 +408,27 @@ func presenceClaims() []absenceClaim {
 			"IMPLEMENTED (`internal/model/prompt.go`", "internal/model/prompt.go"},
 		{"docs/security/SECURITY.md",
 			"`docs/runbooks/` holds nineteen runbooks and an index", "docs/runbooks/README.md"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`test/security` holds twenty test files and `test/contract` eight over recorded provider fixtures",
+			"test/security"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`test/security` holds twenty test files and `test/contract` eight over recorded provider fixtures",
+			"test/contract"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`internal/reconciliation`, `internal/settlement` and `internal/execution` hold 67 Go files",
+			"internal/reconciliation"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`internal/reconciliation`, `internal/settlement` and `internal/execution` hold 67 Go files",
+			"internal/settlement"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`internal/reconciliation`, `internal/settlement` and `internal/execution` hold 67 Go files",
+			"internal/execution"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`infra/terraform` carries per-service task roles (`modules/ecs-service`)",
+			"infra/terraform/modules/ecs-service"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`nativemarket.ConservativeSafetyPolicy()` sets `circuit_breaker_move_bps: 0`",
+			"internal/nativemarket/safety.go"},
 	}
 }
 
