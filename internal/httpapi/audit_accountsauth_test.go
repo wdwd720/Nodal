@@ -104,7 +104,7 @@ func TestAudit_MeRoutesNameAnAccountInTheQueryStringWhereTheInvariantTestCannotS
 				continue
 			}
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr {
+			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
 			if ft.Kind() != reflect.Struct {
@@ -268,7 +268,7 @@ func TestAudit_TheClosureDecisionSurfaceCarriesNoFinancialFact(t *testing.T) {
 	seen := map[string]bool{}
 	var walk func(reflect.Type, int)
 	walk = func(tp reflect.Type, depth int) {
-		for tp.Kind() == reflect.Ptr || tp.Kind() == reflect.Slice {
+		for tp.Kind() == reflect.Pointer || tp.Kind() == reflect.Slice {
 			tp = tp.Elem()
 		}
 		if tp.Kind() != reflect.Struct || depth > 3 {

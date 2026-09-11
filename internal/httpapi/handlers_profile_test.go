@@ -229,7 +229,7 @@ func TestProfile_EveryMeOperationNamingAnAccountIsAccountedFor(t *testing.T) {
 				continue
 			}
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr {
+			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
 			if ft.Kind() != reflect.Struct {
