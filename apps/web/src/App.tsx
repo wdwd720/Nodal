@@ -43,12 +43,16 @@ import { signInPathFor, useSession } from "./session.tsx";
 import { Activity } from "./pages/Activity.tsx";
 import { Agents } from "./pages/Agents.tsx";
 import { CreateAsset } from "./pages/CreateAsset.tsx";
-import { Home } from "./pages/Home.tsx";
+import { Home } from "./pages/home/Home.tsx";
 import { Marketplace } from "./pages/Marketplace.tsx";
 import { NativeMarkets } from "./pages/NativeMarkets.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { Portfolio } from "./pages/Portfolio.tsx";
-import { Settings } from "./pages/Settings.tsx";
+import { BuyCredits } from "./pages/credits/BuyCredits.tsx";
+import { Notifications } from "./pages/notifications/Notifications.tsx";
+import { AccountStanding } from "./pages/settings/AccountStanding.tsx";
+import { Security as SecuritySettings } from "./pages/settings/Security.tsx";
+import { Settings } from "./pages/settings/Settings.tsx";
 
 import { GetStarted } from "./pages/public/GetStarted.tsx";
 import { HowItWorks } from "./pages/public/HowItWorks.tsx";
@@ -207,7 +211,11 @@ export function App(): ReactNode {
         <Route path="/agents" element={<Agents />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/activity" element={<Activity />} />
+        <Route path="/buy-credits" element={<BuyCredits />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/security" element={<SecuritySettings />} />
+        <Route path="/settings/account" element={<AccountStanding />} />
       </Route>
 
       <Route path="*" element={<NotFoundRoute />} />

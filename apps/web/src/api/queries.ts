@@ -50,6 +50,18 @@ import {
   itemsSpec,
   validated,
   validatedList,
+  agentSpec,
+  creditPricingSpec,
+  creditPurchaseSpec,
+  markedReadSpec,
+  meAuditEntrySpec,
+  myAccountSpec,
+  notificationPreferenceSpec,
+  notificationSpec,
+  securitySummarySpec,
+  termsStateSpec,
+  unreadCountSpec,
+  userProfileSpec,
 } from "./contract.ts";
 
 export type Principal = Schemas["Principal"];
@@ -815,6 +827,409 @@ export function useCreatePayout(): UseMutationResult<PayoutRequest, unknown, Cre
     onSuccess: (_req, r) => {
       void qc.invalidateQueries({ queryKey: nodalKeys.payouts(r.accountId) });
       void qc.invalidateQueries({ queryKey: nodalKeys.credits(r.accountId) });
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Buying Credits, the notification centre, and the account's own standing
+ * (USER_JOURNEY §3, §4, §9).
+ *
+ * The shape of the purchase hooks is the interesting part. `POST /v1/payments`
+ * answers 201 with a `client_secret` on creation and 200 WITHOUT one on an
+ * idempotent replay, and the secret is never returned by a read. So the secret
+ * exists in exactly one place for exactly as long as the mutation result lives,
+ * and nothing here writes it to a query cache: a cached provider secret is a
+ * second browser resuming somebody else's payment form.
+ *
+ * The state of a purchase, by contrast, is a read that must be allowed to go
+ * stale and be asked again — the browser learns that a payment captured from
+ * `GET /v1/payments/{id}` and from the event stream, never from the redirect
+ * the provider sent the customer back with.
+ * ------------------------------------------------------------------------ */
+
+export type CreditPricing = Schemas["CreditPricing"];
+/**
+ * The purchase, plus the sandbox flag.
+ *
+ * The flag is declared here as well as in the generated types because the API
+ * gained it after this page was written, and a page that renders a sandbox
+ * label must compile against an API that has not been regenerated yet. The
+ * intersection is a no-op once the generated type carries it. It stays
+ * optional: an absent flag means the deployment did not say, which labels
+ * nothing and never quietly means "live".
+ */
+export type CreditPurchase = Schemas["CreditPurchase"] & { readonly sandbox?: boolean };
+export type Notification = Schemas["Notification"];
+export type NotificationKind = Schemas["NotificationKind"];
+export type NotificationPreference = Schemas["NotificationPreferences"]["items"][number];
+export type UserProfile = Schemas["UserProfile"];
+export type TermsState = Schemas["TermsState"];
+export type MyAccount = Schemas["MyAccount"];
+export type SecuritySummary = Schemas["SecuritySummary"];
+export type MeAuditEntry = Schemas["MeAuditPage"]["items"][number];
+export type Agent = Schemas["Agent"];
+
+export const meKeys = {
+  pricing: ["credit-pricing"] as const,
+  purchase: (id: string) => ["credit-purchase", id] as const,
+  agents: (accountId: string) => ["agents", accountId] as const,
+  notifications: (unread: boolean, cursor: string) => ["notifications", unread, cursor] as const,
+  unreadCount: ["notifications-unread-count"] as const,
+  notificationPreferences: ["notification-preferences"] as const,
+  terms: ["terms-acceptances"] as const,
+  myAccount: ["my-account"] as const,
+  security: ["my-security"] as const,
+  audit: (cursor: string) => ["my-audit", cursor] as const,
+};
+
+/** The rate and the bounds, as the server states them. Nothing derives them here. */
+export function useCreditPricing(): UseQueryResult<CreditPricing> {
+  return useQuery({
+    queryKey: meKeys.pricing,
+    queryFn: async () => {
+      const { data } = await api.GET("/credits/pricing", {});
+      return validated<CreditPricing>(data, creditPricingSpec, "/credits/pricing");
+    },
+  });
+}
+
+export interface StartPurchaseInput {
+  readonly accountId: string;
+  /** Exact minor units of the pricing currency. Never a Credit quantity: there is no such field. */
+  readonly amountMinor: number;
+  readonly currency: string;
+  /** Created once, when the customer confirmed the amount. Reused by every retry. */
+  readonly idempotencyKey: string;
+}
+
+export function useStartCreditPurchase(): UseMutationResult<CreditPurchase, unknown, StartPurchaseInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: StartPurchaseInput) => {
+      const { data } = await api.POST("/payments", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          amount_minor: input.amountMinor,
+          currency: input.currency,
+        },
+      });
+      return validated<CreditPurchase>(data, creditPurchaseSpec, "/payments");
+    },
+    onSuccess: (purchase, input) => {
+      // The balance is not moved by this call — a PaymentIntent is not money —
+      // but the purchase row exists now, so anything reading it is stale.
+      void qc.invalidateQueries({ queryKey: meKeys.purchase(purchase.purchase_id) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.credits(input.accountId) });
+    },
+  });
+}
+
+/**
+ * The authoritative state of one purchase.
+ *
+ * `refetchMs` is how the "Balance updating" state waits: the webhook is what
+ * captures a payment, and a provider redirect only says the customer came back.
+ * Callers stop polling when the state is terminal rather than polling forever.
+ */
+export function useCreditPurchase(
+  purchaseId: string | undefined,
+  options: { readonly refetchMs?: number } = {},
+): UseQueryResult<CreditPurchase> {
+  return useQuery({
+    queryKey: meKeys.purchase(purchaseId ?? ""),
+    enabled: purchaseId !== undefined && purchaseId !== "",
+    staleTime: 0,
+    ...(options.refetchMs === undefined ? {} : { refetchInterval: options.refetchMs }),
+    queryFn: async () => {
+      const { data } = await api.GET("/payments/{paymentId}", {
+        params: { path: { paymentId: purchaseId ?? "" } },
+      });
+      return validated<CreditPurchase>(data, creditPurchaseSpec, "/payments/{id}");
+    },
+  });
+}
+
+export function useAgents(accountId: string | undefined): UseQueryResult<Agent[]> {
+  return useQuery({
+    queryKey: meKeys.agents(accountId ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/agents", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      const page = validated<Schemas["AgentPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: agentSpec } } },
+        "/agents",
+      );
+      return page.items;
+    },
+  });
+}
+
+export interface NotificationList {
+  readonly items: Notification[];
+  readonly nextCursor: string | null;
+}
+
+export function useNotifications(options: {
+  readonly unread: boolean;
+  readonly cursor?: string;
+}): UseQueryResult<NotificationList> {
+  const { unread, cursor } = options;
+  return useQuery({
+    queryKey: meKeys.notifications(unread, cursor ?? ""),
+    queryFn: async () => {
+      const { data } = await api.GET("/me/notifications", {
+        params: {
+          query: {
+            unread,
+            limit: 50,
+            ...(cursor === undefined || cursor === "" ? {} : { cursor }),
+          },
+        },
+      });
+      const page = validated<Schemas["NotificationPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: notificationSpec } } },
+        "/me/notifications",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
+    },
+  });
+}
+
+/**
+ * The badge.
+ *
+ * Exported for the shell's bell as well as for the notifications page, so both
+ * read the same query key and marking one notification read updates both at
+ * once. Two independent counts on one screen is how a bell comes to disagree
+ * with the list underneath it.
+ */
+export function useUnreadCount(): UseQueryResult<number> {
+  return useQuery({
+    queryKey: meKeys.unreadCount,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/notifications/unread-count", {});
+      return validated<Schemas["UnreadCount"]>(data, unreadCountSpec, "/me/notifications/unread-count").count;
+    },
+  });
+}
+
+/** Everything a change to one notification makes stale. */
+function invalidateNotifications(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.invalidateQueries({ queryKey: ["notifications"] });
+  void qc.invalidateQueries({ queryKey: meKeys.unreadCount });
+}
+
+export function useMarkNotificationRead(): UseMutationResult<Notification, unknown, string> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (notificationId: string) => {
+      const { data } = await api.POST("/me/notifications/{notificationId}/read", {
+        ...idempotent(newIdempotencyKey(), { path: { notificationId } }),
+      });
+      return validated<Notification>(data, notificationSpec, "/me/notifications/{id}/read");
+    },
+    onSuccess: () => {
+      invalidateNotifications(qc);
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead(): UseMutationResult<number, unknown, void> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.POST("/me/notifications/read-all", {
+        ...idempotent(newIdempotencyKey()),
+      });
+      return validated<Schemas["MarkedRead"]>(data, markedReadSpec, "/me/notifications/read-all").updated;
+    },
+    onSuccess: () => {
+      invalidateNotifications(qc);
+    },
+  });
+}
+
+export function useNotificationPreferences(): UseQueryResult<NotificationPreference[]> {
+  return useQuery({
+    queryKey: meKeys.notificationPreferences,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/notification-preferences", {});
+      return validated<Schemas["NotificationPreferences"]>(
+        data,
+        { arrays: { items: { required: true, spec: notificationPreferenceSpec } } },
+        "/me/notification-preferences",
+      ).items;
+    },
+  });
+}
+
+export interface PreferenceChange {
+  readonly kind: NotificationKind;
+  readonly enabled: boolean;
+}
+
+export function useUpdateNotificationPreferences(): UseMutationResult<
+  NotificationPreference[],
+  unknown,
+  readonly PreferenceChange[]
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: readonly PreferenceChange[]) => {
+      const { data } = await api.PUT("/me/notification-preferences", {
+        ...idempotent(newIdempotencyKey()),
+        body: { items: changes.map((c) => ({ kind: c.kind, enabled: c.enabled })) },
+      });
+      return validated<Schemas["NotificationPreferences"]>(
+        data,
+        { arrays: { items: { required: true, spec: notificationPreferenceSpec } } },
+        "/me/notification-preferences",
+      ).items;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: meKeys.notificationPreferences });
+    },
+  });
+}
+
+export function useTermsState(enabled = true): UseQueryResult<TermsState> {
+  return useQuery({
+    queryKey: meKeys.terms,
+    enabled,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/terms-acceptances", {});
+      return validated<TermsState>(data, termsStateSpec, "/me/terms-acceptances");
+    },
+  });
+}
+
+export interface ProfileUpdateInput {
+  readonly displayName?: string;
+  readonly handle?: string;
+  readonly locale?: string;
+  readonly timeZone?: string;
+  readonly idempotencyKey: string;
+}
+
+export function useUpdateProfile(): UseMutationResult<UserProfile, unknown, ProfileUpdateInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ProfileUpdateInput) => {
+      const { data } = await api.POST("/me/profile", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          ...(input.displayName === undefined ? {} : { display_name: input.displayName }),
+          ...(input.handle === undefined ? {} : { handle: input.handle }),
+          ...(input.locale === undefined ? {} : { locale: input.locale }),
+          ...(input.timeZone === undefined ? {} : { time_zone: input.timeZone }),
+        },
+      });
+      return validated<UserProfile>(data, userProfileSpec, "/me/profile");
+    },
+    onSuccess: () => {
+      // The principal carries the profile, so the whole session view is stale.
+      void qc.invalidateQueries({ queryKey: keys.me });
+    },
+  });
+}
+
+export function useMyAccount(enabled = true): UseQueryResult<MyAccount> {
+  return useQuery({
+    queryKey: meKeys.myAccount,
+    enabled,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/account", {});
+      return validated<MyAccount>(data, myAccountSpec, "/me/account");
+    },
+  });
+}
+
+export interface CloseAccountInput {
+  readonly reason?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Asks for closure. Needs a recent strong authentication, so the caller must be
+ * ready to render the step-up round trip and come back to the same place.
+ */
+export function useCloseAccount(): UseMutationResult<MyAccount, unknown, CloseAccountInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CloseAccountInput) => {
+      const { data } = await api.POST("/me/account/close", {
+        ...idempotent(input.idempotencyKey),
+        body: input.reason === undefined || input.reason === "" ? {} : { reason: input.reason },
+      });
+      return validated<MyAccount>(data, myAccountSpec, "/me/account/close");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: meKeys.myAccount });
+    },
+  });
+}
+
+/**
+ * Cancels an open closure request.
+ *
+ * Deliberately no step-up: requesting closure is the dangerous direction, and
+ * stopping a request must never be harder than starting it.
+ */
+export function useCancelAccountClosure(): UseMutationResult<MyAccount, unknown, void> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.POST("/me/account/close/cancel", {
+        ...idempotent(newIdempotencyKey()),
+      });
+      return validated<MyAccount>(data, myAccountSpec, "/me/account/close/cancel");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: meKeys.myAccount });
+    },
+  });
+}
+
+export function useSecuritySummary(enabled = true): UseQueryResult<SecuritySummary> {
+  return useQuery({
+    queryKey: meKeys.security,
+    enabled,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/security", {});
+      return validated<SecuritySummary>(data, securitySummarySpec, "/me/security");
+    },
+  });
+}
+
+export interface AuditPage {
+  readonly items: MeAuditEntry[];
+  readonly nextCursor: string | null;
+}
+
+export function useMeAudit(cursor: string | undefined): UseQueryResult<AuditPage> {
+  return useQuery({
+    queryKey: meKeys.audit(cursor ?? ""),
+    queryFn: async () => {
+      const { data } = await api.GET("/me/audit", {
+        params: {
+          query: cursor === undefined || cursor === "" ? { limit: 50 } : { limit: 50, cursor },
+        },
+      });
+      const page = validated<Schemas["MeAuditPage"]>(
+        data,
+        { arrays: { items: { required: true, spec: meAuditEntrySpec } } },
+        "/me/audit",
+      );
+      return { items: page.items, nextCursor: page.next_cursor };
     },
   });
 }

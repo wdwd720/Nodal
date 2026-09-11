@@ -55,9 +55,17 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/agents", heading: "Agents", nav: "Agents" },
   { path: "/portfolio", heading: "Portfolio", nav: "Portfolio" },
   { path: "/activity", heading: "Activity", nav: "Activity" },
+  // No `nav`: Buy Credits is a primary action in the header rather than a rail
+  // destination, which is where USER_JOURNEY §2 puts it.
+  { path: "/buy-credits", heading: "Buy Credits" },
+  // No `nav`: the shell reaches notifications through the bell and the account
+  // menu, neither of which is the "Sections" navigation the nav walk uses.
+  { path: "/notifications", heading: "Notifications" },
   // No `nav`: Settings is reached from the account menu rather than the rail,
   // which is where USER_JOURNEY §2 puts it.
   { path: "/settings", heading: "Settings and security" },
+  { path: "/settings/security", heading: "Security" },
+  { path: "/settings/account", heading: "Account" },
 ];
 
 /** Everything, for a check that genuinely applies to every page. */
