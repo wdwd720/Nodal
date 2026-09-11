@@ -159,6 +159,12 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-160 | P2 | PRODUCTIZATION | fixed | A gate sandbox-activated out of REVOKED reported success, logged it, and could never be active |
+| F-161 | P2 | PRODUCTIZATION | fixed | A SANDBOX gate reached from EXPIRED or REVOKED carried the whole approval version that reached ACTIVE, under a banner saying it carries none |
+| F-162 | P2 | PRODUCTIZATION | fixed | Rehearsing the real ceremony on a sandbox-listed capability stopped the deployment booting |
+| F-163 | P1 | PRODUCTIZATION | fixed | No kill switch reached the conversion-request path, so WITHDRAWALS_DISABLE, GLOBAL_NEW_RISK_KILL and ACCOUNT_FREEZE stopped none of it |
+| F-164 | P3 | PRODUCTIZATION | fixed | ADR-0023 §3 said every sandbox permission reads NOT-AN-APPROVAL; one carries a standing product decision, correctly |
+| F-165 | P3 | PRODUCTIZATION | fixed | ADR-0023 cited `test/integration/gates` as its proof, which has never existed |
 
 ---
 
@@ -7456,3 +7462,192 @@ transaction. No product behaviour was wrong.
 before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
+
+## F-160 · A gate sandbox-activated out of REVOKED reported success, logged it, and could never be active · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the independent governance / sandbox-tier audit of ADR-0023 (goal
+§54), reproduced on `productization` by
+`TestAUDIT_ASandboxGateEnteredFromRevokedCanNeverBeActive`,
+`TestAUDIT_ASandboxTierCanRecoverAGateItRevoked` and
+`TestIntegration_AUDIT_SandboxFromRevokedKeepsTheRevoke`.
+
+ADR-0023 and migration 00755 both name REVOKED as a legal source of SANDBOX,
+`cp_gate_can_transition` and `gates.CanTransition` agree, and `cp_gate_sandbox`
+accepted the move. Its UPDATE wrote `state`, `effective_at`, `expires_at` and
+`version` — so `revoked_at` survived, and `gates.evaluateSandbox` refused a row
+with a revoke recorded before it looked at anything else. `Admin.Sandbox`
+returned success, the console showed SANDBOX, `sandboxGatesAtBoot` logged
+"capability sandbox-activated at boot", and the capability stayed refused with
+`gate is revoked` for ever.
+
+There was no way back either. The only operation that clears `revoked_at` is
+`propose` (00701), and PENDING_APPROVAL leads only to APPROVED — which needs a
+second distinct principal — or back to REVOKED. So a sandbox tier that revoked a
+capability could not sandbox-activate it again without running part of the
+dual-control ceremony the sandbox tier exists so a rehearsal need not fabricate.
+
+**Fix.** Migration 00791 clears `revoked_at` and `revoke_reason` with the rest of
+the row when a gate enters SANDBOX, and backfills the rows the old function
+wrote. `evaluateSandbox` no longer consults the column: a revoke is a STATE, and
+revoking a gate moves it to REVOKED, where the state check refuses it — the
+column on a SANDBOX row is residue of an earlier life. Commit 0f4bfa7.
+
+**Evidence.** TEST_INTEGRATION: `TestIntegration_SandboxGate` now starts from
+REVOKED and asserts `RevokedAt == nil` and an active sandbox verdict;
+`TestIntegration_AUDIT_SandboxFromRevokedKeepsTheRevoke` passes through
+`BootstrapSandbox`, the path `cmd/api` runs at boot. TEST_UNIT:
+`TestEvaluateWith_SandboxRowIsActiveOnlyOnASandboxTier` holds both halves — a
+SANDBOX row with a stale revoke is active, a REVOKED row is not, whatever the
+tier. STATIC_PROOF:
+`migrations/00791_a_sandbox_row_carries_no_approval_and_no_revoke.sql`.
+
+## F-161 · A SANDBOX gate reached from EXPIRED or REVOKED carried the whole approval version that reached ACTIVE · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced by
+`TestIntegration_AUDIT_SandboxFromExpiredCarriesTheApprovalItClaimsNotToHave`.
+
+Migration 00755's header, ADR-0023 §1, `internal/gates`' package doc and the
+operator console all state that a SANDBOX gate carries no approval chain and no
+evidence; the console renders "none, and none is expected". That was true only
+of a gate sandboxed from a freshly bootstrapped DISABLED row, which has nothing
+to carry. `cp_gate_sandbox` deliberately did not touch those columns, so a gate
+sandboxed from EXPIRED or REVOKED — both documented sources — kept the entire
+approval version that reached ACTIVE: three chain entries, the proposer, the
+approval version and all four evidence references. `GET /v1/admin/gates`
+returned every one of them beside `state: SANDBOX, active: true`, and the
+sandbox transition and its audit event attested the evidence digest of that
+approval, which nobody produced for the sandbox activation.
+
+**Fix (D-090).** The same migration writes a blank row: approval version 0,
+`approvers` and `evidence_hashes` `'[]'`, proposer and the four `*_ref` columns
+NULL, in the same statement as the state change. "Never touches the approval
+chain" becomes "clears the approval chain", which is the property every reader
+was promised, and the cleared version survives in `capability_gate_transitions`
+with the digest each principal attested. `internal/gates/sandbox.go` and
+`sandbox_bootstrap.go` pass the digest of a gate with no evidence as the sandbox
+transition's hash, so the transition, the audit event and the resulting row all
+say the same thing. The console's one stale sentence follows. Commit 0f4bfa7.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_SandboxFromAFinishedCeremonyCarriesNoneOfIt` drives a real
+three-principal ceremony to ACTIVE, expires it, sandboxes it and asserts the row
+and its transition carry nothing;
+`TestIntegration_AUDIT_SandboxFromExpiredCarriesTheApprovalItClaimsNotToHave` is
+the auditor's reproduction. STATIC_PROOF: `apps/admin/src/views/gates.ts`.
+
+## F-162 · Rehearsing the real ceremony on a sandbox-listed capability stopped the deployment booting · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced by
+`TestIntegration_AUDIT_ARealCeremonyOnASandboxCapabilityBlocksTheNextBoot`.
+
+`BootstrapSandbox` refused to move a gate in PENDING_APPROVAL, APPROVED, ACTIVE
+or SUSPENDED — correctly, because a configuration line must not change the state
+of a real approval. But the refusal was an error, `cmd/api`'s wire step returned
+it, and the process exited. So an operator who rehearsed step one of the
+dual-control ceremony — on the tier that exists for rehearsing it — for any
+capability named in `CP_API_SANDBOX_GATES` stopped the deployment restarting
+until somebody edited the blueprint. The only in-machine escape, a revoke, landed
+on F-160's permanently inert gate.
+
+**Fix (D-091).** The gate is still never moved; the outcome is now a skip.
+`gates.SandboxAtBoot` returns the skipped capabilities alongside the moved ones
+and `cmd/api` logs a WARN naming the capability, its state and what to do about
+it, then carries on with the rest of the list. Boot still refuses when
+`CP_API_SANDBOX_GATES` is set on a deployment that is not a sandbox tier, and the
+manual path still refuses the transition as illegal. Commit 7666e28.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_BootstrapSandboxIsIdempotentAndNeverMovesAnApproval` asserts the
+skip is reported, writes no audit event, leaves the proposal untouched, still
+activates the rest of the list, and that the operator-driven move is still
+refused with INVALID_STATE_TRANSITION.
+
+## F-163 · No kill switch reached the conversion-request path · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit, reproduced by
+`TestAUDIT_NoKillSwitchCanReachTheConversionRequestPath`.
+
+POLICY_AUTHORITY §2 declares the blocking matrix as a property of every guarded
+operation and puts the `WITHDRAW` class under `WITHDRAWALS_DISABLE`,
+`ACCOUNT_FREEZE` and `GLOBAL_NEW_RISK_KILL`. `internal/payout` imported
+`internal/killswitch` nowhere. Nothing on `POST /v1/payouts` →
+`httpapi.payoutsAdapter.Create` → `compileRoute` → `payout.Service.Create`
+consulted a switch, and neither did the reservation or the submission to the
+provider — so an operator could activate all three controls and a conversion
+request would still be created, still move the user's Credits into
+PAYOUT_RESERVED, and still be handed to a provider. The account's own status was
+not read either, so a FROZEN account could convert.
+
+This is the withdrawal surface that matters: the conservative and development
+legal policies both deny `PAYOUT`, and `legalrouter.SandboxPolicy` is the one
+policy that permits it, so every exercise of the withdrawal boundary this system
+can perform goes through this path. `internal/withdrawal`, the older
+crypto-address path that refuses everything today, has always made both checks —
+which is the negative control in the auditor's test.
+
+**Fix (D-092).** `payout.Service` takes a `KillSwitchChecker` and an account
+reader, both required; `Create`, `CompleteVerification` and `Submit` call them
+inside the transaction that authorizes them, switches first and account status
+second. `Create` refuses before the quote is consumed, so a switch cannot burn a
+quote on its way to refusing; `Submit` refuses inside the claim, the last point
+before a provider is called under a committed idempotency key. At the boundary,
+`compileRoute` pre-checks the compiled action's class against an in-process
+snapshot of at most one second — explicitly a pre-check, never the authority.
+Cancellation declares `CANCEL` and consults nothing, because that class is never
+blocked and stopping a cancellation would hold a user's reserved value for the
+length of an incident. Commit d074f55.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_EveryWithdrawSwitchStopsAConversionRequest` activates each of
+the three switches in turn, asserts KILL_SWITCH_ACTIVE naming it, asserts nothing
+moved, releases it and asserts the path reopens;
+`TestIntegration_AFrozenAccountCannotConvert` and
+`TestIntegration_AKillSwitchStopsASubmissionMidFlight` cover the account status
+and the submission. TEST_UNIT:
+`TestAUDIT_NoKillSwitchCanReachTheConversionRequestPath` (the auditor's, now
+green). STATIC_PROOF: `internal/payout/service.go`, `cmd/api/wire.go`.
+
+## F-164 · ADR-0023 §3 said every sandbox permission's approval reference reads NOT-AN-APPROVAL · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, reproduced by
+`TestAUDIT_EverySandboxPermissionsApprovalReferenceSaysItIsNotAnApproval`.
+
+One of the six permissions in `legalrouter.SandboxPolicy` — the SIMULATION rule —
+carries `PRODUCT-SIM-001`, not `NOT-AN-APPROVAL-SANDBOX-TIER-ONLY`. The code is
+right: simulated capital moves nothing, the conservative and development policies
+carry the same rule under the same reference, and it is the one rule in that
+policy which is not a sandbox-tier concession. Labelling it one would imply the
+other deployments permit simulation on nothing. The ADR sentence was the one a
+reader checks the policy against, and it was false as written.
+
+**Fix.** The sentence states the exception and why it exists; the auditor's test
+asserts the corrected rule positively in both halves, and fails if the sandbox
+policy ever stops permitting simulation, so the exception cannot become vacuous.
+No code changed.
+
+**Evidence.** TEST_UNIT:
+`TestAUDIT_EverySandboxPermissionsApprovalReferenceSaysItIsNotAnApproval`.
+STATIC_PROOF: `docs/adr/0023-the-sandbox-tier.md`;
+`internal/legalrouter/sandbox.go`.
+
+## F-165 · ADR-0023 cited a test directory that has never existed · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, by opening the path.
+
+ADR-0023's Consequences section cited `test/integration/gates` for the four
+properties a reader most needs proven: that a SANDBOX gate is active only for a
+sandbox-tier checker, carries no approval, cannot be promoted from SANDBOX, and
+cannot exist in PROD. That directory does not exist and never has —
+`test/integration/` holds the migration, enum and a few cross-cutting suites, and
+`internal/gates`' database-backed tests live beside the code behind
+`//go:build integration`, which is what F-01 is about. The citation check in
+`test/docs` covers Go test-function names, not paths, so nothing caught it.
+
+**Fix.** The ADR cites `internal/gates/sandbox_integration_test.go`,
+`sandbox_test.go` and `parity_integration_test.go`, which are the files that
+prove those properties. `test/docs` now also resolves path-shaped citations in
+the documents a reviewer relies on, so the next one fails a test instead of being
+read.
+
+**Evidence.** TEST_UNIT: `TestDocs_EveryPathTheyNameExists`. STATIC_PROOF:
+`docs/adr/0023-the-sandbox-tier.md` Consequences and Evidence sections.

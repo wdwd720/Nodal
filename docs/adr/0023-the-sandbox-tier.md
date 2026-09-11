@@ -39,10 +39,16 @@ exists nowhere else:
 1. **A `SANDBOX` gate state** (migration 00755). A gate enters it from
    DISABLED, REVOKED or EXPIRED by a single operator with `gate:propose` and a
    step-up, through a SECURITY DEFINER function that writes its own history
-   row and never touches the approval chain, the evidence references or the
-   validity window. It leaves only to DISABLED or REVOKED; it is not on the
-   path to ACTIVE, and the real ceremony starts from DISABLED as it always
-   has. A table CHECK refuses a SANDBOX row whose environment is PROD, and the
+   row and CLEARS the approval chain, the approval version, the evidence
+   references, the validity window and any recorded revoke in the same
+   statement (migration 00791; 00755 left them, which meant a gate sandboxed
+   from EXPIRED or REVOKED carried the whole approval version that reached
+   ACTIVE, and one sandboxed from REVOKED could never be active at all —
+   F-160, F-161). The cleared version is not lost: every transition of it,
+   with the digest each principal attested, is in
+   `capability_gate_transitions`. It leaves only to DISABLED or REVOKED; it is
+   not on the path to ACTIVE, and the real ceremony starts from DISABLED as it
+   always has. A table CHECK refuses a SANDBOX row whose environment is PROD, and the
    function refuses to write one there. `gates.EvaluateWith` reads a SANDBOX
    row as active only for a Checker built with sandbox allowed, which
    `cmd/api` does exactly when the deployment is a sandbox tier; anywhere else
@@ -53,8 +59,12 @@ exists nowhere else:
    the capabilities a sandbox tier activates at boot, idempotently, as the
    SYSTEM actor `config:CP_API_SANDBOX_GATES`. The authority is the blueprint
    line, reviewed like every other line there. A gate in any state that is
-   not a legal source of SANDBOX — a real proposal or approval — is an error,
-   never a move. Each listed capability must also be in
+   not a legal source of SANDBOX — a real proposal or approval — is never
+   moved: it is skipped, with a WARN naming the capability and its state, and
+   the rest of the list is still activated. It used to be a startup error, so
+   rehearsing the ceremony on a listed capability — which is what this tier is
+   for — stopped the deployment booting until somebody edited the blueprint
+   (F-162, D-091). Each listed capability must also be in
    `CP_API_ENABLED_CAPABILITIES`: configuration remains condition 1.
 3. **A sandbox legal policy** (`legalrouter.SandboxPolicy`), evaluated by the
    real router and the real compiler, with real required capabilities. It
@@ -62,7 +72,12 @@ exists nowhere else:
    unlike it — permits a payout for an account whose verification is
    `PAYOUT_KYC` or higher under `PAYOUT_RESERVE`, answering
    `REQUIRES_VERIFICATION` below that. Every permission's approval reference
-   reads `NOT-AN-APPROVAL-SANDBOX-TIER-ONLY`.
+   reads `NOT-AN-APPROVAL-SANDBOX-TIER-ONLY`, except the simulation rule,
+   which carries the standing product decision `PRODUCT-SIM-001` that the
+   conservative and development policies carry too: simulated capital moves
+   nothing on every deployment, so it is the one rule here that is not a
+   sandbox-tier concession, and labelling it one would imply the other
+   deployments permit simulation on nothing (F-164).
 4. **A sandbox payout policy** (`valuedomain.SandboxPolicy`,
    `CP_API_PAYOUT_POLICY=SANDBOX`, refused in PROD and refused unless the
    legal policy is SANDBOX): purchased and earned value withdrawable once
@@ -102,18 +117,25 @@ somehow carried any of the sandbox values refuses to start.
   Stripe test cards mint sandbox Credits; native markets trade; a verified
   sandbox identity can request a payout that a provider settles without
   moving value.
-- `test/integration/gates` proves a SANDBOX gate is active only for a
-  sandbox-tier checker, carries no approval, cannot be proposed or approved
-  from SANDBOX, and cannot exist in PROD; `test/integration/enums` keeps the
-  SQL and Go state lists identical; `internal/config` proves the declaration
-  is refused in PROD and the payout policy is refused without it.
+- `internal/gates/sandbox_integration_test.go` and
+  `internal/gates/sandbox_test.go` prove a SANDBOX gate is active only for a
+  sandbox-tier checker, carries no approval and no revoke whatever it was
+  sandboxed from, cannot be proposed or approved from SANDBOX, and cannot
+  exist in PROD. (The citation this replaces named a directory under
+  `test/integration` that has never held them: this package's database-backed
+  tests live beside the code behind `//go:build integration` — F-165.)
+  `test/integration/enums` keeps the SQL and Go state lists identical,
+  `internal/gates/parity_integration_test.go` keeps the transition tables
+  identical, and `internal/config` proves the declaration is refused in PROD
+  and the payout policy is refused without it.
 - The launch-gate matrix does not move: `LIVE_READY` still needs three
   principals, four references and a licensed provider, because PROD does.
 
 ## Evidence
 
-Migration 00755; `internal/gates/sandbox.go`, `sandbox_bootstrap.go`,
-`sandbox_test.go`, `sandbox_integration_test.go`;
+Migrations 00755 and 00791; `internal/gates/sandbox.go`,
+`sandbox_bootstrap.go`, `sandbox_test.go`, `sandbox_integration_test.go`,
+`parity_integration_test.go`;
 `internal/legalrouter/sandbox.go` and its test;
 `internal/valuedomain/sandboxpolicy.go` and its test;
 `internal/provider/payoutsandbox`; `cmd/api/sandboxtier.go`;

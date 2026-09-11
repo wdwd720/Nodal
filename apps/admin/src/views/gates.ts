@@ -18,7 +18,11 @@
  *     ceremony still starts from DISABLED;
  *   - it carries **no approval chain, no evidence references and no validity
  *     window**, by construction: `cp_gate_sandbox` writes its own history row
- *     and touches none of them;
+ *     and clears all of them in the same statement (migration 00791). Until
+ *     that migration it only ever declined to SET them, so a gate sandboxed
+ *     from EXPIRED or REVOKED arrived here carrying the whole approval version
+ *     that reached ACTIVE, and this panel said "none, and none is expected"
+ *     beside three approvers and four evidence references (F-161);
  *   - it is active **only for this deployment**. Anywhere that is not a
  *     sandbox tier the same row evaluates inactive with the server's own
  *     reason, and PROD cannot hold such a row at all.
@@ -270,7 +274,7 @@ function approversValue(gate: CapabilityGate): HTMLElement | string {
     return el("pre", {}, JSON.stringify(gate.approvers, null, 2));
   }
   if (gate.state === "SANDBOX") {
-    return "none, and none is expected — cp_gate_sandbox never touches the approval chain";
+    return "none, and none is expected — entering SANDBOX clears the approval chain";
   }
   return "none recorded — activation needs two distinct principals, neither of whom proposed";
 }
