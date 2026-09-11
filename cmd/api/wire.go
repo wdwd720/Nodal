@@ -476,6 +476,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("verification service: %w", err)
 	}
+	// The other half of D-061. The resolver below already reports the base
+	// level for a profile whose validity window has elapsed, so nothing an
+	// expired verification permits can leave; what was missing was anything
+	// that moved the STATE, which left a profile reading VERIFIED while every
+	// surface treated the person as unverified, and made §20's EXPIRED -- whose
+	// next step is REVERIFY -- a state no deployment could ever reach.
+	go runVerificationExpiry(ctx, database, verificationSvc, clk, log)
 	// The composite resolver replaces the cap that internal/identity documents:
 	// NODAL_IDENTITY is what Nodal establishes by itself, and PAYOUT_KYC and
 	// ENHANCED come from a provider decision PLUS the sub-checks that justify
