@@ -76,8 +76,8 @@ every state column, its own tests, and an HTTP surface generated from
 |---|---|---|---|
 | Identity & session | `internal/auth`, `internal/security`, `internal/pii` | ZITADEL relying party, Nodal sessions, sealed PII, step-up, roles | built |
 | Profile & account lifecycle | `internal/profile`, `internal/terms` | `user_profiles`, terms acceptances, onboarding progress, self-service account state, admin support view | in progress (P) |
-| Credits | `internal/credits`, `internal/valuedomain` | the Credit ledger (11 origins, 5 finality states), funding states, balance buckets (gross / spendable / frozen / payout-eligible / ineligible), the value-domain isolation | built; sandbox payout policy extended |
-| Payments | `internal/payments`, `internal/provider/stripecredit` | PaymentIntents, webhooks, capture → mint, reversals | built |
+| Credits | `internal/credit`, `internal/valuedomain` | the Credit ledger (11 origins, 5 finality states), funding states, balance buckets (gross / spendable / frozen / payout-eligible / ineligible), the value-domain isolation | built; sandbox payout policy extended |
+| Payments | `internal/credit` (`credit_fundings`), `internal/provider/stripecredit` | PaymentIntents, webhooks, capture → mint, reversals — no separate package: a PaymentIntent lives beside the mint it causes | built |
 | Native market | `internal/nativeasset`, `internal/nativemarket`, `internal/risk` | native assets and their lifecycle, the off-chain CPMM `(V+R)·Y ≥ K`, quotes that never price execution, the risk gate, safety limits, positions & P&L, price history & candles, discovery | built; positions/P&L/candles/safety/demo in progress (M) |
 | Activity | `internal/activity` | one feed over the domain tables, fixed kinds | in progress (M) |
 | Verification | `internal/verification`, `internal/eligibility`, `internal/provider/verifysandbox` | `compliance_profiles` state machine, evidence rows (identity, age, jurisdiction, sanctions), levels `NONE → NODAL_IDENTITY → PAYOUT_KYC → ENHANCED`, eligibility reasons | in progress (V) |

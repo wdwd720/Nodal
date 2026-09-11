@@ -11,7 +11,7 @@ Answers §§11–16, §35, §46, §47 and §51 of the product goal.
 The internal market engine was complete and had no product around it.
 `internal/nativemarket` priced and executed trades against a constant-product
 curve with a virtual Credit reserve, the database enforced the invariant on
-every fill, and `internal/credits` tracked the provenance of every Credit. What
+every fill, and `internal/credit` tracked the provenance of every Credit. What
 did not exist:
 
 - **No positions.** `position_lots` (migration 00104) is the hosted rail's
