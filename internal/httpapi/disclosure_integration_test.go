@@ -29,7 +29,7 @@ import (
 // documents required at THIS point in the journey, and the version and bytes
 // served NOW.
 
-func newDisclosureDeps(t *testing.T, pool *db.DB) (WithdrawalDeps, accounts.AccountID, accounts.UserID) {
+func newDisclosureDeps(t *testing.T, pool *db.DB) (WithdrawalDeps, *profile.Service, accounts.AccountID, accounts.UserID) {
 	t.Helper()
 	ctx := context.Background()
 	repo := accounts.NewRepository()
@@ -48,7 +48,7 @@ func newDisclosureDeps(t *testing.T, pool *db.DB) (WithdrawalDeps, accounts.Acco
 		Sessions: noSessions{},
 	})
 	require.NoError(t, err)
-	return WithdrawalDeps{Terms: svc}, acct.ID, user.ID
+	return WithdrawalDeps{Terms: svc}, svc, acct.ID, user.ID
 }
 
 type noSessions struct{}
@@ -69,7 +69,7 @@ func TestIntegration_TheDisclosureIsReadForTheAccountsOwner(t *testing.T) {
 	require.NoError(t, err)
 	defer pool.Close()
 
-	deps, acct, user := newDisclosureDeps(t, pool)
+	deps, termsSvc, acct, user := newDisclosureDeps(t, pool)
 
 	accepted, err := deps.disclosureAccepted(ctx, pool, acct)
 	require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestIntegration_TheDisclosureIsReadForTheAccountsOwner(t *testing.T) {
 		onboarding = append(onboarding, d.ID)
 	}
 	require.NotEmpty(t, onboarding)
-	_, err = deps.Terms.(*profile.Service).Accept(ctx, actor, onboarding)
+	_, err = termsSvc.Accept(ctx, actor, onboarding)
 	require.NoError(t, err)
 
 	accepted, err = deps.disclosureAccepted(ctx, pool, acct)
@@ -92,7 +92,7 @@ func TestIntegration_TheDisclosureIsReadForTheAccountsOwner(t *testing.T) {
 	assert.False(t, accepted, "the onboarding documents are not the withdrawal disclosure")
 
 	// And the document itself.
-	_, err = deps.Terms.(*profile.Service).Accept(ctx, actor, []terms.DocumentID{terms.WithdrawalDisclosure})
+	_, err = termsSvc.Accept(ctx, actor, []terms.DocumentID{terms.WithdrawalDisclosure})
 	require.NoError(t, err)
 	accepted, err = deps.disclosureAccepted(ctx, pool, acct)
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestIntegration_AnAcceptanceOfOtherBytesDoesNotCount(t *testing.T) {
 	require.NoError(t, err)
 	defer pool.Close()
 
-	deps, acct, user := newDisclosureDeps(t, pool)
+	deps, _, acct, user := newDisclosureDeps(t, pool)
 	doc, ok := terms.Get(terms.WithdrawalDisclosure)
 	require.True(t, ok)
 
@@ -141,7 +141,7 @@ func TestIntegration_AnUnwiredRegistryRefusesRatherThanPermits(t *testing.T) {
 	require.NoError(t, err)
 	defer pool.Close()
 
-	_, acct, _ := newDisclosureDeps(t, pool)
+	_, _, acct, _ := newDisclosureDeps(t, pool)
 	accepted, err := WithdrawalDeps{}.disclosureAccepted(ctx, pool, acct)
 	require.NoError(t, err)
 	assert.False(t, accepted)
@@ -159,7 +159,7 @@ func TestIntegration_TheEligibilityExplanationReportsItAsAStep(t *testing.T) {
 	require.NoError(t, err)
 	defer pool.Close()
 
-	deps, acct, user := newDisclosureDeps(t, pool)
+	deps, termsSvc, acct, user := newDisclosureDeps(t, pool)
 	accepted, err := deps.disclosureAccepted(ctx, pool, acct)
 	require.NoError(t, err)
 
@@ -172,7 +172,7 @@ func TestIntegration_TheEligibilityExplanationReportsItAsAStep(t *testing.T) {
 	assert.Contains(t, reasonCodes(e.Reasons), string(eligibility.WithdrawalTermsNotAccepted),
 		"the eligibility page names the step before anybody reaches the quote")
 
-	_, err = deps.Terms.(*profile.Service).Accept(ctx,
+	_, err = termsSvc.Accept(ctx,
 		profile.Actor{UserID: user.String(), ActorType: "USER"},
 		[]terms.DocumentID{terms.WithdrawalDisclosure})
 	require.NoError(t, err)

@@ -504,3 +504,92 @@ no account filter, so one account's controlled actions are filtered client-side
 over the newest page and the view says so; and `internal/adminplane` does not
 export `gate.sandbox` / `gate.unsandbox` writes, so those two steps are gated on
 `gate.propose` — the permission `gates.Admin.sandboxOp` actually requires.
+
+---
+
+## Addendum — 2026-09-10: the cross-domain wiring (W)
+
+The seams the domain branches left for each other, closed. Nothing here is a new
+product surface: it is the wiring that makes the surfaces already built reach
+each other, plus the passes that make the clocks behind them run.
+
+### Routes added
+
+None. Every route in this addendum already existed; what changed is what the
+existing ones answer with.
+
+### Migrations added
+
+None. Every table read here was created by another branch's migration; the
+schema stays at 00786.
+
+### Packages added
+
+None. `internal/activity`, `internal/notifications`, `internal/agents`,
+`internal/payout`, `internal/eligibility`, `internal/profile`,
+`internal/verification` and `cmd/api` all gained code.
+
+### What the existing surfaces now carry
+
+| Surface | Before | Now |
+|---|---|---|
+| `GET /v1/me/activity` | 7 kinds: Credit purchases, reversals, native trades, asset creation, payouts and admin adjustments | 18. The 11 added are `VERIFICATION_UPDATED`, `PAYOUT_DESTINATION_ADDED`, `PAYOUT_DESTINATION_DISABLED`, `TERMS_ACCEPTED`, `ACCOUNT_CLOSURE_REQUESTED`, `ACCOUNT_CLOSURE_DECIDED`, `AGENT_CREATED`, `AGENT_PAUSED`, `AGENT_RESUMED`, `AGENT_DISABLED`, `NATIVE_MARKET_PAUSED` (D-081) |
+| `GET /v1/me/notifications` | 6 follower sources; `VERIFICATION_UPDATED` and `AGENT_PAUSED` declared with no producer | 8 sources. `compliance_profile_transitions` (7 of the 10 states) and `agent_pauses` (a pause somebody other than the owner opened), plus a `cmd/api` publisher that emits the same `AGENT_PAUSED` immediately and dedups against the follower on the pause row (D-082) |
+| `POST /v1/payouts/quote`, `POST /v1/payouts` | succeeded without the withdrawal disclosure | refuse with `TERMS_ACCEPTANCE_REQUIRED` (422), in the domain service, naming the document (D-083) |
+| `GET /v1/me/eligibility` | six reasons | seven: `TERMS_NOT_ACCEPTED`, which lowers the verdict and changes no withdrawable figure (D-083) |
+
+### Error codes added
+
+`TERMS_ACCEPTANCE_REQUIRED` → 422. Deliberately not `VERIFICATION_REQUIRED`,
+which would send somebody into an identity flow they may already have finished,
+and not `FORBIDDEN`, which says the account may not do this at all.
+
+### In-process passes added to `cmd/api`
+
+The launch tier deploys one web service and no workers, so periodic work runs
+here or nowhere — the answer D-046, F-118 and D-069 already gave.
+
+| Pass | Cadence | What it does |
+|---|---|---|
+| `runVerificationExpiry` | 5 min | VERIFIED profiles past `expires_at` → EXPIRED through the real transition, under SYSTEM `verification:expiry-sweep`. Finishes D-061; the resolver already reported the base level without it (D-084) |
+| `runPayoutSweeps` | 15 s | submit every reserved (VERIFIED) request to the single configured provider; apply the provider's answer to SUBMITTED / PROVIDER_PENDING / PAYOUT_STATUS_UNKNOWN through `Reconcile`. Neither had any caller in `cmd/` at all (D-085) |
+| `runCreditSettlement` | 15 min, **20 s on a sandbox tier** | unchanged, except that a sandbox tier's window is 2 minutes rather than the configured 720-hour chargeback window — without which nothing bought on STAGING could ever be withdrawn (D-086) |
+
+### Boot-time provisioning added
+
+`creditAssetAtBoot` registers THE Credit asset through `assets.Repository.Create`
+on a sandbox tier that has none. Nothing wrote one: `scripts/seedeconomy` refuses
+to run anywhere but LOCAL, DEV and TEST, so D-068's demo seeder was a permanent
+no-op on the one tier it was built for. PROD is refused (D-084).
+
+A fresh sandbox database now boots to 1 Credit asset, 1 GLOBAL risk policy, 4
+demo markets with 6 fills and 19 labelled `demo_seed_rows`, and 6 sandbox gates —
+and boots to the same thing twice
+(`TestIntegration_BootingTwiceCreatesEverythingOnceOnASandboxTier`).
+
+### State machines
+
+None added. Every state change in this addendum goes through a transition table
+another branch built: `compliance_profile_transitions` (00761),
+`payout_request_transitions` (00603), `agent_lifecycle_transitions` (00501,
+00750), `credit_funding_transitions` (00743).
+
+### Interfaces exposed for other domains
+
+- `activity.Kind` — eleven new members; a nineteenth kind is a `const src…`
+  branch, a `sources` entry, a `feedQuery` group and a summary template.
+- `notifications.AgentPauseRef` / `AgentPauseCopy` — exported so any writer of an
+  `AGENT_PAUSED` notification derives the same dedup key from the same row.
+- `notifications.ScopeVerification` / `ScopeEligibility` / `ScopeAgent` — realtime
+  invalidation scopes a client refetches on.
+- `agents.Event.PauseID` — which `agent_pauses` row a pause event is about.
+- `agents.Publisher` — wired, non-nil, in `cmd/api` for the first time.
+- `profile.Service.Outstanding(ctx, q, userID, terms.Requirement)` — the documents
+  a person still owes at one point in the journey.
+- `payout.CreateRequest.DisclosureAccepted`, `payout.QuoteRequest.DisclosureAccepted`,
+  `payout.RequiredDisclosure`, `payout.Service.AwaitingSubmission`.
+- `eligibility.WithdrawalInput.DisclosureAccepted`, `eligibility.WithdrawalTermsNotAccepted`.
+- `verification.Service.ExpireOverdue`, `verification.Repository.OverdueVerifications`,
+  `verification.SweepBatch`.
+- `httpapi.WithdrawalDeps.Terms` (`httpapi.TermsOutstanding`) — the legal registry
+  reader the withdrawal surfaces consult.
