@@ -181,7 +181,22 @@ func (s *Service) ParentsOf(ctx context.Context, q db.Querier, lotID LotID) ([]L
 //   - it is REVERSIBLE and NO parent is below a payout-eligible finality, so
 //     the promotion branch will move it; or
 //   - some parent is DISPUTED or REVERSED and the lot is not already one of
-//     those itself, so the freeze branch will.
+//     those itself, so the freeze branch will; or
+//   - it is frozen at a finality it can legally leave and NO parent is frozen
+//     any more, so the THAW branch will (D-140).
+//
+// The third clause is the mirror the freeze never had. A derived lot frozen
+// because its funding was disputed matched neither of the other two once it
+// moved -- the promotion clause opens `st.finality = 'REVERSIBLE'` and a frozen
+// lot is not, the freeze clause opens "not already frozen" and a frozen lot is
+// -- and nothing else in this system can move a lot with no `credit_fundings`
+// row. So a dispute the platform WON left the earning derived from that funding
+// at DISPUTED for ever: neither spendable nor payout-eligible, with the
+// eligibility page telling its holder that waiting would fix it (F-278).
+//
+// Which frozen finalities it opens is `thawableFinalities()`, read out of the
+// transition table rather than written here: REVERSED is terminal and a lot
+// whose funding was actually taken back stays frozen for ever, by design.
 //
 // The freeze clause used to sit under an outer `st.finality IN
 // ('REVERSIBLE','SETTLED')`, which is a THIRD statement of which lots can be
@@ -220,6 +235,12 @@ const settleDerivedCandidates = `
 	               JOIN credit_lot_state ps ON ps.lot_id = p.parent_lot_id
 	              WHERE p.lot_id = st.lot_id
 	                AND ps.finality = ANY($3::text[])))
+	     OR (st.finality = ANY($4::text[])
+	         AND NOT EXISTS (
+	             SELECT 1 FROM credit_lot_parents p
+	               JOIN credit_lot_state ps ON ps.lot_id = p.parent_lot_id
+	              WHERE p.lot_id = st.lot_id
+	                AND ps.finality = ANY($3::text[])))
 	   )
 	 ORDER BY st.lot_id
 	 LIMIT $1`
@@ -249,6 +270,26 @@ func frozenFinalities() []string {
 	return out
 }
 
+// thawableFinalities are the frozen finalities a derived lot can legally LEAVE
+// again, as a SQL array: the ones from which the transition table has an edge to
+// both SETTLED and REVERSIBLE, which are the two the thaw branch can reach.
+//
+// It is computed from `finalityTransitions` rather than written down, so the
+// clause that selects a lot to thaw and the table that decides whether the move
+// is legal cannot come apart. Today it is exactly DISPUTED. REVERSED is not in
+// it and must not be: it is terminal, it means the money behind the lot was
+// actually taken back, and a lot derived from a reversal stays frozen for ever.
+func thawableFinalities() []string {
+	var out []string
+	for _, f := range valuedomain.FrozenFinalities() {
+		if valuedomain.CanTransitionFinality(f, valuedomain.FinalitySettled) &&
+			valuedomain.CanTransitionFinality(f, valuedomain.FinalityReversible) {
+			out = append(out, string(f))
+		}
+	}
+	return out
+}
+
 // SettleDerivedResult is what one pass of SettleDerived did.
 type SettleDerivedResult struct {
 	// Promoted is how many derived lots reached a payout-eligible finality
@@ -257,6 +298,9 @@ type SettleDerivedResult struct {
 	// Frozen is how many were moved to DISPUTED because a parent was disputed
 	// or reversed.
 	Frozen int
+	// Thawed is how many came back out of a freeze because the dispute behind
+	// every frozen parent was resolved in the platform's favour (D-140).
+	Thawed int
 }
 
 // SettleDerived is the pass that moves derived lots when their parents move.
@@ -286,6 +330,27 @@ type SettleDerivedResult struct {
 //     earning funded by a grant and a charged-back card stayed spendable for
 //     ever (F-273).
 //
+//   - a frozen derived lot NONE of whose parents is frozen any more is
+//     thawed: to SETTLED when every parent is payout-eligible, to REVERSIBLE
+//     when one of them is still inside a dispute window. It is the mirror
+//     D-094 promised for funded value and D-124 never built for derived value,
+//     and without it winning a dispute unfroze the card and stranded the
+//     earning (D-140, F-278).
+//
+//     The target is what `DerivedFinality` says now, mapped onto the two edges
+//     DISPUTED actually has. A lot minted UNFUNDED comes back SETTLED rather
+//     than UNFUNDED because there is no DISPUTED -> UNFUNDED edge and inventing
+//     one would give this sweep a way to un-fund value; the two are the same
+//     answer to every reader that matters -- `Spendable()` and
+//     `PayoutEligible()` admit both -- and SETTLED is the one that is true of a
+//     lot whose whole provenance has finished moving.
+//
+//     A lot with a REVERSED parent is never selected: REVERSED is terminal, so
+//     that parent is frozen for ever and the clause that opens this branch
+//     requires no parent to be frozen. That is the design and not an oversight
+//     -- the value behind it was taken back -- and it is why the thaw cannot
+//     become a laundering route.
+//
 // Batch-bounded, and each lot is taken under the same advisory lock SetFinality
 // uses, tried rather than waited for -- so two tickers racing skip past each
 // other instead of blocking, and neither holds a long transaction over the lot
@@ -301,7 +366,7 @@ func (s *Service) SettleDerived(ctx context.Context, tx pgx.Tx, limit int) (Sett
 		limit = 100
 	}
 	rows, err := tx.Query(ctx, settleDerivedCandidates,
-		limit, payoutEligibleFinalities(), frozenFinalities())
+		limit, payoutEligibleFinalities(), frozenFinalities(), thawableFinalities())
 	if err != nil {
 		return out, mapError(err)
 	}
@@ -355,6 +420,23 @@ func (s *Service) SettleDerived(ctx context.Context, tx pgx.Tx, limit int) (Sett
 				return out, err
 			}
 			out.Frozen++
+		case c.from.Frozen():
+			// Nothing above this lot is frozen any more, so the freeze that
+			// put it here has been resolved. Back to what its parents say it
+			// is, through the one edge the transition table has for it: an
+			// illegal move is refused by SetFinality rather than skipped here,
+			// because a thaw this sweep cannot express is a fact an operator
+			// has to see.
+			to := valuedomain.FinalityReversible
+			if worst.PayoutEligible() {
+				to = valuedomain.FinalitySettled
+			}
+			if err := s.SetFinality(ctx, tx, c.id, to,
+				Reference{Type: "credit_lot_parents", ID: c.id.String()},
+				"the dispute that froze the lots this one was derived from has been resolved"); err != nil {
+				return out, err
+			}
+			out.Thawed++
 		case c.from == valuedomain.FinalityReversible && worst.PayoutEligible():
 			// UNFUNDED is terminal, so a derived lot whose parents are all
 			// UNFUNDED is already as final as it can be; SETTLED is the state
