@@ -1447,7 +1447,7 @@ deployed, verified in a browser, adversarially audited and reconciled with the
 architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
 identity source of truth) is the first productization decision.
 
-**State at the last update (2026-09-10, 17:35 PDT; refreshed at least hourly while the wave runs).**
+**State at the last update (2026-09-10, 18:00 PDT; refreshed at least hourly while the wave runs).**
 
 - **Done on `productization`:** deploy enablement for the web app (`df48cb4`:
   Render static site `nodal-web`, `CP_AUTH_POST_LOGIN_URL`, same-site cookie
@@ -1460,6 +1460,8 @@ identity source of truth) is the first productization decision.
   secrets, the push of `main` (`9906c9f`), and later the `app-nodal` CNAME.
   §2's live verification happens the moment those are done; nothing else
   waits for it.
+- **Merged since (latest):** the markets branch (`wt/markets` → positions/P&L, prints and candles, discovery, activity feed, market safety, demo seeder; ADR-0027, D-063–068, migrations 00771–00775), the verification branch (`wt/verification` → the verification state machine and sessions, evidence checks, the sandbox verification provider, eligibility, payout destinations, quotes and provenance; ADR-0025/0026, D-057–062, migrations 00761–00764), the profile branch (`wt/profile` → user profiles, terms acceptances, account closure, operator bootstrap; ADR-0024, D-053–056, migrations 00756–00760), the console's second round (`wt/admin`), the shell's phase 2 (`wt/web-shell`: onboarding against the real registry, the bell, the stream, `return_to`, the sandbox line). Orchestrator additions: `return_to` on login (`7bc6f0a`), sandbox temperature on purchases and the tier on `/v1/version` (`1a82ffb`), the gate history route (`9b7c445`), public reads of the legal registry and market discovery (`4730287`, D-080). Every merge: build, vet, full lint, unit, the touched integration suites and the restore drill green; the drill line is at 153 tables / 00786.
+- **In flight now:** F2 (home, Buy Credits, portfolio, activity, notifications, settings), F3 (markets, trading, charts), F4 (withdraw, verification, destinations, agents), F1 phase 3 (real legal text, live market preview); a wiring agent for the cross-domain hooks the backend agents left (activity kinds, notification sources, agent events, the withdrawal disclosure before a payout).
 - **Merged since (later):** agents management surface (`wt/agents` → `9f5fe8c`, ADR-0029, D-073–076, migration 00786), notifications + realtime + the user's audit trail (`wt/notifications` → `dac0fda`, ADR-0028, D-069–072, migrations 00781–00783), the public site and shell (`wt/web-shell` → `ffa56e3`, 73 E2E cases green on its branch); restore drill re-run at 00786 (`de7f377`); every merge's integration suites green.
 - **Merged since:** the operator console (`wt/admin` → `b6e3b5b`: SANDBOX
   rendered as "not an approval", the §38 account view, a live break-glass

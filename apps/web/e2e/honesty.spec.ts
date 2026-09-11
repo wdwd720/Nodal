@@ -154,12 +154,26 @@ test("example data on the public site is labelled as an example", async ({ brows
   await page.context().close();
 });
 
-test("a page showing balances discloses that they are USDC", async ({ page }) => {
-  for (const route of ["/home", "/portfolio"]) {
+test("a page showing a USD valuation says what is actually held", async ({ page }) => {
+  // The list is empty of `/home` and `/portfolio` on purpose, and it is the
+  // change D-077 made rather than an omission: both moved onto Credits, which
+  // are not a settlement token and must not be described as though they were.
+  // What they owe is the Credit disclosure, which the two tests below require.
+  //
+  // The rule this test protects is unchanged — a page that puts a dollar figure
+  // in front of somebody must say what the underlying actually is, because a
+  // "$" is the single most misread character in this product. So it is asserted
+  // wherever a USD figure still renders, which on the closed-loop product is
+  // the agent surface and its holdings.
+  for (const route of ["/agents"]) {
     await page.goto(route);
     const text = await visibleText(page);
-    expect(text, `${route} names the settlement asset`).toContain("USDC");
-    expect(text.toLowerCase(), `${route} says what USDC is`).toContain("stablecoin");
+    expect(text, `${route} says what a USD figure is`).toContain(
+      "USD figures are a valuation computed by the backend",
+    );
+    expect(text, `${route} says it is an estimate, not dollars held`).toContain(
+      "not an amount held in dollars",
+    );
   }
 });
 
@@ -191,9 +205,17 @@ test("a model score never appears without the denial beside it", async ({ page }
 });
 
 test("pending settlement is never hidden", async ({ page }) => {
-  await page.goto("/settings");
+  // The claim under test is that value which is not yet usable is shown
+  // SEPARATELY and is named as not usable. On the closed-loop product that
+  // lives on the dashboard's Credit module — a frozen bucket and a
+  // payout-eligible split, each with its own figure — rather than on the
+  // hosted rail's funding panel, which D-077 removed with its page.
+  await page.goto("/home");
   const text = await visibleText(page);
-  expect(text).toContain("not spendable until the backend marks them available");
+  expect(text, "value that is held is named as not spendable").toContain("Not spendable until");
+  expect(text, "and what may be paid out is a separate question").toContain(
+    "Payout-eligible value",
+  );
 });
 
 test("the risk statement is on every page", async ({ browser, page }) => {

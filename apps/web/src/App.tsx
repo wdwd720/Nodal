@@ -45,16 +45,20 @@ import { Explanation, Loading } from "./components/DataState.tsx";
 import { clearSignInPending, signInPending } from "./lib/survives-sign-in.ts";
 import { signInPathFor, useSession } from "./session.tsx";
 
-import { Activity } from "./pages/Activity.tsx";
+import { Activity } from "./pages/activity/Activity.tsx";
 import { Agents } from "./pages/Agents.tsx";
-import { Home } from "./pages/Home.tsx";
+import { Home } from "./pages/home/Home.tsx";
 import { CreateAsset } from "./pages/markets/CreateAsset.tsx";
 import { MarketDetail } from "./pages/markets/MarketDetail.tsx";
 import { Markets } from "./pages/markets/Markets.tsx";
 import { Products } from "./pages/markets/Products.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
-import { Portfolio } from "./pages/Portfolio.tsx";
-import { Settings } from "./pages/Settings.tsx";
+import { Portfolio } from "./pages/portfolio/Portfolio.tsx";
+import { BuyCredits } from "./pages/credits/BuyCredits.tsx";
+import { Notifications } from "./pages/notifications/Notifications.tsx";
+import { AccountStanding } from "./pages/settings/AccountStanding.tsx";
+import { Security as SecuritySettings } from "./pages/settings/Security.tsx";
+import { Settings } from "./pages/settings/Settings.tsx";
 
 import { Welcome } from "./pages/onboarding/Welcome.tsx";
 import { WelcomeDone } from "./pages/onboarding/WelcomeDone.tsx";
@@ -310,7 +314,11 @@ export function App(): ReactNode {
         <Route path="/agents" element={<Agents />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/activity" element={<Activity />} />
+        <Route path="/buy-credits" element={<BuyCredits />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/security" element={<SecuritySettings />} />
+        <Route path="/settings/account" element={<AccountStanding />} />
       </Route>
 
       <Route path="*" element={<NotFoundRoute />} />

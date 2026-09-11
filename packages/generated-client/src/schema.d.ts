@@ -4459,6 +4459,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The legal documents currently served, with their text, for anyone
+         * @description The same registry a signed-in person accepts from (internal/terms), without any acceptance state: a visitor with no account can read the binding text before creating one, and the public site serves these bytes rather than an explainer. Every document says whether counsel review is still required.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current documents, oldest requirement first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PublicLegalDocument"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/version": {
         parameters: {
             query?: never;
@@ -5913,6 +5952,17 @@ export interface components {
             role: string;
             /** @enum {string} */
             verification: "CODE_COMPLETE" | "CONTRACT_TESTED" | "SANDBOX_VERIFIED" | "CANARY_VERIFIED" | "LIVE_VERIFIED" | "BLOCKED_EXTERNAL";
+        };
+        /** @description A served legal document without any person's acceptance state. */
+        PublicLegalDocument: {
+            body: string;
+            /** @description sha256 of the exact body bytes; an acceptance records this hash */
+            content_hash: string;
+            counsel_review_required: boolean;
+            document_id: string;
+            requirement: string;
+            title: string;
+            version: string;
         };
         PurchaseInternalProductRequest: {
             account_id: components["schemas"]["UUID"];

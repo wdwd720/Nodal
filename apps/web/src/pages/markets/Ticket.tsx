@@ -36,7 +36,7 @@ import { newIdempotencyKey } from "@controlplane/generated-client";
 
 import {
   useCreditBalance,
-  useMarketPortfolio,
+  usePortfolio,
   useNativeOrder,
   useNativeQuote,
   positionIn,
@@ -110,7 +110,7 @@ export function Ticket(props: {
   const quote = useNativeQuote();
   const order = useNativeOrder();
   const credits = useCreditBalance(props.accountId);
-  const portfolio = useMarketPortfolio(props.accountId);
+  const portfolio = usePortfolio(props.accountId);
   const position = positionIn(portfolio.data, market.market_id);
 
   const status = statusCopy(market.market_status);

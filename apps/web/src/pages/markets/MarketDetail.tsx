@@ -129,6 +129,11 @@ export function MarketDetail(): ReactNode {
     // things this screen just changed, so it asks for them again itself.
     void queryClient.invalidateQueries({ queryKey: ["native-market"] });
     void queryClient.invalidateQueries({ queryKey: ["credits"] });
+    // `usePortfolio` is keyed ["me", "portfolio", id], and the stream only
+    // invalidates that prefix on an `account` scope — a fill emits `position`
+    // and `balance`, so without this the position the fill just changed is the
+    // one thing on the screen that would not refresh.
+    void queryClient.invalidateQueries({ queryKey: ["me", "portfolio"] });
     void queryClient.invalidateQueries({ queryKey: ["activity"] });
   };
 

@@ -87,10 +87,12 @@ func TestNonPublicOperationsDeclareAPermission(t *testing.T) {
 func TestPublicOperationsAreExactlyTheExpectedSet(t *testing.T) {
 	t.Parallel()
 	want := []string{
-		"GetAuthCallback",      // OIDC callback; the state row is the credential
-		"GetAuthLogin",         // OIDC entry point
-		"GetHealthz",           // liveness
-		"GetReadyz",            // readiness
+		"GetAuthCallback", // OIDC callback; the state row is the credential
+		"GetAuthLogin",    // OIDC entry point
+		"GetHealthz",
+		"GetNativeMarkets", // liveness
+		"GetReadyz",
+		"GetTerms",             // readiness
 		"GetVersion",           // build version and non-secret config hash
 		"PostWebhooksProvider", // authority is the provider signature over raw bytes
 	}
@@ -234,6 +236,8 @@ func publicPaths() map[string]struct{} {
 		"GET /v1/healthz":                 {},
 		"GET /v1/readyz":                  {},
 		"GET /v1/version":                 {},
+		"GET /v1/terms":                   {},
+		"GET /v1/native-markets":          {},
 		"POST /v1/webhooks/stripe_credit": {},
 	}
 }
