@@ -8,6 +8,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/gen/api"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/observability"
 )
 
@@ -51,6 +52,23 @@ func (s *Server) PostPayments(ctx context.Context, request api.PostPaymentsReque
 	}
 	if request.Body.AmountMinor <= 0 {
 		return nil, validationError("amount_minor", "the amount must be positive")
+	}
+	// Bounded here, before any guard measures anything against it (F-159).
+	//
+	// internal/capacity compares headroom rather than summing, so it can no
+	// longer be overflowed -- but a ceiling that is only safe because the
+	// number reaching it happens to be small is not safe, and the bound the
+	// deployment publishes is the honest one to apply. It is the SAME number
+	// GET /v1/credits/pricing states, read from the policy rather than
+	// repeated here, so a client is refused by the figure it was shown instead
+	// of by a constant nobody published.
+	pricing, err := s.opts.Ports.Credits.Pricing(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if request.Body.AmountMinor > pricing.MaxAmountMinor {
+		return nil, validationError("amount_minor",
+			"the largest single purchase this deployment sells is "+money.USDFromMinor(pricing.MaxAmountMinor).String())
 	}
 	currency := "USD"
 	if request.Body.Currency != nil {

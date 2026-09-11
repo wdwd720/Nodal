@@ -367,6 +367,24 @@ func (g *Guard) Admit(ctx context.Context, q db.Querier, a Action) (Reading, err
 // vault straight over it: at 199,000 of 200,000 minor units, a further 50,000
 // is admitted and the tier ends up 49,000 beyond the cap it was given. The
 // ceiling is about what the deployment could owe after the action, not before.
+//
+// # Why the comparison is a subtraction
+//
+// It used to be `after := r.AtRiskMinor + amountMinor` compared against the
+// ceiling. That sum is unchecked int64: an amount near math.MaxInt64 wraps
+// negative, the comparison passes, and the guard whose whole job is to answer
+// "what could this deployment owe after the action" answers with a number
+// below zero (F-159).
+//
+// It was inert only because internal/credit happened to call this BEFORE
+// pricing, and PricingPolicy.CreditsFor then refused the amount for exceeding
+// MaxAmountMinor -- so the order of two calls was the only thing between that
+// arithmetic and a ceiling that could be stepped over. Comparing headroom
+// instead cannot overflow for any non-negative amount, because both sides of
+// `amountMinor > MaxAtRiskMinor - AtRiskMinor` are already bounded by values
+// this guard measured. The API bounds amount_minor before the guard ever sees
+// it as well; a guard that depends on its caller having done that is not a
+// guard.
 func (g *Guard) AdmitAmount(ctx context.Context, q db.Querier, a Action, amountMinor int64) (Reading, error) {
 	if amountMinor < 0 {
 		return Reading{}, errs.New(errs.CodeValidationFailed, "capacity: a negative amount")
@@ -376,11 +394,14 @@ func (g *Guard) AdmitAmount(ctx context.Context, q db.Querier, a Action, amountM
 		return r, err
 	}
 	if g.budget.MaxAtRiskMinor > 0 && a == ActionCreditPurchase {
-		after := r.AtRiskMinor + amountMinor
-		if after > g.budget.MaxAtRiskMinor {
+		// Headroom, not a sum. A measured AtRiskMinor above the ceiling gives
+		// a negative headroom, which refuses every positive amount -- which is
+		// the right answer for a tier already past its cap.
+		headroom := g.budget.MaxAtRiskMinor - r.AtRiskMinor
+		if amountMinor > headroom {
 			return r, g.refuse(a, "money at risk",
-				fmt.Sprintf("%d minor units at risk now and this would make it %d, past the ceiling of %d",
-					r.AtRiskMinor, after, g.budget.MaxAtRiskMinor))
+				fmt.Sprintf("%d minor units at risk now leaves %d of headroom under the ceiling of %d, and this asks for %d",
+					r.AtRiskMinor, headroom, g.budget.MaxAtRiskMinor, amountMinor))
 		}
 	}
 	return r, nil
