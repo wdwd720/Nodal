@@ -53,7 +53,20 @@ async function visibleText(page: Page): Promise<string> {
   await expect(page.locator("h1")).toHaveCount(1);
   // Includes the text of disabled-control explanations and disclosures, which
   // is exactly the copy most likely to drift.
-  return page.evaluate(() => document.body.innerText);
+  //
+  // It excludes `.doc-source`, and only that: the verbatim bytes of a legal
+  // document the API served. An acceptance records the sha256 of exactly what
+  // was shown, so the app must reproduce those bytes unaltered — it has no
+  // licence to reword them and this scan has no business asserting over them.
+  // The document that forced the question says "none of them is guaranteed to
+  // complete", which is a DENIAL, and a substring ban cannot tell a claim from
+  // its denial — the same reasoning the terms assertions below already rest on.
+  // Every word the product writes for itself is still scanned.
+  return page.evaluate(() => {
+    const copy = document.body.cloneNode(true) as HTMLElement;
+    for (const served of copy.querySelectorAll(".doc-source")) served.remove();
+    return copy.innerText;
+  });
 }
 
 async function signedOutPage(browser: Browser): Promise<Page> {

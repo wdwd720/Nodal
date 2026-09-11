@@ -61,6 +61,10 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   // navigation. It is shown to everybody — including the accounts that cannot
   // use it, which is the point of goal §19 — but it is not a destination.
   { path: "/withdraw", heading: "Withdraw" },
+  // No `nav`: verification is reached from Withdraw, because that is the only
+  // thing in the product that needs it — goal §19's "nothing else in the
+  // product needs this" is a routing fact as much as a sentence.
+  { path: "/verify", heading: "Verify your identity" },
   { path: "/portfolio", heading: "Portfolio", nav: "Portfolio" },
   { path: "/activity", heading: "Activity", nav: "Activity" },
   // No `nav`: Settings is reached from the account menu rather than the rail,

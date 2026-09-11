@@ -49,6 +49,7 @@ import { Activity } from "./pages/Activity.tsx";
 import { AgentDetail } from "./pages/agents/AgentDetail.tsx";
 import { AgentNew } from "./pages/agents/AgentNew.tsx";
 import { AgentsList } from "./pages/agents/AgentsList.tsx";
+import { Verify } from "./pages/verify/Verify.tsx";
 import { Withdraw } from "./pages/withdraw/Withdraw.tsx";
 import { CreateAsset } from "./pages/CreateAsset.tsx";
 import { Home } from "./pages/Home.tsx";
@@ -310,6 +311,7 @@ export function App(): ReactNode {
         <Route path="/agents/new" element={<AgentNew />} />
         <Route path="/agents/:agentId" element={<AgentDetail />} />
         <Route path="/withdraw" element={<Withdraw />} />
+        <Route path="/verify" element={<Verify />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/settings" element={<Settings />} />

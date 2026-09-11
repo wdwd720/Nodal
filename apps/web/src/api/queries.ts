@@ -55,12 +55,19 @@ import {
   agentSpec,
   authorityLevelSpec,
   strategySpec,
+  payoutDestinationSpec,
+  payoutQuoteSpec,
+  verificationSessionSpec,
   itemsSpec,
   validated,
   validatedAgent,
   validatedCompileResult,
+  validatedEligibility,
   validatedList,
+  validatedPayout,
+  validatedStartedVerification,
   validatedStrategy,
+  validatedVerificationProfile,
 } from "./contract.ts";
 
 export type Principal = Schemas["Principal"];
@@ -822,6 +829,16 @@ export interface CreatePayoutRequest {
   readonly accountId: string;
   readonly amount: string;
   readonly destinationId?: string;
+  /**
+   * The quote the customer was actually shown.
+   *
+   * It is consumed in the same transaction that reserves the value, so one
+   * quote funds exactly one payout and an expired or already-used one refuses
+   * the request before anything is decided about the money. Sending it is what
+   * makes "the number you saw is the number you get" a property of the system
+   * rather than a hope about timing.
+   */
+  readonly quoteId?: string;
   readonly idempotencyKey: string;
 }
 
@@ -835,13 +852,15 @@ export function useCreatePayout(): UseMutationResult<PayoutRequest, unknown, Cre
           account_id: r.accountId,
           amount: r.amount,
           ...(r.destinationId !== undefined ? { destination_id: r.destinationId } : {}),
+          ...(r.quoteId !== undefined ? { quote_id: r.quoteId } : {}),
         },
       });
-      return validated<PayoutRequest>(data, payoutRequestSpec, "/payouts");
+      return validatedPayout<PayoutRequest>(data, "/payouts");
     },
     onSuccess: (_req, r) => {
       void qc.invalidateQueries({ queryKey: nodalKeys.payouts(r.accountId) });
       void qc.invalidateQueries({ queryKey: nodalKeys.credits(r.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(r.accountId) });
     },
   });
 }
@@ -1259,7 +1278,7 @@ export function usePayout(
       const { data } = await api.GET("/payouts/{payoutId}", {
         params: { path: { payoutId: payoutId ?? "" } },
       });
-      return validated<PayoutRequest>(data, payoutRequestSpec, "/payouts/{id}");
+      return validatedPayout<PayoutRequest>(data, "/payouts/{id}");
     },
   });
 }
@@ -1286,12 +1305,319 @@ export function useCancelPayout(): UseMutationResult<PayoutRequest, unknown, Can
         ...idempotent(input.idempotencyKey, { path: { payoutId: input.payoutId } }),
         body: { account_id: input.accountId, reason: input.reason },
       });
-      return validated<PayoutRequest>(data, payoutRequestSpec, "/payouts/{id}/cancel");
+      return validatedPayout<PayoutRequest>(data, "/payouts/{id}/cancel");
     },
     onSuccess: (_payout, input) => {
       void qc.invalidateQueries({ queryKey: agentKeys.payout(input.payoutId) });
       void qc.invalidateQueries({ queryKey: nodalKeys.payouts(input.accountId) });
       void qc.invalidateQueries({ queryKey: nodalKeys.credits(input.accountId) });
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Verification, eligibility, destinations and quotes (goal §19-§21, §23-§25)
+ *
+ * The order of the hooks below is the order of the journey, and the separation
+ * between them is the architecture: verification changes a PROFILE, eligibility
+ * reads a POLICY against provenance, a destination is a PROVIDER'S token, and a
+ * quote is a pre-commitment that reserves nothing. No hook here converts one
+ * into another, and there is deliberately none that asks "can I withdraw?" in a
+ * single call — because the answer is composed from four different facts and a
+ * screen that showed one of them as the answer would be wrong three ways.
+ * ------------------------------------------------------------------------ */
+
+export type VerificationProfile = Schemas["VerificationProfile"];
+export type VerificationSession = Schemas["VerificationSession"];
+export type VerificationCheck = Schemas["VerificationCheck"];
+export type VerificationRequirement = Schemas["VerificationRequirement"];
+export type StartedVerification = Schemas["StartedVerification"];
+export type SandboxOutcome = Schemas["SandboxVerificationOutcome"]["outcome"];
+export type WithdrawalEligibility = Schemas["WithdrawalEligibility"];
+export type WithdrawalOriginBucket = Schemas["WithdrawalOriginBucket"];
+export type PayoutDestination = Schemas["PayoutDestination"];
+export type PayoutDestinationKind = Schemas["PayoutDestination"]["kind"];
+export type PayoutQuote = Schemas["PayoutQuote"];
+export type PayoutProvenanceSlice = Schemas["PayoutProvenanceSlice"];
+
+export const withdrawKeys = {
+  verification: (accountId: string) => ["me", "verification", accountId] as const,
+  verificationSession: (accountId: string, sessionId: string) =>
+    ["me", "verification", accountId, "session", sessionId] as const,
+  eligibility: (accountId: string) => ["me", "eligibility", accountId] as const,
+  destinations: (accountId: string) => ["me", "payout-destinations", accountId] as const,
+};
+
+/**
+ * The financial verification profile: state, level, the sub-checks behind it,
+ * and what is missing.
+ *
+ * It is never served from cache. A provider callback can move it at any moment,
+ * and a screen that offered "Start verification" against a stale profile would
+ * be offering to start something that has already finished.
+ */
+export function useVerification(accountId: string | undefined): UseQueryResult<VerificationProfile> {
+  return useQuery({
+    queryKey: withdrawKeys.verification(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/verification", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedVerificationProfile<VerificationProfile>(data, "/me/verification");
+    },
+  });
+}
+
+export interface StartVerificationInput {
+  readonly accountId: string;
+  /** ISO 3166-1 alpha-2, upper case. Never inferred from a network address. */
+  readonly country: string;
+  readonly region?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Opens a provider-hosted verification.
+ *
+ * The jurisdiction is supplied by the person and by nobody else. Deriving it
+ * from an IP address would be a legal determination wearing a network header's
+ * clothes, and the API refuses to make one — so this hook has no fallback and
+ * no default country.
+ */
+export function useStartVerification(): UseMutationResult<StartedVerification, unknown, StartVerificationInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: StartVerificationInput) => {
+      const region = input.region;
+      const { data } = await api.POST("/me/verification/sessions", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          purpose: "PAYOUT_KYC",
+          jurisdiction_country: input.country,
+          ...(region === undefined || region === "" ? {} : { jurisdiction_region: region }),
+        },
+      });
+      return validatedStartedVerification<StartedVerification>(data, "/me/verification/sessions");
+    },
+    onSuccess: (_started, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.verification(input.accountId) });
+    },
+  });
+}
+
+/**
+ * Asks the provider what happened, and records it.
+ *
+ * It is a GET that changes state on the server, which is the only shape that
+ * works: somebody coming back from a hosted flow has said they came back, not
+ * that they passed. Never trusting the redirect is the rule; polling is how it
+ * is kept.
+ */
+export function usePollVerification(
+  accountId: string | undefined,
+  sessionId: string | undefined,
+  options: { readonly refetchMs?: number } = {},
+): UseQueryResult<VerificationSession> {
+  return useQuery({
+    queryKey: withdrawKeys.verificationSession(accountId ?? "", sessionId ?? ""),
+    enabled: accountId !== undefined && sessionId !== undefined && sessionId !== "",
+    staleTime: 0,
+    ...(options.refetchMs === undefined ? {} : { refetchInterval: options.refetchMs }),
+    queryFn: async () => {
+      const { data } = await api.GET("/me/verification/sessions/{sessionId}", {
+        params: { path: { sessionId: sessionId ?? "" }, query: { account_id: accountId ?? "" } },
+      });
+      return validated<VerificationSession>(data, verificationSessionSpec, "/me/verification/sessions/{id}");
+    },
+  });
+}
+
+export interface SandboxOutcomeInput {
+  readonly accountId: string;
+  readonly outcome: SandboxOutcome;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Chooses what a REHEARSAL verification decides. Sandbox tier only.
+ *
+ * The API refuses this with FORBIDDEN on any deployment that is not a sandbox
+ * tier, and there is no default outcome anywhere in the path: a rehearsal
+ * session nobody has answered stays pending forever, because "approved unless
+ * told otherwise" is a fabricated approval with extra steps. The interface
+ * offers this control only where the API has said the session has one.
+ */
+export function useSandboxOutcome(): UseMutationResult<VerificationSession, unknown, SandboxOutcomeInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SandboxOutcomeInput) => {
+      const { data } = await api.POST("/me/verification/sandbox-outcome", {
+        ...idempotent(input.idempotencyKey),
+        body: { account_id: input.accountId, outcome: input.outcome },
+      });
+      return validated<VerificationSession>(data, verificationSessionSpec, "/me/verification/sandbox-outcome");
+    },
+    onSuccess: (_session, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.verification(input.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(input.accountId) });
+    },
+  });
+}
+
+/**
+ * What of this balance may be withdrawn, per origin, and why not the rest.
+ *
+ * `staleTime: 0` for the same reason buying power has it: eligibility is
+ * recomputed by the backend from a policy the deployment can change, from
+ * provenance that moves with every trade, and from capability gates an operator
+ * can close. A cached answer is a claim about money that may no longer be true.
+ */
+export function useEligibility(accountId: string | undefined): UseQueryResult<WithdrawalEligibility> {
+  return useQuery({
+    queryKey: withdrawKeys.eligibility(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/eligibility", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedEligibility<WithdrawalEligibility>(data, "/me/eligibility");
+    },
+  });
+}
+
+export function usePayoutDestinations(accountId: string | undefined): UseQueryResult<PayoutDestination[]> {
+  return useQuery({
+    queryKey: withdrawKeys.destinations(accountId ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/payout-destinations", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedList<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations");
+    },
+  });
+}
+
+export interface AddDestinationInput {
+  readonly accountId: string;
+  readonly kind: PayoutDestinationKind;
+  /** The provider's token, or a sandbox handle. Never an account number. */
+  readonly providerToken: string;
+  readonly displayLabel?: string;
+  readonly currency?: string;
+  readonly country?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Registers a destination from a provider token.
+ *
+ * What travels here is the PROVIDER'S reference plus a mask a person
+ * recognises. An input that looks like an account number, a card number, an
+ * IBAN, a private key or a seed phrase is refused by the API rather than
+ * stored, and this hook does not pre-empt that check: the refusal belongs to
+ * the backend, and rendering its message is how a person learns what the
+ * product will and will not hold.
+ *
+ * Adding one needs a recent strong sign-in, so a STEP_UP_REQUIRED here is
+ * expected rather than exceptional and the caller wires the round trip.
+ */
+export function useAddDestination(): UseMutationResult<PayoutDestination, unknown, AddDestinationInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AddDestinationInput) => {
+      const { data } = await api.POST("/me/payout-destinations", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          kind: input.kind,
+          provider_token: input.providerToken,
+          ...(input.displayLabel === undefined || input.displayLabel === ""
+            ? {}
+            : { display_label: input.displayLabel }),
+          ...(input.currency === undefined || input.currency === "" ? {} : { currency: input.currency }),
+          ...(input.country === undefined || input.country === "" ? {} : { country: input.country }),
+        },
+      });
+      return validated<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations");
+    },
+    onSuccess: (_destination, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.destinations(input.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(input.accountId) });
+    },
+  });
+}
+
+export interface RemoveDestinationInput {
+  readonly destinationId: string;
+  readonly accountId: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Stops using a destination.
+ *
+ * It disables rather than deletes, because a destination value has left through
+ * is financial history. A disabled one never comes back: adding it again is a
+ * new registration with its own creation time, which is what makes a cooldown
+ * on a changed destination a fact rather than a field somebody resets.
+ */
+export function useRemoveDestination(): UseMutationResult<PayoutDestination, unknown, RemoveDestinationInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RemoveDestinationInput) => {
+      const { data } = await api.DELETE("/me/payout-destinations/{destinationId}", {
+        ...idempotent(input.idempotencyKey, {
+          path: { destinationId: input.destinationId },
+          query: { account_id: input.accountId },
+        }),
+      });
+      return validated<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations/{id}");
+    },
+    onSuccess: (_destination, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.destinations(input.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(input.accountId) });
+    },
+  });
+}
+
+export interface PayoutQuoteInput {
+  readonly accountId: string;
+  readonly destinationId: string;
+  /** The GROSS Credits the customer would give up. The fee comes out of it. */
+  readonly amount: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * What a payout would cost, before committing to it.
+ *
+ * A quote reserves nothing and writes no ledger row, and it expires. An expired
+ * one is REFUSED rather than silently re-priced — somebody who saw a number and
+ * pressed the button a quarter of an hour later is told the number moved, not
+ * charged a different one — so the caller shows the expiry and takes a fresh
+ * quote rather than hoping.
+ *
+ * It is a mutation rather than a query because the backend persists it and
+ * because a price must not appear because a component remounted.
+ */
+export function usePayoutQuote(): UseMutationResult<PayoutQuote, unknown, PayoutQuoteInput> {
+  return useMutation({
+    mutationFn: async (input: PayoutQuoteInput) => {
+      const { data } = await api.POST("/payouts/quote", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          destination_id: input.destinationId,
+          amount: input.amount,
+        },
+      });
+      return validated<PayoutQuote>(data, payoutQuoteSpec, "/payouts/quote");
     },
   });
 }
