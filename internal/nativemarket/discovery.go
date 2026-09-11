@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"math/big"
+	"regexp"
 	"strings"
 	"time"
 
@@ -196,6 +196,24 @@ func encodeListCursor(c listCursor) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// cursorKeyPattern is what PostgreSQL's numeric parser accepts, and nothing
+// else.
+//
+// The key goes into the statement as `$8::numeric`, so the only question this
+// validator has to answer is whether the cast will succeed. It used to be
+// answered by big.Rat.SetString, which is a WIDER grammar than numeric's: it
+// accepts a quotient ("1/3") and a hexadecimal mantissa with a binary exponent
+// ("0x1p2"). Both parsed here, reached the database, and came back as SQLSTATE
+// 22P02, which mapError's default branch rendered INTERNAL -- a 500 from a
+// public, unauthenticated route on input the caller chose (F-199).
+//
+// Every key this package MAKES is an integer or a plain decimal: epoch seconds
+// with microseconds, a Credit amount, a price at eighteen places, a signed
+// basis-point move. Exponent notation is deliberately not accepted -- numeric
+// would take it, and this package never writes it, so a cursor carrying one did
+// not come from here.
+var cursorKeyPattern = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
+
 func decodeListCursor(s string) (listCursor, bool, error) {
 	if strings.TrimSpace(s) == "" {
 		return listCursor{}, false, nil
@@ -208,7 +226,7 @@ func decodeListCursor(s string) (listCursor, bool, error) {
 	if err := json.Unmarshal(b, &c); err != nil {
 		return listCursor{}, false, errs.New(errs.CodeValidationFailed, "cursor is not a valid pagination cursor")
 	}
-	if _, ok := new(big.Rat).SetString(c.Key); !ok {
+	if !cursorKeyPattern.MatchString(c.Key) {
 		return listCursor{}, false, errs.New(errs.CodeValidationFailed, "cursor is not a valid pagination cursor")
 	}
 	if _, err := ParseMarketID(c.ID); err != nil {

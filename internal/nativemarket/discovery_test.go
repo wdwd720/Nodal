@@ -150,13 +150,40 @@ func TestListCursor_IsOpaqueAndRefusesTampering(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok, "no cursor is the first page, not an error")
 
+	// Every shape this package actually writes is accepted: epoch seconds with
+	// microseconds, a Credit amount, a price at eighteen places, and a signed
+	// basis-point move, which is the only negative one.
+	for _, good := range []string{"0", "1788696000.123456", "30000000000", "36363636363636", "-1000000000"} {
+		got, ok, err := decodeListCursor(encodeListCursor(listCursor{Key: good, ID: id.String()}))
+		require.NoError(t, err, "key %q", good)
+		require.True(t, ok)
+		assert.Equal(t, good, got.Key)
+	}
+
+	// The key is validated against PostgreSQL's numeric grammar and not
+	// against a wider one. big.Rat.SetString used to answer this question, and
+	// it accepts forms numeric does not -- a quotient and a hexadecimal
+	// mantissa with a binary exponent -- so those reached `$8::numeric`, failed
+	// with SQLSTATE 22P02 and surfaced as a 500 from a public route (F-199).
 	for name, bad := range map[string]string{
-		"not base64":    "!!!!",
-		"not json":      "bm90LWpzb24",
-		"key not a rat": encodeListCursor(listCursor{Key: "drop table", ID: id.String()}),
-		"id not an id":  encodeListCursor(listCursor{Key: "1", ID: "../../etc/passwd"}),
-		"no id at all":  encodeListCursor(listCursor{Key: "1"}),
-		"empty key":     encodeListCursor(listCursor{ID: id.String()}),
+		"not base64":       "!!!!",
+		"not json":         "bm90LWpzb24",
+		"key not a number": encodeListCursor(listCursor{Key: "drop table", ID: id.String()}),
+		"key is a rat":     encodeListCursor(listCursor{Key: "1/3", ID: id.String()}),
+		"key is a hex float with a binary exponent": encodeListCursor(
+			listCursor{Key: "0x1p2", ID: id.String()},
+		),
+		"key is exponent notation this package never writes": encodeListCursor(
+			listCursor{Key: "1e30", ID: id.String()},
+		),
+		"key is not-a-number":  encodeListCursor(listCursor{Key: "NaN", ID: id.String()}),
+		"key is infinity":      encodeListCursor(listCursor{Key: "Infinity", ID: id.String()}),
+		"key has whitespace":   encodeListCursor(listCursor{Key: " 1", ID: id.String()}),
+		"key is only a minus":  encodeListCursor(listCursor{Key: "-", ID: id.String()}),
+		"key has a bare point": encodeListCursor(listCursor{Key: "1.", ID: id.String()}),
+		"id not an id":         encodeListCursor(listCursor{Key: "1", ID: "../../etc/passwd"}),
+		"no id at all":         encodeListCursor(listCursor{Key: "1"}),
+		"empty key":            encodeListCursor(listCursor{ID: id.String()}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

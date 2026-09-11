@@ -625,6 +625,15 @@ func mapError(err error) error {
 		return errs.Wrap(err, errs.CodeAssetRestricted, "this market is not accepting that trade")
 	case "NM005":
 		return errs.Wrap(err, errs.CodeInternal, "this trade would break supply conservation")
+	case "22P02":
+		// invalid_text_representation: a value the caller supplied did not parse
+		// as the type it is cast to. That is the caller's input being wrong, not
+		// this service being broken, and the default branch below rendered it as
+		// a 500 from a public route (F-199). The message names no value: the
+		// database's own text quotes the input back, and a public error that
+		// echoes caller-supplied bytes is a small reflection surface.
+		return errs.Wrap(err, errs.CodeValidationFailed,
+			"a value in this request is not in the form this API accepts")
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errs.New(errs.CodeNotFound, "native market not found")
