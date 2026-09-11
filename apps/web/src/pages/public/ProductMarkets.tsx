@@ -2,16 +2,15 @@
  * `/product/markets` — how the internal market actually prices things.
  *
  * `docs/product/USER_JOURNEY.md` §0 wants this page to be a read-only preview
- * of live sandbox data. It is not one yet, and the page says so rather than
- * pretending: every market read in `openapi.yaml` requires the
- * `native_asset:read` permission (`internal/httpapi/authz.go`), so a signed-out
- * browser cannot fetch a market at all. The choice was between an example
- * clearly labelled as one and a page that shows an authentication error to
- * every visitor, and the labelled example is the honest half of that pair.
+ * of the live list with the sandbox label visible, and since D-080 opened
+ * `GET /v1/native-markets` to a signed-out browser it is one. Every market read
+ * beyond the list is still gated, so the only action offered is to sign in —
+ * anything else would be a door a visitor cannot open.
  *
- * The gap is recorded for the API: a public, read-only market listing would let
- * this page carry live sandbox data with the sandbox label, which is what the
- * journey asks for.
+ * The example composition stays as the fallback for an empty or unreachable
+ * list, with every label it had. A deployment with no markets is a fact worth
+ * stating, and an example that quietly stood in for live data would be the one
+ * fake dashboard on a site that has none.
  */
 import type { ReactNode } from "react";
 
@@ -19,7 +18,7 @@ import { LinkButton } from "../../components/Button.tsx";
 import { Field, FieldGrid } from "../../components/Field.tsx";
 import { Panel } from "../../components/Panel.tsx";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE } from "../../lib/honesty.ts";
-import { ExampleMarkets } from "./ExampleUI.tsx";
+import { LiveMarkets } from "./LiveMarkets.tsx";
 import { SiteItem, SitePageHead, SiteSection } from "./SiteChrome.tsx";
 
 const MECHANICS: ReadonlyArray<{ readonly title: string; readonly body: string }> = [
@@ -100,10 +99,10 @@ export function ProductMarkets(): ReactNode {
       </SiteSection>
 
       <SiteSection
-        title="A market list"
-        lead="The product's own table, rendered from fixed example values. Live market data needs a session, because the API refuses market reads to a signed-out browser."
+        title="What is listed"
+        lead="Read from Nodal's public market list as this page loaded. Opening a market, taking a quote and trading all need a session."
       >
-        <ExampleMarkets />
+        <LiveMarkets />
       </SiteSection>
 
       <SiteSection title="What the ticket asks you" lead="The same four inputs on every market.">

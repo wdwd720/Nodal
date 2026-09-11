@@ -625,6 +625,28 @@ main:focus {
   border-radius: var(--radius-panel);
   margin: var(--space-2) 0 var(--space-3);
   max-width: 100%;
+  /*
+   * `position: relative` is load-bearing, and the reason is not obvious.
+   *
+   * `overflow-x: auto` clips descendants that are in this element's flow. It
+   * does NOT clip an absolutely positioned descendant whose containing block is
+   * an ancestor of this one — that box escapes the scroll container entirely
+   * and lands at its static position in the unscrolled table.
+   *
+   * `Figure` puts the unabbreviated value in a `.visually-hidden` span, which
+   * is `position: absolute`, and `DataTable`'s caption is another. In a table
+   * narrow enough to fit, nobody notices. In a table wider than the viewport,
+   * those 1px spans sit at the far right of the TABLE, outside the viewport,
+   * and grow `documentElement.scrollWidth` — so the page scrolls sideways on a
+   * phone even though every visible box is inside it. `document.body.scrollWidth`
+   * stays correct, which is why it hides from a casual check.
+   *
+   * Making this element positioned gives those spans a containing block that
+   * IS the scroll container, so they are clipped with everything else. The
+   * 375px reflow gate in `e2e/accessibility.spec.ts` is what caught it, on the
+   * first table wide enough to expose it.
+   */
+  position: relative;
 }
 
 /*
