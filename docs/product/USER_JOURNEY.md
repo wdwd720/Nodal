@@ -38,10 +38,10 @@ Security · Learn · **Sign in** · **Get started**.
 |---|---|---|---|
 | Get started | `/get-started` explains the two things that will happen: an identity is created with the identity provider, and a Nodal profile. One button. | `GET /v1/auth/login` (302 to ZITADEL) | — |
 | Identity | ZITADEL hosted page: create account, verify e-mail, MFA if the provider requires it. Nodal never sees the password. | — | ZITADEL identity |
-| Callback | `/auth/callback` → API sets `__Host-nodal_session` → redirects to `CP_AUTH_POST_LOGIN_URL` + return path | `GET /v1/auth/callback` | session; `GET /v1/me` → `profile: null`, `onboarding.state: NEW` |
+| Callback | `/auth/callback` → API sets `__Host-nodal_session` → redirects to `CP_AUTH_POST_LOGIN_URL` + return path | `GET /v1/auth/callback` | session; `GET /v1/me` → `profile: null`, `onboarding.complete: false` with `next_step: PROFILE` |
 | Onboarding 1 | `/welcome`: display name (and optional handle), locale/timezone prefilled | `POST /v1/me/profile` | profile exists |
 | Onboarding 2 | `/welcome/terms`: the current Terms, Privacy and Risk disclosure, each with a version; the two acknowledgements the product needs (Credits are internal and not withdrawable until eligible; the sandbox/internal-economy risk statement) | `POST /v1/me/terms-acceptances` | acceptances recorded, audited |
-| Onboarding 3 | `/welcome/done`: what the dashboard shows and the three actions; "Explore markets" / "Buy Credits" / "Go to dashboard" | — | `onboarding.state: ONBOARDED` |
+| Onboarding 3 | `/welcome/done`: what the dashboard shows and the three actions; "Explore markets" / "Buy Credits" / "Go to dashboard" | — | `onboarding.complete: true` with a `completed_at`, every entry in `onboarding.steps` complete, and no `next_step` |
 
 Target: 60–90 seconds from landing to dashboard. Returning users skip 1–3.
 Any later visit with an unaccepted new document version routes to the terms

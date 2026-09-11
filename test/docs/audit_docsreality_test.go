@@ -207,6 +207,70 @@ func TestAuditDocs_EveryRouteAProductDocumentNamesIsServed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// F-253: a response field a document tells a caller to read
+// ---------------------------------------------------------------------------
+
+// USER_JOURNEY §1 described the onboarding half of `GET /v1/me` as a state
+// word: `onboarding.state: NEW` at the callback and `onboarding.state:
+// ONBOARDED` at the end. There is no such field and there never was. D-053
+// settled the question in the other direction -- onboarding is TIMESTAMPS, the
+// steps are independent, may be done in any order and cannot be undone -- and
+// the schema says so: `started_at`, `complete`, `completed_at`, `next_step`,
+// `steps[]`. A client written from the table would branch on a field that is
+// always undefined, which reads as "not onboarded" forever.
+//
+// The check derives the property names from the contract, so renaming one
+// fails here rather than in somebody's client (found by the browser
+// end-to-end audit).
+func onboardingFields(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	spec := read(t, root, "openapi/openapi.yaml")
+	idx := strings.Index(spec, "\n    Onboarding:\n")
+	require(t, idx >= 0, "openapi.yaml no longer declares an Onboarding schema")
+	block := spec[idx+1:]
+	// To the next schema at the same indent.
+	if m := regexp.MustCompile(`(?m)^    [A-Za-z]`).FindStringIndex(block[4:]); m != nil {
+		block = block[:4+m[0]]
+	}
+	out := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^ {8}([a-z_]+):`).FindAllStringSubmatch(block, -1) {
+		out[m[1]] = true
+	}
+	require(t, out["complete"] && out["steps"],
+		"only %d Onboarding properties parsed; this check stopped seeing the schema", len(out))
+	return out
+}
+
+var docField = regexp.MustCompile(`onboarding\.([a-z_]+)`)
+
+func TestAuditDocs_EveryOnboardingFieldADocumentNamesIsDeclared(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	declared := onboardingFields(t, root)
+
+	var problems []string
+	named := 0
+	for _, rel := range routeDocs {
+		body := read(t, root, rel)
+		for _, m := range docField.FindAllStringSubmatch(body, -1) {
+			named++
+			if declared[m[1]] {
+				continue
+			}
+			problems = append(problems, rel+":"+strconv.Itoa(lineOf(body, m[0]))+
+				" tells a caller to read onboarding."+m[1]+
+				"; the Onboarding schema declares no such property (D-053: timestamps, not a state machine)")
+		}
+	}
+	require(t, named > 0, "no onboarding field citations found; this check stopped seeing them")
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d onboarding field(s) a document names the contract does not declare:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
 // F-docs-10: a package a document names
 // ---------------------------------------------------------------------------
 
