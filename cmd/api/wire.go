@@ -49,8 +49,10 @@ import (
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/observability"
+	"github.com/nodal/controlplane/internal/operatorroles"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
+	"github.com/nodal/controlplane/internal/profile"
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/ratelimit"
@@ -308,10 +310,36 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// login path is what writes it (F-47). Nil in LOCAL/TEST with no keyring;
 	// config.Validate requires one in STAGING and PROD.
 	piiStore := newPIIStore(ctx, cfg, in.resolver, log)
+
+	// ---- operator bootstrap (ADR-0024, D-056) ------------------------------
+	//
+	// Nothing else in this system writes operator_roles, so a deployment that
+	// has never had an operator cannot get one and every admin route is
+	// unreachable in it. The declaration is configuration, parsed and validated
+	// by internal/config (which refuses anything in PROD but empty or exactly
+	// one ADMIN); the row is written at the declared identity's next login, and
+	// the login then reads the directory exactly as it always did.
+	//
+	// The line below is the only visible effect at boot, and it is deliberate:
+	// a control whose effect is invisible in the logs is a control nobody can
+	// check happened.
+	bootstrapDecls, err := operatorroles.ParseDeclarations(cfg.Auth.BootstrapOperators)
+	if err != nil {
+		return nil, fmt.Errorf("operator bootstrap: %w", err)
+	}
+	operatorBootstrap, err := identity.NewOperatorBootstrap(bootstrapDecls, auditWriter)
+	if err != nil {
+		return nil, fmt.Errorf("operator bootstrap: %w", err)
+	}
+	if len(bootstrapDecls) > 0 {
+		log.Warn("operator roles declared by configuration; they are granted at the named identity's next login and are recorded in the audit trail",
+			"declarations", operatorBootstrap.LogFields(), "actor", operatorroles.ActorID)
+	}
+
 	identitySvc, err := identity.New(identity.Deps{
 		IdP: idp, DB: database, Accounts: accountRepo, Sessions: sessionMgr,
 		Audit: auditWriter, Clock: clk, AttemptTTL: identity.DefaultAttemptTTL,
-		PII: piiStore,
+		PII: piiStore, Operators: operatorBootstrap,
 		AdmitAccount: func(ctx context.Context, tx pgx.Tx) error {
 			_, aerr := capGuard.Admit(ctx, tx, capacity.ActionOpenAccount)
 			return aerr
@@ -319,6 +347,28 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("identity service: %w", err)
+	}
+
+	// ---- profile, terms and account lifecycle ------------------------------
+	//
+	// The product-level user record (PART 4), terms acceptance (PART 48) and
+	// the self-service account lifecycle (PART 4, PART 37). It holds no
+	// personal data: identity_pii keeps that, sealed, and ADR-0021 decides who
+	// may read it.
+	profileSvc, err := profile.New(profile.Deps{
+		DB: database, Repo: profile.NewRepository(), Accounts: accountRepo,
+		Audit: auditWriter, Clock: clk, Sessions: sessionMgr,
+		// The level Nodal establishes by itself, for the operator support view.
+		// A resolver that reported NONE where it does not know would be an
+		// under-report presented as a fact; a nil one is reported as "not known
+		// in this deployment".
+		Verification: func(ctx context.Context, accountID accounts.AccountID) (string, error) {
+			level, lerr := verificationResolver.Level(ctx, accountID)
+			return string(level), lerr
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("profile service: %w", err)
 	}
 
 	// --- the Nodal-native economy -------------------------------------------
@@ -421,6 +471,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Clock:             clk,
 		Env:               cfg.Env,
 		Identity:          identitySvc,
+		Profile:           profileSvc,
 		Sessions:          sessionMgr,
 		Accounts:          accountRepo,
 		Assets:            assetRepo,

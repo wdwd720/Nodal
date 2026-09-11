@@ -111,7 +111,11 @@ func pageLimit(l *api.Limit, def, maxLimit int) int {
 
 func toAPIAccount(a accounts.Account) api.Account {
 	return api.Account{
-		Id:           toUUID(a.ID),
+		Id: toUUID(a.ID),
+		// The owning user, so an operator surface can go from an account to the
+		// person who holds it without guessing. It is read-only: the only route
+		// that sets an owner is the first login, in internal/identity.
+		OwnerUserId:  uuidPtr(a.OwnerUserID),
 		Kind:         api.AccountKind(a.Kind),
 		Status:       api.AccountStatus(a.Status),
 		StatusReason: strPtr(a.StatusReason),
@@ -166,6 +170,14 @@ func toAPIPrincipal(p security.Principal, stepUpWindow time.Duration) api.Princi
 	if security.HasStrongAMR(p.AMR) && !p.AuthTime.IsZero() {
 		until := p.AuthTime.Add(stepUpWindow).UTC()
 		out.StepUpValidUntil = &until
+	}
+	// A live break-glass elevation reports when it expires. The session has
+	// carried the value since 00011 and the roles array already names
+	// BREAK_GLASS; only the expiry was missing, which left a console able to say
+	// that an elevation existed but not how long it had left.
+	if p.BreakGlassUntil != nil {
+		until := p.BreakGlassUntil.UTC()
+		out.BreakGlassUntil = &until
 	}
 	return out
 }

@@ -130,7 +130,11 @@ func (s *Server) GetMe(ctx context.Context, _ api.GetMeRequestObject) (api.GetMe
 	if !ok {
 		return nil, errs.New(errs.CodeUnauthenticated, "authentication is required")
 	}
-	return api.GetMe200JSONResponse(toAPIPrincipal(p, effectiveStepUpMaxAge(s.opts.StepUpMaxAge))), nil
+	out := toAPIPrincipal(p, effectiveStepUpMaxAge(s.opts.StepUpMaxAge))
+	// Additive: the product surfaces attach the profile and onboarding objects
+	// when this deployment has them, and change nothing above (handlers_me.go).
+	s.meExtras(ctx, p, &out)
+	return api.GetMe200JSONResponse(out), nil
 }
 
 // GetSessions lists the caller's own sessions (PART 192 device listing).

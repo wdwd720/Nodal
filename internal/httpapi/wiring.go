@@ -42,7 +42,11 @@ type WireDeps struct {
 	Clock clock.Clock
 	Env   config.Environment
 
-	Identity     IdentityPort
+	Identity IdentityPort
+	// Profile is the product-level user record, terms acceptance and account
+	// lifecycle (internal/profile). Nil leaves those routes UNSUPPORTED and
+	// GET /v1/me answering exactly what it answered before.
+	Profile      ProfilePort
 	Sessions     *auth.Manager
 	Accounts     *accounts.Repository
 	Assets       *assets.Repository
@@ -115,6 +119,7 @@ func Wire(d WireDeps) (Ports, error) {
 
 	p := Ports{
 		Identity:       d.Identity,
+		Profile:        d.Profile,
 		Reconciliation: d.Reconcile,
 		Quotes:         d.Quotes,
 		Health:         healthAdapter{db: d.DB},

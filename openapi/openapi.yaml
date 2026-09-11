@@ -966,6 +966,132 @@ paths:
                   config_hash: { type: string }
                   environment: { type: string }
 
+  # ---- profile, terms and account lifecycle ----
+  /me/profile:
+    post:
+      tags: [auth]
+      summary: Update the caller own profile (display name, handle, locale, time zone)
+      description: >-
+        Every field is optional and only the ones present change; an empty
+        handle clears it. There is no id in the path, so this route can reach no
+        profile but the caller own.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ProfileUpdate" } } }
+      responses:
+        "200":
+          description: Updated profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/UserProfile" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /me/terms-acceptances:
+    get:
+      tags: [auth]
+      summary: Legal documents, which of them the caller has accepted, and which are outstanding
+      responses:
+        "200":
+          description: Acceptance state
+          content: { application/json: { schema: { $ref: "#/components/schemas/TermsState" } } }
+    post:
+      tags: [auth]
+      summary: Accept the named documents at the versions currently served
+      description: >-
+        The record names the document, its version and the sha256 of the exact
+        bytes shown. Accepting the same bytes twice is idempotent and produces
+        one record, not two.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TermsAcceptanceRequest" } } }
+      responses:
+        "200":
+          description: Acceptance state after accepting
+          content: { application/json: { schema: { $ref: "#/components/schemas/TermsState" } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /me/account:
+    get:
+      tags: [auth]
+      summary: The standing of the caller own account, with any restrictions and open closure request
+      responses:
+        "200":
+          description: Account standing
+          content: { application/json: { schema: { $ref: "#/components/schemas/MyAccount" } } }
+  /me/account/close:
+    post:
+      tags: [auth]
+      summary: Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+      description: >-
+        Requires a recent strong authentication. The request waits out a
+        cooling-off period during which the caller can cancel it, and is then
+        effected by an operator. Nothing is deleted: financial and audit records
+        are retained.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CloseAccountRequest" } } }
+      responses:
+        "200":
+          description: Account standing, including the open request
+          content: { application/json: { schema: { $ref: "#/components/schemas/MyAccount" } } }
+        "409": { $ref: "#/components/responses/Problem" }
+  /me/account/close/cancel:
+    post:
+      tags: [auth]
+      summary: Cancel the caller own open closure request
+      description: >-
+        Deliberately does NOT require a step-up. Requesting closure is the
+        dangerous direction and asks for one; stopping a request must never be
+        harder than starting it.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200":
+          description: Account standing after cancelling
+          content: { application/json: { schema: { $ref: "#/components/schemas/MyAccount" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /me/security:
+    get:
+      tags: [auth]
+      summary: What the system knows about the security of the caller own account
+      description: >-
+        Derived entirely from the session store and the claims of the current
+        session. It holds no secret and creates nothing.
+      responses:
+        "200":
+          description: Security summary
+          content: { application/json: { schema: { $ref: "#/components/schemas/SecuritySummary" } } }
+  /admin/users/{userId}:
+    get:
+      tags: [admin]
+      summary: Operator support view of one user (read only)
+      parameters: [{ $ref: "#/components/parameters/UserId" }]
+      responses:
+        "200":
+          description: Support view
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminUserView" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+  /admin/users/{userId}/closure:
+    post:
+      tags: [admin]
+      summary: Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+      description: >-
+        The only mutation the support surface offers, and it acts on a request
+        the user themselves opened. EFFECT is refused before the cooling-off
+        period has passed, by the database as well as by the service, and an
+        operator may not decide a request of their own.
+      parameters:
+        - { $ref: "#/components/parameters/UserId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ClosureDecision" } } }
+      responses:
+        "200":
+          description: Support view after the decision
+          content: { application/json: { schema: { $ref: "#/components/schemas/AdminUserView" } } }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -1010,6 +1136,7 @@ components:
     PayoutId: { in: path, name: payoutId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     PaymentId: { in: path, name: paymentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     ProductId: { in: path, name: productId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    UserId: { in: path, name: userId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
     Problem:
       description: Structured error
@@ -1544,6 +1671,16 @@ components:
         auth_time: { $ref: "#/components/schemas/Timestamp" }
         amr: { type: array, items: { type: string } }
         step_up_valid_until: { $ref: "#/components/schemas/Timestamp" }
+        # When a break-glass elevation is live, the instant it expires. The
+        # session already carries it and the roles array already shows
+        # BREAK_GLASS; omitting the expiry left an operator console unable to
+        # say how long an elevation had left. Absent means no elevation.
+        break_glass_until: { $ref: "#/components/schemas/Timestamp" }
+        # Added by the product surfaces, additively: every field above is
+        # unchanged and still required. Both are absent for a principal with
+        # no profile row, so a client must treat them as optional.
+        profile: { $ref: "#/components/schemas/UserProfile" }
+        onboarding: { $ref: "#/components/schemas/Onboarding" }
     SessionSummary:
       type: object
       required: [id, created_at, last_seen_at, expires_at]
@@ -1562,6 +1699,11 @@ components:
       required: [id, kind, status, created_at]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
+        # Read-only, and additive: the account already referenced a user in the
+        # schema, and an operator surface that could list accounts but not reach
+        # the person who owns one had to guess. It is the caller's own user id
+        # on the customer routes, which they already have from /v1/me.
+        owner_user_id: { $ref: "#/components/schemas/UUID" }
         kind: { type: string, enum: [CUSTOMER, CANARY, PLATFORM] }
         status: { type: string, enum: [ACTIVE, RESTRICTED, FROZEN, CLOSED] }
         status_reason: { type: string }
@@ -2180,3 +2322,215 @@ components:
         p95_ms: { type: integer }
         last_success_at: { $ref: "#/components/schemas/Timestamp" }
         disable_reason: { type: string }
+    # ---- profile, terms and account lifecycle ----
+    UserProfile:
+      type: object
+      required: [user_id, locale, time_zone, avatar_seed, created_at]
+      description: >-
+        Product-level state only. It carries no e-mail address, phone number,
+        legal name or date of birth: those are sealed in identity_pii and this
+        surface has no route to them.
+      properties:
+        user_id: { $ref: "#/components/schemas/UUID" }
+        display_name: { type: string, maxLength: 64 }
+        handle: { type: string, pattern: "^[a-z][a-z0-9_]{2,29}$" }
+        locale: { type: string, pattern: "^[a-z]{2}(-[A-Z]{2})?$" }
+        time_zone: { type: string, maxLength: 64 }
+        avatar_seed:
+          type: string
+          pattern: "^[0-9a-f]{16}$"
+          description: Sixteen hex characters a client renders an identicon from. Nodal accepts no avatar upload.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        updated_at: { $ref: "#/components/schemas/Timestamp" }
+    ProfileUpdate:
+      type: object
+      description: Only the fields present are changed. An empty handle clears it.
+      properties:
+        display_name: { type: string, maxLength: 64 }
+        handle: { type: string, maxLength: 30 }
+        locale: { type: string, maxLength: 5 }
+        time_zone: { type: string, maxLength: 64 }
+    Onboarding:
+      type: object
+      required: [started_at, complete, steps]
+      description: >-
+        Timestamps, not a state machine. The steps are independent, may be done
+        in any order, and cannot be undone (D-053).
+      properties:
+        started_at: { $ref: "#/components/schemas/Timestamp" }
+        complete: { type: boolean }
+        completed_at: { $ref: "#/components/schemas/Timestamp" }
+        next_step: { type: string, enum: [PROFILE, TERMS] }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [key, complete]
+            properties:
+              key: { type: string, enum: [PROFILE, TERMS] }
+              complete: { type: boolean }
+              completed_at: { $ref: "#/components/schemas/Timestamp" }
+    LegalDocument:
+      type: object
+      required: [document_id, version, title, content_hash, requirement, counsel_review_required, accepted]
+      properties:
+        document_id:
+          type: string
+          enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, RISK_DISCLOSURE, CREDITS_TERMS, WITHDRAWAL_DISCLOSURE]
+        version: { type: string }
+        title: { type: string }
+        content_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        requirement:
+          type: string
+          enum: [ONBOARDING, WITHDRAWAL]
+          description: When acceptance is required. A WITHDRAWAL document is not asked for at signup.
+        counsel_review_required:
+          type: boolean
+          description: >-
+            The document has not been reviewed by a lawyer. Every document
+            currently served is marked, and a surface must say so rather than
+            presenting a draft as settled.
+        body:
+          type: string
+          description: >-
+            The document text, as Markdown, so a client renders exactly what it
+            records acceptance of.
+        accepted: { type: boolean }
+        accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    TermsState:
+      type: object
+      required: [documents, outstanding]
+      properties:
+        documents: { type: array, items: { $ref: "#/components/schemas/LegalDocument" } }
+        outstanding:
+          type: array
+          description: Documents required at onboarding whose current bytes the caller has not accepted.
+          items: { type: string }
+        acceptances: { type: array, items: { $ref: "#/components/schemas/TermsAcceptance" } }
+    TermsAcceptance:
+      type: object
+      required: [id, document_id, version, content_hash, accepted_at]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        document_id: { type: string }
+        version: { type: string }
+        content_hash: { type: string }
+        accepted_at: { $ref: "#/components/schemas/Timestamp" }
+    TermsAcceptanceRequest:
+      type: object
+      required: [document_ids]
+      properties:
+        document_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [TERMS_OF_SERVICE, PRIVACY_POLICY, RISK_DISCLOSURE, CREDITS_TERMS, WITHDRAWAL_DISCLOSURE]
+    AccountRestriction:
+      type: object
+      required: [code, message]
+      description: >-
+        A restriction, written for the person it applies to. The free text an
+        operator wrote on a status change is deliberately not here: it was
+        written for other operators and appears in the support view instead.
+      properties:
+        code:
+          type: string
+          enum: [USER_SUSPENDED, USER_CLOSED, ACCOUNT_RESTRICTED, ACCOUNT_FROZEN, ACCOUNT_CLOSED, CLOSURE_PENDING]
+        account_id: { $ref: "#/components/schemas/UUID" }
+        message: { type: string }
+    ClosureRequest:
+      type: object
+      required: [id, state, requested_at, cooling_off_until]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        state: { type: string, enum: [PENDING, CANCELLED, REFUSED, EFFECTED] }
+        requested_at: { $ref: "#/components/schemas/Timestamp" }
+        cooling_off_until: { $ref: "#/components/schemas/Timestamp" }
+        effectable:
+          type: boolean
+          description: The cooling-off period has passed and an operator may now effect the request.
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        decided_reason: { type: string }
+    MyAccount:
+      type: object
+      required: [user_id, user_status, accounts, restrictions, cooling_off_days]
+      properties:
+        user_id: { $ref: "#/components/schemas/UUID" }
+        user_status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        restrictions: { type: array, items: { $ref: "#/components/schemas/AccountRestriction" } }
+        closure_request: { $ref: "#/components/schemas/ClosureRequest" }
+        cooling_off_days:
+          type: integer
+          description: How long a new closure request would wait before it could be effected.
+    CloseAccountRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Optional. A person leaving does not owe an explanation.
+    SecuritySummary:
+      type: object
+      required: [active_sessions, mfa_present, amr, step_up_max_age_seconds]
+      description: >-
+        Derived from the session store and the claims of the current session.
+        Nothing here is a secret and nothing here is created by asking.
+      properties:
+        active_sessions: { type: integer }
+        mfa_present:
+          type: boolean
+          description: The identity provider asserted a strong authentication method for the current session.
+        amr: { type: array, items: { type: string } }
+        last_login_at: { $ref: "#/components/schemas/Timestamp" }
+        last_step_up_at: { $ref: "#/components/schemas/Timestamp" }
+        step_up_valid_until: { $ref: "#/components/schemas/Timestamp" }
+        step_up_max_age_seconds: { type: integer }
+        current_session_id: { $ref: "#/components/schemas/UUID" }
+    AdminUserView:
+      type: object
+      required: [user_id, user_status, idp_issuer, idp_subject, email_verified, created_at, accounts, restrictions, active_sessions, audit_stream, verification]
+      description: >-
+        Read only. There is no field here an operator can write, and the only
+        mutation the support surface offers is deciding a closure request the
+        user themselves opened (PART 38).
+      properties:
+        user_id: { $ref: "#/components/schemas/UUID" }
+        user_status: { type: string, enum: [ACTIVE, SUSPENDED, CLOSED] }
+        idp_issuer: { type: string }
+        idp_subject: { type: string }
+        email_verified:
+          type: boolean
+          description: >-
+            The identity provider asserted a verified address. The address
+            itself is sealed and is not reachable from here.
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        profile: { $ref: "#/components/schemas/UserProfile" }
+        onboarding: { $ref: "#/components/schemas/Onboarding" }
+        accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        restrictions: { type: array, items: { $ref: "#/components/schemas/AccountRestriction" } }
+        closure_request: { $ref: "#/components/schemas/ClosureRequest" }
+        acceptances: { type: array, items: { $ref: "#/components/schemas/TermsAcceptance" } }
+        active_sessions: { type: integer }
+        audit_stream:
+          type: string
+          description: >-
+            Where this user history is recorded, so the support view points at
+            the evidence rather than restating it.
+        verification:
+          type: object
+          required: [known]
+          description: >-
+            The verification level Nodal has established. known is false when
+            this deployment wired no resolver, which is reported as not known
+            here and never as NONE.
+          properties:
+            known: { type: boolean }
+            level: { type: string }
+    ClosureDecision:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: { type: string, enum: [CANCEL, REFUSE, EFFECT] }
+        reason: { type: string, minLength: 8 }

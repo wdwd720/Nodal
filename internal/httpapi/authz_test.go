@@ -168,6 +168,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{payoutId}":     testSessionID,
 		"{paymentId}":    testSessionID,
 		"{productId}":    testOrderID.String(),
+		"{userId}":       testUserID.String(),
 	}
 
 	requiredQuery := map[string]string{

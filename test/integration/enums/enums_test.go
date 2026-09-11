@@ -48,10 +48,13 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/operatorroles"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/prediction"
+	"github.com/nodal/controlplane/internal/profile"
 	"github.com/nodal/controlplane/internal/reality"
 	"github.com/nodal/controlplane/internal/reconciliation"
+	"github.com/nodal/controlplane/internal/terms"
 )
 
 var (
@@ -158,6 +161,18 @@ func registry() []pair {
 		{table: "reconciliation_records", constraint: "reconciliation_records_status_check", source: "reconciliation.AllStatuses()", values: str(reconciliation.AllStatuses())},
 		{table: "data_sources", constraint: "data_sources_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
 		{table: "raw_archive_objects", constraint: "raw_archive_objects_retention_class_check", source: "reality.RetentionClasses()", values: str(reality.RetentionClasses())},
+
+		// Paired with the product surfaces (00756-00760). Each is a domain
+		// match: the Go list named is the one that DECLARES the values.
+		//
+		// operator_roles is the one worth reading twice. Its CHECK is
+		// security.AllRoles() MINUS break-glass, and operatorroles.Directory()
+		// computes exactly that subtraction -- so a role added to the matrix
+		// and not to the CHECK fails here, and so does a CHECK that quietly
+		// re-admits BREAK_GLASS as a standing role.
+		{table: "terms_acceptances", constraint: "terms_acceptances_document_id_check", source: "terms.AllDocumentIDs()", values: str(terms.AllDocumentIDs())},
+		{table: "account_closure_requests", constraint: "account_closure_requests_state_check", source: "profile.AllClosureStates()", values: str(profile.AllClosureStates())},
+		{table: "operator_roles", constraint: "operator_roles_role_check", source: "operatorroles.Directory()", values: str(operatorroles.Directory())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",
@@ -518,6 +533,12 @@ var unpaired = []string{
 	"stream_gaps.stream_gaps_kind_check",
 	"stream_gaps.stream_gaps_resolution_check",
 	"stream_gaps.stream_gaps_resolved_by_actor_type_check",
+	// Unpaired for the reason sessions_actor_type_check is: the column holds a
+	// deliberate SUBSET of security.AllActorTypes() -- USER and OPERATOR, never
+	// SERVICE, AGENT or SYSTEM -- so pairing it with the full list would fail,
+	// and pairing it with a hand-written subset would be the coincidence this
+	// registry exists to avoid.
+	"terms_acceptances.terms_acceptances_actor_type_check",
 	"tools.tools_effect_check",
 	"trade_intents.trade_intents_actor_type_check",
 	"users.users_status_check",
