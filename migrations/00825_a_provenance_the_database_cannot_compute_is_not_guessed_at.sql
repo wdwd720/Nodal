@@ -77,4 +77,4 @@ END $$;
 -- +goose StatementEnd
 
 -- +goose Down
-DROP FUNCTION IF EXISTS cp_credit_lots_without_computable_roots();
+SELECT 1; -- protected: the check is a one-time refusal and the function it leaves behind is how an operator finds the lots it refused; removing that reader is not a rollback of anything
