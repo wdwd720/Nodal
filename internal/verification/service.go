@@ -349,22 +349,33 @@ func (s *Service) Poll(ctx context.Context, database *db.DB, accountID accounts.
 		return session, nil
 	}
 	now := s.deps.Clock.Now().UTC()
-	if session.ProviderPolledAt != nil && now.Sub(session.ProviderPolledAt.UTC()) < PollMinimumInterval {
-		// Asked within the interval. The status on the row is what the last
-		// call returned, and returning it is the whole answer.
-		return session, nil
-	}
-	// Recorded BEFORE the call, and in its own committed transaction, for the
-	// reason the payout provider's idempotency key is written before its call:
-	// a process that dies between the write and the response must not leave a
-	// provider that was asked and a record that says it was not. The cost of
-	// the ordering is one extra call's worth of interval after a crash, which
-	// is the direction to be wrong in.
+	// The interval is CLAIMED, not read and then written.
+	//
+	// A read of provider_polled_at followed by a comparison followed by a
+	// separate committed write is three steps with nothing holding them
+	// together, and every request that reads before the write lands passes the
+	// test. Twenty tabs on one session made seventeen provider calls; the
+	// shipped interval test polls fifty times in series, which is the case the
+	// read-then-write does handle (F-274, D-133 amended).
+	//
+	// One UPDATE ... WHERE ... RETURNING, committed before the call. Exactly one
+	// concurrent request can match the predicate; the rest answer from the
+	// record, which is what the interval has always meant them to do.
+	var claimed bool
 	if err := database.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
-			return s.deps.Repo.MarkProviderPolled(ctx, tx, session.ID, now)
+			var cerr error
+			claimed, cerr = s.deps.Repo.ClaimProviderPoll(ctx, tx, session.ID,
+				now, now.Add(-PollMinimumInterval))
+			return cerr
 		}); err != nil {
 		return Session{}, err
+	}
+	if !claimed {
+		// Asked within the interval, by this request or another one racing it.
+		// The status on the row is what the last call returned, and returning
+		// it is the whole answer.
+		return session, nil
 	}
 	result, err := provider.Get(ctx, session.ProviderRef)
 	if err != nil {
