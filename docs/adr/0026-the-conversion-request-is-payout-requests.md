@@ -110,6 +110,35 @@ inside the transaction that reserves the value — so one quote funds exactly on
 payout, and an expired or mismatched one refuses before anything is decided
 about the money.
 
+### 2a. The state, the money and the price are the transition row's (migrations 00807, 00808, 00810)
+
+`payout_requests` is the ConversionRequest, and until this wave it was the one
+state column in this area the application could still write. 00713 granted
+`cp_app` table-wide UPDATE; 00733 narrowed it and left `state`,
+`reserved_quantity`, `settled_quantity`, `reserved_at` and `settled_at` on the
+grant. One transaction moved a REJECTED request to SETTLED with the whole amount
+settled and a forged provider reference, and the holder was shown it (F-229).
+
+It now has the treatment its three neighbours got: a legal-edge table populated
+from `payout.StateEdges()`, a SECURITY DEFINER trigger that writes the state and
+refuses an edge that is not in it, the money carried ON the transition row rather
+than written beside it, and a column grant back for only what the application
+owns. Every place this package wrote a quantity it was also moving the state, so
+the two were always one event; writing them as two was what let a quantity be
+rewritten alongside a lawful move (D-123).
+
+Two more things the row now records, because the alternative was deriving them
+later from something that may have moved:
+
+- **the price the customer was shown** — the quote's gross, fee and net and the
+  currency they were in (00808). The quote itself is REQUIRED now: it was
+  optional, and the entire minimum-and-fee branch of `Create` sat inside the
+  check for it, so a payout below the provider's published minimum was reserved
+  and settled with the fee never taken (F-224, D-119).
+- **whether it was a rehearsal** — `sandbox` and `environment` (00810), written
+  at creation. The by-id read used to answer that question from today's provider
+  mode and the other two surfaces did not answer it at all (F-232).
+
 ### 3. Provenance is a read model, and the order is not the intuitive one
 
 `payout.Provenance` folds `payout_allocations` by origin and orders them by

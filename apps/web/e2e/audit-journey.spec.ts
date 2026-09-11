@@ -659,13 +659,32 @@ test("journey 10 · the request is handed to the rehearsal provider and nothing 
     readonly items: ReadonlyArray<{ readonly payout_id: string; readonly state: string }>;
   };
   const request = payouts.items[0];
-  test.skip(
-    request === undefined,
-    "no withdrawal request exists on this account: every seeded Credit is UNFUNDED, so the " +
-      "eligibility engine held the earning at FUNDING_NOT_SETTLED and step 9 took its refusal " +
-      "branch. Driving this leg needs a settled credit purchase, which needs a payment provider " +
-      "key this tier deliberately does not have (goal §59).",
-  );
+  if (request === undefined) {
+    // No request exists, so step 9 took one of its two refusal branches. The
+    // reason it took is read here rather than guessed: the skip message used to
+    // say "every seeded Credit is UNFUNDED, so the earning inherits that", which
+    // stopped being the mechanism when D-124 made an earning as final as what
+    // paid for it (F-230). What holds it now is whatever the eligibility answer
+    // actually says -- most often the provider's minimum, because the trade in
+    // step 5 is small -- and saying so is the difference between a skip a reader
+    // can act on and one they have to re-derive.
+    const eligibility = await page.request.get(`/v1/me/eligibility?account_id=${account}`);
+    const answer = (await eligibility.json()) as {
+      readonly withdrawable_now: string;
+      readonly reasons: readonly string[];
+      readonly buckets: ReadonlyArray<{ readonly origin: string; readonly reasons: readonly string[] }>;
+    };
+    const per = answer.buckets
+      .filter((bucket) => bucket.reasons.length > 0)
+      .map((bucket) => `${bucket.origin}=${bucket.reasons.join("/")}`)
+      .join(" ");
+    test.skip(
+      true,
+      `no withdrawal request exists on this account: step 9 took a refusal branch. ` +
+        `withdrawable_now=${answer.withdrawable_now}; account reasons=[${answer.reasons.join(", ")}]; ` +
+        `per origin: ${per}. Scenario F drives this leg to SETTLED on the same tier.`,
+    );
+  }
 
   // `cmd/api/payoutsweep.go` (D-085) submits a reserved request to the provider
   // every fifteen seconds and asks the provider about it five seconds later;

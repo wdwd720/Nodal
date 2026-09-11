@@ -109,7 +109,11 @@ test("a direct POST /v1/payouts is refused for the same reason the page gives", 
     data: {
       account_id: accountId,
       amount: "1000000",
-      quote_id: "00000000-0000-4000-8000-000000000001",
+      // A well-formed quote id that names no quote. It is a version 7 UUID
+      // because internal/id accepts no other version (F-131), so a v4 here
+      // would be refused for its shape and prove nothing about the order the
+      // route decides in.
+      quote_id: "01900000-0000-7000-8000-000000000001",
     },
   });
 

@@ -66,10 +66,27 @@ Three rules the ledger keeps regardless of provider:
 
 ## 3. The `ConversionProvider` contract
 
+This section is in two halves, and they are NOT the same thing. The first is
+what a Role C contract must be able to EXPRESS — the union of what every viable
+provider requires, which is what an adapter is designed against. The second is
+what the shipped Go interfaces ACTUALLY ARE.
+
+They were one section until F-234, which is how it came to describe nine methods
+and an error taxonomy that do not exist. A reader looking for
+`payout.Provider.QuotePayout` found `payout.Service.Quote`, which computes the
+fee locally; a reader looking for `ParsePayoutWebhook` found that
+`ports.Webhooks` registers `stripecredit` alone and that
+`POST /v1/webhooks/sandbox_payout` is a 404. A design document that reads as an
+inventory is worse than no document, because the difference is only discovered
+by somebody who assumed it.
+
+### 3a. What a Role C contract must be able to express
+
 Provider-abstract, derived from the union of what Tilia/Thunes, Stripe Connect,
 Stripe stablecoin payouts, Bridge, Persona, Veriff and Sumsub actually require.
-Every method exists because at least one viable provider demands it; none
-leaks a single provider's vocabulary.
+Every method below exists because at least one viable provider demands it; none
+leaks a single provider's vocabulary. **This is the design target, not the
+shipped interface** — see §3b for what is built.
 
 | Method | Why it is there |
 |---|---|
@@ -95,6 +112,40 @@ a provider string.
 itself converts Credits to money. If Nodal's own code contained such a
 function, the architecture would be arguing against Nodal in a regulatory
 review. The contract instructs a licensed provider; that is all it does.
+
+### 3b. What the shipped interfaces are
+
+Two small interfaces, and they are deliberately smaller than §3a. An interface
+shaped around a guess at a vendor's request body is the mistake PART XVIII warns
+about with extra steps, so what is built is what the sandbox provider and the
+eligibility path actually need, and the rest arrives with the adapter that needs
+it.
+
+`payout.Provider` (`internal/payout/provider.go`):
+
+| Method | What it does |
+|---|---|
+| `Name() string` | identifies the provider in configuration, gates and evidence |
+| `Capabilities() Capabilities` | **no argument.** Rails, currencies, assets, networks, recipient kinds, supported countries, `ExcludedRegions`, minimum and maximum, the published fee model and its version, availability and contract reference |
+| `Submit(ctx, SubmitRequest) (SubmitResult, error)` | one payout under a key Nodal chose and persisted first. `SubmitRequest` carries the idempotency key, Nodal's reference, the destination's provider reference and kind, the amount in minor units and the currency; `Validate()` refuses an empty one |
+| `Lookup(ctx, idempotencyKey) (SubmitResult, error)` | what happened to a key. A provider without it cannot be registered at all, because a timed-out submission would be permanently ambiguous |
+
+`verification.Provider` (`internal/verification/provider.go`): `Name`,
+`Capabilities`, `Start`, `Poll` and `ParseWebhook`. `IngestWebhook` exists on the
+service and has no production caller and no route.
+
+**The gap between 3a and 3b, stated so nobody rediscovers it.** A real adapter
+will add: a `Capabilities` that takes a jurisdiction (the union needs
+sub-national exclusions per country, and the shipped one publishes
+`ExcludedRegions` as a map instead); `QuotePayout`, which `payout.Service.Quote`
+currently computes locally from the published fee model; `GetPayout` and
+`ListPayouts`, where only `Lookup` exists; `ParsePayoutWebhook` and a route for
+it; `RedactVerification`; the error classes, where `internal/payout` has
+`ErrProviderUnavailable` and `ErrIdempotencyUnsupported`; and
+`provider_name`/`provider_request_id` on every response, where `SubmitResult`
+carries `ProviderReference` and `RawStatus`. None of that is missing by
+accident — there is no contracted provider to shape it against (BLOCKERS B-01,
+B-06) — and none of it should be written before there is.
 
 ## 4. What exists today, and how it maps
 
