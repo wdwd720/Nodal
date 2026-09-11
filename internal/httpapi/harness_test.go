@@ -111,6 +111,12 @@ type fixtures struct {
 	webhook     *fakeWebhook
 	idem        *fakeIdempotency
 	stream      http.Handler
+
+	// The withdrawal journey (goal PARTS 19-25). Defined in
+	// handlers_verification_test.go, beside the tests that drive them.
+	verification *fakeVerification
+	eligibility  *fakeEligibility
+	conversion   *fakeConversion
 }
 
 func newFixtures() *fixtures {
@@ -191,6 +197,10 @@ func newFixtures() *fixtures {
 		webhook:   &fakeWebhook{status: http.StatusOK},
 		idem:      newFakeIdempotency(),
 		stream:    http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, ": keepalive\n\n") }),
+
+		verification: newFakeVerification(),
+		eligibility:  newFakeEligibility(),
+		conversion:   newFakeConversion(),
 	}
 }
 
@@ -211,6 +221,8 @@ func (f *fixtures) ports() Ports {
 		// satisfied its "not 401" assertion while measuring nothing (F-132).
 		Webhooks: map[string]WebhookPort{stripecredit.ProviderName: f.webhook},
 		Stream:   f.stream,
+
+		Verification: f.verification, Eligibility: f.eligibility, Conversion: f.conversion,
 	}
 }
 
