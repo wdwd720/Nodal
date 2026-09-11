@@ -53,8 +53,8 @@ export const REGION = "CA";
  */
 export function sandboxHandle(): string {
   const stamp = Date.now().toString(36);
-  // A UUID slice rather than Math.random(): the source scan refuses a float
-  // anywhere under e2e/, and a random hex tail needs no float.
+  // A UUID slice rather than a floating-point random draw: the source scan
+  // refuses a float anywhere under e2e/, and a random hex tail needs none.
   const tail = randomUUID().replaceAll("-", "").slice(0, 6);
   return `sandbox-handle-${stamp}-${tail}`;
 }
