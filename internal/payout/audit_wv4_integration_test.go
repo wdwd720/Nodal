@@ -460,11 +460,10 @@ func TestAuditWV4_TheAllocationRecordFoldsTwoRootSetsIntoOneProvenance(t *testin
 		  WHERE a.request_id = $1 ORDER BY a.lot_id`, req.ID)
 	require.NoError(t, qerr)
 	type record struct {
-		lot          credit.LotID
-		origin       string
-		floor        string
-		rootsOnJoin  []string
-		rootsOnTable bool
+		lot         credit.LotID
+		origin      string
+		floor       string
+		rootsOnJoin []string
 	}
 	var records []record
 	for rows.Next() {
