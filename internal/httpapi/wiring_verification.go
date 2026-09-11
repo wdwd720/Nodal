@@ -508,7 +508,7 @@ func (a conversionAdapter) AddDestination(ctx context.Context, r AddPayoutDestin
 	// publishes exclusions for that country, because "we do not know which
 	// state" is not "any state".
 	if ok, refusals := caps.CanPayRecipient(payout.RecipientProfile{
-		Kind: "individual", Country: r.Country, Region: r.Region,
+		Kind: payout.RecipientKindIndividual, Country: r.Country, Region: r.Region,
 	}); !ok {
 		code := errs.CodeProviderUnavailable
 		detail := "the payout provider " + provider.Name() + " does not pay recipients in " + r.Country
@@ -566,8 +566,11 @@ func (a conversionAdapter) AddDestination(ctx context.Context, r AddPayoutDestin
 	return out, err
 }
 
-func (a conversionAdapter) DisableDestination(ctx context.Context, accountID accounts.AccountID, id payout.DestinationID) (payout.Destination, error) {
-	var out payout.Destination
+func (a conversionAdapter) DisableDestination(ctx context.Context, accountID accounts.AccountID, id payout.DestinationID) (payout.Destination, []payout.RequestID, error) {
+	var (
+		out  payout.Destination
+		open []payout.RequestID
+	)
 	err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.ReadCommitted}, func(ctx context.Context, tx pgx.Tx) error {
 		current, gerr := a.deps.Payouts.Destination(ctx, tx, id)
 		if gerr != nil {
@@ -586,9 +589,24 @@ func (a conversionAdapter) DisableDestination(ctx context.Context, accountID acc
 				Reason:     "the account holder stopped using this destination",
 				OccurredAt: a.clk.Now().UTC(),
 			})
-		return terr
+		if terr != nil {
+			return terr
+		}
+		// Read AFTER the disable and inside the same transaction, so the answer
+		// is the set of requests that are now stranded rather than a snapshot
+		// from before the act that stranded them.
+		//
+		// The disable is not refused when the list is non-empty. §25 makes
+		// removing a destination a step-up-protected act because it is what a
+		// person does when a destination is compromised, and a removal that
+		// fails while a payout is outstanding is a removal an attacker can
+		// block by starting one. So the act succeeds, and the person is told
+		// what it left behind (F-263).
+		var oerr error
+		open, oerr = a.deps.Payouts.OpenRequestsForDestination(ctx, tx, id)
+		return oerr
 	})
-	return out, err
+	return out, open, err
 }
 
 // Quote is the pre-commitment call. It reserves nothing and writes no ledger
@@ -661,14 +679,27 @@ func (a conversionAdapter) Quote(ctx context.Context, r CreatePayoutQuote) (payo
 			return ferr
 		}
 		decision, eerr := a.deps.PayoutEngine.Evaluate(ctx, tx, payout.EligibilityInput{
-			AccountID:             r.AccountID,
-			Requested:             r.Amount,
-			Policy:                policy,
-			Verified:              level,
-			ActiveCaps:            caps,
-			Now:                   a.clk.Now().UTC(),
-			DestinationVerified:   dest.Status.Usable(),
-			ProviderSupports:      true,
+			AccountID:  r.AccountID,
+			Requested:  r.Amount,
+			Policy:     policy,
+			Verified:   level,
+			ActiveCaps: caps,
+			Now:        a.clk.Now().UTC(),
+
+			DestinationVerified: dest.Status.Usable(),
+			// The provider's real answer about this destination, not `true`.
+			//
+			// It was hardcoded, three lines under a comment saying the facts
+			// are read in this transaction "so the provenance shown beside a
+			// quote is the provenance the commit would actually consume rather
+			// than an optimistic one" -- and the commit asks
+			// payoutsAdapter.providerSupports, which can say no (F-269). Quote
+			// refuses outright before it gets here when the provider cannot pay
+			// the recipient, so in practice this is true by the time it is
+			// read; it is read anyway, because the next thing providerSupports
+			// learns to refuse must not need a second edit here to be seen.
+			ProviderSupports: providerSupportsDestination(a.deps, dest),
+
 			SanctionsState:        facts.Sanctions,
 			AccountRestrictions:   facts.Restrictions,
 			JurisdictionSupported: facts.JurisdictionSupported,
@@ -691,10 +722,6 @@ func currencyOf(d payout.Destination, fallback string) string {
 	return fallback
 }
 
-func refusalCodes(rs []payout.RecipientRefusal) []string {
-	out := make([]string, 0, len(rs))
-	for _, r := range rs {
-		out = append(out, string(r))
-	}
-	return out
-}
+// refusalCodes is internal/payout's, so the destination route and the quote
+// route render a refusal the same way.
+func refusalCodes(rs []payout.RecipientRefusal) []string { return payout.RefusalCodes(rs) }

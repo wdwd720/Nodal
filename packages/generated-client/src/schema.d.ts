@@ -2804,7 +2804,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Destination disabled */
+                /** @description Destination disabled. `open_payout_ids` names the conversion requests that still point at it: each is refused at submission from now on and holds its value reserved until it is cancelled. */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -5913,6 +5913,8 @@ export interface components {
             kind: "BANK" | "CARD_PUSH" | "FIAT_WALLET" | "CRYPTO_WALLET";
             /** @description What a person recognises, such as "••••4242". Never the whole number. */
             masked_display?: string;
+            /** @description Present only on the response to DELETE /me/payout-destinations/{id}: the conversion requests that still point at this destination and are not finished. A reserved payout is refused at submission once its destination stops being usable and stays VERIFIED with its value held out of the balance, so the holder is told here which payouts to cancel rather than left to discover that their money is stuck. */
+            open_payout_ids?: components["schemas"]["UUID"][];
             provider: string;
             /** @description The subdivision this pays into, where the provider distinguishes them. */
             region?: string;

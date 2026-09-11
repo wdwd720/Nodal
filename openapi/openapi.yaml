@@ -1766,7 +1766,10 @@ paths:
         - { in: query, name: account_id, required: true, schema: { $ref: "#/components/schemas/UUID" } }
       responses:
         "200":
-          description: Destination disabled
+          description: >-
+            Destination disabled. `open_payout_ids` names the conversion
+            requests that still point at it: each is refused at submission from
+            now on and holds its value reserved until it is cancelled.
           content: { application/json: { schema: { $ref: "#/components/schemas/PayoutDestination" } } }
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
@@ -4563,6 +4566,16 @@ components:
           type: boolean
           description: Whether a payout may be sent here right now.
         sandbox: { type: boolean }
+        open_payout_ids:
+          type: array
+          items: { $ref: "#/components/schemas/UUID" }
+          description: >-
+            Present only on the response to DELETE /me/payout-destinations/{id}:
+            the conversion requests that still point at this destination and are
+            not finished. A reserved payout is refused at submission once its
+            destination stops being usable and stays VERIFIED with its value
+            held out of the balance, so the holder is told here which payouts to
+            cancel rather than left to discover that their money is stuck.
         verified_at: { $ref: "#/components/schemas/Timestamp" }
         created_at: { $ref: "#/components/schemas/Timestamp" }
     CreatePayoutDestination:

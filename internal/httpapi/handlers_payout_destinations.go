@@ -203,11 +203,24 @@ func (s *Server) DeleteMePayoutDestinationsDestinationId(ctx context.Context, re
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
 		func(ctx context.Context) (api.PayoutDestination, commandMeta, error) {
-			dest, cerr := s.opts.Ports.Conversion.DisableDestination(ctx, accountID, destinationID)
+			dest, open, cerr := s.opts.Ports.Conversion.DisableDestination(ctx, accountID, destinationID)
 			if cerr != nil {
 				return api.PayoutDestination{}, commandMeta{}, cerr
 			}
-			return toAPIDestination(dest), commandMeta{
+			body := toAPIDestination(dest)
+			// Only on this route, and only when there is something to say. A
+			// payout still pointing at a destination that has just stopped
+			// being usable is refused at submission and keeps its value
+			// reserved until somebody cancels it; leaving the holder to
+			// discover that is how a person's money goes quiet (F-263).
+			if len(open) > 0 {
+				ids := make([]api.UUID, 0, len(open))
+				for _, r := range open {
+					ids = append(ids, toUUID(r))
+				}
+				body.OpenPayoutIds = &ids
+			}
+			return body, commandMeta{
 				Status:       http.StatusOK,
 				ResourceType: "payout_destination",
 				ResourceID:   dest.ID.String(),

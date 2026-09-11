@@ -294,6 +294,47 @@ func (s *Service) Destination(ctx context.Context, q db.Querier, id DestinationI
 	return d, nil
 }
 
+// OpenRequestsForDestination lists the conversion requests that still point at
+// a destination and have not finished, oldest first.
+//
+// It exists so that disabling a destination can TELL the person what it has
+// just stranded. A reserved request whose destination is no longer usable is
+// refused at Submit and stays in VERIFIED with its value held out of their
+// balance (F-263); the holder can cancel it, and cannot be expected to guess
+// that they need to.
+//
+// "Not finished" is State.Terminal(), read from Go rather than repeated as a
+// SQL literal list, so a state added to the machine cannot quietly drop out of
+// this answer.
+func (s *Service) OpenRequestsForDestination(ctx context.Context, q db.Querier, id DestinationID) ([]RequestID, error) {
+	if id.IsZero() {
+		return nil, errs.New(errs.CodeValidationFailed, "payout: a destination id is required")
+	}
+	terminal := make([]string, 0, 4)
+	for _, st := range AllStates() {
+		if st.Terminal() {
+			terminal = append(terminal, string(st))
+		}
+	}
+	rows, err := q.Query(ctx,
+		`SELECT id FROM payout_requests
+		  WHERE destination_id = $1 AND NOT (state = ANY($2))
+		  ORDER BY created_at, id`, id, terminal)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	var out []RequestID
+	for rows.Next() {
+		var reqID RequestID
+		if err := rows.Scan(&reqID); err != nil {
+			return nil, mapError(err)
+		}
+		out = append(out, reqID)
+	}
+	return out, mapError(rows.Err())
+}
+
 // lockDestination takes the row lock a status change needs before it checks
 // that the change is legal. Without it two concurrent transitions produce a
 // trail whose from_status was already superseded (00744's rule, and the reason

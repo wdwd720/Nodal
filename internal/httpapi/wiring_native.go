@@ -658,7 +658,23 @@ func (a payoutsAdapter) deploymentTerms() (payout.ProviderTerms, error) {
 // D-122). The provider's own answer is the only one worth having, and it is
 // free to ask.
 func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
-	p, err := a.deps.Payouts.Provider(d.Provider)
+	return providerSupportsDestination(a.deps, d)
+}
+
+// providerSupportsDestination is the same question asked from anywhere that
+// holds the economy dependencies.
+//
+// It is a function rather than a method because the QUOTE asks it too, and
+// asked it as the literal `true` -- three lines under a comment promising that
+// the provenance shown beside a quote is the provenance the commit would
+// consume (F-269). Two call sites, one implementation, so they cannot drift.
+func providerSupportsDestination(deps NativeEconomyDeps, d payout.Destination) bool {
+	if deps.Payouts == nil {
+		// No payout service wired at all. Nothing supports anything, which is
+		// the answer that refuses rather than the one that proceeds.
+		return false
+	}
+	p, err := deps.Payouts.Provider(d.Provider)
 	if err != nil {
 		return false
 	}
@@ -670,7 +686,7 @@ func (a payoutsAdapter) providerSupports(d payout.Destination) bool {
 		return false
 	}
 	ok, _ := caps.CanPayRecipient(payout.RecipientProfile{
-		Kind: "individual", Country: d.Country, Region: d.Region,
+		Kind: payout.RecipientKindIndividual, Country: d.Country, Region: d.Region,
 	})
 	return ok
 }

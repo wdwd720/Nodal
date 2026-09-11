@@ -81,7 +81,8 @@ func TestAuditWV2_TheFirstContributorsFinalityIsHandedToTheNextSeller(t *testing
 	buy, err := f.buy(attacker, 1_000_000_000, money.Quantity{})
 	require.NoError(t, err)
 	half, err := buy.Fill.AssetsOut.MulDiv(
-		money.QuantityFromInt64(1), money.QuantityFromInt64(2), money.RoundDown)
+		money.QuantityFromInt64(1), money.QuantityFromInt64(2), money.RoundDown,
+	)
 	require.NoError(t, err)
 	sell, err := f.sell(attacker, half, money.Quantity{})
 	require.NoError(t, err)
