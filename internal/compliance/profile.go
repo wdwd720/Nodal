@@ -16,6 +16,7 @@ import (
 	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/security"
 )
 
@@ -204,9 +205,9 @@ type Change struct {
 }
 
 // Upsert writes the ATTRIBUTE half of the profile — age, jurisdiction,
-// residency, sanctions, provider, policy version, restrictions — and appends an
-// audit event with before/after hashes. AGENT and USER actors are refused:
-// customers cannot self-attest compliance state.
+// residency, provider, policy version, restrictions — and appends an audit
+// event with before/after hashes. AGENT and USER actors are refused: customers
+// cannot self-attest compliance state.
 //
 // It does NOT write identity_state, verified_at or expires_at, and passing them
 // in has no effect. Migration 00761 made a transition row the only way the
@@ -215,6 +216,23 @@ type Change struct {
 // `internal/verification`. The returned Profile is the row as it actually
 // stands, so a caller reading the state back gets the truth rather than what it
 // asked for.
+//
+// # The sanctions screen moves the same way (00796, F-168)
+//
+// `sanctions_state` used to be in the attribute list, written by the statement
+// below like a country code. It is not an attribute: `internal/eligibility`
+// reads it as one of the allowlists that decides whether a payout may proceed,
+// and it is derived from the provider's sanctions and PEP checks. So a CHANGE to
+// it is now written as a transition row — carrying the actor, the reason and the
+// correlation id this call already has — and the trigger on that row writes the
+// column, which `cp_app` can no longer write at all.
+//
+// A caller therefore still just sets `p.SanctionsState` and the change is
+// recorded for it. What it cannot do any more is change the screen without
+// saying who decided and why: Change already requires both.
+//
+// A profile BORN with a screen is recorded by the database itself, because an
+// INSERT is not a change and no binding about changes applies to it.
 func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change) (Profile, error) {
 	if ch.ActorType != security.ActorSystem && ch.ActorType != security.ActorOperator {
 		return Profile{}, errs.New(errs.CodeForbidden, "compliance profiles are written only by SYSTEM or OPERATOR actors")
@@ -245,13 +263,17 @@ func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change
 	// The birth state is a literal, not p.IdentityState: a BEFORE INSERT
 	// trigger (00761) refuses any other, and the ON CONFLICT branch cannot
 	// name the column at all because cp_app has no UPDATE privilege on it.
+	// sanctions_state is written on the INSERT and never on the conflict
+	// branch: a birth may carry a screen (the database records that itself),
+	// and a CHANGE to one goes through the transition below, which is the only
+	// statement that can still write the column.
 	row := tx.QueryRow(ctx, `INSERT INTO compliance_profiles
 		(user_id, identity_state, age_verified, jurisdiction_country, jurisdiction_region, residency_country, sanctions_state, provider, provider_ref, policy_version, restrictions)
 		VALUES ($1,'UNVERIFIED',$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),$6,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
 		ON CONFLICT (user_id) DO UPDATE SET
 			age_verified = EXCLUDED.age_verified,
 			jurisdiction_country = EXCLUDED.jurisdiction_country, jurisdiction_region = EXCLUDED.jurisdiction_region,
-			residency_country = EXCLUDED.residency_country, sanctions_state = EXCLUDED.sanctions_state,
+			residency_country = EXCLUDED.residency_country,
 			provider = EXCLUDED.provider, provider_ref = EXCLUDED.provider_ref, policy_version = EXCLUDED.policy_version,
 			restrictions = EXCLUDED.restrictions
 		RETURNING `+columns,
@@ -260,6 +282,17 @@ func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change
 	after, err := scan(row)
 	if err != nil {
 		return Profile{}, fmt.Errorf("compliance: upsert: %w", err)
+	}
+	if before != nil && before.SanctionsState != p.SanctionsState {
+		if err := r.screen(ctx, tx, after, p.SanctionsState, ch); err != nil {
+			return Profile{}, err
+		}
+		// The row as it stands after the trigger wrote the screen, for the same
+		// reason the statement above returns one: a caller reading a compliance
+		// state back is entitled to the truth rather than to what it asked for.
+		if after, err = r.Get(ctx, tx, p.UserID); err != nil {
+			return Profile{}, err
+		}
 	}
 
 	beforeHash, afterHash, err := hashes(before, after)
@@ -279,6 +312,33 @@ func (r *Repository) Upsert(ctx context.Context, tx pgx.Tx, p Profile, ch Change
 		return Profile{}, fmt.Errorf("compliance: audit: %w", err)
 	}
 	return after, nil
+}
+
+// screen records a change to the sanctions screening decision as a transition
+// row on compliance_profile_transitions, which is the only thing that can write
+// the column (00796).
+//
+// The verification edge it carries is from the profile's current state to the
+// same state: this row is about the screen and moves nothing else, and
+// `cp_require_transition_edge` returns without comparing anything when a column
+// did not change, so a same-state row licenses nothing it does not describe.
+// The verification timestamps are left NULL and the trigger keeps whatever the
+// profile already holds, so recording a screen never rewrites when somebody was
+// verified.
+func (r *Repository) screen(ctx context.Context, tx pgx.Tx, current Profile, to SanctionsState, ch Change) error {
+	if !to.Valid() {
+		return errs.Newf(errs.CodeValidationFailed, "unknown sanctions state %q", to)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO compliance_profile_transitions
+		(id, user_id, from_state, to_state, from_sanctions_state, to_sanctions_state,
+		 actor_type, actor_id, reason, correlation_id, occurred_at)
+		VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,NULLIF($9,''),now())`,
+		id.New[id.Any](), current.UserID, string(current.IdentityState),
+		string(current.SanctionsState), string(to),
+		string(ch.ActorType), ch.ActorID, ch.Reason, ch.CorrelationID); err != nil {
+		return fmt.Errorf("compliance: record the sanctions screen: %w", err)
+	}
+	return nil
 }
 
 // hashProfile is sha256 over the canonical JSON of the state-bearing fields

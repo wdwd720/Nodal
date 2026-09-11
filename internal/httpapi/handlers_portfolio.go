@@ -95,10 +95,10 @@ func toAPIPortfolioPosition(p PortfolioPositionView) api.PortfolioPosition {
 		out.AverageCostCredits = ptr(avg.String())
 	}
 	if v.Position.FirstAcquiredAt != nil {
-		out.FirstAcquiredAt = v.Position.FirstAcquiredAt
+		out.FirstAcquiredAt = timePtr(v.Position.FirstAcquiredAt)
 	}
 	if v.Position.LastTradeAt != nil {
-		out.LastTradeAt = v.Position.LastTradeAt
+		out.LastTradeAt = timePtr(v.Position.LastTradeAt)
 	}
 	return out
 }

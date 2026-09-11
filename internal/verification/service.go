@@ -258,8 +258,15 @@ func (s *Service) Resume(ctx context.Context, database *db.DB, accountID account
 
 func (s *Service) resume(ctx context.Context, database *db.DB, session Session, provider Provider) (Started, error) {
 	if session.ProviderRef == "" {
-		return Started{}, errs.New(errs.CodeConflict,
-			"that verification session was never handed to the provider; it has to be reconciled before it can be resumed")
+		// A row written before the provider was called, whose call never
+		// landed. Nothing can move it -- only a provider answer moves a session
+		// the provider knows about -- so the expiry sweep closes it after
+		// UnstartedSessionGrace and the person starts a new one. Until it does,
+		// this is a Conflict rather than a silent second attempt, because the
+		// one-open-session index would refuse the second anyway.
+		return Started{}, errs.Newf(errs.CodeConflict,
+			"that verification session was never handed to the provider; it is closed automatically "+
+				"within %s and verification can be started again then", UnstartedSessionGrace)
 	}
 	started, err := provider.Resume(ctx, session.ProviderRef)
 	if err != nil {

@@ -331,7 +331,7 @@ func toAPIAgent(v agents.View) api.Agent {
 		},
 		Runtime:   toAPIRuntime(v.Runtime),
 		Archived:  v.Grant.Archived(),
-		CreatedAt: v.Agent.CreatedAt,
+		CreatedAt: v.Agent.CreatedAt.UTC(),
 	}
 	if v.Agent.Mode != "" {
 		m := api.AgentMode(v.Agent.Mode)
@@ -339,7 +339,7 @@ func toAPIAgent(v agents.View) api.Agent {
 	}
 	total := v.Runs.TotalRuns
 	out.RunsTotal = &total
-	out.LastRunAt = v.Runs.LastRunAt
+	out.LastRunAt = timePtr(v.Runs.LastRunAt)
 	if v.Runs.LastRunStatus != "" {
 		st := v.Runs.LastRunStatus
 		out.LastRunStatus = &st
@@ -349,11 +349,11 @@ func toAPIAgent(v agents.View) api.Agent {
 		out.GrantedByUserId = &u
 	}
 	if !v.Grant.GrantedAt.IsZero() {
-		g := v.Grant.GrantedAt
+		g := v.Grant.GrantedAt.UTC()
 		out.GrantedAt = &g
 	}
 	if !v.Agent.UpdatedAt.IsZero() {
-		u := v.Agent.UpdatedAt
+		u := v.Agent.UpdatedAt.UTC()
 		out.UpdatedAt = &u
 	}
 	if v.PauseOpen {
@@ -361,7 +361,7 @@ func toAPIAgent(v agents.View) api.Agent {
 			ReasonCode:        v.Pause.ReasonCode.String(),
 			Reason:            v.Pause.Reason,
 			PausedByActorType: api.AgentPausePausedByActorType(v.Pause.PausedByActorType),
-			PausedAt:          v.Pause.PausedAt,
+			PausedAt:          v.Pause.PausedAt.UTC(),
 		}
 		if v.Pause.OpenOrdersPolicy != "" {
 			pol := api.AgentPauseOpenOrdersPolicy(v.Pause.OpenOrdersPolicy)

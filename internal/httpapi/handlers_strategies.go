@@ -153,10 +153,14 @@ func (s *Server) toAPIStrategy(st agents.Strategy) api.Strategy {
 		SourceKind:         api.StrategySourceKind(st.SourceKind),
 		Status:             api.StrategyStatus(st.Status),
 		CompilerConfigured: s.opts.Ports.Strategies != nil && s.opts.Ports.Strategies.CompilerConfigured(),
-		CreatedAt:          st.CreatedAt,
+		// UTC, like every other timestamp this API publishes. pgx hands a
+		// timestamptz back in the PROCESS's zone, so a converter that forgets
+		// publishes the server's timezone offset to a client that was promised
+		// "RFC 3339 UTC" by the contract (F-172).
+		CreatedAt: st.CreatedAt.UTC(),
 	}
 	if !st.UpdatedAt.IsZero() {
-		u := st.UpdatedAt
+		u := st.UpdatedAt.UTC()
 		out.UpdatedAt = &u
 	}
 	if st.CurrentVersion != nil {
@@ -179,7 +183,7 @@ func toAPIStrategyVersion(v agents.StrategyVersion) api.StrategyVersion {
 		out.EffectSet = []string{}
 	}
 	if !v.BuiltAt.IsZero() {
-		b := v.BuiltAt
+		b := v.BuiltAt.UTC()
 		out.BuiltAt = &b
 	}
 	// The IR is handed over as the object it is. It is decoded rather than

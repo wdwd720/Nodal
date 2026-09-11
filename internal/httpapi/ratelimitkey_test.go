@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -54,6 +55,54 @@ func TestRateLimitKeyDistinguishesCallersBehindAProxy(t *testing.T) {
 	assert.Equal(t, "ip:198.51.100.200",
 		behind(req("198.51.100.200:1234", "203.0.113.7")),
 		"an untrusted caller forged its rate-limit key")
+
+	// A caller that IS behind the balancer cannot choose it either (F-166).
+	//
+	// A proxy appends to whatever the client sent, so the header is
+	// "<what the client wrote>, <what the proxy saw>" and only the right-hand
+	// end of it is the proxy's word. Reading the left-most entry made the key a
+	// field of the request, which is the whole budget handed to whoever asks
+	// for it.
+	const realCaller = "198.51.100.77"
+	forged := behind(req("10.1.2.3:44321", "203.0.113.7, "+realCaller))
+	assert.Equal(t, "ip:"+realCaller, forged,
+		"the left-most entry is the caller's own writing and became its rate-limit key")
+
+	// One caller, one bucket, however many entries it invents.
+	keys := map[string]struct{}{}
+	for i := 0; i < 256; i++ {
+		keys[behind(req("10.1.2.3:44321",
+			fmt.Sprintf("203.0.113.%d, 192.168.7.%d, %s", i, i, realCaller)))] = struct{}{}
+	}
+	assert.Len(t, keys, 1, "one caller produced %d distinct rate-limit keys by rewriting one header", len(keys))
+
+	// A chain of balancers appends once per hop, so the trusted addresses at
+	// the right-hand end are skipped and the first thing none of them added is
+	// the answer.
+	assert.Equal(t, "ip:"+realCaller,
+		behind(req("10.1.2.3:1", realCaller+", 10.4.4.4, 10.5.5.5")),
+		"a two-hop chain reported its own inner hop as the caller")
+
+	// A header that is nothing but trusted hops says nothing about who called,
+	// and neither does an unparsable one: both fall back to the peer, which no
+	// caller can write.
+	assert.Equal(t, "ip:10.1.2.3", behind(req("10.1.2.3:1", "10.4.4.4, 10.5.5.5")))
+	assert.Equal(t, "ip:10.1.2.3", behind(req("10.1.2.3:1", "not-an-address")))
+	assert.Equal(t, "ip:10.1.2.3", behind(req("10.1.2.3:1", "")))
+
+	// An entry that will not parse is skipped rather than trusted, so a caller
+	// cannot end the walk on a word of its own choosing.
+	assert.Equal(t, "ip:"+realCaller,
+		behind(req("10.1.2.3:1", realCaller+", junk")))
+
+	// Only the last maxForwardedForEntries hops are parsed, so a caller cannot
+	// make one request cost a list walk of its own length -- and what it wrote
+	// beyond that end of the list is not read at all. Here the only untrusted
+	// entry is 4,096 hops to the left of the peer: the walk never reaches it
+	// and the key is the peer's.
+	long := "203.0.113.7, " + strings.Repeat("10.4.4.4, ", 4095) + "10.4.4.4"
+	assert.Equal(t, "ip:10.1.2.3", behind(req("10.1.2.3:1", long)),
+		"an entry past the parse bound was read")
 
 	// With nothing trusted the old behaviour stands, which is why
 	// config.Validate now requires the list in STAGING and PROD.

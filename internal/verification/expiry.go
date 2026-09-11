@@ -115,6 +115,151 @@ func (s *Service) ExpireOverdue(ctx context.Context, database *db.DB, now time.T
 // expirySweepActor is what the trail says did this.
 const expirySweepActor = "verification:expiry-sweep"
 
+// sessionSweepActor is what the trail says expired an attempt.
+const sessionSweepActor = "verification:session-expiry-sweep"
+
+// UnstartedSessionGrace is how long a session that was never handed to a
+// provider is kept before it is expired.
+//
+// A session row is written BEFORE the provider is called, so a crash between
+// the two leaves a row with no provider reference (that is what the row is for:
+// something to reconcile). Nothing can ever move it -- `Resume` refuses a
+// session the provider never saw, and only the provider's answer moves a
+// session that it did -- and the partial unique index in 00762 permits one open
+// session per person, so it is the person's own verification that is blocked,
+// by a row about an attempt that never happened.
+//
+// Fifteen minutes is far longer than any provider call in PROVIDER_BOUNDARY §3
+// and short enough that somebody who hit a crash can try again while they are
+// still at their desk.
+const UnstartedSessionGrace = 15 * time.Minute
+
+// ExpireOverdueSessions moves verification attempts that can no longer produce
+// a decision to EXPIRED, through the transition row that is the only thing that
+// writes a session status. It returns how many it moved.
+//
+// # What it is for
+//
+// The partial unique index in 00762 permits exactly one OPEN session per
+// person. A hosted link that ran out is not open in any sense the person can
+// use -- the provider will not accept it and `Poll` gets nothing new -- but its
+// STATUS still says open, so that person cannot start another verification at
+// all. Nothing expired a session, so "your link expired, start again" was a
+// sentence the product could not honour: §20's own words for what happens next.
+//
+// # What it deliberately does not do
+//
+// It does not touch the profile. A session that ran out did not decide
+// anything, and `applyToProfile` already refuses to let an abandoned attempt
+// undo a standing verification; moving the profile here would be a clock
+// deciding something about a person, which is the thing D-061 was careful not
+// to do. The person's next `Start` moves the profile, as it always has.
+//
+// # Why one transaction per session
+//
+// The same reason ExpireOverdue gives: each is an independent attempt by an
+// independent person, and one transaction over a batch would hold every row
+// lock until the last one committed -- including the lock a person's own
+// webhook is waiting for.
+func (s *Service) ExpireOverdueSessions(ctx context.Context, database *db.DB, now time.Time, limit int) (int, error) {
+	if database == nil {
+		return 0, errs.New(errs.CodeInternal, "verification: the session expiry sweep needs a database")
+	}
+	if limit <= 0 || limit > SweepBatch {
+		limit = SweepBatch
+	}
+	now = now.UTC()
+
+	// As the system: it moves somebody else's attempt, which no customer
+	// principal may do.
+	ctx = security.WithPrincipal(ctx, security.Principal{
+		SubjectID: sessionSweepActor, ActorType: security.ActorSystem, AuthTime: now,
+	})
+
+	due, err := s.deps.Repo.OverdueSessions(ctx, database, now, now.Add(-UnstartedSessionGrace), limit)
+	if err != nil {
+		return 0, err
+	}
+	moved := 0
+	for _, d := range due {
+		err := database.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+			_, terr := s.deps.Repo.TransitionSession(ctx, tx, d.ID, SessionExpired, SessionChange{
+				ActorType:  security.ActorSystem,
+				ActorID:    sessionSweepActor,
+				Reason:     d.reason,
+				OccurredAt: now,
+			})
+			return terr
+		})
+		switch {
+		case err == nil:
+			moved++
+		case errs.CodeOf(err) == errs.CodeInvalidStateTransition, errs.CodeOf(err) == errs.CodeNotFound:
+			// The provider answered, or the person cancelled, between the read
+			// and the write. The session is no longer open, so there is nothing
+			// to expire and the next pass will not see it.
+			continue
+		default:
+			return moved, err
+		}
+	}
+	return moved, nil
+}
+
+// DueSession is one attempt the sweep found, and why it is due.
+type DueSession struct {
+	ID     SessionID
+	reason string
+}
+
+// OverdueSessions returns the open verification sessions that can no longer
+// produce a decision, oldest first, up to limit.
+//
+// Two kinds, and they are due for different reasons:
+//
+//   - a hosted link past its `expires_at`: the provider issued it with a life
+//     and that life is over;
+//   - a session still in CREATED with no provider reference, older than the
+//     grace: the provider was never told about it, so no answer can arrive.
+//
+// Rows another transaction holds are skipped rather than waited for: a session
+// somebody's webhook is writing at this moment is being decided, which is a
+// better outcome than expiry, and the next pass sees whatever is left.
+func (r *Repository) OverdueSessions(ctx context.Context, q db.Querier, now, unstartedBefore time.Time, limit int) ([]DueSession, error) {
+	rows, err := q.Query(ctx, `SELECT id, (expires_at IS NOT NULL AND expires_at <= $1) AS linked
+		  FROM verification_sessions
+		 WHERE status IN ('CREATED','PENDING_USER_ACTION','PROCESSING','REQUIRES_INPUT','MANUAL_REVIEW')
+		   AND ((expires_at IS NOT NULL AND expires_at <= $1)
+		        OR (status = 'CREATED' AND provider_ref IS NULL AND created_at <= $2))
+		 ORDER BY created_at
+		 LIMIT $3
+		   FOR UPDATE SKIP LOCKED`, now.UTC(), unstartedBefore.UTC(), limit)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	defer rows.Close()
+	var out []DueSession
+	for rows.Next() {
+		var d DueSession
+		var linked bool
+		if err := rows.Scan(&d.ID, &linked); err != nil {
+			return nil, mapError(err)
+		}
+		if linked {
+			d.reason = "the hosted verification session passed the expiry the provider gave it; " +
+				"starting verification again issues a new one"
+		} else {
+			d.reason = "this attempt was never handed to the provider, so no decision can arrive for it; " +
+				"starting verification again creates a new one"
+		}
+		out = append(out, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapError(err)
+	}
+	return out, nil
+}
+
 // OverdueVerifications returns the people whose VERIFIED profile has passed its
 // validity window, oldest first, up to limit.
 //

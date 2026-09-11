@@ -100,7 +100,7 @@ func toAPINativeAsset(a nativeasset.Asset) api.NativeAsset {
 		Status:           api.NativeAssetStatus(a.Status),
 		ModerationState:  api.NativeAssetModerationState(a.Moderation),
 		ModerationNotes:  ptr(a.ModerationNotes),
-		CreatedAt:        ptr(a.CreatedAt),
+		CreatedAt:        ptr(a.CreatedAt.UTC()),
 		Supply: api.NativeSupply{
 			MaxSupply:          qtyString(a.Supply.MaxSupply),
 			CreatorAllocation:  qtyString(a.Supply.CreatorAllocation),
@@ -122,10 +122,10 @@ func toAPINativeAsset(a nativeasset.Asset) api.NativeAsset {
 		out.ImageUrl = ptr(a.ImageURL)
 	}
 	if a.EconomicsLockedAt != nil {
-		out.EconomicsLockedAt = a.EconomicsLockedAt
+		out.EconomicsLockedAt = timePtr(a.EconomicsLockedAt)
 	}
 	if a.ActivatedAt != nil {
-		out.ActivatedAt = a.ActivatedAt
+		out.ActivatedAt = timePtr(a.ActivatedAt)
 	}
 	return out
 }
@@ -365,7 +365,7 @@ func (s *Server) PostNativeMarketsMarketIdQuotes(ctx context.Context, request ap
 		AssetDecimals:   ptr(res.Value.AssetDecimals),
 		SlippageBps:     ptr(int(q.SlippageBPS)),
 		StateVersion:    q.StateVersion,
-		ExpiresAt:       q.ExpiresAt,
+		ExpiresAt:       q.ExpiresAt.UTC(),
 	}), nil
 }
 
@@ -479,7 +479,7 @@ func toAPIPayout(r payout.Request, d payout.Decision) api.PayoutRequest {
 		SettledQuantity:   ptr(qtyString(r.SettledQuantity)),
 		PolicyVersion:     r.PolicyVersion,
 		PolicyHash:        ptr(r.PolicyHash),
-		CreatedAt:         ptr(r.CreatedAt),
+		CreatedAt:         ptr(r.CreatedAt.UTC()),
 	}
 	if r.DestinationID != nil {
 		id := uuid.MustParse(r.DestinationID.String())

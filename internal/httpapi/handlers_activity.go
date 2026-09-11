@@ -75,7 +75,7 @@ func toAPIActivityFeedItem(it activity.Item) api.ActivityFeedItem {
 	out := api.ActivityFeedItem{
 		Id:         it.ID,
 		Kind:       api.ActivityFeedKind(it.Kind),
-		OccurredAt: it.OccurredAt,
+		OccurredAt: it.OccurredAt.UTC(),
 		Summary:    it.Summary,
 		Amounts:    amounts,
 		Simulated:  it.Simulated,

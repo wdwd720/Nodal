@@ -930,8 +930,8 @@ func toAPIAdminAction(a admin.Action) api.AdminAction {
 		RequiresDual: a.RequiresDual,
 		Status:       api.AdminActionStatus(a.Status),
 		ProposedAt:   a.ProposedAt.UTC(),
-		ApprovedAt:   a.ApprovedAt,
-		ExecutedAt:   a.ExecutedAt,
+		ApprovedAt:   timePtr(a.ApprovedAt),
+		ExecutedAt:   timePtr(a.ExecutedAt),
 		ExpiresAt:    a.ExpiresAt.UTC(),
 	}
 	if u := parseUUIDText(a.ProposedBy); u != nil {

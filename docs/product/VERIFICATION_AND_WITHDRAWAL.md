@@ -194,12 +194,43 @@ full treatment: a transitions table, an edge binding, a trigger that writes
 `cp_app` on any of the three, and a birth control so a profile cannot be
 INSERTed already verified.
 
+**Neither is the sanctions screen.** 00761 left `sanctions_state` in the
+attribute grant beside the state it had just protected, so one UPDATE cleared a
+screening HIT with no edge, no actor and no evidence — and that column is one of
+the allowlists `internal/eligibility` reads before a payout may proceed (F-168).
+Migration 00796 carries the screen on the same transition row
+(`from_sanctions_state`, `to_sanctions_state`, both NULL when the row says
+nothing about it), has the same trigger write it, and takes the column out of
+`cp_app`'s reach. A profile that is BORN holding a screen records that too,
+through a trigger, because an INSERT is not a change.
+
 **A level is earned from evidence.** A profile in VERIFIED with no sub-checks
 reports only what Nodal establishes by itself. PAYOUT_KYC needs the four §21
 checks to have PASSED — identity document, age, jurisdiction, sanctions — and
 ENHANCED needs a political-exposure answer on top. A decision whose window has
 elapsed reports the lower level immediately, before any sweep moves the state
 (D-061).
+
+**What runs on a timer, and what it is not for.** Two passes run in the API
+process, because this deployment has no worker tier (render.yaml):
+
+- `verification.Service.ExpireOverdue`, every five minutes, moves a VERIFIED
+  profile past its validity window to EXPIRED (D-084). It decides nothing: the
+  resolver above already reports that person at their base level and did so
+  before any sweep ran. What it buys is that the row stops disagreeing with the
+  level, which is what makes §20's EXPIRED — whose next step the profile view
+  renders as REVERIFY — a state a deployment can reach.
+- `verification.Service.ExpireOverdueSessions`, on the same ticker, closes an
+  ATTEMPT that can no longer be decided: a hosted link past the expiry the
+  provider gave it, and a session still in CREATED that the provider was never
+  told about (a crash between writing the row and making the call), after
+  `UnstartedSessionGrace`. This one has somebody waiting on it. Migration 00762
+  permits exactly one OPEN session per person, so until it ran, a link that
+  expired left its owner unable to start verification again at all — and "your
+  link expired, start again" is what §20 says happens next (F-170).
+
+Neither touches a Credit, a lot or a balance. A verification decision changes
+what a person may ASK for; it never changes what their Credits ARE.
 
 ---
 

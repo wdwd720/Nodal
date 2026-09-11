@@ -530,6 +530,21 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// surface treated the person as unverified, and made §20's EXPIRED -- whose
 	// next step is REVERIFY -- a state no deployment could ever reach.
 	go runVerificationExpiry(ctx, database, verificationSvc, clk, log)
+	// ---- expiry sweeps ----------------------------------------------------
+	//
+	// Four ExpireDue passes that existed, were tested, were documented as
+	// "meant for a periodic worker", and were called by nothing in any binary
+	// (F-170). Three of them only make a row agree with what every reader of it
+	// already believes; the fourth is the one a person is waiting on, because
+	// 00762 permits one open verification session per person and an expired
+	// hosted link that nothing closes is that person's verification, blocked
+	// for good. See cmd/api/expiresweeps.go.
+	go runExpirySweeps(ctx, database, expiryDeps{
+		Gates:        gateAdmin,
+		Admin:        adminSvc,
+		Capital:      capitalSvc,
+		Verification: verificationSvc,
+	}, clk, log)
 	// The composite resolver replaces the cap that internal/identity documents:
 	// NODAL_IDENTITY is what Nodal establishes by itself, and PAYOUT_KYC and
 	// ENHANCED come from a provider decision PLUS the sub-checks that justify
@@ -596,7 +611,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	hub.UseClock(clk.Now)
 	sse.SetResume(notificationResume(database))
 	notificationProducer := notifications.NewProducer(clk.Now, cfg.SandboxTier())
-	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer),
+	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer).WithLogger(log),
 		hubPublisher{hub: hub}, log)
 
 	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)

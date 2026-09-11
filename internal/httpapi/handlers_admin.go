@@ -153,7 +153,7 @@ func toAPIGateTransition(t gates.Transition) api.CapabilityGateTransition {
 		ActorId:      t.ActorID,
 		Reason:       t.Reason,
 		EvidenceHash: &evidence,
-		OccurredAt:   t.OccurredAt,
+		OccurredAt:   t.OccurredAt.UTC(),
 		Sandbox:      t.To == gates.StateSandbox,
 	}
 }

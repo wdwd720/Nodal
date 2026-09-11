@@ -199,6 +199,11 @@ func registry() []pair {
 		// two lists together; this holds both against the schema.
 		{table: "compliance_profiles", constraint: "compliance_profiles_identity_state_check", source: "compliance.AllIdentityStates()", values: str(compliance.AllIdentityStates())},
 		{table: "compliance_profiles", constraint: "compliance_profiles_sanctions_state_check", source: "compliance.AllSanctionsStates()", values: str(compliance.AllSanctionsStates())},
+		// The same list on the transition row that now carries the screen
+		// (00796): a value the column accepts and the edge cannot name would
+		// be a screening decision that cannot be recorded.
+		{table: "compliance_profile_transitions", constraint: "compliance_profile_transitions_from_sanctions_state_check", source: "compliance.AllSanctionsStates()", values: str(compliance.AllSanctionsStates())},
+		{table: "compliance_profile_transitions", constraint: "compliance_profile_transitions_to_sanctions_state_check", source: "compliance.AllSanctionsStates()", values: str(compliance.AllSanctionsStates())},
 		{table: "verification_sessions", constraint: "verification_sessions_status_check", source: "verification.AllSessionStatuses()", values: str(verification.AllSessionStatuses())},
 		{table: "verification_sessions", constraint: "verification_sessions_purpose_check", source: "verification.AllPurposes()", values: str(verification.AllPurposes())},
 		{table: "verification_checks", constraint: "verification_checks_kind_check", source: "verification.AllCheckKinds()", values: str(verification.AllCheckKinds())},

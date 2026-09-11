@@ -43,6 +43,11 @@ func readCreditFundings(ctx context.Context, q db.Querier, at time.Time, rowID s
 		JOIN credit_fundings f ON f.id = t.funding_id
 		JOIN accounts a ON a.id = f.account_id
 		WHERE `+keysetOn("t.occurred_at", "t.id")+` AND t.to_state = ANY($3::text[])
+		  -- A transition that did not move the verification state is not a
+		  -- verification update. Since 00796 a row on this table may record a
+		  -- change to the SANCTIONS screen while the state stands still, and
+		  -- "your verification was updated" is not what happened to that person.
+		  AND t.from_state IS DISTINCT FROM t.to_state
 		ORDER BY t.occurred_at, t.id LIMIT $4`,
 		at.UTC(), nullable(rowID), keysOf(creditFundingKinds), limit)
 	if err != nil {
@@ -139,6 +144,11 @@ func readPayoutRequests(ctx context.Context, q db.Querier, at time.Time, rowID s
 		JOIN payout_requests p ON p.id = t.request_id
 		JOIN accounts a ON a.id = p.account_id
 		WHERE `+keysetOn("t.occurred_at", "t.id")+` AND t.to_state = ANY($3::text[])
+		  -- A transition that did not move the verification state is not a
+		  -- verification update. Since 00796 a row on this table may record a
+		  -- change to the SANCTIONS screen while the state stands still, and
+		  -- "your verification was updated" is not what happened to that person.
+		  AND t.from_state IS DISTINCT FROM t.to_state
 		ORDER BY t.occurred_at, t.id LIMIT $4`,
 		at.UTC(), nullable(rowID), keysOf(payoutKinds), limit)
 	if err != nil {
@@ -577,6 +587,11 @@ func readVerificationUpdates(ctx context.Context, q db.Querier, at time.Time, ro
 		FROM compliance_profile_transitions t
 		LEFT JOIN verification_sessions vs ON vs.id = t.session_id
 		WHERE `+keysetOn("t.occurred_at", "t.id")+` AND t.to_state = ANY($3::text[])
+		  -- A transition that did not move the verification state is not a
+		  -- verification update. Since 00796 a row on this table may record a
+		  -- change to the SANCTIONS screen while the state stands still, and
+		  -- "your verification was updated" is not what happened to that person.
+		  AND t.from_state IS DISTINCT FROM t.to_state
 		ORDER BY t.occurred_at, t.id LIMIT $4`,
 		at.UTC(), nullable(rowID), keysOf(verificationKinds), limit)
 	if err != nil {

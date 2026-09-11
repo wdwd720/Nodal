@@ -122,7 +122,7 @@ func KillSwitchReleaseExecutor(ctl *killswitch.Controller) admin.ExecFunc {
 		out, err := json.Marshal(killSwitchReleaseResult{
 			SwitchID: sw.ID.String(), Kind: string(sw.Kind), Scope: sw.ScopeID,
 			Severity: string(sw.Severity), Active: sw.Active,
-			ReleasedBy: sw.ReleasedBy, ReleasedAt: sw.ReleasedAt, ApprovalID: sw.ReleaseApprovalID,
+			ReleasedBy: sw.ReleasedBy, ReleasedAt: timePtr(sw.ReleasedAt), ApprovalID: sw.ReleaseApprovalID,
 		})
 		if err != nil {
 			return nil, errs.Wrap(err, errs.CodeInternal, "encode kill switch release result")

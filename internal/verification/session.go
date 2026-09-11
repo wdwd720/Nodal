@@ -159,8 +159,11 @@ func (s SessionStatus) Terminal() bool {
 // sessionTransitions is the explicit legal transition table.
 var sessionTransitions = map[SessionStatus][]SessionStatus{
 	// Written before the provider was called. Either the call produced a link,
-	// or it did not and the row is cancelled or ages out. It cannot jump to a
-	// decision: a session nobody was ever sent to cannot have been decided.
+	// or it did not and the row is cancelled or ages out -- "ages out" being
+	// Service.ExpireOverdueSessions, which since F-170 exists and runs: this
+	// edge was unreachable, and the row it describes holds the only open
+	// session its owner is allowed (00762). It cannot jump to a decision: a
+	// session nobody was ever sent to cannot have been decided.
 	SessionCreated: {SessionPendingUserAction, SessionCancelled, SessionExpired},
 
 	// A link is out. The person completes it (PROCESSING), the provider asks

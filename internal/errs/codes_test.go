@@ -14,6 +14,7 @@ import (
 // registry so a change to either side is a visible diff here.
 var expectedStatus = map[errs.Code]int{
 	errs.CodeValidationFailed: http.StatusBadRequest,
+	errs.CodeBodyTooLarge:     http.StatusRequestEntityTooLarge,
 	errs.CodeUnauthenticated:  http.StatusUnauthorized,
 	errs.CodeForbidden:        http.StatusForbidden,
 	errs.CodeStepUpRequired:   http.StatusForbidden,

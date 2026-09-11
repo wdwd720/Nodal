@@ -602,6 +602,45 @@ another branch built: `compliance_profile_transitions` (00761),
 - `httpapi.WithdrawalDeps.Terms` (`httpapi.TermsOutstanding`) — the legal registry
   reader the withdrawal surfaces consult.
 
+---
+
+## Addendum — 2026-09-10: the platform-hardening fixes (F-166 … F-173)
+
+Nothing here is a new product surface. It is the transport, the follower, the
+schema binding and the timers behind surfaces that already exist.
+
+### Routes added
+
+None.
+
+### Migrations added
+
+| Migration | What it adds |
+|---|---|
+| `00796_a_sanctions_screen_is_a_decision_not_an_attribute.sql` | `compliance_profile_transitions.from_sanctions_state` / `.to_sanctions_state` and their CHECKs; `cp_uuid_v7()`; `cp_compliance_profile_birth_screen()` and its trigger; a replaced `cp_compliance_apply_state_transition()`; the constraint trigger `compliance_profiles_require_sanctions_transition`; `sanctions_state` out of `cp_app`'s column grant |
+
+Schema is at migration **796** after this batch. No table was added; no
+migration ≤ 00755 was touched.
+
+### Packages added
+
+None. `internal/httpapi`, `internal/ratelimit`, `internal/errs`,
+`internal/notifications`, `internal/compliance`, `internal/verification` and
+`cmd/api` gained code.
+
+### Interfaces other domains can use
+
+- `ratelimit.NewMemoryStoreWithMax`, `ratelimit.DefaultMaxKeys`,
+  `ratelimit.MemoryStore.Stats` / `MemoryStats` — what the store is holding, for
+  a sweeper's log.
+- `notifications.Follower.WithLogger` — the follower reports a pass that looks
+  stalled to the binary's logger.
+- `verification.Service.ExpireOverdueSessions`,
+  `verification.Repository.OverdueSessions`, `verification.DueSession`,
+  `verification.UnstartedSessionGrace` — closing an attempt that can no longer
+  be decided.
+- `errs.CodeBodyTooLarge` is in `errs.AllCodes()`, so anything that enumerates
+  the code set now covers the one the transport returns on every route.
 ## Addendum — 2026-09-10: the credits-payments audit fixes (F-151 … F-159)
 
 Nine findings against goal §54, one P0 and three P1. No new product surface: a

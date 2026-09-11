@@ -159,6 +159,14 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-166 | P1 | PRODUCTIZATION | fixed | Any caller behind the platform router chose its own rate-limit key and its own audit address by writing one header |
+| F-167 | P2 | PRODUCTIZATION | fixed | The notification follower's cursor could move backwards, so one ordinary burst stalled a source for the life of the deployment, silently |
+| F-168 | P2 | PRODUCTIZATION | fixed | The sanctions screen that gates a payout was writable by one UPDATE with no transition row, one statement after the migration that protected the state beside it |
+| F-169 | P2 | PRODUCTIZATION | fixed | The in-process rate-limit store documented a bound nothing enforced: no caller of Sweep, and a key seen once retained for the life of the process |
+| F-170 | P2 | PRODUCTIZATION | fixed | Four expiry passes existed and nothing called them; the one with a person waiting left an expired verification link holding its owner's only session shut |
+| F-171 | P3 | PRODUCTIZATION | fixed | BODY_TOO_LARGE is emitted on every route and was absent from the registered code set, so nothing that enumerates the codes covered it |
+| F-172 | P3 | PRODUCTIZATION | fixed | /v1/strategies published timestamps in the server's local offset, on a contract that says RFC 3339 UTC |
+| F-173 | P3 | PRODUCTIZATION | fixed | The body limit was justified by the size of the largest schema field, and that number had been wrong since the strategy schemas landed |
 | F-151 | P0 | PRODUCTIZATION | fixed | The pricing policy minted a count of Credits into a field that means base units, so $10 bought 0.001 Credits |
 | F-152 | P1 | PRODUCTIZATION | fixed | A chargeback destroyed whichever lots sorted first and stranded the units it reversed |
 | F-153 | P1 | PRODUCTIZATION | fixed | A failed provider call or an abandoned checkout held the money-at-risk ceiling forever |
@@ -7498,6 +7506,267 @@ before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
 
+## F-166 · Any caller behind the platform router chose its own rate-limit key and its own audit address by writing one header · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the platform-hardening audit reading `httpapi.clientIP` against
+`render.yaml`, reproduced in `internal/httpapi/audit_platform_test.go`.
+
+`clientIP` took the LEFT-most `X-Forwarded-For` entry whenever the immediate peer
+was one of `CP_HTTP_TRUSTED_PROXY_CIDRS`, and `render.yaml` trusts the whole
+private space because that is the only way the container is reachable. A reverse
+proxy APPENDS to whatever `X-Forwarded-For` the client sent — nginx's
+`$proxy_add_x_forwarded_for` is the canonical form — so the header the app reads
+is "«whatever the client wrote», «the address the proxy saw»", and only the
+right-most entry is the proxy's word for who called.
+
+So a caller chose its own transport rate-limit key for every unauthenticated
+class, and its own address in `sessions`, `login_attempts`, `security_events`
+and `terms_acceptances.source_ip`. The reproduction drove the real `rateLimit`
+middleware with a 3-a-minute auth budget and took 300 of it by rewriting one
+header.
+
+**Fix.** The list is walked from the RIGHT, discarding entries that are
+themselves inside a trusted network (a two-hop chain appends twice) and anything
+unparsable, and falls back to `RemoteAddr` when the list says nothing —
+`RemoteAddr` being the peer, which no caller can write. The list is truncated to
+its last 32 entries before a single one is parsed, so one request cannot ask for
+a walk of its own length. "Untrusted peer ⇒ ignore the header" is unchanged.
+Commit 1b789a3.
+
+**Evidence.** TEST_UNIT: `TestAudit_ForgedXForwardedForChoosesTheRateLimitKeyAndTheAuditAddress`,
+`TestAudit_TheAuthBudgetIsBypassedByRewritingOneHeader`,
+`TestRateLimitKeyDistinguishesCallersBehindAProxy` (extended: a multi-entry
+header, a chain of balancers, an all-trusted list, an unparsable entry, and the
+parse bound), `TestClientIPIsAPlainAddress`. STATIC_PROOF:
+`internal/httpapi/middleware.go` (`clientIP`, `isTrustedProxy`,
+`maxForwardedForEntries`); `docs/threat-model/THREAT_MODEL.md` §3.9, whose
+residual for this row said "middleware absent".
+
+## F-167 · The notification follower's cursor could move backwards, so one ordinary burst stalled a source for the life of the deployment, silently · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the platform-hardening audit reading `Follower.runSource`,
+reproduced in `internal/notifications/stall_audit_test.go`.
+
+The pass read from `cursor - lap`, took at most `batch` rows, and made the LAST
+of them the new cursor. The new cursor was therefore the 200th row counted from
+a point two minutes BEHIND where the cursor already stood — so it could move
+backwards, and did as soon as one source produced 200 rows inside one two-minute
+lap. Every later pass re-read the same 200 rows, deduplicated all of them and
+wrote the same instant back: the source was pinned at that instant forever, and
+every later row — a reversal, a failed payout, a frozen account, a new sign-in —
+sat behind a cursor that would never reach it. The dedup index made the repeated
+re-read produce nothing, so nothing logged and nothing alerted. One trader
+spending their own 120/min command budget reaches it.
+
+**Fix.** The two jobs that single read was doing are two reads. The DRAIN reads
+forward from exactly where the last pass stopped and is the only thing that
+moves the cursor, which is monotone by construction. The LAP re-reads the window
+behind the cursor and moves nothing; it runs only when the drain left room in
+the batch, because a pass still draining a backlog has not reached the head
+where a late commit hides. Two things fell out of it: the cursor may not advance
+more than half a lap past the database's own clock (one row carrying a wrong
+clock would otherwise drag it into the future and skip everything written
+between now and then), and a signal now rides with the fact it accompanies, so
+the lap no longer republishes an invalidation every fifteen seconds for every
+row of the last two minutes. A full drain that produced no notifications is
+logged as a WARN — legitimate after a restore winds a cursor back, and the shape
+the stall had (D-097). Commit a1379b0.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_FollowerStallsForeverAfterABatchSizedBurst` (260 transitions in one
+lap window; the cursor advances, all 260 are told, and a capture an hour later
+is reported), plus the package's existing
+`TestIntegration_TheFollowerFindsARowThatCommittedBehindItsCursor`,
+`…ACrashBetweenReadingAndEmittingDuplicatesNothing`,
+`…TheFollowerNotifiesOnceForACapturedPurchase`. STATIC_PROOF:
+`internal/notifications/follower.go` (`runSource`, `notAfterCursor`,
+`futureHorizon`).
+
+## F-168 · The sanctions screen that gates a payout was writable by one UPDATE with no transition row, one statement after the migration that protected the state beside it · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the platform-hardening audit reading migration 00761, reproduced in
+`test/integration/migrations/audit_sanctions_test.go`.
+
+00761 states the rule it enforces: "an application statement could move a
+profile from UNVERIFIED to VERIFIED with no recorded edge, no actor and no
+provider reference, and the trail a regulator would read was whatever the last
+writer said." It fixes that for `identity_state` and then grants
+`UPDATE (… sanctions_state …)` back in the very next statement.
+`sanctions_state` is not an attribute: `internal/eligibility/evaluate.go` reads
+it as one of the allowlists that decides whether a payout may proceed, and
+`verification.sanctionsStateFrom` derives it from the provider's sanctions and
+PEP checks. The reproduction cleared a screening HIT as `cp_app` in one
+statement, in the same session in which the state beside it was refused.
+
+**Fix.** Migration 00796 carries the screen on the transition row that already
+exists (`from_sanctions_state`, `to_sanctions_state`; both NULL when the row
+says nothing about it), has `cp_compliance_apply_state_transition` write the
+column, drops it from the column grant, and adds the constraint trigger that
+refuses a change no row describes. `compliance.Upsert` writes that row when the
+screen changes, carrying the actor, reason and correlation id it already
+required, and re-reads the profile so a caller still gets the truth back. A
+profile BORN holding a screen records it through a trigger, because an INSERT is
+not a change — the hole F-122 found in the state next to it (D-098). The apply
+function also stops a same-state row erasing `verified_at` and `expires_at`,
+which is a row shape this migration is the first to create. Commit a6b11bb.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_SanctionsStateIsWritableWithNoTransitionRow`,
+`TestIntegration_Compliance_ASanctionsScreenIsRecordedAsADecision`,
+`TestIntegration_Compliance_AProfileBornScreenedRecordsIt`,
+`TestIntegration_TheVerificationStateIsNotTheApplicationsToWrite` (the refused
+list now includes the screen), `test/integration/enums` (both new CHECKs paired
+against `compliance.AllSanctionsStates()`), `test/security`. STATIC_PROOF:
+`migrations/00796_a_sanctions_screen_is_a_decision_not_an_attribute.sql`,
+`internal/compliance/profile.go` (`Upsert`, `screen`).
+
+## F-169 · The in-process rate-limit store documented a bound nothing enforced · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the platform-hardening audit reading `ratelimit.MemoryStore`,
+reproduced in `internal/httpapi/audit_platform_test.go`.
+
+`MemoryStore` documents itself as having "bounded memory: expired windows are
+dropped lazily on access and by Sweep". Neither half held for a key that is
+never revisited: the lazy drop replaces the entry for a key that COMES BACK, and
+nothing in `cmd/` or `internal/` called `Sweep`. The map therefore retained one
+entry per distinct (limiter, key) pair for the life of the process — and with
+F-166 above it, the key cardinality was an unauthenticated caller's to choose,
+which is the F-117 failure (an unbounded dimension on a 512 MB instance) wearing
+a different label.
+
+**Fix.** Two halves. `cmd/api` sweeps the store on a ticker at the largest
+configured window for as long as the store exists, and `Sweep` decides per entry
+using the window that entry was written with, so a one-minute counter is not
+kept alive by a ten-minute ticker. And the store caps itself at
+`DefaultMaxKeys`: when one window holds more distinct keys than that, every
+counter is dropped and the rest of that window is counted against one shared
+budget, reported as a WARN because callers sharing a budget is a refusal
+somebody did not earn. The two alternatives are worse — evicting the oldest
+hands an attacker a way to evict the counter watching them, and admitting
+uncounted keys removes the limit at the moment it is being tested (D-099).
+Commit 49fbdaf.
+
+**Evidence.** TEST_UNIT: `TestAudit_TheMemoryRateLimitStoreIsNeverSwept`,
+`TestMemoryStore_StopsGrowingAtItsCap`,
+`TestMemoryStore_SweepUsesEachEntrysOwnWindow`,
+`TestRateLimitSweepInterval_IsTheLargestConfiguredWindow`,
+`TestRateLimitSweeper_RemovesExpiredCountersAndStops`,
+`TestRateLimitStore_TheMemoryStoreIsSweptForAsLongAsItExists`. STATIC_PROOF:
+`internal/ratelimit/ratelimit.go`, `cmd/api/ratelimitstore.go`.
+
+## F-170 · Four expiry passes existed and nothing called them · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the platform-hardening audit grepping for callers of
+`gates.Admin.ExpireDue`, `admin.Service.ExpireDue` and
+`capital.Service.ExpireDue`, and for anything that expires a verification
+session.
+
+Three of them were written, tested by their own packages, documented as "meant
+for a periodic worker", and called by nothing in any binary. Nothing expired a
+verification SESSION at all. Three of the four are not safety controls, and
+saying so is the point: the gate checker already treats a closed window as
+inactive, `admin.checkPending` refuses to execute an expired action, and a
+reservation past its window is not counted as buying power. What did happen is
+that every surface disagreed with its own row.
+
+The fourth is why this was not deferred again. Migration 00762 permits exactly
+one OPEN verification session per person. A hosted link that ran out is not open
+in any sense the person can use, and nothing moved its status, so its owner
+could not start verification again — ever. §20 says "your link expired, start
+again", and the product could not honour that sentence.
+
+**Fix.** One ticker in `cmd/api` at the five-minute cadence the other passes
+use, each sweep in its own transaction and its own error path, the whole pass
+under a timeout, a nil service skipped rather than panicked on.
+`verification.Service.ExpireOverdueSessions` closes an expired hosted link and
+an attempt the provider was never told about (after `UnstartedSessionGrace`),
+through the transition row that is the only thing that writes a session status,
+`FOR UPDATE SKIP LOCKED` and batch-bounded (D-099). Commit d3279a6.
+
+**Evidence.** TEST_INTEGRATION:
+`TestIntegration_TheExpirySweepsRunInThisProcess` (all four passes against the
+real schema; the expired link is closed and its owner can start again),
+`TestIntegration_TheSessionSweepClosesWhatCannotBeDecided`,
+`TestIntegration_TheSessionSweepLeavesADecidedSessionAlone`. STATIC_PROOF:
+`cmd/api/expiresweeps.go`, `internal/verification/expiry.go`;
+`docs/product/VERIFICATION_AND_WITHDRAWAL.md` §4 and ADR-0025 §2, which now
+describe what runs.
+
+## F-171 · BODY_TOO_LARGE is emitted on every route and was absent from the registered code set · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the platform-hardening audit reading `internal/errs/codes.go`,
+reproduced in `internal/httpapi/audit_platform_test.go`.
+
+`CodeBodyTooLarge` is declared, mapped to 413 in the status registry, and
+emitted by `captureBody` on every route — and was not in `allCodes`. So
+`errs.AllCodes()` returned 53 of the 54 declared codes and everything that
+enumerates the set skipped it, including
+`TestHTTPStatus_EveryCodeExplicitlyMapped`, whose independent `expectedStatus`
+table omitted it too and whose length assertion therefore passed. The published contract's `Problem.code` description did not
+name it and `apps/web/src/api/problem.ts` had no case for it.
+
+**Fix.** Registered in `allCodes`, added to the independent expectation table,
+named in the OpenAPI description, and given a sentence a person can act on in
+the web client ("send less, rather than sending it again"). Commit d7b9447.
+
+**Evidence.** TEST_UNIT:
+`TestAudit_BodyTooLargeIsMissingFromTheRegisteredCodeSet`,
+`TestHTTPStatus_EveryCodeExplicitlyMapped`, `TestAllCodes_UniqueAndWellFormed`,
+`pnpm --filter @controlplane/web test`. STATIC_PROOF: `internal/errs/codes.go`,
+`openapi/openapi.yaml` (`Problem.code`), `apps/web/src/api/problem.ts`.
+
+## F-172 · /v1/strategies published timestamps in the server's local offset · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the platform-hardening audit reading `handlers_strategies.go`
+against openapi.yaml's own "Timestamps are RFC 3339 UTC", reproduced in
+`internal/httpapi/audit_platform_test.go`.
+
+pgx hands a `timestamptz` back in the process's zone. Every other converter in
+the package lands `.UTC()` on the way out; `toAPIStrategy` and
+`toAPIStrategyVersion` did not, so `created_at`, `updated_at` and `built_at` on
+that one route published whatever offset the server ran in.
+
+**Fix.** The three conversions, and an invariant so a third converter cannot
+forget: `harness.do` scans every JSON response it records for an RFC 3339
+instant carrying a zone offset, which makes every route test in the package a
+test of this too. A per-converter table would have been sixty fixtures that the
+sixty-first converter is not in. Commit d7b9447.
+
+The finding understated itself, and the invariant is how that was found: the
+audit called `/v1/strategies` "the one route that publishes the server's
+timezone offset", and the first integration run with the scanner in place
+failed on eleven more conversions across five files — the internal commerce
+product, seller and order; the native asset, its economics lock and its
+activation; a native market, its printed price and its activation; an agent's
+creation, last run, grant and pause; a credit purchase's creation, reversibility
+and settlement; a portfolio position's first acquisition and last trade; an
+admin action's approval and execution; an activity item; a gate transition; and
+a kill-switch release. Every one is now UTC. Commit 9b87a8d.
+
+**Evidence.** TEST_UNIT: `TestAudit_StrategyTimestampsAreNotUTC`,
+`TestStrategyConverters_PublishUTC`,
+`TestTimestampScanner_SeesAnOffsetAndAcceptsZ` (so the scanner cannot pass
+vacuously), and the whole `internal/httpapi` suite through `harness.do`.
+STATIC_PROOF: `internal/httpapi/handlers_strategies.go`,
+`internal/httpapi/timestamps_test.go`.
+
+## F-173 · The body limit was justified by a number that had been wrong since the strategy schemas landed · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the platform-hardening audit reading `bodyLimitFor`'s comment
+against the spec.
+
+The comment justified 64 KiB with "the largest field any request schema declares
+is 5,000 characters". `CreateStrategyRequest.description` is 8,000. The limit
+itself was never wrong; the sentence that says why it is right was, and a
+sentence is checked by nothing.
+
+**Fix.** The number is a constant beside the limit and a test derives it from
+`openapi/openapi.yaml`, so a schema that declares a larger field fails there
+rather than in production. Commit d7b9447.
+
+**Evidence.** TEST_UNIT:
+`TestBodyLimit_IsDerivedFromTheLargestFieldTheContractDeclares`. STATIC_PROOF:
+`internal/httpapi/middleware.go` (`largestSchemaFieldChars`).
 ## F-151 · The pricing policy minted a count of Credits into a field that means base units, so $10 bought 0.001 Credits · PRODUCTIZATION · P0 · FIXED
 
 **Found by** the credits-payments audit of goal §54, reading `internal/credit/pricing.go` against every consumer of the quantity it produces.

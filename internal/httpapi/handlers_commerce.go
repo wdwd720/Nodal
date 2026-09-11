@@ -35,7 +35,7 @@ func toAPIProduct(p commerce.Product) api.InternalProduct {
 		Status:          api.InternalProductStatus(p.Status),
 		EarningOrigin:   api.CreditOrigin(origin),
 		TermsFrozen:     ptr(p.TermsFrozen()),
-		CreatedAt:       ptr(p.CreatedAt),
+		CreatedAt:       ptr(p.CreatedAt.UTC()),
 	}
 	// The split is shown alongside the price so a seller never has to compute
 	// the platform's share themselves and get the rounding direction wrong.
@@ -54,7 +54,7 @@ func toAPISeller(s commerce.Seller) api.InternalSeller {
 		AccountId:   uuid.MustParse(s.AccountID.String()),
 		DisplayName: s.DisplayName,
 		Status:      api.InternalSellerStatus(s.Status),
-		CreatedAt:   ptr(s.CreatedAt),
+		CreatedAt:   ptr(s.CreatedAt.UTC()),
 	}
 	if s.PayoutAccountID != nil {
 		id := uuid.MustParse(s.PayoutAccountID.String())
@@ -77,7 +77,7 @@ func toAPIInternalOrder(o commerce.Order) api.InternalOrder {
 		PlatformFee:     qtyString(o.PlatformFee),
 		SellerProceeds:  qtyString(o.SellerProceeds),
 		EarningOrigin:   api.CreditOrigin(o.EarningOrigin),
-		CreatedAt:       ptr(o.CreatedAt),
+		CreatedAt:       ptr(o.CreatedAt.UTC()),
 	}
 	if !o.EarningAccountID.IsZero() {
 		id := uuid.MustParse(o.EarningAccountID.String())

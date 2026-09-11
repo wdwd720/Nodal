@@ -164,7 +164,7 @@ func (s *Server) GetNativeMarketsMarketIdTrades(ctx context.Context, request api
 			SpotPriceAfter:  p.SpotAfter.String(),
 			CreditVolume:    p.CreditVolume.String(),
 			AssetVolume:     p.AssetVolume.String(),
-			PrintedAt:       p.PrintedAt,
+			PrintedAt:       p.PrintedAt.UTC(),
 		})
 	}
 	return api.GetNativeMarketsMarketIdTrades200JSONResponse(api.NativeTradePage{
@@ -203,7 +203,7 @@ func toAPIMarketSummary(m nativemarket.MarketSummary) api.NativeMarketSummary {
 		CreatorFeeBps:        int(m.Fees.CreatorBPS),
 		StateVersion:         ptr(m.State.Version),
 		Demo:                 m.Demo,
-		CreatedAt:            m.CreatedAt,
+		CreatedAt:            m.CreatedAt.UTC(),
 	}
 	if m.Description != "" {
 		out.Description = ptr(m.Description)
@@ -215,7 +215,7 @@ func toAPIMarketSummary(m nativemarket.MarketSummary) api.NativeMarketSummary {
 		out.ModerationState = ptr(api.NativeMarketSummaryModerationState(m.Moderation))
 	}
 	if m.ActivatedAt != nil {
-		out.ActivatedAt = m.ActivatedAt
+		out.ActivatedAt = timePtr(m.ActivatedAt)
 	}
 	// A market with no trade in the window has no 24-hour change, which is a
 	// different fact from a change of zero. Both fields say so together.
