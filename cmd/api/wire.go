@@ -48,6 +48,7 @@ import (
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/notifications"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
@@ -411,6 +412,32 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return sessionMgr.StillLive(ctx, database, p.SubjectID, sessionID)
 	})
 
+	// ---- notifications ----------------------------------------------------
+	//
+	// The producer no longer missing (F-69, and the "NO PRODUCER IS ATTACHED"
+	// note above). Two halves:
+	//
+	//   1. a follower that reads the transition tables domain services already
+	//      write -- credit fundings, payout requests, native fills and market
+	//      pauses, account status, login security events -- and turns the rows a
+	//      person needs to know about into notifications, idempotently, in one
+	//      transaction per source per pass (D-069);
+	//   2. the hub, which now carries those notifications and the "this is
+	//      stale" signals derived from the same rows, per user, so the frontend
+	//      invalidates a query instead of polling (D-071).
+	//
+	// The hub is given the clock so its event ids encode the instant they were
+	// published at: the counter used to restart with the process, and a client
+	// reconnecting after a redeploy silently resumed a stream that had lost
+	// everything. With a time-encoded id, Last-Event-ID names an instant and
+	// notificationResume replays what the table holds since it -- which is the
+	// only part of a realtime stream that survives a free instance sleeping.
+	hub.UseClock(clk.Now)
+	sse.SetResume(notificationResume(database))
+	notificationProducer := notifications.NewProducer(clk.Now, cfg.SandboxTier())
+	go runNotificationFollower(ctx, database, notifications.NewFollower(notificationProducer),
+		hubPublisher{hub: hub}, log)
+
 	legalPolicy, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
 	if err != nil {
 		return nil, err
@@ -527,6 +554,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
 	ports.Stream = sse
+	// Scoped to the caller and to nobody else: neither port takes an account id
+	// and neither has an account:read_any mode.
+	ports.Notifications = httpapi.NewNotificationsPort(database, clk)
+	ports.MeAudit = httpapi.NewMeAuditPort(database)
 
 	// Provider webhooks. The map is keyed by the provider name in the path, so
 	// POST /v1/webhooks/stripe_credit reaches the Credit purchase pipeline and

@@ -234,6 +234,28 @@ var operationPolicies = map[string]operationPolicy{
 		AnyOf: perms(security.PermReconciliationResolve), StepUp: true, Mutating: true,
 	},
 
+	// --- notifications and the customer's own audit trail -----------------
+	//
+	// account:read and nothing new. A notification centre grants no authority
+	// a customer did not already have: reading what you were told about your
+	// own account is the same permission as reading the account, and marking
+	// your own notification read adds nothing to it. The question these routes
+	// actually turn on -- is this row addressed to YOU -- is tenant scoping,
+	// which no entry in this table can express and which
+	// internal/notifications answers against the principal on every call.
+	//
+	// account:read_any is deliberately absent from every row here. An operator
+	// investigating an account reads the audit trail; a copy of what the
+	// customer was shown is a different thing, and this is not the route that
+	// hands it over. See D-070.
+	"GetMeNotifications":                    {AnyOf: perms(security.PermAccountRead)},
+	"GetMeNotificationsUnreadCount":         {AnyOf: perms(security.PermAccountRead)},
+	"PostMeNotificationsNotificationIdRead": {AnyOf: perms(security.PermAccountRead), Mutating: true},
+	"PostMeNotificationsReadAll":            {AnyOf: perms(security.PermAccountRead), Mutating: true},
+	"GetMeNotificationPreferences":          {AnyOf: perms(security.PermAccountRead)},
+	"PutMeNotificationPreferences":          {AnyOf: perms(security.PermAccountRead), Mutating: true},
+	"GetMeAudit":                            {AnyOf: perms(security.PermAccountRead)},
+
 	// --- system -----------------------------------------------------------
 	"GetHealthz": {Public: true},
 	"GetReadyz":  {Public: true},

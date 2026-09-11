@@ -151,23 +151,24 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 	require.True(t, ok, "the router must be walkable")
 
 	replacements := map[string]string{
-		"{accountId}":    testAccountID.String(),
-		"{instrumentId}": testInstrument.String(),
-		"{intentId}":     testIntentID.String(),
-		"{orderId}":      testOrderID.String(),
-		"{depositId}":    testDepositID.String(),
-		"{sessionId}":    testSessionID,
-		"{actionId}":     testSessionID,
-		"{recordId}":     testSessionID,
-		"{capability}":   "LIVE_FUNDING",
-		"{action}":       "propose",
-		"{decision}":     "approve",
-		"{provider}":     "stripe_credit",
-		"{assetId}":      testInstrument.String(),
-		"{marketId}":     testOrderID.String(),
-		"{payoutId}":     testSessionID,
-		"{paymentId}":    testSessionID,
-		"{productId}":    testOrderID.String(),
+		"{accountId}":      testAccountID.String(),
+		"{instrumentId}":   testInstrument.String(),
+		"{intentId}":       testIntentID.String(),
+		"{orderId}":        testOrderID.String(),
+		"{depositId}":      testDepositID.String(),
+		"{sessionId}":      testSessionID,
+		"{actionId}":       testSessionID,
+		"{recordId}":       testSessionID,
+		"{capability}":     "LIVE_FUNDING",
+		"{action}":         "propose",
+		"{decision}":       "approve",
+		"{provider}":       "stripe_credit",
+		"{assetId}":        testInstrument.String(),
+		"{marketId}":       testOrderID.String(),
+		"{payoutId}":       testSessionID,
+		"{paymentId}":      testSessionID,
+		"{productId}":      testOrderID.String(),
+		"{notificationId}": testOrderID.String(),
 	}
 
 	requiredQuery := map[string]string{
@@ -270,7 +271,10 @@ func routeKeyFor(p routeProbe) string {
 }
 
 func anonymousBody(method string) any {
-	if method == http.MethodPost {
+	// PUT as well as POST: the generated binder decodes a required body BEFORE
+	// authorization runs (D-042), so a probe with no body is refused with 400
+	// and never measures what these tests are about.
+	if method == http.MethodPost || method == http.MethodPut {
 		return "{}"
 	}
 	return nil

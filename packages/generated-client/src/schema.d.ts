@@ -1810,6 +1810,268 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's own security and account history (PART 52); never another person's */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of audit entries, newest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MeAuditPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per-kind in-app notification preferences (IN_APP is the only channel that exists) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One entry per kind */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPreferences"];
+                    };
+                };
+            };
+        };
+        /** Replace the caller's answers for the kinds named */
+        put: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferencesUpdate"];
+                };
+            };
+            responses: {
+                /** @description Preferences as they now stand */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPreferences"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's notification centre, newest first */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    /** @description Restrict to these kinds; omitted means every kind */
+                    kinds?: components["schemas"]["NotificationKind"][];
+                    limit?: components["parameters"]["Limit"];
+                    /** @description Only notifications that have not been marked read */
+                    unread?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of notifications */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationPage"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark one notification read (idempotent; the first instant is kept) */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    notificationId: components["parameters"]["NotificationId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The notification as it now stands */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Notification"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark every unread notification read */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description How many were changed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarkedRead"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How many of the caller's notifications are unread */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The badge */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UnreadCount"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-assets": {
         parameters: {
             query?: never;
@@ -3258,6 +3520,30 @@ export interface components {
             /** @default * */
             scope_id: string;
         };
+        MarkedRead: {
+            updated: number;
+        };
+        MeAuditEntry: {
+            action: string;
+            /** @description Who acted, by category. The operator's identity is never exposed to a customer. */
+            actor_type?: string;
+            id: string;
+            ip?: string;
+            occurred_at: components["schemas"]["Timestamp"];
+            resource_id?: string;
+            resource_type?: string;
+            severity?: string;
+            /**
+             * @description SECURITY is the sign-in and session trail; ACCOUNT is what was done to the caller's own accounts.
+             * @enum {string}
+             */
+            source: "SECURITY" | "ACCOUNT";
+            user_agent?: string;
+        };
+        MeAuditPage: {
+            items: components["schemas"]["MeAuditEntry"][];
+            next_cursor: string | null;
+        };
         NativeAsset: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_id: components["schemas"]["UUID"];
@@ -3383,6 +3669,56 @@ export interface components {
             max_supply: components["schemas"]["Quantity"];
             pool_supply: components["schemas"]["Quantity"];
             treasury_allocation: components["schemas"]["Quantity"];
+        };
+        Notification: {
+            /** Format: uuid */
+            account_id?: string | null;
+            body: string;
+            /** @description Identifiers and state names only; never a balance. Canonical figures come from REST. */
+            data?: {
+                [key: string]: unknown;
+            };
+            id: components["schemas"]["UUID"];
+            kind: components["schemas"]["NotificationKind"];
+            occurred_at: components["schemas"]["Timestamp"];
+            /** Format: date-time */
+            read_at?: string | null;
+            resource_id?: string;
+            resource_type?: string;
+            /** @description True when this notification was produced on a sandbox tier and describes nothing of real value (ADR-0023). */
+            sandbox: boolean;
+            /** @enum {string} */
+            severity: "INFO" | "WARN" | "CRITICAL";
+            title: string;
+        };
+        /**
+         * @description What a notification is about. The list is the product vocabulary; the nine names migration 00640 declared and nothing produces are not accepted here.
+         * @enum {string}
+         */
+        NotificationKind: "CREDIT_PURCHASE_CAPTURED" | "CREDIT_PURCHASE_REVERSED" | "NATIVE_TRADE_FILLED" | "NATIVE_MARKET_PAUSED" | "PAYOUT_ACCEPTED" | "PAYOUT_SETTLED" | "PAYOUT_FAILED" | "PAYOUT_NEEDS_REVIEW" | "VERIFICATION_UPDATED" | "ACCOUNT_RESTRICTED" | "SECURITY_NEW_SESSION" | "AGENT_PAUSED" | "SYSTEM";
+        NotificationPage: {
+            items: components["schemas"]["Notification"][];
+            next_cursor: string | null;
+        };
+        NotificationPreference: {
+            /**
+             * @description The only delivery channel that exists. No e-mail, SMS or push provider is configured anywhere in this system.
+             * @enum {string}
+             */
+            channel: "IN_APP";
+            enabled: boolean;
+            /** @description False where the kind cannot be switched off -- a new sign-in, an account restriction, a reversed purchase, a failed payout, a system message. The stored answer is kept and ignored, and a settings page should show the switch as fixed rather than one that does nothing. */
+            enforced: boolean;
+            kind: components["schemas"]["NotificationKind"];
+        };
+        NotificationPreferences: {
+            items: components["schemas"]["NotificationPreference"][];
+        };
+        NotificationPreferencesUpdate: {
+            items: {
+                enabled: boolean;
+                kind: components["schemas"]["NotificationKind"];
+            }[];
         };
         Order: {
             account_id: components["schemas"]["UUID"];
@@ -3618,7 +3954,7 @@ export interface components {
             occurred_at: components["schemas"]["Timestamp"];
             resource_id?: string;
             /** @enum {string} */
-            type: "buying_power.changed" | "order.transitioned" | "intent.transitioned" | "deposit.transitioned" | "agent.state" | "resync";
+            type: "buying_power.changed" | "order.transitioned" | "intent.transitioned" | "deposit.transitioned" | "agent.state" | "resync" | "notification.created" | "data.changed";
         };
         SubmitIntentRequest: {
             account_id: components["schemas"]["UUID"];
@@ -3684,6 +4020,9 @@ export interface components {
         TradeIntentPage: components["schemas"]["Page"] & {
             items: components["schemas"]["TradeIntent"][];
         };
+        UnreadCount: {
+            count: number;
+        };
         /**
          * @description USD as a decimal string with exactly two fraction digits
          * @example 1234.56
@@ -3747,6 +4086,7 @@ export interface components {
         IntentId: components["schemas"]["UUID"];
         Limit: number;
         MarketId: components["schemas"]["UUID"];
+        NotificationId: components["schemas"]["UUID"];
         OrderId: components["schemas"]["UUID"];
         PaymentId: components["schemas"]["UUID"];
         PayoutId: components["schemas"]["UUID"];

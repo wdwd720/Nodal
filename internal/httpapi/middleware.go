@@ -364,7 +364,13 @@ func corsPolicy(origins []string) func(http.Handler) http.Handler {
 		}
 	}
 	const allowHeaders = "Content-Type, Idempotency-Key, X-Request-Id, X-Correlation-Id, Last-Event-ID"
-	const allowMethods = "GET, POST, DELETE, OPTIONS"
+	// PUT joined the list when the first PUT route did (GET/PUT
+	// /v1/me/notification-preferences). A method the surface mounts and the
+	// preflight does not name is a route that works from curl and fails from
+	// the browser the product actually ships -- and the deployed topology is
+	// cross-origin (app-nodal -> api-nodal), so every non-simple request here
+	// is preflighted.
+	const allowMethods = "GET, POST, PUT, DELETE, OPTIONS"
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
