@@ -296,6 +296,14 @@ cannot disagree with the first.
 | `00759` | `terms_acceptances` — append-only, one row per (user, document, version, sha256 of the bytes shown), with the acting session, address and user agent |
 | `00760` | `operator_roles.role` gains a CHECK: every declared role except BREAK_GLASS, paired with `operatorroles.Directory()` in `test/integration/enums` |
 
+**Migrations 00798-00800** (the accounts-auth audit fixes, F-174 to F-181).
+
+| Migration | Adds |
+|---|---|
+| `00798` | The closure cooling-off period is compared against `statement_timestamp()` rather than the caller-supplied `occurred_at`; `cp_transition_stamp_is_honest` bounds a transition stamp to two minutes either side of the database clock; the closure and user-status EDGE SETS become CHECK constraints on their transition tables, paired with `profile.ClosureEdges()` and `profile.UserStatusEdges()` in `test/integration/enums` |
+| `00799` | `operator_role_transitions` + the F-42 pair for the operator directory: an append-only record of every revocation and expiry with its actor and reason, a SECURITY DEFINER writer, an immutability trigger over the provenance columns and a one-way `revoked_at`, `REVOKE UPDATE ON operator_roles FROM cp_app` with `GRANT UPDATE (reason)` back for the row lock |
+| `00800` | `operator_roles.role` drops `CUSTOMER` from its CHECK: it is what a principal the directory says nothing about already is, and naming it issued an OPERATOR session with no operator permissions |
+
 **Routes added (10).** All under `/v1`; permissions are the existing ones.
 
 | Method | Path | Permission | Notes |
