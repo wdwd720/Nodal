@@ -1421,6 +1421,15 @@ paths:
         when somebody trades, and the response says which it was. `q` searches the
         asset's name, symbol and description in PostgreSQL — there is no external
         index, and a market's identity is never a display name.
+
+
+        This route is unauthenticated, so it carries no account identity and
+        answers no question about one: there is no creator field and no creator
+        filter, and content a moderation verdict REJECTED is not published here.
+        A DELISTED market is off the default page and returned when `status`
+        asks for it. The creator of a market is on
+        `GET /native-markets/{marketId}/summary`, which is behind a session
+        (D-080, D-110).
       parameters:
         - { $ref: "#/components/parameters/Cursor" }
         - { $ref: "#/components/parameters/Limit" }
@@ -1430,7 +1439,6 @@ paths:
           schema:
             type: array
             items: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
-        - { in: query, name: creator_account_id, schema: { $ref: "#/components/schemas/UUID" } }
         - { in: query, name: q, schema: { type: string, maxLength: 128 } }
         - in: query
           name: sort
@@ -1450,7 +1458,14 @@ paths:
         the holder concentration. It is a separate read from GET
         /native-markets/{marketId} so the trade screen and the markets page share
         one projection and cannot disagree about a price or a volume.
-      parameters: [{ $ref: "#/components/parameters/MarketId" }]
+
+
+        `account_id` is optional and must be an account the caller owns. It marks
+        that account's row in `top_holders` with `is_you` and changes nothing
+        else: the holder list names nobody either way (D-111).
+      parameters:
+        - { $ref: "#/components/parameters/MarketId" }
+        - { in: query, name: account_id, schema: { $ref: "#/components/schemas/UUID" } }
       responses:
         "200":
           description: Market detail
@@ -1979,12 +1994,11 @@ components:
         state_version: { type: integer, format: int64 }
         top_holders:
           type: array
-          description: Holder concentration, which is the number a buyer most needs to see
-          items:
-            type: object
-            properties:
-              account_id: { $ref: "#/components/schemas/UUID" }
-              quantity: { $ref: "#/components/schemas/Quantity" }
+          description: >-
+            Holder concentration, which is the number a buyer most needs to see.
+            It names nobody; see NativeAssetHolder. This read takes no account,
+            so no row is marked `is_you`.
+          items: { $ref: "#/components/schemas/NativeAssetHolder" }
 
     NativeQuoteRequest:
       type: object
@@ -3674,9 +3688,15 @@ components:
         One market as the markets page and the trade screen see it. Every price is
         an exact integer at price_scale and every quantity is base units; nothing
         here is a float and nothing is a display string.
+
+
+        It carries no account identity, because the markets list that returns it
+        is unauthenticated: an identifier on a public page is both readable and
+        enumerable by anybody. The creator is a field of NativeMarketDetail,
+        which only a signed-in caller can reach (D-110).
       required:
         [market_id, asset_id, credit_asset_id, name, symbol, market_status, asset_status,
-         creator_account_id, last_price, price_scale, asset_decimals, virtual_credit_reserve,
+         last_price, price_scale, asset_decimals, virtual_credit_reserve,
          initial_asset_reserve, real_credit_reserve, asset_reserve, liquidity_credits,
          circulating_supply, max_supply, credit_volume_24h, trades_24h,
          platform_fee_bps, creator_fee_bps, demo, created_at]
@@ -3691,12 +3711,6 @@ components:
         market_status: { type: string, enum: [PENDING, ACTIVE, CLOSE_ONLY, HALTED, FROZEN, DELISTED] }
         asset_status: { type: string, enum: [DRAFT, PENDING_REVIEW, ACTIVE, CLOSE_ONLY, HALTED, DELISTED, REJECTED] }
         moderation_state: { type: string, enum: [PENDING, APPROVED, REJECTED, FLAGGED] }
-        creator_account_id:
-          allOf: [{ $ref: "#/components/schemas/UUID" }]
-          description: >-
-            The creator's account id, which is the handle placeholder. A display
-            name belongs to the profile domain and is joined later; inventing one
-            here would be a second source for it.
         last_price:
           allOf: [{ $ref: "#/components/schemas/Quantity" }]
           description: The MARGINAL price -- what the next base unit costs -- at price_scale.
@@ -3776,15 +3790,55 @@ components:
       properties:
         market: { $ref: "#/components/schemas/NativeMarketSummary" }
         limits_in_force: { $ref: "#/components/schemas/MarketSafetyLimits" }
+        creator_account_id:
+          allOf: [{ $ref: "#/components/schemas/UUID" }]
+          description: >-
+            The creator's account id, which is the handle placeholder. A display
+            name belongs to the profile domain and is joined later; inventing one
+            here would be a second source for it. It is on the DETAIL response
+            rather than on the summary because the summary is served
+            unauthenticated by the markets list (D-110).
         top_holders:
           type: array
-          description: Holder concentration, which is the number a buyer most needs to see
-          items:
-            type: object
-            required: [account_id, quantity]
-            properties:
-              account_id: { $ref: "#/components/schemas/UUID" }
-              quantity: { $ref: "#/components/schemas/Quantity" }
+          description: >-
+            Holder concentration, which is the number a buyer most needs to see.
+            It names nobody; see NativeAssetHolder.
+          items: { $ref: "#/components/schemas/NativeAssetHolder" }
+
+    NativeAssetHolder:
+      type: object
+      description: >-
+        One place in an asset's holder concentration. It says how much and how
+        large a share, and it does not say whose: `top_holders` used to render an
+        account id to any signed-in caller, which made every market's largest
+        positions readable by account and watchable trade by trade. The caller's
+        own row is marked `is_you`, which tells them nothing they did not send.
+        A named holder list is surveillance and belongs behind
+        `native_market:surveil` on an operator route (D-111).
+      required: [rank, quantity, share_bps]
+      properties:
+        rank:
+          type: integer
+          description: >-
+            1 is the largest holder of this asset. The rank is over every holder,
+            not over the returned page, so rank 10 on a page of ten means there
+            are more.
+        quantity:
+          allOf: [{ $ref: "#/components/schemas/Quantity" }]
+          description: Base units, at the ASSET's decimals.
+        share_bps:
+          allOf: [{ $ref: "#/components/schemas/BPS" }]
+          description: >-
+            This holding as a share of every unit accounts hold, truncated. The
+            denominator is the sum of customer balances rather than the
+            circulating supply, because units still in the pool are held by
+            nobody and a creator's allocation is minted outside the curve, so a
+            share of circulating supply can exceed 100%. This one cannot.
+        is_you:
+          type: boolean
+          description: >-
+            This row is the calling account's own holding. Present only where the
+            request named an account the caller owns.
 
     NativeCandle:
       type: object

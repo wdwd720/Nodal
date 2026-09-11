@@ -508,8 +508,13 @@ export const nativeMarketSpec: Spec = {
     asset_decimals: "integer",
   },
   arrays: {
+    // The same shape the trade screen's holder list has, and it names nobody
+    // either: this read takes no account, so not even the caller's own row is
+    // marked (D-111).
     top_holders: {
-      spec: { optional: { account_id: "uuid", quantity: "quantity" } },
+      spec: {
+        required: { rank: "integer", quantity: "quantity", share_bps: "integer" },
+      },
     },
   },
 };
@@ -931,7 +936,6 @@ export const nativeMarketSummarySpec: Spec = {
     market_id: "uuid",
     asset_id: "uuid",
     credit_asset_id: "uuid",
-    creator_account_id: "uuid",
     symbol: "string",
     name: "string",
     market_status: "string",
@@ -1468,7 +1472,14 @@ export const marketSafetyLimitsSpec: Spec = {
 export const nativeMarketDetailSpec: Spec = {
   required: { market: "object", limits_in_force: "object" },
   arrays: {
-    top_holders: { spec: { required: { account_id: "uuid", quantity: "quantity" } } },
+    // No account id, on purpose: a holder list that names people is a list of
+    // other people's positions (D-111).
+    top_holders: {
+      spec: {
+        required: { rank: "integer", quantity: "quantity", share_bps: "integer" },
+        optional: { is_you: "boolean" },
+      },
+    },
   },
 };
 

@@ -171,14 +171,21 @@ var operationPolicies = map[string]operationPolicy{
 
 	// --- markets, charts, portfolio and activity (product goal SS12-16, 35) -
 	//
-	// Discovery, the chart and the tape are the same authority as reading a
-	// native asset: they are public market data about assets anyone with
-	// native_asset:read may already list, and none of them names an account.
-	// The tape deliberately carries no account id, so it cannot become a way
-	// to watch a particular trader.
-	// Market discovery is product data, not account data: the list carries no
-	// balances, positions or identities, and the public site previews it for a
-	// visitor with no session (D-080). Every other market read stays gated.
+	// The chart and the tape are the same authority as reading a native asset:
+	// they are market data about assets anyone with native_asset:read may
+	// already list, and neither names an account. The tape deliberately carries
+	// no account id, so it cannot become a way to watch a particular trader.
+	//
+	// Market discovery is product data, not account data, and the public site
+	// previews it for a visitor with no session (D-080). That premise was a
+	// claim about the response and not a property of it: every row carried the
+	// creator's account id and the route took it as a filter, so an anonymous
+	// caller could read the identifier and enumerate one account's creations by
+	// it. It is now a property -- the projection blanks the column and the
+	// filter it answers matches nothing (D-110) -- and content a moderation
+	// verdict REJECTED is off the list as well (F-198). The creator is on the
+	// SUMMARY read below, which is gated, and so is the holder list, which
+	// names nobody either way (D-111). Every other market read stays gated.
 	"GetNativeMarkets":                {Public: true},
 	"GetNativeMarketsMarketIdSummary": {AnyOf: perms(security.PermNativeAssetRead)},
 	"GetNativeMarketsMarketIdCandles": {AnyOf: perms(security.PermNativeAssetRead)},

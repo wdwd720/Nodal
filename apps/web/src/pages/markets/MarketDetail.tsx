@@ -63,13 +63,7 @@ import {
   Panel,
   Pill,
 } from "../../components/Layout.tsx";
-import {
-  figureText,
-  formatCount,
-  formatUnits,
-  fromBaseUnits,
-  percentOfTotal,
-} from "../../lib/format.ts";
+import { figureText, formatCount, formatUnits, fromBaseUnits } from "../../lib/format.ts";
 import { formatInstant } from "../../lib/time.ts";
 import { NATIVE_ASSET_RISK, NATIVE_PRICE_NOTE, CREDITS_DISCLOSURE } from "../../lib/honesty.ts";
 import { useActiveAccountId } from "../../session.tsx";
@@ -136,9 +130,11 @@ function readAt(at: number): string | undefined {
 export function MarketDetail(): ReactNode {
   const params = useParams<{ marketId: string }>();
   const marketId = params.marketId ?? "";
-  const detail = useNativeMarketDetail(marketId);
   const version = useVersion();
   const accountId = useActiveAccountId();
+  // The account is sent so the holder list can mark this person's own row. It
+  // is not a filter: the list is the same list for everybody (D-111).
+  const detail = useNativeMarketDetail(marketId, accountId);
   const queryClient = useQueryClient();
   const wide = useWide();
   const [ticketOpen, setTicketOpen] = useState(false);
@@ -192,6 +188,7 @@ export function MarketDetail(): ReactNode {
               <div className="stack">
                 <Overview
                   market={data.market}
+                  creatorAccountId={data.creatorAccountId}
                   simulated={simulated}
                   asOf={readAt(detail.dataUpdatedAt)}
                 />
@@ -265,6 +262,13 @@ export function MarketDetail(): ReactNode {
 
 function Overview(props: {
   readonly market: NativeMarketSummary;
+  /**
+   * The creator, which is a field of the DETAIL response and not of the summary
+   * the public markets list serves: an account id on an unauthenticated page is
+   * both readable and enumerable (D-110). Absent renders no row rather than a
+   * blank one, because "we are not saying" and "nobody" are different facts.
+   */
+  readonly creatorAccountId: string | undefined;
   readonly simulated: boolean;
   readonly asOf: string | undefined;
 }): ReactNode {
@@ -340,12 +344,14 @@ function Overview(props: {
             <Pill tone={moderation.tone}>{market.moderation_state}</Pill>
           </Field>
         )}
-        <Field
-          label="Created by"
-          note="The creator's account. A display name belongs to the profile domain and is not joined here."
-        >
-          <IdentifierShort value={market.creator_account_id} what="creator account id" />
-        </Field>
+        {props.creatorAccountId !== undefined && (
+          <Field
+            label="Created by"
+            note="The creator's account. A display name belongs to the profile domain and is not joined here."
+          >
+            <IdentifierShort value={props.creatorAccountId} what="creator account id" />
+          </Field>
+        )}
         <Field label="Created">{formatInstant(market.created_at)}</Field>
         {market.activated_at !== undefined && (
           <Field label="Opened for trading">{formatInstant(market.activated_at)}</Field>
@@ -860,9 +866,20 @@ function Tape(props: { readonly marketId: string; readonly simulated: boolean })
  * Concentration.
  * -------------------------------------------------------------------------- */
 
+/**
+ * One place in the concentration, which is all the backend says.
+ *
+ * There is no account here and there is not meant to be: the holder list used
+ * to hand every signed-in caller each top holder's account id, which made a
+ * market's largest positions readable by account and watchable trade by trade
+ * (D-111). The caller's own row is marked, and that is the whole of what this
+ * page knows about a person.
+ */
 interface Holder {
-  readonly account_id: string;
+  readonly rank: number;
   readonly quantity: string;
+  readonly share_bps: number;
+  readonly is_you?: boolean;
 }
 
 function Holders(props: {
@@ -885,9 +902,14 @@ function Holders(props: {
 
   const columns: ReadonlyArray<Column<Holder>> = [
     {
-      key: "account",
-      header: "Account",
-      cell: (holder) => <IdentifierShort value={holder.account_id} what="account id" />,
+      key: "rank",
+      header: "Place",
+      cell: (holder) => (
+        <span>
+          #{holder.rank}
+          {holder.is_you === true && <span className="holder-you"> you</span>}
+        </span>
+      ),
     },
     {
       key: "quantity",
@@ -903,19 +925,14 @@ function Holders(props: {
     },
     {
       key: "share",
-      header: "Share of supply in circulation",
+      header: "Share of the units accounts hold",
       numeric: true,
       riskMeasure: true,
-      cell: (holder) => {
-        // Exact integer arithmetic on base units, truncated, so a holder can
-        // never appear to hold a larger share than they do.
-        const share = percentOfTotal(holder.quantity, market.circulating_supply);
-        return share === undefined ? (
-          <span className="absent">nothing in circulation</span>
-        ) : (
-          <span className="holder-share">about {share}%</span>
-        );
-      },
+      // The backend's figure, truncated there on exact integers. Recomputing it
+      // here would need a denominator this page does not have: units still in
+      // the curve are held by nobody, and a creator's allocation is minted
+      // outside it, so a share of the circulating supply can exceed 100%.
+      cell: (holder) => <Figure kind="bps" bps={holder.share_bps} />,
     },
   ];
 
@@ -926,14 +943,16 @@ function Holders(props: {
       temp={props.simulated ? "simulated" : "economy"}
     >
       <DataTable
-        caption="The largest holders of this asset and the share of the circulating supply each one holds"
+        caption="The largest holdings of this asset and the share of held units each one is"
         columns={columns}
         rows={props.holders}
-        rowKey={(holder) => holder.account_id}
+        rowKey={(holder) => String(holder.rank)}
       />
       <p className="field-note">
-        The backend returns the largest holders it records, not every holder. A share is of the
-        supply in circulation, not of the total that will ever exist.
+        The backend returns the largest holdings it records, not every one, and it does not say
+        whose: concentration is the figure a buyer needs, and who occupies each place is somebody
+        else&rsquo;s position. A share is of the units accounts hold, not of the total that will
+        ever exist.
       </p>
     </Panel>
   );

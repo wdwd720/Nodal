@@ -415,7 +415,21 @@ func corsPolicy(origins []string) func(http.Handler) http.Handler {
 // persisted state, so losing these counters can never widen a financial
 // budget.
 type RateLimits struct {
-	// General applies to every authenticated request.
+	// General applies to every request that is not an auth endpoint, a quote
+	// preview or a command -- which since D-080 includes the two PUBLIC reads,
+	// `GET /v1/terms` and `GET /v1/native-markets`. It is therefore also the
+	// ANONYMOUS budget for those two, keyed by IP rather than by principal
+	// (principalKey below), at 600 a minute.
+	//
+	// That is the right budget for them and it is worth saying why rather than
+	// leaving it to be rediscovered (F-200). Both are reads of small, bounded
+	// tables: the registry is a handful of documents, and the markets list is
+	// one page of at most 100 rows over `native_assets`, which has one row per
+	// launched asset. The `?q=` search adds an unanchored ILIKE that cannot use
+	// an index, so its cost is a sequential scan of that table -- the same order
+	// of work as the list itself, which scans the same join. If that table ever
+	// stops being small the fix is a trigram index, not a tighter limit, and
+	// "small" is a property somebody has to re-check rather than assume.
 	General *ratelimit.Limiter
 	// Auth applies to the unauthenticated endpoints: the login flow and the
 	// provider webhooks. Both are reachable without a session, so their budget

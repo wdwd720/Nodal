@@ -6,6 +6,7 @@ import (
 	"context"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -329,6 +330,68 @@ func TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach(t *testing.T) {
 	// The negative control. If the query above stopped matching anything it
 	// would report an empty set for every table and pass by comparing nothing.
 	assert.NotEmpty(t, granted("payout_requests"), "the privilege query returned nothing; it is not looking at the catalogue")
+}
+
+// TestIntegration_EverySecurityDefinerPinsPgTemp is the guard F-48's fix did
+// not leave behind, and is why the same defect arrived twice (F-194).
+//
+// A SECURITY DEFINER function runs with its owner's privileges, and `cp_migrate`
+// owns every one here. TEMP on a database is granted to PUBLIC by default and is
+// revoked nowhere in this tree, so any caller may create a temp relation; when
+// `pg_temp` is not named in the function's search_path PostgreSQL searches it
+// FIRST for relation names. A temp table shadowing `native_assets` is therefore
+// read, as the owner, by a trigger that writes a position from it.
+//
+// 00701 and 00717 both state the rule in prose and both fix the functions that
+// existed when they were written. Nothing stated it as a property of the
+// SCHEMA, so 00771 and 00772 reintroduced it four functions at a time. This
+// asserts the property: every definer in `public` pins pg_temp, and the failure
+// message names the ones that do not, so the next migration to forget it fails
+// here rather than in an audit.
+func TestIntegration_EverySecurityDefinerPinsPgTemp(t *testing.T) {
+	requireEnv(t)
+	ctx := context.Background()
+	require.NoError(t, migrate.Up(ctx, migrateURL))
+	admin := connect(t, migrateURL)
+
+	rows, err := admin.Query(ctx,
+		`SELECT p.proname, coalesce(array_to_string(p.proconfig, ' '), '')
+		   FROM pg_proc p
+		   JOIN pg_namespace n ON n.oid = p.pronamespace
+		  WHERE n.nspname = 'public' AND p.prosecdef
+		  ORDER BY p.proname`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var (
+		definers []string
+		unpinned []string
+	)
+	for rows.Next() {
+		var name, config string
+		require.NoError(t, rows.Scan(&name, &config))
+		definers = append(definers, name)
+		// A definer with no search_path at all is the worse version of the same
+		// hazard: it inherits the CALLER's path, pg_temp included.
+		if !strings.Contains(config, "search_path=") || !strings.Contains(config, "pg_temp") {
+			unpinned = append(unpinned, name+" ["+config+"]")
+		}
+	}
+	require.NoError(t, rows.Err())
+
+	assert.Empty(t, unpinned,
+		"every SECURITY DEFINER function in public must SET search_path with pg_temp named "+
+			"(00717's shape: pg_catalog, public, pg_temp). Unpinned, pg_temp is searched first and a "+
+			"caller who may CREATE TEMP chooses which rows the definer reads: %v", unpinned)
+
+	// The negative control. An empty catalogue query would pass by comparing
+	// nothing, and these functions are the ones the rule exists for.
+	for _, want := range []string{
+		"ledger_apply_entry", "cp_gate_transition",
+		"cp_native_market_check_print", "cp_native_position_allocate", "cp_native_position_apply_fill",
+	} {
+		assert.Contains(t, definers, want, "the catalogue query is not finding the definers it is about")
+	}
 }
 
 // TestIntegration_OperatorDirectoryAuthority pins the privilege half of

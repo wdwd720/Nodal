@@ -418,6 +418,14 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	}
 
 	fillID := NewFillID()
+	// The version this trade produces. The curve cannot know it -- it prices
+	// against reserves and has never seen a row -- and nothing else assigned
+	// it, so `state_version_after` was 0 on every order response in every
+	// deployment and the trade ticket printed "Recorded at state version 0"
+	// (F-195). It is the same number the fill's `seq` column carries and the
+	// same number 00712's apply trigger will move the market to, written here
+	// from one expression so the three cannot disagree.
+	fill.StateAfter.Version = st.Version + 1
 	var quoteID any
 	if r.QuoteID != nil {
 		quoteID = *r.QuoteID
@@ -429,7 +437,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 		    real_credit_reserve_after, asset_reserve_after, quote_id, journal_transaction_id, idempotency_key)
 		 VALUES ($1,$2,$3,$4,$5,$6::numeric,$7::numeric,$8::numeric,$9::numeric,$10::numeric,
 		         $11::numeric,$12::numeric,$13,$14::numeric,$15::numeric,$16,$17,$18)`,
-		fillID, m.ID, st.Version+1, r.AccountID, string(r.Side),
+		fillID, m.ID, fill.StateAfter.Version, r.AccountID, string(r.Side),
 		fill.CreditsIn.String(), fill.CreditsOut.String(), fill.AssetsIn.String(), fill.AssetsOut.String(),
 		fill.CreditsToPool.String(), fill.PlatformFee.String(), fill.CreatorFee.String(),
 		st.Version, fill.StateAfter.RealCreditReserve.String(), fill.StateAfter.AssetReserve.String(),
@@ -445,7 +453,7 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 	}
 	// The public print, stamped with the SAME instant as the price observation
 	// above, because they are the same observation (see prints.go).
-	if err := s.recordPrint(ctx, tx, m, fill, fillID, st.Version+1, printedAt); err != nil {
+	if err := s.recordPrint(ctx, tx, m, fill, fillID, fill.StateAfter.Version, printedAt); err != nil {
 		return ExecuteResult{}, err
 	}
 	if err := s.recordFill(ctx, tx, m, r, fill, fillID, post.TransactionID.String(), at); err != nil {
@@ -617,6 +625,15 @@ func mapError(err error) error {
 		return errs.Wrap(err, errs.CodeAssetRestricted, "this market is not accepting that trade")
 	case "NM005":
 		return errs.Wrap(err, errs.CodeInternal, "this trade would break supply conservation")
+	case "22P02":
+		// invalid_text_representation: a value the caller supplied did not parse
+		// as the type it is cast to. That is the caller's input being wrong, not
+		// this service being broken, and the default branch below rendered it as
+		// a 500 from a public route (F-199). The message names no value: the
+		// database's own text quotes the input back, and a public error that
+		// echoes caller-supplied bytes is a small reflection surface.
+		return errs.Wrap(err, errs.CodeValidationFailed,
+			"a value in this request is not in the form this API accepts")
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errs.New(errs.CodeNotFound, "native market not found")

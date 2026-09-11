@@ -22,6 +22,10 @@ type fakeMarketData struct {
 	// parameter reached the domain rather than being dropped.
 	lastList nativemarket.ListRequest
 	lastCand nativemarket.CandleRequest
+	// lastCaller records the account the detail handler resolved, so a test can
+	// prove an account_id reached the domain as the caller's own mark and not
+	// as a filter (D-111).
+	lastCaller accounts.AccountID
 }
 
 func (f *fakeMarketData) List(_ context.Context, r nativemarket.ListRequest) (nativemarket.MarketPage, error) {
@@ -32,7 +36,8 @@ func (f *fakeMarketData) List(_ context.Context, r nativemarket.ListRequest) (na
 	return f.page, nil
 }
 
-func (f *fakeMarketData) Detail(context.Context, nativemarket.MarketID) (MarketDetailView, error) {
+func (f *fakeMarketData) Detail(_ context.Context, _ nativemarket.MarketID, caller accounts.AccountID) (MarketDetailView, error) {
+	f.lastCaller = caller
 	if err := f.fail(); err != nil {
 		return MarketDetailView{}, err
 	}

@@ -152,14 +152,22 @@ func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key st
 		creditsIn, creditsOut, assetsIn, assetsOut string
 		toPool, platformFee, creatorFee            string
 		realAfter, assetAfter                      string
+		versionBefore, versionAfter                int64
 	)
+	// seq IS the version the fill produced: 00712's apply trigger moves the
+	// market to it, and the column is the market's own sequence. Reading it
+	// here is what makes a replay report the same state_version_after as the
+	// original -- the alternative, recomputing it from current state, would
+	// report today's version for a trade that happened yesterday (F-195).
 	err := q.QueryRow(ctx,
 		`SELECT id, market_id, account_id, side, credits_in::text, credits_out::text, assets_in::text, assets_out::text,
 		        credits_to_pool::text, platform_fee::text, creator_fee::text,
-		        real_credit_reserve_after::text, asset_reserve_after::text
+		        real_credit_reserve_after::text, asset_reserve_after::text,
+		        state_version_before, seq
 		   FROM native_market_fills WHERE idempotency_key = $1`, key).
 		Scan(&res.FillID, &res.MarketID, &owner, &side, &creditsIn, &creditsOut, &assetsIn, &assetsOut,
-			&toPool, &platformFee, &creatorFee, &realAfter, &assetAfter)
+			&toPool, &platformFee, &creatorFee, &realAfter, &assetAfter,
+			&versionBefore, &versionAfter)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ExecuteResult{}, accounts.AccountID{}, false, nil
@@ -183,9 +191,11 @@ func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key st
 		CreditsToPool: parse(toPool),
 		PlatformFee:   parse(platformFee),
 		CreatorFee:    parse(creatorFee),
+		StateBefore:   State{Version: versionBefore},
 		StateAfter: State{
 			RealCreditReserve: parse(realAfter),
 			AssetReserve:      parse(assetAfter),
+			Version:           versionAfter,
 		},
 	}
 	return res, owner, true, nil
@@ -230,26 +240,82 @@ func (s *Service) StoredQuote(ctx context.Context, q db.Querier, id QuoteID) (Qu
 	return qt, nil
 }
 
-// Holding is one account's position in a native asset.
+// Holding is one place in an asset's concentration, and it does not say whose.
+//
+// # Why there is no holder here
+//
+// The concentration display of PART LIV answers "how much of this is held by
+// how few", and that question is answered by the SHAPE of the distribution.
+// Who occupies each place is a different fact, and it was being handed to every
+// signed-in caller: `top_holders[]` rendered {account_id, quantity} behind
+// `native_asset:read`, which every customer role holds, so anyone could read
+// any market's largest positions by account and watch them move trade by trade
+// (F-197). prints.go states the rule this package already follows for the tape
+// it owns -- "who did it is not the public's business" -- and a position is a
+// stronger version of the same fact than a print.
+//
+// So a row is a rank, a quantity and a share, and the one row a caller may see
+// named is their own, which they already know (D-111). An operator who needs
+// the names needs them for surveillance, which is a permission
+// (`native_market:surveil`) and a route of its own, not a field on the page
+// every customer reads.
 type Holding struct {
+	// Rank is 1 for the largest holder of the asset, 2 for the next, and so on
+	// down the page. It is assigned over ALL holders, so rank 10 on a page of
+	// ten means there are more.
+	Rank int
+	// Quantity is the holding in the asset's base units.
+	Quantity money.Quantity
+	// ShareBPS is this holding as a share of every unit accounts hold, in basis
+	// points, truncated.
+	//
+	// The denominator is the sum of customer balances, not the circulating
+	// supply: units still in the pool are held by nobody, and a creator's
+	// allocation is minted outside the curve, so a share of circulating supply
+	// is a number that can exceed one hundred per cent. This one cannot.
+	ShareBPS money.BPS
+	// IsYou marks the caller's own row, and is set only by HoldersFor.
+	IsYou bool
+	// AccountID is set ONLY on the caller's own row, by HoldersFor, and is zero
+	// everywhere else including on every row Holders returns. Telling somebody
+	// their own account id is telling them nothing they did not send.
 	AccountID accounts.AccountID
-	Quantity  money.Quantity
 }
 
-// Holders returns the largest holders of an asset, which is what the
-// concentration display of PART LIV shows. It reads the ledger's balance
-// projection rather than keeping a second tally.
+// Holders returns the shape of an asset's concentration, naming nobody.
+//
+// It reads the ledger's balance projection rather than keeping a second tally.
 func (s *Service) Holders(ctx context.Context, q db.Querier, assetID assets.AssetID, limit int) ([]Holding, error) {
+	return s.holders(ctx, q, assetID, limit, accounts.AccountID{})
+}
+
+// HoldersFor is Holders with the caller's own row marked.
+//
+// The caller is not a filter and does not change which rows come back: it marks
+// the one row the caller already knows about, so a person can find themselves
+// on a page that names nobody.
+func (s *Service) HoldersFor(ctx context.Context, q db.Querier, assetID assets.AssetID, limit int, caller accounts.AccountID) ([]Holding, error) {
+	return s.holders(ctx, q, assetID, limit, caller)
+}
+
+func (s *Service) holders(ctx context.Context, q db.Querier, assetID assets.AssetID, limit int, caller accounts.AccountID) ([]Holding, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 25
 	}
+	// The rank and the denominator are computed by the database over EVERY
+	// holder, before the limit is applied: a rank counted in Go would be a rank
+	// within the page, and a share taken over the page would make the tenth
+	// holder of a thousand look like a tenth of the asset. owner_id breaks ties
+	// so the ordering -- and therefore the rank -- is the same on every read.
 	rows, err := q.Query(ctx,
-		`SELECT la.owner_id::text, b.balance::text
+		`SELECT row_number() OVER (ORDER BY b.balance DESC, la.owner_id) AS rank,
+		        la.owner_id::text, b.balance::text,
+		        (sum(b.balance) OVER ())::text AS held_total
 		   FROM ledger_accounts la
 		   JOIN ledger_balances b ON b.ledger_account_id = la.id
 		  WHERE la.asset_id = $1 AND la.owner_type = 'CUSTOMER'
 		    AND la.code = 'NATIVE_ASSET_BALANCE' AND b.balance > 0
-		  ORDER BY b.balance DESC
+		  ORDER BY b.balance DESC, la.owner_id
 		  LIMIT $2`, assetID, limit)
 	if err != nil {
 		return nil, mapError(err)
@@ -257,8 +323,11 @@ func (s *Service) Holders(ctx context.Context, q db.Querier, assetID assets.Asse
 	defer rows.Close()
 	var out []Holding
 	for rows.Next() {
-		var owner, bal string
-		if err := rows.Scan(&owner, &bal); err != nil {
+		var (
+			rank            int64
+			owner, bal, tot string
+		)
+		if err := rows.Scan(&rank, &owner, &bal, &tot); err != nil {
 			return nil, mapError(err)
 		}
 		acct, perr := accounts.ParseAccountID(owner)
@@ -269,9 +338,37 @@ func (s *Service) Holders(ctx context.Context, q db.Querier, assetID assets.Asse
 		if perr != nil {
 			return nil, errs.Wrap(perr, errs.CodeInternal, "nativemarket: holding is not an integer")
 		}
-		out = append(out, Holding{AccountID: acct, Quantity: qty})
+		total, perr := money.ParseQuantity(tot)
+		if perr != nil {
+			return nil, errs.Wrap(perr, errs.CodeInternal, "nativemarket: held total is not an integer")
+		}
+		h := Holding{Rank: int(rank), Quantity: qty, ShareBPS: shareBPS(qty, total)}
+		if !caller.IsZero() && acct == caller {
+			h.IsYou, h.AccountID = true, acct
+		}
+		out = append(out, h)
 	}
 	return out, mapError(rows.Err())
+}
+
+// shareBPS is part/total in basis points, truncated, saturating at 100%.
+//
+// Truncated because a share rounded up is a concentration figure that overstates
+// somebody's position, and this number is read as a risk measure.
+func shareBPS(part, total money.Quantity) money.BPS {
+	if total.Sign() <= 0 || part.Sign() <= 0 {
+		return 0
+	}
+	scaled := part.Mul(money.QuantityFromInt64(int64(money.OneHundredPercent)))
+	out, err := scaled.Div(total, money.RoundDown)
+	if err != nil {
+		return 0
+	}
+	v, err := out.Int64()
+	if err != nil || money.BPS(v) > money.OneHundredPercent {
+		return money.OneHundredPercent
+	}
+	return money.BPS(v)
 }
 
 // VerifyReserves checks the control-account invariant of the Credit reserve.

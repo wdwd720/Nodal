@@ -263,18 +263,9 @@ func (s *Server) GetNativeMarketsMarketId(ctx context.Context, request api.GetNa
 		return nil, err
 	}
 
-	holders := make([]struct {
-		AccountId *uuid.UUID `json:"account_id,omitempty"`
-		Quantity  *string    `json:"quantity,omitempty"`
-	}, 0, len(v.Holders))
-	for _, h := range v.Holders {
-		id := uuid.MustParse(h.AccountID.String())
-		q := qtyString(h.Quantity)
-		holders = append(holders, struct {
-			AccountId *uuid.UUID `json:"account_id,omitempty"`
-			Quantity  *string    `json:"quantity,omitempty"`
-		}{AccountId: &id, Quantity: &q})
-	}
+	// Naming nobody, like the summary read: this route takes no account, so no
+	// row is marked as the caller's own either (D-111).
+	holders := toAPIHolders(v.Holders)
 
 	spot := nativemarket.SpotPrice(v.Market.Curve, v.State)
 	scale := nativemarket.PriceScale

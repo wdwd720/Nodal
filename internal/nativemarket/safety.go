@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"sort"
 	"strings"
 	"time"
@@ -356,42 +357,93 @@ func (s *Service) checkSafety(p SafetyPolicy, m Market, r ExecuteRequest, fill F
 }
 
 // PriceImpactBPS is how far a fill moves the market's marginal price, in basis
-// points of the pre-trade spot, as a magnitude.
+// points of the pre-trade price, as a magnitude.
 //
 // It is the market's move, not the caller's cost: SlippageBPS is the caller's
-// cost. A buy raises the spot and a sell lowers it, and the limit is on the
+// cost. A buy raises the price and a sell lowers it, and the limit is on the
 // size of the move either way, so this is an absolute value.
+//
+// # It is computed from the RESERVES, not from two prices
+//
+// The prices in a Fill are renderings at PriceScale, and a rendering can lose
+// the whole measurement: on a market whose price truncates near zero, two
+// different prices render as the same number and the difference between them is
+// zero, so a 12,500 basis point order reported an impact of nothing and the
+// ceiling passed it (F-193). The reserves do not round. On this curve
+// (V+R)*Y = K, so the marginal price is K/Y^2, the ratio of the prices after and
+// before is (Y/Y')^2, and the impact is
+//
+//	| Y^2 - Y'^2 | / Y'^2
+//
+// in exact integers, for both directions. A fill that does not carry both asset
+// reserves is not measurable, and an unmeasurable impact saturates: it is a
+// refusal, never a permission.
 func PriceImpactBPS(f Fill) money.BPS {
-	if f.SpotBefore.Sign() == 0 {
-		return 0
+	before, after := f.StateBefore.AssetReserve.BigInt(), f.StateAfter.AssetReserve.BigInt()
+	if before.Sign() <= 0 || after.Sign() <= 0 {
+		return unmeasurableBPS
 	}
-	diff := f.SpotAfter.Sub(f.SpotBefore).Abs()
-	scaled := diff.Mul(money.QuantityFromInt64(int64(money.OneHundredPercent)))
-	out, err := scaled.Div(f.SpotBefore, money.RoundDown)
-	if err != nil {
-		return money.OneHundredPercent
+	beforeSq := new(big.Int).Mul(before, before)
+	afterSq := new(big.Int).Mul(after, after)
+	diff := new(big.Int).Sub(beforeSq, afterSq)
+	diff.Abs(diff)
+	diff.Mul(diff, big.NewInt(int64(money.OneHundredPercent)))
+	diff.Quo(diff, afterSq)
+	if !diff.IsInt64() || money.BPS(diff.Int64()) > unmeasurableBPS {
+		return unmeasurableBPS
 	}
-	v, err := out.Int64()
-	if err != nil {
-		return 1_000 * money.OneHundredPercent
-	}
-	return money.BPS(v)
+	return money.BPS(diff.Int64())
 }
 
-// checkOpeningLiquidity refuses a market whose pool is too shallow to price.
+// checkOpeningLiquidity refuses a market whose pool is too shallow to price,
+// and a market whose price is too small to measure.
+//
+// The two are different bounds and a market has to clear both. The policy's
+// MinOpeningLiquidityCredits bounds the DEPTH -- how much Credit it takes to
+// move the price -- and says nothing about the supply that depth is spread
+// over. MinSpotUnits bounds the PRICE that depth produces, which is what every
+// section 47 ratio divides by; see its comment for why a market can otherwise
+// open at a price of zero and stay there. The second is a compiled-in property
+// of the price representation rather than a policy value, so no recorded policy
+// can lower it: a deployment may decide how deep a market must be, and may not
+// decide that a price of zero is measurable.
 func checkOpeningLiquidity(p SafetyPolicy, r CreateRequest) error {
-	if p.MinOpeningLiquidityCredits == nil {
+	if p.MinOpeningLiquidityCredits != nil &&
+		r.VirtualCreditReserve.Cmp(*p.MinOpeningLiquidityCredits) < 0 {
+		return errs.Newf(errs.CodeValidationFailed,
+			"a market must open with at least %s Credit base units of virtual reserve; this one opens with %s. "+
+				"A pool this shallow can be moved to any price by a trivial order",
+			p.MinOpeningLiquidityCredits.String(), r.VirtualCreditReserve.String()).
+			WithField("min_opening_liquidity_credits", p.MinOpeningLiquidityCredits.String()).
+			WithField("virtual_credit_reserve", r.VirtualCreditReserve.String()).
+			WithField("policy_version", p.Version)
+	}
+	// PoolSupply is what the curve sells, and CreateRequest.Validate has already
+	// refused a request without one. Skipping the price check when it is absent
+	// keeps this function answering exactly one question for a caller that asked
+	// about the reserve alone.
+	if r.PoolSupply.Sign() <= 0 {
 		return nil
 	}
-	if r.VirtualCreditReserve.Cmp(*p.MinOpeningLiquidityCredits) >= 0 {
+	opening := SpotPrice(
+		Curve{VirtualCreditReserve: r.VirtualCreditReserve, InitialAssetReserve: r.PoolSupply},
+		State{AssetReserve: r.PoolSupply},
+	)
+	if opening.Cmp(minSpot) >= 0 {
 		return nil
 	}
 	return errs.Newf(errs.CodeValidationFailed,
-		"a market must open with at least %s Credit base units of virtual reserve; this one opens with %s. "+
-			"A pool this shallow can be moved to any price by a trivial order",
-		p.MinOpeningLiquidityCredits.String(), r.VirtualCreditReserve.String()).
-		WithField("min_opening_liquidity_credits", p.MinOpeningLiquidityCredits.String()).
+		"a market must open at a marginal price of at least %d units at price scale %d; this one opens at %s. "+
+			"A virtual reserve of %s spread over %s units prices each unit below what the scale can express, "+
+			"and a price that small can measure neither a price impact, nor a slippage, nor a circuit-breaker "+
+			"move. Raise the virtual reserve or lower the supply",
+		MinSpotUnits, PriceScale, opening.String(),
+		r.VirtualCreditReserve.String(), r.PoolSupply.String()).
+		WithField("min_opening_spot_units", MinSpotUnits).
+		WithField("price_scale", PriceScale).
+		WithField("opening_spot_price", opening.String()).
 		WithField("virtual_credit_reserve", r.VirtualCreditReserve.String()).
+		WithField("pool_supply", r.PoolSupply.String()).
 		WithField("policy_version", p.Version)
 }
 
@@ -456,9 +508,11 @@ func (s *Service) applyBreaker(ctx context.Context, tx pgx.Tx, p SafetyPolicy, m
 	if perr != nil {
 		return nil, errs.Wrap(perr, errs.CodeInternal, "nativemarket: a recorded price is not an integer")
 	}
-	if reference.Sign() == 0 {
-		return nil, nil
-	}
+	// A reference too small to measure against is NOT a reason to conclude the
+	// market has not moved. This used to return here, so an armed breaker on a
+	// market whose price had truncated could never trip at all (F-193). moveBPS
+	// now saturates on such a reference and the market pauses to CLOSE_ONLY,
+	// which stops new exposure and leaves every holder able to sell.
 	move := moveBPS(reference, fill.SpotAfter)
 	if move < *p.CircuitBreakerMoveBPS {
 		return nil, nil
@@ -497,20 +551,27 @@ func (s *Service) applyBreaker(ctx context.Context, tx pgx.Tx, p SafetyPolicy, m
 	return &trip, nil
 }
 
-// moveBPS is |b - a| / a in basis points, saturating rather than overflowing.
+// moveBPS is |b - a| / a in basis points, saturating rather than overflowing --
+// and saturating rather than reporting nothing when a cannot be measured
+// against.
+//
+// A reference below MinSpotUnits cannot express a basis point, so "the market
+// moved zero basis points" is not a conclusion this function may draw from one.
+// It used to, and a circuit breaker on a market whose price had truncated could
+// therefore never arm (F-193).
 func moveBPS(a, b money.Quantity) money.BPS {
-	if a.Sign() == 0 {
-		return 0
+	if a.Cmp(minSpot) < 0 {
+		return unmeasurableBPS
 	}
 	diff := b.Sub(a).Abs()
 	scaled := diff.Mul(money.QuantityFromInt64(int64(money.OneHundredPercent)))
 	out, err := scaled.Div(a, money.RoundDown)
 	if err != nil {
-		return 1_000 * money.OneHundredPercent
+		return unmeasurableBPS
 	}
 	v, err := out.Int64()
 	if err != nil {
-		return 1_000 * money.OneHundredPercent
+		return unmeasurableBPS
 	}
 	return money.BPS(v)
 }

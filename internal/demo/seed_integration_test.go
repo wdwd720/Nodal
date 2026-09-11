@@ -337,6 +337,61 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	bad, err := h.deps.Markets.VerifyPositions(ctx, testDB)
 	require.NoError(t, err)
 	assert.Empty(t, bad)
+
+	// EVERY lot the seeder caused, in every account it touched, not just the
+	// grant to one trader (F-200).
+	//
+	// The claim in ADR-0027 used to be that demo Credits are PROMOTIONAL and no
+	// payout policy in this build releases that origin. True, and not the whole
+	// seeder: the seeded trades also issue MARKET_TRADING_PROCEEDS to whoever
+	// sold and MARKET_CREATOR_EARNING to the creator of every seeded asset, and
+	// SandboxPolicy -- the policy a sandbox tier actually runs -- marks BOTH of
+	// those origins withdrawable, because rehearsing a payout of earned value is
+	// what a sandbox is for. What holds them is the finality floor beneath every
+	// origin policy: Execute issues them REVERSIBLE, and only SETTLED and
+	// UNFUNDED value is payout-eligible at all.
+	//
+	// So the assertion is the disjunction that is actually load-bearing: for
+	// every lot, either its origin is refused or its finality is not eligible.
+	// A change that made one of them withdrawable by BOTH tests would fail here
+	// -- which is the only way demo money could ever leave.
+	type lot struct {
+		account  string
+		origin   valuedomain.CreditOrigin
+		finality valuedomain.FundingFinality
+	}
+	var lots []lot
+	// credit_lot_state.finality, not credit_lots.initial_finality: what a payout
+	// would consult is where the lot is NOW.
+	lotRows, err := testDB.Query(ctx,
+		`SELECT l.account_id::text, l.origin, st.finality
+		   FROM credit_lots l
+		   JOIN credit_lot_state st ON st.lot_id = l.id
+		   JOIN demo_seed_rows ds ON ds.kind = 'ACCOUNT' AND ds.ref_id = l.account_id`)
+	require.NoError(t, err)
+	defer lotRows.Close()
+	for lotRows.Next() {
+		var l lot
+		require.NoError(t, lotRows.Scan(&l.account, &l.origin, &l.finality))
+		lots = append(lots, l)
+	}
+	require.NoError(t, lotRows.Err())
+	require.NotEmpty(t, lots, "the seeder must have issued Credits somewhere")
+
+	seenEarning := false
+	for _, l := range lots {
+		if l.origin == valuedomain.OriginMarketCreatorEarning {
+			seenEarning = true
+		}
+		sandbox := valuedomain.SandboxPolicy().Rule(l.origin)
+		assert.False(t, sandbox.PayoutAllowed && l.finality.PayoutEligible(),
+			"a demo lot in %s at origin %s and finality %s could be withdrawn on a sandbox tier; "+
+				"demo money must be held by its origin or by its finality",
+			l.account, l.origin, l.finality)
+	}
+	assert.True(t, seenEarning,
+		"the seeder's trades pay a creator fee, so MARKET_CREATOR_EARNING must be among the lots "+
+			"this assertion covered; if it is not, the assertion has stopped testing what it names")
 }
 
 // TestIntegration_TheActivityFeedSeesWhatTheSeederDid drives internal/activity

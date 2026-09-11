@@ -32,13 +32,10 @@ func (s *Server) GetNativeMarkets(ctx context.Context, request api.GetNativeMark
 			r.Statuses = append(r.Statuses, nativemarket.Status(st))
 		}
 	}
-	if request.Params.CreatorAccountId != nil {
-		creator, err := accounts.ParseAccountID(request.Params.CreatorAccountId.String())
-		if err != nil {
-			return nil, validationError("creator_account_id", "creator_account_id must be a canonical UUID")
-		}
-		r.Creator = creator
-	}
+	// No creator filter. This route is unauthenticated (D-080) and an
+	// identifier on it is both readable and enumerable, so the list carries no
+	// identity and answers no question about one (D-110). The creator is on the
+	// summary read, which is behind a session.
 	if request.Params.Q != nil {
 		r.Query = *request.Params.Q
 	}
@@ -74,25 +71,33 @@ func (s *Server) GetNativeMarketsMarketIdSummary(ctx context.Context, request ap
 	if err != nil {
 		return nil, validationError("marketId", "marketId must be a canonical UUID")
 	}
-	view, err := s.opts.Ports.MarketData.Detail(ctx, marketID)
+	// An account is optional here and must be one the caller owns: it marks the
+	// caller's own row in the holder list and changes nothing else (D-111).
+	var caller accounts.AccountID
+	if request.Params.AccountId != nil {
+		caller, err = accountScope(ctx, *request.Params.AccountId)
+		if err != nil {
+			return nil, err
+		}
+	}
+	view, err := s.opts.Ports.MarketData.Detail(ctx, marketID, caller)
 	if err != nil {
 		return nil, err
 	}
-	holders := make([]struct {
-		AccountId api.UUID     `json:"account_id"`
-		Quantity  api.Quantity `json:"quantity"`
-	}, 0, len(view.Holders))
-	for _, h := range view.Holders {
-		holders = append(holders, struct {
-			AccountId api.UUID     `json:"account_id"`
-			Quantity  api.Quantity `json:"quantity"`
-		}{AccountId: uuid.MustParse(h.AccountID.String()), Quantity: h.Quantity.String()})
-	}
-	return api.GetNativeMarketsMarketIdSummary200JSONResponse(api.NativeMarketDetail{
+	holders := toAPIHolders(view.Holders)
+	out := api.NativeMarketDetail{
 		Market:        toAPIMarketSummary(view.Summary),
 		LimitsInForce: toAPIMarketLimits(view.Limits),
 		TopHolders:    &holders,
-	}), nil
+	}
+	// The creator, on the gated read and not on the summary the public list
+	// serves (D-110). A market whose creator this projection did not carry
+	// renders no field at all rather than the nil UUID, which would read as an
+	// account that exists.
+	if !view.Summary.CreatorAccountID.IsZero() {
+		out.CreatorAccountId = ptr(uuid.MustParse(view.Summary.CreatorAccountID.String()))
+	}
+	return api.GetNativeMarketsMarketIdSummary200JSONResponse(out), nil
 }
 
 // GetNativeMarketsMarketIdCandles returns OHLCV over a bounded window.
@@ -177,6 +182,28 @@ func (s *Server) GetNativeMarketsMarketIdTrades(ctx context.Context, request api
 
 // --- rendering ---------------------------------------------------------------
 
+// toAPIHolders renders the concentration without naming anybody.
+//
+// There is no account id on the wire at all -- not even the caller's own, which
+// they sent -- because a field that is sometimes an identity is a field a client
+// will eventually render as one. `is_you` carries the whole of what the caller
+// is entitled to learn from this list about a person (D-111).
+func toAPIHolders(hs []nativemarket.Holding) []api.NativeAssetHolder {
+	out := make([]api.NativeAssetHolder, 0, len(hs))
+	for _, h := range hs {
+		row := api.NativeAssetHolder{
+			Rank:     h.Rank,
+			Quantity: h.Quantity.String(),
+			ShareBps: int(h.ShareBPS),
+		}
+		if h.IsYou {
+			row.IsYou = ptr(true)
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
 func toAPIMarketSummary(m nativemarket.MarketSummary) api.NativeMarketSummary {
 	out := api.NativeMarketSummary{
 		MarketId:             uuid.MustParse(m.MarketID.String()),
@@ -186,7 +213,6 @@ func toAPIMarketSummary(m nativemarket.MarketSummary) api.NativeMarketSummary {
 		Symbol:               m.Symbol,
 		MarketStatus:         api.NativeMarketSummaryMarketStatus(m.MarketStatus),
 		AssetStatus:          api.NativeMarketSummaryAssetStatus(m.AssetStatus),
-		CreatorAccountId:     uuid.MustParse(m.CreatorAccountID.String()),
 		LastPrice:            m.LastPrice.String(),
 		PriceScale:           m.PriceScale,
 		CreditVolume24h:      m.CreditVolume24h.String(),
