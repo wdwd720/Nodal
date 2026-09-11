@@ -54,6 +54,12 @@ for (const route of PUBLIC_ROUTES) {
 for (const route of APP_ROUTES) {
   test(`${route.path} has no automatically detectable WCAG A/AA violation`, async ({ page }) => {
     await page.goto(route.path);
+    // The heading, as the public sweep above already asserts. "One h1" is
+    // satisfied by the 404 page, by the sign-in page a gate diverted to, and by
+    // any other screen the router might answer with — so a route that stopped
+    // existing would have kept this suite green while checking a page nobody
+    // asked about. `RouteUnderTest.heading` has always been there for this.
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
     expect(await violations(page), `${route.path} accessibility violations`).toEqual([]);
   });
@@ -106,6 +112,9 @@ test("no application page scrolls sideways on a phone", async ({ page }) => {
   await page.setViewportSize({ width: NARROW_WIDTH, height: NARROW_HEIGHT });
   for (const route of APP_ROUTES) {
     await page.goto(route.path);
+    // The page under test, not merely a page. A reflow check that measured the
+    // 404 would report that the application reflows perfectly.
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

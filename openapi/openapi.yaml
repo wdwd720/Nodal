@@ -2003,7 +2003,11 @@ components:
           description: >-
             Scale of whichever of input_amount and expected_output is in asset units.
             On a BUY the input is Credits and the output is the asset; on a SELL it is
-            the other way round. Fees and prices are always Credits, at price_scale.
+            the other way round. Fees and prices are always Credits, and they are NOT
+            on one scale between them: platform_fee and creator_fee are taken out of
+            the Credit amount and carry the Credit asset's own decimals, while
+            effective_price and spot_price_before are ratios computed at price_scale.
+            Rendering a fee at price_scale divides it by a million million.
         slippage_bps: { $ref: "#/components/schemas/BPS" }
         state_version: { type: integer, format: int64 }
         expires_at: { $ref: "#/components/schemas/Timestamp" }

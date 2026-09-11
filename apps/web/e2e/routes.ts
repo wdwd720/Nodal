@@ -98,6 +98,12 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
  */
 export const DYNAMIC_APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/markets/:marketId", heading: "the market symbol and name" },
+  // `/agents/:agentId` was in no list at all, which meant no sweep visited it
+  // and the only coverage it had was its own not-found state — the one shape of
+  // the page that renders no figure, no limit and no lifecycle control. It is
+  // here rather than in `APP_ROUTES` for the reason the comment above gives:
+  // a sweep would ask the API for an agent called ":agentId".
+  { path: "/agents/:agentId", heading: "the agent's name" },
 ];
 
 /**

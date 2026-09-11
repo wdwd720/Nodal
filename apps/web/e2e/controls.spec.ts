@@ -94,6 +94,12 @@ test("no dead controls on the public site", async ({ browser }) => {
 test("no dead controls in the application", async ({ page }) => {
   for (const route of APP_ROUTES) {
     await page.goto(route.path);
+    // Landed on the right page first. The walk asserts things about whatever
+    // rendered, and the 404 page — which offers a tidy list of live links —
+    // passes every one of them, so without this the suite could walk the same
+    // not-found screen fifteen times and report that the application has no
+    // dead controls on it.
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     await walk(page, route.path);
   }
 });

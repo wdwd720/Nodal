@@ -5609,7 +5609,7 @@ export interface components {
             side: "BUY" | "SELL";
         };
         NativeQuote: {
-            /** @description Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, at price_scale. */
+            /** @description Scale of whichever of input_amount and expected_output is in asset units. On a BUY the input is Credits and the output is the asset; on a SELL it is the other way round. Fees and prices are always Credits, and they are NOT on one scale between them: platform_fee and creator_fee are taken out of the Credit amount and carry the Credit asset's own decimals, while effective_price and spot_price_before are ratios computed at price_scale. Rendering a fee at price_scale divides it by a million million. */
             asset_decimals?: number;
             creator_fee?: components["schemas"]["Quantity"];
             effective_price?: components["schemas"]["Quantity"];

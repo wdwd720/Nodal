@@ -91,6 +91,9 @@ async function signedOutPage(browser: Browser): Promise<Page> {
 for (const route of APP_ROUTES) {
   test(`rendered text of ${route.path} uses no forbidden phrasing`, async ({ page }) => {
     await page.goto(route.path);
+    // The page under test. Scanning the 404 for forbidden vocabulary proves
+    // that the 404 is clean and nothing else.
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     const text = await visibleText(page);
     for (const [pattern, why] of FORBIDDEN) {
       expect(pattern.test(text), `${route.path}: ${String(pattern)} — ${why}`).toBe(false);
@@ -311,6 +314,7 @@ test("a page showing Credits says what a Credit is", async ({ page }) => {
 test("a model score never appears without the denial beside it", async ({ page }) => {
   for (const route of APP_ROUTES) {
     await page.goto(route.path);
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     const text = await visibleText(page);
     if (!/confidence/i.test(text)) continue;
     expect(text, `${route.path}: confidence appears, so the denial must too`).toContain(
@@ -336,6 +340,7 @@ test("pending settlement is never hidden", async ({ page }) => {
 test("the risk statement is on every page", async ({ browser, page }) => {
   for (const route of APP_ROUTES) {
     await page.goto(route.path);
+    await expect(page.getByRole("heading", { level: 1, name: route.heading })).toBeVisible();
     const text = await visibleText(page);
     expect(text, `${route.path} carries the risk statement`).toContain("can lose money");
   }

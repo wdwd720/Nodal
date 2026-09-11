@@ -26,6 +26,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { FORBIDDEN } from "../../src/lib/honesty.test.ts";
 import { NARROW_HEIGHT, NARROW_WIDTH } from "../routes.ts";
 
 /**
@@ -256,6 +257,79 @@ test("the API refuses an agent built on a strategy version that does not exist",
   const after = await page.request.get(`/v1/agents?account_id=${id}`);
   const agentsAfter = ((await after.json()) as { readonly items: readonly unknown[] }).items.length;
   expect(agentsAfter, "no agent was created by the direct request either").toBe(agentsBefore);
+});
+
+/**
+ * `/agents/:agentId` against a REAL agent.
+ *
+ * The audit found this route in no list at all: `APP_ROUTES` cannot hold it,
+ * because the cross-cutting sweeps walk that list by navigating to each `path`
+ * and would ask the API for an agent called ":agentId"; `DYNAMIC_APP_ROUTES`
+ * did not name it either. So the only coverage the screen had was its
+ * not-found state — the one shape of it that renders no figure, no limit, no
+ * lifecycle control and no authority level, which is to say the one shape that
+ * cannot fail the checks a sweep would apply.
+ *
+ * This is the scenario that owns the route, so the sweep belongs here, with a
+ * real identifier to put in the gap. On this build there is no identifier to
+ * find: `cmd/api/wire.go` constructs the strategy service with `Compiler: nil`,
+ * so no strategy version is ever produced and an agent — whose version column
+ * is `REFERENCES strategy_versions(id)` — cannot exist. The skip below states
+ * that precisely rather than saying "no agent", because the two are different
+ * facts and only one of them is about this deployment's configuration.
+ */
+test("the agent detail screen passes axe and reflows at 375px", async ({ page }) => {
+  const id = await accountId(page);
+  const listed = await page.request.get(`/v1/agents?account_id=${id}`);
+  expect(listed.status(), "the agent list is readable").toBe(200);
+  const body = (await listed.json()) as {
+    readonly items: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+    readonly compiler_configured?: boolean;
+  };
+  const agent = body.items[0];
+  test.skip(
+    agent === undefined,
+    body.compiler_configured === true
+      ? "this account has no agent yet, though the tier has a compiler that could produce one"
+      : "no agent can exist on this deployment: the strategy service is wired with no compiler " +
+        "(cmd/api/wire.go), so no strategy version is produced and an agent references one",
+  );
+  const target = agent as { readonly id: string; readonly name: string };
+
+  await page.goto(`/agents/${target.id}`);
+  // The page under test, named by the thing it is about, not merely "a page
+  // with one h1" — which the not-found state also satisfies.
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(target.name);
+  await expect(page.locator("h1")).toHaveCount(1);
+  await page.waitForLoadState("networkidle");
+
+  expect(await violations(page), "/agents/:agentId accessibility violations").toEqual([]);
+
+  // The two honesty rules the application sweep applies to every other screen
+  // and has never applied to this one: the standing risk statement, and no
+  // currency figure beside a Credit figure — there is no approved external
+  // value for a Credit, so a dollar amount next to one would be an exchange
+  // rate nobody set. An agent screen quotes Credits throughout, which is
+  // exactly why it needs the second rule.
+  const text = await page.evaluate(() => document.body.innerText);
+  expect(text, "the risk statement is on this page too").toContain("can lose money");
+  if (text.includes("Credits")) {
+    expect(
+      /\$\s?\d/.test(text),
+      "/agents/:agentId rendered a currency amount on a page that quotes Credits",
+    ).toBe(false);
+    expect(
+      /not money|quoted in credits|internal platform value/.test(text.toLowerCase()),
+      "/agents/:agentId says what a Credit is",
+    ).toBe(true);
+  }
+
+  await page.setViewportSize({ width: NARROW_WIDTH, height: NARROW_HEIGHT });
+  await page.waitForTimeout(300);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, "/agents/:agentId does not scroll horizontally at 375px").toBeLessThanOrEqual(1);
 });
 
 test("an agent that does not exist is reported as not found, never drawn", async ({ page }) => {

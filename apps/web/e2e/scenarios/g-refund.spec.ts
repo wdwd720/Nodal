@@ -31,6 +31,10 @@
 import { createHmac } from "node:crypto";
 
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
+// The scale a Credit is held at, imported from the application rather than
+// restated: one more copy of it is one more place to edit, and the register
+// already carries a finding about how many there are.
+import { CREDIT_DECIMALS } from "../../src/lib/credits.ts";
 
 const WEBHOOK_SECRET = process.env["CP_WEB_STRIPE_WEBHOOK_SECRET"] ?? "";
 const CAPTURED_CHARGE = process.env["CP_WEB_CAPTURED_CHARGE_ID"] ?? "";
@@ -112,6 +116,26 @@ test("a frozen bucket is shown as frozen, never folded into the total", async ({
   ).toHaveAttribute("title", /Credits$/);
 });
 
+/**
+ * The exact string a `Figure` puts in its `title`, for a Credit quantity.
+ *
+ * `lib/format.ts` moves the point through the base units and groups the integer
+ * digits with commas; `Figure` writes that, plus the symbol, into `title`. This
+ * reproduces it by string surgery — the point is MOVED, the digits are grouped,
+ * nothing is parsed — so the assertion below is against the API's own number
+ * rather than against "some figure rendered".
+ */
+function exactCredits(baseUnits: string): string {
+  const scale = CREDIT_DECIMALS;
+  const negative = baseUnits.startsWith("-");
+  const digits = (negative ? baseUnits.slice(1) : baseUnits).padStart(scale + 1, "0");
+  const whole = digits.slice(0, digits.length - scale).replace(/^0+(?=\d)/, "");
+  const frac = digits.slice(digits.length - scale);
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const body = frac === "" ? grouped : `${grouped}.${frac}`;
+  return `${negative ? "\u2212" : ""}${body} Credits`;
+}
+
 test("a reversed purchase is rendered as a reversal, not as a missing row", async ({ page }) => {
   // The "must not happen": Credits vanishing without a record. Every purchase
   // the backend holds in a reversed state has a page that says so in words,
@@ -123,11 +147,33 @@ test("a reversed purchase is rendered as a reversal, not as a missing row", asyn
 
   // `reversed` is optional on the contract. Where the backend reports one, the
   // interface must account for it rather than let it disappear into the total.
+  //
+  // What this used to assert was that the Credit panel contained the words
+  // "Not payout-eligible" — a heading the panel carries unconditionally, on
+  // every account, reversal or not. So on the one account that disproves the
+  // test's name, with a non-zero `reversed` bucket the panel does not draw at
+  // all, the test passed. It asserts the figure now: a field labelled for the
+  // bucket, whose title is the API's own string for it.
+  //
+  // THIS FAILS ON A BRANCH WHERE THE CREDIT PANEL HAS NOT YET LEARNED THE
+  // BUCKET. It is written against the contract — `reversed` on
+  // `GET /v1/credits/balance` — rather than against what Home draws today,
+  // because the contract is the thing that must be true, and a test that waited
+  // for the page to catch up would be the same test that has been passing
+  // wrongly all along.
   const reversed = balance["reversed"];
   if (typeof reversed === "string" && /[1-9]/.test(reversed)) {
     await page.goto("/home");
     const credits = page.locator(".panel", { hasText: "Credits" }).first();
-    await expect(credits).toContainText("Not payout-eligible");
+    const field = credits.locator('.field:has(dt:text-is("Reversed"))');
+    await expect(field, "a reversed bucket has its own labelled field").toHaveCount(1);
+    await expect(
+      field.locator(".figure").first(),
+      "and its figure is the backend's own string, not something derived here",
+    ).toHaveAttribute("title", exactCredits(reversed));
+    // And the words, so a reader who is not reading a tooltip still learns what
+    // happened to those Credits.
+    await expect(credits).toContainText("reversed");
   }
 
   // And the notification centre carries the record whether or not this account
