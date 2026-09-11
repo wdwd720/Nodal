@@ -77,6 +77,7 @@ func (s *Service) Balances(ctx context.Context, q db.Querier, r BalanceRequest) 
 
 		ok, reasons := r.Policy.Permits(valuedomain.PermitInput{
 			Origin:      lot.Origin,
+			OriginFloor: lot.OriginFloor,
 			Finality:    lot.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    r.Verified,
@@ -120,6 +121,7 @@ func (s *Service) EligibleLots(ctx context.Context, q db.Querier, r BalanceReque
 		}
 		ok, _ := r.Policy.Permits(valuedomain.PermitInput{
 			Origin:      lot.Origin,
+			OriginFloor: lot.OriginFloor,
 			Finality:    lot.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    r.Verified,

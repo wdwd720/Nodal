@@ -12,11 +12,19 @@ import (
 
 func qty(n int64) money.Quantity { return money.QuantityFromInt64(n) }
 
-// holding is one settled, well-aged bucket of an origin, which is the case
-// where the ONLY thing that can refuse is the policy, the capability or the
-// verification level.
+// holding is one settled, well-aged bucket of an origin whose provenance
+// bottoms out in itself, which is the case where the ONLY thing that can refuse
+// is the policy, the capability or the verification level.
+//
+// The floor is stated because it has no permissive zero value: an unstated one
+// is UNKNOWN_ORIGIN and refuses, for the same reason an unstated Finality does
+// (D-131). A bucket whose floor differs from its origin is the interesting case
+// and gets its own test rather than a default nobody reads.
 func holding(o valuedomain.CreditOrigin, n int64) OriginHolding {
-	return OriginHolding{Origin: o, Quantity: qty(n), Finality: valuedomain.FinalitySettled, HeldDays: 400}
+	return OriginHolding{
+		Origin: o, OriginFloor: o, Quantity: qty(n),
+		Finality: valuedomain.FinalitySettled, HeldDays: 400,
+	}
 }
 
 // baseInput is a deployment where nothing account-level or provider-level is
@@ -213,7 +221,8 @@ func TestExplainWithdrawal_WaitingIsItsOwnReason(t *testing.T) {
 	policy := valuedomain.SandboxPolicy()
 
 	reversible := baseInput(policy, valuedomain.VerificationPayoutKYC, OriginHolding{
-		Origin: valuedomain.OriginPurchased, Quantity: qty(5_000),
+		Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
+		Quantity: qty(5_000),
 		Finality: valuedomain.FinalityReversible, HeldDays: 400,
 	})
 	e := ExplainWithdrawal(reversible)
@@ -223,7 +232,8 @@ func TestExplainWithdrawal_WaitingIsItsOwnReason(t *testing.T) {
 	// An undeclared finality is not defaulted into something permissive: it is
 	// refused, because UNFUNDED — the tempting default — is payout-eligible.
 	unknown := baseInput(policy, valuedomain.VerificationPayoutKYC, OriginHolding{
-		Origin: valuedomain.OriginPurchased, Quantity: qty(5_000), HeldDays: 400,
+		Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
+		Quantity: qty(5_000), HeldDays: 400,
 	})
 	e = ExplainWithdrawal(unknown)
 	assert.Contains(t, reasonsOf(bucketOf(e, valuedomain.OriginPurchased)), string(WithdrawalFundingNotSettled))

@@ -6647,6 +6647,8 @@ export interface components {
             consumption_rank: number;
             min_hold_days?: number;
             origin: components["schemas"]["CreditOrigin"];
+            /** @description What this value ultimately came from: the most restricted origin anywhere in its provenance. It equals `origin` for value nothing else funded. It is here because ORIGIN_NOT_PAYOUT_ELIGIBLE on a bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on -- what a person needs to read is that the value came from a promotional grant, not a word about the trade that moved it. */
+            origin_floor?: components["schemas"]["CreditOrigin"];
             payout_allowed: boolean;
             quantity: components["schemas"]["Quantity"];
             reasons: components["schemas"]["WithdrawalReason"][];

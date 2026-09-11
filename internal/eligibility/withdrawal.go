@@ -137,6 +137,15 @@ var withdrawalReasonRank = func() map[WithdrawalReason]int {
 // computes nothing about a ledger.
 type OriginHolding struct {
 	Origin valuedomain.CreditOrigin
+	// OriginFloor is the most restricted origin anywhere in the provenance of
+	// the units in this bucket -- most restricted, for the reason Finality is
+	// least final: a bucket holding one lot funded by a promotional grant is a
+	// bucket that is not wholly withdrawable, and the conservative reading is
+	// the true one (D-131).
+	//
+	// It has no permissive zero value. An unstated floor is read as an unknown
+	// origin and refuses.
+	OriginFloor valuedomain.CreditOrigin
 	// Quantity is everything the account holds of this origin.
 	Quantity money.Quantity
 	// Finality is the least final funding state among those units. Least,
@@ -210,6 +219,12 @@ type WithdrawalInput struct {
 // OriginBucket is one provenance and what may leave it.
 type OriginBucket struct {
 	Origin valuedomain.CreditOrigin
+	// OriginFloor is what the value in this bucket ultimately came from, when
+	// that is not the bucket's own origin. It is reported because
+	// ORIGIN_NOT_PAYOUT_ELIGIBLE on a bucket of MARKET_TRADING_PROCEEDS is an
+	// answer nobody can act on: what the person needs to read is "this came
+	// from a promotional grant", not a word about the trade (D-131).
+	OriginFloor valuedomain.CreditOrigin
 	// Quantity is what is held; Withdrawable is what could leave right now.
 	Quantity     money.Quantity
 	Withdrawable money.Quantity
@@ -372,6 +387,7 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 	rule := in.Policy.Rule(h.Origin)
 	bucket := OriginBucket{
 		Origin:               h.Origin,
+		OriginFloor:          h.OriginFloor,
 		Quantity:             h.Quantity,
 		Withdrawable:         money.Quantity{},
 		PayoutAllowed:        rule.PayoutAllowed,
@@ -391,6 +407,7 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 
 	permitted, permitReasons := in.Policy.Permits(valuedomain.PermitInput{
 		Origin:      h.Origin,
+		OriginFloor: h.OriginFloor,
 		Finality:    h.Finality,
 		Domain:      valuedomain.InternalCredit,
 		Verified:    in.Verified,
@@ -410,9 +427,15 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 	// Would verifying alone fix it? Re-run the identical evaluation with the
 	// level raised and nothing else changed. That is the difference between
 	// "you cannot" and "not yet, and here is the step" (§19).
-	if !permitted && rule.PayoutAllowed && !in.Verified.AtLeast(rule.RequiredVerification) {
+	// ... and only when the ORIGIN side could ever be satisfied. A bucket whose
+	// floor the policy forbids is never fixed by verifying, and telling
+	// somebody it would be is the refusal §19 says not to make, dressed as
+	// encouragement.
+	if !permitted && rule.PayoutAllowed && in.Policy.Rule(h.OriginFloor).PayoutAllowed &&
+		!in.Verified.AtLeast(rule.RequiredVerification) {
 		raised, _ := in.Policy.Permits(valuedomain.PermitInput{
 			Origin:      h.Origin,
+			OriginFloor: h.OriginFloor,
 			Finality:    h.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    rule.RequiredVerification,

@@ -353,41 +353,48 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	// minted REVERSIBLE and only SETTLED and UNFUNDED value is payout-eligible,
 	// so the disjunction "refused by origin OR refused by finality" covered
 	// them. That floor was not a control, it was F-230: nothing could promote an
-	// earning out of REVERSIBLE on any deployment, so five of the six origins
-	// SandboxPolicy marks withdrawable could never be withdrawn and the
-	// eligibility page reported FUNDING_NOT_SETTLED on value whose finality
-	// nothing could move. D-124 fixed that -- an earning is as final as what
-	// paid for it -- and a seeded earning, funded by an UNFUNDED grant, is now
-	// UNFUNDED and payout-eligible by finality. On a sandbox tier, through a
-	// provider that moves nothing. That is what a rehearsal IS.
+	// earning out of REVERSIBLE on any deployment. D-124 fixed that -- an
+	// earning is as final as what paid for it -- and a seeded earning, funded by
+	// an UNFUNDED grant, became UNFUNDED and payout-eligible by finality.
 	//
-	// So this asserts what is actually load-bearing, and it is two claims
-	// rather than one:
+	// The round-one version of this test then narrowed to two weaker claims: the
+	// GRANT never leaves by origin, and every other demo lot is DERIVED from the
+	// grant. The second is a statement about the parent table and not about
+	// whether anything can leave, so between them they said nothing about the
+	// sentence this test is named for as it applies to the EARNINGS -- which,
+	// on a sandbox tier at PAYOUT_KYC, the policy released. That is F-261, and
+	// it is why the narrowing was a mistake rather than a simplification.
 	//
-	//  1. The GRANT never leaves, by ORIGIN, on every policy in this build.
-	//     That is the sentence this test is named for and it is unchanged.
-	//  2. Every other demo lot is DERIVED from that grant and from nothing
-	//     else: its parent chain bottoms out in PROMOTIONAL seeded value, so no
-	//     demo earning ever rests on money a person actually paid.
+	// D-131 makes the strong form true by construction: a derived lot carries an
+	// ORIGIN FLOOR, inherited from the most restricted origin among its parents,
+	// and Policy.Permits releases a lot only when it releases the floor as well
+	// as the origin. Every demo lot's provenance bottoms out in a PROMOTIONAL
+	// grant, so every demo lot's floor is PROMOTIONAL, so no demo lot can leave
+	// under any policy in this build. So the assertion is restored to what the
+	// name says, over EVERY seeded lot in EVERY account the seeder touched, and
+	// it is asserted through Policy.Permits itself rather than through a rule
+	// repeated here (F-200, F-261).
 	//
 	// The residual, stated rather than hidden: a sandbox tier configured with a
-	// LIVE payout adapter in its provider slot could pay a seeded earning out
-	// for real. No such adapter exists (BLOCKERS B-01, B-06) and payoutPolicyFor
-	// returns SandboxPolicy only on a sandbox tier, so the combination is
-	// unreachable today; what would close it is cmd/api refusing to boot with
+	// LIVE payout adapter in its provider slot could pay a seeded lot out for
+	// real if a policy released it. No such adapter exists (BLOCKERS B-01,
+	// B-06), payoutPolicyFor returns SandboxPolicy only on a sandbox tier, and
+	// the floor now refuses regardless of which of this build's policies is in
+	// force; what would close the last of it is cmd/api refusing to boot with
 	// CP_API_DEMO_DATA set and a payout slot that is not the rehearsal one
-	// (D-124).
+	// (D-124, D-131).
 	type lot struct {
 		id       string
 		account  string
 		origin   valuedomain.CreditOrigin
+		floor    valuedomain.CreditOrigin
 		finality valuedomain.FundingFinality
 	}
 	var lots []lot
-	// credit_lot_state.finality, not credit_lots.initial_finality: what a payout
-	// would consult is where the lot is NOW.
+	// credit_lot_state, not credit_lots.initial_finality: what a payout would
+	// consult is where the lot is NOW, and the floor lives there too.
 	lotRows, err := testDB.Query(ctx,
-		`SELECT l.id::text, l.account_id::text, l.origin, st.finality
+		`SELECT l.id::text, l.account_id::text, l.origin, st.origin_floor, st.finality
 		   FROM credit_lots l
 		   JOIN credit_lot_state st ON st.lot_id = l.id
 		   JOIN demo_seed_rows ds ON ds.kind = 'ACCOUNT' AND ds.ref_id = l.account_id`)
@@ -395,7 +402,7 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 	defer lotRows.Close()
 	for lotRows.Next() {
 		var l lot
-		require.NoError(t, lotRows.Scan(&l.id, &l.account, &l.origin, &l.finality))
+		require.NoError(t, lotRows.Scan(&l.id, &l.account, &l.origin, &l.floor, &l.finality))
 		lots = append(lots, l)
 	}
 	require.NoError(t, lotRows.Err())
@@ -406,16 +413,46 @@ func TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave(t *testing.T) {
 		if l.origin == valuedomain.OriginMarketCreatorEarning {
 			seenEarning = true
 		}
+
+		// 1. The strong form. EVERY seeded lot, whatever its origin and
+		//    whatever its finality, is refused by EVERY policy in this build --
+		//    asked of Policy.Permits with everything else in the lot's favour,
+		//    so the only thing that can be refusing is the provenance.
+		for _, p := range []valuedomain.Policy{valuedomain.DefaultPolicy(), valuedomain.SandboxPolicy()} {
+			ok, reasons := p.Permits(valuedomain.PermitInput{
+				Origin:      l.origin,
+				OriginFloor: l.floor,
+				Finality:    l.finality,
+				Domain:      valuedomain.InternalCredit,
+				Verified:    valuedomain.VerificationEnhanced,
+				HeldDays:    3650,
+				ActiveCaps: map[valuedomain.CapabilityKey]bool{
+					valuedomain.CapPayoutReserve: true, valuedomain.CapPayoutSettle: true,
+				},
+				PolicyValid: true,
+			})
+			assert.Falsef(t, ok,
+				"a demo lot in %s (origin %s, floor %s, finality %s) may leave under %s; "+
+					"demo Credits are given away and never leave, under any policy in this build",
+				l.account, l.origin, l.floor, l.finality, p.Version)
+			assert.Containsf(t, reasons, valuedomain.ReasonOriginForbidden,
+				"a demo lot in %s is refused for a reason other than its provenance, which is "+
+					"a refusal a deployment change could remove", l.account)
+		}
+
+		// 2. And the reason it is refused is the grant, in every case: the
+		//    floor is PROMOTIONAL whether the lot IS the grant or was derived
+		//    from it. A demo earning that rested on money somebody actually
+		//    paid would have a different floor and would show up here.
+		assert.Equalf(t, valuedomain.OriginPromotional, l.floor,
+			"a demo lot in %s at origin %s has floor %s; no demo lot may rest on anything but the grant",
+			l.account, l.origin, l.floor)
+
 		if l.origin == valuedomain.OriginPromotional {
-			// 1. The grant itself, held by its origin, on every policy this
-			// build has.
-			assert.Falsef(t, valuedomain.SandboxPolicy().Rule(l.origin).PayoutAllowed,
-				"the seeder's grant in %s became withdrawable; demo Credits are given away and never leave",
-				l.account)
-			assert.False(t, valuedomain.DefaultPolicy().Rule(l.origin).PayoutAllowed)
 			continue
 		}
-		// 2. Everything else is derived, and derived from the grant.
+		// 3. The provenance chain itself, which is what makes the floor true
+		//    rather than asserted.
 		roots := lotRootsOf(t, l.id)
 		require.NotEmptyf(t, roots,
 			"a demo lot in %s at origin %s names nothing that funded it; an earning with no parents "+

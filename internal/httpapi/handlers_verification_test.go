@@ -97,17 +97,28 @@ func newFakeEligibility() *fakeEligibility {
 		ActiveCaps: map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
 		Holdings: []eligibility.OriginHolding{
 			{
-				Origin: valuedomain.OriginPurchased, Quantity: money.QuantityFromInt64(5000),
+				Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
+				Quantity: money.QuantityFromInt64(5000),
 				Finality: valuedomain.FinalitySettled, HeldDays: 30,
 			},
 			{
-				Origin: valuedomain.OriginPromotional, Quantity: money.QuantityFromInt64(9000),
+				Origin: valuedomain.OriginPromotional, OriginFloor: valuedomain.OriginPromotional,
+				Quantity: money.QuantityFromInt64(9000),
+				Finality: valuedomain.FinalityUnfunded, HeldDays: 30,
+			},
+			// The bucket D-131 is about: proceeds of the grant above. Its own
+			// origin is one the sandbox policy releases and its floor is not,
+			// so the route has to render the floor or the refusal reads as a
+			// statement about the trade.
+			{
+				Origin: valuedomain.OriginMarketTradingProceeds, OriginFloor: valuedomain.OriginPromotional,
+				Quantity: money.QuantityFromInt64(2000),
 				Finality: valuedomain.FinalityUnfunded, HeldDays: 30,
 			},
 		},
 		PolicyValid: true,
-		Gross:       money.QuantityFromInt64(14000),
-		Spendable:   money.QuantityFromInt64(14000),
+		Gross:       money.QuantityFromInt64(16000),
+		Spendable:   money.QuantityFromInt64(16000),
 
 		JurisdictionSupported: true,
 		ProviderAvailable:     true,
@@ -322,6 +333,20 @@ func TestGetMeEligibility_ExplainsPerOrigin(t *testing.T) {
 	assert.Contains(t, promotional["reasons"], "ORIGIN_NOT_WITHDRAWABLE")
 	assert.NotContains(t, promotional, "verification_would_suffice",
 		"verifying does not make a promotional grant withdrawable, and the product must not imply it does")
+	assert.NotContains(t, promotional, "origin_floor",
+		"a bucket whose floor is its own origin does not repeat itself")
+
+	// The bucket D-131 is about. Its own origin is one the sandbox policy
+	// releases; its floor is the grant that funded it, and the answer has to
+	// name the grant or the refusal reads as a statement about the trade.
+	proceeds := byOrigin["MARKET_TRADING_PROCEEDS"]
+	require.NotNil(t, proceeds)
+	assert.Equal(t, "PROMOTIONAL", proceeds["origin_floor"],
+		"the person has to be able to read where the value came from, not only that it cannot leave")
+	assert.Contains(t, proceeds["reasons"], "ORIGIN_NOT_WITHDRAWABLE")
+	assert.Equal(t, "0", proceeds["withdrawable"])
+	assert.NotContains(t, proceeds, "verification_would_suffice",
+		"verifying does not release a grant that has been traded, and the product must not imply it does")
 }
 
 // The destination surface takes a provider token and refuses the thing the

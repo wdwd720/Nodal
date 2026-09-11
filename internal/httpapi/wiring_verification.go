@@ -387,6 +387,7 @@ func foldHoldings(lots []credit.Lot, now time.Time) []eligibility.OriginHolding 
 	type acc struct {
 		qty      money.Quantity
 		finality valuedomain.FundingFinality
+		floor    valuedomain.CreditOrigin
 		age      int
 		seen     bool
 	}
@@ -408,6 +409,13 @@ func foldHoldings(lots []credit.Lot, now time.Time) []eligibility.OriginHolding 
 		if !a.seen || finalityRank(l.Finality) < finalityRank(a.finality) {
 			a.finality = l.Finality
 		}
+		// The most restricted floor in the bucket, for the reason the finality
+		// is the least final one: a bucket holding one lot funded by a grant is
+		// not wholly withdrawable, and the conservative reading is the true one
+		// (D-131).
+		if !a.seen || valuedomain.MoreRestricted(l.OriginFloor, a.floor) {
+			a.floor = l.OriginFloor
+		}
 		a.seen = true
 	}
 	out := make([]eligibility.OriginHolding, 0, len(byOrigin))
@@ -417,7 +425,8 @@ func foldHoldings(lots []credit.Lot, now time.Time) []eligibility.OriginHolding 
 			continue
 		}
 		out = append(out, eligibility.OriginHolding{
-			Origin: origin, Quantity: a.qty, Finality: a.finality, HeldDays: a.age,
+			Origin: origin, OriginFloor: a.floor,
+			Quantity: a.qty, Finality: a.finality, HeldDays: a.age,
 		})
 	}
 	return out

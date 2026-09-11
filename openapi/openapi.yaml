@@ -4490,6 +4490,15 @@ components:
       required: [origin, quantity, withdrawable, reasons, payout_allowed, consumption_rank]
       properties:
         origin: { $ref: "#/components/schemas/CreditOrigin" }
+        origin_floor:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            What this value ultimately came from: the most restricted origin
+            anywhere in its provenance. It equals `origin` for value nothing
+            else funded. It is here because ORIGIN_NOT_PAYOUT_ELIGIBLE on a
+            bucket of MARKET_TRADING_PROCEEDS is an answer nobody can act on --
+            what a person needs to read is that the value came from a
+            promotional grant, not a word about the trade that moved it.
         quantity: { $ref: "#/components/schemas/Quantity" }
         withdrawable: { $ref: "#/components/schemas/Quantity" }
         reasons: { type: array, items: { $ref: "#/components/schemas/WithdrawalReason" } }

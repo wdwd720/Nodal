@@ -158,9 +158,30 @@ func TestAuditWV2_AGrantThePolicyForbidsCannotBeTradedIntoWithdrawableValue(t *t
 	require.Equal(t, grant.ID, parents[0].LotID,
 		"fixture check: the Credits that came out of the pool are the grant the trader put in")
 
-	assert.False(t, proceeds.Finality.PayoutEligible(),
-		"F-wv2-3: value whose every parent is a grant the policy forbids reached a "+
-			"payout-eligible finality by being traded (goal §23)")
+	// INVERTED, and the inversion is the decision (D-131, F-261).
+	//
+	// As written this asserted `!proceeds.Finality.PayoutEligible()` -- that
+	// the proceeds of an UNFUNDED grant must not be payout-eligible BY
+	// FINALITY. Making that true would mean minting them REVERSIBLE, and
+	// nothing could ever move them out of it: a grant has no credit_fundings
+	// row, so SettleFunding cannot reach it and SettleDerived would wait for a
+	// parent that is already as final as it will ever be. That is F-230
+	// restored, which is what D-124 exists to have fixed.
+	//
+	// The finality was never the right dimension for this finding. UNFUNDED
+	// value IS final -- nobody can claw back a gift -- and what makes a grant
+	// unwithdrawable is its ORIGIN, which the policy closes and which D-124 did
+	// not carry across the trade. So the assertion now reads the dimension the
+	// fix works in: the proceeds are as final as the grant (UNFUNDED, and that
+	// is correct), and their ORIGIN FLOOR is the grant, which no policy in this
+	// build releases.
+	assert.Equal(t, valuedomain.FinalityUnfunded, proceeds.Finality,
+		"proceeds of an unfunded grant are unfunded; nothing external can reverse either of them")
+	assert.Equal(t, valuedomain.OriginPromotional, proceeds.OriginFloor,
+		"F-wv2-3: value whose every parent is a grant the policy forbids did not inherit the "+
+			"grant's origin floor, so a market round trip laundered it (goal §23)")
+	assert.False(t, policy.Rule(proceeds.OriginFloor).PayoutAllowed,
+		"F-wv2-3: the floor a round trip produced is one the policy releases")
 
 	// And the engine agrees to let it go, which is the half a person sees.
 	decision, err := payout.NewEngine(f.credits).Evaluate(f.ctx, testDB, payout.EligibilityInput{

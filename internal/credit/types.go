@@ -79,6 +79,15 @@ type Lot struct {
 	// started REVERSIBLE and later SETTLED can be told from one that was
 	// issued SETTLED.
 	InitialFinality valuedomain.FundingFinality
+	// OriginFloor is the most restricted origin anywhere in this lot's
+	// provenance: its own Origin when nothing funded it, the most restricted
+	// floor among its parents when something did.
+	//
+	// It is read from `credit_lot_state`, which a trigger maintains, for the
+	// same reason the finality is: a derived lot is as withdrawable as the
+	// least withdrawable thing that funded it, and neither half of that is the
+	// application's to assert (D-131, F-261).
+	OriginFloor valuedomain.CreditOrigin
 
 	FundingReference *Reference
 	JournalTxID      ledger.TransactionID

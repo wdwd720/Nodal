@@ -82,6 +82,11 @@ func toAPIWithdrawalEligibility(e eligibility.WithdrawalExplanation) api.Withdra
 			ConsumptionRank: credit.ConsumptionRank(b.Origin),
 			MinHoldDays:     ptr(b.MinHoldDays),
 		}
+		if b.OriginFloor != "" && b.OriginFloor != b.Origin {
+			// Only when it differs. Repeating the origin back as its own floor
+			// is noise on ten of the eleven buckets a fresh account has.
+			item.OriginFloor = ptr(api.CreditOrigin(b.OriginFloor))
+		}
 		if b.RequiredVerification != "" {
 			item.RequiredVerification = ptr(api.VerificationLevel(b.RequiredVerification))
 		}

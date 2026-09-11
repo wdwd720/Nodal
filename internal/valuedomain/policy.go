@@ -245,7 +245,17 @@ const (
 // PermitInput is everything Permits needs. Every field is supplied by the
 // caller; this package reads no clock and no store.
 type PermitInput struct {
-	Origin      CreditOrigin
+	Origin CreditOrigin
+	// OriginFloor is the most restricted origin anywhere in this value's
+	// provenance: its own origin when nothing funded it, and the most
+	// restricted floor among its parents when something did (D-131).
+	//
+	// It has no permissive zero value. An empty or undeclared floor is read as
+	// UNKNOWN_ORIGIN and refuses, exactly as an empty Origin does, because a
+	// caller that has not established where value ultimately came from has not
+	// established that it may leave. Every lot the database returns carries one:
+	// `credit_lot_state.origin_floor` is NOT NULL and trigger-maintained.
+	OriginFloor CreditOrigin
 	Finality    FundingFinality
 	Domain      Domain
 	Verified    VerificationLevel
@@ -271,7 +281,10 @@ func (p Policy) Permits(in PermitInput) (bool, []PermitReason) {
 	if !in.PolicyValid {
 		add(ReasonPolicyInvalid)
 	}
-	if !in.Origin.Valid() {
+	// One reason for both, because a caller that supplied neither has the same
+	// problem twice and a duplicated reason is a decision record that hashes
+	// differently for no reason anybody can explain.
+	if !in.Origin.Valid() || !in.OriginFloor.Valid() {
 		add(ReasonUnknownOrigin)
 	}
 	if !in.Finality.Valid() {
@@ -284,10 +297,21 @@ func (p Policy) Permits(in PermitInput) (bool, []PermitReason) {
 		add(ReasonDomainNotWithdrawable)
 	}
 
+	// BOTH the origin and the floor. A derived lot is as withdrawable as the
+	// least withdrawable thing that funded it: MARKET_TRADING_PROCEEDS out of a
+	// promotional grant is a promotional grant that has been round-tripped, and
+	// goal §23 forbids the round trip from changing the answer (D-131).
+	//
+	// The floor's rule is consulted only for PayoutAllowed. The capability, the
+	// verification level and the hold period belong to the value as it is now,
+	// and asking a grant's rule for them would demand a capability no rule that
+	// forbids payout is even allowed to name (OriginRule.Validate).
 	rule := p.Rule(in.Origin)
-	if !rule.PayoutAllowed {
+	floorRule := p.Rule(in.OriginFloor)
+	if !rule.PayoutAllowed || !floorRule.PayoutAllowed {
 		add(ReasonOriginForbidden)
-	} else {
+	}
+	if rule.PayoutAllowed {
 		// Capability is checked only when the rule would otherwise permit, so
 		// the reason list of a forbidden origin does not also complain about a
 		// capability that could never have helped.
