@@ -211,8 +211,14 @@ worst-first so no seller receives provenance better than the pool's worst
 outstanding contribution (D-132). The cost, stated: on a seeded tier every
 earning carries a PROMOTIONAL floor, so the sandbox journey ends at an honest
 refusal naming that floor rather than at a settled rehearsal payout; a real
-settled purchase is what would change it. A third audit round is running
-*(pending)*.
+settled purchase is what would change it. The third audit round found six
+(one P1: the reservation still consumed by origin while the decision was per
+lot — the same invariant at a third layer; three P2; two P3), against
+thirteen and eleven: flattening, not flat. `fix/withdrawal-3` closes the P1
+where the units actually move (the payout takes exactly the lots its decision
+evaluated, D-136; the allocation record carries the floor) and makes
+provenance a set of root origins judged in full by whatever policy applies
+(D-138); a narrow fourth round audits only that fix *(pending)*.
 
 ## 13 · Conversion
 
@@ -278,8 +284,8 @@ fixed on `productization` (F-251, F-252), one to each fix branch (F-250,
 F-253), one duplicate, one closed by the auditor's own test landing. Both
 wave-B fix branches are merged (F-224–F-250, F-253); the agents gap is closed
 (F-255–F-257, F-258 a residual). The withdrawal area's second round found 11
-(4 P1, 4 P2, 3 P3; `F-wv2-n`, register numbers F-259–F-269 on
-`fix/withdrawal-2`) and did **not** flatten; the third round is next
+(4 P1) and its third 6 (1 P1) — F-259–F-269 fixed and merged, F-270–F-277 on
+`fix/withdrawal-3`; flattening, with a narrow fourth round to confirm it
 *(pending)*. Current open: the wave-B findings until their branches merge
 *(pending)*. The register: `docs/audit/AUDIT_FINDINGS.md`; the P0/P1 list:
 `docs/audit/LAUNCH_GATE_MATRIX.md` "What the productization wave changed".
