@@ -1447,7 +1447,7 @@ deployed, verified in a browser, adversarially audited and reconciled with the
 architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
 identity source of truth) is the first productization decision.
 
-**State at the last update (2026-09-10, 17:00 PDT; refreshed at least hourly while the wave runs).**
+**State at the last update (2026-09-10, 17:35 PDT; refreshed at least hourly while the wave runs).**
 
 - **Done on `productization`:** deploy enablement for the web app (`df48cb4`:
   Render static site `nodal-web`, `CP_AUTH_POST_LOGIN_URL`, same-site cookie
@@ -1460,6 +1460,7 @@ identity source of truth) is the first productization decision.
   secrets, the push of `main` (`9906c9f`), and later the `app-nodal` CNAME.
   §2's live verification happens the moment those are done; nothing else
   waits for it.
+- **Merged since (later):** agents management surface (`wt/agents` → `9f5fe8c`, ADR-0029, D-073–076, migration 00786), notifications + realtime + the user's audit trail (`wt/notifications` → `dac0fda`, ADR-0028, D-069–072, migrations 00781–00783), the public site and shell (`wt/web-shell` → `ffa56e3`, 73 E2E cases green on its branch); restore drill re-run at 00786 (`de7f377`); every merge's integration suites green.
 - **Merged since:** the operator console (`wt/admin` → `b6e3b5b`: SANDBOX
   rendered as "not an approval", the §38 account view, a live break-glass
   self-approval bug fixed, §62 clean, generated artefacts guarded; its
