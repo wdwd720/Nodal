@@ -726,6 +726,18 @@ export function Withdraw(): ReactNode {
                 </Field>
               </FieldGrid>
 
+              {/* TWO segments, because the API reports two and they are exactly
+                  the whole: `ineligible` IS `gross - payout_eligible`
+                  (`internal/eligibility/withdrawal.go`), so these two account
+                  for every Credit and nothing is drawn twice.
+
+                  `frozen` is not a third part. A frozen lot is a disputed lot,
+                  no payout policy permits one, and it is therefore already
+                  inside `ineligible` — drawing it beside the other two made the
+                  bar claim more than the whole it was drawn against, and made
+                  the frozen Credits look like value held back twice. It is a
+                  figure beside the bar instead, with the sentence that says
+                  where in the picture it lives. */}
               <SegmentedBar
                 caption="Your Credits by what may leave"
                 scale={CREDIT_DECIMALS}
@@ -743,18 +755,27 @@ export function Withdraw(): ReactNode {
                     key: "ineligible",
                     label: "Not eligible",
                     baseUnits: data.ineligible,
-                    explanation: "Held back by the policy, for the reasons listed below.",
+                    explanation:
+                      "Everything else you hold, held back by the policy for the reasons listed below.",
                     texture: "hatch",
-                  },
-                  {
-                    key: "frozen",
-                    label: "Frozen",
-                    baseUnits: data.frozen,
-                    explanation: "Held because of a dispute or an adjustment on this account.",
-                    texture: "sparse",
                   },
                 ]}
               />
+
+              <FieldGrid columns={2}>
+                <Field
+                  label="Frozen"
+                  note="Held because of a dispute or an adjustment on this account. It is inside the ineligible part of the bar above rather than beside it: no payout policy permits a disputed lot to leave, so freezing value cannot make it eligible or add to what you hold."
+                >
+                  <Credits base={data.frozen} />
+                </Field>
+                <Field
+                  label="Spendable"
+                  note="A different question with a different answer: what may be used inside Nodal now. Spending and withdrawing are not the same permission."
+                >
+                  <Credits base={data.spendable} />
+                </Field>
+              </FieldGrid>
 
               <FieldGrid columns={3}>
                 <Field label="Anything at all" note="The composed answer, not one of its parts.">
