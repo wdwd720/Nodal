@@ -508,6 +508,17 @@ func TestIntegration_ExecutionIsIdempotent(t *testing.T) {
 	require.EqualValues(t, 1, st.Version, "the retry must not have moved the market a second time")
 	require.Equal(t, first.Fill.AssetsOut.String(),
 		f.balance(f.trader, f.asset.AssetID, ledger.CodeNativeAssetBalance).String())
+
+	// The version the trade produced, which the API renders as
+	// state_version_after and the ticket prints. Both answers come out of the
+	// same row -- the first from the version the trade was priced against, the
+	// replay from the fill's own seq -- so a retry reports the version the
+	// market moved to and not the one it is at now (F-195).
+	require.EqualValues(t, 1, first.Fill.StateAfter.Version,
+		"a fill must carry the version it produced, not zero")
+	require.Equal(t, first.Fill.StateAfter.Version, second.Fill.StateAfter.Version,
+		"a replay reports the same version the original did")
+	require.EqualValues(t, 0, second.Fill.StateBefore.Version)
 }
 
 // TestIntegration_AStaleFillIsRefusedByTheDatabase is PART XIV's "execution

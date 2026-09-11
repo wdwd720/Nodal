@@ -152,14 +152,22 @@ func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key st
 		creditsIn, creditsOut, assetsIn, assetsOut string
 		toPool, platformFee, creatorFee            string
 		realAfter, assetAfter                      string
+		versionBefore, versionAfter                int64
 	)
+	// seq IS the version the fill produced: 00712's apply trigger moves the
+	// market to it, and the column is the market's own sequence. Reading it
+	// here is what makes a replay report the same state_version_after as the
+	// original -- the alternative, recomputing it from current state, would
+	// report today's version for a trade that happened yesterday (F-195).
 	err := q.QueryRow(ctx,
 		`SELECT id, market_id, account_id, side, credits_in::text, credits_out::text, assets_in::text, assets_out::text,
 		        credits_to_pool::text, platform_fee::text, creator_fee::text,
-		        real_credit_reserve_after::text, asset_reserve_after::text
+		        real_credit_reserve_after::text, asset_reserve_after::text,
+		        state_version_before, seq
 		   FROM native_market_fills WHERE idempotency_key = $1`, key).
 		Scan(&res.FillID, &res.MarketID, &owner, &side, &creditsIn, &creditsOut, &assetsIn, &assetsOut,
-			&toPool, &platformFee, &creatorFee, &realAfter, &assetAfter)
+			&toPool, &platformFee, &creatorFee, &realAfter, &assetAfter,
+			&versionBefore, &versionAfter)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ExecuteResult{}, accounts.AccountID{}, false, nil
@@ -183,9 +191,11 @@ func (s *Service) fillByIdempotencyKey(ctx context.Context, q db.Querier, key st
 		CreditsToPool: parse(toPool),
 		PlatformFee:   parse(platformFee),
 		CreatorFee:    parse(creatorFee),
+		StateBefore:   State{Version: versionBefore},
 		StateAfter: State{
 			RealCreditReserve: parse(realAfter),
 			AssetReserve:      parse(assetAfter),
+			Version:           versionAfter,
 		},
 	}
 	return res, owner, true, nil
