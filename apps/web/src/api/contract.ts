@@ -967,3 +967,35 @@ export const nativeMarketSummarySpec: Spec = {
     reference_price_24h: "quantity",
   },
 };
+
+/* ---------------------------------------------------------------------------
+ * The public reads (D-080): the legal registry and market discovery.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * A served legal document with no acceptance state.
+ *
+ * `body` is REQUIRED here, unlike on `LegalDocument`, and that difference is
+ * the point of the endpoint: the public site renders the bytes rather than an
+ * explainer, so a document that arrived without them would leave the page with
+ * nothing honest to show. `content_hash` is the sha256 of exactly those bytes
+ * and is the same value `/me/terms-acceptances` serves, so a visitor can check
+ * that what they read before signing up is what they were later asked to
+ * accept.
+ */
+export const publicLegalDocumentSpec: Spec = {
+  required: {
+    document_id: "string",
+    version: "string",
+    title: "string",
+    content_hash: "string",
+    requirement: "string",
+    counsel_review_required: "boolean",
+    body: "string",
+  },
+};
+
+
+export const nativeMarketPageSpec: Spec = {
+  arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
+};

@@ -144,20 +144,45 @@ test("the landing page names the boundary before it names the product", async ({
   await page.context().close();
 });
 
-test("the policy documents are readable before there is an account to accept them with", async ({
-  browser,
-}) => {
+test("the documents a visitor reads are the bytes an acceptance records", async ({ browser }) => {
+  // This is the whole point of D-080. `GET /v1/terms` and
+  // `GET /me/terms-acceptances` serve the same registry, and `content_hash` is
+  // the sha256 of the exact body, which is the value an acceptance stores. So a
+  // visitor with no account can read the binding text, and what they read can
+  // be checked against what they will later be asked to agree to rather than
+  // taken on trust.
   const page = await signedOutPage(browser);
-  for (const [path, heading, version] of [
-    ["/terms", "Product terms", "terms-v1"],
-    ["/privacy", "Privacy", "privacy-v1"],
-    ["/risk", "Risk disclosure", "risk-v1"],
+  const response = await page.request.get("/v1/terms");
+  expect(response.ok(), "the registry answers without a session").toBeTruthy();
+  const documents = (await response.json()) as Array<{
+    document_id: string;
+    version: string;
+    content_hash: string;
+  }>;
+
+  for (const [path, id] of [
+    ["/terms", "TERMS_OF_SERVICE"],
+    ["/privacy", "PRIVACY_POLICY"],
+    ["/risk", "RISK_DISCLOSURE"],
+    ["/credits-terms", "CREDITS_TERMS"],
+    ["/withdrawal-disclosure", "WITHDRAWAL_DISCLOSURE"],
   ] as const) {
+    const doc = documents.find((candidate) => candidate.document_id === id);
+    expect(doc, `${id} is served`).toBeTruthy();
+    const served = doc as { version: string; content_hash: string };
+
     await page.goto(path);
-    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    await expect(page.getByText(`explainer ${version}`).first()).toBeVisible();
-    await expect(page.getByText("Nothing here has been reviewed by a lawyer.")).toBeVisible();
-    await expect(page.getByText("This page is an explanation, not the agreement.")).toBeVisible();
+    // The served text, not a summary of it.
+    await expect(page.locator("pre.doc-source")).toBeVisible();
+    const text = await page.evaluate(() => document.body.innerText);
+    expect(text, `${path} shows the version`).toContain(`version ${served.version}`);
+    // The hash is shown truncated, first five and last four, which is enough to
+    // compare against a record without reading sixty-four characters aloud.
+    expect(text, `${path} shows the content hash`).toContain(served.content_hash.slice(0, 5));
+    // Reading is not accepting, and the page says so.
+    expect(text, `${path} says reading records nothing`).toContain(
+      "Reading this page records nothing.",
+    );
   }
   await page.context().close();
 });
@@ -273,25 +298,4 @@ test("the terms step reports what the server says is outstanding", async ({ page
   await page.goto("/welcome/terms");
   await expect(page.getByRole("heading", { level: 1, name: "What you are agreeing to" })).toBeVisible();
   await expect(page.getByText("Nothing outstanding")).toBeVisible();
-});
-
-test("the public policy pages say they are not the agreement", async ({ browser }) => {
-  // The binding documents are the API's and are hashed into the acceptance
-  // record; these pages are plain-language explanations for somebody who has no
-  // session yet and therefore cannot be shown them at all. Saying so is the
-  // whole job of this test.
-  const page = await signedOutPage(browser);
-  for (const [path, documentId] of [
-    ["/terms", "TERMS_OF_SERVICE"],
-    ["/privacy", "PRIVACY_POLICY"],
-    ["/risk", "RISK_DISCLOSURE"],
-  ] as const) {
-    await page.goto(path);
-    const text = await page.evaluate(() => document.body.innerText);
-    expect(text, `${path} names the document it explains`).toContain(documentId);
-    expect(text, `${path} is not presented as the agreement`).toContain(
-      "This page is a plain-language explanation, not the agreement.",
-    );
-  }
-  await page.context().close();
 });
