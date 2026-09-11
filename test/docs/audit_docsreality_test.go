@@ -1082,31 +1082,62 @@ func TestAuditDocs_TheReadmeDescribesTheTreeItShipsWith(t *testing.T) {
 
 	var problems []string
 
-	const nextjs = "Next.js web app in `apps/web`"
-	require(t, strings.Contains(body, nextjs), "README no longer contains %q; the claim moved", nextjs)
-	if !strings.Contains(pkg, `"next"`) {
-		problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, nextjs))+
-			" calls apps/web a Next.js app; apps/web/package.json declares vite and react-router and no next dependency")
+	// The framework. The README named one the repository has never depended on,
+	// so this reads the manifest rather than the sentence.
+	const stack = "React 19 + Vite single-page app in `apps/web`"
+	require(t, strings.Contains(body, stack), "README no longer contains %q; the claim moved", stack)
+	at := "README.md:" + strconv.Itoa(lineOf(body, stack))
+	if strings.Contains(pkg, `"next"`) {
+		problems = append(problems, at+" calls apps/web a Vite app; apps/web/package.json declares next")
 	}
-
-	const pending = "API e2e, Playwright UI e2e, and chaos tiers are pending"
-	require(t, strings.Contains(body, pending), "README no longer contains %q; the claim moved", pending)
-	for _, tier := range []struct{ dir, job string }{
-		{"test/e2e", "  e2e:"},
-		{"apps/web/e2e/scenarios", "  web-e2e:"},
-		{"test/chaos", "  chaos:"},
-	} {
-		if exists(root, tier.dir) && strings.Contains(ci, tier.job) {
-			problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, pending))+
-				" calls "+tier.dir+" pending; it exists and CI has a"+strings.TrimSuffix(tier.job, ":")+" job")
+	for _, dep := range []string{`"vite"`, `"react"`, `"react-router-dom"`} {
+		if !strings.Contains(pkg, dep) {
+			problems = append(problems, at+" names the stack as React + Vite + react-router; package.json has no "+dep)
 		}
 	}
 
-	const load = "unmeasured until an API binary exists"
+	// The test tiers. Three whole tiers were reported as pending while CI ran
+	// all three; the sentence now names each directory, and each has to be there
+	// with the job that runs it.
+	const tiers = "API e2e (`test/e2e`), Playwright UI e2e (`apps/web/e2e`), chaos (`test/chaos`)"
+	require(t, strings.Contains(body, tiers), "README no longer contains %q; the claim moved", tiers)
+	at = "README.md:" + strconv.Itoa(lineOf(body, tiers))
+	for _, tier := range []struct{ dir, job string }{
+		{"test/e2e", "  e2e:"},
+		{"apps/web/e2e", "  web-e2e:"},
+		{"test/chaos", "  chaos:"},
+		{"test/security", "  integration:"},
+		{"test/contract", "  contract:"},
+	} {
+		if !exists(root, tier.dir) {
+			problems = append(problems, at+" names "+tier.dir+"; it is not in the repository")
+		}
+		if !strings.Contains(ci, tier.job) {
+			problems = append(problems, at+" says CI runs "+tier.dir+"; there is no"+
+				strings.TrimSuffix(tier.job, ":")+" job")
+		}
+	}
+
+	// The load tier. It really is unmeasured -- the defect was the REASON,
+	// which named an absent API binary that has been on disk and deployed for
+	// days. A true claim with a false reason is a claim nobody can act on.
+	const load = "no measured run against a deployed target has been recorded"
 	require(t, strings.Contains(body, load), "README no longer contains %q; the claim moved", load)
-	if exists(root, "cmd/api/main.go") {
+	if !exists(root, "cmd/api/main.go") {
 		problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, load))+
+			" implies cmd/api exists; it does not")
+	}
+	if strings.Contains(body, "unmeasured until an API binary exists") {
+		problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, "unmeasured until an API binary exists"))+
 			" says the load tier is unmeasured until an API binary exists; cmd/api exists and is deployed")
+	}
+
+	// What V1 is not. The list outlived two of its own entries.
+	const marketplace = "the **marketplace** is built (`internal/commerce`"
+	require(t, strings.Contains(body, marketplace), "README no longer contains %q; the claim moved", marketplace)
+	if !exists(root, "internal/commerce") {
+		problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, marketplace))+
+			" says internal/commerce is built; it is not in the repository")
 	}
 
 	sort.Strings(problems)
