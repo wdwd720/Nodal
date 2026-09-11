@@ -199,6 +199,85 @@ func scanPosition(row rowScanner) (Position, error) {
 	return p, nil
 }
 
+// ApplyBuy and ApplySell state, in Go, exactly what migration 00772's triggers
+// do in SQL.
+//
+// They are not the production path -- a position is written only by the
+// database, and nothing in this package calls these -- and that is what makes
+// them useful: TestIntegration_PositionsAgreeWithTheGoStatementOfTheArithmetic
+// drives real fills through the engine and compares the rows the triggers wrote
+// against the rows these functions produce. Two independent statements of the
+// same arithmetic, written in different languages, that must agree.
+//
+// The rounding is the part worth stating twice. A partial exit removes the
+// TRUNCATED share of the basis, so the basis left behind is never short of the
+// units left behind; a full exit removes the whole basis exactly, so a closed
+// position can never keep a few base units of cost attached to nothing. Getting
+// that backwards in either implementation is a slow leak in somebody's reported
+// P&L, and the CHECK in 00772 would not catch it.
+
+// ApplyBuy returns the position after a buy of assetsOut units for creditsIn
+// Credits, of which fees were fees.
+func (p Position) ApplyBuy(assetsOut, creditsIn, fees money.Quantity, at time.Time) Position {
+	out := p
+	out.Quantity = p.Quantity.Add(assetsOut)
+	out.CostBasisCredits = p.CostBasisCredits.Add(creditsIn)
+	out.FeesPaidCredits = p.FeesPaidCredits.Add(fees)
+	out.UnitsBoughtTotal = p.UnitsBoughtTotal.Add(assetsOut)
+	out.CreditsInTotal = p.CreditsInTotal.Add(creditsIn)
+	out.FillCount = p.FillCount + 1
+	if out.FirstAcquiredAt == nil {
+		t := at.UTC()
+		out.FirstAcquiredAt = &t
+	}
+	t := at.UTC()
+	out.LastTradeAt = &t
+	return out
+}
+
+// ApplySell returns the position after a sell of assetsIn units for creditsOut
+// Credits net of fees.
+//
+// It refuses a sell the position cannot support rather than producing a
+// negative quantity, for the reason the trigger does: a negative quantity would
+// put a disagreement with the ledger INSIDE the read model, where the
+// reconciliation query could no longer see it.
+func (p Position) ApplySell(assetsIn, creditsOut, fees money.Quantity, at time.Time) (Position, error) {
+	if p.Quantity.Cmp(assetsIn) < 0 {
+		return Position{}, errs.Newf(errs.CodeValidationFailed,
+			"this position holds %s and cannot deliver %s", p.Quantity, assetsIn)
+	}
+	costRemoved := p.CostBasisCredits
+	if assetsIn.Cmp(p.Quantity) != 0 {
+		v := new(big.Int).Mul(p.CostBasisCredits.BigInt(), assetsIn.BigInt())
+		costRemoved = money.QuantityFromBigInt(v.Quo(v, p.Quantity.BigInt()))
+	}
+	out := p
+	out.Quantity = p.Quantity.Sub(assetsIn)
+	out.CostBasisCredits = p.CostBasisCredits.Sub(costRemoved)
+	out.RealizedPnLCredits = p.RealizedPnLCredits.Add(creditsOut.Sub(costRemoved))
+	out.FeesPaidCredits = p.FeesPaidCredits.Add(fees)
+	out.UnitsSoldTotal = p.UnitsSoldTotal.Add(assetsIn)
+	out.CreditsOutTotal = p.CreditsOutTotal.Add(creditsOut)
+	out.FillCount = p.FillCount + 1
+	t := at.UTC()
+	out.LastTradeAt = &t
+	return out, nil
+}
+
+// HoldsInvariant is the CHECK migration 00772 enforces, stated in Go:
+// the quantity is the allocation plus everything bought less everything sold,
+// and a closed position carries no basis.
+func (p Position) HoldsInvariant() bool {
+	if p.Quantity.Cmp(p.AllocationUnits.Add(p.UnitsBoughtTotal).Sub(p.UnitsSoldTotal)) != 0 {
+		return false
+	}
+	if p.Quantity.Sign() <= 0 && p.CostBasisCredits.Sign() != 0 {
+		return false
+	}
+	return !p.Quantity.IsNegative() && !p.CostBasisCredits.IsNegative()
+}
+
 // Value marks a position against a market's current state.
 func Value(p Position, m Market, st State, asOf time.Time) PositionValuation {
 	spot := SpotPrice(m.Curve, st)

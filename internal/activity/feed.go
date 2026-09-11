@@ -136,6 +136,10 @@ func (f *Feed) Activity(ctx context.Context, q db.Querier, r Request) (Page, err
 // on it and an item with none left are different facts, and a column that is
 // zero because this kind has no money for it is the first.
 func (f *Feed) amountsOf(simulated bool, credits string, moneyMinor int64, currency, origin, symbol, assetUnits string) []Amount {
+	// The deployment's own flag is ORed in here rather than only at the call
+	// site: on a sandbox tier nothing can move anywhere, and an amount that
+	// could be rendered REAL by passing false would be a way to lose that.
+	simulated = simulated || f.simulated
 	temp := func(real bool) Temperature {
 		switch {
 		case simulated:

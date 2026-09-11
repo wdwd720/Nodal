@@ -114,29 +114,62 @@ const ConservativeSafetyVersion = "market-safety-conservative-1"
 func ConservativeSafetyPolicy() SafetyPolicy {
 	bps := func(v money.BPS) *money.BPS { return &v }
 	sec := func(v int) *int { return &v }
-	no := false
+	permitted := true
 	// 1,000 Credits at the Credit asset's six decimal places. A market opened
 	// with less than this can be moved several percent by a single Credit.
 	minLiquidity := money.QuantityFromInt64(1_000_000_000)
 	return SafetyPolicy{
 		Version: ConservativeSafetyVersion,
-		// 25%: one order that moves the marginal price by a quarter is not
-		// price discovery, it is the order being larger than the market. The
-		// caller's own MinOutput governs everything below it.
-		MaxPriceImpactBPS: bps(2_500),
-		MaxSlippageBPS:    bps(2_500),
-		// 90% within five minutes. A newly launched speculative asset moving
-		// 50% in an hour is the product working; roughly doubling or halving
-		// inside five minutes is not orderly, and pausing is cheap because the
-		// pause is CLOSE_ONLY -- holders can still leave.
-		CircuitBreakerMoveBPS:       bps(9_000),
+		// 90%, which on this curve means one order may be at most about 38% of
+		// the pool's effective reserve: price impact is (x'/x)^2 - 1, so 9,000
+		// basis points is x'/x = 1.378. Past that the order is not discovering
+		// a price, it is larger than the market it is trading against. Below
+		// it the caller's own MinOutput is the protection, and it is the number
+		// they actually agreed to.
+		MaxPriceImpactBPS: bps(9_000),
+		MaxSlippageBPS:    bps(9_000),
+		// The circuit breaker is BUILT, ENFORCED, TESTED -- and DISARMED in the
+		// compiled-in policy. That is a decision, not an omission.
+		//
+		// A trip moves the market to CLOSE_ONLY, and only a person can move it
+		// back: that is deliberate (resuming a market after an economic
+		// incident should be somebody's decision) and it is exactly why an
+		// automatic threshold is dangerous on a deployment with nobody
+		// watching. A freshly launched constant-product market on a virtual
+		// reserve legitimately moves several hundred percent in minutes -- the
+		// first few buyers ARE the price discovery -- so any threshold low
+		// enough to catch manipulation catches every launch, and the result is
+		// a product whose markets pause on their first good day and stay
+		// paused.
+		//
+		// So the mechanism is here and a deployment that has an operator to
+		// watch its markets arms it by recording a policy with a threshold and
+		// a window it has chosen. Zero is off, and Validate accepts zero for
+		// exactly this reason.
+		CircuitBreakerMoveBPS:       bps(0),
 		CircuitBreakerWindowSeconds: sec(300),
 		MinOpeningLiquidityCredits:  &minLiquidity,
+		// PERMITTED by default, and this is the one limit here whose default
+		// is the permissive one. It is deliberate and it is not this file's
+		// decision to reverse.
+		//
 		// A creator buying their own asset is the cheapest way to manufacture
-		// volume and a price on a market whose fee they also collect. The
-		// surveillance detector already reports it; this refuses it. A
-		// deployment that wants it may record a policy that says so.
-		CreatorMayBuyOwnAsset: &no,
+		// volume and a price on a market whose fee they also collect, so goal
+		// SS47 names self-dealing -- and it says "prevent OR EXPOSE". This
+		// package already decided which, in doc.go: an automated market maker
+		// has no order book, so the counterparty is always the pool and there
+		// is no matched self-trade to prevent; what exists is a pattern, and
+		// "a detector that halts a market on a heuristic is a denial-of-service
+		// vector against creators". surveillance.go raises
+		// CREATOR_SELF_DEALING on exactly this and does not block, and
+		// TestIntegration_SurveillanceRaisesAlertsWithoutBlocking holds that
+		// line.
+		//
+		// A deployment that would rather prevent than expose records a policy
+		// with this false, and every creator BUY is then refused with
+		// ASSET_RESTRICTED. That is the point of it being a policy value: the
+		// choice is a deployment's, and it is written down either way.
+		CreatorMayBuyOwnAsset: &permitted,
 	}
 }
 

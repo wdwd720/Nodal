@@ -386,22 +386,27 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, r ExecuteRequest) (Exe
 		return ExecuteResult{}, err
 	}
 
-	// The market's own safety limits, before the account's (see safety.go).
-	// They are cheaper and they are about the MARKET: an order that no market
-	// would accept should not consume a risk decision about the account.
+	// The risk kernel, before anything is posted (see risk.go). The settlement
+	// compiler has already recorded that this route requires an evaluation;
+	// this is the evaluation.
+	afford, err := s.checkRisk(ctx, tx, m, r, fill, creatorID)
+	if err != nil {
+		return ExecuteResult{}, err
+	}
+
+	// Then the market's own safety limits (see safety.go) -- but only for an
+	// order the account can actually pay for. An order larger than the balance
+	// is about to be refused by the ledger's negative-balance guard with the
+	// reason that is true, and "this order would move the market too far" is
+	// the same wrong answer risk.go already declined to give.
 	safetyPolicy, err := s.safetyPolicy(ctx, tx)
 	if err != nil {
 		return ExecuteResult{}, err
 	}
-	if err := s.checkSafety(safetyPolicy, m, r, fill, creatorID); err != nil {
-		return ExecuteResult{}, err
-	}
-
-	// The risk kernel, before anything is posted (see risk.go). The settlement
-	// compiler has already recorded that this route requires an evaluation;
-	// this is the evaluation.
-	if err := s.checkRisk(ctx, tx, m, r, fill, creatorID); err != nil {
-		return ExecuteResult{}, err
+	if afford {
+		if err := s.checkSafety(safetyPolicy, m, r, fill, creatorID); err != nil {
+			return ExecuteResult{}, err
+		}
 	}
 
 	post, err := s.postTrade(ctx, tx, m, r, fill, creatorID)
