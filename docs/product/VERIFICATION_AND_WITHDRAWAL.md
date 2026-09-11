@@ -72,7 +72,7 @@ receive is four other decisions, each made by a different thing.
                           │                            provider accepts
                           │                            status → VERIFIED
                           ▼
-  POST /v1/me/terms/accept ────────────────────────►  terms_acceptances
+  POST /v1/me/terms-acceptances ───────────────────►  terms_acceptances
        (WITHDRAWAL_DISCLOSURE, asked HERE and           version + content hash
         never at signup)                                of the bytes shown
                           │
