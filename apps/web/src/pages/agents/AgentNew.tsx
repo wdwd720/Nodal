@@ -527,17 +527,19 @@ export function AgentNew(): ReactNode {
                     // "Try compiling again" is a new DECISION, not a retry of the
                     // last one — the attempt number the backend records is the
                     // evidence that it was asked twice — so each attempt carries
-                    // its own key. What the key still buys is the case a fresh one
-                    // would get wrong: a reply lost in transit, where pressing the
-                    // button again must re-send THIS attempt rather than start
-                    // another. So it is minted per attempt and dropped the moment
-                    // the backend answers either way.
+                    // its own key, and the answered attempt number is in the
+                    // signature that mints it. What the key still buys is the
+                    // case a fresh one would get wrong: a reply lost in transit,
+                    // where pressing the button again must re-send THIS attempt
+                    // rather than start another.
                     idempotencyKey: compileKey.forRequest(
                       requestSignature([strategy.id, String(compile.data?.attempt_no ?? "")]),
                     ),
                   },
                   {
-                    onSettled: () => {
+                    // On SUCCESS only: a compile that failed in transit must be
+                    // re-sent as the same attempt, not recorded as a second one.
+                    onSuccess: () => {
                       compileKey.clear();
                     },
                   },

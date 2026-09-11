@@ -178,7 +178,13 @@ function Lifecycle(props: { readonly agent: Agent; readonly accountId: string })
                       requestSignature([agent.id, action, reason.trim()]),
                     ),
                   },
-                  { onSettled: () => { actionKey.clear(); } },
+                  // On SUCCESS only. A failed attempt keeps the key, so
+                  // pressing the same action again is a retry of the same
+                  // request rather than a second decision — which is the whole
+                  // reason the key exists. Changing the action, or the reason
+                  // recorded with it, changes the signature and mints a new one
+                  // without anybody having to remember to.
+                  { onSuccess: () => { actionKey.clear(); } },
                 );
               }}
             >
