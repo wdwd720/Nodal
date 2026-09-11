@@ -385,6 +385,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// startup. A deployment with no Credit asset provisioned still gets the
 	// routes, and they answer NOT_FOUND with a reason rather than 404-ing as
 	// though the feature did not exist.
+
 	// THE Credit asset, on a sandbox tier that has none. Everything below reads
 	// it -- the quote's scale, credit.Service.AssetID, the demo seeder -- and
 	// `scripts/seedeconomy`, the only thing that ever wrote one, refuses to run
