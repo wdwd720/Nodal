@@ -653,8 +653,14 @@ func TestIntegration_ACompilerBackendProducesAVersionAndEveryAttemptIsRecorded(t
 		Description: "buy the dip", Constraints: json.RawMessage(`{"max_daily_trades":3}`),
 	})
 	require.NoError(t, err)
-	assert.Contains(t, st.Description, "structured constraints",
-		"a constraint the user stated up front is recorded with the description, not applied silently")
+	// The description is what the person wrote, and nothing else. The declared
+	// constraints are recorded BESIDE it, in their own column (00813, D-129):
+	// they used to be concatenated onto the description, which made "what you
+	// wrote" untrue and left a compiler no way to claim it had not read the
+	// prose.
+	assert.Equal(t, "buy the dip", st.Description)
+	assert.JSONEq(t, `{"max_daily_trades":3}`, string(st.Constraints),
+		"a constraint the user stated up front is recorded, in its own field, not applied silently")
 
 	sid, err := strategy.ParseStrategyID(st.ID)
 	require.NoError(t, err)

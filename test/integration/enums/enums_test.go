@@ -58,6 +58,7 @@ import (
 	"github.com/nodal/controlplane/internal/profile"
 	"github.com/nodal/controlplane/internal/reality"
 	"github.com/nodal/controlplane/internal/reconciliation"
+	"github.com/nodal/controlplane/internal/strategy/ir"
 	"github.com/nodal/controlplane/internal/terms"
 	"github.com/nodal/controlplane/internal/verification"
 )
@@ -220,6 +221,17 @@ func registry() []pair {
 		{table: "terms_acceptances", constraint: "terms_acceptances_document_id_check", source: "terms.AllDocumentIDs()", values: str(terms.AllDocumentIDs())},
 		{table: "account_closure_requests", constraint: "account_closure_requests_state_check", source: "profile.AllClosureStates()", values: str(profile.AllClosureStates())},
 		{table: "operator_roles", constraint: "operator_roles_role_check", source: "operatorroles.Directory()", values: str(operatorroles.Directory())},
+
+		// Paired 2026-09-11 with the structured compiler (00811, D-129). One
+		// list, three tables: how a strategy document came to exist. It was
+		// unpaired because no Go list declared the three names; ir.LineageSource
+		// declared them as constants and now exports the list, so a fourth
+		// authoring path added in Go and not in the CHECK is a version that
+		// cannot be written at all -- which is the failure this registry exists
+		// to catch, and it would land at the moment a compile succeeded.
+		{table: "strategies", constraint: "strategies_source_kind_check", source: "ir.AllLineageSources()", values: str(ir.AllLineageSources())},
+		{table: "strategy_versions", constraint: "strategy_versions_source_kind_check", source: "ir.AllLineageSources()", values: str(ir.AllLineageSources())},
+		{table: "compile_attempts", constraint: "compile_attempts_source_kind_check", source: "ir.AllLineageSources()", values: str(ir.AllLineageSources())},
 
 		// Paired 2026-09-10 with migration 00798, which put both account
 		// lifecycle EDGE SETS in the schema. These two are not lists of values
@@ -637,7 +649,6 @@ var unpaired = []string{
 	"capital_envelopes.capital_envelopes_status_check",
 	"compile_attempts.compile_attempts_outcome_check",
 	"compile_attempts.compile_attempts_parse_result_check",
-	"compile_attempts.compile_attempts_source_kind_check",
 	"compile_attempts.compile_attempts_stage_reached_check",
 	"compliance_profile_transitions.compliance_profile_transitions_actor_type_check",
 	"cost_accounting.cost_accounting_kind_check",
@@ -713,11 +724,9 @@ var unpaired = []string{
 	"sessions.sessions_actor_type_check",
 	"signing_decisions.signing_decisions_decision_check",
 	"signing_results.signing_results_retry_class_check",
-	"strategies.strategies_source_kind_check",
 	"strategies.strategies_status_check",
 	"strategy_dependencies.strategy_dependencies_effect_check",
 	"strategy_dependencies.strategy_dependencies_kind_check",
-	"strategy_versions.strategy_versions_source_kind_check",
 	"strategy_versions.strategy_versions_status_check",
 	"stream_gaps.stream_gaps_kind_check",
 	"stream_gaps.stream_gaps_resolution_check",

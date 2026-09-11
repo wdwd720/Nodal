@@ -179,6 +179,9 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// authorization answers first, which is what they measure.
 		"{agentId}":    testSessionID,
 		"{strategyId}": testSessionID,
+		// The acceptance route's version NUMBER. Any integer probes the gate;
+		// authorization answers before the version is looked up.
+		"{version}": "1",
 	}
 
 	requiredQuery := map[string]string{

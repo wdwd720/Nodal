@@ -1,6 +1,7 @@
 # ADR-0029 — Agents are a constrained-authority management surface; execution stays behind F-65
 
-Status: **Accepted** (2026-09-10)
+Status: **Accepted** (2026-09-10), amended 2026-09-11 (the compiler and the
+acceptance route; see "Amendment" below)
 
 Supersedes nothing. Constrains how the agent architecture becomes a product
 surface. Answers §17 (AGENTS) and §18 (AGENT CREATION UX) of the product goal,
@@ -88,16 +89,17 @@ wrong:
    not being evaluated and nothing is scheduled. Evidence can only ever make the
    answer weaker than the deployment claims — never stronger.
 
-**The compiler is a declared, reported absence.** `POST /v1/strategies/{id}/compile`
-records a `compile_attempts` row on every path, including the path where this
-deployment has no compiler: outcome `MODEL_UNAVAILABLE` (the honest member of a
-CHECK written before this surface existed) with failure code
-`COMPILER_UNAVAILABLE`, `parse_result NOT_ATTEMPTED`, `stage_reached PROMPT`, and
-no strategy version. No IR is fabricated and nothing is inferred from the user's
-description. The seam is two interfaces — a `CompilerBackend` that
-`*strategy.Compiler` satisfies exactly, and a `RefsLoader` for the registry its
-TYPE and RISK_COMPAT stages validate against — and a compile is attempted only
-when BOTH are present.
+**The compiler is a declared, reported absence** — on every tier that has none,
+which as of the amendment below is every tier that is not a sandbox tier.
+`POST /v1/strategies/{id}/compile` records a `compile_attempts` row on every
+path, including the path where this deployment has no compiler: outcome
+`MODEL_UNAVAILABLE` (the honest member of a CHECK written before this surface
+existed) with failure code `COMPILER_UNAVAILABLE`, `parse_result NOT_ATTEMPTED`,
+`stage_reached PROMPT`, and no strategy version. No IR is fabricated and nothing
+is inferred from the user's description. The seam is two interfaces — a
+`CompilerBackend` that `*strategy.Compiler` satisfies exactly, and a
+`RefsLoader` for the registry its TYPE and RISK_COMPAT stages validate against —
+and a compile is attempted only when BOTH are present.
 
 ## Why this and not the alternatives
 
@@ -150,9 +152,10 @@ when BOTH are present.
   step-up in front of `pause` is a control that argues with the operator during
   an incident.
 - A deployment with no compiler cannot produce a strategy version, and an agent
-  is created only from one. The whole surface is therefore reachable and honest
-  and produces no agents on this tier — which the API says in words, on the
-  strategy page, before a user writes a description.
+  is created only from one. That remains true off a sandbox tier, and the API
+  still says it in words, on the strategy page, before a user writes a
+  description. On a sandbox tier the amendment below supplies a compiler, and
+  the whole of §18 becomes reachable there.
 - F-65's deferral is undisturbed and still watched. Nothing here is the bridge,
   and the day a worker is deployed the honest answer changes in one place:
   `agentRuntimeDeployment()` in `cmd/api`.
@@ -166,3 +169,121 @@ unit and integration suites; `internal/httpapi/handlers_agents.go`,
 `internal/httpapi/authz.go`; `cmd/api/agents.go` and the agents block in
 `cmd/api/wire.go`; `test/integration/enums`;
 `test/security/deferred_bridge_test.go` still green.
+
+## Amendment (2026-09-11): the compiler a sandbox tier has, and the act that accepts what it produced
+
+Two things were missing, and they were missing together.
+
+### The acceptance route (F-255, D-128)
+
+`agents.Service.Create` refuses an agent whose strategy version is not
+`ACCEPTED` with `accepted_by_user_id` and `accepted_at` set; migration 00500
+pairs the status and the columns in a CHECK; the compiler is forbidden from
+returning an accepted version, because "a backend that could return it would be
+approving on the user's behalf, which is exactly what goal §18's review step
+exists to stop". Every one of those was in place and **nothing could write the
+row**: there was no route, no service method and no SQL anywhere that set the
+status to `ACCEPTED`. An agent was unreachable on every deployment of this
+build, even with a working compiler.
+
+`POST /v1/strategies/{strategyId}/versions/{version}/accept` is that act.
+
+* **Owner only.** `RequireAccountOwner`, and a stranger gets `NOT_FOUND` — the
+  answer `Get` already gives, for the reason it gives it. An operator's
+  `account:read_any` does not substitute: approving a strategy is not a read.
+* **The version is named by number.** `strategy_versions` is
+  `UNIQUE (strategy_id, version)`, so the pair is a complete key, and the number
+  is what the review screen shows. A request built from what is on the screen
+  names what is on the screen.
+* **The body echoes the `ir_hash` that was on the screen.** Without it, "accept
+  version 2" would mean "accept whatever version 2 is when this request
+  arrives". Versions are immutable, so the hash cannot drift under a caller who
+  read *this* version; what the echo catches is a caller who read a different
+  one, which is exactly what a second compile landing between the reading and
+  the pressing produces. A mismatch is `CONFLICT` and writes nothing.
+* **Step-up at the boundary**, unlike `enable`, which demands it in the domain.
+  The asymmetry is deliberate: the five lifecycle actions share one operation id
+  and a step-up in front of `pause` argues with the operator during an incident.
+  Acceptance has no emergency twin — it is a single-purpose route whose entire
+  content is a person saying "I read this and I approve it", and it is the gate
+  every later grant of authority rests on.
+* **A second acceptance of the same version is a replay**, not a conflict: the
+  caller asked for a state the row is already in, by the same person, and
+  refusing would make a lost response look like an error.
+* It writes an audit event on the owner's account stream and **grants nothing**.
+
+### The structured compiler of a sandbox tier (F-256, F-257, D-129)
+
+The `RefsLoader` half of the seam above had **no implementation anywhere**, so
+the pair could never be satisfied and "until both exist, a strategy cannot be
+compiled here" was true by construction rather than by configuration. A second
+absence sat underneath it: `risk.DefaultGlobalPolicyJSON` sets
+`"allowed_venues": []`, nothing ever listed a venue, and the RISK_COMPAT stage
+refuses any strategy whose envelope names a venue outside the allowlist — so
+even a model-backed compiler could never have produced a version.
+
+`internal/provider/compilersandbox` is a compiler for a sandbox tier, beside
+`payoutsandbox` and `verifysandbox` and for the same two reasons they are first
+class providers: production wiring may not import a test double, and a component
+that refuses to exist in PROD has to say so somewhere PROD compiles.
+
+**It reads a DECLARED strategy and never the description.** The grammar is the
+smallest one that produces a valid IR and covers §18's list: one instrument and
+one venue from the registry; an entry rule and an exit rule, each either a
+comparator on the instrument's mid price against a threshold or "on every
+evaluation"; three risk limits; a capital floor; an evaluation interval and an
+hourly ceiling on trade intents; and `PAPER`, which is the only mode this build
+compiles. Every amount is an exact USD **minor-unit** string. Unknown fields are
+refused rather than ignored, so a misspelled key is a named refusal instead of a
+setting that silently did not apply.
+
+An absent or incomplete strategy compiles to a refusal that names **every** field
+it needed — failure code `STRUCTURED_CONSTRAINTS_REQUIRED`, `stage_reached
+PROMPT`, no version — which is the same honest shape `COMPILER_UNAVAILABLE` has.
+Nothing is defaulted, because a default is an inference about what somebody
+meant.
+
+What it produces is a real `ir.IR`, validated by the same `strategy.Validate` the
+model path runs, with lineage source `STRUCTURED_SANDBOX` (00811), a zero model
+budget and no providers, effects derived by `ir`'s own rules, and a rationale
+that names, element by element, which stated field each part came from.
+
+The IR requires a committed prediction before a trade intent, and the caller
+stated no forecast. The compiler does not invent one: the prediction it emits
+claims nothing, in the direction that cannot flatter — no direction, probability
+zero, no expected gain, a loss not ruled out, and a maximum downside of the whole
+position. A zero downside would have been the comfortable choice and would have
+been a claim.
+
+**PROD is refused three times over.** `compilersandbox.New` refuses `EnvProd`;
+`cmd/api` constructs it only when `cfg.SandboxTier()`, which is
+`CP_API_LEGAL_POLICY=SANDBOX`, a value `config.Validate` already refuses in PROD;
+and migration 00812 gives `strategy_versions` a `sandbox` flag and an
+`environment`, pairs `STRUCTURED_SANDBOX` with the flag, and refuses the pair
+`(sandbox, PROD)` in any database. Both columns are immutable under the guard
+00500 installed, so `cp_app` cannot clear the label on a row it wrote.
+
+Everything built this way is labelled a rehearsal where it is stored and where it
+is shown: the version carries `sandbox`, the agent carries it (read from its
+version, never stored on the agent, so the two cannot disagree), and the web
+renders both at `data-temp="simulated"`.
+
+### What did not change
+
+`internal/agents` still acquires no caller for the runtime, and no file here
+names those constructors. `enable` still walks DRAFT → COMPILED → VALIDATED →
+BACKTEST_ELIGIBLE in PAPER mode and stops. Levels 4–6 are still refused with the
+capability each would need. No Credits move when an agent is created. F-65's
+deferral is undisturbed, `test/security` is still green, and
+`agentRuntimeDeployment()` still answers `NOT_DEPLOYED` — so Scenario D's
+"inspect decisions" step shows the honest empty state on every tier of this
+build, sandbox or not (D-130).
+
+### Amendment evidence
+
+Migrations 00811, 00812, 00813; `internal/provider/compilersandbox` with its
+unit suite; `internal/agents/structured.go` and `accept.go` with
+`accept_integration_test.go`; `cmd/api/compiler.go` and
+`compiler_integration_test.go`; `internal/httpapi/handlers_strategies.go` and
+the `authz.go` row; `apps/web/src/pages/agents/AgentNew.tsx` and
+`apps/web/e2e/scenarios/d-agent.spec.ts`.

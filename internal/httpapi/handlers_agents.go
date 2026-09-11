@@ -329,8 +329,12 @@ func toAPIAgent(v agents.View) api.Agent {
 			UsedCredits:    v.BudgetUsedCredits.String(),
 			Source:         api.AgentBudgetSource(v.BudgetUsedSource),
 		},
-		Runtime:   toAPIRuntime(v.Runtime),
-		Archived:  v.Grant.Archived(),
+		Runtime:  toAPIRuntime(v.Runtime),
+		Archived: v.Grant.Archived(),
+		// A property of the strategy version this agent deploys, read from the
+		// version rather than kept here, so an agent cannot carry a different
+		// answer from the document it runs.
+		Sandbox:   v.Sandbox,
 		CreatedAt: v.Agent.CreatedAt.UTC(),
 	}
 	if v.Agent.Mode != "" {

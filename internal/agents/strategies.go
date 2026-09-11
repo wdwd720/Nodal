@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/nodal/controlplane/internal/audit"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
@@ -68,20 +69,46 @@ type StrategyDeps struct {
 	Clock clock.Clock
 	// Compiler is nil on a deployment with no model provider.
 	Compiler CompilerBackend
-	// Refs is nil on a deployment with no validation registry.
+	// Structured is the compiler that reads a DECLARED strategy rather than a
+	// description. It is nil on every deployment that is not a sandbox tier.
+	// At most one of Compiler and Structured answers a compile: a deployment
+	// that somehow had both would be two products.
+	Structured StructuredCompilerBackend
+	// Refs is nil on a deployment with no validation registry. When Structured
+	// is set it must also implement StructuredRefsLoader, which
+	// NewStrategyService checks rather than discovering at compile time.
 	Refs RefsLoader
 	// CompilerVersion is recorded on every attempt.
 	CompilerVersion string
+	// Environment is the deployment environment, recorded on every version a
+	// sandbox compiler produces so migration 00812's CHECK can refuse the pair
+	// (sandbox, PROD).
+	Environment string
+	// Audit appends the acceptance event on the owner's account stream. Nil is
+	// refused when nothing else is: an acceptance that leaves no trail is the
+	// one act in this file that must leave one.
+	Audit AuditAppender
+}
+
+// AuditAppender is the part of internal/audit this package uses. It appends
+// inside the caller's transaction, so the acceptance row and its audit event
+// commit together or not at all.
+type AuditAppender interface {
+	Append(ctx context.Context, tx pgx.Tx, e audit.Event) (audit.Appended, error)
 }
 
 // StrategyService is the strategy half of the agent creation flow (goal §18):
 // describe, compile, review, approve.
 type StrategyService struct {
-	db       *db.DB
-	clk      clock.Clock
-	compiler CompilerBackend
-	refs     RefsLoader
-	version  string
+	db         *db.DB
+	clk        clock.Clock
+	compiler   CompilerBackend
+	structured StructuredCompilerBackend
+	refs       RefsLoader
+	registry   StructuredRefsLoader
+	version    string
+	env        string
+	audit      AuditAppender
 }
 
 // NewStrategyService builds the service.
@@ -97,13 +124,49 @@ func NewStrategyService(deps StrategyDeps) (*StrategyService, error) {
 	if v == "" {
 		v = "unspecified"
 	}
-	return &StrategyService{db: deps.DB, clk: clk, compiler: deps.Compiler, refs: deps.Refs, version: v}, nil
+	svc := &StrategyService{
+		db: deps.DB, clk: clk, compiler: deps.Compiler, structured: deps.Structured,
+		refs: deps.Refs, version: v, env: deps.Environment, audit: deps.Audit,
+	}
+	if deps.Structured != nil {
+		if deps.Compiler != nil {
+			return nil, errs.New(errs.CodeValidationFailed,
+				"agents: a deployment has one compiler; wiring a model compiler and a structured one together would make which of them answered a coin toss")
+		}
+		loader, ok := deps.Refs.(StructuredRefsLoader)
+		if !ok {
+			return nil, errs.New(errs.CodeValidationFailed,
+				"agents: a structured compiler needs a registry that can resolve an instrument NAME; wire a StructuredRefsLoader beside it")
+		}
+		svc.registry = loader
+	}
+	return svc, nil
 }
 
 // CompilerConfigured reports whether this deployment can compile at all. The
 // API exposes it so the create-agent flow can say so before a user types a
 // description, rather than after.
-func (s *StrategyService) CompilerConfigured() bool { return s.compiler != nil && s.refs != nil }
+func (s *StrategyService) CompilerConfigured() bool {
+	return (s.compiler != nil || s.structured != nil) && s.refs != nil
+}
+
+// CompilerInfo reports WHICH compiler this deployment has, so the product can
+// say so rather than implying there is only one kind.
+//
+// A deployment with none answers the zero value, which reads as "no compiler"
+// everywhere it is rendered and is the same fact CompilerConfigured reports.
+func (s *StrategyService) CompilerInfo() CompilerInfo {
+	switch {
+	case !s.CompilerConfigured():
+		return CompilerInfo{}
+	case s.structured != nil:
+		return CompilerInfo{
+			Name: s.structured.CompilerName(), Sandbox: s.structured.SandboxCompiler(), Structured: true,
+		}
+	default:
+		return CompilerInfo{Name: "model", Sandbox: false, Structured: false}
+	}
+}
 
 // Strategy is one strategies row plus its current version, as the product shows
 // it.
@@ -113,6 +176,11 @@ type Strategy struct {
 	OwnerUserID string
 	Name        string
 	Description string
+	// Constraints is the structured strategy the owner declared, verbatim, in
+	// its own column (00813). It is what a structured compiler reads, and the
+	// description is what a person reads: keeping them apart is what lets this
+	// build claim the description is never interpreted.
+	Constraints json.RawMessage
 	SourceKind  string
 	Status      string
 	// CurrentVersion is the compiled version this strategy currently offers,
@@ -134,9 +202,21 @@ type StrategyVersion struct {
 	// universe, the entries, the exits and the limits rather than a summary of
 	// them (goal §18: show a human-understandable compiled strategy before
 	// activation).
-	IR        json.RawMessage
-	BuiltAt   time.Time
-	CreatedAt time.Time
+	IR json.RawMessage
+	// Sandbox is true when this version was produced by a compiler that exists
+	// only on a sandbox tier. Everything built from it is a rehearsal, and the
+	// API and the page say so wherever it is shown.
+	Sandbox bool
+	// Environment is the deployment that compiled it; empty for a version
+	// compiled before migration 00812 added the column.
+	Environment string
+	// AcceptedByUserID and AcceptedAt are the record of a PERSON reading this
+	// document and approving it. They are the only evidence goal SS18's review
+	// step leaves, and agents.Create refuses a version without them.
+	AcceptedByUserID string
+	AcceptedAt       *time.Time
+	BuiltAt          time.Time
+	CreatedAt        time.Time
 }
 
 // CompileOutcome is what one compile request produced.
@@ -152,9 +232,25 @@ type CompileOutcome struct {
 	// Clarifications is what the compiler could not decide. Never a guess.
 	Clarifications []string
 	Detail         string
+	// Rationale is the compiler's own explanation of what it produced and why,
+	// in words. Never chain-of-thought: it is the structured explanation
+	// compile_attempts.explanation holds.
+	Rationale Rationale
 	// Version is present only on SUCCESS.
 	Version *StrategyVersion
 }
+
+// Rationale is the compiler's user-visible explanation of one attempt. It is
+// persisted in compile_attempts.explanation and shown beside the rendered
+// strategy on the review step, so a person approving a document can read why
+// each part of it is there.
+type Rationale struct {
+	Summary string   `json:"summary"`
+	Details []string `json:"details"`
+}
+
+// Empty reports whether there is nothing to show.
+func (r Rationale) Empty() bool { return r.Summary == "" && len(r.Details) == 0 }
 
 // Succeeded reports whether a version was produced.
 func (o CompileOutcome) Succeeded() bool {
@@ -214,16 +310,20 @@ func (s *StrategyService) Create(ctx context.Context, req CreateStrategyRequest)
 
 	now := s.clk.Now().UTC()
 	id := strategy.NewStrategyID()
-	stored := description
+	// The description is stored exactly as it was written, and the declared
+	// constraints go in their own column (00813). They used to be concatenated
+	// onto the description, which made "what you wrote" untrue and left a
+	// compiler no way to claim it had not read the prose.
+	constraints := json.RawMessage("{}")
 	if len(req.Constraints) > 0 {
-		stored = description + "\n\n[structured constraints]\n" + string(req.Constraints)
+		constraints = req.Constraints
 	}
 	err = s.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		_, ierr := tx.Exec(ctx, `
-			INSERT INTO strategies (id, owner_account_id, owner_user_id, name, description, source_kind, status,
+			INSERT INTO strategies (id, owner_account_id, owner_user_id, name, description, constraints, source_kind, status,
 			                        created_by_actor_type, created_by_actor_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, 'NATURAL_LANGUAGE', 'ACTIVE', $6, $7, $8, $8)`,
-			id, req.AccountID, p.SubjectID, name, stored, string(p.ActorType), p.SubjectID, now)
+			VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'NATURAL_LANGUAGE', 'ACTIVE', $7, $8, $9, $9)`,
+			id, req.AccountID, p.SubjectID, name, description, []byte(constraints), string(p.ActorType), p.SubjectID, now)
 		if ierr != nil {
 			if db.IsUniqueViolation(ierr) {
 				return errs.New(errs.CodeConflict, "agents: a strategy with that name already exists on this account").
@@ -240,31 +340,44 @@ func (s *StrategyService) Create(ctx context.Context, req CreateStrategyRequest)
 }
 
 const strategyColumns = `s.id::text, s.owner_account_id::text, s.owner_user_id::text, s.name, s.description,
-       s.source_kind, s.status, s.created_at, s.updated_at,
+       s.constraints, s.source_kind, s.status, s.created_at, s.updated_at,
        coalesce(v.id::text, ''), coalesce(v.version, 0), coalesce(v.status, ''),
        coalesce(encode(v.ir_hash, 'hex'), ''), coalesce(v.effect_set, '{}'::text[]),
-       coalesce(v.human_readable, ''), coalesce(v.ir, 'null'::jsonb), v.built_at, v.created_at`
+       coalesce(v.human_readable, ''), coalesce(v.ir, 'null'::jsonb),
+       coalesce(v.sandbox, false), coalesce(v.environment, ''),
+       v.accepted_by_user_id::text, v.accepted_at, v.built_at, v.created_at`
 
 func scanStrategy(row pgx.Row) (Strategy, error) {
 	var (
 		st                  Strategy
+		constraints         []byte
 		vid, vstatus, vhash string
 		vversion            int
 		effects             []string
 		human               string
 		irDoc               []byte
+		sandbox             bool
+		environment         string
+		acceptedBy          *string
+		acceptedAt          *time.Time
 		builtAt, vcreated   *time.Time
 	)
 	err := row.Scan(&st.ID, &st.AccountID, &st.OwnerUserID, &st.Name, &st.Description,
-		&st.SourceKind, &st.Status, &st.CreatedAt, &st.UpdatedAt,
-		&vid, &vversion, &vstatus, &vhash, &effects, &human, &irDoc, &builtAt, &vcreated)
+		&constraints, &st.SourceKind, &st.Status, &st.CreatedAt, &st.UpdatedAt,
+		&vid, &vversion, &vstatus, &vhash, &effects, &human, &irDoc,
+		&sandbox, &environment, &acceptedBy, &acceptedAt, &builtAt, &vcreated)
 	if err != nil {
 		return Strategy{}, err
 	}
+	st.Constraints = json.RawMessage(constraints)
 	if vid != "" {
 		v := StrategyVersion{
 			ID: vid, Version: vversion, Status: vstatus, IRHashHex: vhash,
 			EffectSet: effects, HumanReadable: human, IR: json.RawMessage(irDoc),
+			Sandbox: sandbox, Environment: environment, AcceptedAt: acceptedAt,
+		}
+		if acceptedBy != nil {
+			v.AcceptedByUserID = *acceptedBy
 		}
 		if builtAt != nil {
 			v.BuiltAt = *builtAt
@@ -372,10 +485,19 @@ func (s *StrategyService) Compile(ctx context.Context, strategyID, requestID, co
 		return s.recordUnavailable(ctx, sid, requestID, st.Description, p, correlationID)
 	}
 
-	refs, err := s.refs.Refs(ctx, s.db, s.clk.Now().UTC())
+	now := s.clk.Now().UTC()
+	refs, err := s.refs.Refs(ctx, s.db, now)
 	if err != nil {
 		return CompileOutcome{}, err
 	}
+
+	// Which compiler answers is a property of the deployment, never of the
+	// request: a caller cannot ask for the other one, and there is never more
+	// than one (NewStrategyService refuses a service wired with both).
+	if s.structured != nil {
+		return s.compileStructured(ctx, st, sid, requestID, nextVersion, refs, now, p, correlationID)
+	}
+
 	sum := sha256.Sum256([]byte(st.AccountID))
 	res, err := s.compiler.CompileNL(ctx, strategy.NLRequest{
 		StrategyID: sid, RequestID: requestID, OwnerAccountID: st.AccountID, OwnerUserID: st.OwnerUserID,
@@ -385,6 +507,55 @@ func (s *StrategyService) Compile(ctx context.Context, strategyID, requestID, co
 		return CompileOutcome{}, err
 	}
 	return s.persist(ctx, sid, requestID, nextVersion, res, p, correlationID)
+}
+
+// compileStructured runs the declared-strategy path.
+//
+// The description is not passed. That is the whole difference between this
+// function and the one above it, and it is deliberately visible here rather
+// than hidden inside a backend: a reader of this file can see that the text a
+// person wrote does not leave the row it was stored in.
+func (s *StrategyService) compileStructured(ctx context.Context, st Strategy, sid strategy.StrategyID,
+	requestID string, nextVersion int, refs strategy.ValidationRefs, now time.Time,
+	p security.Principal, correlationID string,
+) (CompileOutcome, error) {
+	registry, err := s.registry.Registry(ctx, s.db, now)
+	if err != nil {
+		return CompileOutcome{}, err
+	}
+	attemptNo, err := s.nextAttemptNo(ctx, requestID)
+	if err != nil {
+		return CompileOutcome{}, err
+	}
+	res, err := s.structured.CompileStructured(ctx, StructuredCompileRequest{
+		StrategyID: sid, RequestID: requestID, AttemptNo: attemptNo,
+		OwnerAccountID: st.AccountID, OwnerUserID: st.OwnerUserID,
+		Version:     nextVersion,
+		Constraints: st.Constraints,
+		Refs:        refs,
+		Registry:    registry,
+		Environment: s.env,
+	})
+	if err != nil {
+		return CompileOutcome{}, err
+	}
+	out, err := s.persist(ctx, sid, requestID, nextVersion, res, p, correlationID)
+	if err != nil {
+		return CompileOutcome{}, err
+	}
+	if containsCode(out.FailureCodes, StructuredConstraintsRequired) {
+		out.Detail = structuredConstraintsDetail
+	}
+	return out, nil
+}
+
+func containsCode(codes []string, want string) bool {
+	for _, c := range codes {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 // recordUnavailable writes the attempt that says no compiler exists.
@@ -464,8 +635,14 @@ func (s *StrategyService) persist(ctx context.Context, sid strategy.StrategyID, 
 				return err
 			}
 		}
-		for _, a := range res.Attempts {
-			if err := s.insertAttempt(ctx, tx, sid, requestID, a, p, correlationID); err != nil {
+		for i, a := range res.Attempts {
+			// The rationale belongs to the LAST attempt, which is the one that
+			// produced the result being explained.
+			var rationale Rationale
+			if i == len(res.Attempts)-1 {
+				rationale = Rationale{Summary: res.Rationale.Summary, Details: res.Rationale.Assumptions}
+			}
+			if err := s.insertAttempt(ctx, tx, sid, requestID, a, rationale, res.Clarifications, p, correlationID); err != nil {
 				return err
 			}
 		}
@@ -488,11 +665,13 @@ func (s *StrategyService) persist(ctx context.Context, sid strategy.StrategyID, 
 		out.AttemptNo = res.Attempts[n-1].AttemptNo
 	}
 	out.Detail = detailFor(res.Outcome)
+	out.Rationale = Rationale{Summary: res.Rationale.Summary, Details: res.Rationale.Assumptions}
 	if res.Version != nil {
 		out.Version = &StrategyVersion{
 			ID: res.Version.ID.String(), Version: res.Version.Version, Status: res.Version.Status,
 			IRHashHex: hex(res.Version.IRHash), EffectSet: res.Version.EffectSet,
 			HumanReadable: res.Version.HumanReadable, BuiltAt: res.Version.BuiltAt,
+			Sandbox: s.sandboxVersions(), Environment: s.environmentOfNewVersions(),
 		}
 		if doc, merr := json.Marshal(res.Version.IR); merr == nil {
 			out.Version.IR = doc
@@ -572,11 +751,12 @@ func (s *StrategyService) insertVersion(ctx context.Context, tx pgx.Tx, v *strat
 		INSERT INTO strategy_versions (
 		    id, strategy_id, version, schema_version, ir, ir_hash, effect_set, status, source_kind,
 		    source_hash, compiler_version, risk_policy_version, risk_policy_hash,
-		    model_budget, data_budget, envelope_requirements, human_readable, built_at)
+		    model_budget, data_budget, envelope_requirements, human_readable, built_at, sandbox, environment)
 		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::text[], $8, $9, $10, $11, $12, $13,
-		        '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, $14, $15)`,
+		        '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, $14, $15, $16, $17)`,
 		v.ID, v.StrategyID, v.Version, schemaVersion, doc, v.IRHash, v.EffectSet, v.Status, string(v.SourceKind),
-		v.SourceHash, v.CompilerVersion, v.RiskPolicy, v.RiskPolicyHash, v.HumanReadable, v.BuiltAt)
+		v.SourceHash, v.CompilerVersion, v.RiskPolicy, v.RiskPolicyHash, v.HumanReadable, v.BuiltAt,
+		s.sandboxVersions(), s.environmentOfNewVersions())
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "agents: insert strategy version")
 	}
@@ -584,11 +764,27 @@ func (s *StrategyService) insertVersion(ctx context.Context, tx pgx.Tx, v *strat
 }
 
 func (s *StrategyService) insertAttempt(ctx context.Context, tx pgx.Tx, sid strategy.StrategyID, requestID string,
-	a strategy.Attempt, p security.Principal, correlationID string,
+	a strategy.Attempt, rationale Rationale, clarifications []string, p security.Principal, correlationID string,
 ) error {
 	codes := a.FailureCodes
 	if codes == nil {
 		codes = []string{}
+	}
+	// explanation and clarifications are columns 00500 created for exactly this
+	// and that nothing ever wrote. An attempt that recorded its codes and threw
+	// away the sentences explaining them left a user reading a list of
+	// identifiers, which is the shape of record this table exists to avoid.
+	explanation, merr := json.Marshal(map[string]any{
+		"summary": rationale.Summary,
+		"details": stringsOrEmpty(rationale.Details),
+		"fields":  a.Fields,
+	})
+	if merr != nil {
+		return errs.Wrap(merr, errs.CodeInternal, "agents: encode compile explanation")
+	}
+	clarificationsJSON, merr := json.Marshal(stringsOrEmpty(clarifications))
+	if merr != nil {
+		return errs.Wrap(merr, errs.CodeInternal, "agents: encode compile clarifications")
 	}
 	var versionID *string
 	if a.VersionID != nil {
@@ -599,12 +795,13 @@ func (s *StrategyService) insertAttempt(ctx context.Context, tx pgx.Tx, sid stra
 		INSERT INTO compile_attempts (
 		    id, strategy_id, request_id, attempt_no, source_kind, input_hash,
 		    prompt_template_version, model_provider, model_id,
-		    parse_result, stage_reached, outcome, failure_codes,
+		    parse_result, stage_reached, outcome, failure_codes, clarifications, explanation,
 		    structured_output, strategy_version_id, requested_by_user_id, correlation_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::text[], $14, $15, $16, $17, $18)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::text[], $14::jsonb, $15::jsonb,
+		        $16, $17, $18, $19, $20)`,
 		a.ID, sid, requestID, a.AttemptNo, string(a.SourceKind), a.InputHash,
 		nullText(a.Provenance.TemplateVersion), nullText(a.Provenance.Provider), nullText(a.Provenance.ModelID),
-		parseResultOf(a), a.StageReached, a.Outcome, codes,
+		parseResultOf(a), a.StageReached, a.Outcome, codes, clarificationsJSON, explanation,
 		jsonOrNil(a.Structured), versionID, p.SubjectID, nullText(correlationID), a.CreatedAt)
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "agents: record compile attempt")

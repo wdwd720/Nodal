@@ -85,6 +85,7 @@ import {
   validatedPayout,
   validatedStartedVerification,
   validatedStrategy,
+  validatedStrategyVersion,
   validatedVerificationProfile,
 } from "./contract.ts";
 
@@ -1602,8 +1603,19 @@ export type AuthorityLevel = Schemas["AuthorityLevel"];
 export type AgentAction = "enable" | "pause" | "resume" | "disable" | "archive";
 
 /** A page of strategies, with the one deployment fact the create flow needs first. */
+/** Which compiler this deployment has, as the API reports it. */
+export type CompilerDescriptor = Schemas["CompilerDescriptor"];
+/** The strategy a person states field by field, which is what a structured compiler reads. */
+export type StructuredStrategy = Schemas["StructuredStrategy"];
+
 export interface StrategyList {
   readonly items: Strategy[];
+  /**
+   * Which compiler answered, when there is one. `sandbox` true means every
+   * version it produces is a rehearsal and is labelled one; `structured` true
+   * means it reads the fields the customer states and never the description.
+   */
+  readonly compiler: CompilerDescriptor | undefined;
   /**
    * False means a compile attempt will be recorded with COMPILER_UNAVAILABLE
    * and produce no IR. The flow says so before a description is written rather
@@ -1645,7 +1657,11 @@ export function useStrategies(accountId: string | undefined): UseQueryResult<Str
       page.items.forEach((item, index) => {
         validatedStrategy<Strategy>(item, `/strategies.items[${String(index)}]`);
       });
-      return { items: page.items, compilerConfigured: page.compiler_configured };
+      return {
+        items: page.items,
+        compiler: page.compiler,
+        compilerConfigured: page.compiler_configured,
+      };
     },
   });
 }
@@ -1667,6 +1683,12 @@ export interface CreateStrategyInput {
   readonly accountId: string;
   readonly name: string;
   readonly description: string;
+  /**
+   * The strategy stated field by field. Omitted on a deployment whose compiler
+   * reads natural language; required by one that does not, which refuses an
+   * incomplete document by naming the fields rather than filling them in.
+   */
+  readonly constraints?: StructuredStrategy;
   /** Minted when the customer confirms the description, never on render. */
   readonly idempotencyKey: string;
 }
@@ -1677,7 +1699,15 @@ export function useCreateStrategy(): UseMutationResult<Strategy, unknown, Create
     mutationFn: async (input: CreateStrategyInput) => {
       const { data } = await api.POST("/strategies", {
         ...idempotent(input.idempotencyKey),
-        body: { account_id: input.accountId, name: input.name, description: input.description },
+        body: {
+          account_id: input.accountId,
+          name: input.name,
+          description: input.description,
+          // The declared strategy travels in its own field and is never merged
+          // into the description. That separation is what lets a structured
+          // compiler claim it did not read the prose.
+          ...(input.constraints === undefined ? {} : { constraints: input.constraints }),
+        },
       });
       return validatedStrategy<Strategy>(data, "/strategies");
     },
@@ -1708,6 +1738,52 @@ export function useCompileStrategy(): UseMutationResult<CompileResult, unknown, 
       return validatedCompileResult<CompileResult>(data, "/strategies/{id}/compile");
     },
     onSuccess: (_result, input) => {
+      void qc.invalidateQueries({ queryKey: agentKeys.strategy(input.strategyId) });
+    },
+  });
+}
+
+export interface AcceptStrategyVersionInput {
+  readonly strategyId: string;
+  /** The version NUMBER, which is what the review screen shows. */
+  readonly version: number;
+  /**
+   * The hash of the document that was on screen when the customer pressed the
+   * button. The API compares it and refuses a mismatch, so "accept" means
+   * "accept THIS document" rather than "accept whatever is there now".
+   */
+  readonly irHash: string;
+  /** Minted at the moment of acceptance, never on render. */
+  readonly idempotencyKey: string;
+}
+
+/**
+ * The review step of goal §18, recorded.
+ *
+ * It is a separate mutation from creating the agent because they are separate
+ * acts: reading a compiled strategy and approving it is what makes an agent
+ * possible, and creating one is a decision made afterwards.
+ */
+export function useAcceptStrategyVersion(): UseMutationResult<
+  StrategyVersion,
+  unknown,
+  AcceptStrategyVersionInput
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AcceptStrategyVersionInput) => {
+      const { data } = await api.POST("/strategies/{strategyId}/versions/{version}/accept", {
+        ...idempotent(input.idempotencyKey, {
+          path: { strategyId: input.strategyId, version: input.version },
+        }),
+        body: { ir_hash: input.irHash },
+      });
+      return validatedStrategyVersion<StrategyVersion>(
+        data,
+        "/strategies/{id}/versions/{version}/accept",
+      );
+    },
+    onSuccess: (_version, input) => {
       void qc.invalidateQueries({ queryKey: agentKeys.strategy(input.strategyId) });
     },
   });

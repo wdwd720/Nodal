@@ -811,12 +811,33 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agents: %w", err)
 	}
+	// The compiler seam, and its registry (D-129, F-256). A sandbox tier gets
+	// the structured compiler and a RefsLoader that reads the real registry;
+	// every other deployment keeps the nil pair ADR-0029 describes, and
+	// COMPILER_UNAVAILABLE's sentence stays true there word for word.
+	if err := priceToolAtBoot(ctx, database, cfg, log); err != nil {
+		return nil, fmt.Errorf("price tool at boot: %w", err)
+	}
+	if err := sandboxVenuePolicyAtBoot(ctx, database, cfg, clk, log); err != nil {
+		return nil, fmt.Errorf("sandbox venue policy at boot: %w", err)
+	}
+	structuredCompiler, err := sandboxStrategyCompiler(cfg, clk, log)
+	if err != nil {
+		return nil, fmt.Errorf("sandbox strategy compiler: %w", err)
+	}
+	var strategyRefsLoader agents.RefsLoader
+	if structuredCompiler != nil {
+		strategyRefsLoader = newStrategyRefs()
+	}
 	strategySvc, err := agents.NewStrategyService(agents.StrategyDeps{
 		DB:              database,
 		Clock:           clk,
 		Compiler:        nil,
-		Refs:            nil,
+		Structured:      structuredCompiler,
+		Refs:            strategyRefsLoader,
 		CompilerVersion: config.BuildVersion,
+		Environment:     string(cfg.Env),
+		Audit:           auditWriter,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("strategies: %w", err)

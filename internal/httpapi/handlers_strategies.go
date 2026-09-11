@@ -25,10 +25,18 @@ type StrategiesPort interface {
 	Get(ctx context.Context, strategyID string) (agents.Strategy, error)
 	List(ctx context.Context, accountID string, limit int) ([]agents.Strategy, error)
 	Compile(ctx context.Context, strategyID, requestID, correlationID string) (agents.CompileOutcome, error)
+	// Accept records that a person read a compiled version and approved it. It
+	// is the only writer of strategy_versions.status = ACCEPTED, and no
+	// compiler can reach it: goal §18's review step is a person's act or it is
+	// nothing (F-255).
+	Accept(ctx context.Context, req agents.AcceptRequest) (agents.StrategyVersion, error)
 	// CompilerConfigured reports whether this deployment can compile at all, so
 	// the create flow can say so before a user writes a description rather than
 	// after.
 	CompilerConfigured() bool
+	// CompilerInfo reports WHICH compiler answered, so a rehearsal is never
+	// rendered as the product.
+	CompilerInfo() agents.CompilerInfo
 }
 
 // PostStrategies records a strategy description. Nothing is compiled here.
@@ -94,10 +102,62 @@ func (s *Server) GetStrategies(ctx context.Context, request api.GetStrategiesReq
 	for _, st := range list {
 		items = append(items, s.toAPIStrategy(st))
 	}
-	return api.GetStrategies200JSONResponse(api.StrategyPage{
+	page := api.StrategyPage{
 		Items:              items,
 		CompilerConfigured: s.opts.Ports.Strategies.CompilerConfigured(),
-	}), nil
+	}
+	if c := toAPICompiler(s.opts.Ports.Strategies.CompilerInfo()); c != nil {
+		page.Compiler = c
+	}
+	return api.GetStrategies200JSONResponse(page), nil
+}
+
+// PostStrategiesStrategyIdVersionsVersionAccept records the review step.
+//
+// The idempotency key covers the whole body, so a retry of the same acceptance
+// after a lost response is the same acceptance. A second, different acceptance
+// of the same version needs no key protection at all: the domain answers a
+// replay for an already-accepted version, because asking for a state the row is
+// already in is not an error.
+func (s *Server) PostStrategiesStrategyIdVersionsVersionAccept(ctx context.Context, request api.PostStrategiesStrategyIdVersionsVersionAcceptRequestObject) (api.PostStrategiesStrategyIdVersionsVersionAcceptResponseObject, error) {
+	if s.opts.Ports.Strategies == nil {
+		return nil, errNotWired("strategies")
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "send the ir_hash of the strategy you read")
+	}
+	strategyID := request.StrategyId.String()
+
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.StrategyVersion, commandMeta, error) {
+			v, aerr := s.opts.Ports.Strategies.Accept(ctx, agents.AcceptRequest{
+				StrategyID:    strategyID,
+				Version:       request.Version,
+				IRHashHex:     request.Body.IrHash,
+				CorrelationID: observability.CorrelationID(ctx),
+				RequestID:     request.Params.IdempotencyKey,
+			})
+			if aerr != nil {
+				return api.StrategyVersion{}, commandMeta{}, aerr
+			}
+			return toAPIStrategyVersion(v), commandMeta{
+				Status: http.StatusOK, ResourceType: "strategy_version", ResourceID: v.ID,
+			}, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostStrategiesStrategyIdVersionsVersionAccept200JSONResponse(res.Value), nil
+}
+
+// toAPICompiler renders which compiler this deployment has, or nothing when it
+// has none. Nothing, rather than a descriptor with an empty name: a client that
+// sees the field sees a compiler.
+func toAPICompiler(info agents.CompilerInfo) *api.CompilerDescriptor {
+	if info.Name == "" {
+		return nil
+	}
+	return &api.CompilerDescriptor{Name: info.Name, Sandbox: info.Sandbox, Structured: info.Structured}
 }
 
 // GetStrategiesStrategyId returns one strategy and its current compiled
@@ -159,6 +219,19 @@ func (s *Server) toAPIStrategy(st agents.Strategy) api.Strategy {
 		// "RFC 3339 UTC" by the contract (F-172).
 		CreatedAt: st.CreatedAt.UTC(),
 	}
+	if s.opts.Ports.Strategies != nil {
+		out.Compiler = toAPICompiler(s.opts.Ports.Strategies.CompilerInfo())
+	}
+	// The declared structured strategy, as declared. It is decoded rather than
+	// passed through as bytes for the reason the IR is: the generated type is a
+	// typed object, and a document that will not decode into it is omitted
+	// rather than rendered as something that looks like one.
+	if len(st.Constraints) > 0 {
+		var declared api.StructuredStrategy
+		if json.Unmarshal(st.Constraints, &declared) == nil && declared.SchemaVersion != 0 {
+			out.Constraints = &declared
+		}
+	}
 	if !st.UpdatedAt.IsZero() {
 		u := st.UpdatedAt.UTC()
 		out.UpdatedAt = &u
@@ -178,9 +251,22 @@ func toAPIStrategyVersion(v agents.StrategyVersion) api.StrategyVersion {
 		IrHash:        v.IRHashHex,
 		EffectSet:     v.EffectSet,
 		HumanReadable: v.HumanReadable,
+		Sandbox:       v.Sandbox,
 	}
 	if out.EffectSet == nil {
 		out.EffectSet = []string{}
+	}
+	if v.Environment != "" {
+		env := v.Environment
+		out.Environment = &env
+	}
+	if v.AcceptedByUserID != "" {
+		id := agentUUID(v.AcceptedByUserID)
+		out.AcceptedByUserId = &id
+	}
+	if v.AcceptedAt != nil {
+		a := v.AcceptedAt.UTC()
+		out.AcceptedAt = &a
 	}
 	if !v.BuiltAt.IsZero() {
 		b := v.BuiltAt.UTC()
@@ -214,6 +300,13 @@ func toAPICompileResult(strategyID string, out agents.CompileOutcome) api.Compil
 	if len(out.Clarifications) > 0 {
 		cl := append([]string(nil), out.Clarifications...)
 		res.Clarifications = &cl
+	}
+	if !out.Rationale.Empty() {
+		details := out.Rationale.Details
+		if details == nil {
+			details = []string{}
+		}
+		res.Rationale = &api.CompileRationale{Summary: out.Rationale.Summary, Details: details}
 	}
 	if out.Version != nil {
 		v := toAPIStrategyVersion(*out.Version)

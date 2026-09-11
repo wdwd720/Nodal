@@ -4464,6 +4464,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/strategies/{strategyId}/versions/{version}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a compiled strategy version you have read
+         * @description The review step of goal §18, recorded. An agent can only be created from a version whose owner read it and approved it, and this is the only way that record is written: no compiler can produce an accepted version, and no operator can accept one on somebody's behalf.
+         *
+         *     The body must echo the `ir_hash` shown on the review screen. Without it, "accept version 2" would mean "accept whatever version 2 is when this request arrives", and a compile that landed between the reading and the pressing would be approved by somebody who never saw it. A hash that does not match this version is refused with 409 and nothing is written.
+         *
+         *     Accepting a version that is already accepted is a replay and answers the version. Accepting one in any other status is refused with INVALID_STATE_TRANSITION. Acceptance grants nothing on its own: creating an agent is the next separate act, and enabling it the one after.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    strategyId: components["parameters"]["StrategyId"];
+                    /** @description The version NUMBER, which is what the review screen shows, not the version's identifier. */
+                    version: components["parameters"]["StrategyVersionNumber"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AcceptStrategyVersionRequest"];
+                };
+            };
+            responses: {
+                /** @description The accepted version */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyVersion"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/terms": {
         parameters: {
             query?: never;
@@ -4649,6 +4707,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptStrategyVersionRequest: {
+            /** @description The semantic hash of the document you read, exactly as the review screen showed it. It is compared with the version's own hash and a mismatch is refused: this is the field that makes "accept" mean "accept THIS document" rather than "accept whatever is there now". */
+            ir_hash: string;
+        };
         Account: {
             created_at: components["schemas"]["Timestamp"];
             id: components["schemas"]["UUID"];
@@ -4813,6 +4875,8 @@ export interface components {
             pause?: components["schemas"]["AgentPause"];
             runs_total?: number;
             runtime: components["schemas"]["AgentRuntime"];
+            /** @description True when the strategy version this agent deploys was compiled by a compiler that exists only on a sandbox tier. Everything about the agent is then a rehearsal: it is labelled one wherever it is shown, and no real capital can move through it on any deployment. */
+            sandbox: boolean;
             /**
              * @description The furthest rung of the promotion ladder this agent has reached.
              * @enum {string}
@@ -4999,16 +5063,30 @@ export interface components {
             /** @enum {string} */
             state: "PENDING" | "CANCELLED" | "REFUSED" | "EFFECTED";
         };
+        /** @description The compiler's own explanation of what it produced, in words, shown beside the rendered strategy on the review step. Never chain-of-thought: a structured compiler's rationale names, element by element, which field you stated it came from. */
+        CompileRationale: {
+            details: string[];
+            summary: string;
+        };
+        /** @description Which compiler this deployment has. Absent means none, which is the same fact compiler_configured reports as false. */
+        CompilerDescriptor: {
+            name: string;
+            /** @description Every version this compiler produces is a rehearsal and is labelled one. */
+            sandbox: boolean;
+            /** @description True when the compiler reads the fields you state rather than your description. A structured compiler never interprets natural language: an unstated field comes back as a named refusal, never as a default. */
+            structured: boolean;
+        };
         CompileResult: {
             attempt_id: components["schemas"]["UUID"];
             attempt_no: number;
             /** @description What the compiler could not decide. It never guesses. */
             clarifications?: string[];
             detail: string;
-            /** @description Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment has no compiler backend configured, so nothing was attempted and nothing was inferred. */
+            /** @description Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment has no compiler backend configured, so nothing was attempted and nothing was inferred. STRUCTURED_CONSTRAINTS_REQUIRED means this deployment's compiler reads a strategy you state field by field and the one you sent is missing or incomplete; every field it needed is listed in clarifications. */
             failure_codes?: string[];
             /** @enum {string} */
             outcome: "SUCCESS" | "REJECTED" | "NEEDS_CLARIFICATION" | "MODEL_UNAVAILABLE" | "TIMEOUT";
+            rationale?: components["schemas"]["CompileRationale"];
             strategy_id: components["schemas"]["UUID"];
             version?: components["schemas"]["StrategyVersion"];
         };
@@ -5080,10 +5158,9 @@ export interface components {
         };
         CreateStrategyRequest: {
             account_id: components["schemas"]["UUID"];
-            /** @description Optional structured bounds stated up front, recorded with the description. */
-            constraints?: {
-                [key: string]: unknown;
-            };
+            /** @description The strategy stated field by field. Recorded in its own column beside the description, never merged into it. A structured compiler reads this and nothing else; an incomplete one compiles to STRUCTURED_CONSTRAINTS_REQUIRED naming the fields it needed. */
+            constraints?: components["schemas"]["StructuredStrategy"];
+            /** @description What you want, in your own words. It is recorded exactly as written and shown back to you unchanged. On a deployment whose compiler is structured it is never read by the compiler and never interpreted. */
             description: string;
             name: string;
         };
@@ -5467,6 +5544,8 @@ export interface components {
             items: components["schemas"]["MeAuditEntry"][];
             next_cursor: string | null;
         };
+        /** @description An exact USD amount in MINOR units, as digits only. "5000" is $50.00. No sign, no decimal point, no separators, no leading zero, never a float. */
+        MinorUSD: string;
         MyAccount: {
             accounts: components["schemas"]["Account"][];
             closure_request?: components["schemas"]["ClosureRequest"];
@@ -6213,27 +6292,36 @@ export interface components {
         };
         Strategy: {
             account_id: components["schemas"]["UUID"];
+            compiler?: components["schemas"]["CompilerDescriptor"];
             /** @description Whether this deployment can compile at all. False means a compile attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR. */
             compiler_configured: boolean;
+            /** @description The structured strategy the owner declared, as they declared it. Absent when none was stated. It is stored in its own column, apart from the description, which is what lets a structured compiler claim it never read the prose. */
+            constraints?: components["schemas"]["StructuredStrategy"];
             created_at: components["schemas"]["Timestamp"];
             current_version?: components["schemas"]["StrategyVersion"];
             description: string;
             id: components["schemas"]["UUID"];
             name: string;
             /** @enum {string} */
-            source_kind: "NATURAL_LANGUAGE" | "TYPESCRIPT_SDK" | "CLONE";
+            source_kind: "NATURAL_LANGUAGE" | "TYPESCRIPT_SDK" | "CLONE" | "STRUCTURED_SANDBOX";
             /** @enum {string} */
             status: "ACTIVE" | "ARCHIVED";
             updated_at?: components["schemas"]["Timestamp"];
         };
         StrategyPage: {
+            compiler?: components["schemas"]["CompilerDescriptor"];
             compiler_configured: boolean;
             items: components["schemas"]["Strategy"][];
             next_cursor?: string;
         };
         StrategyVersion: {
+            /** @description When a person read this document and approved it. Present exactly when status is ACCEPTED; the two are paired by a CHECK in the schema. */
+            accepted_at?: components["schemas"]["Timestamp"];
+            accepted_by_user_id?: components["schemas"]["UUID"];
             built_at?: components["schemas"]["Timestamp"];
             effect_set: string[];
+            /** @description The deployment that compiled it. Empty for a version compiled before the column existed. */
+            environment?: string;
             /** @description The compiled strategy in words, which is what a person reviews before approving it. */
             human_readable: string;
             id: components["schemas"]["UUID"];
@@ -6242,6 +6330,8 @@ export interface components {
                 [key: string]: unknown;
             };
             ir_hash: string;
+            /** @description True when this version was produced by a compiler that exists only on a sandbox tier. Everything built from it is a rehearsal, it is labelled one everywhere it is shown, and migration 00812 refuses the row in a production database. */
+            sandbox: boolean;
             /** @enum {string} */
             status: "COMPILED" | "ACCEPTED" | "REJECTED" | "SUPERSEDED" | "REVOKED";
             version: number;
@@ -6256,6 +6346,51 @@ export interface components {
             resource_id?: string;
             /** @enum {string} */
             type: "buying_power.changed" | "order.transitioned" | "intent.transitioned" | "deposit.transitioned" | "agent.state" | "resync" | "notification.created" | "data.changed";
+        };
+        /** @description One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid price against a threshold you state; EVERY_INTERVAL carries no condition at all and acts on every evaluation, which is how "rebalance every N minutes" is written. The two extra fields belong to PRICE_THRESHOLD and are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold. */
+        StructuredRule: {
+            /** @enum {string} */
+            comparator?: "LT" | "LTE" | "GT" | "GTE";
+            /** @enum {string} */
+            kind: "PRICE_THRESHOLD" | "EVERY_INTERVAL";
+            price_usd?: components["schemas"]["MinorUSD"];
+        };
+        /** @description A strategy stated field by field, which is what a structured compiler reads. Every field is required and there is no default for any of them, because a default is an inference about what somebody meant.
+         *
+         *     Unknown fields are refused rather than ignored, so a misspelled key is a named refusal instead of a setting that silently did not apply. */
+        StructuredStrategy: {
+            capital_limit: {
+                /** @description The smallest envelope this strategy will run in. */
+                min_allocation_usd: components["schemas"]["MinorUSD"];
+            };
+            entry: components["schemas"]["StructuredRule"];
+            exit: components["schemas"]["StructuredRule"];
+            frequency: {
+                interval_minutes: number;
+                max_intents_per_hour: number;
+            };
+            /**
+             * @description PAPER is the only mode this build compiles. Any other value is refused with the reason; it is never downgraded silently, because compiling a request for a mode that moves value as one that does not would be answering a question nobody asked.
+             * @enum {string}
+             */
+            mode: "PAPER";
+            /** @description The three ceilings. Each is an exact USD amount in MINOR units, written as digits: "5000" is $50.00. None of them is a float and none carries a decimal point. max_single_trade_usd is also the size of every trade the compiled strategy proposes. */
+            risk_limits: {
+                max_daily_loss_usd: components["schemas"]["MinorUSD"];
+                max_position_usd: components["schemas"]["MinorUSD"];
+                max_single_trade_usd: components["schemas"]["MinorUSD"];
+            };
+            /**
+             * @description The grammar this document is written against. A later grammar is refused by name.
+             * @enum {integer}
+             */
+            schema_version: 1;
+            universe: {
+                /** @description An instrument's canonical name, e.g. SOL/USDC. It must be in this deployment's registry and ACTIVE. */
+                instrument: string;
+                /** @description A venue code, e.g. JUPITER. It must be in the registry, able to take new actions, and list the instrument above. */
+                venue: string;
+            };
         };
         SubmitIntentRequest: {
             account_id: components["schemas"]["UUID"];
@@ -6560,6 +6695,8 @@ export interface components {
         ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];
         StrategyId: components["schemas"]["UUID"];
+        /** @description The version NUMBER, which is what the review screen shows, not the version's identifier. */
+        StrategyVersionNumber: number;
         UserId: components["schemas"]["UUID"];
     };
     requestBodies: never;

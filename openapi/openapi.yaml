@@ -1290,6 +1290,45 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /strategies/{strategyId}/versions/{version}/accept:
+    post:
+      tags: [agents]
+      summary: Accept a compiled strategy version you have read
+      description: >-
+        The review step of goal §18, recorded. An agent can only be created from
+        a version whose owner read it and approved it, and this is the only way
+        that record is written: no compiler can produce an accepted version, and
+        no operator can accept one on somebody's behalf.
+
+
+        The body must echo the `ir_hash` shown on the review screen. Without it,
+        "accept version 2" would mean "accept whatever version 2 is when this
+        request arrives", and a compile that landed between the reading and the
+        pressing would be approved by somebody who never saw it. A hash that does
+        not match this version is refused with 409 and nothing is written.
+
+
+        Accepting a version that is already accepted is a replay and answers the
+        version. Accepting one in any other status is refused with
+        INVALID_STATE_TRANSITION. Acceptance grants nothing on its own: creating
+        an agent is the next separate act, and enabling it the one after.
+      parameters:
+        - { $ref: "#/components/parameters/StrategyId" }
+        - { $ref: "#/components/parameters/StrategyVersionNumber" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptStrategyVersionRequest" }
+      responses:
+        "200":
+          description: The accepted version
+          content: { application/json: { schema: { $ref: "#/components/schemas/StrategyVersion" } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /agents:
     post:
       tags: [agents]
@@ -1806,6 +1845,12 @@ components:
     UserId: { in: path, name: userId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     NotificationId: { in: path, name: notificationId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
     StrategyId: { in: path, name: strategyId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
+    StrategyVersionNumber:
+      in: path
+      name: version
+      required: true
+      description: The version NUMBER, which is what the review screen shows, not the version's identifier.
+      schema: { type: integer, minimum: 1 }
     AgentId: { in: path, name: agentId, required: true, schema: { $ref: "#/components/schemas/UUID" } }
   responses:
     Problem:
@@ -3560,7 +3605,7 @@ components:
     Agent:
       type: object
       required: [id, account_id, strategy_id, strategy_version_id, name, stage, state, status,
-                 authority, limits, budget, runtime, archived, created_at]
+                 authority, limits, budget, runtime, archived, sandbox, created_at]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         account_id: { $ref: "#/components/schemas/UUID" }
@@ -3593,6 +3638,13 @@ components:
         last_run_at: { $ref: "#/components/schemas/Timestamp" }
         last_run_status: { type: string }
         archived: { type: boolean }
+        sandbox:
+          type: boolean
+          description: >-
+            True when the strategy version this agent deploys was compiled by a
+            compiler that exists only on a sandbox tier. Everything about the
+            agent is then a rehearsal: it is labelled one wherever it is shown,
+            and no real capital can move through it on any deployment.
         granted_by_user_id: { $ref: "#/components/schemas/UUID" }
         granted_at: { $ref: "#/components/schemas/Timestamp" }
         created_at: { $ref: "#/components/schemas/Timestamp" }
@@ -3632,7 +3684,7 @@ components:
         reason: { type: string, maxLength: 500 }
     StrategyVersion:
       type: object
-      required: [id, version, status, ir_hash, effect_set, human_readable]
+      required: [id, version, status, ir_hash, effect_set, human_readable, sandbox]
       properties:
         id: { $ref: "#/components/schemas/UUID" }
         version: { type: integer }
@@ -3648,7 +3700,140 @@ components:
           description: The typed intermediate representation itself.
           type: object
           additionalProperties: true
+        sandbox:
+          type: boolean
+          description: >-
+            True when this version was produced by a compiler that exists only on
+            a sandbox tier. Everything built from it is a rehearsal, it is
+            labelled one everywhere it is shown, and migration 00812 refuses the
+            row in a production database.
+        environment:
+          type: string
+          description: The deployment that compiled it. Empty for a version compiled before the column existed.
+        accepted_by_user_id:
+          $ref: "#/components/schemas/UUID"
+        accepted_at:
+          allOf: [{ $ref: "#/components/schemas/Timestamp" }]
+          description: >-
+            When a person read this document and approved it. Present exactly
+            when status is ACCEPTED; the two are paired by a CHECK in the schema.
         built_at: { $ref: "#/components/schemas/Timestamp" }
+    CompilerDescriptor:
+      type: object
+      description: >-
+        Which compiler this deployment has. Absent means none, which is the same
+        fact compiler_configured reports as false.
+      required: [name, sandbox, structured]
+      properties:
+        name: { type: string }
+        sandbox:
+          type: boolean
+          description: Every version this compiler produces is a rehearsal and is labelled one.
+        structured:
+          type: boolean
+          description: >-
+            True when the compiler reads the fields you state rather than your
+            description. A structured compiler never interprets natural language:
+            an unstated field comes back as a named refusal, never as a default.
+    StructuredStrategy:
+      type: object
+      description: >-
+        A strategy stated field by field, which is what a structured compiler
+        reads. Every field is required and there is no default for any of them,
+        because a default is an inference about what somebody meant.
+
+
+        Unknown fields are refused rather than ignored, so a misspelled key is a
+        named refusal instead of a setting that silently did not apply.
+      additionalProperties: false
+      required: [schema_version, universe, entry, exit, risk_limits, capital_limit, frequency, mode]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+          description: The grammar this document is written against. A later grammar is refused by name.
+        universe:
+          type: object
+          additionalProperties: false
+          required: [instrument, venue]
+          properties:
+            instrument:
+              type: string
+              description: An instrument's canonical name, e.g. SOL/USDC. It must be in this deployment's registry and ACTIVE.
+            venue:
+              type: string
+              description: A venue code, e.g. JUPITER. It must be in the registry, able to take new actions, and list the instrument above.
+        entry: { $ref: "#/components/schemas/StructuredRule" }
+        exit: { $ref: "#/components/schemas/StructuredRule" }
+        risk_limits:
+          type: object
+          additionalProperties: false
+          required: [max_single_trade_usd, max_position_usd, max_daily_loss_usd]
+          description: >-
+            The three ceilings. Each is an exact USD amount in MINOR units,
+            written as digits: "5000" is $50.00. None of them is a float and none
+            carries a decimal point. max_single_trade_usd is also the size of
+            every trade the compiled strategy proposes.
+          properties:
+            max_single_trade_usd: { $ref: "#/components/schemas/MinorUSD" }
+            max_position_usd: { $ref: "#/components/schemas/MinorUSD" }
+            max_daily_loss_usd: { $ref: "#/components/schemas/MinorUSD" }
+        capital_limit:
+          type: object
+          additionalProperties: false
+          required: [min_allocation_usd]
+          properties:
+            min_allocation_usd:
+              allOf: [{ $ref: "#/components/schemas/MinorUSD" }]
+              description: The smallest envelope this strategy will run in.
+        frequency:
+          type: object
+          additionalProperties: false
+          required: [interval_minutes, max_intents_per_hour]
+          properties:
+            interval_minutes: { type: integer, minimum: 1, maximum: 10080 }
+            max_intents_per_hour: { type: integer, minimum: 1, maximum: 3600 }
+        mode:
+          type: string
+          enum: [PAPER]
+          description: >-
+            PAPER is the only mode this build compiles. Any other value is
+            refused with the reason; it is never downgraded silently, because
+            compiling a request for a mode that moves value as one that does not
+            would be answering a question nobody asked.
+    StructuredRule:
+      type: object
+      additionalProperties: false
+      description: >-
+        One entry or exit rule. PRICE_THRESHOLD compares the instrument's mid
+        price against a threshold you state; EVERY_INTERVAL carries no condition
+        at all and acts on every evaluation, which is how "rebalance every N
+        minutes" is written. The two extra fields belong to PRICE_THRESHOLD and
+        are refused on EVERY_INTERVAL, so a rule cannot half-state a threshold.
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [PRICE_THRESHOLD, EVERY_INTERVAL] }
+        comparator: { type: string, enum: [LT, LTE, GT, GTE] }
+        price_usd: { $ref: "#/components/schemas/MinorUSD" }
+    MinorUSD:
+      type: string
+      pattern: "^(0|[1-9][0-9]{0,14})$"
+      description: >-
+        An exact USD amount in MINOR units, as digits only. "5000" is $50.00.
+        No sign, no decimal point, no separators, no leading zero, never a float.
+    AcceptStrategyVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [ir_hash]
+      properties:
+        ir_hash:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: >-
+            The semantic hash of the document you read, exactly as the review
+            screen showed it. It is compared with the version's own hash and a
+            mismatch is refused: this is the field that makes "accept" mean
+            "accept THIS document" rather than "accept whatever is there now".
     Strategy:
       type: object
       required: [id, account_id, name, description, source_kind, status, compiler_configured, created_at]
@@ -3657,13 +3842,21 @@ components:
         account_id: { $ref: "#/components/schemas/UUID" }
         name: { type: string }
         description: { type: string }
-        source_kind: { type: string, enum: [NATURAL_LANGUAGE, TYPESCRIPT_SDK, CLONE] }
+        constraints:
+          allOf: [{ $ref: "#/components/schemas/StructuredStrategy" }]
+          description: >-
+            The structured strategy the owner declared, as they declared it.
+            Absent when none was stated. It is stored in its own column, apart
+            from the description, which is what lets a structured compiler claim
+            it never read the prose.
+        source_kind: { type: string, enum: [NATURAL_LANGUAGE, TYPESCRIPT_SDK, CLONE, STRUCTURED_SANDBOX] }
         status: { type: string, enum: [ACTIVE, ARCHIVED] }
         compiler_configured:
           type: boolean
           description: >-
             Whether this deployment can compile at all. False means a compile
             attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR.
+        compiler: { $ref: "#/components/schemas/CompilerDescriptor" }
         current_version: { $ref: "#/components/schemas/StrategyVersion" }
         created_at: { $ref: "#/components/schemas/Timestamp" }
         updated_at: { $ref: "#/components/schemas/Timestamp" }
@@ -3675,6 +3868,7 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Strategy" }
         compiler_configured: { type: boolean }
+        compiler: { $ref: "#/components/schemas/CompilerDescriptor" }
         next_cursor: { type: string }
     CreateStrategyRequest:
       type: object
@@ -3682,11 +3876,21 @@ components:
       properties:
         account_id: { $ref: "#/components/schemas/UUID" }
         name: { type: string, minLength: 1, maxLength: 120 }
-        description: { type: string, minLength: 1, maxLength: 8000 }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 8000
+          description: >-
+            What you want, in your own words. It is recorded exactly as written
+            and shown back to you unchanged. On a deployment whose compiler is
+            structured it is never read by the compiler and never interpreted.
         constraints:
-          type: object
-          additionalProperties: true
-          description: Optional structured bounds stated up front, recorded with the description.
+          allOf: [{ $ref: "#/components/schemas/StructuredStrategy" }]
+          description: >-
+            The strategy stated field by field. Recorded in its own column beside
+            the description, never merged into it. A structured compiler reads
+            this and nothing else; an incomplete one compiles to
+            STRUCTURED_CONSTRAINTS_REQUIRED naming the fields it needed.
     CompileResult:
       type: object
       required: [strategy_id, attempt_id, attempt_no, outcome, detail]
@@ -3702,14 +3906,31 @@ components:
           description: >-
             Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment
             has no compiler backend configured, so nothing was attempted and
-            nothing was inferred.
+            nothing was inferred. STRUCTURED_CONSTRAINTS_REQUIRED means this
+            deployment's compiler reads a strategy you state field by field and
+            the one you sent is missing or incomplete; every field it needed is
+            listed in clarifications.
           items: { type: string }
         clarifications:
           type: array
           description: What the compiler could not decide. It never guesses.
           items: { type: string }
         detail: { type: string }
+        rationale: { $ref: "#/components/schemas/CompileRationale" }
         version: { $ref: "#/components/schemas/StrategyVersion" }
+    CompileRationale:
+      type: object
+      description: >-
+        The compiler's own explanation of what it produced, in words, shown beside
+        the rendered strategy on the review step. Never chain-of-thought: a
+        structured compiler's rationale names, element by element, which field you
+        stated it came from.
+      required: [summary, details]
+      properties:
+        summary: { type: string }
+        details:
+          type: array
+          items: { type: string }
     # ---- native markets: discovery, charts, portfolio, activity (M) ----
     NativeMarketSummary:
       type: object

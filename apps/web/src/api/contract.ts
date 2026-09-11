@@ -1026,9 +1026,46 @@ export function validatedStrings(value: unknown, path: string): string[] {
 }
 
 export const strategyVersionSpec: Spec = {
-  required: { id: "uuid", version: "integer", status: "string", ir_hash: "string", human_readable: "string" },
-  optional: { built_at: "timestamp" },
+  required: {
+    id: "uuid",
+    version: "integer",
+    status: "string",
+    ir_hash: "string",
+    human_readable: "string",
+    // Whether this version is a rehearsal. Required, not optional: a page that
+    // could not tell a sandbox-compiled strategy from a real one would render
+    // the first as the second, and the temperature rule exists to stop exactly
+    // that.
+    sandbox: "boolean",
+  },
+  optional: {
+    built_at: "timestamp",
+    environment: "string",
+    accepted_by_user_id: "uuid",
+    accepted_at: "timestamp",
+  },
 };
+
+/** Which compiler the deployment has. Absent means none. */
+export const compilerDescriptorSpec: Spec = {
+  required: { name: "string", sandbox: "boolean", structured: "boolean" },
+};
+
+/** The compiler's explanation of one attempt, shown beside the rendered strategy. */
+export const compileRationaleSpec: Spec = {
+  required: { summary: "string" },
+};
+
+/**
+ * A strategy version returned on its own, by the acceptance route.
+ *
+ * It goes through the same spec as the one nested inside a strategy, so an
+ * accepted version that arrived with a malformed hash is refused in the one
+ * place it matters most: the response that says a person approved it.
+ */
+export function validatedStrategyVersion<T>(raw: unknown, path: string): T {
+  return validated<T>(raw, strategyVersionSpec, path);
+}
 
 export const strategySpec: Spec = {
   required: {
@@ -1104,6 +1141,10 @@ export const agentSpec: Spec = {
     budget: "object",
     runtime: "object",
     archived: "boolean",
+    // Whether this agent deploys a sandbox-compiled strategy. Required for the
+    // reason StrategyVersion.sandbox is: a page that could not tell a rehearsal
+    // from the product would render the first as the second.
+    sandbox: "boolean",
     created_at: "timestamp",
   },
   optional: {

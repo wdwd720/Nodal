@@ -186,9 +186,19 @@ test("F-web: the agent detail route passes axe and reflows at 375px", async ({ p
   const res = await page.request.get(`/v1/agents?account_id=${id}`);
   const body = (await res.json()) as { items?: Array<{ id: string }> };
   const agent = body.items?.[0];
+  // The route has a subject on a sandbox tier now: the structured compiler
+  // (D-129) produces a version, the acceptance route (D-128) makes it
+  // grantable, and scenarios/d-agent.spec.ts creates the agent this finds. The
+  // skip remains for a deployment with no compiler, where the reason is a fact
+  // about the configuration rather than about this account (F-251).
+  const strategies = (await page.request
+    .get(`/v1/strategies?account_id=${id}`)
+    .then((r) => r.json())) as { compiler_configured?: boolean };
   test.skip(
     agent === undefined,
-    "no agent can exist on this deployment: the strategy service is wired with no compiler (cmd/api/wire.go), so no strategy version is produced and an agent references one — the same reason d-agent.spec.ts states (F-251)",
+    strategies.compiler_configured === true
+      ? "this account has no agent yet, though this tier has a compiler that could produce one; scenarios/d-agent.spec.ts is the scenario that creates one"
+      : "no agent can exist on this deployment: the strategy service is wired with no compiler (cmd/api/wire.go), so no strategy version is produced and an agent references one (F-251)",
   );
 
   await page.goto(`/agents/${agent?.id ?? ""}`);
