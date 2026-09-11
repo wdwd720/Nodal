@@ -499,8 +499,13 @@ export const nativeMarketSpec: Spec = {
     asset_decimals: "integer",
   },
   arrays: {
+    // The same shape the trade screen's holder list has, and it names nobody
+    // either: this read takes no account, so not even the caller's own row is
+    // marked (D-111).
     top_holders: {
-      spec: { optional: { account_id: "uuid", quantity: "quantity" } },
+      spec: {
+        required: { rank: "integer", quantity: "quantity", share_bps: "integer" },
+      },
     },
   },
 };
