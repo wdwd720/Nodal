@@ -430,7 +430,36 @@ const (
 	SourceNaturalLanguage LineageSource = "NATURAL_LANGUAGE"
 	SourceTypeScriptSDK   LineageSource = "TYPESCRIPT_SDK"
 	SourceClone           LineageSource = "CLONE"
+	// SourceStructuredSandbox is a document assembled field by field from a
+	// structured strategy the user declared, by a compiler that reads no
+	// natural language and calls no model. It exists only on a sandbox tier:
+	// migration 00812 pairs it with `sandbox` and refuses the pair in PROD.
+	SourceStructuredSandbox LineageSource = "STRUCTURED_SANDBOX"
 )
+
+var allLineageSources = []LineageSource{
+	SourceNaturalLanguage, SourceTypeScriptSDK, SourceClone, SourceStructuredSandbox,
+}
+
+// AllLineageSources returns every declared authoring path (a copy). It is the
+// Go half of the source_kind CHECK on strategies, strategy_versions and
+// compile_attempts; test/integration/enums holds the two together.
+func AllLineageSources() []LineageSource {
+	return append([]LineageSource(nil), allLineageSources...)
+}
+
+// Valid reports whether s is a declared authoring path.
+func (s LineageSource) Valid() bool {
+	for _, v := range allLineageSources {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// String returns the wire form.
+func (s LineageSource) String() string { return string(s) }
 
 // Lineage is provenance; it never influences evaluation and is excluded
 // from the semantic hash.

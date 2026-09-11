@@ -384,9 +384,25 @@ var operationPolicies = map[string]operationPolicy{
 	"GetStrategies":                   {AnyOf: perms(security.PermStrategyRead)},
 	"GetStrategiesStrategyId":         {AnyOf: perms(security.PermStrategyRead)},
 	"PostStrategiesStrategyIdCompile": {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
-	"PostAgents":                      {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
-	"GetAgents":                       {AnyOf: perms(security.PermStrategyRead)},
-	"GetAgentsAgentId":                {AnyOf: perms(security.PermStrategyRead)},
+	// Accepting a compiled strategy version is the one act in this block that
+	// takes the step-up AT THE BOUNDARY, and the asymmetry with the action route
+	// below is deliberate.
+	//
+	// `enable` demands its strong authentication inside internal/agents, because
+	// the five actions share one operation id and pausing must stay fast:
+	// POLICY_AUTHORITY §2's reasoning for a kill switch applies exactly, and a
+	// step-up in front of an emergency stop argues with the operator during the
+	// incident. Acceptance has no emergency twin. It is a single-purpose route
+	// whose entire content is a person saying "I read this document and I
+	// approve it", and it is the gate every later grant of authority rests on —
+	// goal §18's review step, F-187's ACCEPTED precondition, D-105's grant. A
+	// hijacked session that can accept a strategy can create an agent from it.
+	"PostStrategiesStrategyIdVersionsVersionAccept": {
+		AnyOf: perms(security.PermStrategyWrite), StepUp: true, Mutating: true,
+	},
+	"PostAgents":       {AnyOf: perms(security.PermStrategyWrite), Mutating: true},
+	"GetAgents":        {AnyOf: perms(security.PermStrategyRead)},
+	"GetAgentsAgentId": {AnyOf: perms(security.PermStrategyRead)},
 	// Deliberately NOT StepUp at the boundary. The five actions share one
 	// operation id, and pausing must stay fast: POLICY_AUTHORITY §2's reasoning
 	// for kill-switch activation applies exactly here, and a step-up in front of

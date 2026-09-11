@@ -69,8 +69,11 @@ type fakeStrategies struct {
 	strategy   agents.Strategy
 	list       []agents.Strategy
 	outcome    agents.CompileOutcome
+	accepted   agents.StrategyVersion
+	acceptReq  agents.AcceptRequest
 	err        error
 	configured bool
+	compiler   agents.CompilerInfo
 	requestID  string
 }
 
@@ -91,7 +94,14 @@ func (f *fakeStrategies) Compile(_ context.Context, _, requestID, _ string) (age
 	return f.outcome, f.err
 }
 
+func (f *fakeStrategies) Accept(_ context.Context, req agents.AcceptRequest) (agents.StrategyVersion, error) {
+	f.acceptReq = req
+	return f.accepted, f.err
+}
+
 func (f *fakeStrategies) CompilerConfigured() bool { return f.configured }
+
+func (f *fakeStrategies) CompilerInfo() agents.CompilerInfo { return f.compiler }
 
 type agentHarness struct {
 	*harness
