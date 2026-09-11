@@ -593,3 +593,80 @@ another branch built: `compliance_profile_transitions` (00761),
   `verification.SweepBatch`.
 - `httpapi.WithdrawalDeps.Terms` (`httpapi.TermsOutstanding`) — the legal registry
   reader the withdrawal surfaces consult.
+
+## Addendum — 2026-09-10: the credits-payments audit fixes (F-151 … F-159)
+
+Nine findings against goal §54, one P0 and three P1. No new product surface: a
+payment now issues the quantity it charged for, a chargeback takes the units it
+reversed, and the two passes that end an unfinished purchase exist and run.
+
+### Routes added
+
+None. Three existing responses grew fields:
+
+| Route | Field | Why |
+|---|---|---|
+| `GET /v1/credits/pricing` | `decimals`, `minor_units_per_major_unit`, `rounding` | the rate alone is not the conversion, so a page holding it had to assume the rest (F-151) |
+| `GET /v1/credits/balance`, `GET /v1/me/portfolio` | `credit_decimals` required; `reversed` promoted to required | the scale travels with the figures, and a bucket nobody renders is a number that can be wrong forever (F-151, F-156) |
+| `POST /v1/payments`, `GET /v1/payments/{id}` | `provider_mode` | the sandbox label is a fact about the payment, not about today's configuration (F-158, D-096) |
+
+`POST /v1/payments` also bounds `amount_minor` against the maximum the pricing
+endpoint publishes, before any capacity guard measures anything against it
+(F-159).
+
+### Migrations added (schema is now at 00793)
+
+| Migration | What | Why |
+|---|---|---|
+| 00793 | `credit_fundings.provider_mode text`, CHECK `IN ('fake','sandbox','live')`, nullable, no backfill | the mode that opened a payment, written once at creation and write-once by privilege under 00743's grants. NULL is a funding that predates the column and renders as sandbox: an unrecorded mode cannot be asserted to be real money (D-096) |
+
+### Packages added
+
+None. `internal/credit`, `internal/capacity`, `internal/valuedomain`,
+`internal/provider/stripecredit`, `internal/httpapi`, `cmd/api`,
+`cmd/reconciliation-worker` and `apps/web` all gained code.
+
+### State machines
+
+`credit.FundingState` gains one edge: `DISPUTED → REVERSIBLE`, taken when a
+dispute or an early-fraud-warning inquiry closes without taking the money. It is
+not `DISPUTED → SETTLED`: settlement means the reversibility window closed, which
+is a clock and a policy, and `SettleDue` is now the only thing in the binary that
+writes SETTLED (D-094). `credit.PurchaseStatus` gains `DISPUTE_LIFTED`, so a
+closed inquiry and a won dispute stay distinguishable in the transition rows.
+
+### Passes that now run in `cmd/api`
+
+| Pass | Cadence | What it ends |
+|---|---|---|
+| `SettleDue` (existing) | the credit ticker | a reversibility window that closed |
+| `ReconcileDue` | the same ticker | a purchase in flight past 15 minutes whose provider event was swallowed (F-154) |
+| `ExpireInFlight` | the same ticker | a pre-capture purchase open past a day, cancelled at the provider first (F-153) |
+
+`cmd/reconciliation-worker` calls the same two methods, so the tiers cannot
+drift; the sweep's own `stale()` query is gone, and with it the
+`provider_reference IS NOT NULL` filter that excluded exactly the fundings the
+sweep existed to recover.
+
+### Interfaces that changed
+
+- `credit.PurchaseProvider` gains `CancelPurchase(ctx, providerReference, idempotencyKey)`.
+  Without it a purchase nobody finishes is permanent, so it is on the interface
+  rather than an optional capability. `stripecredit.Client` implements it with
+  `POST /v1/payment_intents/:id/cancel` and `cancellation_reason=abandoned`.
+- `credit.NewPurchaseService(ctx, q, cfg)` takes a querier, to hold its pricing
+  policy's scale against the registered CREDIT asset (D-093), and
+  `cfg.ProviderMode`, to stamp on every funding it opens (D-096).
+- `credit.ConsumeRequest.LotIDs` restricts consumption to named lots, which is
+  what a clawback needs (F-152).
+- `credit.Balances.CreditDecimals` carries the scale with the figures.
+- `httpapi.Options.CreditPurchaseSandbox` is **removed**: there is no
+  deployment-wide answer left to stamp on a past payment.
+
+### What did NOT change
+
+No new error code, no new capability gate, no new environment variable, no new
+route, no change to the ledger, the lot event stream or the payout path. The
+shipped pricing policy issues 10^6 times what it did, which is the fix; no
+deployment has ever sold a Credit, so there are no fundings recorded under the
+old arithmetic.

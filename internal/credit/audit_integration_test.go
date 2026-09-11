@@ -514,7 +514,7 @@ func (f *fixture) balancesFor(t *testing.T, p valuedomain.Policy, v valuedomain.
 
 func (f *purchaseFixture) balancesForAccount(t *testing.T, p valuedomain.Policy, v valuedomain.VerificationLevel) Balances {
 	t.Helper()
-	return f.fixture.balancesFor(t, p, v)
+	return f.balancesFor(t, p, v)
 }
 
 func randomKey() string {

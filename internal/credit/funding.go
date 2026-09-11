@@ -592,6 +592,25 @@ func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effect
 	covered := lot.Remaining
 	shortfall := lot.Quantity.Sub(covered)
 
+	// The provenance invariant, checked at the one moment it would cost money
+	// to be wrong about. VerifyProvenance says the sum of an account's
+	// remaining lot quantities IS its CREDIT_BALANCE, so a single lot can never
+	// hold more than the balance -- and if it does, provenance and the ledger
+	// have come apart and destroying these units would drive the balance
+	// negative against a number nobody can explain. That is a reconciliation
+	// incident, never something to absorb.
+	balance, err := s.creditBalance(ctx, tx, f.AccountID, assetID)
+	if err != nil {
+		return ReverseResult{}, err
+	}
+	if covered.Cmp(balance) > 0 {
+		return ReverseResult{}, errs.Newf(errs.CodeReconciliationRequired,
+			"credit: lot %s holds %s and the account's CREDIT_BALANCE is %s; a clawback cannot destroy units the ledger does not show",
+			lot.ID, covered, balance).
+			WithField("account_id", f.AccountID.String()).
+			WithField("lot_id", lot.ID.String())
+	}
+
 	custBalance := ledger.CustomerAccount(f.AccountID, ledger.CodeCreditBalance, assetID)
 	custIssuance := ledger.CustomerAccount(f.AccountID, ledger.CodeCreditIssuance, assetID)
 	custDeficit := ledger.CustomerAccount(f.AccountID, ledger.CodeDeficit, assetID)

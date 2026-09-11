@@ -28,6 +28,17 @@ exact integer count of **base units** (`money.Quantity`, `numeric(38,0)`). There
 is no float anywhere on this path; `internal/money`'s
 `TestNoFloatingPointInSource` and `scripts/lintfin` refuse one.
 
+One Credit is therefore `10^6` base units, and **the scale travels with the
+figures**. `GET /v1/credits/pricing` returns `decimals`, `GET /v1/credits/balance`
+returns `credit_decimals`, and `credit.PricingPolicy` carries the scale it prices
+at as a hashed field that `NewPurchaseService` holds against the registered
+asset. That is not decoration: the pricing policy used to convert money into
+Credits with no scale at all, writing a count of whole Credits into the column,
+the API field and the ledger entry that all mean base units, so $10.00 at 100
+Credits per dollar bought 0.001 Credits while the purchase page said 1,000. Every
+row agreed with every other row, which is why nothing caught it — the defect was
+in the unit (F-151, D-093).
+
 Three books, each with one job:
 
 | Book | Table | Answers |
@@ -79,11 +90,49 @@ They agree, and `test/integration/enums` keeps them agreeing.
 | `UNFUNDED` | yes | yes | nothing was ever at risk of reversal — a grant, or an earning funded by value already inside |
 | `REVERSIBLE` | yes | **no** | a card issuer can still reclaim the funding. Spending it is the ordinary product experience and the platform carries that risk knowingly; paying it out would turn a chargeback into an uncollateralised loss |
 | `SETTLED` | yes | yes | the funding is final |
-| `DISPUTED` | **no** | no | frozen while the dispute runs |
+| `DISPUTED` | **no** | no | frozen while the dispute runs. If it closes without taking the money — a won dispute, reinstated funds, or an early-fraud-warning inquiry that closed — the freeze lifts and the funding returns to `REVERSIBLE`, to the window it was already in. It does **not** settle: settlement is a clock closing, not a card network agreeing (D-094) |
 | `REVERSED` | **no** | no | the funding was clawed back |
 
 `FundingFinality.Spendable()` and `.PayoutEligible()` are the two functions;
 the second is a *floor*, and origin policy applies on top of it.
+
+### What a payment buys, and what ends one nobody finished
+
+`credit.PricingPolicy` is the only thing that decides how many Credits a payment
+issues. It reads no clock, no database and no request body beyond the amount, so
+the same amount under the same policy version always issues the same quantity —
+and there is no field anywhere in the API that carries a Credit amount into a
+purchase. `GET /v1/credits/pricing` publishes every term of the conversion
+(`credits_per_major_unit`, `minor_units_per_major_unit`, `decimals`, `rounding`
+and the bounds) so a page can show the same figure the server will issue rather
+than deriving half of it.
+
+A purchase that nobody finishes used to be permanent. Every state before capture
+counts against the money-at-risk ceiling, and nothing moved a funding out of one:
+a provider call that failed left a committed row with no reference that no sweep
+looked at, and an abandoned checkout's provider reports "still waiting" forever.
+Two abandoned $1,000 checkouts exhausted the launch tier's $2,000 ceiling and
+every honest purchase after them was refused `AT_CAPACITY` with no remedy (F-153,
+F-90's failure through a different door). Three passes now run on `cmd/api`'s
+credit ticker, and on `cmd/reconciliation-worker` where a deployment has one:
+
+| Pass | What it asks | What it does |
+|---|---|---|
+| `SettleDue` | has this funding's reversibility window closed | REVERSIBLE → SETTLED, and promotes the lot |
+| `ReconcileDue` | what did the provider do with a purchase in flight past fifteen minutes | adopts the provider's answer, which is what mints a purchase whose `succeeded` event was swallowed (F-154) |
+| `ExpireInFlight` | has a pre-capture purchase been open past a day | cancels it at the provider, then CANCELED here |
+
+`ExpireInFlight` asks before it ends anything, and cancels the PaymentIntent at
+the provider before cancelling the funding: a funding marked CANCELED over a live
+intent is a card that can still be charged against a terminal funding that will
+never mint. `CAPTURE_PENDING` is deliberately not expired — once the provider is
+processing, cancelling is no longer ours to do.
+
+Whether a purchase was a rehearsal is recorded on it. `credit_fundings.provider_mode`
+is written once, at creation, from the mode of the provider that opened the
+payment, and the API's `sandbox` flag is rendered from that row. It used to be the
+deployment's CURRENT mode stamped on every purchase the API returned, so going
+live re-labelled every sandbox purchase ever made as real value (F-158, D-096).
 
 ### How long REVERSIBLE lasts, and the sandbox tier (D-086)
 
@@ -191,14 +240,18 @@ Three independent things must all say yes:
      omission.
    - `SandboxPolicy` — reachable only on a sandbox tier (ADR-0023) — permits
      `PURCHASED` and the five earning origins once the account reaches
-     `PAYOUT_KYC`, and refuses `PROMOTIONAL`, `REFUND`, `ADMIN_ADJUSTMENT` and
-     `PROVIDER_SETTLEMENT` outright. A granted Credit that could leave the system
-     would be the first rule somebody copied.
+     `PAYOUT_KYC`, and refuses `PROMOTIONAL`, `REFUND`, `ADMIN_ADJUSTMENT`,
+     `PROVIDER_SETTLEMENT` and `COMPETITION_REWARD` outright. A granted Credit
+     that could leave the system would be the first rule somebody copied — and a
+     competition prize is a grant: nobody paid for it and nobody earned it. It
+     was withdrawable here until D-095, which is the sentence above stated and
+     then broken one line later, and it gave a platform a payout path gated only
+     by a competition it runs itself (F-157).
 3. **Capabilities and verification.** The permitted origins require
    `PAYOUT_RESERVE` ACTIVE and a verification level the account actually holds.
 
-So: **promotional, refunded, adjusted and provider-settled value can never leave
-this system under any policy in this build.** That is what makes the sandbox
+So: **promotional, refunded, adjusted, provider-settled and prize value can never
+leave this system under any policy in this build.** That is what makes the sandbox
 demo catalogue safe — its Credits are `PROMOTIONAL`, spendable inside the
 product and unable to leave it
 (`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave`).
@@ -208,6 +261,19 @@ They return gross, spendable, frozen, reversed, payout-eligible and ineligible,
 broken down by origin and by finality, with the **reasons** each ineligible lot
 was refused — because "18,450 Credits" does not answer "how much may I
 withdraw", and §46 forbids showing those four words as synonyms.
+
+Every one of those buckets is rendered. `reversed` was returned and shown
+nowhere, which is how a chargeback that stranded units inside the lot it reversed
+stayed invisible (F-152, F-156); Home and Portfolio show it, and `SegmentedBar`
+draws whatever its segments do not account for, so the next bucket a caller
+forgets is visible instead of silently missing.
+
+A clawback takes the units the reversed funding minted and nothing else. What the
+lot still holds is destroyed; what was already spent out of it is the recorded
+`DEFICIT` the account owes. It used to consume in ordinary consumption order,
+which meant a chargeback of a card payment destroyed whichever lot sorted first —
+a promotional grant, every time — while the charged-back lot kept its units
+(F-152).
 
 ---
 
@@ -278,5 +344,6 @@ Stated so nobody has to discover it:
 `internal/valuedomain` (origins, finalities, policies); `internal/credit`
 (issue, consume, balances, purchase); `internal/ledger` (the journal and its
 triggers); `internal/nativemarket` (the curve, risk, safety, prints, positions);
-`internal/payout` (reservation by lot); migrations 00711, 00712, 00713, 00771,
-00772, 00773, 00774; ADR-0023, ADR-0027; D-063 to D-068.
+`internal/payout` (reservation by lot); migrations 00711, 00712, 00713, 00729,
+00743, 00771, 00772, 00773, 00774, 00793; ADR-0023, ADR-0027; D-063 to D-068,
+D-086, D-093 to D-096; findings F-151 to F-159.
