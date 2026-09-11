@@ -4759,6 +4759,19 @@ export interface components {
             active_sessions: number;
             /** @description Where this user history is recorded, so the support view points at the evidence rather than restating it. */
             audit_stream: string;
+            /** @description What this person accounts still hold, across every account they own. Effecting a closure is irreversible and puts whatever is left out of their reach, so the decision surface carries the three facts the refusal exists for and the service refuses EFFECT while any of them stands. A blocker means REFUSE with a reason, never a permanent no. */
+            closure_blockers: {
+                /** @description Nothing financial stands in the way of effecting. */
+                clear: boolean;
+                /** @description The gross Credit balance in base units, as a decimal string. Gross and not spendable a disputed or frozen lot is still value that belongs to this person. */
+                credit_balance: string;
+                /** @description Native-asset positions still holding a non-zero quantity. */
+                open_native_positions: number;
+                /** @description Payout requests that have not reached a terminal state. */
+                open_payout_requests: number;
+                /** @description One sentence per blocker, in a fixed order, written for the operator deciding and for the person who will read the refusal. */
+                reasons: string[];
+            };
             closure_request?: components["schemas"]["ClosureRequest"];
             created_at: components["schemas"]["Timestamp"];
             /** @description The identity provider asserted a verified address. The address itself is sealed and is not reachable from here. */

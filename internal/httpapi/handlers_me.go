@@ -219,5 +219,19 @@ func toAPIAdminUser(v profile.AdminUserView, now time.Time) api.AdminUserView {
 		level := v.Verification
 		out.Verification.Level = &level
 	}
+	// The three facts the closure decision needs, carried whether or not there
+	// is a request to decide: an operator looking at a person before a request
+	// exists is looking at the same account (F-181).
+	out.ClosureBlockers.Clear = v.Blockers.Clear()
+	out.ClosureBlockers.CreditBalance = v.Blockers.CreditBalance
+	out.ClosureBlockers.OpenPayoutRequests = v.Blockers.OpenPayoutRequests
+	out.ClosureBlockers.OpenNativePositions = v.Blockers.OpenNativePositions
+	out.ClosureBlockers.Reasons = v.Blockers.Reasons()
+	if out.ClosureBlockers.Reasons == nil {
+		out.ClosureBlockers.Reasons = []string{}
+	}
+	if out.ClosureBlockers.CreditBalance == "" {
+		out.ClosureBlockers.CreditBalance = "0"
+	}
 	return out
 }
