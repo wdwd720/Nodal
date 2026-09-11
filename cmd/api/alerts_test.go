@@ -116,7 +116,8 @@ func TestNoDestinationIsSaidOutLoud(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	cfg := &config.Config{Env: config.EnvLocal}
 
-	d := newAlertDispatcher(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	d, err := newAlertDispatcher(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	require.NoError(t, err, "LOCAL keeps the honest degradation; only STAGING and PROD refuse")
 	assert.Nil(t, d, "a dispatcher was built with no destination to send to")
 	out := buf.String()
 	assert.Contains(t, out, "level=WARN")
@@ -138,7 +139,8 @@ func TestDeliveryTimeoutFitsInsideTheShutdownBudget(t *testing.T) {
 
 	var buf strings.Builder
 	log := slog.New(slog.NewTextHandler(&buf, nil))
-	d := newAlertDispatcher(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	d, err := newAlertDispatcher(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	require.NoError(t, err)
 	require.NotNil(t, d)
 	defer d.Close()
 
@@ -201,4 +203,40 @@ func TestADisabledCreditPathIsAPage(t *testing.T) {
 	assert.NotPanics(t, func() {
 		raiseIfCreditPathDisabled(nil, cfg, disabled("x", nil), time.Now())
 	})
+}
+
+// And in STAGING or PROD the absence is a refusal, not a log line (F-137).
+//
+// RuleAlertDestination only ever saw the env:// reference render.yaml writes,
+// so the deployment that had never set NODAL_ALERT_WEBHOOK_URL passed every
+// configuration check and arrived here, where the old code logged at ERROR and
+// served. Three documents said that could not happen.
+func TestADeploymentWithNowhereToAlertRefusesToStart(t *testing.T) {
+	t.Parallel()
+	for _, env := range []config.Environment{config.EnvStaging, config.EnvProd} {
+		t.Run(string(env), func(t *testing.T) {
+			t.Parallel()
+			log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+			unset := &config.Config{Env: env}
+			_, err := newAlertDispatcher(context.Background(), unset, config.NewResolver(env, os.LookupEnv), log)
+			require.Error(t, err, "%s served with no alert destination at all", env)
+			assert.Contains(t, err.Error(), "CP_ALERT_WEBHOOK_URL")
+
+			// And a reference whose value was never set, which is the shape the
+			// blueprint actually produces.
+			dangling := &config.Config{Env: env}
+			dangling.Alert.WebhookURL = config.SecretRef("env://NODAL_ALERT_WEBHOOK_URL_NOT_SET_ANYWHERE")
+			resolver := config.NewResolver(env, config.LookupFromMap(map[string]string{}))
+			_, err = newAlertDispatcher(context.Background(), dangling, resolver, log)
+			require.Error(t, err, "%s served on a reference that resolves to nothing", env)
+			assert.Contains(t, err.Error(), "CP_ALERT_WEBHOOK_URL")
+
+			// A reference that resolves to an empty string is the same thing
+			// wearing a different hat.
+			empty := config.NewResolver(env, config.LookupFromMap(map[string]string{"NODAL_ALERT_WEBHOOK_URL_NOT_SET_ANYWHERE": "  "}))
+			_, err = newAlertDispatcher(context.Background(), dangling, empty, log)
+			require.Error(t, err, "%s served on a reference that resolves to whitespace", env)
+		})
+	}
 }

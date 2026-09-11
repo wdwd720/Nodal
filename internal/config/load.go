@@ -161,6 +161,12 @@ func Load(ctx context.Context, service Service, lookup func(string) (string, boo
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	// The two prod-like secrets whose reference cannot stand in for their
+	// value. This needs the lookup, which is why it is here rather than in
+	// Validate (F-137).
+	if err := c.ResolvableSecrets(ctx, lookup); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -446,6 +452,8 @@ func specs() []varSpec {
 			setString(func(c *Config) *string { return &c.API.PayoutPolicy }))),
 		only(ServiceAPI, opt("CP_API_SANDBOX_GATES", secAPI, "Comma-separated capabilities the deployment sandbox-activates at boot, e.g. CREDIT_PURCHASE,NATIVE_MARKET_TRADING. Only on a sandbox tier; each must also be in CP_API_ENABLED_CAPABILITIES. A SANDBOX gate carries no approval, cannot exist in PROD, and is read as active only by a sandbox tier.", "",
 			setString(func(c *Config) *string { return &c.API.SandboxGates }))),
+		only(ServiceAPI, opt("CP_API_DEMO_DATA", secAPI, "Load the SANDBOX demo catalogue at boot: eight labelled demo markets, a demo Credit balance and the activity feed built from them. Only on a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX) and never in PROD; false by default, so a deployment that says nothing seeds nothing. Distinct from CP_SEED_ENABLED, which governs the developer seed scripts and is refused outright in STAGING/PROD.", "false",
+			setBool(func(c *Config) *bool { return &c.API.DemoData }))),
 		only(ServiceAPI, opt("CP_API_SETTLEMENT_CHAIN", secAPI, "Chain of the USD-pegged asset that funds settle into, e.g. solana. Required in STAGING/PROD; cmd/api also checks the pair resolves to a known stablecoin, which needs the database and so stays there.", "solana",
 			setString(func(c *Config) *string { return &c.API.SettlementChain }))),
 		only(ServiceAPI, opt("CP_API_SETTLEMENT_MINT", secAPI, "Mint address of that asset. Required in STAGING/PROD.", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -543,7 +551,7 @@ func specs() []varSpec {
 			setSecret(func(c *Config) *SecretRef { return &c.Auth.ClientSecretRef }))),
 		opt("CP_AUTH_REDIRECT_URL", secAuth, "OIDC redirect URL. Required when CP_AUTH_MODE=oidc; https in STAGING/PROD.", "",
 			setString(func(c *Config) *string { return &c.Auth.RedirectURL })),
-		opt("CP_AUTH_POST_LOGIN_URL", secAuth, "Where the OIDC callback sends the browser after setting the session cookie. Empty means the API's own root, which is only right when the web app is served from the API's origin. Set it to the web app's origin (https in STAGING/PROD) when the app is hosted separately; the API's root is a 404 problem document.", "https://app-nodal.actorvia.xyz/",
+		opt("CP_AUTH_POST_LOGIN_URL", secAuth, "Where the OIDC callback sends the browser after setting the session cookie. Empty means a path on the API's own origin, which is what a same-origin development run (the Vite proxy) needs and is only right there. Required in STAGING/PROD with CP_AUTH_MODE=oidc, where the app has its own origin and the API's root is a 404 problem document. The LOCAL/TEST default is empty rather than one deployment's hostname: a default naming app-nodal.actorvia.xyz would send a developer's browser to the internet.", "",
 			setString(func(c *Config) *string { return &c.Auth.PostLoginURL })),
 		req("CP_AUTH_COOKIE_NAME", secAuth, "Session cookie name.", "cp_session",
 			setString(func(c *Config) *string { return &c.Auth.CookieName })),
@@ -613,7 +621,7 @@ func specs() []varSpec {
 		secretVar(opt("CP_PII_KEYRING_REF", secPII, "Keyring for personal data at rest, as a JSON document: {\"active\": N, \"keys\": {\"N\": \"<base64 32 bytes>\"}}. internal/pii seals identity_pii's columns with AES-256-GCM under the active version and opens a row under whichever version it names, so rotation is: add a key, make it active, deploy, reseal, then remove the old key. Required in STAGING/PROD. Empty in LOCAL/TEST means no personal data is stored, which is said at startup. A SecretRef because it IS the key.", "env://NODAL_PII_KEYRING",
 			setSecret(func(c *Config) *SecretRef { return &c.PII.Keyring }))),
 
-		req("CP_SEED_ENABLED", secSeed, "Allow seeding clearly-labeled fake users/assets/balances. Must be false in STAGING/PROD.", "false",
+		req("CP_SEED_ENABLED", secSeed, "Allow the developer seed scripts (scripts/seed, scripts/seedeconomy) to write clearly-labelled fake identities, assets and balances. They refuse anything but LOCAL/DEV/TEST anyway; setting this false stops them there too. Must be false in STAGING/PROD, which is why it is not and cannot be the control for a sandbox tier's demo catalogue -- that is CP_API_DEMO_DATA.", "false",
 			setBool(func(c *Config) *bool { return &c.Seed.Enabled })),
 
 		req("CP_CREDIT_SETTLEMENT_WINDOW", secCredit, "How long a captured card payment stays reversible before its Credits may be treated as settled. A risk determination, not a default worth trusting: card scheme chargeback windows run to 120 days.", "720h",

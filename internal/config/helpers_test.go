@@ -117,6 +117,16 @@ func prodEnv() map[string]string {
 		"CP_ALERT_TIMEOUT":        "5s",
 		"CP_PII_KEYRING_REF":      "env://CP_SECRET_PII_KEYRING",
 
+		// The values behind the two references above, which a prod-like
+		// configuration must actually be able to resolve (F-137). Every other
+		// secret here is aws-sm://, whose resolver lives in the running
+		// process and which Load therefore does not check. These two are
+		// env://, they are the destination for an alert and the key personal
+		// data is sealed under, and a reference with nothing behind it is what
+		// the deployment had.
+		"CP_SECRET_ALERT_WEBHOOK_URL": "https://hooks.example.com/T000/B000/xxxx",
+		"CP_SECRET_PII_KEYRING":       `{"active":1,"keys":{"1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}`,
+
 		"CP_SEED_ENABLED": "false",
 
 		"CP_CREDIT_SETTLEMENT_WINDOW":        "720h",

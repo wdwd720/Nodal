@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -44,6 +45,11 @@ const (
 	// environment variable would have replaced a reviewable directory with an
 	// unreviewable one (ADR-0024).
 	RuleBootstrapOperators Rule = "BOOTSTRAP_OPERATORS"
+	// RuleCapabilityNameDeclared rejects a name in
+	// CP_API_ENABLED_CAPABILITIES or CP_API_SANDBOX_GATES that internal/gates
+	// does not declare. The first of those lists is condition 1 of the policy
+	// authority, so a misspelled name is a capability switched off in silence.
+	RuleCapabilityNameDeclared Rule = "CAPABILITY_NAME_DECLARED"
 )
 
 // SecurityEventRetentionFloorDays is the shortest security-event retention
@@ -170,6 +176,71 @@ func HasViolation(err error, rule Rule) bool {
 		}
 	}
 	return false
+}
+
+// ResolvableSecrets checks the two prod-like secrets whose whole value is that
+// they are THERE: the alert destination and the personal-data keyring.
+//
+// RuleAlertDestination and RulePIIKeyring can only see the REFERENCE, and a
+// reference is never empty once the blueprint writes one. render.yaml sets
+// CP_ALERT_WEBHOOK_URL to the literal "env://NODAL_ALERT_WEBHOOK_URL", so both
+// rules passed on a deployment where neither variable had ever been set. The
+// composition root then logged an ERROR and served: alerts reached the log
+// stream and nobody (the F-118 state), and no verified e-mail was ever stored
+// (the F-47 state). Three documents said this could not boot. It booted (F-137).
+//
+// So the value is resolved here, where the lookup that Load was given is still
+// in hand, and an unresolvable or empty one is a failed configuration check in
+// STAGING and PROD. LOCAL, TEST and DEV keep the honest degradation: a
+// developer should not need a webhook, and the composition root says out loud
+// what is not happening.
+//
+// A scheme this chain cannot resolve at all -- aws-sm://, whose resolver lives
+// in the running process -- is NOT a violation. It is the AWS architecture's
+// normal shape, and refusing it here would refuse a configuration that is
+// correct.
+func (c *Config) ResolvableSecrets(ctx context.Context, lookup func(string) (string, bool)) error {
+	if !c.Env.IsProductionLike() {
+		return nil
+	}
+	resolver := NewResolver(c.Env, lookup)
+	var errs []error
+	for _, s := range []struct {
+		rule  Rule
+		field string
+		name  string
+		ref   SecretRef
+		cost  string
+	}{
+		{
+			RuleAlertDestination, "Alert.WebhookURL", "CP_ALERT_WEBHOOK_URL", c.Alert.WebhookURL,
+			"a ledger-integrity violation would reach this service's log and nothing else",
+		},
+		{
+			RulePIIKeyring, "PII.Keyring", "CP_PII_KEYRING_REF", c.PII.Keyring,
+			"a customer's verified e-mail address would be hashed for lookup and otherwise discarded",
+		},
+	} {
+		if s.ref.IsZero() {
+			continue // already a violation, raised by the rule itself
+		}
+		v, err := resolver.Resolve(ctx, s.ref)
+		switch {
+		case errors.Is(err, ErrUnsupportedSecretRef):
+			continue
+		case err != nil:
+			errs = append(errs, &Violation{Rule: s.rule, Field: s.field, Detail: fmt.Sprintf(
+				"%s references %s and it does not resolve (%v): in STAGING/PROD the reference is not the control, the value is -- %s",
+				s.name, s.ref.Redacted(), err, s.cost,
+			)})
+		case strings.TrimSpace(v) == "":
+			errs = append(errs, &Violation{Rule: s.rule, Field: s.field, Detail: fmt.Sprintf(
+				"%s references %s and it resolves to nothing: %s",
+				s.name, s.ref.Redacted(), s.cost,
+			)})
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Validate checks every rule and returns all violations joined into one
@@ -302,6 +373,35 @@ func (c *Config) Validate() error {
 			add(RuleField, "API.PayoutPolicy", "the sandbox payout policy requires CP_API_LEGAL_POLICY=SANDBOX; a deployment is a sandbox tier or it is not")
 		}
 	}
+	// Every capability named in either list must be one internal/gates
+	// declares.
+	//
+	// This comment on APIConfig.SandboxGates has always said "each must be a
+	// declared capability"; nothing checked it. CP_API_ENABLED_CAPABILITIES is
+	// condition 1 of the policy authority, so one misspelled letter turned a
+	// capability off -- cmd/api's parseCapabilities dropped the unknown name
+	// without a word, and the deployment that may no longer sell Credits
+	// answered 200 on every health check and looked exactly like the one that
+	// may. That is the defect class F-124 is in the register for, and this is
+	// where it is cheapest to catch: at the configuration, where an operator
+	// sees it (F-145).
+	for field, list := range map[string]string{
+		"API.EnabledCapabilities": c.API.EnabledCapabilities,
+		"API.SandboxGates":        c.API.SandboxGates,
+	} {
+		for _, raw := range strings.Split(list, ",") {
+			name := strings.TrimSpace(raw)
+			if name == "" {
+				continue
+			}
+			if !IsDeclaredCapability(name) {
+				add(RuleCapabilityNameDeclared, field, fmt.Sprintf(
+					"%q is not a declared capability; a name nothing answers to is silently inactive, "+
+						"and this list is condition 1 of the policy authority", name,
+				))
+			}
+		}
+	}
 	if strings.TrimSpace(c.API.SandboxGates) != "" {
 		if !sandboxTier {
 			add(RuleSandboxTierNotInProd, "API.SandboxGates",
@@ -321,6 +421,14 @@ func (c *Config) Validate() error {
 					fmt.Sprintf("%s is sandbox-activated but not in CP_API_ENABLED_CAPABILITIES; configuration is condition 1 and a sandbox gate does not replace it", name))
 			}
 		}
+	}
+	// The demo catalogue is a sandbox-tier affordance and nothing else
+	// (D-086). PROD is refused by SandboxTier() already; this says so under
+	// its own rule so an operator reads the reason rather than inferring it.
+	if c.API.DemoData && !sandboxTier {
+		add(RuleSandboxTierNotInProd, "API.DemoData",
+			"the demo catalogue may only be loaded by a sandbox tier (CP_API_LEGAL_POLICY=SANDBOX, never PROD): "+
+				"a deployment where value can move has no place to put simulated data")
 	}
 
 	if c.Credit.SettlementWindow <= 0 {
@@ -683,6 +791,20 @@ func (c *Config) Validate() error {
 			} else if prodLike && u.Scheme != "https" {
 				add(RuleOIDCConfigured, name, "must use https in STAGING/PROD")
 			}
+		}
+		// The web app has its own origin on every deployed tier, and the API's
+		// root is a 404 problem document -- so an empty value here sends a
+		// freshly authenticated browser to an error page. It also removes the
+		// one thing that pins the redirect's HOST, which is what made the
+		// `return_to` backslash bypass an open redirect rather than a
+		// nuisance (F-146, F-149). Optional in LOCAL, TEST and DEV, where the
+		// Vite proxy serves the app from the API's own origin and a relative
+		// destination is exactly right.
+		if prodLike && c.Auth.PostLoginURL == "" {
+			add(RuleOIDCConfigured, "Auth.PostLoginURL",
+				"required in STAGING/PROD when CP_AUTH_MODE=oidc: the web app is its own origin, the API's "+
+					"root is a 404 problem document, and an unset origin leaves the post-login redirect "+
+					"unpinned")
 		}
 		if v := c.Auth.PostLoginURL; v != "" {
 			u, err := parseHTTPURL(v)

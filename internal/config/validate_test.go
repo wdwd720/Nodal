@@ -697,9 +697,37 @@ func TestValidate_PostLoginURL(t *testing.T) {
 	cfg.Auth.PostLoginURL = "https://app-nodal.actorvia.xyz/"
 	require.NoError(t, cfg.Validate())
 
+	// Empty used to be accepted everywhere, "keeping the same-origin default".
+	// It is refused on a deployed tier now (F-146, F-149): the web app is its
+	// own origin there, the API's root is a 404 problem document, and an unset
+	// base is what turned the `return_to` backslash bypass into an open
+	// redirect off the callback that sets the session cookie. The variable was
+	// `opt(...)` and no rule required it, so the vulnerable configuration was a
+	// supported one.
 	cfg = validProdConfig(t)
 	cfg.Auth.PostLoginURL = ""
-	require.NoError(t, cfg.Validate(), "empty keeps the same-origin default")
+	err = cfg.Validate()
+	require.Error(t, err, "PROD accepted an unset post-login origin")
+	assert.True(t, HasViolation(err, RuleOIDCConfigured))
+	require.Error(t, asStaging(cfg).Validate(), "STAGING accepted an unset post-login origin")
+
+	// LOCAL, TEST and DEV keep it, because there the Vite proxy serves the app
+	// from the API's own origin and a relative destination is exactly right.
+	// This is also why the LOCAL/TEST DEFAULT is now empty rather than one
+	// deployment's hostname: a developer's callback must not send their browser
+	// to app-nodal.actorvia.xyz.
+	for _, env := range []Environment{EnvLocal, EnvTest, EnvDev} {
+		local := validProdConfig(t)
+		local.Env = env
+		demoteProviders(local, ProviderModeSandbox)
+		local.Auth.PostLoginURL = ""
+		require.NoErrorf(t, local.Validate(), "%s refused an unset post-login origin", env)
+	}
+	for _, s := range specs() {
+		if s.Name == "CP_AUTH_POST_LOGIN_URL" {
+			assert.Empty(t, s.Default, "the default names one deployment's hostname")
+		}
+	}
 }
 
 // The sandbox tier (ADR-0023) is one declaration, and PROD cannot make it: the
@@ -779,4 +807,68 @@ func TestValidate_TheSandboxTierCannotBeProd(t *testing.T) {
 	c.API.EnabledCapabilities = "CREDIT_PURCHASE,NATIVE_MARKET_TRADING"
 	c.API.SandboxGates = "credit_purchase, NATIVE_MARKET_TRADING"
 	assert.NoError(t, c.Validate(), "enabled capabilities may be sandbox-activated, in any case")
+}
+
+// TestValidate_TheAlertDestinationAndTheKeyringAreRESOLVED (F-137).
+//
+// RuleAlertDestination and RulePIIKeyring can only see the reference, and
+// render.yaml always writes one: CP_ALERT_WEBHOOK_URL is the literal string
+// "env://NODAL_ALERT_WEBHOOK_URL", which is never empty. So a STAGING whose
+// operator never set the variable behind it passed both rules, booted, served,
+// alerted nobody and stored no personal data -- while render.yaml,
+// HUMAN_ACTIONS_QUEUE.md and MASTER_BUILD_STATE.md all said it could not start.
+func TestValidate_TheAlertDestinationAndTheKeyringAreRESOLVED(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		missing string
+		rule    Rule
+	}{
+		{"alert destination", "CP_SECRET_ALERT_WEBHOOK_URL", RuleAlertDestination},
+		{"pii keyring", "CP_SECRET_PII_KEYRING", RulePIIKeyring},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, env := range []Environment{EnvProd, EnvStaging} {
+				vars := asEnv(prodEnv(), env)
+
+				// Absent entirely.
+				delete(vars, tc.missing)
+				_, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+				require.Errorf(t, err, "%s booted with %s behind a reference that resolves to nothing", env, tc.missing)
+				assert.True(t, HasViolation(err, tc.rule), "%s: wrong rule: %v", env, err)
+
+				// Present and empty, which is what a dashboard field somebody
+				// cleared looks like.
+				vars[tc.missing] = "   "
+				_, err = Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+				require.Errorf(t, err, "%s booted with %s set to whitespace", env, tc.missing)
+				assert.True(t, HasViolation(err, tc.rule), "%s: wrong rule: %v", env, err)
+			}
+		})
+	}
+
+	// LOCAL, TEST and DEV keep the honest degradation: a developer running the
+	// API needs neither a webhook nor a keyring, and the composition root says
+	// out loud what is not happening.
+	for _, env := range []Environment{EnvLocal, EnvTest, EnvDev} {
+		vars := asEnv(prodEnv(), env)
+		delete(vars, "CP_SECRET_ALERT_WEBHOOK_URL")
+		delete(vars, "CP_SECRET_PII_KEYRING")
+		_, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+		require.NoErrorf(t, err, "%s refused to load without a webhook; only STAGING and PROD may", env)
+	}
+
+	// And a scheme this chain cannot resolve at all is NOT a violation: an
+	// aws-sm:// reference is resolved by the running process, and refusing it
+	// here would refuse the AWS architecture.
+	vars := withVars(prodEnv(), map[string]string{
+		"CP_ALERT_WEBHOOK_URL": "aws-sm://cp/prod/alert-webhook-url",
+		"CP_PII_KEYRING_REF":   "aws-sm://cp/prod/pii-keyring",
+	})
+	delete(vars, "CP_SECRET_ALERT_WEBHOOK_URL")
+	delete(vars, "CP_SECRET_PII_KEYRING")
+	_, err := Load(context.Background(), ServiceAPI, LookupFromMap(vars))
+	require.NoError(t, err, "a secret only the running process can resolve was refused at load")
 }
