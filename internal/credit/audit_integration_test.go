@@ -412,3 +412,82 @@ func randomKey() string {
 	}
 	return s
 }
+
+// ---------------------------------------------------------------------------
+// F-credits-payments-5: the sweep that recovers a swallowed provider event has
+// no caller in the deployed topology.
+// ---------------------------------------------------------------------------
+
+// A provider event that names a reference no funding holds is Ignored
+// (purchase.go:365-374) and the webhook pipeline records the event id as
+// processed, so Stripe's redelivery of the SAME event id is answered Duplicate
+// and never reaches Dispatch again (internal/webhook/handler.go, via
+// event.Inbox.ProcessHashed).
+//
+// That window is real: StartPurchase commits the provider reference in phase 3,
+// AFTER the provider call returns (purchase.go:232-256), and Stripe can deliver
+// payment_intent.succeeded before that commit lands.
+//
+// PurchaseService.Reconcile is the recovery, and it is the only one. It has
+// exactly one caller in the repository -- cmd/reconciliation-worker -- and
+// render.yaml declares two services, both `type: web`, neither of them that
+// worker. cmd/api deliberately runs SettleDue itself for exactly this reason
+// (cmd/api/creditsettle.go: "the launch tier has no worker tier") and does not
+// run Reconcile.
+//
+// So on the deployed tier the card is charged and no Credits are ever minted.
+func TestAudit_ASwallowedSucceededEventIsOnlyRecoveredByASweepNobodyRuns(t *testing.T) {
+	f := newPurchaseFixture(t)
+
+	// Phase 1 and 2 have happened; phase 3 has not. The provider holds a
+	// PaymentIntent this row does not yet name.
+	var funding Funding
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
+				AccountID: f.account, Provider: f.prov.Name(),
+				CreditQuantity: q(10_000), PaidAmount: money.USDFromMinor(10_000),
+				IdempotencyKey: f.keyPrefix + ":swallowed",
+			})
+			return err
+		}))
+	ref := "pi_fake_" + randomKey()
+
+	// payment_intent.succeeded arrives in the window. The pipeline verified it,
+	// archived it and will mark it processed.
+	d := f.deliver(t, event(ref, PurchaseSucceeded, "swallowed-e1", 10_000))
+	require.Equal(t, "IGNORED", string(d))
+
+	// Phase 3 commits a moment later.
+	_, err := testDB.Exec(f.ctx,
+		`UPDATE credit_fundings SET provider_reference = $2 WHERE id = $1`, funding.ID, ref)
+	require.NoError(t, err)
+
+	// Stripe redelivers the same event id; the inbox answers Duplicate and
+	// Dispatch is never called again. The funding is still where it was.
+	got := f.funding(t, funding.ID)
+	assert.Equal(t, FundingCreated, got.State)
+	assert.Nil(t, got.LotID, "the card was charged and no Credits exist")
+
+	bal, err := f.svc.creditBalance(f.ctx, testDB, f.account, f.asset)
+	require.NoError(t, err)
+	assert.Equal(t, "0", bal.String())
+
+	// Reconcile is the recovery, and it works. Nothing in the deployed
+	// topology calls it: `grep -rn "\.Reconcile(" cmd/ internal/` names only
+	// cmd/reconciliation-worker, and render.yaml declares no worker service.
+	f.prov.mu.Lock()
+	f.prov.byRef[ref] = PurchaseSnapshot{
+		ProviderReference: ref, Status: PurchaseSucceeded, RawStatus: "succeeded",
+		Amount: money.USDFromMinor(10_000), Currency: "USD",
+	}
+	f.prov.mu.Unlock()
+	require.NoError(t, f.tx(func(tx pgx.Tx) error {
+		_, rerr := f.svcP.Reconcile(f.ctx, tx, funding.ID)
+		return rerr
+	}))
+	recovered := f.funding(t, funding.ID)
+	assert.Equal(t, FundingReversible, recovered.State)
+	require.NotNil(t, recovered.LotID, "Reconcile is what mints; it is not deployed")
+}
