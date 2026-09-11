@@ -88,6 +88,17 @@ func auditLoadBlueprint(t *testing.T) auditBlueprint {
 	return bp
 }
 
+// auditLoadRenderBlueprint loads the committed file into the shape render_test.go
+// uses, so the shared scan can run over it.
+func auditLoadRenderBlueprint(t *testing.T) renderBlueprint {
+	t.Helper()
+	b, err := os.ReadFile("../../render.yaml")
+	require.NoError(t, err)
+	var bp renderBlueprint
+	require.NoError(t, yaml.Unmarshal(b, &bp))
+	return bp
+}
+
 func auditBlueprintText(t *testing.T) string {
 	t.Helper()
 	b, err := os.ReadFile("../../render.yaml")
@@ -207,8 +218,15 @@ func TestAuditConfigDeploy_STAGINGRefusesToBootWithoutTheAlertDestinationAndKeyr
 // loadBlueprint(t).Services[0] only. The static site's envVars are never looked
 // at, so a live secret key written there is committed and green.
 //
-// This test replays that scan's logic verbatim over a document with an
-// injected credential and asserts it is caught. It is not.
+// The reproduction injects a live-looking Stripe secret key into the static
+// site's env block and runs the REAL scan over the result.
+//
+// It used to replay the scan's logic locally, which was the right way to
+// DEMONSTRATE the finding and the wrong thing to leave behind: a copy of a
+// scan passes forever once it is written, whatever the original does
+// afterwards. credentialMarkersIn (render_test.go) is the scan
+// TestRender_NoSecretIsWrittenIntoTheBlueprint actually uses, so this now fails
+// again the day that one narrows.
 func TestAuditConfigDeploy_TheSecretScanCoversEveryServiceInTheBlueprint(t *testing.T) {
 	t.Parallel()
 
@@ -218,41 +236,23 @@ func TestAuditConfigDeploy_TheSecretScanCoversEveryServiceInTheBlueprint(t *test
 	injected := strings.Replace(raw, anchor,
 		"      - key: STRIPE_SECRET_KEY\n        value: sk_live_AUDITINJECTEDNOTAREALKEY0000\n"+anchor, 1)
 
-	var bp auditBlueprint
+	var bp renderBlueprint
 	require.NoError(t, yaml.Unmarshal([]byte(injected), &bp))
+	require.Len(t, bp.Services, 2)
 
-	// The scan, exactly as render_test.go performs it.
-	scanned := func(services int) (markersFound bool) {
-		secret := map[string]bool{}
-		for _, v := range config.Vars() {
-			if v.Secret {
-				secret[v.Name] = true
-			}
-		}
-		secret["CP_DATABASE_APP_URL"] = true
-		secret["CP_DATABASE_MIGRATE_URL"] = true
-		for i := 0; i < services && i < len(bp.Services); i++ {
-			for _, e := range bp.Services[i].EnvVars {
-				if e.Value == nil || secret[e.Key] {
-					continue
-				}
-				for _, marker := range []string{"sk_live_", "sk_test_", "whsec_", "-----BEGIN"} {
-					if strings.Contains(*e.Value, marker) {
-						markersFound = true
-					}
-				}
-			}
-		}
-		return markersFound
-	}
-
-	require.True(t, scanned(len(bp.Services)),
-		"the injection itself is wrong if a full scan does not see it")
-	assert.True(t, scanned(1),
+	found := credentialMarkersIn(bp)
+	assert.NotEmpty(t, found,
 		"a live Stripe secret key written into the static site's environment passes "+
-			"TestRender_NoSecretIsWrittenIntoTheBlueprint, which reads Services[0] only. "+
-			"Reproduced directly against render.yaml as well: inject the same line, run "+
-			"`go test ./test/infra/ -run TestRender_NoSecretIsWrittenIntoTheBlueprint` -- PASS.")
+			"TestRender_NoSecretIsWrittenIntoTheBlueprint. That test opens by claiming something about "+
+			"the FILE and read Services[0] only; a build-time variable on the static site is embedded "+
+			"in the bundle and served to every visitor.")
+	assert.Contains(t, strings.Join(found, " "), "nodal-web",
+		"the scan found a marker, but not the one injected into the second service")
+
+	// The control: the committed file is clean. The publishable key on the
+	// static site is pk_test_, which is public by design and is not a marker.
+	assert.Empty(t, credentialMarkersIn(auditLoadRenderBlueprint(t)),
+		"render.yaml as committed carries something that looks like a credential")
 }
 
 // ---------------------------------------------------------------- F-cfg-4 ---
@@ -436,25 +436,49 @@ func TestAuditConfigDeploy_TheAPIServiceDeclaresItsOwnHostname(t *testing.T) {
 func TestAuditConfigDeploy_TheBuildStampsAVersion(t *testing.T) {
 	t.Parallel()
 
-	dockerfile, err := os.ReadFile("../../build/Dockerfile")
+	b, err := os.ReadFile("../../build/Dockerfile")
 	require.NoError(t, err)
-	require.Regexp(t, regexp.MustCompile(`ARG VERSION=dev`), string(dockerfile),
-		"the Dockerfile no longer defaults VERSION; re-read this finding")
-	require.Contains(t, string(dockerfile), "config.BuildVersion=${VERSION}")
+	dockerfile := string(b)
 
-	api := auditLoadBlueprint(t).Services[0]
-	var found bool
-	for _, e := range api.EnvVars {
-		if e.Key == "VERSION" {
-			found = true
+	// The link-time stamp still comes from the VERSION build arg, which is what
+	// makes everything below about the arg rather than about the ldflags.
+	require.Contains(t, dockerfile, "config.BuildVersion=${VERSION}",
+		"the Dockerfile no longer stamps config.BuildVersion from VERSION; re-read this finding")
+
+	// The finding: `ARG VERSION=dev` with nothing supplying VERSION meant every
+	// image ever built from this blueprint reported build_version "dev".
+	assert.NotRegexp(t, regexp.MustCompile(`(?m)^ARG VERSION=dev\s*$`), dockerfile,
+		"VERSION still defaults to the constant \"dev\", and render.yaml supplies none, so "+
+			"config.BuildVersion is the literal \"dev\" in every deployed image. /v1/version -- the "+
+			"endpoint whose whole purpose is to prove which build and which configuration are running "+
+			"-- reports \"dev\", and the config hash it reports alongside includes that same constant.")
+
+	// What replaced it (D-088). Render passes a service's environment variables
+	// to `docker build` as build args -- which is the sole reason CMD is in
+	// render.yaml -- and sets RENDER_GIT_COMMIT itself, at build time and at run
+	// time. So the default is the commit when Render is the builder and "dev"
+	// everywhere else, and nothing new joins the configuration table.
+	//
+	// Both stages, because an ARG declared inside a stage is scoped to it: the
+	// builder stamps the binary and the runtime stage writes the OCI version
+	// label, and a label that says "dev" over a binary that says the commit is
+	// the same defect wearing a smaller hat.
+	assert.Equal(t, 2, strings.Count(dockerfile, "ARG RENDER_GIT_COMMIT="),
+		"RENDER_GIT_COMMIT must be declared in both stages")
+	assert.Equal(t, 2, strings.Count(dockerfile, "ARG VERSION=${RENDER_GIT_COMMIT:-dev}"),
+		"VERSION must derive from RENDER_GIT_COMMIT in both stages")
+
+	// And the blueprint still declares CMD, which is the mechanism this relies
+	// on: if Render stopped passing environment variables as build args, CMD
+	// would stop reaching the build too and the image would not build at all --
+	// a loud failure rather than a silent "dev".
+	var cmd bool
+	for _, e := range auditLoadBlueprint(t).Services[0].EnvVars {
+		if e.Key == "CMD" {
+			cmd = true
 		}
 	}
-	assert.True(t, found,
-		"render.yaml declares CMD so that build/Dockerfile receives it as a build arg, and declares "+
-			"no VERSION, so config.BuildVersion is the literal \"dev\" in every deployed image. "+
-			"/v1/version -- the endpoint whose whole purpose is to prove which build and which "+
-			"configuration are running -- reports \"dev\", and the config hash it reports alongside "+
-			"includes that same constant.")
+	assert.True(t, cmd, "render.yaml no longer passes CMD as a build arg; the VERSION default relies on the same mechanism")
 }
 
 // ---------------------------------------------------------------- F-cfg-8 ---
@@ -535,41 +559,74 @@ func itoa(n int) string {
 func TestAuditConfigDeploy_SeedingHonoursTheVariableThatForbidsIt(t *testing.T) {
 	t.Parallel()
 
-	var readers []string
-	for _, root := range []string{"../../cmd", "../../internal"} {
-		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return err
-			}
-			if strings.Contains(filepath.ToSlash(path), "internal/config/") {
-				return nil // where it is declared and validated
-			}
-			b, rerr := os.ReadFile(path) //nolint:gosec // G304: walking the source tree
-			if rerr != nil {
-				return rerr
-			}
-			if strings.Contains(string(b), "Seed.Enabled") {
-				readers = append(readers, filepath.ToSlash(path))
-			}
-			return nil
-		})
-		require.NoError(t, err)
+	// readersOf walks the source tree for files outside internal/config -- where
+	// the variable is declared and validated -- that read a configured value.
+	//
+	// The original walked cmd/ and internal/. scripts/ is here because that is
+	// where the readers turned out to belong: CP_SEED_ENABLED governs the
+	// developer seed scripts and nothing else, since RuleNoSeed forbids it in
+	// STAGING and PROD and so it could never have been the deployed tier's
+	// control. The assertion is the one the finding made -- the switch is read
+	// by something that can act on it -- and the demo catalogue's own switch is
+	// asserted alongside it below, which the finding could not do because there
+	// was none.
+	readersOf := func(needles ...string) []string {
+		var readers []string
+		for _, root := range []string{"../../cmd", "../../internal", "../../scripts"} {
+			err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+				if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+					return err
+				}
+				if strings.Contains(filepath.ToSlash(path), "internal/config/") {
+					return nil // where it is declared and validated
+				}
+				b, rerr := os.ReadFile(path) //nolint:gosec // G304: walking the source tree
+				if rerr != nil {
+					return rerr
+				}
+				for _, needle := range needles {
+					if strings.Contains(string(b), needle) {
+						readers = append(readers, filepath.ToSlash(path))
+						return nil
+					}
+				}
+				return nil
+			})
+			require.NoError(t, err)
+		}
+		return readers
 	}
 
-	// And the blueprint says no.
-	var seed string
+	env := map[string]string{}
 	for _, e := range auditLoadBlueprint(t).Services[0].EnvVars {
-		if e.Key == "CP_SEED_ENABLED" && e.Value != nil {
-			seed = *e.Value
+		if e.Value != nil {
+			env[e.Key] = *e.Value
 		}
 	}
-	require.Equal(t, "false", seed, "the blueprint no longer forbids seeding; re-read this finding")
 
-	assert.NotEmpty(t, readers,
+	// The blueprint still forbids the developer seed scripts.
+	require.Equal(t, "false", env["CP_SEED_ENABLED"], "the blueprint no longer forbids seeding; re-read this finding")
+
+	assert.NotEmpty(t, readersOf("SeedScriptsAllowed", "Seed.Enabled"),
 		"CP_SEED_ENABLED is required of every binary, validated by RuleNoSeed, set to \"false\" in "+
-			"render.yaml -- and read by nothing outside internal/config. cmd/api/marketsurfaces.go "+
-			"seeds the demo catalogue on cfg.SandboxTier() alone, so the deployed STAGING declares "+
-			"that it does not seed and seeds.")
+			"render.yaml -- and read by nothing outside internal/config. An operator who reached for "+
+			"the one variable that says whether fake data may be written changed nothing at all.")
+
+	// And the thing that WAS seeding has a declared control that something
+	// reads (D-086). cmd/api/marketsurfaces.go used to seed the demo catalogue
+	// on cfg.SandboxTier() alone -- its own docstring said "when the deployment
+	// is a sandbox tier AND ASKS FOR IT", and there was no asking -- so the
+	// deployed STAGING declared that it does not seed and seeded.
+	assert.NotEmpty(t, readersOf("API.DemoData"),
+		"the sandbox demo catalogue still has no switch: eight demo markets, a demo Credit balance "+
+			"and an activity feed built out of them are loaded on every boot with nothing able to stop it")
+	demo, declared := env["CP_API_DEMO_DATA"]
+	require.True(t, declared,
+		"the blueprint does not say whether this deployment seeds demo data, so the answer is the "+
+			"variable's default and nobody decided it")
+	assert.Equal(t, "true", demo,
+		"STAGING is the rehearsal this catalogue exists for; if it is genuinely not wanted, say so "+
+			"here and delete this assertion with it")
 }
 
 // --------------------------------------------------------------- F-cfg-10 ---
