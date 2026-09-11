@@ -34,8 +34,8 @@
  * and not a failure to load: it means no gate row exists yet, which is the
  * safest possible state and is labelled as such.
  */
-import { actOnGate, contractCapabilities, inApiContract, listGates, SANDBOX_GATE_ACTIONS } from "../api.ts";
-import type { CapabilityGate, GateActionName } from "../api.ts";
+import { actOnGate, isCapability, listGates, SANDBOX_GATE_ACTIONS } from "../api.ts";
+import type { Capability, CapabilityGate, GateActionName } from "../api.ts";
 import type { ViewContext } from "../context.ts";
 import { allowedWrites } from "../decide.ts";
 import { actionButton, append, clear, el, emptyState, field, fields, notice, panel, pill, table } from "../dom.ts";
@@ -92,7 +92,6 @@ export async function renderGates(ctx: ViewContext, root: HTMLElement): Promise<
         `${gates.length} of ${declared.length} declared capabilities have a stored gate row. A capability with no row is DISABLED, which is the default and the safe state.`,
       ),
       sandboxed.length > 0 ? sandboxBanner(sandboxed) : null,
-      contractDriftNotice(declared),
       table(
         ["Capability", "Row state", "Active now", "Why not", "Approval version", "Window", ""],
         declared.flatMap((capability) => gateRows(ctx, capability, known.get(capability))),
@@ -123,29 +122,6 @@ function sandboxBanner(sandboxed: readonly CapabilityGate[]): HTMLElement {
       "p",
       { class: "muted" },
       "A SANDBOX gate carries no approval, no evidence reference and no approver. It is not a step towards ACTIVE and it never becomes one: the real ceremony starts from DISABLED.",
-    ),
-  );
-}
-
-/**
- * The console addresses every capability the authority document declares, and
- * the authority document is generated from the same Go tables the server
- * validates against. The OpenAPI contract restates that list by hand and has
- * fallen behind it; where the two disagree the operator is told, because a
- * name this console can drive but the published contract does not list is a
- * fact about the repository, not about the gate.
- */
-function contractDriftNotice(declared: readonly string[]): HTMLElement | null {
-  const missing = declared.filter((c) => !inApiContract(c));
-  if (missing.length === 0) return null;
-  return notice(
-    "info",
-    el("strong", {}, `${missing.length} declared capabilities are absent from the API contract's Capability enum.`),
-    el("p", {}, missing.join(", ")),
-    el(
-      "p",
-      { class: "muted" },
-      `The server validates this path segment against internal/gates.AllCapabilities (${String(declared.length)} names), not against the contract (${String(contractCapabilities().length)}), so these gates are addressable and are offered here. Regenerating openapi/openapi.yaml's Capability enum from Go closes the gap.`,
     ),
   );
 }
@@ -303,14 +279,22 @@ function controls(ctx: ViewContext, capability: string, gate: CapabilityGate | u
   const now = ctx.now();
   const permitted = new Set(allowedWrites(ctx.session.principal, "gates", now, ctx.authority));
   const box = el("div", { class: "controls" });
+  // The authority document and the OpenAPI contract are generated from the same
+  // Go source, and `scan.test.ts` holds their capability lists equal, so this
+  // normally passes for every declared name. If it ever does not, the honest
+  // answer is a refused control naming the drift, not a request assembled
+  // against a path this console cannot type.
+  const routable = isCapability(capability);
   for (const action of ACTIONS) {
     const spec = gateWrite(ctx.authority, action);
-    const allowed = permitted.has(spec.writeId) && transitionOffered(action, gate);
-    const refusal = !permitted.has(spec.writeId)
-      ? `${reasonText("MISSING_PERMISSION")} This step needs ${spec.permission}${
-          spec.elevationOnly ? ", which only a live break-glass elevation carries" : ""
-        }.`
-      : transitionRefusal(action, gate);
+    const allowed = routable && permitted.has(spec.writeId) && transitionOffered(action, gate);
+    const refusal = !routable
+      ? `This console's API contract does not list ${capability} as a gated capability, so it cannot address this gate. The console and the API are out of step; regenerate the client.`
+      : !permitted.has(spec.writeId)
+        ? `${reasonText("MISSING_PERMISSION")} This step needs ${spec.permission}${
+            spec.elevationOnly ? ", which only a live break-glass elevation carries" : ""
+          }.`
+        : transitionRefusal(action, gate);
     append(
       box,
       actionButton({
@@ -318,7 +302,9 @@ function controls(ctx: ViewContext, capability: string, gate: CapabilityGate | u
         variant: buttonVariant(action),
         allowed,
         ...(allowed ? {} : { reason: refusal }),
-        onClick: () => openGateForm(ctx, capability, action, gate),
+        onClick: () => {
+          if (routable) openGateForm(ctx, capability, action, gate);
+        },
       }),
     );
   }
@@ -412,7 +398,7 @@ function transitionRefusal(action: GateActionName, gate: CapabilityGate | undefi
 
 function openGateForm(
   ctx: ViewContext,
-  capability: string,
+  capability: Capability,
   action: GateActionName,
   gate: CapabilityGate | undefined,
 ): void {

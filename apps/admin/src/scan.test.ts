@@ -31,6 +31,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { contractCapabilities, isCapability } from "./api.ts";
 import { ROUTES } from "./app.ts";
 import { parseAuthority, SUPPORTED_AUTHORITY_VERSION } from "./authority.ts";
 import type { Authority } from "./authority.ts";
@@ -182,9 +183,30 @@ test("every surface declares at least one permission that can read it", () => {
   assert.deepEqual(bad, [], bad.join("\n"));
 });
 
+test("the contract's capability enum and the authority document agree", () => {
+  // Two generated artefacts, both derived from internal/gates, reached the
+  // console by different routes: the authority document through
+  // internal/adminplane, the enum through openapi/openapi.yaml. They disagreed
+  // — ten names against twenty, missing five of the six a sandbox tier
+  // activates — and the console could only report it (D-078). Now that the enum
+  // is regenerated, holding them equal here is what keeps the report
+  // unnecessary: a future divergence fails this test instead of appearing as a
+  // notice an operator has to act on.
+  const declared = [...authority().capabilities].sort();
+  const contract = [...contractCapabilities()].sort();
+  assert.deepEqual(
+    contract,
+    declared,
+    "openapi/openapi.yaml's Capability enum and internal/gates.AllCapabilities have diverged; regenerate the contract",
+  );
+});
+
 test("the gates surface can address every declared capability", () => {
   const doc = authority();
   assert.ok(doc.capabilities.length > 0, "the document must declare the capabilities the gates view lists");
+  for (const capability of doc.capabilities) {
+    assert.ok(isCapability(capability), `${capability} is declared but the console cannot address it`);
+  }
   const writes = new Set((doc.surfaces.find((s) => s.id === "gates")?.writes ?? []).map((w) => w.id));
   // The six steps of the real ceremony are declared writes. sandbox and
   // unsandbox (ADR-0023) are not yet exported by adminplane, and views/gates.ts
