@@ -20,7 +20,7 @@
 -- being bumped. The acceptance no longer matches the current document, the API
 -- reports the document as unaccepted, and the user is asked again. Re-asking
 -- after a typo fix is a small cost; a consent record that names a version whose
--- text has since changed is a record of nothing (D-056).
+-- text has since changed is a record of nothing (D-053).
 --
 -- The unique key therefore includes the hash: the same person may hold two
 -- acceptances of one version when its bytes changed between them, and both rows
@@ -56,7 +56,7 @@ CREATE TRIGGER terms_acceptances_immutable BEFORE UPDATE OR DELETE ON terms_acce
     FOR EACH ROW EXECUTE FUNCTION forbid_mutation();
 
 COMMENT ON TABLE terms_acceptances IS
-    'One row per document version a user accepted, with the sha256 of the exact bytes they were shown. Append-only: consent is a record of something that happened, and a changed document is a new row rather than an edit (PART 48, PART 52, D-056).';
+    'One row per document version a user accepted, with the sha256 of the exact bytes they were shown. Append-only: consent is a record of something that happened, and a changed document is a new row rather than an edit (PART 48, PART 52, D-053).';
 
 GRANT SELECT, INSERT ON terms_acceptances TO cp_app;
 GRANT SELECT ON terms_acceptances TO cp_readonly, cp_ops;

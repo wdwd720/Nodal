@@ -115,7 +115,7 @@ func TestBuildTermsView_AcceptanceCountsOnlyAtTheCurrentBytes(t *testing.T) {
 	assert.NotContains(t, view.Outstanding, doc.ID)
 	assert.True(t, statusOf(t, view, doc.ID).Accepted)
 
-	// D-056: the same version with different bytes is a document nobody has
+	// D-053: the same version with different bytes is a document nobody has
 	// agreed to, and the API asks again rather than treating it as accepted.
 	stale := []Acceptance{{
 		DocumentID: doc.ID, Version: doc.Version,

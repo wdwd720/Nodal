@@ -333,7 +333,7 @@ func TestIntegration_Terms_AnAcceptanceCannotBeEditedOrDeleted(t *testing.T) {
 	require.Error(t, err)
 }
 
-// D-056: a document whose bytes changed without its version being bumped is a
+// D-053: a document whose bytes changed without its version being bumped is a
 // document nobody has agreed to, and the API asks again rather than treating a
 // record of different text as consent.
 func TestIntegration_Terms_AStaleHashIsOutstandingAgain(t *testing.T) {

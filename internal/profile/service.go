@@ -263,7 +263,7 @@ func (s *Service) Terms(ctx context.Context, a Actor) (TermsView, error) {
 
 func buildTermsView(list []Acceptance) TermsView {
 	// An acceptance counts only when the version AND the bytes match what is
-	// served now. D-056: a document edited without its version being bumped is
+	// served now. D-053: a document edited without its version being bumped is
 	// a document nobody has agreed to.
 	accepted := make(map[terms.DocumentID]time.Time, len(list))
 	for _, acc := range list {

@@ -41,6 +41,7 @@ The set of ADRs is the one required by goal PART 210.
 | [0021](0021-who-may-read-personal-data.md) | Personal data is encrypted in the application or not stored, and a role with no use for it cannot read it | Accepted | 121 | — |
 | [0022](0022-one-identity-source-of-truth.md) | One identity source of truth: ZITADEL authenticates, Neon owns the Nodal user; no second authentication system | Accepted | 4 (product goal §3) | — |
 | [0023](0023-the-sandbox-tier.md) | The sandbox tier: one declaration, refused in PROD, lets a non-production deployment exercise every gated surface without approving anything | Accepted | 4 (product goal §9) | — |
+| [0024](0024-how-a-principal-becomes-an-operator.md) | How a principal becomes an operator: a declaration in the deployment reconciled into `operator_roles`, never a claim from the identity provider | Accepted | 4 (product goal §38) | — |
 
 "Accepted" in the table abbreviates the full status line used in each file:
 `Accepted — implementation tracked in docs/build/REQUIREMENTS_TRACEABILITY.md`.
