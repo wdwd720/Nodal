@@ -1142,6 +1142,35 @@ attack was: the destination was already bound, and the hole was the origin.
    sanctions screening decision, since the screen has no edge table in either
    language yet.
 
+**Amended 2026-09-11 (second withdrawal-verification audit, F-259, F-265).**
+Residual 2 was wider than it said and the edge-table family was one member short.
+
+A same-state row did not only carry "a screening decision": both apply functions
+skipped the edge check and then wrote every other column the row held, so a
+`VERIFIED -> VERIFIED` compliance row moved `expires_at` -- renewing, for as long
+as the writer liked, a validity window a provider decided once and that
+`ExpireOverdue` and `Resolver` both read (F-265). 00815 narrows the exemption to
+the one row 00796 needs: a same-state row must carry `to_sanctions_state` and
+must not carry `verified_at`, `expires_at`, a provider, a provider reference or
+a session, and the apply function leaves both timestamps untouched on such a row
+rather than trusting the refusal. The residual now reads, exactly: a same-state
+row may still change the SANCTIONS SCREEN, which is what 00796's birth trigger
+and `compliance.Repository.screen` write and which the screen's own edge flag
+(00796) binds; nothing else rides on it. `payout_requests` has no same-state
+exemption at all any more, because `transitionWith` returns early and no
+legitimate writer produces one.
+
+And the fourth state machine in this area had no edge table: 00763's
+`payout_destinations.status` kept the rest of the F-42 treatment and an apply
+function that consulted nothing, so one INSERT moved a destination its holder had
+disabled back to VERIFIED with a fresh `verified_at` (F-259). 00814 adds
+`payout_destination_status_edges` from a new exported
+`payout.DestinationStateEdges()`, with no same-state exemption, and
+`test/integration/enums` gains the fourth pairing -- so "held identical by the
+enum suite" now covers every edge set in this area rather than three of four.
+
+Residual 1 is unchanged: `verification_checks` INSERT is still `cp_app`'s.
+
 **Evidence.** F-227. `migrations/00806_*.sql`, `internal/verification/state.go`,
 `internal/verification/session.go`; `TestIntegration_EveryLegalEdgeTableMatchesItsGoTable`,
 `TestIntegration_NobodyButTheMigrationRoleWritesAnEdgeTable`.
@@ -1222,6 +1251,40 @@ by hand; the one that did now produces the crash it was simulating
 `TestIntegration_MoneyColumnsAreOutOfTheApplicationsReach`,
 `TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase`.
 
+**Amended 2026-09-11 (second withdrawal-verification audit, F-264).** 00807
+copied 00806's same-state exemption without copying the reason for it, and the
+money it had just moved onto the transition row rode in through the copy.
+
+A row whose endpoints are the same state skipped the edge check and the trigger
+then wrote everything else it carried. So a `VERIFIED -> REJECTED` row inserted
+onto a request ALREADY REJECTED changed no state -- and wrote
+`reserved_quantity`, `settled_quantity`, both instants, `provider_status` and
+`provider_reference = 'forged-by-cp_app'`, which is the exact column this entry
+says was revoked for being the provider's word. 00731's deferred binding cannot
+see it: it compares `old_val` to `new_val` and returns NULL when they are not
+distinct.
+
+The second half was the reservation invariant. `cp_payout_reservation_balanced`
+(PO001, 00713) is a constraint trigger on `payout_allocations`, so a
+`reserved_quantity` written with no allocation row behind it touched that table
+not at all and was compared to nothing.
+
+00815: the same-state exemption is dropped outright for `payout_requests` -- no
+legitimate writer produces such a row, because `transitionWith` returns early --
+and `payout_requests_reservation_backed` asks PO001's question where the quantity
+is written. Both sides are re-read at COMMIT rather than taken from NEW, because
+a deferred constraint trigger replays each row event with the values it had at
+the time and an ordinary `Create` passes through `reserved = 0` with the
+allocations already written. `settled_quantity` needs no clause of its own:
+00713's CHECK already says it cannot exceed the reservation, so a forged
+settlement has to forge the reservation first.
+
+Residual: a transaction that writes BOTH a reservation and matching allocation
+rows satisfies the invariant, which is correct -- it is what `Create` does -- so
+what PO001 proves is that a quantity has provenance behind it, not that the
+provenance is the right person's. That is what `payout_allocations`' own foreign
+key to `credit_lots` and the consumption path enforce.
+
 ## D-124 — Proceeds are as final as what paid for them (2026-09-11, product goal §54, F-230, F-e2e-1)
 
 **Problem.** `internal/nativemarket` and `internal/commerce` minted every earning
@@ -1287,6 +1350,43 @@ not the rehearsal one.
 `TestIntegration_ProceedsOfAReversiblePurchaseAreReversible`,
 `TestAuditWV_AProceedsLotSettlesWhenItsFundingDoesAndNotBefore`.
 
+**Amended 2026-09-11 (second withdrawal-verification audit, F-260, F-261,
+F-262, F-266).** Four things this decision got wrong, superseded by D-131 and
+D-132 and by 00816.
+
+1. **Only the finality travelled.** "A derived lot inherits its parents'
+   finality and nothing else" left the ORIGIN behind and made goal §23's
+   forbidden round trip reachable for the first time: a trader holding only
+   PROMOTIONAL, UNFUNDED Credits buys and sells, and the proceeds are
+   MARKET_TRADING_PROCEEDS at UNFUNDED -- an origin `SandboxPolicy` releases, a
+   finality `PayoutEligible()` admits (F-261). Before this decision the pattern
+   was unreachable by accident, because proceeds were REVERSIBLE for ever. D-131
+   adds the origin floor and supersedes this paragraph.
+
+2. **"Arrival order" was the wrong draw-down.** The claim above that arrival
+   order "keeps the record bounded by the reserve" is true and is not the
+   question. FIFO hands a seller the BEST provenance the pool happens to hold,
+   so a reversible purchase is laundered by an earlier contributor's settled
+   Credits -- the exact route this entry says the finality model exists to close
+   (F-262). D-132 draws the pool down worst first.
+
+3. **`SettleDerived`'s candidate set never shrank.** `finality IN
+   ('REVERSIBLE','SETTLED') AND EXISTS (a parent row)`, `ORDER BY lot_id LIMIT
+   100`: promoting a lot left it in the predicate and UUIDv7s sort
+   chronologically, so the sweep returned the oldest hundred derived lots for
+   ever and both directions starved after the hundredth -- F-230 restored by the
+   sweep written to fix it, at a volume any deployment passes in its first week
+   (F-260). The predicate now selects only lots a pass would move.
+
+4. **`credit_lot_parents` was INSERTable at any time.** Nothing bound a parent
+   row to the mint, so one INSERT invented the provenance of a card payment
+   months later and the sweep promoted it (F-266). 00816 binds the row to the
+   lot's creating transaction; the residual is stated in that migration's header.
+
+The consequences paragraph above is also superseded: the narrowing of
+`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` was a mistake rather than
+a simplification, and D-131 restores the strong form.
+
 ## D-125 — The idempotency record keeps what may be kept, not the whole answer (2026-09-11, product goal §54, F-231)
 
 **Problem.** `runCommand` marshals a command's whole response into
@@ -1340,3 +1440,270 @@ rather than an audit.
 - **Why derived rather than chosen:** the two alternatives are both worse. *Re-pointing it at `internal/risk`* would deny `internal/strategy/validate.go` an import it legitimately makes — reading the kernel's limits to validate a strategy is not mutating a policy, and depguard matches package paths, not intent — so `make lint` would fail on correct code and the rule would be relaxed again by whoever hit it. *Deleting it* would leave `MASTER_BUILD_STATE.md:1216`, `REQUIREMENTS_TRACEABILITY.md` R-009-1 and `PRODUCTION_READINESS_REPORT.md:158–159` citing a rule that no longer exists, which is the same defect in three more documents, and one of those three is a file this work may not edit.
 - **Consequences:** the guard keeps a fifth entry that does nothing, and the document a reviewer scores posture from says so. If `internal/risk` is ever split so that policy writing has its own package, the deny starts working and this note is deleted with the same commit.
 - **Evidence:** `.golangci.yml:164`, `scripts/lintfin/main.go:70`, `docs/security/SECURITY.md` §5; `internal/risk/policy.go`, `internal/strategy/validate.go`, migration 00152.
+
+
+## D-131 — A derived lot is as withdrawable as the least withdrawable thing that funded it, in origin as well as in finality (2026-09-11, product goal §23, §54, F-261)
+
+**Problem.** D-124 made a derived lot inherit its parents' FINALITY and nothing
+else. A trader holding only PROMOTIONAL, UNFUNDED Credits buys into a native
+market and sells back out; the proceeds are MARKET_TRADING_PROCEEDS — an origin
+`SandboxPolicy` marks withdrawable — at UNFUNDED, which `PayoutEligible()`
+admits; and `payout.Engine.Evaluate` returns `Sufficient()` at PAYOUT_KYC.
+
+Goal §23 forbids that shape in as many words: "nonwithdrawable source → trade →
+magically payout-eligible balance unless the eventual external/legal/provider
+policy explicitly allows it". `SandboxPolicy` says the opposite of allowing it —
+"a promotional grant that could leave the system would be the first rule somebody
+copied" — and `CREDIT_ECONOMY.md` §4 says promotional value "can never leave this
+system under any policy in this build". Before D-124 the pattern was unreachable
+by accident, because every earning was minted REVERSIBLE for ever; D-124 opened
+it, and two shipped tests then asserted the opening as correct (F-261).
+
+**Chosen.** Every lot carries an **origin floor** beside its finality, in
+`credit_lot_state.origin_floor`, maintained by a trigger and by nothing else
+(00816). A lot with no parents has its own origin as its floor; a derived lot's
+floor is the most restricted floor among its parents. "Most restricted" is
+defined once, in `valuedomain`: closed under `DefaultPolicy` and `SandboxPolicy`
+both < closed under one < permitted, with ties broken on the origin's own name.
+`cp_credit_origin_floor_rank` is the same ordering in SQL, and
+`TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs` holds the two
+identical the way `cp_credit_finality_can_transition` is held to
+`CanTransitionFinality`.
+
+`Policy.Permits` permits a lot only if it permits BOTH the lot's origin and its
+floor, and the floor has **no permissive zero value**: an unstated or undeclared
+one is `UNKNOWN_ORIGIN` and refuses. `eligibility.ExplainWithdrawal` carries the
+floor onto the bucket and `GET /v1/me/eligibility` renders it as `origin_floor`
+when it differs from the origin, so a person reads "this came from a promotional
+grant" rather than `ORIGIN_NOT_PAYOUT_ELIGIBLE` on a bucket of trading proceeds,
+which is an answer nobody can act on. `verification_would_suffice` is suppressed
+on a bucket the floor forbids: verifying will never release it, and saying
+otherwise is the refusal §19 forbids, dressed as encouragement.
+
+**Why derived rather than chosen.** The finality was never the dimension this
+finding lives in. UNFUNDED value IS final — nobody can claw back a gift — and
+what makes a grant unwithdrawable is its ORIGIN, which the policy closes.
+Answering F-261 by minting a grant's proceeds REVERSIBLE would be F-230 restored:
+a grant has no `credit_fundings` row, so `SettleFunding` cannot reach it and
+`SettleDerived` would wait for a parent already as final as it will ever be.
+
+The floor is the MOST RESTRICTED parent rather than an apportionment for the same
+reason the finality is the least final: a bucket containing one grant-funded unit
+is a bucket that is not wholly withdrawable, and splitting a lot into a
+withdrawable part and a granted part is a second provenance model on top of the
+one the ledger has, whose first question — which part is the profit — nobody can
+answer.
+
+Reading the floor's rule for `PayoutAllowed` only, and not for the capability,
+the verification level or the hold period, follows from `OriginRule.Validate`: a
+rule that forbids payout may not name a capability, so asking a grant's rule for
+one would demand a gate that cannot exist.
+
+**Consequences, stated and tested.**
+1. A demo trader's proceeds are never withdrawable.
+   `TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` is restored to the
+   strong form D-124 narrowed away: EVERY seeded lot, in every account the seeder
+   touched, is refused by `Policy.Permits` under BOTH policies in this build,
+   with `ORIGIN_NOT_PAYOUT_ELIGIBLE` among the reasons — asked of the policy
+   rather than of a rule repeated in the test.
+2. A trader whose parents are all PURCHASED still earns withdrawable proceeds.
+   `TestIntegration_ASandboxTraderEarnsProceedsThatCanReachAPayout` and
+   `TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality` are funded with a
+   settled purchase instead of a grant, each with the reason in its own comment;
+   browser scenario F reaches a conversion request unchanged, because the
+   sandbox fixture buys Credits.
+3. A trader who buys with a grant and sells at a profit cannot withdraw the
+   profit either. That is the intended answer and it is not hidden.
+4. `credit.Lot`, `eligibility.OriginHolding` and `eligibility.OriginBucket` grow
+   a floor; `WithdrawalOriginBucket.origin_floor` is an additive optional field.
+
+**Documents reconciled.** `CREDIT_ECONOMY.md` §4 and §7,
+`VERIFICATION_AND_WITHDRAWAL.md` §7 and §9, and D-124 (amended, dated) now say
+this rather than the finality-only rule.
+
+**Residual.** The ordering is computed from the policies this BUILD ships. A
+policy persisted through the approval path that released an origin
+`SandboxPolicy` closes would not change any floor already written, because a
+floor is fixed when the lot is minted — which is the conservative direction, and
+is the same property `credit_lots.origin` already has.
+
+**Evidence.** F-261. `migrations/00816_*.sql`,
+`internal/valuedomain/originfloor.go`, `internal/valuedomain/policy.go`,
+`internal/credit/types.go`, `internal/eligibility/withdrawal.go`,
+`internal/httpapi/wiring_verification.go`;
+`TestAuditWV2_AGrantThePolicyForbidsCannotBeTradedIntoWithdrawableValue`,
+`TestPolicy_PermitsReadsTheFloorAsWellAsTheOrigin`,
+`TestIntegration_GoAndSQLAgreeOnHowRestrictedEveryOriginIs`,
+`TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave`,
+`TestGetMeEligibility_ExplainsPerOrigin`.
+
+## D-132 — The pooled reserve is drawn down worst first (2026-09-11, product goal §54, F-262)
+
+**Problem.** `native_market_credit_sources` was drawn down in arrival order
+(`ORDER BY created_at, id`). A pool is fungible, so "whose Credits left" is a
+CHOICE rather than a fact, and FIFO makes the choice that hands a seller the best
+provenance the pool happens to be holding. A pays in 40,000 settled Credits; B
+pays in 40,000 a card issuer can still take back, sells back less than A put in,
+and is minted proceeds funded by A's settled contribution — payout-eligible at
+birth — while B's own reversible Credits stay in the pool for whoever sells next
+(F-262). That is the laundering route D-124 says the finality model exists to
+close, reached through somebody else's money instead of the seller's own. The
+shipped test missed it because its market had ONE contributor, so FIFO handed the
+trader back their own lot.
+
+**Chosen.** Open sources are consumed in order of: origin floor most restricted
+first, then least final first, then oldest. A seller can never be handed
+provenance better than the pool's worst outstanding contribution.
+
+The rows are still SELECTed and LOCKED in arrival order, which is not the same
+ordering and is deliberate: two concurrent sales against one market must take the
+same row locks in the same sequence or they deadlock, and arrival order is the
+one ordering that cannot change while a transaction runs. The draw-down order is
+decided afterwards, in memory, over the rows the transaction already holds.
+
+**Why derived rather than chosen.** Fail closed is the architecture's rule and
+this is what it looks like when it is inconvenient. Of the three orderings
+available, FIFO is a laundering route; pro-rata (a sale draws a slice of every
+outstanding contribution) gives every seller a floor as bad as the pool's worst
+ANYWAY, and multiplies the parent rows by the number of contributors, so it is
+worse in both directions; worst-first gives the same answer as pro-rata for the
+floor and the fewest parent rows.
+
+**What it costs, stated plainly.** An honest seller paying into a pool that still
+holds somebody else's REVERSIBLE contribution receives reversible proceeds until
+that contribution settles — and `credit.Service.SettleDerived` promotes them on
+the next pass when it does, so the wait is bounded by the other person's dispute
+window rather than permanent. Somebody else's promotional grant in the pool gives
+a seller a PROMOTIONAL origin floor, which no policy in this build releases and
+which does NOT move when anything settles (D-131). On a seeded demo tier every
+pool contribution is a grant, so that is the state demo markets are in, and it is
+correct: demo money does not become withdrawable by passing through a market.
+
+**Evidence.** F-262. `internal/nativemarket/poolprovenance.go`;
+`TestAuditWV2_TheFirstContributorsFinalityIsHandedToTheNextSeller`,
+`TestIntegration_ProceedsOfAReversiblePurchaseAreReversible` (widened to two
+contributors), `TestIntegration_AnHonestSellerWaitsForTheWorstContributionToSettle`.
+
+## D-133 — A poll is a call to a provider, and the session records when the last one happened (2026-09-11, product goal §54, second-round observation (a))
+
+**Problem.** `GET /v1/me/verification/sessions/{id}` calls
+`verification.Provider.Get` on every request whose session is not terminal. It is
+a GET, so `internal/httpapi`'s rate-limit selection puts it in the General class
+— 600 a minute per principal on the deployment, 6000 under the browser suite — so
+one signed-in person can make this deployment call an identity provider six
+hundred times a minute, against a contract whose pricing and rate limits are the
+provider's and not ours.
+
+**Chosen.** A per-session minimum interval, not a rate-limit class.
+`verification_sessions.provider_polled_at` (00818) records when the provider was
+last asked, and a poll inside `verification.PollMinimumInterval` — ten seconds —
+answers from the session's recorded status and calls nobody.
+
+**Why derived rather than chosen.** The other option was moving the route into
+the Quote class, and it was not taken for three reasons. The Quote class is
+selected by URL PATH before routing, so the rule would be a second path pattern
+in a function whose job is to classify by shape, and the next provider-calling
+GET would need a third. A budget is per PRINCIPAL: two people polling one
+session, or one person with two tabs, get two budgets and the provider sees the
+sum — an interval on the SESSION bounds the quantity a provider contract is
+actually written in. And a rate limit REFUSES, where a poll inside the interval
+does not need to be refused: the answer is already on the row, it is the answer
+the last call got, and this is the route a person watching a spinner hits.
+Answering from the record is better product behaviour AND fewer provider calls
+than a 429.
+
+Ten seconds is chosen rather than inherited: a hosted identity check takes tens
+of seconds to minutes, the web client polls while a person waits, and a provider
+answering faster than ten seconds is answering faster than the screen can be
+read. The write happens BEFORE the call and in its own committed transaction, for
+the reason the payout provider's idempotency key is written first: a process that
+dies between the two must not leave a provider that was asked and a record that
+says it was not. The cost of that ordering is one interval's delay after a crash.
+
+**Consequences.** `IngestWebhook` is untouched, so a deployment with webhooks
+wired sees a decision immediately whatever the interval says. A terminal session
+is still not polled at all. `cp_app` gets UPDATE on the one new column and
+nothing else.
+
+**Residual.** The interval bounds calls per session, not per deployment. A
+caller who opens sessions in a loop still makes one provider call per session —
+which `verification_sessions_one_open_per_user` bounds to one open session per
+PERSON, so the remaining lever is account creation, which the capacity ceiling
+(`CP_CAPACITY_MAX_ACCOUNTS`) governs.
+
+**Evidence.** Second-round observation (a). `migrations/00818_*.sql`,
+`internal/verification/service.go`, `internal/verification/repository.go`;
+`TestIntegration_APollInsideTheMinimumIntervalCallsNobody`.
+
+## D-134 — A rehearsal is recorded, not inferred from a NULL two readers read differently (2026-09-11, product goal §54, second-round observation (b))
+
+**Problem.** 00810 added `payout_requests.sandbox` NULLABLE, on 00793's
+reasoning: a row written before the migration has no recorded fact, and `NOT NULL
+DEFAULT false` would assert about every one of them that it was a real payout,
+which is the one direction this label must never be wrong in. The reasoning is
+right and the result is a column two readers disagree about.
+`httpapi.toAPIPayout` reads NULL as a REHEARSAL; the CHECK reads it as REAL —
+`CHECK (NOT coalesce(sandbox, false) OR environment IS DISTINCT FROM 'PROD')` —
+so a NULL row is exempt from the rule the constraint exists to state, and the
+exemption is invisible because `coalesce(sandbox, false)` looks like a default
+rather than like a hole. One of the two is wrong on any given row and nothing can
+say which.
+
+**Chosen.** The column becomes NOT NULL (00817), the CHECK drops the `coalesce`
+so it says what it means, and the rows with no recorded fact are backfilled
+`true`.
+
+**Why `true` is a statement and not a convenience.** Every `payout_requests` row
+that exists anywhere was written on a non-PROD tier, because no PROD deployment
+of this system has ever existed.
+`docs/audit/FINAL_CHECKPOINT_2026-09-10.md` §11 states the deployment as it
+stands — "Every provider is `sandbox`. `CP_AUTH_MODE` is `oidc`. `CP_ENV` is
+`STAGING`" — and §13 states that every capability gate is inactive by absence,
+`capability_gates` holding zero rows, so `PAYOUT_RESERVE` and `PAYOUT_SETTLE`
+have never been active anywhere. A payout row written under those conditions is a
+rehearsal by every definition the system has. The migration CHECKS the ground
+rather than assuming it: it refuses to run if it finds a row with
+`environment = 'PROD'` and no flag, so on a database where the claim is false it
+fails loudly instead of relabelling somebody's money.
+
+**Why not a DEFAULT.** A default lets a new writer forget, and this is a safety
+label. `payout.CreateRequest.Validate` already refuses a request with no
+environment and `Create` writes both columns, so the only writers that could
+forget are test fixtures — which is exactly where a loud failure belongs, and
+where three of them now state the fact.
+
+**Consequences.** `environment` stays nullable: nothing reads it as permission,
+`scanRequest` already coalesces it to an empty string, and making it NOT NULL
+would be a second change riding on the first.
+
+**Evidence.** Second-round observation (b). `migrations/00817_*.sql`,
+`internal/payout/payout.go`, `internal/payout/repository.go`,
+`internal/httpapi/handlers_native.go`; `TestIntegration_TheWithdrawnInvariantsAreStillEnforced`.
+
+## D-135 — A refusal to store a body stores an empty document, because nil means "store the whole body" (2026-09-11, product goal §54, F-267)
+
+**Problem.** `redactForStorage` returns `nil` on both branches that exist to
+refuse a response nobody could inspect, under a comment calling that "the safe
+direction". `CommandResult.stored()` reads nil as "there is nothing special to
+store, keep Body". So the two branches that exist to keep a credential out of
+`idempotency_keys.response_body` put the WHOLE answer in it, and the comment
+beside them said the opposite of what happened (F-267).
+
+**Chosen.** Both branches return `[]byte("{}")`, and so does a body that parses
+as a bare `null` — it carries no field to strip and is not a document either.
+
+**Why derived rather than chosen.** The alternative is changing the SENTINEL —
+making `StoredBody` an explicit "store nothing" flag rather than overloading nil.
+That is a wider change to a type three call sites share, for a distinction one
+constant expresses, and the bug is not that nil is a bad sentinel: it is that a
+function returned the sentinel for "keep everything" while meaning "keep
+nothing".
+
+**Consequences.** Not reachable from today's routes, because every command
+response is a struct that marshals to a JSON object. It is one response type away
+— a route returning a list, a string or `null` — which is why the fix is the
+constant and not a note. The added unit test drives all four uninspectable shapes through `stored()`.
+
+**Evidence.** F-267. `internal/httpapi/neverstored.go`;
+`TestAuditWV2_RedactForStorageDoesNotFallBackToTheWholeBody`,
+`TestRedactForStorageStoresNothingRecognisableWhenItCannotInspectABody`.
