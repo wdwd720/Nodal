@@ -2,10 +2,10 @@
 
 package identity_test
 
-// Adversarial audit (goal §54), area accounts-auth. These demonstrated defects.
-// The return_to one still does: it is fixed on another branch and is left as the
-// auditor wrote it, so it fails here and passes once both branches merge. The
-// step-up one is inverted and is the regression for F-177.
+// Adversarial audit (goal §54), area accounts-auth. These demonstrated defects
+// and are inverted into the regressions for their fixes. The return_to one is
+// fixed on fix/config-deploy, so it FAILS on this branch and passes once both
+// branches are merged; see its own comment.
 
 import (
 	"context"
@@ -33,9 +33,12 @@ import (
 // returns the stored path verbatim, so the callback answers
 // `302 Location: /\evil.test` AFTER setting the session cookie.
 //
-// The guard and postLoginDestination belong to the config-deploy fix branch;
-// this test is left exactly as the auditor wrote it so the orchestrator can see
-// it flip once that branch merges.
+// The guard and postLoginDestination belong to the config-deploy fix branch, so
+// THIS TEST FAILS ON fix/accounts BY DESIGN and passes once both branches are
+// merged. It is inverted rather than left as written because the auditor's file
+// exists only on this branch: nobody on the branch carrying the fix can turn the
+// demonstration into a regression, so it is done here and the failure is
+// reported rather than hidden.
 func TestAudit_BeginAcceptsABackslashReturnToThatBrowsersResolveOffSite(t *testing.T) {
 	svc, _, _ := newService(t)
 	ctx := context.Background()
@@ -46,20 +49,20 @@ func TestAudit_BeginAcceptsABackslashReturnToThatBrowsersResolveOffSite(t *testi
 		`/\/evil.test`,
 		`/\\evil.test`,
 	} {
-		begin, err := svc.Begin(ctx, identity.BeginRequest{ReturnTo: returnTo})
-		require.NoErrorf(t, err, "Begin refused %q; if this now fails the defect is fixed", returnTo)
-
-		done, err := svc.Complete(ctx, identity.CompleteRequest{Code: "finance", State: begin.State})
-		require.NoError(t, err)
-		assert.Equalf(t, returnTo, done.ReturnTo,
-			"the callback will redirect the freshly signed-in browser to %q", returnTo)
+		_, err := svc.Begin(ctx, identity.BeginRequest{ReturnTo: returnTo})
+		require.Errorf(t, err, "Begin accepted %q, which every WHATWG-conformant browser resolves off site", returnTo)
+		assert.Equalf(t, errs.CodeValidationFailed, errs.CodeOf(err), "%q", returnTo)
 	}
 
-	// The comparison: the two shapes the existing suite tests ARE refused.
+	// The comparison: the two shapes the existing suite tests ARE refused, and
+	// an ordinary local path is still accepted, so this is refusing the
+	// backslash rather than refusing everything.
 	_, err := svc.Begin(ctx, identity.BeginRequest{ReturnTo: "//evil.test"})
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
 	_, err = svc.Begin(ctx, identity.BeginRequest{ReturnTo: "https://evil.test/x"})
 	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
+	_, err = svc.Begin(ctx, identity.BeginRequest{ReturnTo: "/portfolio"})
+	assert.NoError(t, err, "an ordinary local path must still be accepted")
 }
 
 // F-177. PART 192 requires session rotation on privilege change and

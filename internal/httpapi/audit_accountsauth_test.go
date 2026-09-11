@@ -1,9 +1,9 @@
 package httpapi
 
-// Adversarial audit (goal §54), area accounts-auth. These demonstrated defects.
-// All but one are inverted here into the regressions for their fixes; the
-// return_to one is fixed on another branch and is left exactly as the auditor
-// wrote it, so it fails here and flips once that branch merges.
+// Adversarial audit (goal §54), area accounts-auth. These demonstrated defects
+// and are inverted here into the regressions for their fixes. The return_to one
+// is fixed on fix/config-deploy, so it FAILS on this branch and passes once both
+// branches are merged; see its own comment.
 
 import (
 	"net/http"
@@ -36,14 +36,27 @@ import (
 // after a successful sign-in, which is the single best moment to land a person
 // on a page that asks them to sign in again.
 //
-// internal/identity's Begin guard and postLoginDestination belong to the
-// config-deploy fix branch, so this test is left as written.
+// postLoginDestination belongs to the config-deploy fix branch, so THIS TEST
+// FAILS ON fix/accounts BY DESIGN and passes once both branches are merged. It
+// is inverted rather than left as written because the auditor's file exists only
+// on this branch: nobody on the branch carrying the fix can turn the
+// demonstration into a regression.
+//
+// It asserts the PROPERTY rather than a particular remedy -- a Location must not
+// carry a backslash, whether the path is refused, normalised or replaced --
+// because which of those the fix chooses is that branch's decision.
 func TestAudit_TheCallbackWillRedirectOffSiteOnABackslashReturnTo(t *testing.T) {
 	t.Parallel()
 
-	// The pure function first: nothing normalises the stored path.
-	assert.Equal(t, `/\evil.test`, postLoginDestination("", `/\evil.test`),
-		"with no configured app origin the stored return_to is the Location verbatim")
+	// The pure function first.
+	for _, returnTo := range []string{`/\evil.test`, `/\evil.test/path`, `/\/evil.test`} {
+		assert.NotContainsf(t, postLoginDestination("", returnTo), `\`,
+			"with no configured app origin the stored %q reaches the Location verbatim, and a browser resolves it off site", returnTo)
+		assert.NotContainsf(t, postLoginDestination("https://app.test", returnTo), `\`,
+			"beneath a configured app origin, %q still resolves off site", returnTo)
+	}
+	assert.Equal(t, "/portfolio", postLoginDestination("", "/portfolio"),
+		"an ordinary local path must still be handed back unchanged")
 
 	// And through the real router, with the login-state cookie the callback
 	// requires, so this is the whole transcript and not a unit of it.
@@ -54,15 +67,15 @@ func TestAudit_TheCallbackWillRedirectOffSiteOnABackslashReturnTo(t *testing.T) 
 	begin := h.do(http.MethodGet, `/v1/auth/login?return_to=%2F%5Cevil.test`, nil)
 	require.Equal(t, http.StatusFound, begin.Code)
 	assert.Equal(t, `/\evil.test`, h.ports.identity.lastBegin.ReturnTo,
-		"the boundary passed the backslash form through to the login service")
+		"the boundary hands the query parameter to the login service, which is the guard")
 
 	res := h.doWithCookies(http.MethodGet, "/v1/auth/callback?code=abc&state=abc", nil,
 		begin.Result().Cookies())
 	require.Equal(t, http.StatusFound, res.Code, "body=%s", res.Body.String())
-	assert.Equal(t, `/\evil.test`, res.Header().Get("Location"),
-		"browsers resolve this to https://evil.test/")
 	require.NotNil(t, namedCookie(res, "cp_session"),
-		"and the session cookie is set on the way out, so the victim is signed in when they land there")
+		"the session cookie is set on the way out, which is what makes the Location worth guarding")
+	assert.NotContains(t, res.Header().Get("Location"), `\`,
+		"the redirect that sets the session cookie sent the browser to a path it resolves as https://evil.test/")
 }
 
 // F-178. handlers_profile.go stated the invariant as "Every `/me/...` route is
