@@ -60,10 +60,18 @@ async function eligibilityOf(page: Page, accountId: string): Promise<{
   readonly reasons: readonly string[];
   readonly buckets: ReadonlyArray<{
     readonly origin: string;
+    /**
+     * Where the value in this bucket ultimately came from, present only when it
+     * differs from `origin` (D-131). A bucket of MARKET_TRADING_PROCEEDS whose
+     * floor is PROMOTIONAL is a grant that has been traded, and the refusal has
+     * to name the grant rather than the trade.
+     */
+    readonly origin_floor?: string;
     readonly quantity: string;
     readonly withdrawable: string;
     readonly payout_allowed: boolean;
     readonly consumption_rank: number;
+    readonly verification_would_suffice?: boolean;
     readonly reasons: readonly string[];
   }>;
 }> {
@@ -218,44 +226,67 @@ test("a rehearsal verification, an eligible earning, a quote and a reservation t
   expect(promotional?.payout_allowed, "a promotional grant never leaves").toBe(false);
   expect(BigInt(promotional?.withdrawable ?? "1")).toBe(0n);
 
-  // # What holds value back here, and what no longer does
+  // # What holds value back on a SEEDED tier, and why that is the rule working
   //
-  // Every Credit on a seeded deployment is UNFUNDED: `scripts/seedeconomy`
-  // grants them PROMOTIONAL and unfunded on purpose, because nobody paid for
-  // them. This spec used to explain the refusal by saying an earning "inherits
-  // that" — it did not. internal/commerce and internal/nativemarket minted
-  // every earning REVERSIBLE unconditionally, and the only writer that promotes
-  // a lot out of REVERSIBLE reads `credit_fundings.lot_id`, which an earning has
-  // never had. So the refusal was not the finality model working; it was F-230,
-  // and no earning on any deployment could ever be withdrawn.
+  // Every Credit on a seeded deployment is a GRANT: `scripts/seedeconomy` issues
+  // 25,000 PROMOTIONAL/UNFUNDED to each customer on purpose, and its own comment
+  // says why a seeder must not mint PURCHASED Credits — it would be inventing a
+  // funding event, and PURCHASED is the origin a payout policy is most likely to
+  // permit.
   //
-  // D-124 makes an earning as final as what paid for it: it records the lots it
-  // was funded from and is minted at the least final finality among them. An
-  // earning funded by an UNFUNDED grant is therefore UNFUNDED and
-  // payout-eligible, and one funded by a card payment inside its dispute window
-  // is REVERSIBLE until `credit.Service.SettleDerived` promotes it — which is
-  // what FUNDING_NOT_SETTLED has always claimed and could not deliver.
+  // This spec used to explain the refusal by saying an earning "inherits" the
+  // grant's UNFUNDED finality. It did not: every earning was minted REVERSIBLE
+  // unconditionally and nothing could promote it, which was F-230 rather than
+  // the model working. D-124 fixed the finality half — an earning is as final as
+  // what paid for it — and in doing so made a grant round-tripped through a sale
+  // payout-eligible, which is goal §23's forbidden pattern (F-261).
   //
-  // The spec still follows whichever answer the tier gives rather than
-  // asserting one it cannot produce: what the seeded catalogue sells, and
-  // therefore what funds the sale, is not this scenario's subject.
+  // D-131 closes it: a derived lot inherits the most restricted ORIGIN in its
+  // provenance as well as the least final finality, and the policy must release
+  // the floor as well as the origin. So on a seeded tier the sale's earning has
+  // a PROMOTIONAL floor and cannot leave, whatever it was traded into. That is
+  // the intended answer and this scenario asserts it rather than tolerating it.
+  //
+  // The consequence for THIS suite, stated because a reader will otherwise think
+  // the leg regressed: a seeded local or sandbox tier cannot reach a settled
+  // conversion request from the browser, because nothing it hands out was ever
+  // paid for. Reaching that leg needs a customer holding a PURCHASED lot behind
+  // a recorded funding, and there is no way to produce one here — the credit
+  // purchase slot has one adapter (`internal/provider/stripecredit`) and it
+  // refuses a fake mode by design. The Go suites drive the withdrawable case
+  // directly (`TestIntegration_ASandboxTraderEarnsProceedsThatCanReachAPayout`,
+  // `TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality`, and
+  // internal/payout's own end-to-end reserve-and-settle tests).
+  const earnedBucket = earned[0];
   if (eligible.eligible) {
-    // Something may leave, which is what D-124 made reachable at all.
+    // Something may leave. On a tier where a customer holds value they paid for,
+    // this is the branch, and it is what D-124 made reachable at all.
     expect(BigInt(eligible.withdrawable_now) > 0n).toBe(true);
   } else {
     // Not eligible, and the answer says WHY rather than reporting a silent no.
-    // The reason this early in the journey is ordinarily TERMS_NOT_ACCEPTED --
-    // the withdrawal disclosure is read and accepted at step 4, on the page,
-    // which is where §48 puts it -- and it may equally be a minimum not met or
-    // a hold period, depending on what the seeded catalogue sold and what
-    // funded it. Asserting a particular one would be asserting something this
-    // scenario does not control; asserting that there IS one is the property.
     expect(
       eligible.reasons.length,
       `nothing is withdrawable and no reason was given; buckets: ${eligible.buckets
         .map((bucket) => `${bucket.origin}=${bucket.reasons.join("/")}`)
         .join(" ")}`,
     ).toBeGreaterThan(0);
+
+    // And on a seeded tier the reason is the ORIGIN FLOOR, named. This is the
+    // browser-visible half of D-131: the earning's own origin is one the policy
+    // releases, and what refuses it is where the value came from — which the
+    // answer has to say, or the person reads a refusal about a trade they made
+    // rather than about the grant they were given.
+    expect(earnedBucket?.reasons, `the earning bucket gives a reason`).toContain(
+      "ORIGIN_NOT_WITHDRAWABLE",
+    );
+    expect(
+      earnedBucket?.origin_floor,
+      "the refusal names where the value came from, not the transaction that moved it",
+    ).toBe("PROMOTIONAL");
+    expect(
+      earnedBucket?.verification_would_suffice ?? false,
+      "verifying does not release a grant that has been earned, and the product must not imply it does",
+    ).toBe(false);
   }
 
   // 4 · A quote, through the page. It reserves nothing and writes no ledger row.

@@ -11347,6 +11347,16 @@ lot, under both policies, through `Policy.Permits` — and the journey test is
 funded with a settled purchase, because what F-230 is about (an earning funded by
 PERMITTED value must reach a payout) survives the change.
 
+**Residual, and it is a change in what the browser suite can reach.** Everything
+a seeded tier hands out is a grant (`scripts/seedeconomy`, deliberately), so
+after this fix nothing earned on a seeded tier can be withdrawn and the browser
+journey's settled-conversion leg is unreachable there. Producing a PURCHASED lot
+behind a recorded funding needs a credit-purchase adapter, and the only one
+refuses a fake mode by design. `f-verified-sandbox.spec.ts` now asserts that the
+refusal is the origin FLOOR, named, so the suite proves the rule instead of
+tolerating an unexplained no; the withdrawable case is driven end to end by the
+Go suites. D-131's second residual records what would close it.
+
 **Evidence.** STATIC_PROOF: `migrations/00816_*.sql`,
 `internal/valuedomain/originfloor.go`, `internal/valuedomain/policy.go`.
 TEST_INT: `TestAuditWV2_AGrantThePolicyForbidsCannotBeTradedIntoWithdrawableValue`,

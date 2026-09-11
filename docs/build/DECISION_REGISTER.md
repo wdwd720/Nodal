@@ -1521,11 +1521,45 @@ one would demand a gate that cannot exist.
 `VERIFICATION_AND_WITHDRAWAL.md` §7 and §9, and D-124 (amended, dated) now say
 this rather than the finality-only rule.
 
-**Residual.** The ordering is computed from the policies this BUILD ships. A
-policy persisted through the approval path that released an origin
-`SandboxPolicy` closes would not change any floor already written, because a
-floor is fixed when the lot is minted — which is the conservative direction, and
-is the same property `credit_lots.origin` already has.
+**Residuals.**
+
+1. The ordering is computed from the policies this BUILD ships. A policy
+   persisted through the approval path that released an origin `SandboxPolicy`
+   closes would not change any floor already written, because a floor is fixed
+   when the lot is minted — which is the conservative direction, and is the same
+   property `credit_lots.origin` already has.
+
+2. **A seeded local or sandbox tier can no longer reach a settled conversion
+   request from the browser, and that is not a defect in the journey.**
+   `scripts/seedeconomy` issues 25,000 PROMOTIONAL/UNFUNDED Credits to each
+   customer and says in its own comment why a seeder must not mint PURCHASED
+   ones — it would be inventing a funding event, and PURCHASED is the origin a
+   payout policy is most likely to permit. Everything a seeded tier's customers
+   hold is therefore a grant, so under this decision everything they earn from
+   each other carries a PROMOTIONAL floor and nothing can leave.
+
+   Reaching that leg from a browser needs a customer holding a PURCHASED lot
+   behind a RECORDED funding, and nothing can produce one on a local tier: the
+   credit-purchase slot has one adapter (`internal/provider/stripecredit`) and it
+   refuses a fake mode on the stated ground that Stripe's own test mode is a
+   better fake than any we would write. Minting the lot without the funding, or
+   relaxing the seeder, would be the fabrication the goal forbids — so neither
+   was done here.
+
+   What holds meanwhile: `f-verified-sandbox.spec.ts` asserts the refusal is the
+   FLOOR, by name and by `origin_floor`, so the browser suite proves this
+   decision rather than tolerating an unexplained no; `audit-journey.spec.ts`
+   step 10 skips with the per-origin reasons printed; and the withdrawable case
+   — an earning funded by value the policy permits, reserved, submitted and
+   settled — is driven end to end by the Go suites
+   (`TestIntegration_ASandboxTraderEarnsProceedsThatCanReachAPayout`,
+   `TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality`, and
+   `internal/payout`'s own reserve-and-settle tests). What would close it is a
+   seeding decision, not a test change: a LOCAL seed that records a
+   sandbox-MODE credit funding (`credit_fundings.provider_mode`, 00793/D-096
+   already model exactly that) and mints the PURCHASED lot from it, labelled a
+   rehearsal everywhere. That is a change to a seeder's policy and belongs to
+   whoever owns `scripts/seedeconomy`.
 
 **Evidence.** F-261. `migrations/00816_*.sql`,
 `internal/valuedomain/originfloor.go`, `internal/valuedomain/policy.go`,
