@@ -82,7 +82,7 @@ func newCreditSweeper(ctx context.Context, cfg *config.Config, database *db.DB,
 			slog.String("error", err.Error()))
 		return nil
 	}
-	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
+	svc, err := credit.NewPurchaseService(ctx, database, credit.PurchaseServiceConfig{
 		Credits: credits, Provider: prov, Pricing: credit.DefaultPricingPolicy(),
 		Gates: checker, Clock: clk, Environment: string(cfg.Env),
 	})

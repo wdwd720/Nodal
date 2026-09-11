@@ -135,7 +135,7 @@ func wireCreditPurchase(
 		return disabled("no capacity ceilings are available", nil)
 	}
 
-	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
+	svc, err := credit.NewPurchaseService(ctx, database, credit.PurchaseServiceConfig{
 		Credits:  credits,
 		Provider: prov,
 		// The shipped policy. Changing the rate is a new version through the

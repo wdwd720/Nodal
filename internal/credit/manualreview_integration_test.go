@@ -103,7 +103,7 @@ func TestIntegration_AnUnparkedFundingStillMintsOnCapture(t *testing.T) {
 	got := f.funding(t, p.Funding.ID)
 	require.Equal(t, FundingReversible, got.State, "capture mints and moves to REVERSIBLE")
 	require.NotNil(t, got.LotID)
-	require.Equal(t, "10000", f.balances(t).Gross.String())
+	require.Equal(t, creditsForDollars(t, f, 100).String(), f.balances(t).Gross.String())
 }
 
 // The other half of F-100. Refusing to let a webhook resolve a review is only

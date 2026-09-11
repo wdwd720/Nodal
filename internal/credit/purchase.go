@@ -77,8 +77,27 @@ type PurchaseServiceConfig struct {
 	Environment string
 }
 
-// NewPurchaseService validates the configuration.
-func NewPurchaseService(cfg PurchaseServiceConfig) (*PurchaseService, error) {
+// NewPurchaseService validates the configuration against the deployment it is
+// about to price for.
+//
+// It takes a querier because one of the checks cannot be made without one: a
+// pricing policy converts money into BASE UNITS of the CREDIT asset, and it can
+// only do that correctly if it knows that asset's scale. The policy declares
+// the scale it prices at; this compares that against the asset the deployment
+// actually registered and refuses to build when they disagree.
+//
+// That refusal is the guard F-151 did not have. The shipped policy issued a
+// count of whole Credits into a column that means base units and nothing
+// anywhere compared the two scales, so every purchase for the life of the
+// deployment would have issued a millionth of what the funding page promised.
+// A deployment whose Credit asset is not provisioned at all is refused for the
+// same reason: a purchase service that cannot name the unit it sells would take
+// money and discover at mint time that there is nothing to mint.
+func NewPurchaseService(ctx context.Context, q db.Querier, cfg PurchaseServiceConfig) (*PurchaseService, error) {
+	if q == nil {
+		return nil, errs.New(errs.CodeValidationFailed,
+			"credit: a purchase service needs a database to check its pricing scale against the registered Credit asset")
+	}
 	if cfg.Credits == nil {
 		return nil, errs.New(errs.CodeValidationFailed, "credit: a purchase service needs the credit service")
 	}
@@ -95,6 +114,18 @@ func NewPurchaseService(cfg PurchaseServiceConfig) (*PurchaseService, error) {
 	if strings.TrimSpace(cfg.Environment) == "" {
 		return nil, errs.New(errs.CodeValidationFailed, "credit: a purchase service needs an environment")
 	}
+	decimals, err := cfg.Credits.AssetDecimals(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if decimals != cfg.Pricing.Decimals {
+		return nil, errs.Newf(errs.CodeValidationFailed,
+			"credit: pricing policy %s prices a %d-decimal Credit and this deployment registered a %d-decimal one; "+
+				"a purchase under it would issue %s of what it charged for",
+			cfg.Pricing.Version, cfg.Pricing.Decimals, decimals, scaleGap(cfg.Pricing.Decimals, decimals)).
+			WithField("policy_decimals", int(cfg.Pricing.Decimals)).
+			WithField("asset_decimals", int(decimals))
+	}
 	clk := cfg.Clock
 	if clk == nil {
 		clk = clock.System()
@@ -103,6 +134,15 @@ func NewPurchaseService(cfg PurchaseServiceConfig) (*PurchaseService, error) {
 		credits: cfg.Credits, provider: cfg.Provider, pricing: cfg.Pricing,
 		gates: cfg.Gates, capacity: cfg.Capacity, clk: clk, env: cfg.Environment,
 	}, nil
+}
+
+// scaleGap describes the size of a scale disagreement in the direction that
+// matters: how much of what it charged for a purchase would actually issue.
+func scaleGap(policy, asset uint8) string {
+	if policy > asset {
+		return fmt.Sprintf("10^%d times", policy-asset)
+	}
+	return fmt.Sprintf("a 10^%d-th", asset-policy)
 }
 
 // Pricing returns the policy in force. It is exposed so a funding page can
