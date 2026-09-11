@@ -612,3 +612,173 @@ export const payoutRequestSpec: Spec = {
 export function itemsSpec(item: Spec): Spec {
   return { arrays: { items: { required: true, spec: item } } };
 }
+
+/* --------------------------------------------------------------------------
+ * Agents and strategies (goal §17, §18; openapi tags: agents)
+ *
+ * Two shapes here that the specs above never had to describe.
+ *
+ * The first is a bare array of strings — an agent's allowed universe, a
+ * compiled version's effect set. `Spec.arrays` validates arrays OF OBJECTS,
+ * which is what every paged response is, so a list of identifiers would have
+ * passed through unchecked. `validatedStrings` closes that.
+ *
+ * The second is a nested object with money inside it. `checkObject` descends
+ * into arrays but treats a nested object as opaque, and an agent's limits and
+ * budget are exactly that: objects whose fields are exact Credit base units. A
+ * budget that arrived as a float would have been rendered rather than refused.
+ * `validatedAgent` therefore validates the nested parts explicitly, and it is
+ * here rather than in a page so no caller can forget.
+ * ------------------------------------------------------------------------ */
+
+/** Validates an array of plain strings and returns it. */
+export function validatedStrings(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) throw new ContractViolation(path, "expected an array of strings");
+  value.forEach((item, index) => {
+    if (typeof item !== "string") {
+      throw new ContractViolation(`${path}[${String(index)}]`, "expected a string");
+    }
+  });
+  return value as string[];
+}
+
+export const strategyVersionSpec: Spec = {
+  required: { id: "uuid", version: "integer", status: "string", ir_hash: "string", human_readable: "string" },
+  optional: { built_at: "timestamp" },
+};
+
+export const strategySpec: Spec = {
+  required: {
+    id: "uuid",
+    account_id: "uuid",
+    name: "string",
+    description: "string",
+    source_kind: "string",
+    status: "string",
+    compiler_configured: "boolean",
+    created_at: "timestamp",
+  },
+  optional: { updated_at: "timestamp", current_version: "object" },
+};
+
+export const compileResultSpec: Spec = {
+  required: {
+    strategy_id: "uuid",
+    attempt_id: "uuid",
+    attempt_no: "integer",
+    outcome: "string",
+    detail: "string",
+  },
+  optional: { version: "object" },
+};
+
+export const authorityLevelSpec: Spec = {
+  required: { level: "integer", name: "string", summary: "string", enabled: "boolean" },
+  optional: { required_capability: "string" },
+};
+
+export const agentScheduleSpec: Spec = {
+  required: { kind: "string" },
+  optional: { interval_minutes: "integer" },
+};
+
+export const agentLimitsSpec: Spec = {
+  required: {
+    budget_credits: "quantity",
+    per_trade_cap_credits: "quantity",
+    daily_loss_stop_credits: "quantity",
+    max_position_share_bps: "integer",
+    schedule: "object",
+  },
+};
+
+export const agentBudgetSpec: Spec = {
+  required: { granted_credits: "quantity", used_credits: "quantity", source: "string" },
+};
+
+export const agentRuntimeSpec: Spec = {
+  required: { evaluator: "string", executor: "string", detail: "string" },
+  optional: { last_heartbeat: "timestamp" },
+};
+
+export const agentPauseSpec: Spec = {
+  required: { reason_code: "string", reason: "string", paused_by_actor_type: "string", paused_at: "timestamp" },
+  optional: { open_orders_policy: "string" },
+};
+
+export const agentSpec: Spec = {
+  required: {
+    id: "uuid",
+    account_id: "uuid",
+    strategy_id: "uuid",
+    strategy_version_id: "uuid",
+    name: "string",
+    stage: "string",
+    state: "string",
+    status: "string",
+    authority: "object",
+    limits: "object",
+    budget: "object",
+    runtime: "object",
+    archived: "boolean",
+    created_at: "timestamp",
+  },
+  optional: {
+    mode: "string",
+    pause: "object",
+    runs_total: "integer",
+    last_run_at: "timestamp",
+    last_run_status: "string",
+    granted_by_user_id: "uuid",
+    granted_at: "timestamp",
+    updated_at: "timestamp",
+  },
+};
+
+/** The compiled version inside a strategy or a compile attempt, when there is one. */
+function checkStrategyVersion(raw: unknown, path: string): void {
+  if (raw === undefined || raw === null) return;
+  validated<unknown>(raw, strategyVersionSpec, path);
+  validatedStrings((raw as Record<string, unknown>)["effect_set"], `${path}.effect_set`);
+}
+
+/** A strategy, with its compiled version checked rather than assumed. */
+export function validatedStrategy<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, strategySpec, path);
+  checkStrategyVersion((raw as Record<string, unknown>)["current_version"], `${path}.current_version`);
+  return value;
+}
+
+/** A compile attempt. Every outcome is a real answer, including "nothing was produced". */
+export function validatedCompileResult<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, compileResultSpec, path);
+  const record = raw as Record<string, unknown>;
+  checkStrategyVersion(record["version"], `${path}.version`);
+  for (const field of ["failure_codes", "clarifications"]) {
+    const list = record[field];
+    if (list !== undefined && list !== null) validatedStrings(list, `${path}.${field}`);
+  }
+  return value;
+}
+
+/**
+ * An agent, including the Credit figures inside its limits and its budget.
+ *
+ * Those live one level down from the fields `checkObject` walks, so without
+ * this they would reach a page unvalidated. A budget is a ceiling on value at
+ * risk; it is not a field this app is willing to render on trust.
+ */
+export function validatedAgent<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, agentSpec, path);
+  const record = raw as Record<string, unknown>;
+  validated<unknown>(record["authority"], authorityLevelSpec, `${path}.authority`);
+  const limits = validated<Record<string, unknown>>(record["limits"], agentLimitsSpec, `${path}.limits`);
+  validated<unknown>(limits["schedule"], agentScheduleSpec, `${path}.limits.schedule`);
+  validatedStrings(limits["allowed_asset_ids"], `${path}.limits.allowed_asset_ids`);
+  validated<unknown>(record["budget"], agentBudgetSpec, `${path}.budget`);
+  validated<unknown>(record["runtime"], agentRuntimeSpec, `${path}.runtime`);
+  if (record["pause"] !== undefined && record["pause"] !== null) {
+    validated<unknown>(record["pause"], agentPauseSpec, `${path}.pause`);
+  }
+  return value;
+}
