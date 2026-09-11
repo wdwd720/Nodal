@@ -35,7 +35,7 @@
  * app did not initiate would be lost. Writing through costs one small string
  * per keystroke and makes the promise unconditional.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 /** Namespace, so nothing else in the origin can collide with a draft. */
 const PREFIX = "nodal.form.";
@@ -339,16 +339,20 @@ export function useSurvivesSignIn<T>(
       accepts ?? ((candidate: unknown): candidate is T => sameShape(initial, candidate));
     const kept = takeFormState<T>(key, check);
     recoveredRef.current = kept !== undefined;
+    // Put straight back, HERE, in the same breath as the read.
+    //
+    // A recovered value has to survive being recovered — a customer bounced to
+    // sign in twice must not lose it the second time — and doing that in an
+    // effect looked equivalent until a page became a `React.lazy` route. React
+    // discards the first render of a suspended tree and renders it again when
+    // the chunk lands, and a discarded render's effects never run: the read
+    // took the draft, the effect that would have put it back went with the
+    // render, and the form the customer came back to was empty. Recovering is
+    // idempotent this way whatever React does with the render it happens in,
+    // which is the only property that makes it safe.
+    if (kept !== undefined) stashFormState(key, kept);
     return kept === undefined ? initial : kept;
   });
-
-  // A recovered value is put straight back, so that a customer who is bounced
-  // to sign-in twice does not lose it the second time.
-  useEffect(() => {
-    if (recoveredRef.current === true) stashFormState(key, value);
-    // Runs once per key: the write-through in `set` covers every later change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
 
   const set = useCallback(
     (next: T) => {

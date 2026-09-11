@@ -259,3 +259,22 @@ test("the shape check reads through objects and arrays", () => {
   assert.equal(sameShape("", "text"), true);
   assert.equal(sameShape("", 3), false);
 });
+
+test("recovering a draft is idempotent, because a discarded render must not eat it", () => {
+  // React discards the first render of a suspended tree — which is every
+  // `React.lazy` route — and renders it again when the chunk lands. The read
+  // that recovers a draft happens in that render, so it has to be safe to
+  // happen twice: the first one took the value and the second one found
+  // nothing, and the customer came back from a step-up to an empty form.
+  installStorage();
+  stashFormState("create-asset.draft", { name: "Round trip asset" });
+
+  const first = takeFormState<{ name: string }>("create-asset.draft");
+  assert.deepEqual(first, { name: "Round trip asset" });
+  // What the hook now does in the same breath as the read.
+  if (first !== undefined) stashFormState("create-asset.draft", first);
+
+  // The render that actually mounts reads the same value rather than nothing.
+  assert.deepEqual(takeFormState("create-asset.draft"), { name: "Round trip asset" });
+  removeStorage();
+});
