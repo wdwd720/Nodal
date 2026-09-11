@@ -52,10 +52,11 @@ import { AgentNew } from "./pages/agents/AgentNew.tsx";
 import { AgentsList } from "./pages/agents/AgentsList.tsx";
 import { Verify } from "./pages/verify/Verify.tsx";
 import { Withdraw } from "./pages/withdraw/Withdraw.tsx";
-import { CreateAsset } from "./pages/CreateAsset.tsx";
 import { Home } from "./pages/home/Home.tsx";
-import { Marketplace } from "./pages/Marketplace.tsx";
-import { NativeMarkets } from "./pages/NativeMarkets.tsx";
+import { CreateAsset } from "./pages/markets/CreateAsset.tsx";
+import { MarketDetail } from "./pages/markets/MarketDetail.tsx";
+import { Markets } from "./pages/markets/Markets.tsx";
+import { Products } from "./pages/markets/Products.tsx";
 import { NotFound } from "./pages/NotFound.tsx";
 import { Portfolio } from "./pages/portfolio/Portfolio.tsx";
 import { BuyCredits } from "./pages/credits/BuyCredits.tsx";
@@ -307,10 +308,13 @@ export function App(): ReactNode {
           onboarding. */}
       <Route element={<RequireSession />}>
         <Route path="/home" element={<Home />} />
-        <Route path="/markets" element={<NativeMarkets />} />
+        <Route path="/markets" element={<Markets />} />
         {/* The internal product marketplace. It moves under the markets agent's
             own pages; the route is D-077's and does not change with it. */}
-        <Route path="/markets/products" element={<Marketplace />} />
+        <Route path="/markets/products" element={<Products />} />
+        {/* Ordered after `/markets/products` so the literal segment wins: a
+            product marketplace is not a market whose id is "products". */}
+        <Route path="/markets/:marketId" element={<MarketDetail />} />
         <Route path="/create-asset" element={<CreateAsset />} />
         <Route path="/agents" element={<AgentsList />} />
         <Route path="/agents/new" element={<AgentNew />} />

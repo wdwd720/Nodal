@@ -1,0 +1,233 @@
+/*
+ * The markets screens: the section navigation, the filter row, the ticket.
+ *
+ * It composes the token layer and adds no colour, radius or duration of its
+ * own — the same rule `site.css` follows. Four things genuinely need a rule
+ * here, and nothing else does:
+ *
+ *   1. the section navigation is links drawn as tabs, so it needs the selected
+ *      state keyed off `aria-current` rather than off `aria-selected`;
+ *   2. the filter row has to wrap on a phone without any control shrinking
+ *      below a thumb;
+ *   3. the trade screen is two columns on a desktop and one on a phone, with
+ *      the ticket first in the source order on both;
+ *   4. the ticket's controls are 44px targets, which is goal §31 and is not
+ *      the 34px a dense table row uses.
+ */
+
+.tabs a.tab {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tabs a.tab[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+/* ------------------------------------------------------------ the filters -- */
+
+.market-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.market-filters > * {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.market-filters .btn-wrap {
+  flex: 0 0 auto;
+}
+
+/* --------------------------------------------------------- the trade screen -- */
+
+.market-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.market-ticket-column {
+  position: sticky;
+  top: var(--space-4);
+  min-width: 0;
+}
+
+@media (max-width: 1023px) {
+  .market-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .market-ticket-column {
+    position: static;
+  }
+}
+
+/* ----------------------------------------------------------------- ticket -- */
+
+/*
+ * Goal §31: the ticket is the one surface a customer operates with a thumb
+ * while a price is moving, so every control in it is a 44px target and the
+ * side switch is two halves of a full-width row rather than two radio dots.
+ */
+.ticket-side {
+  display: flex;
+  gap: var(--space-2);
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.ticket-side legend {
+  padding: 0;
+  margin: 0 0 var(--space-2);
+}
+
+.ticket-side label {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+}
+
+.ticket-side label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+
+.ticket-side input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.ticket .inline-field input,
+.ticket .inline-field select {
+  min-height: var(--tap-min);
+}
+
+.ticket-tolerance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.ticket-tolerance legend {
+  padding: 0;
+  margin: 0 0 var(--space-2);
+}
+
+.ticket-tolerance label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.ticket-tolerance label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  font-weight: var(--weight-semibold);
+}
+
+.ticket-tolerance input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/*
+ * The expiry countdown. It is mono so the digits do not jump, and it never
+ * animates: a number counting down is already motion that carries data.
+ */
+.quote-expiry {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+}
+
+.quote-expiry-gone {
+  color: var(--warn);
+  font-weight: var(--weight-semibold);
+}
+
+/* ------------------------------------------------------- the mobile ticket -- */
+
+/*
+ * Under 768px the ticket is a bottom sheet, which is what `Dialog` already
+ * becomes at that width. What is needed here is the way in: a bar docked to the
+ * bottom edge, above the shell's own bottom navigation, carrying the last price
+ * and one full-width action.
+ */
+.ticket-dock {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .ticket-dock {
+    display: flex;
+    position: sticky;
+    bottom: 0;
+    z-index: var(--z-sticky);
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3);
+    margin: var(--space-4) 0 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .ticket-dock .btn {
+    min-height: var(--tap-min);
+  }
+}
+
+/* ------------------------------------------------------- the chart labels -- */
+
+/*
+ * An axis label is a rendered figure, not a string: a price at eighteen decimal
+ * places only fits an axis in the ladder notation, and that notation is markup.
+ * So the label carries the same tabular type as every other figure, at the
+ * smallest size in the scale.
+ */
+.chart-axis-label .figure,
+.chart-axis-label .num {
+  font-size: var(--text-2xs);
+}
+
+/* ------------------------------------------------------------- the holders -- */
+
+.holder-share {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-soft);
+}

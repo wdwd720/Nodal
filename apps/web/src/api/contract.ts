@@ -971,11 +971,6 @@ export const publicLegalDocumentSpec: Spec = {
   },
 };
 
-
-export const nativeMarketPageSpec: Spec = {
-  arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
-};
-
 /* --------------------------------------------------------------------------
  * Agents and strategies (goal §17, §18; openapi tags: agents)
  *
@@ -1388,3 +1383,119 @@ export function validatedPayout<T>(raw: unknown, path: string): T {
   }
   return value;
 }
+
+/* --------------------------------------------------------------------------
+ * The rest of the markets surfaces: the page envelope, the trade screen, the
+ * charts and the tape (product goal §12–§14, §47).
+ *
+ * `nativeMarketSummarySpec` above is the row these all carry. Every price in it
+ * is `quantity` — an exact integer at the market's own `price_scale` — and
+ * every amount is base units. None of them is `usd` and none of them is
+ * `decimal`: PART LIV forbids an external value for a Credit, so a response
+ * that tried to hand this app a currency figure for a native market would be
+ * refused at this boundary rather than rendered.
+ *
+ * `price_scale` and `asset_decimals` are required on every one of these,
+ * because they are how the digits are read. A response that carried a price
+ * without saying what scale it is on is not a price, it is a number, and the
+ * markets page would draw it a factor of ten to the twelve wrong (F-44).
+ * ------------------------------------------------------------------------ */
+
+export const nativeMarketPageSpec: Spec = {
+  required: { sort: "string", stable: "boolean" },
+  arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
+};
+
+/**
+ * The limits in force on one market (goal §47).
+ *
+ * Only the policy version is required, and that is the contract's own answer
+ * rather than a convenience: the compiled-in safety policy ships with the
+ * circuit breaker DISARMED (D-065), and the risk fields are absent entirely
+ * until a GLOBAL risk policy is recorded. Rendering an absent limit as a zero
+ * would state the strictest possible limit where the truth is that there is
+ * none, so every limit is optional here and the panel renders each absence as
+ * an absence.
+ *
+ * Note what this does NOT make optional-by-accident: a DISARMED breaker arrives
+ * as a literal `0`, not as an absent field, because the server distinguishes
+ * "unset", which it refuses, from "zero", which is a decision. The panel reads
+ * those as two different answers.
+ */
+export const marketSafetyLimitsSpec: Spec = {
+  required: { safety_policy_version: "string" },
+  optional: {
+    max_price_impact_bps: "integer",
+    max_slippage_bps: "integer",
+    circuit_breaker_move_bps: "integer",
+    circuit_breaker_window_seconds: "integer",
+    min_opening_liquidity_credits: "quantity",
+    creator_may_buy_own_asset: "boolean",
+    risk_policy_version: "string",
+    max_native_market_concentration_bps: "integer",
+    max_creator_concentration_bps: "integer",
+  },
+};
+
+/**
+ * The trade screen's read.
+ *
+ * `market` and `limits_in_force` are checked as objects here and validated
+ * against their own specs where the response is decoded, which is the same
+ * shape `portfolioSpec` uses for `credits` and `totals`.
+ */
+export const nativeMarketDetailSpec: Spec = {
+  required: { market: "object", limits_in_force: "object" },
+  arrays: {
+    top_holders: { spec: { required: { account_id: "uuid", quantity: "quantity" } } },
+  },
+};
+
+export const nativeCandlePageSpec: Spec = {
+  required: {
+    market_id: "uuid",
+    interval: "string",
+    from: "timestamp",
+    to: "timestamp",
+    price_scale: "integer",
+    asset_decimals: "integer",
+  },
+  arrays: {
+    candles: {
+      required: true,
+      spec: {
+        required: {
+          open_time: "timestamp",
+          open: "quantity",
+          high: "quantity",
+          low: "quantity",
+          close: "quantity",
+          credit_volume: "quantity",
+          asset_volume: "quantity",
+          trades: "integer",
+        },
+      },
+    },
+  },
+};
+
+export const nativeTradePageSpec: Spec = {
+  required: { market_id: "uuid", price_scale: "integer", asset_decimals: "integer" },
+  arrays: {
+    trades: {
+      required: true,
+      spec: {
+        required: {
+          seq: "integer",
+          side: "string",
+          effective_price: "quantity",
+          spot_price_after: "quantity",
+          credit_volume: "quantity",
+          asset_volume: "quantity",
+          printed_at: "timestamp",
+        },
+        optional: { spot_price_before: "quantity" },
+      },
+    },
+  },
+};
