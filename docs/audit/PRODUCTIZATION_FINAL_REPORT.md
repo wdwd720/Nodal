@@ -158,10 +158,11 @@ STARTED → PENDING → VERIFIED`, with `NEEDS_INFORMATION`, `REJECTED`,
 provider decision, a lifted restriction or a restored suspension. Levels are
 earned from evidence: `NONE → NODAL_IDENTITY → PAYOUT_KYC` (four passed checks:
 document, age, jurisdiction, sanctions) `→ ENHANCED`. The sanctions screen
-rides the transition row (F-168, 00796). **The second audit found the edge set
-was enforced in Go only: `cp_app` could reach VERIFIED in one INSERT**
-(F-wv-7, P1) — the legal-edge tables are D-121 on `fix/withdrawal`
-*(pending merge)*. `docs/product/VERIFICATION_AND_WITHDRAWAL.md` §4.
+rides the transition row (F-168, 00796). The second audit found the edge set
+was enforced in Go only — `cp_app` could reach VERIFIED in one INSERT (F-227,
+P1) — and migration 00806 now holds the legal edges in two tables the apply
+functions consult (`AD001` on an edge not in them), paired with the Go tables
+by the enum suite (D-121). `docs/product/VERIFICATION_AND_WITHDRAWAL.md` §4.
 
 ## 12 · Withdrawals
 
@@ -173,10 +174,16 @@ request (`payout_requests`, ADR-0026) → the provider. Kill switches reach the
 path (F-163, D-092). **The exact external blockers**: a licensed payout
 provider under contract (B-01/B-05), counsel's answer on the Credit float and
 on withdrawable gains (B-02), Stripe's restricted-business determination
-(B-09), the 1099 election and KYB (B-11). **The second audit's four P1s** —
-a sub-minimum payout with the quote skipped, a provider told no amount or
-destination, an open sanctions review that stopped nothing, and the
-transition tables above — are being fixed on `fix/withdrawal` *(pending)*.
+(B-09), the 1099 election and KYB (B-11). The second audit's four P1s — a
+sub-minimum payout with the quote skipped, a provider told no amount or
+destination, an open sanctions review that stopped nothing, and the transition
+tables above — are fixed and merged (`8a1b701`, F-224–F-227, D-119–D-121): the
+quote is required and its minimum is a domain fact, the provider is told the
+net amount and the destination from the recorded quote, and the sanctions
+screen, restrictions and jurisdiction block inside the reserving transaction.
+Earned Credits now settle when what paid for them settles (F-230, D-124,
+00809), so the conversion request is reachable for the origins the sandbox
+policy permits. Round two of the area's audit is running.
 
 ## 13 · Conversion
 
@@ -239,7 +246,10 @@ that had not written the area. Wave B: withdrawal-verification 11 (4 P1) →
 `fix/withdrawal`; docs-vs-reality 14 (6 P2) → `fix/docs`; browser end-to-end
 6 (1 P1, the same defect as the withdrawal audit's F-wv-3, and 5 P3) → two
 fixed on `productization` (F-251, F-252), one to each fix branch (F-250,
-F-253), one duplicate, one closed by the auditor's own test landing. Current open: the wave-B findings until their branches merge
+F-253), one duplicate, one closed by the auditor's own test landing. Both
+wave-B fix branches are merged (F-224–F-250, F-253); the withdrawal area's
+second audit round is running *(pending)*; the agents gap (F-255–F-258) is
+being built. Current open: the wave-B findings until their branches merge
 *(pending)*. The register: `docs/audit/AUDIT_FINDINGS.md`; the P0/P1 list:
 `docs/audit/LAUNCH_GATE_MATRIX.md` "What the productization wave changed".
 
@@ -258,9 +268,9 @@ Results: green in the full integration run (58 packages) and
 
 ## 19 · Restore
 
-`make restore-drill` after every merge: the latest at migration **00805 —
-OK, 154 tables, row counts identical, 0 accounts with balance drift, journal
-hashes equal, one live state change on the restored database, 15.5 s**
+`make restore-drill` after every merge: the latest at migration **00810 —
+OK, 159 tables, row counts identical, 0 accounts with balance drift, journal
+hashes equal, one live state change on the restored database, 15.1 s**
 (`docs/operations/BACKUP_RESTORE.md`, held to the migration head by
 `TestDocs_CountsMatchTheCode`). Class: `LIVE_OBSERVED`.
 
