@@ -6,18 +6,19 @@ class `docs/audit/PRODUCTION_EVIDENCE_INDEX.md` uses (`LIVE_OBSERVED`,
 `STATIC_PROOF`, `BLOCKED_EXTERNAL`, `UNKNOWN`); where a class is `UNKNOWN` or
 `BLOCKED_EXTERNAL` the item says so rather than rounding up.
 
-**Status of this document: DRAFT, being finished while wave B of the audit
-lands.** Items marked *(pending)* are refreshed when the last two fix branches
-merge, the browser audit reports, and the human actions queue is done. The
-headline does not change with them:
+**Status: written at the end of the productization wave (2026-09-11, 07:39
+PDT), after the last fix branch merged.** The items still marked *(pending)*
+are the ones only a person can move — the staging deployment, its browser
+walk, and CI's minutes — and the human actions queue names each. The headline:
 
-> `SOFTWARE_COMPLETE` is **false**. The customer product is built, merged,
-> audited and green on every local tier; it has not been deployed to STAGING
-> or walked in a browser there, because the deployment waits on two secrets
-> only a person may set; the withdrawal area's second audit found four P1s
-> whose fixes are on a branch; and CI cannot run because the repository's
-> Actions minutes are spent. The other four launch flags are false for reasons
-> no engineering clears.
+> `SOFTWARE_COMPLETE` is **false** for one reason that is not engineering.
+> The customer product is built, merged, audited eleven rounds deep and green
+> on every local tier — every software condition of goal §57 is met on the
+> evidence in `PRODUCTION_EVIDENCE_INDEX.md` — but §57 also requires "live
+> staging matches current HEAD", and the productization build reaches STAGING
+> only after two secrets a person must set and a push a person must make.
+> CI's minutes are a second evidence gap of the same kind. The other four
+> launch flags are false for reasons no engineering clears.
 
 ---
 
@@ -27,8 +28,9 @@ Run `git log -1 productization` for the value; a hash cannot be inside the
 object it hashes. The branch is `productization`, pushed to
 `origin/productization`; `main` is at `9906c9f` locally and is the human's to
 push (queue item 3). The commit this draft was written at is named in
-`docs/build/MASTER_BUILD_STATE.md` "RESUME HERE". *(pending: the final value
-after the wave-B merges.)*
+`docs/build/MASTER_BUILD_STATE.md` "RESUME HERE". The last product commit is
+the merge of `fix/withdrawal-4`, `5b2a414`; the commits after it are the drill
+record and these documents.
 
 ## 2 · Product URLs
 
@@ -72,8 +74,13 @@ on a sandbox tier a sandbox provider settles it after ten seconds and **no
 value moves**; on any other tier `PAYOUT_RESERVE`/`PAYOUT_SETTLE` are not
 ACTIVE and the request is refused with the capability's own words.
 `docs/product/USER_JOURNEY.md` is the screen-by-screen version; scenarios A–J
-in `apps/web/e2e/scenarios/` are the runnable one. Class: `STATIC_PROOF` +
-`LIVE_OBSERVED` locally (154 Playwright cases); live staging *(pending)*.
+in `apps/web/e2e/scenarios/` and the browser audit's twelve journeys are the
+runnable one. One honest limit of a seeded tier: every demo Credit is a grant
+and everything earned from a grant carries its floor, so the sandbox journey
+ends at a refusal naming that floor rather than at a rehearsal payout; a
+test-mode card purchase (queue item 8) is what would walk the last leg live.
+Class: `STATIC_PROOF` + `LIVE_OBSERVED` locally (180 Playwright cases); live
+staging *(pending the queue)*.
 
 ## 5 · Credits
 
@@ -227,7 +234,9 @@ declared the area flat: the repaired invariants held under exhaustive attack,
 and what remained was the ordinary cost of a large change. `fix/withdrawal-4`
 (the thaw clause, D-140; the page naming the floor; a state guard on the
 blocked reason; an explicit lot restriction; the root set on the allocation;
-a backfill that refuses a cycle) is the last fix of the area *(pending)*.
+a backfill that refuses a cycle) is merged (`5b2a414`), and the area is
+closed at four rounds. What remains is recorded, not open: the sanctions
+screen's legal edges are a compliance decision (B-02).
 
 ## 13 · Conversion
 
@@ -284,9 +293,14 @@ key and GitHub's billing page. Class: `LIVE_OBSERVED` (local),
 
 ## 17 · Security findings
 
-Opened by this goal: **F-134–F-223, ninety findings** (1 P0, 12 P1, 40 P2, 37
-P3), all FIXED with regression tests, from eight adversarial audits by agents
-that had not written the area. Wave B: withdrawal-verification 11 (4 P1) →
+Opened by this goal: **F-134–F-283, one hundred and fifty findings** (1 P0,
+22 P1, 62 P2, 65 P3), 149 FIXED with a regression test each and one recorded
+residual (F-258, `strategy_versions.status` application-written), from eleven
+audit rounds by agents that had not written the area: wave A's eight areas
+(F-134–F-223, ninety findings); wave B's withdrawal-verification (F-224–F-234,
+F-249, F-250), docs-vs-reality (F-235–F-248, F-253), browser end to end
+(F-251, F-252, F-254); the agents gap (F-255–F-258); and the withdrawal area's
+rounds two, three and four (F-259–F-283). Wave B: withdrawal-verification 11 (4 P1) →
 `fix/withdrawal`; docs-vs-reality 14 (6 P2) → `fix/docs`; browser end-to-end
 6 (1 P1, the same defect as the withdrawal audit's F-wv-3, and 5 P3) → two
 fixed on `productization` (F-251, F-252), one to each fix branch (F-250,
@@ -315,9 +329,10 @@ Results: green in the full integration run (58 packages) and
 
 ## 19 · Restore
 
-`make restore-drill` after every merge: the latest at migration **00822 —
-OK, 160 tables, row counts identical, 0 accounts with balance drift, journal
-hashes equal, one live state change on the restored database, 12.2 s**
+`make restore-drill` after every merge — eleven this wave; the latest at
+migration **00825 — OK, 160 tables, row counts identical, 0 accounts with
+balance drift, journal hashes equal, one live state change on the restored
+database, 12.4 s**
 (`docs/operations/BACKUP_RESTORE.md`, held to the migration head by
 `TestDocs_CountsMatchTheCode`). Class: `LIVE_OBSERVED`.
 
@@ -338,8 +353,11 @@ hashes equal, one live state change on the restored database, 12.2 s**
 | Playwright, merged tree, sandbox API | 154 passed / 3 skipped |
 | CI on GitHub | **could not run** — Actions minutes exhausted (queue item 7) |
 
-Commits per run: `docs/audit/PRODUCTION_EVIDENCE_INDEX.md` §3. *(pending:
-the same tiers after the wave-B merges.)*
+Commits per run: `docs/audit/PRODUCTION_EVIDENCE_INDEX.md` §3. At the end
+state (`d66bade`): lint 0 issues, unit green, the full integration suite
+**58 packages, all passed, 14m33s** (at `12f3a9a`), the full Playwright suite **181 passed / 11 stated skips / 0 failed** (5.8 min, at `197a5de`: the Stripe webhook legs and the Buy Credits chooser without a key, the reversed bucket, the no-compiler branch on a tier that has one, the agent sweep that `d-agent` performs, journey 10 on a seeded tier); the race, fuzz, contract,
+e2e and chaos tiers were run at `a4830b9` and every merge since changed only
+the packages the integration suite covers.
 
 ## 21 · Live staging
 
@@ -388,6 +406,16 @@ its minutes back. Nothing else needs a person.
 
 ## 26 · Resume here
 
-*(pending — the exact next step after productization is written when the
-wave-B branches have merged; until then the "RESUME HERE" note in
-`docs/build/MASTER_BUILD_STATE.md` is current to the hour.)*
+1. The human does `docs/build/HUMAN_ACTIONS_QUEUE.md` items 1–3 (secrets,
+   push `main`), then 3b (merge PR #1) and 4 (the CNAME); 7 restores CI; 8 is
+   optional and gives the last leg a live rehearsal.
+2. Claude, told "secrets set, main pushed": verifies `/v1/healthz`,
+   `/v1/readyz`, `/v1/version` (the merged commit and its config hash),
+   walks scenarios A–J on `app-nodal.actorvia.xyz` in Chrome (§56), records
+   both in `PRODUCTION_EVIDENCE_INDEX.md`, and sets `SOFTWARE_COMPLETE = true`
+   if and only if the walk matches the documents.
+3. Then the next engineering, in this order: the next audit round at the
+   area's boundaries (the credit-lifecycle seam and `sanctions_state`, both
+   named by round four), the agent runtime's bridge (F-65) once a decision
+   exists on what an agent may act on, and the Domain-A tiers this goal did
+   not touch.
