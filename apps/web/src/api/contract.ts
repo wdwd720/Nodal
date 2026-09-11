@@ -803,30 +803,6 @@ export const meAuditEntrySpec: Spec = {
   },
 };
 
-export const authorityLevelSpec: Spec = {
-  required: { level: "integer", name: "string", summary: "string", enabled: "boolean" },
-  optional: { required_capability: "string" },
-};
-
-export const agentSpec: Spec = {
-  required: {
-    id: "uuid",
-    account_id: "uuid",
-    strategy_id: "uuid",
-    name: "string",
-    stage: "string",
-    state: "string",
-    status: "string",
-    authority: "object",
-    limits: "object",
-    budget: "object",
-    runtime: "object",
-    archived: "boolean",
-    created_at: "timestamp",
-  },
-  optional: { mode: "string", pause: "object", runs_total: "integer", last_run_at: "timestamp", last_run_status: "string" },
-};
-
 /* --------------------------------------------------------------------------
  * Portfolio, the activity feed, and market discovery (goal §15, §16, §12).
  *
@@ -999,3 +975,416 @@ export const publicLegalDocumentSpec: Spec = {
 export const nativeMarketPageSpec: Spec = {
   arrays: { markets: { required: true, spec: nativeMarketSummarySpec } },
 };
+
+/* --------------------------------------------------------------------------
+ * Agents and strategies (goal §17, §18; openapi tags: agents)
+ *
+ * Two shapes here that the specs above never had to describe.
+ *
+ * The first is a bare array of strings — an agent's allowed universe, a
+ * compiled version's effect set. `Spec.arrays` validates arrays OF OBJECTS,
+ * which is what every paged response is, so a list of identifiers would have
+ * passed through unchecked. `validatedStrings` closes that.
+ *
+ * The second is a nested object with money inside it. `checkObject` descends
+ * into arrays but treats a nested object as opaque, and an agent's limits and
+ * budget are exactly that: objects whose fields are exact Credit base units. A
+ * budget that arrived as a float would have been rendered rather than refused.
+ * `validatedAgent` therefore validates the nested parts explicitly, and it is
+ * here rather than in a page so no caller can forget.
+ * ------------------------------------------------------------------------ */
+
+/** Validates an array of plain strings and returns it. */
+export function validatedStrings(value: unknown, path: string): string[] {
+  if (!Array.isArray(value)) throw new ContractViolation(path, "expected an array of strings");
+  value.forEach((item, index) => {
+    if (typeof item !== "string") {
+      throw new ContractViolation(`${path}[${String(index)}]`, "expected a string");
+    }
+  });
+  return value as string[];
+}
+
+export const strategyVersionSpec: Spec = {
+  required: { id: "uuid", version: "integer", status: "string", ir_hash: "string", human_readable: "string" },
+  optional: { built_at: "timestamp" },
+};
+
+export const strategySpec: Spec = {
+  required: {
+    id: "uuid",
+    account_id: "uuid",
+    name: "string",
+    description: "string",
+    source_kind: "string",
+    status: "string",
+    compiler_configured: "boolean",
+    created_at: "timestamp",
+  },
+  optional: { updated_at: "timestamp", current_version: "object" },
+};
+
+export const compileResultSpec: Spec = {
+  required: {
+    strategy_id: "uuid",
+    attempt_id: "uuid",
+    attempt_no: "integer",
+    outcome: "string",
+    detail: "string",
+  },
+  optional: { version: "object" },
+};
+
+export const authorityLevelSpec: Spec = {
+  required: { level: "integer", name: "string", summary: "string", enabled: "boolean" },
+  optional: { required_capability: "string" },
+};
+
+export const agentScheduleSpec: Spec = {
+  required: { kind: "string" },
+  optional: { interval_minutes: "integer" },
+};
+
+export const agentLimitsSpec: Spec = {
+  required: {
+    budget_credits: "quantity",
+    per_trade_cap_credits: "quantity",
+    daily_loss_stop_credits: "quantity",
+    max_position_share_bps: "integer",
+    schedule: "object",
+  },
+};
+
+export const agentBudgetSpec: Spec = {
+  required: { granted_credits: "quantity", used_credits: "quantity", source: "string" },
+};
+
+export const agentRuntimeSpec: Spec = {
+  required: { evaluator: "string", executor: "string", detail: "string" },
+  optional: { last_heartbeat: "timestamp" },
+};
+
+export const agentPauseSpec: Spec = {
+  required: { reason_code: "string", reason: "string", paused_by_actor_type: "string", paused_at: "timestamp" },
+  optional: { open_orders_policy: "string" },
+};
+
+export const agentSpec: Spec = {
+  required: {
+    id: "uuid",
+    account_id: "uuid",
+    strategy_id: "uuid",
+    strategy_version_id: "uuid",
+    name: "string",
+    stage: "string",
+    state: "string",
+    status: "string",
+    authority: "object",
+    limits: "object",
+    budget: "object",
+    runtime: "object",
+    archived: "boolean",
+    created_at: "timestamp",
+  },
+  optional: {
+    mode: "string",
+    pause: "object",
+    runs_total: "integer",
+    last_run_at: "timestamp",
+    last_run_status: "string",
+    granted_by_user_id: "uuid",
+    granted_at: "timestamp",
+    updated_at: "timestamp",
+  },
+};
+
+/** The compiled version inside a strategy or a compile attempt, when there is one. */
+function checkStrategyVersion(raw: unknown, path: string): void {
+  if (raw === undefined || raw === null) return;
+  validated<unknown>(raw, strategyVersionSpec, path);
+  validatedStrings((raw as Record<string, unknown>)["effect_set"], `${path}.effect_set`);
+}
+
+/** A strategy, with its compiled version checked rather than assumed. */
+export function validatedStrategy<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, strategySpec, path);
+  checkStrategyVersion((raw as Record<string, unknown>)["current_version"], `${path}.current_version`);
+  return value;
+}
+
+/** A compile attempt. Every outcome is a real answer, including "nothing was produced". */
+export function validatedCompileResult<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, compileResultSpec, path);
+  const record = raw as Record<string, unknown>;
+  checkStrategyVersion(record["version"], `${path}.version`);
+  for (const field of ["failure_codes", "clarifications"]) {
+    const list = record[field];
+    if (list !== undefined && list !== null) validatedStrings(list, `${path}.${field}`);
+  }
+  return value;
+}
+
+/**
+ * An agent, including the Credit figures inside its limits and its budget.
+ *
+ * Those live one level down from the fields `checkObject` walks, so without
+ * this they would reach a page unvalidated. A budget is a ceiling on value at
+ * risk; it is not a field this app is willing to render on trust.
+ */
+export function validatedAgent<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, agentSpec, path);
+  const record = raw as Record<string, unknown>;
+  validated<unknown>(record["authority"], authorityLevelSpec, `${path}.authority`);
+  const limits = validated<Record<string, unknown>>(record["limits"], agentLimitsSpec, `${path}.limits`);
+  validated<unknown>(limits["schedule"], agentScheduleSpec, `${path}.limits.schedule`);
+  validatedStrings(limits["allowed_asset_ids"], `${path}.limits.allowed_asset_ids`);
+  validated<unknown>(record["budget"], agentBudgetSpec, `${path}.budget`);
+  validated<unknown>(record["runtime"], agentRuntimeSpec, `${path}.runtime`);
+  if (record["pause"] !== undefined && record["pause"] !== null) {
+    validated<unknown>(record["pause"], agentPauseSpec, `${path}.pause`);
+  }
+  return value;
+}
+
+/* --------------------------------------------------------------------------
+ * Verification, eligibility, payout destinations and payout quotes
+ * (goal §19-§21, §23-§25; openapi tags: verification, eligibility, payouts)
+ *
+ * Two rules shape every spec below.
+ *
+ * NOT ONE OF THEM CARRIES PERSONAL DATA, and that is a property of the API
+ * rather than of this file: there is no document identifier, no government
+ * number and no date of birth anywhere in the verification surface, because a
+ * provider holds the evidence and Nodal holds only the conclusion. A spec that
+ * declared such a field would be describing a response this system never sends.
+ *
+ * EVERY MONEY FIGURE IS AN EXACT INTEGER OF BASE UNITS. A payout quote has a
+ * gross, a fee and a net on the Credit side and the same three in the
+ * provider's minor units, and there is no rate field holding a decimal between
+ * them. `integer` on the minor-unit fields is not a float creeping in: they are
+ * whole counts of the smallest unit of a currency, which is what int64 is for,
+ * and the Credit side beside them is validated as `quantity`.
+ * ------------------------------------------------------------------------ */
+
+export const verificationSessionSpec: Spec = {
+  required: { session_id: "uuid", status: "string", purpose: "string", provider: "string", sandbox: "boolean", created_at: "timestamp" },
+  optional: {
+    provider_ref: "string",
+    jurisdiction_country: "string",
+    jurisdiction_region: "string",
+    rules_version: "string",
+    failure_reason: "string",
+    expires_at: "timestamp",
+  },
+};
+
+export const verificationCheckSpec: Spec = {
+  required: { kind: "string", outcome: "string", provider: "string", rules_version: "string", sandbox: "boolean", recorded_at: "timestamp" },
+  optional: { provider_ref: "string", detail: "string" },
+};
+
+export const verificationRequirementSpec: Spec = {
+  required: { code: "string", detail: "string", action: "string" },
+};
+
+export const verificationProfileSpec: Spec = {
+  required: {
+    account_id: "uuid",
+    state: "string",
+    level: "string",
+    jurisdiction_supported: "boolean",
+    minimum_age: "integer",
+    age_verified: "boolean",
+    sanctions_state: "string",
+    sandbox: "boolean",
+    rules_version: "string",
+    payout_ready: "boolean",
+  },
+  optional: {
+    jurisdiction_country: "string",
+    jurisdiction_region: "string",
+    verified_at: "timestamp",
+    expires_at: "timestamp",
+    session: "object",
+    provider: "string",
+    provider_availability: "string",
+  },
+  arrays: {
+    checks: { spec: verificationCheckSpec },
+    missing: { spec: verificationRequirementSpec },
+  },
+};
+
+/** The profile, with its open session and its string lists checked too. */
+export function validatedVerificationProfile<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, verificationProfileSpec, path);
+  const record = raw as Record<string, unknown>;
+  if (record["session"] !== undefined && record["session"] !== null) {
+    validated<unknown>(record["session"], verificationSessionSpec, `${path}.session`);
+  }
+  for (const field of ["jurisdiction_refusals", "restrictions"]) {
+    const list = record[field];
+    if (list !== undefined && list !== null) validatedStrings(list, `${path}.${field}`);
+  }
+  return value;
+}
+
+export const startedVerificationSpec: Spec = {
+  required: { session: "object", sandbox: "boolean" },
+  optional: { hosted_url: "string", expires_at: "timestamp", sandbox_control_path: "string" },
+};
+
+export function validatedStartedVerification<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, startedVerificationSpec, path);
+  validated<unknown>((raw as Record<string, unknown>)["session"], verificationSessionSpec, `${path}.session`);
+  return value;
+}
+
+export const withdrawalOriginBucketSpec: Spec = {
+  required: {
+    origin: "string",
+    quantity: "quantity",
+    withdrawable: "quantity",
+    payout_allowed: "boolean",
+    consumption_rank: "integer",
+  },
+  optional: {
+    required_verification: "string",
+    required_capability: "string",
+    min_hold_days: "integer",
+    verification_would_suffice: "boolean",
+  },
+};
+
+export const withdrawalEligibilitySpec: Spec = {
+  required: {
+    account_id: "uuid",
+    eligible: "boolean",
+    withdrawable_now: "quantity",
+    gross: "quantity",
+    spendable: "quantity",
+    frozen: "quantity",
+    payout_eligible: "quantity",
+    ineligible: "quantity",
+    policy_version: "string",
+    current_verification: "string",
+    required_verification: "string",
+    sandbox: "boolean",
+  },
+  optional: {
+    verification_would_suffice: "boolean",
+    minimum_quantity: "quantity",
+    provider: "string",
+    provider_available: "boolean",
+    destination_configured: "boolean",
+    jurisdiction_supported: "boolean",
+    policy_hash: "string",
+  },
+  arrays: {
+    buckets: { required: true, spec: withdrawalOriginBucketSpec },
+  },
+};
+
+/** Eligibility, with the reason lists on the answer and on every bucket. */
+export function validatedEligibility<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, withdrawalEligibilitySpec, path);
+  const record = raw as Record<string, unknown>;
+  validatedStrings(record["reasons"], `${path}.reasons`);
+  const buckets = record["buckets"];
+  if (Array.isArray(buckets)) {
+    buckets.forEach((bucket, index) => {
+      const reasons = (bucket as Record<string, unknown>)["reasons"];
+      validatedStrings(reasons, `${path}.buckets[${String(index)}].reasons`);
+    });
+  }
+  return value;
+}
+
+export const payoutDestinationSpec: Spec = {
+  required: {
+    destination_id: "uuid",
+    account_id: "uuid",
+    kind: "string",
+    provider: "string",
+    status: "string",
+    sandbox: "boolean",
+    created_at: "timestamp",
+  },
+  optional: {
+    display_label: "string",
+    masked_display: "string",
+    currency: "string",
+    country: "string",
+    usable: "boolean",
+    verified_at: "timestamp",
+  },
+};
+
+export const payoutProvenanceSliceSpec: Spec = {
+  required: { origin: "string", quantity: "quantity", consumption_rank: "integer" },
+  optional: { returned: "boolean" },
+};
+
+/**
+ * A payout quote.
+ *
+ * The minor-unit fields are `integer` because that is what they are: whole
+ * counts of the smallest unit of the provider's currency. The Credit side of
+ * the same quote is `quantity` — an exact integer string of base units — and
+ * there is deliberately no field between them holding a rate, because a rate is
+ * where a float would enter.
+ */
+export const payoutQuoteSpec: Spec = {
+  required: {
+    quote_id: "uuid",
+    account_id: "uuid",
+    destination_id: "uuid",
+    provider: "string",
+    gross_quantity: "quantity",
+    fee_quantity: "quantity",
+    net_quantity: "quantity",
+    currency: "string",
+    gross_amount_minor: "integer",
+    fee_amount_minor: "integer",
+    net_amount_minor: "integer",
+    minimum_ok: "boolean",
+    expires_at: "timestamp",
+    sandbox: "boolean",
+  },
+  optional: {
+    minimum_amount_minor: "integer",
+    pricing_version: "string",
+    fee_model_version: "string",
+    policy_version: "string",
+    consumed_at: "timestamp",
+    created_at: "timestamp",
+  },
+  arrays: {
+    provenance: { spec: payoutProvenanceSliceSpec },
+  },
+};
+
+/**
+ * A payout request, including the provenance slices the merged contract added.
+ *
+ * `payoutRequestSpec` above predates them and is left alone: it is what the
+ * list endpoint's page spec is built from, and widening it would make a
+ * response without provenance a contract violation when the API says the field
+ * is optional. This walks the extra fields where they matter.
+ */
+export function validatedPayout<T>(raw: unknown, path: string): T {
+  const value = validated<T>(raw, payoutRequestSpec, path);
+  const record = raw as Record<string, unknown>;
+  const slices = record["provenance"];
+  if (slices !== undefined && slices !== null) {
+    if (!Array.isArray(slices)) throw new ContractViolation(`${path}.provenance`, "expected an array");
+    slices.forEach((slice, index) => {
+      validated<unknown>(slice, payoutProvenanceSliceSpec, `${path}.provenance[${String(index)}]`);
+    });
+  }
+  const reasons = record["eligibility_reasons"];
+  if (reasons !== undefined && reasons !== null) {
+    validatedStrings(reasons, `${path}.eligibility_reasons`);
+  }
+  return value;
+}

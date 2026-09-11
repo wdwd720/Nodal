@@ -70,6 +70,18 @@ import {
   portfolioSpec,
   portfolioTotalsSpec,
   securitySummarySpec,
+  authorityLevelSpec,
+  strategySpec,
+  payoutDestinationSpec,
+  payoutQuoteSpec,
+  verificationSessionSpec,
+  validatedAgent,
+  validatedCompileResult,
+  validatedEligibility,
+  validatedPayout,
+  validatedStartedVerification,
+  validatedStrategy,
+  validatedVerificationProfile,
 } from "./contract.ts";
 
 export type Principal = Schemas["Principal"];
@@ -831,6 +843,16 @@ export interface CreatePayoutRequest {
   readonly accountId: string;
   readonly amount: string;
   readonly destinationId?: string;
+  /**
+   * The quote the customer was actually shown.
+   *
+   * It is consumed in the same transaction that reserves the value, so one
+   * quote funds exactly one payout and an expired or already-used one refuses
+   * the request before anything is decided about the money. Sending it is what
+   * makes "the number you saw is the number you get" a property of the system
+   * rather than a hope about timing.
+   */
+  readonly quoteId?: string;
   readonly idempotencyKey: string;
 }
 
@@ -844,13 +866,15 @@ export function useCreatePayout(): UseMutationResult<PayoutRequest, unknown, Cre
           account_id: r.accountId,
           amount: r.amount,
           ...(r.destinationId !== undefined ? { destination_id: r.destinationId } : {}),
+          ...(r.quoteId !== undefined ? { quote_id: r.quoteId } : {}),
         },
       });
-      return validated<PayoutRequest>(data, payoutRequestSpec, "/payouts");
+      return validatedPayout<PayoutRequest>(data, "/payouts");
     },
     onSuccess: (_req, r) => {
       void qc.invalidateQueries({ queryKey: nodalKeys.payouts(r.accountId) });
       void qc.invalidateQueries({ queryKey: nodalKeys.credits(r.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(r.accountId) });
     },
   });
 }
@@ -1042,7 +1066,6 @@ export type NotificationPreference = Schemas["NotificationPreferences"]["items"]
 export type MyAccount = Schemas["MyAccount"];
 export type SecuritySummary = Schemas["SecuritySummary"];
 export type MeAuditEntry = Schemas["MeAuditPage"]["items"][number];
-export type Agent = Schemas["Agent"];
 
 /** The rate and the bounds, as the server states them. Nothing derives them here. */
 export function useCreditPricing(): UseQueryResult<CreditPricing> {
@@ -1108,24 +1131,6 @@ export function useCreditPurchase(
         params: { path: { paymentId: purchaseId ?? "" } },
       });
       return validated<CreditPurchase>(data, creditPurchaseSpec, "/payments/{id}");
-    },
-  });
-}
-
-export function useAgents(accountId: string | undefined): UseQueryResult<Agent[]> {
-  return useQuery({
-    queryKey: meKeys.agents(accountId ?? ""),
-    enabled: accountId !== undefined,
-    queryFn: async () => {
-      const { data } = await api.GET("/agents", {
-        params: { query: { account_id: accountId ?? "" } },
-      });
-      const page = validated<Schemas["AgentPage"]>(
-        data,
-        { arrays: { items: { required: true, spec: agentSpec } } },
-        "/agents",
-      );
-      return page.items;
     },
   });
 }
@@ -1553,6 +1558,621 @@ export function usePublicMarkets(limit = 6): UseQueryResult<PublicMarkets> {
         stable: boolean;
       }>(data, nativeMarketPageSpec, "/native-markets");
       return { markets: page.markets, sort: page.sort, stable: page.stable };
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Agents and strategies (goal §17, §18)
+ *
+ * Three separate acts, three separate hooks, because the goal requires them to
+ * be separate acts: describing a strategy in words, asking for it to be
+ * compiled, and granting an agent authority over Credits are different
+ * decisions and a customer makes each one explicitly. There is deliberately no
+ * hook that does two of them in one call.
+ *
+ * Compiling is a mutation even when it produces nothing. Every attempt is
+ * recorded — including an attempt on a deployment with no compiler backend,
+ * which is recorded with outcome MODEL_UNAVAILABLE and the failure code
+ * COMPILER_UNAVAILABLE. "We did not try, and this is why" is a fact about a
+ * strategy, and the interface shows the API's own words for it rather than
+ * inventing an IR nobody produced.
+ * ------------------------------------------------------------------------ */
+
+export type Strategy = Schemas["Strategy"];
+export type StrategyVersion = Schemas["StrategyVersion"];
+export type CompileResult = Schemas["CompileResult"];
+export type Agent = Schemas["Agent"];
+export type AgentLimits = Schemas["AgentLimits"];
+export type AgentSchedule = Schemas["AgentSchedule"];
+export type AuthorityLevel = Schemas["AuthorityLevel"];
+export type AgentAction = "enable" | "pause" | "resume" | "disable" | "archive";
+
+/** A page of strategies, with the one deployment fact the create flow needs first. */
+export interface StrategyList {
+  readonly items: Strategy[];
+  /**
+   * False means a compile attempt will be recorded with COMPILER_UNAVAILABLE
+   * and produce no IR. The flow says so before a description is written rather
+   * than after.
+   */
+  readonly compilerConfigured: boolean;
+}
+
+/** A page of agents, with every declared authority level, enabled or not. */
+export interface AgentList {
+  readonly items: Agent[];
+  readonly authorityLevels: AuthorityLevel[];
+}
+
+export const agentKeys = {
+  strategies: (accountId: string) => ["strategies", accountId] as const,
+  strategy: (id: string) => ["strategy", id] as const,
+  agents: (accountId: string) => ["agents", accountId] as const,
+  agent: (id: string) => ["agent", id] as const,
+  payout: (id: string) => ["payout", id] as const,
+};
+
+export function useStrategies(accountId: string | undefined): UseQueryResult<StrategyList> {
+  return useQuery({
+    queryKey: agentKeys.strategies(accountId ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/strategies", {
+        params: { query: { account_id: accountId ?? "", limit: 50 } },
+      });
+      const page = validated<Schemas["StrategyPage"]>(
+        data,
+        {
+          required: { compiler_configured: "boolean" },
+          arrays: { items: { required: true, spec: strategySpec } },
+        },
+        "/strategies",
+      );
+      page.items.forEach((item, index) => {
+        validatedStrategy<Strategy>(item, `/strategies.items[${String(index)}]`);
+      });
+      return { items: page.items, compilerConfigured: page.compiler_configured };
+    },
+  });
+}
+
+export function useStrategy(strategyId: string | undefined): UseQueryResult<Strategy> {
+  return useQuery({
+    queryKey: agentKeys.strategy(strategyId ?? ""),
+    enabled: strategyId !== undefined && strategyId !== "",
+    queryFn: async () => {
+      const { data } = await api.GET("/strategies/{strategyId}", {
+        params: { path: { strategyId: strategyId ?? "" } },
+      });
+      return validatedStrategy<Strategy>(data, "/strategies/{id}");
+    },
+  });
+}
+
+export interface CreateStrategyInput {
+  readonly accountId: string;
+  readonly name: string;
+  readonly description: string;
+  /** Minted when the customer confirms the description, never on render. */
+  readonly idempotencyKey: string;
+}
+
+export function useCreateStrategy(): UseMutationResult<Strategy, unknown, CreateStrategyInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateStrategyInput) => {
+      const { data } = await api.POST("/strategies", {
+        ...idempotent(input.idempotencyKey),
+        body: { account_id: input.accountId, name: input.name, description: input.description },
+      });
+      return validatedStrategy<Strategy>(data, "/strategies");
+    },
+    onSuccess: (_strategy, input) => {
+      void qc.invalidateQueries({ queryKey: agentKeys.strategies(input.accountId) });
+    },
+  });
+}
+
+export interface CompileStrategyInput {
+  readonly strategyId: string;
+  /**
+   * The key is also the compiler's request id, which is what bounds a compile
+   * request to eight attempts. Two keys are two requests, which is the right
+   * reading: asking again is a new decision by the customer, not a retry of
+   * the last one.
+   */
+  readonly idempotencyKey: string;
+}
+
+export function useCompileStrategy(): UseMutationResult<CompileResult, unknown, CompileStrategyInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CompileStrategyInput) => {
+      const { data } = await api.POST("/strategies/{strategyId}/compile", {
+        ...idempotent(input.idempotencyKey, { path: { strategyId: input.strategyId } }),
+      });
+      return validatedCompileResult<CompileResult>(data, "/strategies/{id}/compile");
+    },
+    onSuccess: (_result, input) => {
+      void qc.invalidateQueries({ queryKey: agentKeys.strategy(input.strategyId) });
+    },
+  });
+}
+
+export function useAgents(accountId: string | undefined): UseQueryResult<AgentList> {
+  return useQuery({
+    queryKey: agentKeys.agents(accountId ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/agents", {
+        params: { query: { account_id: accountId ?? "", limit: 100 } },
+      });
+      const page = validated<Schemas["AgentPage"]>(
+        data,
+        {
+          arrays: {
+            items: { required: true, spec: agentSpec },
+            authority_levels: { required: true, spec: authorityLevelSpec },
+          },
+        },
+        "/agents",
+      );
+      page.items.forEach((item, index) => {
+        validatedAgent<Agent>(item, `/agents.items[${String(index)}]`);
+      });
+      return { items: page.items, authorityLevels: page.authority_levels };
+    },
+  });
+}
+
+export function useAgent(agentId: string | undefined): UseQueryResult<Agent> {
+  return useQuery({
+    queryKey: agentKeys.agent(agentId ?? ""),
+    enabled: agentId !== undefined && agentId !== "",
+    queryFn: async () => {
+      const { data } = await api.GET("/agents/{agentId}", {
+        params: { path: { agentId: agentId ?? "" } },
+      });
+      return validatedAgent<Agent>(data, "/agents/{id}");
+    },
+  });
+}
+
+export interface CreateAgentInput {
+  readonly accountId: string;
+  readonly strategyId: string;
+  /** Always a specific compiled version. An agent never follows "the latest". */
+  readonly strategyVersionId: string;
+  readonly name: string;
+  readonly authorityLevel: number;
+  readonly limits: AgentLimits;
+  readonly idempotencyKey: string;
+}
+
+export function useCreateAgent(): UseMutationResult<Agent, unknown, CreateAgentInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateAgentInput) => {
+      const { data } = await api.POST("/agents", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          strategy_id: input.strategyId,
+          strategy_version_id: input.strategyVersionId,
+          name: input.name,
+          authority_level: input.authorityLevel,
+          limits: input.limits,
+        },
+      });
+      return validatedAgent<Agent>(data, "/agents");
+    },
+    onSuccess: (_agent, input) => {
+      void qc.invalidateQueries({ queryKey: agentKeys.agents(input.accountId) });
+    },
+  });
+}
+
+export interface AgentActionInput {
+  readonly agentId: string;
+  readonly accountId: string;
+  readonly action: AgentAction;
+  readonly reason?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * One lifecycle action on one agent.
+ *
+ * The action is part of the path rather than the body because each of the five
+ * is a different authority, and an idempotency key is scoped to the operation:
+ * a body field would let one key replay across two different decisions.
+ */
+export function useAgentAction(): UseMutationResult<Agent, unknown, AgentActionInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AgentActionInput) => {
+      const reason = input.reason;
+      const { data } = await api.POST("/agents/{agentId}/{action}", {
+        ...idempotent(input.idempotencyKey, {
+          path: { agentId: input.agentId, action: input.action },
+        }),
+        ...(reason === undefined || reason === "" ? {} : { body: { reason } }),
+      });
+      return validatedAgent<Agent>(data, "/agents/{id}/{action}");
+    },
+    onSuccess: (_agent, input) => {
+      void qc.invalidateQueries({ queryKey: agentKeys.agent(input.agentId) });
+      void qc.invalidateQueries({ queryKey: agentKeys.agents(input.accountId) });
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Following one payout request (goal §19)
+ * ------------------------------------------------------------------------ */
+
+/**
+ * One payout request, polled while it is still moving.
+ *
+ * A payout is the one place where the answer genuinely changes without the
+ * customer doing anything: a provider accepts it, then settles it, and the
+ * page has to follow that rather than ask somebody to reload. The event stream
+ * invalidates this key too; the poll is the floor, not the mechanism.
+ */
+export function usePayout(
+  payoutId: string | undefined,
+  options: { readonly refetchMs?: number } = {},
+): UseQueryResult<PayoutRequest> {
+  return useQuery({
+    queryKey: agentKeys.payout(payoutId ?? ""),
+    enabled: payoutId !== undefined && payoutId !== "",
+    staleTime: 0,
+    ...(options.refetchMs === undefined ? {} : { refetchInterval: options.refetchMs }),
+    queryFn: async () => {
+      const { data } = await api.GET("/payouts/{payoutId}", {
+        params: { path: { payoutId: payoutId ?? "" } },
+      });
+      return validatedPayout<PayoutRequest>(data, "/payouts/{id}");
+    },
+  });
+}
+
+export interface CancelPayoutInput {
+  readonly payoutId: string;
+  readonly accountId: string;
+  readonly reason: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Withdraws a request the provider has not been given yet.
+ *
+ * The reserved Credits go back to the exact lots they came from with their
+ * provenance intact, which is why this is a command with its own key rather
+ * than a local undo.
+ */
+export function useCancelPayout(): UseMutationResult<PayoutRequest, unknown, CancelPayoutInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CancelPayoutInput) => {
+      const { data } = await api.POST("/payouts/{payoutId}/cancel", {
+        ...idempotent(input.idempotencyKey, { path: { payoutId: input.payoutId } }),
+        body: { account_id: input.accountId, reason: input.reason },
+      });
+      return validatedPayout<PayoutRequest>(data, "/payouts/{id}/cancel");
+    },
+    onSuccess: (_payout, input) => {
+      void qc.invalidateQueries({ queryKey: agentKeys.payout(input.payoutId) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.payouts(input.accountId) });
+      void qc.invalidateQueries({ queryKey: nodalKeys.credits(input.accountId) });
+    },
+  });
+}
+
+/* --------------------------------------------------------------------------
+ * Verification, eligibility, destinations and quotes (goal §19-§21, §23-§25)
+ *
+ * The order of the hooks below is the order of the journey, and the separation
+ * between them is the architecture: verification changes a PROFILE, eligibility
+ * reads a POLICY against provenance, a destination is a PROVIDER'S token, and a
+ * quote is a pre-commitment that reserves nothing. No hook here converts one
+ * into another, and there is deliberately none that asks "can I withdraw?" in a
+ * single call — because the answer is composed from four different facts and a
+ * screen that showed one of them as the answer would be wrong three ways.
+ * ------------------------------------------------------------------------ */
+
+export type VerificationProfile = Schemas["VerificationProfile"];
+export type VerificationSession = Schemas["VerificationSession"];
+export type VerificationCheck = Schemas["VerificationCheck"];
+export type VerificationRequirement = Schemas["VerificationRequirement"];
+export type StartedVerification = Schemas["StartedVerification"];
+export type SandboxOutcome = Schemas["SandboxVerificationOutcome"]["outcome"];
+export type WithdrawalEligibility = Schemas["WithdrawalEligibility"];
+export type WithdrawalOriginBucket = Schemas["WithdrawalOriginBucket"];
+export type PayoutDestination = Schemas["PayoutDestination"];
+export type PayoutDestinationKind = Schemas["PayoutDestination"]["kind"];
+export type PayoutQuote = Schemas["PayoutQuote"];
+export type PayoutProvenanceSlice = Schemas["PayoutProvenanceSlice"];
+
+export const withdrawKeys = {
+  verification: (accountId: string) => ["me", "verification", accountId] as const,
+  verificationSession: (accountId: string, sessionId: string) =>
+    ["me", "verification", accountId, "session", sessionId] as const,
+  eligibility: (accountId: string) => ["me", "eligibility", accountId] as const,
+  destinations: (accountId: string) => ["me", "payout-destinations", accountId] as const,
+};
+
+/**
+ * The financial verification profile: state, level, the sub-checks behind it,
+ * and what is missing.
+ *
+ * It is never served from cache. A provider callback can move it at any moment,
+ * and a screen that offered "Start verification" against a stale profile would
+ * be offering to start something that has already finished.
+ */
+export function useVerification(accountId: string | undefined): UseQueryResult<VerificationProfile> {
+  return useQuery({
+    queryKey: withdrawKeys.verification(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/verification", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedVerificationProfile<VerificationProfile>(data, "/me/verification");
+    },
+  });
+}
+
+export interface StartVerificationInput {
+  readonly accountId: string;
+  /** ISO 3166-1 alpha-2, upper case. Never inferred from a network address. */
+  readonly country: string;
+  readonly region?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Opens a provider-hosted verification.
+ *
+ * The jurisdiction is supplied by the person and by nobody else. Deriving it
+ * from an IP address would be a legal determination wearing a network header's
+ * clothes, and the API refuses to make one — so this hook has no fallback and
+ * no default country.
+ */
+export function useStartVerification(): UseMutationResult<StartedVerification, unknown, StartVerificationInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: StartVerificationInput) => {
+      const region = input.region;
+      const { data } = await api.POST("/me/verification/sessions", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          purpose: "PAYOUT_KYC",
+          jurisdiction_country: input.country,
+          ...(region === undefined || region === "" ? {} : { jurisdiction_region: region }),
+        },
+      });
+      return validatedStartedVerification<StartedVerification>(data, "/me/verification/sessions");
+    },
+    onSuccess: (_started, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.verification(input.accountId) });
+    },
+  });
+}
+
+/**
+ * Asks the provider what happened, and records it.
+ *
+ * It is a GET that changes state on the server, which is the only shape that
+ * works: somebody coming back from a hosted flow has said they came back, not
+ * that they passed. Never trusting the redirect is the rule; polling is how it
+ * is kept.
+ */
+export function usePollVerification(
+  accountId: string | undefined,
+  sessionId: string | undefined,
+  options: { readonly refetchMs?: number } = {},
+): UseQueryResult<VerificationSession> {
+  return useQuery({
+    queryKey: withdrawKeys.verificationSession(accountId ?? "", sessionId ?? ""),
+    enabled: accountId !== undefined && sessionId !== undefined && sessionId !== "",
+    staleTime: 0,
+    ...(options.refetchMs === undefined ? {} : { refetchInterval: options.refetchMs }),
+    queryFn: async () => {
+      const { data } = await api.GET("/me/verification/sessions/{sessionId}", {
+        params: { path: { sessionId: sessionId ?? "" }, query: { account_id: accountId ?? "" } },
+      });
+      return validated<VerificationSession>(data, verificationSessionSpec, "/me/verification/sessions/{id}");
+    },
+  });
+}
+
+export interface SandboxOutcomeInput {
+  readonly accountId: string;
+  readonly outcome: SandboxOutcome;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Chooses what a REHEARSAL verification decides. Sandbox tier only.
+ *
+ * The API refuses this with FORBIDDEN on any deployment that is not a sandbox
+ * tier, and there is no default outcome anywhere in the path: a rehearsal
+ * session nobody has answered stays pending forever, because "approved unless
+ * told otherwise" is a fabricated approval with extra steps. The interface
+ * offers this control only where the API has said the session has one.
+ */
+export function useSandboxOutcome(): UseMutationResult<VerificationSession, unknown, SandboxOutcomeInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SandboxOutcomeInput) => {
+      const { data } = await api.POST("/me/verification/sandbox-outcome", {
+        ...idempotent(input.idempotencyKey),
+        body: { account_id: input.accountId, outcome: input.outcome },
+      });
+      return validated<VerificationSession>(data, verificationSessionSpec, "/me/verification/sandbox-outcome");
+    },
+    onSuccess: (_session, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.verification(input.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(input.accountId) });
+    },
+  });
+}
+
+/**
+ * What of this balance may be withdrawn, per origin, and why not the rest.
+ *
+ * `staleTime: 0` for the same reason buying power has it: eligibility is
+ * recomputed by the backend from a policy the deployment can change, from
+ * provenance that moves with every trade, and from capability gates an operator
+ * can close. A cached answer is a claim about money that may no longer be true.
+ */
+export function useEligibility(accountId: string | undefined): UseQueryResult<WithdrawalEligibility> {
+  return useQuery({
+    queryKey: withdrawKeys.eligibility(accountId ?? ""),
+    enabled: accountId !== undefined,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/eligibility", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedEligibility<WithdrawalEligibility>(data, "/me/eligibility");
+    },
+  });
+}
+
+export function usePayoutDestinations(accountId: string | undefined): UseQueryResult<PayoutDestination[]> {
+  return useQuery({
+    queryKey: withdrawKeys.destinations(accountId ?? ""),
+    enabled: accountId !== undefined,
+    queryFn: async () => {
+      const { data } = await api.GET("/me/payout-destinations", {
+        params: { query: { account_id: accountId ?? "" } },
+      });
+      return validatedList<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations");
+    },
+  });
+}
+
+export interface AddDestinationInput {
+  readonly accountId: string;
+  readonly kind: PayoutDestinationKind;
+  /** The provider's token, or a sandbox handle. Never an account number. */
+  readonly providerToken: string;
+  readonly displayLabel?: string;
+  readonly currency?: string;
+  readonly country?: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Registers a destination from a provider token.
+ *
+ * What travels here is the PROVIDER'S reference plus a mask a person
+ * recognises. An input that looks like an account number, a card number, an
+ * IBAN, a private key or a seed phrase is refused by the API rather than
+ * stored, and this hook does not pre-empt that check: the refusal belongs to
+ * the backend, and rendering its message is how a person learns what the
+ * product will and will not hold.
+ *
+ * Adding one needs a recent strong sign-in, so a STEP_UP_REQUIRED here is
+ * expected rather than exceptional and the caller wires the round trip.
+ */
+export function useAddDestination(): UseMutationResult<PayoutDestination, unknown, AddDestinationInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AddDestinationInput) => {
+      const { data } = await api.POST("/me/payout-destinations", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          kind: input.kind,
+          provider_token: input.providerToken,
+          ...(input.displayLabel === undefined || input.displayLabel === ""
+            ? {}
+            : { display_label: input.displayLabel }),
+          ...(input.currency === undefined || input.currency === "" ? {} : { currency: input.currency }),
+          ...(input.country === undefined || input.country === "" ? {} : { country: input.country }),
+        },
+      });
+      return validated<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations");
+    },
+    onSuccess: (_destination, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.destinations(input.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(input.accountId) });
+    },
+  });
+}
+
+export interface RemoveDestinationInput {
+  readonly destinationId: string;
+  readonly accountId: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Stops using a destination.
+ *
+ * It disables rather than deletes, because a destination value has left through
+ * is financial history. A disabled one never comes back: adding it again is a
+ * new registration with its own creation time, which is what makes a cooldown
+ * on a changed destination a fact rather than a field somebody resets.
+ */
+export function useRemoveDestination(): UseMutationResult<PayoutDestination, unknown, RemoveDestinationInput> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: RemoveDestinationInput) => {
+      const { data } = await api.DELETE("/me/payout-destinations/{destinationId}", {
+        ...idempotent(input.idempotencyKey, {
+          path: { destinationId: input.destinationId },
+          query: { account_id: input.accountId },
+        }),
+      });
+      return validated<PayoutDestination>(data, payoutDestinationSpec, "/me/payout-destinations/{id}");
+    },
+    onSuccess: (_destination, input) => {
+      void qc.invalidateQueries({ queryKey: withdrawKeys.destinations(input.accountId) });
+      void qc.invalidateQueries({ queryKey: withdrawKeys.eligibility(input.accountId) });
+    },
+  });
+}
+
+export interface PayoutQuoteInput {
+  readonly accountId: string;
+  readonly destinationId: string;
+  /** The GROSS Credits the customer would give up. The fee comes out of it. */
+  readonly amount: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * What a payout would cost, before committing to it.
+ *
+ * A quote reserves nothing and writes no ledger row, and it expires. An expired
+ * one is REFUSED rather than silently re-priced — somebody who saw a number and
+ * pressed the button a quarter of an hour later is told the number moved, not
+ * charged a different one — so the caller shows the expiry and takes a fresh
+ * quote rather than hoping.
+ *
+ * It is a mutation rather than a query because the backend persists it and
+ * because a price must not appear because a component remounted.
+ */
+export function usePayoutQuote(): UseMutationResult<PayoutQuote, unknown, PayoutQuoteInput> {
+  return useMutation({
+    mutationFn: async (input: PayoutQuoteInput) => {
+      const { data } = await api.POST("/payouts/quote", {
+        ...idempotent(input.idempotencyKey),
+        body: {
+          account_id: input.accountId,
+          destination_id: input.destinationId,
+          amount: input.amount,
+        },
+      });
+      return validated<PayoutQuote>(data, payoutQuoteSpec, "/payouts/quote");
     },
   });
 }

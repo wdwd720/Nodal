@@ -258,18 +258,28 @@ test("a page showing a USD valuation says what is actually held", async ({ page 
   //
   // The rule this test protects is unchanged — a page that puts a dollar figure
   // in front of somebody must say what the underlying actually is, because a
-  // "$" is the single most misread character in this product. So it is asserted
-  // wherever a USD figure still renders, which on the closed-loop product is
-  // the agent surface and its holdings.
-  for (const route of ["/agents"]) {
-    await page.goto(route);
-    const text = await visibleText(page);
-    expect(text, `${route} says what a USD figure is`).toContain(
-      "USD figures are a valuation computed by the backend",
-    );
-    expect(text, `${route} says it is an estimate, not dollars held`).toContain(
+  // "$" is the single most misread character in this product. What changed is
+  // that the agent surface no longer has one to annotate: the previous /agents
+  // screen valued account holdings in USD because v1 had no agent resource and
+  // holdings were the closest thing it could show. The rebuilt one reads the
+  // agent resource itself, and every figure on it is a Credit budget — which is
+  // the same rule arriving at a stricter answer, since the safest way to not
+  // misread a dollar figure is for there not to be one.
+  //
+  // So the assertion follows the figure: wherever a USD valuation renders it
+  // must be explained, and where none renders the page must not be quietly
+  // showing a dollar amount under another name.
+  await page.goto("/agents");
+  const agentsText = await visibleText(page);
+  if (/USD figures are a valuation computed by the backend/.test(agentsText)) {
+    expect(agentsText, "/agents says it is an estimate, not dollars held").toContain(
       "not an amount held in dollars",
     );
+  } else {
+    expect(
+      /\$\s?\d/.test(agentsText),
+      "/agents shows no dollar figure, so it owes no valuation note",
+    ).toBe(false);
   }
 });
 
