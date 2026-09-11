@@ -352,8 +352,8 @@ cookie and the Fetch Metadata CSRF guard require. It is not a deployment.
 | Action queue | `#actions` | `GET /v1/admin/actions` | propose, approve, reject, execute (`cancel` has no HTTP route and says so) |
 | Reconciliation | `#reconciliation` | `GET /v1/admin/reconciliation/records` | resolve (material resolutions demand the approved action id); no `compensation` form, deliberately |
 | Kill switches | `#kill-switches` | `GET /v1/admin/kill-switches` | activate (one operator, no step-up), release (step-up; SEVERE needs an approved action) |
-| Capability gates | `#gates` | `GET /v1/admin/gates` | propose, approve, activate, suspend, resume, revoke, **sandbox, unsandbox** |
-| Accounts | `#accounts` | `GET /v1/admin/accounts`, `/v1/accounts/{id}`, `/v1/accounts/{id}/activity`, `/v1/credits/balance`, plus the reconciliation, action, gate and kill-switch lists for one account | account status only |
+| Capability gates | `#gates` | `GET /v1/admin/gates`, `/v1/admin/gates/{capability}/history` | propose, approve, activate, suspend, resume, revoke, **sandbox, unsandbox** |
+| Accounts | `#accounts` | `GET /v1/admin/accounts`, `/v1/admin/users/{userId}`, `/v1/admin/agents`, `/v1/accounts/{id}`, `/v1/accounts/{id}/activity`, `/v1/credits/balance`, plus the reconciliation, action, gate and kill-switch lists for one account | account status; decide a closure request the customer opened; pause one agent |
 | Withdrawals, envelopes, agent promotion | `#withdrawals` `#envelopes` `#agent-promotion` | `GET /v1/admin/actions`, filtered by the surface's action kinds | none — each links into the one queue |
 | Break-glass | `#break-glass` | `GET /v1/admin/actions` | propose `BREAK_GLASS_GRANT` |
 | Providers | `#providers` | `GET /v1/admin/providers` | none |
@@ -361,9 +361,11 @@ cookie and the Fetch Metadata CSRF guard require. It is not a deployment.
 What the console will not do, each for a reason on screen: fabricate an approval
 reference (a high-risk proposal still requires all four); render a `SANDBOX` gate
 as an approval (ADR-0023 — its own hue, a dashed pill, and the words "sandbox —
-not an approval"); show a balance-editing control (none exists: account-scoped
-writes go through `RequireAccountOwner`, which has no operator override); or
-leave a marker instead of a decision (`src/scan.test.ts`).
+not an approval", in the verdict column and in the transition history alike);
+show a balance-editing control (none exists: account-scoped writes go through
+`RequireAccountOwner`, which has no operator override); originate a closure
+request (no route closes an account nobody asked to close, so no control here
+could); or leave a marker instead of a decision (`src/scan.test.ts`).
 
 Two generated documents are its authority and neither is hand-written:
 `src/generated/authority.json` (permissions, roles, action kinds, surfaces,
@@ -375,11 +377,22 @@ at runtime from `dist/`, so `build.mjs` verifies its own copy and
 `TestConsoleBuiltArtifactsMatchTheirSource` compares `dist/` to `src/` whenever
 `dist/` exists.
 
-Known gaps, stated in the views rather than worked around: no `/v1/admin` route
-exposes `capability_gate_transitions`, so a SANDBOX row's actor (an operator, or
-the SYSTEM actor `config:CP_API_SANDBOX_GATES`) cannot be named for a specific
-row; `Account` carries no owner, so `GET /v1/admin/users/{userId}` has nothing to
-be called with; no route lists an account's agents; `cmd/api`'s
-`providerCatalog` omits the payout slot, so `sandbox_payout` never appears in
-the providers view; and `openapi/openapi.yaml`'s `Capability` enum lists ten of
-the twenty capabilities Go declares (D-079).
+**Closed, 2026-09-10 (later).** Every gap this section recorded has since been
+closed by the backend, and the console uses each one rather than describing it:
+`GET /v1/admin/gates/{capability}/history` names the operator or the SYSTEM actor
+`config:CP_API_SANDBOX_GATES` that moved a gate, and every gate with a row now
+shows its whole recorded history; `Account` carries `owner_user_id`, so
+`GET /v1/admin/users/{userId}` renders the support view and
+`POST /v1/admin/users/{userId}/closure` decides a closure request the customer
+opened; `GET /v1/admin/agents` and `POST /v1/admin/agents/{agentId}/pause` fill
+the agents panel; `providerCatalog` describes the Credit purchase and payout
+slots, so `sandbox_payout` renders as sandbox; and the `Capability` enum names
+all twenty, which retires the drift notice D-079 introduced — `scan.test.ts`
+holds the enum and the authority document equal instead, so a future divergence
+fails CI rather than reaching an operator.
+
+What remains, stated in the views rather than worked around: the action queue has
+no account filter, so one account's controlled actions are filtered client-side
+over the newest page and the view says so; and `internal/adminplane` does not
+export `gate.sandbox` / `gate.unsandbox` writes, so those two steps are gated on
+`gate.propose` — the permission `gates.Admin.sandboxOp` actually requires.
