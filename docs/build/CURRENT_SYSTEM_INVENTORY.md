@@ -427,7 +427,7 @@ column of its own; `read_at` is a nullable timestamp, not a state, and
 §6 above said "**Not exposed over HTTP:** agents, strategies, backtests,
 predictions". Half of that is no longer true and the half that is has not moved.
 
-**Routes added** (nine; permission is the boundary floor, and tenant scoping is a
+**Routes added** (ten; permission is the boundary floor, and tenant scoping is a
 separate per-request check):
 
 | Method + path | Permission | Notes |
