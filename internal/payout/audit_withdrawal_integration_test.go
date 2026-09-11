@@ -145,7 +145,7 @@ func newAuditFixture(t *testing.T) *auditFixture {
 		func(ctx context.Context, tx pgx.Tx) error {
 			d, err := f.svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: f.account, Kind: payout.DestinationBank,
-				Provider: provider.Name(), ProviderReference: "audit-dest-" + uuid.NewString(),
+				Provider: provider.Name(), ProviderReference: sandboxHandle(),
 				DisplayLabel: "Audit bank", Currency: "USD", Country: "US",
 			})
 			if err != nil {

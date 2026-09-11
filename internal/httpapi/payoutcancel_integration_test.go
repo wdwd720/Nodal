@@ -4,9 +4,11 @@ package httpapi
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
@@ -92,7 +94,7 @@ func TestIntegration_AUserCanCancelTheirOwnPayoutAndNobodyElses(t *testing.T) {
 		func(ctx context.Context, tx pgx.Tx) error {
 			d, derr := svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: owner, Kind: payout.DestinationBank, Provider: "sandbox",
-				ProviderReference: "dest-" + id.New[id.Any]().String(),
+				ProviderReference: sandboxHandle(),
 				DisplayLabel:      "Test bank", Currency: "USD", Country: "US",
 			})
 			if derr != nil {
@@ -222,4 +224,16 @@ func creditBalance(t *testing.T, d *db.DB, account accounts.AccountID, asset ass
 	q, err := money.ParseQuantity(raw)
 	require.NoError(t, err)
 	return q
+}
+
+// sandboxHandle is a provider token a fixture can use safely.
+//
+// It replaces the UUID's dashes with a letter rather than stripping them,
+// because payout.ValidateDestinationToken strips '-' before looking for a
+// thirteen-to-nineteen digit run and Luhn-checking it -- and a raw
+// "dest-<uuid>" produces such a run, passing the checksum about one time in
+// ten. A fixture that is refused at random is a fixture that teaches people to
+// rerun the suite.
+func sandboxHandle() string {
+	return "sbx" + strings.ReplaceAll(uuid.NewString(), "-", "x")
 }

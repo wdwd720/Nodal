@@ -203,7 +203,7 @@ func (h *domainAHarness) stuckPayout(t *testing.T) payout.Request {
 			var err error
 			dest, err = h.payouts.CreateDestination(ctx, tx, payout.Destination{
 				ID: payout.NewDestinationID(), AccountID: h.creator, Kind: payout.DestinationBank,
-				Provider: "sandbox", ProviderReference: "dest-" + uuid.NewString(),
+				Provider: "sandbox", ProviderReference: sandboxHandle(),
 				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if err != nil {

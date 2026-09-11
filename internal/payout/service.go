@@ -93,6 +93,23 @@ func (s *Service) guardWithdraw(ctx context.Context, q db.Querier, accountID acc
 	if err := s.kills.Check(ctx, q, killswitch.Action{Class: killswitch.Withdraw, AccountID: accountID.String()}); err != nil {
 		return err
 	}
+	// The account row, share-locked before its status is read.
+	//
+	// The status read on its own is a snapshot, and an account closure is an
+	// aggregate read followed by a status change in another transaction. Under
+	// READ COMMITTED the two were invisible to each other: the closure saw no
+	// open request, this saw an ACTIVE account, and the reservation landed on an
+	// account CLOSED a moment later -- value held out of the balance of somebody
+	// who can no longer sign in to cancel it. profile.Repository.LockHoldings
+	// takes FOR UPDATE on the same row, which conflicts with this, so one of the
+	// two waits and then sees what the other did (F-249, D-102's window).
+	//
+	// FOR SHARE rather than FOR UPDATE: two concurrent conversion requests on
+	// one account must not queue behind each other here. They are already
+	// serialised where it matters, on the lots they consume.
+	if _, err := q.Exec(ctx, `SELECT 1 FROM accounts WHERE id = $1 FOR SHARE`, accountID); err != nil {
+		return mapError(err)
+	}
 	acct, err := s.accounts.Get(ctx, q, accountID)
 	if err != nil {
 		return err

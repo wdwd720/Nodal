@@ -196,7 +196,7 @@ func TestIntegration_DestinationLifecycleAndWhoMayMoveIt(t *testing.T) {
 			var cerr error
 			fresh, cerr = f.svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: f.account, Kind: payout.DestinationBank, Provider: "sandbox",
-				ProviderReference: "dest-" + uuid.NewString(), Currency: "USD", Country: "US",
+				ProviderReference: sandboxHandle(), Currency: "USD", Country: "US",
 				MaskedDisplay: "****4242",
 			})
 			return cerr

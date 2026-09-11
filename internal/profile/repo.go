@@ -428,3 +428,44 @@ func (r *Repository) ClosureBlockers(ctx context.Context, q db.Querier, userID s
 	}
 	return b, nil
 }
+
+// lockHoldingsSQL takes an exclusive row lock on every account the person owns.
+//
+// It exists because the blockers above are an aggregate read, and an aggregate
+// read sees a snapshot. Under READ COMMITTED a payout Create committing between
+// that read and the closure's own commit is invisible to both: the closure sees
+// no open request, the payout sees an ACTIVE account, and the reservation lands
+// on an account that is CLOSED a moment later -- value held out of the balance
+// of somebody who can no longer sign in to cancel it (F-249).
+//
+// PostgreSQL will not take a row lock through an aggregate ("FOR UPDATE is not
+// allowed with aggregate functions"), so this is a second statement rather than
+// a clause on the first. It locks `accounts` because that is the row both sides
+// name: `payout.Service.guardWithdraw` takes FOR SHARE on exactly this row
+// before it reads the account's status, and FOR SHARE conflicts with FOR
+// UPDATE. So a conversion request in flight either commits before the closure
+// reads the blockers -- and blocks it, with the reason the operator can give the
+// person -- or waits here until the closure has committed, and then meets the
+// CLOSED status in its own guard and is refused.
+//
+// `cp_app` may take it: 00744 revoked table-wide UPDATE on `accounts` and left
+// a column grant on `cost_basis_method`, and a column grant is what a row lock
+// needs (00744 probed exactly this).
+const lockHoldingsSQL = `SELECT id FROM accounts WHERE owner_user_id = $1 ORDER BY id FOR UPDATE`
+
+// LockHoldings takes the lock described above. It is called by the EFFECT path
+// only: a read-only view of the blockers must not take locks that make an
+// operator's screen contend with a customer's payout.
+func (r *Repository) LockHoldings(ctx context.Context, tx pgx.Tx, userID string) error {
+	rows, err := tx.Query(ctx, lockHoldingsSQL, userID)
+	if err != nil {
+		return fmt.Errorf("profile: lock holdings: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() { //nolint:revive // the rows are locked, not read
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("profile: lock holdings: %w", err)
+	}
+	return nil
+}

@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +109,7 @@ func newPayoutSweepFixture(t *testing.T) *payoutSweepFixture {
 		func(ctx context.Context, tx pgx.Tx) error {
 			dest, derr := svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: acct.ID, Kind: payout.DestinationBank,
-				Provider: payoutsandbox.Name, ProviderReference: "dest-" + id.New[id.Any]().String(),
+				Provider: payoutsandbox.Name, ProviderReference: sandboxHandle(),
 				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if derr != nil {
@@ -325,4 +327,16 @@ func TestIntegration_ASweepWithNoProviderDoesNothing(t *testing.T) {
 	runPayoutSweeps(ctx, f.db, empty, f.clk,
 		quietLogger())
 	assert.Equal(t, payout.StateVerified, f.stateOf(t, req.ID))
+}
+
+// sandboxHandle is a provider token a fixture can use safely.
+//
+// It replaces the UUID's dashes with a letter rather than stripping them,
+// because payout.ValidateDestinationToken strips '-' before looking for a
+// thirteen-to-nineteen digit run and Luhn-checking it -- and a raw
+// "dest-<uuid>" produces such a run, passing the checksum about one time in
+// ten. A fixture that is refused at random is a fixture that teaches people to
+// rerun the suite.
+func sandboxHandle() string {
+	return "sbx" + strings.ReplaceAll(uuid.NewString(), "-", "x")
 }

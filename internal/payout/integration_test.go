@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -172,7 +173,7 @@ func newFixture(t *testing.T) *fixture {
 		func(ctx context.Context, tx pgx.Tx) error {
 			d, err := f.svc.CreateDestination(ctx, tx, payout.Destination{
 				AccountID: f.account, Kind: payout.DestinationBank,
-				Provider: "sandbox", ProviderReference: "dest-" + uuid.NewString(),
+				Provider: "sandbox", ProviderReference: sandboxHandle(),
 				DisplayLabel: "Test bank", Currency: "USD", Country: "US",
 			})
 			if err != nil {
@@ -1264,4 +1265,16 @@ func TestIntegration_APayoutGoesToTheProviderItWasClaimedFor(t *testing.T) {
 	require.Error(t, err, "a payout claimed for one provider was submitted to another")
 	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
 	assert.Zero(t, other.Submits(), "the second provider was called with the first's idempotency key")
+}
+
+// sandboxHandle is a provider token a fixture can use safely.
+//
+// It replaces the UUID's dashes with a letter rather than stripping them,
+// because payout.ValidateDestinationToken strips '-' before looking for a
+// thirteen-to-nineteen digit run and Luhn-checking it -- and a raw
+// "dest-<uuid>" produces such a run, passing the checksum about one time in
+// ten. A fixture that is refused at random is a fixture that teaches people to
+// rerun the suite.
+func sandboxHandle() string {
+	return "sbx" + strings.ReplaceAll(uuid.NewString(), "-", "x")
 }
