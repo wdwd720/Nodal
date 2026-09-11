@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/nodal/controlplane/internal/alert"
-
+	"github.com/nodal/controlplane/internal/operatorroles"
 	"github.com/nodal/controlplane/internal/ratelimit"
 )
 
@@ -37,6 +37,13 @@ const (
 	// environment to make the same claim about whose money is moving: PROD is
 	// live, STAGING is the provider's sandbox.
 	RuleProviderModeMatchesEnv Rule = "PROVIDER_MODE_MATCHES_ENV"
+	// RuleBootstrapOperators rejects a CP_AUTH_BOOTSTRAP_OPERATORS declaration
+	// that does not parse, and in PROD one that is anything other than empty or
+	// exactly one ADMIN. The variable exists to make a deployment's FIRST
+	// operator possible; a PROD deployment carrying a staff list in an
+	// environment variable would have replaced a reviewable directory with an
+	// unreviewable one (ADR-0024).
+	RuleBootstrapOperators Rule = "BOOTSTRAP_OPERATORS"
 )
 
 // SecurityEventRetentionFloorDays is the shortest security-event retention
@@ -703,6 +710,12 @@ func (c *Config) Validate() error {
 	}
 	if prodLike && c.Auth.DebugAuthEnabled {
 		add(RuleNoDebugAuth, "Auth.DebugAuthEnabled", "must be false in STAGING/PROD")
+	}
+	if decls, err := operatorroles.ParseDeclarations(c.Auth.BootstrapOperators); err != nil {
+		add(RuleBootstrapOperators, "Auth.BootstrapOperators", err.Error())
+	} else if env == EnvProd && !operatorroles.IsSafeForProduction(decls) {
+		add(RuleBootstrapOperators, "Auth.BootstrapOperators",
+			"a PROD deployment may declare nothing here, or exactly one ADMIN: the variable makes a first operator possible, and every grant after that is a decision a person makes in the directory, with a reason attached")
 	}
 	// A cookie Domain removes the __Host- prefix, and the prefix is the whole
 	// binding.

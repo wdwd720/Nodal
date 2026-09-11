@@ -309,7 +309,11 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// policy and sandbox gate list (ADR-0023). Before it, Metrics.OnAlert had no production caller and
 	// a ledger-integrity violation reached a counter that died with the process
 	// (F-118).
-	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+4+1+2+11+1+14*11+4+1+1+8+2, len(seen))
+	// The trailing +1 is CP_AUTH_BOOTSTRAP_OPERATORS: nothing in the system
+	// writes operator_roles, so a deployment that has never had an operator
+	// could not get one, and the declaration that fixes it is configuration
+	// rather than a route (ADR-0024, D-056).
+	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+4+1+2+11+1+14*11+4+1+1+8+2+1, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {

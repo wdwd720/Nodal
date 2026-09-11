@@ -52,6 +52,15 @@ type Deps struct {
 	// and, as with AdmitAccount, cmd/api always supplies one and
 	// TestIdentityIsGivenThePIIStore asserts that it does.
 	PII *pii.Store
+	// Operators writes the operator-directory rows a deployment declared for
+	// this identity, before the directory is read. It is how a deployment with
+	// no operator gets its first one (ADR-0024, D-056); nil declares none.
+	//
+	// This is NOT taking a role from a provider claim, which this package must
+	// never do: the declaration comes from the deployment's own configuration
+	// and lands in operator_roles, which stays the only thing the role decision
+	// below reads.
+	Operators *OperatorBootstrap
 }
 
 // Service implements login/logout.
@@ -261,6 +270,15 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 				accountIDs = append(accountIDs, a.ID.String())
 			}
 		}
+		// A declared bootstrap grant is written before the directory is read,
+		// so the session that first carries the role and the row that grants it
+		// commit together. It is idempotent and it never revives a revoked row.
+		var bootstrapped []security.Role
+		if s.d.Operators != nil {
+			if bootstrapped, err = s.d.Operators.Ensure(ctx, tx, issuer, ident.Subject, user.ID.String(), now); err != nil {
+				return err
+			}
+		}
 		roles, err := operatorRoles(ctx, tx, user.ID, now)
 		if err != nil {
 			return err
@@ -285,7 +303,7 @@ func (s *Service) Complete(ctx context.Context, req CompleteRequest) (Completed,
 		if len(accountIDs) > 0 {
 			stream = audit.AccountStream(accountIDs[0])
 		}
-		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created})
+		payload, _ := json.Marshal(map[string]any{"session_id": issued.Session.ID, "actor_type": actor, "roles": roles, "amr": ident.AMR, "step_up": at.stepUp, "created": created, "bootstrapped_roles": bootstrapped})
 		if _, err := s.d.Audit.Append(ctx, tx, audit.Event{
 			Stream: stream, ActorType: string(actor), ActorID: user.ID.String(), Action: "auth.login",
 			ResourceType: "session", ResourceID: issued.Session.ID, RequestID: req.RequestID, SourceIP: req.IP, Device: req.UserAgent,

@@ -391,6 +391,16 @@ type AuthConfig struct {
 	SessionTTL       time.Duration
 	StepUpMaxAge     time.Duration
 	DebugAuthEnabled bool
+	// BootstrapOperators declares the operator-directory rows this deployment
+	// grants at login, as `issuer|subject=ROLE` entries separated by commas.
+	// It is how a deployment that has never had an operator gets its first one:
+	// nothing else in the system writes operator_roles (ADR-0024).
+	//
+	// It is a raw string here and parsed by internal/operatorroles, so config
+	// keeps no dependency on the security matrix; Validate refuses a value that
+	// does not parse, and refuses anything in PROD but empty or exactly one
+	// ADMIN.
+	BootstrapOperators string
 }
 
 // ProviderConfig configures one external provider adapter.
