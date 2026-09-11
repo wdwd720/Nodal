@@ -553,8 +553,22 @@ function RequestDetail(props: {
               * is the only thing that resolves it. There is no re-point: a
               * different destination is a different request, with its own
               * quote and its own fee.
+              *
+              * And it renders under the SAME condition as that control. The
+              * sentences below are present tense -- "its Credits are still
+              * reserved", "cancelling is what releases them" -- and the reason
+              * stays on the request after it is cancelled, because why somebody's
+              * value could not be sent is part of its history. A cancelled
+              * request therefore rendered this panel beside a Reserved figure of
+              * zero, under a State badge reading REJECTED, above a Cancel control
+              * isCancellable had already removed (F-279). The API stopped sending
+              * the field outside VERIFIED in the same change; the page does not
+              * rely on that, because a panel whose copy is only true in one state
+              * should say so itself.
               */}
-            {data.blocked_reason !== undefined && data.blocked_reason !== "" && (
+            {isCancellable(data.state) &&
+              data.blocked_reason !== undefined &&
+              data.blocked_reason !== "" && (
               <div className="notice">
                 <p>
                   <strong>This withdrawal cannot be sent.</strong> {data.blocked_reason}

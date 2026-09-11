@@ -77,11 +77,15 @@ func TestAuditWV4_ADerivedLotFrozenByADisputeIsNeverThawedWhenTheDisputeIsWon(t 
 	// A seller's earning derived from it, and a creator fee derived from THAT,
 	// so the freeze has a second level to reach.
 	earning := f.derive(valuedomain.OriginMarketTradingProceeds, 300_000_000,
-		[]credit.LotParent{{LotID: purchase, Quantity: money.QuantityFromInt64(300_000_000),
-			Finality: valuedomain.FinalityReversible}})
+		[]credit.LotParent{{
+			LotID: purchase, Quantity: money.QuantityFromInt64(300_000_000),
+			Finality: valuedomain.FinalityReversible,
+		}})
 	grand := f.derive(valuedomain.OriginMarketCreatorEarning, 100_000_000,
-		[]credit.LotParent{{LotID: earning.ID, Quantity: money.QuantityFromInt64(100_000_000),
-			Finality: valuedomain.FinalityReversible}})
+		[]credit.LotParent{{
+			LotID: earning.ID, Quantity: money.QuantityFromInt64(100_000_000),
+			Finality: valuedomain.FinalityReversible,
+		}})
 
 	// The cardholder disputes. The sweep freezes the earning on the first pass
 	// and the grandchild on the second: one level per pass, which is F-273's
@@ -260,17 +264,34 @@ func TestAuditWV4_ACancelledPayoutStillTellsItsHolderItsCreditsAreReserved(t *te
 			"history is the right thing to keep; rendering it in the present tense is not",
 		after.BlockedReason)
 
-	// And the column itself is held to nothing but the pairing CHECK: cp_app can
-	// stamp a blocked reason on a request in any state, including a terminal one.
-	tag, uerr := testDB.Exec(f.ctx,
+	// And the column itself. This assertion is INVERTED from the reproduction as
+	// written, and the narrative is the auditor's: 00822 granted cp_app UPDATE
+	// (blocked_reason, blocked_at) with no state predicate in the database,
+	// `recordBlocked` carries `AND state = 'VERIFIED'` in its WHERE and nothing
+	// else does, so the only rule the column was held to was that a reason and
+	// an instant exist together. 00823 puts the rule in the schema.
+	//
+	// The reproduction expected the write to affect no rows and report no error,
+	// which is what a BEFORE trigger returning NULL does. The fix RAISES
+	// instead: a write that silently does nothing is how a caller comes to
+	// believe something was recorded, and every other protection on this schema
+	// refuses out loud (00807, 00819). A refusal is the stronger of the two
+	// shapes, so the assertion tests for it (F-279, D-139 amended).
+	_, uerr := testDB.Exec(f.ctx,
 		`UPDATE payout_requests SET blocked_reason = $2, blocked_at = now() WHERE id = $1`,
 		req.ID, "a reason written straight onto a rejected request by the application role")
-	require.NoError(t, uerr)
-	assert.Zero(t, tag.RowsAffected(),
-		"F-wv4-2: 00822 grants cp_app UPDATE (blocked_reason, blocked_at) with no state "+
-			"predicate in the database. `recordBlocked` carries `AND state = 'VERIFIED'` in its "+
-			"WHERE and nothing else does, so the only rule the column is held to is that a reason "+
-			"and an instant exist together")
+	require.Error(t, uerr,
+		"F-wv4-2: cp_app must not be able to stamp a blocked reason onto a payout that has "+
+			"finished moving")
+	assert.Equal(t, "AD001", db.SQLState(uerr), "got %v", uerr)
+	assert.Contains(t, uerr.Error(), "PAYOUT_BLOCKED_REASON_ON_FINISHED")
+
+	// The reason it already carries is untouched: the history stays, and only
+	// the reading of it is state-scoped.
+	stillRecorded, gerr := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, gerr)
+	assert.NotEmpty(t, stillRecorded.BlockedReason,
+		"D-139: why somebody's reserved value could not be sent is part of its history")
 }
 
 // ---------------------------------------------------------------------------
@@ -376,19 +397,26 @@ func TestAuditWV4_TheAllocationRecordFoldsTwoRootSetsIntoOneProvenance(t *testin
 
 	// Same origin, same floor, different root sets.
 	onlyEarned := f.derive(valuedomain.OriginMarketTradingProceeds, 300_000_000,
-		[]credit.LotParent{{LotID: earning.ID, Quantity: money.QuantityFromInt64(300_000_000),
-			Finality: valuedomain.FinalitySettled}})
+		[]credit.LotParent{{
+			LotID: earning.ID, Quantity: money.QuantityFromInt64(300_000_000),
+			Finality: valuedomain.FinalitySettled,
+		}})
 	halfPurchased := f.derive(valuedomain.OriginMarketTradingProceeds, 300_000_000,
 		[]credit.LotParent{
-			{LotID: earning.ID, Quantity: money.QuantityFromInt64(150_000_000),
-				Finality: valuedomain.FinalitySettled},
-			{LotID: purchase.ID, Quantity: money.QuantityFromInt64(150_000_000),
-				Finality: valuedomain.FinalitySettled},
+			{
+				LotID: earning.ID, Quantity: money.QuantityFromInt64(150_000_000),
+				Finality: valuedomain.FinalitySettled,
+			},
+			{
+				LotID: purchase.ID, Quantity: money.QuantityFromInt64(150_000_000),
+				Finality: valuedomain.FinalitySettled,
+			},
 		})
 	require.Equal(t, []valuedomain.CreditOrigin{valuedomain.OriginCreatorEarning},
 		rootsOf(t, onlyEarned.ID), "fixture check")
 	require.Equal(t, []valuedomain.CreditOrigin{
-		valuedomain.OriginCreatorEarning, valuedomain.OriginPurchased},
+		valuedomain.OriginCreatorEarning, valuedomain.OriginPurchased,
+	},
 		rootsOf(t, halfPurchased.ID), "fixture check")
 	require.Equal(t, floorOf(t, onlyEarned.ID), floorOf(t, halfPurchased.ID),
 		"fixture check: the two provenances are indistinguishable by (origin, floor)")
@@ -535,8 +563,10 @@ func TestAuditWV4_ACycleMakesTheBackfillAnswerTheLotsOwnOrigin(t *testing.T) {
 	f := newAuditFixture(t)
 	grant := f.issue(valuedomain.OriginPromotional, valuedomain.FinalityUnfunded, 900_000_000)
 	proceeds := f.derive(valuedomain.OriginMarketTradingProceeds, 300_000_000,
-		[]credit.LotParent{{LotID: grant.ID, Quantity: money.QuantityFromInt64(300_000_000),
-			Finality: valuedomain.FinalityUnfunded}})
+		[]credit.LotParent{{
+			LotID: grant.ID, Quantity: money.QuantityFromInt64(300_000_000),
+			Finality: valuedomain.FinalityUnfunded,
+		}})
 	require.Equal(t, valuedomain.OriginPromotional, floorOf(t, proceeds.ID),
 		"fixture check: the round trip floors at the grant")
 
