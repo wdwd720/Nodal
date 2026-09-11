@@ -159,6 +159,14 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-193 | P1 | PRODUCTIZATION | fixed | A market whose marginal price truncates to zero can be opened, and the impact, slippage and breaker controls then fail open |
+| F-194 | P2 | PRODUCTIZATION | fixed | Four SECURITY DEFINER functions written after F-48 repeat F-48: an unpinned search_path lets the application forge a position through pg_temp |
+| F-195 | P2 | PRODUCTIZATION | fixed | Every order response reports state_version_after 0, and the trade ticket prints it |
+| F-196 | P2 | PRODUCTIZATION | fixed | The public market list carries creator_account_id and accepts it as a filter, contradicting the premise D-080 made it public on |
+| F-197 | P2 | PRODUCTIZATION | fixed | The market summary hands every top holder's account id and exact holding to any signed-in customer |
+| F-198 | P2 | PRODUCTIZATION | fixed | Content a moderation verdict REJECTED stays on the public list, beside the verdict that rejected it |
+| F-199 | P3 | PRODUCTIZATION | fixed | A crafted discovery cursor is a 500 from a public, unauthenticated route |
+| F-200 | P3 | PRODUCTIZATION | fixed | Four claims in the markets area the code does not support |
 
 ---
 
@@ -7456,3 +7464,297 @@ transaction. No product behaviour was wrong.
 before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
+
+## F-193 · A market whose marginal price truncates to zero can be opened, and the impact, slippage and breaker controls then fail open · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the independent adversarial audit of the `markets` area (goal §54),
+reproduced on `audit/markets` as
+`TestAudit_AMarketWhoseSpotTruncatesToZeroIsNotOpenable`.
+
+The marginal price is `(V+R)·10^18 / Y`, truncated, and nothing bounded `Y`
+against `V`. `SupplyModel.Validate` has no ceiling on max supply,
+`POST /v1/native-assets` accepts any integer string at up to eighteen decimals,
+and `checkOpeningLiquidity` bounded only `V`, from below, at 1,000 Credits. So
+ten billion units of an eighteen-decimal asset — `Y0 = 10^28` — launched at that
+floor priced at `10^27/10^28`, which truncates to ZERO, and stayed zero as it
+traded: on this curve `x = V+R` never falls below `V` and `y` never rises above
+`Y0`, so the price can only rise from the opening one, and an opening price of
+zero is a price of zero for the life of the market.
+
+Four readers then read that zero and not one of them reported a failure.
+`PriceImpactBPS` and `Fill.SlippageBPS` divided by it, returned 0, and passed an
+order whose true impact was 12,500 basis points through a 9,000 basis point
+ceiling. `applyBreaker` returned early on a zero reference, so no circuit
+breaker could ever arm on such a market. `MarketValueCredits(q, 0)` is zero, so
+`GET /v1/me/portfolio` marked every holder at nothing and reported
+`unrealized_pnl_credits` of minus the whole basis on a position bought seconds
+earlier.
+
+**Fix (D-108).** Three changes, at three different heights.
+
+`checkOpeningLiquidity` additionally requires the OPENING price to be at least
+`MinSpotUnits` = 10^6 units of price scale. Every §47 control is a ratio quoted
+in basis points, and one basis point of a price `S` is `S/10,000` units, so
+below 10^4 a basis point is not representable at all and 10^6 leaves two further
+digits. It is checked once, at creation, because the price cannot fall below the
+opening one; it is compiled in rather than a policy value, because a deployment
+may decide how deep a market must be and may not decide that a price of zero is
+measurable. At the default six decimals it is not a constraint anybody meets (a
+billion tokens on the 1,000-Credit floor open at 10^13); at eighteen decimals it
+binds, and a creator who wants more supply has to say what pool prices it.
+
+`PriceImpactBPS` is computed from the RESERVES — `|Y² − Y'²| / Y'²`, which is
+exactly `(Y/Y')² − 1` for both directions — rather than from two rendered
+prices, so it cannot lose the measurement to a rendering. A fill that does not
+carry both reserves saturates. `SlippageBPS` and `moveBPS` saturate on a
+reference below `MinSpotUnits` instead of reporting zero, and `applyBreaker`'s
+early return on a zero reference is gone, so an armed breaker on an unmeasurable
+market pauses it to CLOSE_ONLY (holders can still sell) instead of concluding
+nothing happened.
+
+`ratioScaled` reports one unit rather than zero for a positive ratio: zero is
+not a small price, it is "free". Migration 00805 moves the database's copy of
+that arithmetic the same distance through `cp_native_market_price`, and
+`discovery.go`'s PRICE and CHANGE_24H sort keys call the same function, so the
+three statements of this arithmetic still agree to the unit.
+
+**Evidence.** TEST_UNIT: `go test ./internal/nativemarket/ -run TestAudit_` —
+green (was four failed assertions). TEST_UNIT:
+`TestCheckOpeningLiquidity_RefusesAPriceTooSmallToMeasure`,
+`TestTheSafetyReadersFailClosedOnAPriceTheyCannotMeasure`,
+`TestPriceImpactBPS_IsTheMarketsMoveNotTheCallersCost` (restated on reserves).
+TEST_INTEGRATION: `internal/nativemarket` — green, including
+`TestIntegration_TheSafetyPolicyRefusesWhatItSaysItRefuses` and
+`TestIntegration_TheCircuitBreakerPausesToCloseOnly`. STATIC_PROOF:
+`internal/nativemarket/{curve,safety,discovery}.go`, `migrations/00805_*.sql`.
+
+## F-194 · Four SECURITY DEFINER functions written after F-48 repeat F-48 · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAudit_APositionCannotBeForgedThroughAnUnpinnedSearchPath` and
+`TestAudit_TheNM001PrintCheckReadsOnlyTablesTheCallerCannotControl`.
+
+Migration 00717 pinned `pg_catalog, public, pg_temp` on five SECURITY DEFINER
+functions and stated the hazard in prose: TEMP on a database is granted to
+PUBLIC by default and is revoked nowhere in this tree, so any caller may create
+a temp relation, and with `pg_temp` unpinned it is searched FIRST for relation
+names. It left no guard. Migrations 00771 and 00772 then wrote four more
+functions with `SET search_path = public` — `cp_native_market_check_print`,
+`cp_native_position_allocate`, `cp_native_position_apply_fill` and
+`cp_native_positions_unreconciled`.
+
+Two of them bite. ADR-0027 §1 and D-063 say "cp_app holds SELECT on
+native_positions and nothing else ... there is no application path by which a
+cost basis can be set to something the trades do not support". cp_app really
+does lack INSERT on the table — and it may open a market, and
+`cp_native_position_allocate` reads `native_assets` to decide whose creator
+allocation to write and how large it is. Shadow that relation in `pg_temp` and
+the trigger writes a position with an owner and a quantity of the caller's
+choosing. The foreign keys resolve by OID and cannot be shadowed, so the market
+still points at the real asset; only the trigger's view of it is forged. The
+NM001 print check has the same shape against `native_market_fills`: the fill's
+foreign key still refuses the fabricated print, so the control that refuses it
+is a key rather than the price check written to enforce the claim.
+
+**Fix (D-109).** Migration 00804 pins all four, in 00717's shape. The part that
+matters is the guard: `test/integration/migrations` now asserts over the
+catalogue that EVERY `prosecdef` function in `public` names `pg_temp` in its
+`proconfig`, with a negative control naming the functions the rule exists for,
+so the next migration to forget it fails in the suite rather than in an audit.
+
+**Evidence.** TEST_INTEGRATION: both audit reproductions green — the forged
+position no longer exists, and the print is refused with NM001 by the check
+rather than by the foreign key. TEST_INTEGRATION:
+`TestIntegration_EverySecurityDefinerPinsPgTemp`. STATIC_PROOF:
+`migrations/00804_*.sql`, `test/integration/migrations/privileges_test.go`.
+
+## F-195 · Every order response reports state_version_after 0 · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAudit_AFillReportsTheStateVersionItProduced`.
+
+`NativeFill.state_version_after` is a REQUIRED field of the order response and
+the trade ticket prints it ("Recorded at state version N",
+`apps/web/src/pages/markets/Ticket.tsx`). `curve.go` never set
+`Fill.StateAfter.Version` — its own comment said "the persistence layer assigns
+it" — and `Execute` wrote `st.Version+1` straight into the fill row without ever
+putting it back on the Fill. So every trade in every deployment reported 0, and
+every ticket said "Recorded at state version 0".
+
+**Fix.** `Execute` assigns it once, before the INSERT, and the fill INSERT and
+the print both take it from there, so the three cannot disagree. The replay path
+reads the fill's own `seq` — which is the version 00712's apply trigger moved
+the market to — rather than recomputing from current state, which would report
+today's version for yesterday's trade.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_AFillReportsTheStateVersionItProduced` green;
+`TestIntegration_ExecutionIsIdempotent` asserts the version on both the original
+and the replay. STATIC_PROOF: `internal/nativemarket/{service,repository,curve}.go`.
+
+## F-196 · The public market list carries creator_account_id and accepts it as a filter · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAudit_ThePublicMarketListCarriesNoIdentity`.
+
+D-080 made `GET /v1/native-markets` public (unauthenticated) on a stated ground:
+"the list carries product data only — no balance, position, holder or identity".
+Every row carried `creator_account_id`, which `openapi.yaml` marked REQUIRED on
+`NativeMarketSummary`, and the route accepted `?creator_account_id=` as a
+filter. So an anonymous caller could both read the identifier and enumerate one
+account's creations by it. The premise was true of what the list was FOR and
+false of what it returned.
+
+**Fix (D-110).** `creator_account_id` is off `NativeMarketSummary` and the
+filter is off the public route. One flag in the compiled-in projection drives
+both halves — the column is blanked and the predicate that would read it matches
+nothing — so a creator question on this surface returns an EMPTY page rather
+than a different question's answer, and the two cannot come apart. The creator
+is a field of `NativeMarketDetail`, served by the gated
+`GET /v1/native-markets/{id}/summary`, where a signed-in caller is looking at a
+market they are about to trade. `authz.go`'s comment and D-080's "why derived"
+sentence now describe the response rather than the intention, and the web's
+"Created by" row reads the detail's field and renders nothing when it is absent.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_ThePublicMarketListCarriesNoIdentity` green;
+`TestIntegration_MarketDiscoveryFiltersSortsAndSearches` restated — the list row
+carries no creator and the detail row does. TEST_UNIT:
+`TestGetNativeMarkets_PassesEveryFilterThroughAndSaysWhetherPagingIsStable`
+asserts the rendered body contains no `creator_account_id`. WEB:
+`pnpm --filter @controlplane/web typecheck|test|build` green. STATIC_PROOF:
+`internal/nativemarket/discovery.go`, `internal/httpapi/{handlers_native_markets,authz}.go`,
+`openapi/openapi.yaml`, `docs/build/DECISION_REGISTER.md` (D-080 correction).
+
+## F-197 · The market summary hands every top holder's account id and exact holding to any signed-in customer · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAudit_NoSignedInAccountLearnsAnotherAccountsHolding`.
+
+`GET /v1/native-markets/{id}/summary` and `GET /v1/native-markets/{id}` returned
+`top_holders[]` as `{account_id, quantity}` to any caller holding
+`native_asset:read`, which every customer role has. So any signed-in stranger
+could read a market's largest positions by account and watch them move trade by
+trade. `prints.go` states the opposite rule for the tape this package owns —
+"who did it is not the public's business (§16's 'never expose ... internal
+sensitive evidence' applied to other people's positions)" — and a position is a
+stronger version of the same fact than a print.
+
+**Fix (D-111).** A holder row is a rank, a quantity and a share of the units
+accounts hold. No account id reaches the wire at all, not even the caller's own,
+because a field that is sometimes an identity is one a client will eventually
+render as one; the caller's row carries `is_you`, resolved from an optional
+`account_id` through the existing ownership check, so a person can still find
+themselves on a page that names nobody. The rank and the share's denominator are
+computed over EVERY holder rather than over the returned page. A named holder
+list is surveillance and belongs behind `native_market:surveil` on a route of
+its own; none is added here, and the permission stays unrouted.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_NoSignedInAccountLearnsAnotherAccountsHolding` green. TEST_UNIT:
+`TestGetNativeMarketsMarketIdSummary_NamesNoHolder` — the rendered `top_holders`
+contains no `account_id`, an account the caller does not own is 403. WEB:
+typecheck, test and build green. STATIC_PROOF:
+`internal/nativemarket/repository.go`, `internal/httpapi/handlers_native_markets.go`,
+`openapi/openapi.yaml` (`NativeAssetHolder`),
+`apps/web/src/pages/markets/MarketDetail.tsx`.
+
+## F-198 · Content a moderation verdict REJECTED stays on the public list · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAudit_RejectedContentLeavesThePublicMarketList`.
+
+`listMarkets` had no predicate on `a.content_moderation_state` and no default
+status filter, and `GET /v1/native-markets` is public (D-080). So a REJECTED
+moderation verdict removed nothing: the asset's creator-supplied name, symbol,
+description and image kept being served to anonymous visitors, with
+`moderation_state: REJECTED` printed beside the content it rejected.
+`nativeasset.SetModeration` deliberately does not halt the market ("a signal for
+an operator to halt it, not an automatic halt"), and halting did not remove it
+from the list either.
+
+**Fix.** Two always-present, NULL-disabled exclusions in the same compiled-in
+statement: a moderation state to exclude, and a market status to exclude. A
+discovery list excludes REJECTED and, when the caller named no statuses,
+DELISTED; `?status=DELISTED` reaches it. FLAGGED stays visible, because D-065
+made flagging a signal for a person to look rather than a verdict, and hiding on
+a flag would make reporting an asset a delisting anybody could trigger. Both
+exclusions are on the LIST: a read of one named market returns it whatever its
+state, because a holder of a rejected or delisted asset still has to be able to
+open it and sell.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_RejectedContentLeavesThePublicMarketList` green;
+`TestIntegration_TheDefaultPageIsWhatIsStillTradable`,
+`TestIntegration_AFlaggedAssetStaysOnTheList`. TEST_SECURITY:
+`TestSQLInjection_EveryStatementIsBuiltFromConstants` green — the predicates are
+parameters of one constant statement, not assembled text. STATIC_PROOF:
+`internal/nativemarket/discovery.go`.
+
+## F-199 · A crafted discovery cursor is a 500 from a public route · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, reproduced as
+`TestAudit_AMalformedDiscoveryCursorIsRefusedNotAFiveHundred`.
+
+`decodeListCursor` validated the cursor's sort key with `big.Rat.SetString`,
+whose grammar is wider than PostgreSQL numeric's: it accepts a quotient (`1/3`)
+and a hexadecimal mantissa with a binary exponent (`0x1p2`). Both passed, reached
+`$8::numeric`, failed with SQLSTATE 22P02, and came back through `mapError`'s
+default branch as `CodeInternal` — a 500 from a public, unauthenticated route on
+input the caller chose.
+
+**Fix.** The key is matched against `^-?[0-9]+(\.[0-9]+)?$`, which is what the
+cast will accept and is every shape this package writes (exponent notation is
+deliberately refused: numeric would take it and this package never produces it).
+And 22P02 maps to VALIDATION_FAILED wherever it arrives, because a value that
+does not parse as the type it is cast to is the caller's input being wrong. The
+message names no value — the database's own text quotes the input back, and a
+public error that echoes caller bytes is a reflection surface for nothing.
+
+**Evidence.** TEST_INTEGRATION:
+`TestAudit_AMalformedDiscoveryCursorIsRefusedNotAFiveHundred` green. TEST_UNIT:
+`TestListCursor_IsOpaqueAndRefusesTampering` extended with the two crafted keys,
+NaN, Infinity, exponent notation, whitespace and a bare point, plus the four
+shapes this package actually writes. STATIC_PROOF:
+`internal/nativemarket/{discovery,service}.go`.
+
+## F-200 · Four claims in the markets area the code does not support · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, by reading each claim against the code it describes.
+
+1. ADR-0027 said "Seven routes" and listed six.
+2. ADR-0027 said demo Credits are `PROMOTIONAL`, which no payout policy in this
+   build releases. True of the grant a demo trader is funded with, and not of
+   the seeder: the seeded trades also issue `MARKET_TRADING_PROCEEDS` and
+   `MARKET_CREATOR_EARNING`, and `valuedomain.SandboxPolicy` — the policy a
+   sandbox tier actually runs — marks BOTH of those origins withdrawable,
+   because rehearsing a payout of earned value is what a sandbox is for. What
+   holds them is the other half of the rule: `Execute` issues them at
+   `REVERSIBLE` finality, and `FundingFinality.PayoutEligible` is a floor
+   beneath every origin policy that only `SETTLED` and `UNFUNDED` value clears.
+3. `cmd/api/marketsurfaces.go` says the seeder runs where the deployment "is a
+   sandbox tier and asks for it", and nothing asked.
+4. `internal/httpapi/middleware.go` said the General rate limiter "applies to
+   every authenticated request". Since D-080 it is also the ANONYMOUS budget for
+   `GET /v1/terms` and `GET /v1/native-markets`, keyed by IP at 600/min.
+
+**Fix.** (1) Corrected. (2) The paragraph names both controls and says which
+holds which, and `TestIntegration_DemoCreditsCanBeSpentAndCanNeverLeave` now
+asserts the load-bearing disjunction — for every lot in every account the seeder
+touched, either its origin is refused or its finality is not payout-eligible —
+with a check that `MARKET_CREATOR_EARNING` is among the lots covered, so the
+assertion cannot quietly stop testing what it names. (3) Left alone: it is being
+fixed on `fix/config-deploy` with a `CP_API_DEMO_DATA` variable, and two
+branches editing one file is a merge conflict for no gain. (4) The comment says
+what the budget covers and why 600/min per IP is the right number for two reads
+of small bounded tables; the `?q=` search's unanchored `ILIKE` costs a scan of
+`native_assets`, which has one row per launched asset — the same order of work as
+the list beside it — and D-080 records that a trigram index is the fix if that
+table ever stops being small.
+
+**Evidence.** TEST_DOCS: `go test ./test/docs/` — green but for the restore-drill
+claim, which the orchestrator's drill updates. TEST_INTEGRATION:
+`internal/demo` green. STATIC_PROOF:
+`docs/adr/0027-a-position-is-the-sum-of-its-fills.md`,
+`internal/httpapi/middleware.go`, `internal/demo/seed_integration_test.go`,
+`docs/build/DECISION_REGISTER.md` (D-080).
