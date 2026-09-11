@@ -122,6 +122,14 @@ func creditAssetDecimals(ctx context.Context, database *db.DB, repo *assets.Repo
 // alone; a gate in any state that is not a legal source of SANDBOX (an ACTIVE
 // one, say) is refused loudly rather than moved, because moving it would be
 // changing a real approval's state from a config file.
+//
+// "Loudly" is a WARN naming the capability and the state it is in, and the rest
+// of the list is still activated (D-091). It used to be a startup error, so an
+// operator who rehearsed the real ceremony -- on the tier that exists for
+// rehearsing it -- for a capability the blueprint also lists could not restart
+// the deployment until somebody edited the blueprint (F-162). The gate is still
+// not moved, which is the control; the process starting is not what protected
+// the approval.
 func sandboxGatesAtBoot(ctx context.Context, database *db.DB, cfg *config.Config, clk clock.Clock, audit gates.AuditAppender, log *slog.Logger) error {
 	raw := strings.TrimSpace(cfg.API.SandboxGates)
 	if raw == "" {
@@ -142,20 +150,26 @@ func sandboxGatesAtBoot(ctx context.Context, database *db.DB, cfg *config.Config
 		}
 		caps = append(caps, c)
 	}
-	var moved []gates.Gate
+	var outcome gates.SandboxBootstrap
 	err := database.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		moved, err = gates.BootstrapSandbox(ctx, tx, string(cfg.Env), caps, clk, audit)
+		outcome, err = gates.SandboxAtBoot(ctx, tx, string(cfg.Env), caps, clk, audit)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	for _, g := range moved {
+	for _, g := range outcome.Moved {
 		log.Warn("capability sandbox-activated at boot: this gate carries no approval and is active on a sandbox tier only",
 			"capability", string(g.Capability), "environment", g.Environment, "state", string(g.State))
 	}
-	if len(moved) == 0 {
+	for _, s := range outcome.Skipped {
+		log.Warn("capability listed in CP_API_SANDBOX_GATES was NOT sandbox-activated: it is part of a real ceremony",
+			"capability", string(s.Capability), "state", string(s.State), "reason", s.Reason,
+			"consequence", "the capability is governed by that ceremony on this deployment, not by the blueprint line; "+
+				"finish or revoke it to hand the capability back to the sandbox tier")
+	}
+	if len(outcome.Moved) == 0 && len(outcome.Skipped) == 0 {
 		log.Info("sandbox gates already in place", "capabilities", raw)
 	}
 	return nil

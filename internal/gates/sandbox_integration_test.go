@@ -205,7 +205,10 @@ func TestIntegration_SandboxGateCanNeverExistInProd(t *testing.T) {
 	assert.Equal(t, errs.CodeForbidden, errs.CodeOf(err))
 }
 
-// The blueprint's sandbox gates are activated once and left alone after.
+// The blueprint's sandbox gates are activated once and left alone after, and a
+// capability in the middle of a real ceremony is skipped rather than moved --
+// and rather than being a startup error, which is what it used to be (F-162,
+// D-091).
 func TestIntegration_BootstrapSandboxIsIdempotentAndNeverMovesAnApproval(t *testing.T) {
 	f := newFixture(t, "STAGING")
 	caps := []Capability{Marketplace, NativeAssetCreation}
@@ -218,24 +221,26 @@ func TestIntegration_BootstrapSandboxIsIdempotentAndNeverMovesAnApproval(t *test
 			require.NoError(t, err)
 		}
 	}
-	var moved []Gate
+	var out SandboxBootstrap
 	require.NoError(t, f.inTx(t, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		moved, err = BootstrapSandbox(ctx, tx, "STAGING", caps, f.clk, f.audit)
+		out, err = SandboxAtBoot(ctx, tx, "STAGING", caps, f.clk, f.audit)
 		return err
 	}))
-	require.Len(t, moved, 2)
-	for _, g := range moved {
+	require.Len(t, out.Moved, 2)
+	assert.Empty(t, out.Skipped)
+	for _, g := range out.Moved {
 		assert.Equal(t, StateSandbox, g.State)
 	}
 	audits := f.audit.count()
 
 	require.NoError(t, f.inTx(t, func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		moved, err = BootstrapSandbox(ctx, tx, "STAGING", caps, f.clk, f.audit)
+		out, err = SandboxAtBoot(ctx, tx, "STAGING", caps, f.clk, f.audit)
 		return err
 	}))
-	assert.Empty(t, moved, "a second boot moves nothing")
+	assert.Empty(t, out.Moved, "a second boot moves nothing")
+	assert.Empty(t, out.Skipped)
 	assert.Equal(t, audits, f.audit.count(), "and writes no audit event")
 
 	// A gate that is part of a real ceremony is refused, not moved.
@@ -251,11 +256,29 @@ func TestIntegration_BootstrapSandboxIsIdempotentAndNeverMovesAnApproval(t *test
 		return f.admin.Propose(ctx, tx, real, highRiskProposal("a real proposal"))
 	})
 	require.NoError(t, err)
+	audits = f.audit.count()
 	err = f.inTx(t, func(ctx context.Context, tx pgx.Tx) error {
-		_, err := BootstrapSandbox(ctx, tx, "STAGING", []Capability{real}, f.clk, f.audit)
-		return err
+		var berr error
+		out, berr = SandboxAtBoot(ctx, tx, "STAGING", append([]Capability{real}, caps...), f.clk, f.audit)
+		return berr
+	})
+	require.NoError(t, err, "a real ceremony on a listed capability must not stop the deployment booting")
+	assert.Empty(t, out.Moved)
+	require.Len(t, out.Skipped, 1, "the gate in the ceremony is reported, so the boot log can name it")
+	assert.Equal(t, real, out.Skipped[0].Capability)
+	assert.Equal(t, StatePendingApproval, out.Skipped[0].State)
+	assert.NotEmpty(t, out.Skipped[0].Reason)
+	assert.Equal(t, StatePendingApproval, f.get(t, real).State, "the real proposal is untouched")
+	assert.Equal(t, audits, f.audit.count(), "a skip writes no audit event: nothing happened to the gate")
+	for _, c := range caps {
+		assert.Equal(t, StateSandbox, f.get(t, c).State, "the rest of the list is still in place")
+	}
+
+	// The manual path keeps its refusal: an operator asking for this move is
+	// told it is illegal, because it is.
+	_, err = f.do(t, f.op("sbx-manual", security.RoleAdmin), func(ctx context.Context, tx pgx.Tx) (Gate, error) {
+		return f.admin.WithSandbox(true).Sandbox(ctx, tx, real, "trying to sandbox a gate under approval")
 	})
 	require.Error(t, err)
 	assert.Equal(t, errs.CodeInvalidStateTransition, errs.CodeOf(err))
-	assert.Equal(t, StatePendingApproval, f.get(t, real).State, "the real proposal is untouched")
 }
