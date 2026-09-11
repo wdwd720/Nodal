@@ -46,6 +46,15 @@ full treatment, in exactly the shape migration 00744 established for `accounts`:
 - A BEFORE INSERT trigger refuses any birth state but UNVERIFIED, because a row
   inserted VERIFIED never changes and none of the above would apply to it.
 
+Migration 00796 extends the same treatment to `sanctions_state`, which 00761
+granted back to `cp_app` one statement after revoking the state beside it. It is
+a screening DECISION — `internal/eligibility` reads it as one of the allowlists
+that decides whether a payout may proceed — so it rides on the same transition
+row (`from_sanctions_state`, `to_sanctions_state`), is written by the same
+trigger, and is out of the application's reach. A profile born already screened
+records that through a trigger of its own, for the reason the birth control
+above exists (F-168).
+
 UNVERIFIED keeps its name rather than becoming §20's `NOT_STARTED`: rows carry
 it and `eligibility.Policy` documents allowlist it by name (D-057).
 
@@ -80,6 +89,14 @@ evidence complete    -> PAYOUT_KYC, or ENHANCED with a political-exposure answer
 A profile in VERIFIED with no sub-checks reports the base level. A state without
 evidence is somebody's assertion; a state with evidence is a decision that can
 be shown to a regulator.
+
+Two sweeps run in the API process and neither is load-bearing for the table
+above. `ExpireOverdue` moves a profile past its window to EXPIRED so the row
+stops disagreeing with the level the resolver already reports (D-084).
+`ExpireOverdueSessions` closes an attempt that can no longer be decided — a
+hosted link past its expiry, or a session the provider was never told about —
+which matters because 00762 permits one open session per person, so a link
+nothing closes is that person's verification blocked for good (F-170).
 
 ### 3. Provider-hosted, and what is therefore not stored
 

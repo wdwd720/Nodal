@@ -169,3 +169,131 @@ func TestIntegration_TheSweepLeavesEveryOtherStateAlone(t *testing.T) {
 	assert.Equal(t, "RESTRICTED", stateOf(t, d, user),
 		"an operator's restriction outranks a clock")
 }
+
+// The session expiry sweep (F-170), against the real schema.
+//
+// Migration 00762 permits exactly ONE open verification session per person. A
+// hosted link past its expiry is not open in any sense the person can use --
+// the provider will not accept it and Poll gets nothing new -- but its STATUS
+// still said open, and nothing in any binary ever moved it. So the index that
+// exists to stop two attempts racing was, for that person, an index that
+// stopped them verifying at all. §20's "your link expired, start again" was a
+// sentence the product could not honour.
+//
+// The other half is the session that was never handed to a provider: the row is
+// written BEFORE the call so a crash leaves something to reconcile, Resume
+// refuses it, and no provider answer can ever arrive for it. It blocks its owner
+// in exactly the same way and nothing could close it either.
+
+// openSession writes an attempt with the given status, provider reference and
+// hosted-link expiry, aged by `age`.
+func openSession(t *testing.T, d *db.DB, user accounts.UserID, status, providerRef string, expiresAt *time.Time, age time.Duration) verification.SessionID {
+	t.Helper()
+	sid := verification.NewSessionID()
+	_, err := d.Exec(context.Background(), `INSERT INTO verification_sessions
+		(id, user_id, purpose, provider, status, rules_version, environment, sandbox, provider_ref, expires_at, created_at)
+		VALUES ($1,$2,'PAYOUT_KYC','expiry-itest','CREATED','v1','LOCAL',false,NULLIF($3,''),$4, now() - $5::interval)`,
+		sid, user, providerRef, expiresAt, age.String())
+	require.NoError(t, err)
+	if status != "CREATED" {
+		_, err = d.Exec(context.Background(), `INSERT INTO verification_session_transitions
+			(id, session_id, from_status, to_status, actor_type, actor_id, reason, occurred_at)
+			VALUES ($1,$2,'CREATED',$3,'SYSTEM','expiry-itest','fixture',now())`,
+			verification.NewTransitionID(), sid, status)
+		require.NoError(t, err)
+	}
+	return sid
+}
+
+func sessionStatusOf(t *testing.T, d *db.DB, sid verification.SessionID) string {
+	t.Helper()
+	var status string
+	require.NoError(t, d.QueryRow(context.Background(),
+		`SELECT status FROM verification_sessions WHERE id = $1`, sid).Scan(&status))
+	return status
+}
+
+func aUser(t *testing.T, d *db.DB) accounts.UserID {
+	t.Helper()
+	u, err := accounts.NewRepository().CreateUser(context.Background(), d, "expiry-itest", "sub-"+uuid.NewString(), nil)
+	require.NoError(t, err)
+	return u.ID
+}
+
+// TestIntegration_TheSessionSweepClosesWhatCannotBeDecided.
+func TestIntegration_TheSessionSweepClosesWhatCannotBeDecided(t *testing.T) {
+	requireEnv(t)
+	d := testDB
+	svc, _ := newService(t, true, time.Now)
+	now := time.Now().UTC()
+
+	ranOut := aUser(t, d)
+	link := openSession(t, d, ranOut, "PENDING_USER_ACTION", "prov_ran_out", ptr(now.Add(-time.Minute)), time.Hour)
+
+	live := aUser(t, d)
+	liveLink := openSession(t, d, live, "PENDING_USER_ACTION", "prov_live", ptr(now.Add(time.Hour)), time.Minute)
+
+	stranded := aUser(t, d)
+	strandedSession := openSession(t, d, stranded, "CREATED", "", nil, verification.UnstartedSessionGrace+time.Minute)
+
+	fresh := aUser(t, d)
+	freshSession := openSession(t, d, fresh, "CREATED", "", nil, time.Minute)
+
+	moved, err := svc.ExpireOverdueSessions(context.Background(), d, now, verification.SweepBatch)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, moved, 2)
+
+	assert.Equal(t, "EXPIRED", sessionStatusOf(t, d, link), "a hosted link past its expiry stayed open")
+	assert.Equal(t, "EXPIRED", sessionStatusOf(t, d, strandedSession),
+		"an attempt the provider was never told about stayed open, and its owner stayed blocked")
+	assert.Equal(t, "PENDING_USER_ACTION", sessionStatusOf(t, d, liveLink), "a live link was closed under somebody")
+	assert.Equal(t, "CREATED", sessionStatusOf(t, d, freshSession),
+		"an attempt seconds old was expired before the provider call could land")
+
+	// The status moved through a transition row, which is the only thing that
+	// can write it, and the row says a clock did this and why.
+	var actorType, actorID, from, reason string
+	require.NoError(t, d.QueryRow(context.Background(),
+		`SELECT actor_type, actor_id, from_status, reason FROM verification_session_transitions
+		  WHERE session_id = $1 AND to_status = 'EXPIRED'`, link).Scan(&actorType, &actorID, &from, &reason))
+	assert.Equal(t, "SYSTEM", actorType)
+	assert.Equal(t, "verification:session-expiry-sweep", actorID)
+	assert.Equal(t, "PENDING_USER_ACTION", from)
+	assert.Contains(t, reason, "expiry")
+
+	// And the point of all of it: the person can start again.
+	repo := verification.NewRepository()
+	_, open, err := repo.OpenSession(context.Background(), d, ranOut)
+	require.NoError(t, err)
+	assert.False(t, open, "the one-open-session index still holds this person's verification shut")
+
+	// A second pass finds nothing and moves nothing: the sweep converges.
+	again, err := svc.ExpireOverdueSessions(context.Background(), d, now, verification.SweepBatch)
+	require.NoError(t, err)
+	assert.Zero(t, again, "the sweep expired something twice")
+}
+
+// TestIntegration_TheSessionSweepLeavesADecidedSessionAlone: a session the
+// provider answered is terminal, and a clock must not describe it as having
+// run out.
+func TestIntegration_TheSessionSweepLeavesADecidedSessionAlone(t *testing.T) {
+	requireEnv(t)
+	d := testDB
+	svc, _ := newService(t, true, time.Now)
+	now := time.Now().UTC()
+
+	user := aUser(t, d)
+	decided := openSession(t, d, user, "PROCESSING", "prov_decided", ptr(now.Add(-time.Hour)), time.Hour)
+	_, err := d.Exec(context.Background(), `INSERT INTO verification_session_transitions
+		(id, session_id, from_status, to_status, actor_type, actor_id, reason, occurred_at)
+		VALUES ($1,$2,'PROCESSING','APPROVED','SYSTEM','expiry-itest','the provider decided',now())`,
+		verification.NewTransitionID(), decided)
+	require.NoError(t, err)
+
+	_, err = svc.ExpireOverdueSessions(context.Background(), d, now, verification.SweepBatch)
+	require.NoError(t, err)
+	assert.Equal(t, "APPROVED", sessionStatusOf(t, d, decided),
+		"a decided session was overwritten by a clock")
+}
+
+func ptr(t time.Time) *time.Time { return &t }
