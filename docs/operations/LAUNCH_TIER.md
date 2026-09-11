@@ -206,3 +206,44 @@ contract are unchanged between tiers — only the CNAME target differs.
 The ACM certificate already issued is not wasted. It stays valid until March
 2027 and is what the AWS load balancer will use on migration. The GoDaddy
 validation record stays in place so ACM can renew.
+
+## 10. Who runs the migrations, and from where
+
+**An operator, from their own machine, against Neon.** Not the API, not a job,
+not a deploy hook.
+
+```
+CP_DATABASE_MIGRATE_URL='<the cp_migrate DSN>' go run ./cmd/migrate up
+CP_DATABASE_MIGRATE_URL='<the cp_migrate DSN>' go run ./cmd/migrate verify
+```
+
+`cmd/migrate` reads `CP_DATABASE_MIGRATE_URL` from its own environment. Nothing
+that loads a service configuration reads it at all: it is required of
+`ServiceTooling` and of nothing else, and `test/infra` keeps it that way.
+
+Three facts make this the arrangement rather than a gap:
+
+1. **This tier deploys no worker and no cron job.** Both are paid service types
+   on Render — a background worker is $7 a month and a cron job has a $1
+   minimum — and a fixed monthly charge is the one thing this tier may not
+   have. §8 is where that stops being true. The reconciliation sweep is
+   operator-run for the same reason.
+2. **The credential must not be on the API.** `cp_migrate` owns every table,
+   and an owner can `ALTER TABLE ... DISABLE TRIGGER`. Since 00743–00753 the
+   state machines are enforced by triggers — the transition bindings,
+   `forbid_mutation` on fifty-three append-only tables, and the eleven that
+   write state columns the application cannot — so the internet-facing process
+   holding it would undercut all of them in one statement (F-93). The blueprint
+   therefore declares neither `CP_DATABASE_MIGRATE_URL` nor a dashboard secret
+   behind it; F-136 is the finding that recorded a prompted
+   `NODAL_DB_MIGRATE_URL` doing exactly that for no purpose.
+3. **A schema change must land before the code that needs it.** With no job to
+   sequence it, the ordering is the operator's: run `cmd/migrate up`, confirm
+   `cmd/migrate verify` passes, then push. `docs/operations/DEPLOYMENT.md` §4
+   describes the same order for the AWS architecture, where a one-shot ECS task
+   does it.
+
+The cost of this is honest and worth stating: a migration is a manual step, so
+a deploy whose operator forgets it leaves the new code against the old schema.
+What bounds it is `cmd/migrate verify`, which compares recorded checksums, and
+the fact that this tier has one operator.

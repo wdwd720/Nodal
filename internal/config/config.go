@@ -214,6 +214,24 @@ type APIConfig struct {
 	// boot. Non-empty only on a sandbox tier; each must be a declared
 	// capability and must also be in EnabledCapabilities.
 	SandboxGates string
+
+	// DemoData asks a sandbox tier to load the demo catalogue at boot: eight
+	// SANDBOX-labelled markets, a demo Credit balance and the activity feed
+	// built out of them.
+	//
+	// It exists because the seeding had no switch at all (D-115, F-144). It
+	// keyed off SandboxTier() alone, so the deployed STAGING seeded on every
+	// boot while CP_SEED_ENABLED -- the variable an operator would reach for,
+	// and the only one either document mentions -- said "false" and was read
+	// by nothing. The two are deliberately separate: RuleNoSeed forbids
+	// CP_SEED_ENABLED in STAGING and PROD, so it could never have been this
+	// control, and the developer seed scripts it does govern write dev
+	// identities and fake USDC rather than SANDBOX-labelled product data.
+	//
+	// True is refused in PROD and on any deployment that is not a sandbox
+	// tier; the default is false, so a deployment that says nothing seeds
+	// nothing.
+	DemoData bool
 }
 
 // CapacityConfig is the deployment tier's hard ceilings on financial activity.

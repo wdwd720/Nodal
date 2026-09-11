@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 
@@ -93,9 +95,58 @@ type BeginResult struct {
 	ExpiresAt   time.Time
 }
 
+// IsLocalPath reports whether p is a path this system will redirect a browser
+// to after a login: a single "/", then something that is neither a slash nor a
+// backslash.
+//
+// The guard used to be `HasPrefix("/") && !HasPrefix("//")`, and "/\evil.example"
+// walks straight through it. Every browser implementing the WHATWG URL standard
+// resolves a special-scheme relative reference beginning "/\" through the
+// relative-slash state into the AUTHORITY state -- "\" is a slash for http(s)
+// -- so the browser goes to https://evil.example/. That is the standard
+// backslash bypass of a "//" check, and it was reachable as an open redirect on
+// the same response that sets the session cookie (F-146).
+//
+// Three rules, each closing a different door:
+//
+//   - it must start with exactly one "/" followed by a character that is
+//     neither "/" nor "\", so neither "//host" nor "/\host" nor "/\/host"
+//     survives;
+//   - no control character, including the tab, newline and carriage return
+//     that URL parsers STRIP before parsing (a tab between the slash and a
+//     hostname disappears and leaves "//evil.example") and the NUL that
+//     truncates a C string;
+//   - and url.Parse must agree it has no scheme and no host, which catches the
+//     forms nobody has thought of yet rather than the ones that are listed.
+//
+// The bare "/" is allowed: it is the app's own root and carries nowhere.
+func IsLocalPath(p string) bool {
+	if p == "" {
+		return false
+	}
+	if p[0] != '/' {
+		return false
+	}
+	if len(p) > 1 && (p[1] == '/' || p[1] == '\\') {
+		return false
+	}
+	for _, r := range p {
+		// Unicode control characters as well as ASCII: a URL parser that
+		// normalises them can turn one of these into a slash.
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	u, err := url.Parse(p)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "" && u.Host == "" && u.Opaque == ""
+}
+
 // Begin creates a single-use login attempt and returns the provider redirect.
 func (s *Service) Begin(ctx context.Context, req BeginRequest) (BeginResult, error) {
-	if req.ReturnTo != "" && (!strings.HasPrefix(req.ReturnTo, "/") || strings.HasPrefix(req.ReturnTo, "//")) {
+	if req.ReturnTo != "" && !IsLocalPath(req.ReturnTo) {
 		return BeginResult{}, errs.New(errs.CodeValidationFailed, "return_to must be a local path")
 	}
 	state, err := randomToken(32)

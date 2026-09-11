@@ -196,7 +196,11 @@ func run(ctx context.Context, lookup func(string) (string, bool), stderr *os.Fil
 	// that must be drained on shutdown -- the same reason the database and the
 	// rate-limit store are opened here. Closed AFTER the server stops, below,
 	// so an alert raised by the last request in flight still gets delivered.
-	alerts := newAlertDispatcher(ctx, cfg, resolver, log)
+	alerts, aerr := newAlertDispatcher(ctx, cfg, resolver, log)
+	if aerr != nil {
+		log.Error("refusing to start", "error", aerr.Error())
+		return exitFailure
+	}
 
 	clk := clock.System()
 	server, err := build(ctx, buildInput{

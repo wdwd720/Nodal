@@ -173,7 +173,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// From the configuration, not the environment: this list is condition 1 of
 	// the policy authority, and it belongs in the hash that proves which
 	// configuration a running binary loaded.
-	enabledCaps := parseCapabilities(in.cfg.API.EnabledCapabilities)
+	enabledCaps, capErr := parseCapabilities(in.cfg.API.EnabledCapabilities)
+	if capErr != nil {
+		return nil, capErr
+	}
 	gateChecker, err := gates.NewChecker(string(cfg.Env), func(c gates.Capability) bool {
 		_, ok := enabledCaps[c]
 		return ok
@@ -323,7 +326,10 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// Personal data is encrypted before it reaches identity_pii, and the
 	// login path is what writes it (F-47). Nil in LOCAL/TEST with no keyring;
 	// config.Validate requires one in STAGING and PROD.
-	piiStore := newPIIStore(ctx, cfg, in.resolver, log)
+	piiStore, perr := newPIIStore(ctx, cfg, in.resolver, log)
+	if perr != nil {
+		return nil, fmt.Errorf("personal data keyring: %w", perr)
+	}
 
 	// ---- operator bootstrap (ADR-0024, D-056) ------------------------------
 	//
@@ -907,16 +913,35 @@ func resolveSettlementAsset(ctx context.Context, in buildInput, repo *assets.Rep
 	return out, nil
 }
 
-func parseCapabilities(list string) map[gates.Capability]struct{} {
+// parseCapabilities reads CP_API_ENABLED_CAPABILITIES, and refuses a name
+// internal/gates does not declare.
+//
+// It used to `continue` past one. That list is condition 1 of the policy
+// authority -- a capability absent from it is inactive whatever its gate row
+// says -- so one misspelled letter switched a capability off and said nothing:
+// a healthy service, a 200 on every probe, and the Credit purchase path dark.
+// The sibling that reads CP_API_SANDBOX_GATES already refused (sandboxGatesAtBoot),
+// so the same mistake produced two different outcomes depending on which
+// variable it was in (F-145).
+//
+// Failing closed here means failing to START, which is the loud end of closed.
+// config.Validate refuses the same names earlier, where an operator sees them
+// before a deploy; this is the second refusal, for a Config that did not come
+// through Load.
+func parseCapabilities(list string) (map[gates.Capability]struct{}, error) {
 	out := map[gates.Capability]struct{}{}
 	for _, raw := range strings.Split(list, ",") {
-		name := gates.Capability(strings.ToUpper(strings.TrimSpace(raw)))
-		if name == "" || !name.Valid() {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
 			continue
+		}
+		name := gates.Capability(strings.ToUpper(trimmed))
+		if !name.Valid() {
+			return nil, fmt.Errorf("CP_API_ENABLED_CAPABILITIES names %q, which is not a declared capability", trimmed)
 		}
 		out[name] = struct{}{}
 	}
-	return out
+	return out, nil
 }
 
 func identityProvider(ctx context.Context, cfg *config.Config, resolver config.Resolver, clk clock.Clock) (auth.IdentityProvider, error) {

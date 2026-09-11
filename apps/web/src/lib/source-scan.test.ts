@@ -243,3 +243,39 @@ test("reduced motion is honoured in the stylesheet", () => {
   assert.ok(css, "src/styles.css must exist");
   assert.match(css.text, /@media \(prefers-reduced-motion: reduce\)/);
 });
+
+test("every EventSource is constructed with withCredentials", () => {
+  // The deployed topology is app-nodal.actorvia.xyz calling
+  // api-nodal.actorvia.xyz: the same SITE, a different ORIGIN. EventSource's
+  // credentials mode is "same-origin" unless `withCredentials` is set, so the
+  // session cookie is not attached and `GET /v1/events/stream` — which requires
+  // PermAccountRead — refuses the request. The bell, the activity feed and every
+  // stream-driven invalidation are then dead while the badge says
+  // "reconnecting" forever.
+  //
+  // This is a source rule rather than a runtime one because the browser suite
+  // cannot reach it: vite.config.ts proxies /v1, so those tests run same-origin
+  // where the default already works. It is stated unconditionally rather than
+  // "when VITE_API_ORIGIN differs from the page" because the option is correct
+  // either way — same-origin requests send the cookie with or without it.
+  const constructions: string[] = [];
+  for (const file of sourceFiles()) {
+    const lines = file.text.split("\n");
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/new\s+EventSource\s*\(/.test(lines[i] ?? "")) continue;
+      // The options object may wrap onto the following lines.
+      const window = lines.slice(i, i + 4).join("\n");
+      if (/withCredentials\s*:\s*true/.test(window)) continue;
+      constructions.push(`${file.path}:${i + 1}`);
+    }
+  }
+  assert.deepEqual(
+    constructions,
+    [],
+    `EventSource without { withCredentials: true } sends no session cookie cross-origin:\n${constructions.join("\n")}`,
+  );
+
+  // And the app really does open one, so this rule cannot pass by vacuum.
+  const opened = matches(sourceFiles(), /new\s+EventSource\s*\(/);
+  assert.ok(opened.length > 0, "no EventSource is constructed anywhere; this rule is watching nothing");
+});

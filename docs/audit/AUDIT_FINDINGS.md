@@ -159,6 +159,21 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-136 | P1 | PRODUCTIZATION | fixed | The blueprint handed the internet-facing API the schema-owner DSN, under a name the test that forbids it did not know |
+| F-137 | P1 | PRODUCTIZATION | fixed | STAGING booted with no alert destination and no PII keyring: both rules were satisfied by the reference, and three documents said it could not |
+| F-138 | P2 | PRODUCTIZATION | fixed | The blueprint's secret scan read one service of two, and nothing pinned the static site's CSP, HSTS, SPA rewrite or domain |
+| F-139 | P2 | PRODUCTIZATION | fixed | `style-src 'self'` blocked the inline style attributes the app ships, so the balance bar rendered empty while its label stated the shares |
+| F-140 | P2 | PRODUCTIZATION | fixed | `connect-src`, `script-src` and the Stripe publishable key were unasserted, and the key's account was never held against the API's |
+| F-141 | P2 | PRODUCTIZATION | fixed | `nodal-api` declared no custom domain while every other value in the file assumed one |
+| F-142 | P2 | PRODUCTIZATION | fixed | `/v1/version` reported `build_version: dev` for every image ever built from the blueprint, and the config hash carried the same constant |
+| F-143 | P2 | PRODUCTIZATION | fixed | `EventSource` was constructed without `withCredentials`, so the live stream carried no session on the deployed cross-origin topology |
+| F-144 | P2 | PRODUCTIZATION | fixed | `CP_SEED_ENABLED` was read by nothing and the sandbox tier seeded demo data regardless, so the deployment declared that it does not seed and seeded |
+| F-145 | P3 | PRODUCTIZATION | fixed | A misspelled capability loaded clean and was dropped in silence, switching off condition 1 of the policy authority |
+| F-146 | P2 | PRODUCTIZATION | fixed | `return_to` of the form `/\host` was an open redirect off the callback that sets the session cookie |
+| F-147 | P3 | PRODUCTIZATION | fixed | `render.yaml` pointed operators at `docs/operations/RENDER_DEPLOY.md`, which does not exist |
+| F-148 | P3 | PRODUCTIZATION | fixed | The static site published its source maps, serving the readable frontend to every visitor |
+| F-149 | P3 | PRODUCTIZATION | fixed | `CP_AUTH_POST_LOGIN_URL` defaulted to one deployment's hostname and no rule required it where it matters |
+| F-150 | P2 | PRODUCTIZATION | fixed | `Permissions-Policy: payment=()` denied the Payment Request API to Stripe's Payment Element, removing the wallets |
 | F-160 | P2 | PRODUCTIZATION | fixed | A gate sandbox-activated out of REVOKED reported success, logged it, and could never be active |
 | F-161 | P2 | PRODUCTIZATION | fixed | A SANDBOX gate reached from EXPIRED or REVOKED carried the whole approval version that reached ACTIVE, under a banner saying it carries none |
 | F-162 | P2 | PRODUCTIZATION | fixed | Rehearsing the real ceremony on a sandbox-listed capability stopped the deployment booting |
@@ -7463,6 +7478,491 @@ before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
 
+## F-136 · The blueprint handed the internet-facing API the schema-owner DSN, under a name the test that forbids it did not know · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the config-deploy audit (goal §54), reading `render.yaml` against
+`test/infra/render_test.go` rather than reading either alone.
+
+`CP_DATABASE_MIGRATE_URL` is deliberately absent from `nodal-api`, F-93 says
+why, a twenty-line comment in `render.yaml` says why, and
+`TestTheWebServiceIsNotGivenTheSchemaOwner` asserts the absence. And two lines
+above that comment the same file declared `NODAL_DB_MIGRATE_URL` as a prompted
+secret on the same service, so Render put the `cp_migrate` DSN — password
+included — into the API container's environment.
+
+`cp_migrate` owns every table, and an owner can `ALTER TABLE ... DISABLE
+TRIGGER`. Since 00743–00753 the state machines are enforced by triggers: the
+transition bindings, `forbid_mutation` on fifty-three append-only tables, and
+the eleven that write state columns the application cannot. So a compromise of
+the web process would have undone all of them in one statement.
+
+Nothing read it. A repository-wide grep found the name in `render.yaml` and in
+two test stand-ins (`test/infra/render_test.go`,
+`test/deployed/surface_test.go`) and nowhere else: `cmd/migrate` takes
+`CP_DATABASE_MIGRATE_URL` from its own environment when an operator runs it.
+The credential was in the internet-facing process for no purpose at all.
+
+The test failed because a name test is only as good as the names it knows.
+
+**Fix.** The entry and both stand-ins are gone.
+`TestTheWebServiceIsNotGivenTheSchemaOwner` asks about the ROLE instead of a
+name: no variable on that service may carry `MIGRATE` in its key, or
+`cp_migrate` / `MIGRATE_URL` in its value. `HUMAN_ACTIONS_QUEUE.md` item 5
+tells the operator to delete the dashboard value by hand, because a blueprint
+sync does not remove one, and `docs/operations/LAUNCH_TIER.md` §10 — which did
+not exist — states how migrations are actually run on this tier: an operator,
+from their own machine, against Neon, with the DSN in that shell and nowhere
+else.
+
+**Evidence.** STATIC_PROOF: `grep -rn NODAL_DB_MIGRATE_URL` — nothing outside
+the audit file's own prose. TEST_UNIT:
+`TestTheWebServiceIsNotGivenTheSchemaOwner`,
+`TestAuditConfigDeploy_TheAPIServiceIsNotHandedTheSchemaOwnerDSN`.
+
+## F-137 · STAGING booted with no alert destination and no PII keyring, and three documents said it could not · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the config-deploy audit, loading `render.yaml`'s own variables
+through `config.Load` with the two dashboard secrets absent — the state an
+operator who had not yet done items 1 and 2 of the human actions queue would
+be in.
+
+`render.yaml` said: *"config.Validate refuses to start in STAGING or PROD when
+it is empty, so a deployment that forgets it does not boot silently unalerted —
+it does not boot."* `HUMAN_ACTIONS_QUEUE.md` items 1 and 2 repeated it.
+`MASTER_BUILD_STATE.md` said the deploy *"refuses to start without them, by
+design."*
+
+It booted. `RuleAlertDestination` and `RulePIIKeyring` checked that the
+`SecretRef` was non-empty, and the blueprint sets `CP_ALERT_WEBHOOK_URL` to the
+literal string `env://NODAL_ALERT_WEBHOOK_URL`, which is never empty. The value
+behind the reference was read only at composition time, where
+`cmd/api/alerts.go` and `cmd/api/pii.go` logged at ERROR and returned nil —
+deliberately, so an unresolvable secret would not cause an outage.
+
+Each decision is defensible and together they meant a healthy, serving STAGING
+in which a ledger-integrity violation reached nobody (the F-118 state) and no
+verified e-mail was ever stored (the F-47 state), with a 200 on every probe.
+
+**Fix.** `Config.ResolvableSecrets` resolves both references during `Load`,
+where the lookup is still in hand; an unresolvable or empty one is a violation
+of the rule that was supposed to have caught it. A scheme the loader's chain
+cannot resolve at all — `aws-sm://`, whose resolver lives in the running
+process — is not a violation, because that is the AWS architecture's normal
+shape. `newAlertDispatcher` and `newPIIStore` return an error in STAGING and
+PROD instead of nil: the second refusal, for the resolver the process holds and
+the loader does not, and for a keyring that resolves and does not parse. LOCAL,
+TEST and DEV keep the honest degradation and the log line naming the
+consequence. The three documents now describe what happens.
+
+**Evidence.** TEST_UNIT:
+`TestValidate_TheAlertDestinationAndTheKeyringAreRESOLVED` (absent, whitespace,
+both environments, and `aws-sm://` still accepted);
+`TestADeploymentWithNowhereToAlertRefusesToStart`;
+`TestADeploymentWithoutAUsableKeyringRefusesToStart`;
+`TestRender_TheBlueprintActuallyStartsTheAPI` — which now resolves the
+references and asserts the other direction, that removing either value stops
+the blueprint loading;
+`TestAuditConfigDeploy_STAGINGRefusesToBootWithoutTheAlertDestinationAndKeyring`.
+
+## F-138 · The blueprint's secret scan read one service of two, and nothing pinned the static site · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, twice over in the same file.
+
+`TestRender_NoSecretIsWrittenIntoTheBlueprint` opens with *"render.yaml is
+committed. Anything with a literal value in it is public to everyone who can
+read the repository"* — a claim about the FILE — and then scanned
+`loadBlueprint(t).Services[0]`. The static site's `envVars` were never looked
+at, so a live Stripe secret key written there was committed and green.
+Reproduced by injecting `sk_live_…` into that block and running the test: PASS.
+A build-time variable on a static site is embedded in the bundle and served to
+every visitor, so this is the worst of the two places to put one.
+
+And `renderBlueprint` stopped at `envVars`: `headers`, `routes`, `domains`,
+`buildCommand` and `staticPublishPath` were in no test at all. The CSP, HSTS,
+`X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`,
+`X-Content-Type-Options`, the SPA rewrite and the custom domain could all be
+deleted with `go test ./test/infra/` still green — confirmed by deleting them.
+`test/deployed/surface_test.go` pins headers, but only the API's, only behind
+the `deployed` build tag, and only against a live target.
+
+**Fix.** The scan is `credentialMarkersIn`, a shared function over every
+service, and the early `continue` on a known-secret key is gone — a name being
+on the secret list is a reason to require an `env://` reference, not a reason
+to stop looking for key material under it. `renderBlueprint` carries the whole
+service. Five new tests pin the site: its build command and publish path, the
+single SPA rewrite, both services' hostnames against
+`CP_HTTP_PUBLIC_BASE_URL`/`VITE_API_ORIGIN`/`CP_HTTP_CORS_ORIGINS`, the six
+headers by VALUE rather than by presence, and the policy directive by
+directive.
+
+**Evidence.** TEST_UNIT:
+`TestRender_NoSecretIsWrittenIntoTheBlueprint`,
+`TestRender_TheStaticSiteIsBuiltAndPublishedFromThisRepository`,
+`TestRender_TheSPARewriteExists`,
+`TestRender_EveryServiceDeclaresItsOwnHostname`,
+`TestRender_TheStaticSitesSecurityHeadersAreWhatTheAppNeeds`,
+`TestAuditConfigDeploy_TheSecretScanCoversEveryServiceInTheBlueprint` (which
+runs the real scan over an injected document rather than a copy of the scan),
+`TestAuditConfigDeploy_TheStaticSitesSecurityHeadersArePinnedSomewhere`.
+
+## F-139 · `style-src 'self'` blocked the inline style attributes the app ships · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, reading the deployed policy against the
+bundle it governs.
+
+CSP Level 3 governs a `style=` ATTRIBUTE with `style-src-attr`, which falls
+back to `style-src` when it is absent. The policy declared `style-src 'self'`
+and no `style-src-attr`, so every inline style attribute in the bundle was
+refused by the browser.
+
+The app ships four. `Skeleton.tsx` sets a loading placeholder's width;
+`CandleChart.tsx` two; and `SegmentedBar.tsx` sets `flexGrow` from the exact
+base-unit string of each segment — and `SegmentedBar` is the
+available/reserved/pending balance bar its own file header calls *"the central
+information-design problem on Home"*. With the attribute blocked every segment
+keeps `flex-grow: 0` and the bar renders empty, while the element's
+`aria-label` still reads "Available now, about 62%; …". A figure stated to a
+screen reader and not shown to an eye is the honesty rule inverted.
+
+**Fix (D-116).** `style-src 'self' 'unsafe-inline'`, and the components are
+left alone. The precise form — `style-src 'self'; style-src-attr
+'unsafe-inline'` — is not supported by every browser the app targets, and a
+browser that ignores `style-src-attr` falls back to `style-src` and blocks the
+attribute again. The relaxation is bounded and the bound is asserted rather
+than described: `script-src` stays without `'unsafe-inline'`, this bundle
+renders no user-controlled HTML, and `object-src 'none'`, `base-uri 'self'` and
+`frame-ancestors 'none'` are unchanged, so what an injected style could reach
+is the appearance of a page an attacker cannot get script into.
+
+**Evidence.** TEST_UNIT:
+`TestRender_TheStaticSitesSecurityHeadersAreWhatTheAppNeeds` (the directive and
+its bound);
+`TestAuditConfigDeploy_TheCSPPermitsTheInlineStylesTheAppShips`, which walks
+`apps/web/src` for `style={{` and fails if the policy refuses what it finds.
+
+## F-140 · The policy's own directives, and the Stripe key's account, were asserted nowhere · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, as the half of F-138 that is not about
+the scan's reach.
+
+Two specific gaps behind the general one. `connect-src` names the only origins
+the app may talk to — an extra entry there is an exfiltration destination and a
+missing one is a dead page — and nothing held it to a list. And the app is
+given `VITE_STRIPE_PUBLISHABLE_KEY` while the API is given
+`CP_PROVIDER_CREDIT_PURCHASE_ACCOUNT_REF`; the adapter makes a read-only call
+at startup and refuses to sell Credits if its SECRET key answers for a
+different account, and nothing compared the key the BROWSER is given against
+the same value. A publishable key embeds its account id, so the comparison is
+free and was not being made.
+
+**Fix.** `connect-src` is held to exactly `'self'` + the API origin +
+`https://api.stripe.com`, `script-src` to exactly `'self'` +
+`https://js.stripe.com`, and `frame-ancestors`, `object-src`, `base-uri` and
+`default-src` each to their single source. The publishable key must embed the
+account id the API names, and its mode must match the provider's — a
+`pk_live_` key against a `sandbox` provider fails here rather than at
+confirmation.
+
+**Evidence.** TEST_UNIT:
+`TestRender_TheStaticSitesSecurityHeadersAreWhatTheAppNeeds`,
+`TestRender_TheStripeKeyAndTheStripeAccountAreTheSameAccount`.
+
+## F-141 · `nodal-api` declared no custom domain while every other value assumed one · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, asking what a deployment created from
+this file alone would actually answer on.
+
+The static site declared `domains: [app-nodal.actorvia.xyz]`. `nodal-api`
+declared none — while `CP_HTTP_PUBLIC_BASE_URL`, `CP_AUTH_REDIRECT_URL`,
+`CP_AUTH_POST_LOGIN_URL`, `CP_HTTP_CORS_ORIGINS`, the app's `VITE_API_ORIGIN`
+and the static site's CSP `connect-src` and `form-action` all name
+`api-nodal.actorvia.xyz`. A blueprint sync would have given it an
+`*.onrender.com` hostname: the OIDC `redirect_uri` would not match, the cookie
+would be set on a host the app does not call, and every request would be a CORS
+failure.
+
+The live service has the domain attached by hand, which is exactly the drift
+the blueprint exists to remove, and `HUMAN_ACTIONS_QUEUE.md` item 4 covers the
+app's CNAME while explicitly saying *"Do not touch api-nodal"* — so re-creating
+the deployment from the file plus the queue reproduced none of it.
+
+**Fix.** `domains: [api-nodal.actorvia.xyz]`, and a test that derives the host
+from `CP_HTTP_PUBLIC_BASE_URL` rather than repeating it, checks the two
+services do not claim the same name, and checks the app is built to call the
+API's host and that the API allows the app's origin.
+
+**Evidence.** TEST_UNIT: `TestRender_EveryServiceDeclaresItsOwnHostname`,
+`TestAuditConfigDeploy_TheAPIServiceDeclaresItsOwnHostname`.
+
+## F-142 · `/v1/version` reported `build_version: dev` for every image ever built · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, following `CMD` backwards from
+`render.yaml` into `build/Dockerfile`.
+
+`build/Dockerfile` stamps `config.BuildVersion` from the `VERSION` build arg
+and defaulted it to `dev`. Render passes a service's environment variables to
+the docker build as build args — which is the sole reason `CMD` is in
+`render.yaml` at all — and no `VERSION` was declared. So every image ever built
+from this blueprint reported `build_version: dev`, and because `BuildVersion`
+is part of `Config.Hash`, the configuration hash could not distinguish two
+different builds of the same configuration either.
+
+The endpoint whose whole purpose is to prove which build and which
+configuration are running could prove neither, and
+`HUMAN_ACTIONS_QUEUE.md` item 3 promised that the push would unblock exactly
+that comparison.
+
+**Fix (D-117).** Render sets `RENDER_GIT_COMMIT` itself, at build time and at
+run time. `ARG RENDER_GIT_COMMIT=` and `ARG VERSION=${RENDER_GIT_COMMIT:-dev}`
+make the link-time version the commit Render is building and `dev` everywhere
+else, with nothing new in the configuration table and a local `docker build`
+unchanged; `scripts/images` still passes `--build-arg VERSION=<sha>`, which
+wins over the default. Both stages, because an ARG declared inside a stage is
+scoped to it and an OCI version label saying `dev` over a binary saying the
+commit is the same defect wearing a smaller hat.
+
+**Evidence.** TEST_UNIT: `TestAuditConfigDeploy_TheBuildStampsAVersion` — the
+constant default is gone, both stages derive `VERSION` from
+`RENDER_GIT_COMMIT`, and `CMD` is still passed, because the default relies on
+the same mechanism and its loss would be a failed build rather than a silent
+`dev`.
+
+## F-143 · The live event stream carried no session on the deployed topology · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, comparing the app's two origins against
+every request the bundle makes.
+
+`EventSource`'s credentials mode is `"same-origin"` unless `withCredentials` is
+set. The deployed app is `app-nodal.actorvia.xyz` and the API is
+`api-nodal.actorvia.xyz`: the same SITE, a different ORIGIN. `StreamStatus.tsx`
+constructed `new EventSource(`${API_BASE}/events/stream`)` with no options, so
+the session cookie was not attached and `GetEventsStream` — which requires
+`PermAccountRead` — refused it. The bell, the activity feed and every
+stream-driven invalidation were dead on the deployed tier, with the badge
+saying "reconnecting" forever.
+
+Everything else in the app was correct, which is why this was the one request
+that broke: the generated client sets `credentials: "include"` and `probeReady`
+deliberately omits them. The browser suite could not catch it either —
+`vite.config.ts` proxies `/v1`, so those tests run same-origin, where the
+default already sends the cookie.
+
+**Fix.** `new EventSource(url, { withCredentials: true })`, and a source rule
+in `apps/web/src/lib/source-scan.test.ts`, which is where this app keeps the
+rules that have to hold for code nobody has written yet. It is stated
+unconditionally rather than only when `VITE_API_ORIGIN` differs from the page,
+because the option is correct either way: a same-origin request sends the
+cookie with or without it.
+
+**Evidence.** TEST_UNIT (node --test): *"every EventSource is constructed with
+withCredentials"*, which also asserts the app opens one at all so the rule
+cannot pass by vacuum. `TestAuditConfigDeploy_TheEventStreamCarriesTheSessionCrossOrigin`
+holds the same thing from the Go side, against the blueprint's two hostnames.
+
+## F-144 · `CP_SEED_ENABLED` was read by nothing, and the sandbox tier seeded regardless · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, grepping for readers of a variable the
+blueprint sets and finding none.
+
+`internal/config` declared `CP_SEED_ENABLED` required of every binary,
+documented it as *"Allow seeding clearly-labeled fake users/assets/balances.
+Must be false in STAGING/PROD"*, and `RuleNoSeed` enforced that. `render.yaml`
+set it to `"false"`. Then `cmd/api/marketsurfaces.go` seeded the sandbox demo
+catalogue on every boot, keyed on `cfg.SandboxTier()` alone — its own docstring
+said *"when the deployment is a sandbox tier AND ASKS FOR IT"*, and there was
+no asking. `c.Seed.Enabled` was read by `internal/config`'s own validator and
+by nothing else in `cmd/` or `internal/`.
+
+So the deployed STAGING declared that it does not seed and seeded: eight demo
+markets, a demo Credit balance, and an activity feed built out of them. Nothing
+real was at risk — the rows are SANDBOX-labelled and migration 00774 forbids a
+PROD one — but a stated control was not in force, and the one variable an
+operator would reach for to turn seeding off did nothing.
+
+**Fix (D-115).** The two cannot be the same variable: `RuleNoSeed` forbids
+`CP_SEED_ENABLED` in STAGING and PROD, so it could never have been the deployed
+tier's control. `CP_API_DEMO_DATA` (bool, default false) is the demo
+catalogue's switch — `demoDataAtBoot` runs on `cfg.SandboxTier() &&
+cfg.API.DemoData`, config refuses `true` on any deployment that is not a
+sandbox tier, and `render.yaml` sets it `true` on STAGING and says why.
+`CP_SEED_ENABLED` keeps what it always claimed: `config.SeedScriptsAllowed` is
+its reader and `scripts/seed` and `scripts/seedeconomy` call it. `scripts/demodata`
+is deliberately not gated on it, because it loads the SANDBOX catalogue a
+sandbox tier is allowed to hold.
+
+**Evidence.** TEST_UNIT: `TestSeedScriptsAllowed` (absent means yes inside
+LOCAL/DEV/TEST so `make seed` and CI keep working; `false` means no; a deployed
+environment is no whatever it says; an unparseable value is an error, never a
+default); `TestVars_DocumentedInDocGo` and the requirements-table count;
+`TestAuditConfigDeploy_SeedingHonoursTheVariableThatForbidsIt`, which walks for
+readers of both switches.
+
+## F-145 · A misspelled capability loaded clean and was dropped in silence · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the config-deploy audit, reading `config.Config`'s own comment
+against `Validate`.
+
+The comment on `SandboxGates` says *"each must be a declared capability and
+must also be in EnabledCapabilities"*. `Validate` checked the second half only:
+it compared the sandbox list against the enabled list and never asked
+`internal/gates` whether either name exists. `cmd/api` then did two different
+things with the same mistake — `parseCapabilities` skipped an invalid name
+without a word, and `sandboxGatesAtBoot` returned an error and refused to
+start.
+
+The first is the one that matters. `CP_API_ENABLED_CAPABILITIES` is condition 1
+of the policy authority, so a typo silently makes a capability inactive
+whatever its gate row says, with a healthy service and a 200 on every health
+check. `CREDIT_PURCHASEE` is one letter and the whole Credit purchase path.
+That is the defect class F-124 is in the register for.
+
+**Fix.** Three refusals at descending distance from the damage:
+`RuleCapabilityNameDeclared` in `config.Validate`, on both lists, where an
+operator sees it before a deploy; `parseCapabilities` returns an error, for a
+Config that did not come through `Load`; and `test/infra` checks every name the
+blueprint states.
+
+`internal/config` cannot import `internal/gates` — `internal/gates`' own
+integration test imports `internal/agent`, which imports `internal/config`, so
+the edge compiles and then `go vet -tags integration ./...` reports a cycle in
+a test binary. The names are restated in `internal/config/capability.go` and
+held equal to `gates.AllCapabilities()` by a test in `test/infra`, which may
+import both. A duplicated list nobody greps is the defect F-130 records; this
+one fails a test rather than rotting.
+
+**Evidence.** TEST_UNIT:
+`TestConfigTable_TheCapabilityNamesAreTheOnesGatesDeclares`,
+`TestRender_EveryCapabilityNamedInTheBlueprintExists`, `TestParseCapabilities`,
+`TestAuditConfigDeploy_AMisspelledCapabilityIsRefusedByTheConfiguration`.
+
+## F-146 · `return_to` of the form `/\host` was an open redirect off the callback that sets the session cookie · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, reading the `return_to` guard against the
+WHATWG URL standard.
+
+`internal/identity/login.go` validated with one string comparison: refuse
+unless it starts with `/`, and refuse `//`. `"/\evil.example"` walks through
+it. `postLoginDestination` then returned the caller's own string verbatim when
+`CP_AUTH_POST_LOGIN_URL` was empty, so `GetAuthCallback` answered `Location:
+/\evil.example` in the same response that sets the session cookie. Every
+browser implementing the standard resolves a special-scheme relative reference
+beginning `"/\"` through the relative-slash state into the AUTHORITY state —
+`\` is a slash for http(s) — so the browser goes to `https://evil.example/`.
+That is the standard backslash bypass of a `//` check.
+
+It was not reachable on the shipped launch tier, which sets
+`CP_AUTH_POST_LOGIN_URL` and therefore pins the host. It was reachable on any
+deployment that left the variable unset, and nothing prevented that: it was
+`opt(...)` and no rule required it in STAGING or PROD.
+
+**Fix.** Three changes, so that no single one is load-bearing.
+`identity.IsLocalPath` refuses a second character of `/` or `\`, any control
+character — the tab, newline and carriage return that URL parsers STRIP before
+parsing, and the NUL that truncates a C string — and anything `url.Parse` reads
+as carrying a scheme, host or opaque part; `Begin` uses it, so the row is never
+written. `postLoginDestination` applies the same test at the point of USE and
+falls back to `/`, including when a base is configured, because a redirect
+built from a stored value must not depend on the writer of that value having
+been careful. And `RuleOIDCConfigured` requires `CP_AUTH_POST_LOGIN_URL` in
+STAGING and PROD.
+
+The comment that said *"Neither input is the user's, so this is not an open
+redirect: the base is configuration and the path is what the login service
+recorded"* was half true and therefore wrong, and is replaced with what is
+actually the case.
+
+**Evidence.** TEST_UNIT:
+`TestAuditConfigDeploy_PostLoginDestinationCannotLeaveTheOrigin`;
+`TestPostLoginDestination_HonoursARealPathAndRefusesEverythingElse` — fourteen
+refused forms and six honoured paths, because a guard that also refuses the
+deep link a customer was reading has broken the feature `return_to` exists for;
+`TestValidate_PostLoginURL`.
+
+## F-147 · `render.yaml` pointed operators at a document that does not exist · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the config-deploy audit, following the file's own first paragraph.
+
+Line 4 read *"see docs/operations/RENDER_DEPLOY.md for what an operator does
+with it"*. There is no such file and there never has been.
+
+**Fix.** It points at `docs/operations/LAUNCH_TIER.md`, which is the document
+that exists, and at `docs/build/HUMAN_ACTIONS_QUEUE.md` for the actions a
+person still has to take.
+
+**Evidence.** STATIC_PROOF: `ls docs/operations/` — ten files —
+`BACKUP_RESTORE`, `DEPLOYMENT`, `DEPLOYMENT_GAP_ANALYSIS`,
+`DISASTER_RECOVERY`, `DNS_RECORDS`, `IDENTITY_PROVIDER`, `LAUNCH_TIER`,
+`PATH_B_STATUS`, `PROVIDER_ACTIVATION_CHECKPOINT`, `RECONCILIATION` — and no
+`RENDER_DEPLOY.md`. The reference is prose in a YAML comment, which is why
+no test caught it: `test/docs` walks markdown.
+
+## F-148 · The static site published its source maps · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the config-deploy audit, reading `apps/web/vite.config.ts` against
+what the CDN serves.
+
+`sourcemap: true` emits a `//# sourceMappingURL=` comment beside the bundle, so
+a browser fetches the map and the CDN serves the entire readable frontend —
+comments included — to anyone who opens dev tools. 2.6 MB of it, beside a
+630 kB bundle.
+
+**Fix.** `sourcemap: "hidden"`. The maps are still WRITTEN, so a production
+stack trace can be symbolicated by whoever holds `dist/`; no comment is
+emitted, so nothing fetches them. Confirmed on a real build: the `.map` file
+exists and `grep -c sourceMappingURL` on the bundle is 0.
+
+**Evidence.** STATIC_PROOF: `apps/web/vite.config.ts`; the build output above.
+
+## F-149 · `CP_AUTH_POST_LOGIN_URL` defaulted to one deployment's hostname · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the config-deploy audit, alongside F-146.
+
+The variable's LOCAL/TEST default was `https://app-nodal.actorvia.xyz/`. A
+default is what a developer gets when they say nothing, and this one sends
+their browser to the internet after a local sign-in. It also read as the
+deployment's value being covered when it is not: defaults are applied only
+where `Environment.AllowsDefaults()`, which is LOCAL and TEST, so the variable
+this file names was simultaneously defaulted to a production hostname and
+unrequired in production.
+
+It was not only untidy. The CI `web-e2e` job starts the API under test with
+`CP_ENV=LOCAL` and sets no `CP_AUTH_POST_LOGIN_URL`, and LOCAL is an
+environment where defaults apply — so `apps/web/e2e/auth.setup.ts`, which
+drives the real `GET /v1/auth/login` and follows the callback, was being sent
+to `https://app-nodal.actorvia.xyz/` by a suite whose whole premise is that it
+runs same-origin behind the Vite proxy. The variable named in the finding is
+the one that sends it there.
+
+**Fix.** The default is `""`, which is what a same-origin run actually wants —
+a relative redirect that resolves to whatever origin the browser is on.
+`render.yaml` and `.env.example` keep the hostname, where it is a deployment's
+statement rather than a fallback, and F-146's rule requires it in STAGING and
+PROD. The rule is inside the `CP_AUTH_MODE=oidc` branch, so the dev-auth E2E
+recipes are not asked for one.
+
+**Evidence.** TEST_UNIT: `TestValidate_PostLoginURL`, which asserts the default
+is empty as well as the rule, and that LOCAL, TEST and DEV still accept an
+empty value. STATIC_PROOF: `.github/workflows/ci.yml` (the `web-e2e` job's
+`CP_ENV: LOCAL` and no post-login variable); `Environment.AllowsDefaults()`.
+
+## F-150 · `Permissions-Policy: payment=()` took the wallets out of Stripe's Payment Element · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the config-deploy audit, reading the header against the one page
+this tier exists to exercise.
+
+`payment=()` denies the Payment Request API to every frame, including the
+`js.stripe.com` iframe the Payment Element runs in. Apple Pay, Google Pay and
+Link are offered through that API, so the wallet rows disappear from Buy
+Credits — the deny-list was written as "deny everything we do not use" and this
+one is used, by a third party, inside an iframe.
+
+**Fix.** `payment=(self "https://js.stripe.com")`. `self` stays because the
+allowlist is what the iframe inherits its permission through; everything else
+in the header is unchanged and still denied.
+
+**Evidence.** TEST_UNIT:
+`TestRender_TheStaticSitesSecurityHeadersAreWhatTheAppNeeds`, which asserts the
+five denials and this one delegation.
 ## F-160 · A gate sandbox-activated out of REVOKED reported success, logged it, and could never be active · PRODUCTIZATION · P2 · FIXED
 
 **Found by** the independent governance / sandbox-tier audit of ADR-0023 (goal

@@ -12,7 +12,21 @@ ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot
 # ---------------------------------------------------------------------------
 FROM ${GO_IMAGE} AS builder
 ARG CMD
-ARG VERSION=dev
+# VERSION is the string linked into config.BuildVersion and reported by
+# /v1/version, which exists to prove which build is running.
+#
+# Render passes a service's environment variables to `docker build` as build
+# args and sets RENDER_GIT_COMMIT itself, at build time and at run time. So the
+# default below is the commit Render is building when Render is the builder,
+# and "dev" everywhere else -- a local `docker build` with no --build-arg is
+# unchanged. scripts/images still passes --build-arg VERSION=<sha> explicitly,
+# which wins over the default.
+#
+# Before this, every image built from render.yaml reported build_version "dev",
+# and because BuildVersion is part of Config.Hash the hash could not tell two
+# builds of the same configuration apart either (F-142).
+ARG RENDER_GIT_COMMIT=
+ARG VERSION=${RENDER_GIT_COMMIT:-dev}
 ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0 \
@@ -41,7 +55,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ---------------------------------------------------------------------------
 FROM ${RUNTIME_IMAGE}
 ARG CMD
-ARG VERSION=dev
+# The same two lines again: an ARG declared inside a stage is scoped to it, so
+# the OCI version label would otherwise say "dev" on an image whose binary says
+# the commit.
+ARG RENDER_GIT_COMMIT=
+ARG VERSION=${RENDER_GIT_COMMIT:-dev}
 ARG REVISION=unknown
 ARG CREATED=unknown
 

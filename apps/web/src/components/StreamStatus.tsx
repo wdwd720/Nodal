@@ -98,7 +98,22 @@ export function useEventStream(enabled: boolean): StreamStatusValue {
 
   useEffect(() => {
     if (!enabled) return;
-    const source = new EventSource(`${API_BASE}/events/stream`);
+    // `withCredentials` is what carries the session.
+    //
+    // EventSource's credentials mode is "same-origin" unless this is set, and
+    // the deployed topology is app-nodal.actorvia.xyz calling
+    // api-nodal.actorvia.xyz — the same SITE, a different ORIGIN. So the
+    // session cookie was not attached, `GET /v1/events/stream` (which requires
+    // PermAccountRead) refused it, and the bell, the activity feed and every
+    // stream-driven invalidation were dead on the deployed tier while the badge
+    // said "reconnecting" forever. Nothing else in the app was affected: the
+    // generated client sets `credentials: "include"` and `probeReady`
+    // deliberately omits them, so this was the one request that broke.
+    //
+    // The browser suite could not catch it either — vite.config.ts proxies /v1,
+    // so those tests run same-origin, where the default already sends the
+    // cookie. `src/lib/source-scan.test.ts` holds this option in place instead.
+    const source = new EventSource(`${API_BASE}/events/stream`, { withCredentials: true });
 
     const onOpen = (): void => {
       setState((previous) => {

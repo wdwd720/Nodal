@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -43,7 +44,9 @@ func TestNoKeyringIsSaidOutLoud(t *testing.T) {
 	var buf strings.Builder
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 	cfg := &config.Config{Env: config.EnvLocal}
-	assert.Nil(t, newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log))
+	store, err := newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	require.NoError(t, err, "LOCAL keeps the honest degradation; only STAGING and PROD refuse")
+	assert.Nil(t, store)
 	assert.Contains(t, buf.String(), "level=WARN")
 	assert.Contains(t, buf.String(), "CP_PII_KEYRING_REF")
 	assert.Contains(t, buf.String(), "consequence")
@@ -57,7 +60,9 @@ func TestAnUnusableKeyringIsAnErrorAndNoStore(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 	cfg := &config.Config{Env: config.EnvLocal}
 	cfg.PII.Keyring = config.SecretRef(`{"active": 3, "keys": {"1": "not-base64"}}`)
-	assert.Nil(t, newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log))
+	store, err := newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	require.NoError(t, err, "LOCAL keeps the honest degradation; only STAGING and PROD refuse")
+	assert.Nil(t, store)
 	assert.Contains(t, buf.String(), "level=ERROR")
 	assert.Contains(t, buf.String(), "not usable")
 }
@@ -74,9 +79,46 @@ func TestAUsableKeyringIsAStore(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 	cfg := &config.Config{Env: config.EnvLocal}
 	cfg.PII.Keyring = config.SecretRef(`{"active": 1, "keys": {"1": "` + b64 + `"}}`)
-	store := newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	store, err := newPIIStore(context.Background(), cfg, config.NewResolver(cfg.Env, os.LookupEnv), log)
+	require.NoError(t, err)
 	require.NotNil(t, store)
 	assert.Equal(t, 1, store.Keyring().Active())
 	assert.Contains(t, buf.String(), "active_key_version=1")
 	assert.NotContains(t, buf.String(), b64, "the startup line printed key material")
+}
+
+// And in STAGING or PROD every one of those three branches is a refusal
+// instead (F-137). RulePIIKeyring saw the env:// reference and nothing else,
+// so a STAGING whose NODAL_PII_KEYRING had never been set served and stored no
+// personal data at all -- the state F-47 sat in, under a document saying it
+// could not boot.
+func TestADeploymentWithoutAUsableKeyringRefusesToStart(t *testing.T) {
+	t.Parallel()
+	for _, env := range []config.Environment{config.EnvStaging, config.EnvProd} {
+		t.Run(string(env), func(t *testing.T) {
+			t.Parallel()
+			log := slog.New(slog.NewTextHandler(io.Discard, nil))
+			empty := config.LookupFromMap(map[string]string{})
+
+			unset := &config.Config{Env: env}
+			_, err := newPIIStore(context.Background(), unset, config.NewResolver(env, empty), log)
+			require.Error(t, err, "%s served with no keyring at all", env)
+			assert.Contains(t, err.Error(), "CP_PII_KEYRING_REF")
+
+			dangling := &config.Config{Env: env}
+			dangling.PII.Keyring = config.SecretRef("env://NODAL_PII_KEYRING_NOT_SET_ANYWHERE")
+			_, err = newPIIStore(context.Background(), dangling, config.NewResolver(env, empty), log)
+			require.Error(t, err, "%s served on a reference that resolves to nothing", env)
+			assert.Contains(t, err.Error(), "CP_PII_KEYRING_REF")
+
+			// Resolvable and unusable is fatal too: a keyring that cannot open
+			// a row is not a keyring.
+			broken := config.NewResolver(env, config.LookupFromMap(map[string]string{
+				"NODAL_PII_KEYRING_NOT_SET_ANYWHERE": `{"active": 3, "keys": {"1": "not-base64"}}`,
+			}))
+			_, err = newPIIStore(context.Background(), dangling, broken, log)
+			require.Error(t, err, "%s served on a keyring that does not parse", env)
+			assert.NotContains(t, err.Error(), "not-base64", "the refusal printed the keyring document")
+		})
+	}
 }

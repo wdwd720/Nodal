@@ -86,6 +86,7 @@
 //	CP_API_SHUTDOWN_TIMEOUT         bound on draining in-flight requests
 //	CP_API_PAYOUT_POLICY            CLOSED | SANDBOX (sandbox tier only, never PROD)
 //	CP_API_SANDBOX_GATES            capabilities sandbox-activated at boot (sandbox tier only)
+//	CP_API_DEMO_DATA                load the SANDBOX demo catalogue at boot (sandbox tier only)
 //	CP_API_ENABLED_CAPABILITIES     comma-separated; empty disables every capability
 //	CP_API_FUNDING_NETWORK          chain the funding endpoints quote on
 //	CP_API_FUNDING_CURRENCY         currency the funding endpoints quote in
@@ -166,7 +167,7 @@
 //	CP_AUTH_COOKIE_DOMAIN           cookie domain (optional)
 //	CP_AUTH_COOKIE_SECURE           bool (true in STAGING/PROD)
 //	CP_AUTH_SESSION_TTL             duration
-//	CP_AUTH_POST_LOGIN_URL          where the callback sends the browser; empty = "/" (same-origin app only)
+//	CP_AUTH_POST_LOGIN_URL          where the callback sends the browser; required in STAGING/PROD with oidc
 //	CP_AUTH_STEP_UP_MAX_AGE         duration
 //	CP_AUTH_DEBUG_ENABLED           bool (false in STAGING/PROD)
 //	CP_AUTH_BOOTSTRAP_OPERATORS     issuer|subject=ROLE, comma separated; PROD accepts empty or one ADMIN
@@ -311,7 +312,7 @@
 //
 // Seed:
 //
-//	CP_SEED_ENABLED                 bool (false in STAGING/PROD)
+//	CP_SEED_ENABLED                 bool (false in STAGING/PROD); the developer seed scripts only
 //
 // Credit (funding lifecycle):
 //

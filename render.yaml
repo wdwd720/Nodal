@@ -1,8 +1,8 @@
 # Render Blueprint for the $0-fixed-cost launch tier.
 #
 # One free web service and nothing else. See docs/operations/LAUNCH_TIER.md for
-# why this tier exists and docs/operations/RENDER_DEPLOY.md for what an operator
-# does with it.
+# why this tier exists and what an operator does with it; the human actions a
+# deployment still needs are docs/build/HUMAN_ACTIONS_QUEUE.md.
 #
 # WHAT IS DELIBERATELY ABSENT
 #
@@ -41,6 +41,18 @@ services:
     # rotation whenever Neon is scaled to zero, which is most of the time.
     healthCheckPath: /v1/healthz
 
+    # The hostname every other value in this file already assumes.
+    #
+    # CP_HTTP_PUBLIC_BASE_URL, CP_AUTH_REDIRECT_URL, CP_HTTP_CORS_ORIGINS, the
+    # app's VITE_API_ORIGIN and the static site's CSP all name
+    # api-nodal.actorvia.xyz. Without this line a blueprint sync answers on
+    # *.onrender.com instead: the OIDC redirect_uri does not match, the session
+    # cookie is set on a host the app never calls, and every request is a CORS
+    # failure. The live service had the domain attached by hand, which is
+    # exactly the drift this file exists to remove (F-141).
+    domains:
+      - api-nodal.actorvia.xyz
+
     envVars:
       # --- the build ----------------------------------------------------
       # build/Dockerfile requires a CMD build arg naming the cmd/ directory to
@@ -57,8 +69,15 @@ services:
       # and the value sits in the variable it names.
       - key: NODAL_DB_APP_URL
         sync: false
-      - key: NODAL_DB_MIGRATE_URL
-        sync: false
+      # NODAL_DB_MIGRATE_URL is deliberately ABSENT, like the CP_ variable that
+      # would reference it (see CP_DATABASE_MIGRATE_URL further down). Nothing
+      # in cmd/api reads it, and the schema owner can
+      # `ALTER TABLE ... DISABLE TRIGGER` -- so declaring it here put the one
+      # credential that can undo every state machine into the one process the
+      # internet can reach, for no purpose (F-136). Migrations are run by an
+      # operator from their own machine with `go run ./cmd/migrate`, which
+      # reads CP_DATABASE_MIGRATE_URL from that machine's environment; this
+      # tier deploys no job that could run them, and LAUNCH_TIER.md §10 says so.
       # The cp_ops role, for the login-attempt purge. cp_app deliberately holds
       # no DELETE on login_attempts -- an attacker with the application
       # credential must not be able to erase the record of the logins they
@@ -324,9 +343,12 @@ services:
       # healthchecks.io and a Cloudflare Worker all accept one on a free tier,
       # so the operator picks and this repository commits to nobody.
       #
-      # This is a real destination, not a placeholder: config.Validate refuses
-      # to start in STAGING or PROD when it is empty, so a deployment that
-      # forgets it does not boot silently unalerted -- it does not boot.
+      # This is a real destination, not a placeholder, and the refusal is on
+      # the VALUE rather than on the reference. config.Load refuses to start in
+      # STAGING or PROD when CP_ALERT_WEBHOOK_URL is empty AND when the
+      # variable it names holds nothing -- a non-empty `env://` string used to
+      # satisfy the rule on its own, so a deployment that never set
+      # NODAL_ALERT_WEBHOOK_URL booted healthy and unalerted (F-137).
       - key: CP_ALERT_WEBHOOK_URL
         value: env://NODAL_ALERT_WEBHOOK_URL
       # Derived from the URL's host: a Slack hook is spoken to as Slack, a
@@ -350,9 +372,10 @@ services:
       # --- personal data -------------------------------------------------
       # identity_pii's columns are ciphertext under this keyring, bound to
       # their row, column and key version; cp_readonly and cp_ops cannot read
-      # the table at all (00754). Without a keyring the service refuses to
-      # start here: personal data is encrypted, or it is not stored, and a
-      # STAGING that silently stored nothing is the state F-47 sat in.
+      # the table at all (00754). Without a RESOLVABLE keyring the service
+      # refuses to start here -- the reference alone is not enough (F-137):
+      # personal data is encrypted, or it is not stored, and a STAGING that
+      # silently stored nothing is the state F-47 sat in.
       # Rotation: add a key, raise "active", deploy, reseal, remove the old key.
       - key: CP_PII_KEYRING_REF
         value: env://NODAL_PII_KEYRING
@@ -409,8 +432,22 @@ services:
       - key: CP_RETENTION_OPERATIONAL_LOG_DAYS
         value: "30"
 
+      # The developer seed scripts stay off. This is what RuleNoSeed forbids in
+      # STAGING and PROD, and it has never been the control for the sandbox
+      # demo catalogue -- which is what CP_API_DEMO_DATA below is (D-115).
       - key: CP_SEED_ENABLED
         value: "false"
+
+      # The sandbox demo catalogue: eight labelled demo markets and a demo
+      # Credit balance, seeded at boot so the markets page this tier exists to
+      # rehearse is not empty. Every row is SANDBOX-labelled, migration 00774's
+      # CHECK forbids a PROD one, and config refuses `true` unless the
+      # deployment is a sandbox tier. Until this variable existed the seeding
+      # keyed off the sandbox declaration alone, so the deployment declared
+      # that it does not seed and seeded, and the variable an operator would
+      # reach for to stop it did nothing (F-144).
+      - key: CP_API_DEMO_DATA
+        value: "true"
 
       # --- provider slots ------------------------------------------------
       # `sandbox`, not `live`. Nothing here has a production contract yet, and
@@ -621,7 +658,23 @@ services:
         # from js.stripe.com, its iframes from js.stripe.com / hooks.stripe.com
         # (3-D Secure) / m.stripe.network (fraud signals), its calls to
         # api.stripe.com, its images from *.stripe.com. Nothing else may load.
-        value: "default-src 'self'; connect-src 'self' https://api-nodal.actorvia.xyz https://api.stripe.com; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: https://*.stripe.com; font-src 'self'; frame-src https://js.stripe.com https://hooks.stripe.com https://m.stripe.network; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://api-nodal.actorvia.xyz; object-src 'none'"
+        #
+        # `style-src` admits 'unsafe-inline' and that is a decision, not an
+        # oversight (D-116). CSP Level 3 governs a `style=` ATTRIBUTE with
+        # style-src-attr, which falls back to style-src when it is absent, so
+        # `style-src 'self'` refuses every inline style attribute in the
+        # bundle -- including SegmentedBar's, which is the width of each
+        # segment of the available/reserved/pending balance bar. Blocked, the
+        # bar renders empty while its accessible name still states the shares.
+        # The precise form -- `style-src 'self'; style-src-attr 'unsafe-inline'`
+        # -- is not supported by every browser this app targets, and a browser
+        # that ignores style-src-attr falls back to style-src and blocks the
+        # attribute again. The relaxation is bounded: this bundle renders no
+        # user-controlled HTML, `script-src` stays without 'unsafe-inline',
+        # and `object-src 'none'` / `base-uri 'self'` / `frame-ancestors 'none'`
+        # are unchanged, so what an injected style could reach is the
+        # appearance of a page an attacker cannot get script into (F-139).
+        value: "default-src 'self'; connect-src 'self' https://api-nodal.actorvia.xyz https://api.stripe.com; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.stripe.com; font-src 'self'; frame-src https://js.stripe.com https://hooks.stripe.com https://m.stripe.network; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://api-nodal.actorvia.xyz; object-src 'none'"
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
@@ -633,7 +686,14 @@ services:
         value: strict-origin-when-cross-origin
       - path: /*
         name: Permissions-Policy
-        value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+        # `payment` is delegated to Stripe's own origin rather than denied.
+        # The Payment Element offers Apple Pay, Google Pay and Link through the
+        # Payment Request API, which it calls from inside the js.stripe.com
+        # iframe; `payment=()` denies that API to every frame including
+        # Stripe's, so the wallet rows disappear from the one page this tier
+        # exists to exercise. `self` is kept because the allowlist is what the
+        # iframe inherits its permission through (F-150).
+        value: "camera=(), microphone=(), geolocation=(), payment=(self \"https://js.stripe.com\"), usb=(), interest-cohort=()"
       - path: /*
         name: Strict-Transport-Security
         value: "max-age=31536000; includeSubDomains"

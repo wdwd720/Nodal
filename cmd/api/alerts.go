@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/nodal/controlplane/internal/alert"
@@ -35,31 +38,54 @@ import (
 const alertDeliveryTimeoutHeadroom = 2 * time.Second
 
 // newAlertDispatcher builds the dispatcher, or returns nil when no destination
-// is configured.
+// is configured -- and an error when this deployment is one that may not run
+// without one.
 //
-// A nil dispatcher is a working configuration, not a failure: LOCAL and TEST
-// have no webhook and should not need one. What must not happen is silence
-// about it, so the absence is logged at WARN naming the consequence -- the same
-// shape `runOpsRetention` uses, and for the same reason. `config.Validate`
-// refuses an empty destination in STAGING and PROD, so this branch is a
-// developer's laptop rather than a deployment.
-func newAlertDispatcher(ctx context.Context, cfg *config.Config, resolver config.Resolver, log *slog.Logger) *alert.Dispatcher {
+// A nil dispatcher is a working configuration in LOCAL, TEST and DEV: a
+// developer should not need a webhook. What must not happen is silence about
+// it, so the absence is logged at WARN naming the consequence -- the same
+// shape `runOpsRetention` uses, and for the same reason.
+//
+// In STAGING and PROD it is fatal, and that changed here (F-137). The old
+// comment said "config.Validate refuses this in STAGING and PROD, so this
+// branch is a developer's laptop rather than a deployment" -- and it was not
+// true of the branch below it. `RuleAlertDestination` could only see the
+// env:// REFERENCE, which render.yaml always writes, so the deployment that
+// had never set NODAL_ALERT_WEBHOOK_URL arrived HERE, at ERROR-and-continue,
+// and served healthy and unalerted. `config.ResolvableSecrets` now refuses that
+// configuration at load; this is the second refusal, for the resolver the
+// running process holds and the loader does not (aws-sm://), and for a
+// destination that resolves to something unusable.
+func newAlertDispatcher(ctx context.Context, cfg *config.Config, resolver config.Resolver, log *slog.Logger) (*alert.Dispatcher, error) {
 	if cfg.Alert.WebhookURL.IsZero() {
+		if cfg.Env.IsProductionLike() {
+			return nil, fmt.Errorf("CP_ALERT_WEBHOOK_URL is not set: %s may not serve with nowhere for a "+
+				"ledger-integrity violation to go", cfg.Env)
+		}
 		log.Warn("alerts are not delivered anywhere: CP_ALERT_WEBHOOK_URL is not set",
 			"consequence", "a ledger-integrity violation is written to this service's log and to nothing else",
-			"note", "config.Validate refuses this in STAGING and PROD")
-		return nil
+			"note", "STAGING and PROD refuse to start in this state")
+		return nil, nil
 	}
 	raw, err := resolver.Resolve(ctx, cfg.Alert.WebhookURL)
+	if err == nil && strings.TrimSpace(raw) == "" {
+		err = errors.New("the reference resolves to an empty value")
+	}
 	if err != nil {
-		// Not fatal. An unresolvable alert destination must not stop a service
-		// from serving: the alternative to an alert is not an outage. It is
-		// logged at ERROR because a deployment that meant to have alerting and
-		// does not is exactly the state this finding is about.
+		if cfg.Env.IsProductionLike() {
+			// The error names the reference, never the value: a webhook URL is
+			// its own credential.
+			return nil, fmt.Errorf("CP_ALERT_WEBHOOK_URL (%s) could not be resolved in %s: %w",
+				cfg.Alert.WebhookURL.Redacted(), cfg.Env, err)
+		}
+		// Outside STAGING and PROD an unresolvable alert destination must not
+		// stop a service from serving: the alternative to an alert is not an
+		// outage. It is logged at ERROR because a deployment that meant to have
+		// alerting and does not is exactly the state this finding is about.
 		log.Error("alerts are not delivered anywhere: CP_ALERT_WEBHOOK_URL could not be resolved",
 			"error", err.Error(),
 			"consequence", "a ledger-integrity violation is written to this service's log and to nothing else")
-		return nil
+		return nil, nil
 	}
 	host := "(unparseable)"
 	if u, perr := url.Parse(raw); perr == nil && u.Host != "" {
@@ -85,7 +111,7 @@ func newAlertDispatcher(ctx context.Context, cfg *config.Config, resolver config
 		Logger:      log,
 	})
 	log.Info("alerts are delivered", "destination", sink.Describe(), "min_severity", cfg.Alert.MinSeverity, "timeout", timeout)
-	return d
+	return d, nil
 }
 
 // attachAlertDispatcher joins the raise path to the dispatcher.

@@ -119,14 +119,27 @@ type demoSeedDeps struct {
 // demoDataAtBoot loads the sandbox demo catalogue when the deployment is a
 // sandbox tier and asks for it.
 //
-// It refuses PROD twice — here and in demo.NewSeeder — and a third time in the
-// database, where migration 00774's CHECK forbids a demo row whose environment
-// is PROD. A failure is logged and does not stop the process: a STAGING
-// deployment that came up without its demo markets is a deployment with an
-// empty markets page, which is a nuisance; one that refuses to start is an
-// outage.
+// "Asks for it" is CP_API_DEMO_DATA, and until D-115 there was no asking: this
+// keyed off SandboxTier() alone while the docstring already claimed otherwise,
+// so the deployed STAGING seeded eight demo markets and a demo Credit balance
+// on every boot with CP_SEED_ENABLED="false" beside it, read by nothing
+// (F-144). The two variables stay separate on purpose -- RuleNoSeed forbids
+// CP_SEED_ENABLED in STAGING and PROD, so it could never have been this
+// control.
+//
+// It refuses PROD three times over: the declaration cannot be made there
+// (SandboxTier()), demo.NewSeeder refuses it, and migration 00774's CHECK
+// refuses a demo row whose environment is PROD. A failure is logged and does
+// not stop the process: a STAGING deployment that came up without its demo
+// markets is a deployment with an empty markets page, which is a nuisance; one
+// that refuses to start is an outage.
 func demoDataAtBoot(ctx context.Context, cfg *config.Config, d demoSeedDeps, log *slog.Logger) {
 	if !cfg.SandboxTier() || cfg.Env == config.EnvProd {
+		return
+	}
+	if !cfg.API.DemoData {
+		log.Info("demo data not seeded: CP_API_DEMO_DATA is false",
+			"consequence", "the markets page shows whatever this deployment actually holds, which may be nothing")
 		return
 	}
 	creditAsset, err := d.Credits.AssetID(ctx, d.DB)

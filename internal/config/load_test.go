@@ -313,7 +313,11 @@ func TestVars_TableIsWellFormed(t *testing.T) {
 	// writes operator_roles, so a deployment that has never had an operator
 	// could not get one, and the declaration that fixes it is configuration
 	// rather than a route (ADR-0024, D-056).
-	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+4+1+2+11+1+14*11+4+1+1+8+2+1, len(seen))
+	// The trailing +1 is CP_API_DEMO_DATA: the sandbox demo catalogue seeded
+	// itself on the legal-policy declaration alone, so the deployed STAGING
+	// declared that it does not seed and seeded, and the variable an operator
+	// would reach for did nothing (D-086, F-144).
+	assert.Equal(t, 3+8+11+8+4+6+2+5+5+4+10+4+1+2+11+1+14*11+4+1+1+8+2+1+1, len(seen))
 }
 
 func TestVars_DocumentedInDocGo(t *testing.T) {
