@@ -14,7 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 )
 
-// The agent surface's publisher (D-083).
+// The agent surface's publisher (D-082).
 //
 // internal/agents imports neither internal/notifications nor internal/activity,
 // deliberately (D-073): what a person is told about an agent is those packages'

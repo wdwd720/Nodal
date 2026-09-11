@@ -18,7 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-// The withdrawal disclosure, against the real ledger (D-084).
+// The withdrawal disclosure, against the real ledger (D-083).
 //
 // The unit tests say the refusal exists and names the document. This says the
 // refusal happens BEFORE anything is written: no payout_requests row, no

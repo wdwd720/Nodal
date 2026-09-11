@@ -20,7 +20,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 )
 
-// The composition root's agent publisher against the real table (D-083).
+// The composition root's agent publisher against the real table (D-082).
 //
 // The claim worth proving is not that a pause writes a notification -- that is
 // one Emit call -- but that the publisher and the follower, which read the same

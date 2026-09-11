@@ -302,7 +302,7 @@ func TestWithdrawalReasonCodes_AreClosedAndUnique(t *testing.T) {
 	}
 }
 
-// TestExplainWithdrawal_TheDisclosureIsAStepAndNotARefusal (D-084).
+// TestExplainWithdrawal_TheDisclosureIsAStepAndNotARefusal (D-083).
 //
 // §48 puts the withdrawal disclosure at the moment somebody asks to take value
 // out, deliberately not at signup, so an unsigned disclosure is the normal state

@@ -21,7 +21,7 @@ import (
 	"github.com/nodal/controlplane/internal/terms"
 )
 
-// The seam between the legal registry and the withdrawal surfaces (D-084).
+// The seam between the legal registry and the withdrawal surfaces (D-083).
 //
 // internal/payout refuses without the disclosure and internal/eligibility
 // reports it; both are unit-tested against a boolean. The question a database

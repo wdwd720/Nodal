@@ -17,7 +17,7 @@ import (
 	"github.com/nodal/controlplane/internal/verification"
 )
 
-// The expiry sweep (D-085), against the real schema.
+// The expiry sweep (D-084), against the real schema.
 //
 // The claim is narrow and the narrowness is the point. The sweep does not decide
 // anything about anybody's money: the resolver already reports a stale profile

@@ -17,7 +17,7 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 )
 
-// Booting twice (D-086).
+// Booting twice (D-084).
 //
 // Three things happen at boot on a sandbox tier and every one of them writes:
 // the Credit asset (creditAssetAtBoot), the conservative GLOBAL risk policy

@@ -19,7 +19,7 @@ import (
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
 
-// The two sources the product domains left for the follower (D-082, D-083),
+// The two sources the product domains left for the follower (D-082),
 // and the two claims that needed proving rather than assuming: that a circuit
 // breaker already notifies through the market transition it writes, and that
 // closing an account already notifies through the account transition.
@@ -270,7 +270,7 @@ func TestIntegration_ASandboxVerificationSaysItIsARehearsal(t *testing.T) {
 	assert.Equal(t, true, data["sandbox"])
 }
 
-// TestIntegration_OnlySomebodyElsesPauseTellsTheOwner (D-083).
+// TestIntegration_OnlySomebodyElsesPauseTellsTheOwner (D-082).
 //
 // An owner who paused their own agent pressed the button. The one thing they
 // cannot know without being told is that somebody else stopped it, so the

@@ -10,7 +10,7 @@ import (
 	"github.com/nodal/controlplane/internal/verification"
 )
 
-// The verification expiry pass (D-085).
+// The verification expiry pass (D-084).
 //
 // Five minutes, the same cadence as runInternalVerification and for the same
 // reason: this deployment runs one process (render.yaml), so periodic work runs

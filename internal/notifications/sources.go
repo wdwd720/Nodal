@@ -665,7 +665,7 @@ func verificationCopy(state string, sandbox bool) (title, body string) {
 }
 
 // ---------------------------------------------------------------------------
-// Agent pauses (D-083)
+// Agent pauses (D-082)
 // ---------------------------------------------------------------------------
 
 // readAgentPauses follows agent_pauses, and deliberately not every row of it.

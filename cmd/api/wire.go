@@ -650,7 +650,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// The legal registry, read at the moment somebody asks to take
 			// value out. §48 puts the withdrawal disclosure there and
 			// deliberately not at signup, so the quote and the payout ask for
-			// it and onboarding does not (D-084).
+			// it and onboarding does not (D-083).
 			Terms:       profileSvc,
 			Environment: string(cfg.Env),
 			SandboxTier: cfg.SandboxTier(),
@@ -740,7 +740,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		BuildVersion: config.BuildVersion,
 		StepUpMaxAge: cfg.Auth.StepUpMaxAge,
 		// The publisher, which is an adapter in THIS package and not an import
-		// in internal/agents (D-073, D-083). It emits one notification, for one
+		// in internal/agents (D-073, D-082). It emits one notification, for one
 		// case: an agent somebody other than its owner stopped. It writes in a
 		// transaction of its own after the agent transaction committed, and
 		// keys on the agent_pauses row through the same exported helpers the

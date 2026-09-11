@@ -14,7 +14,7 @@ import (
 	"github.com/nodal/controlplane/internal/terms"
 )
 
-// The withdrawal disclosure, at the boundary of this package (D-084).
+// The withdrawal disclosure, at the boundary of this package (D-083).
 //
 // §48 requires the disclosure before a conversion or payout request, and the
 // registry's own comment said "nothing in this package enforces that; the

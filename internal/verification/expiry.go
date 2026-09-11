@@ -12,7 +12,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 )
 
-// The expiry sweep (D-085, and the half of D-061 that was left open).
+// The expiry sweep (D-084, and the half of D-061 that was left open).
 //
 // A verification decision stands for ValidityWindow and the transition that
 // reaches VERIFIED writes `expires_at` onto the profile. Two things then have to
