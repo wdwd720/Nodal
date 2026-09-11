@@ -573,6 +573,10 @@ jobs:
           # ceremony is exercised by internal/gates' own suites; a sandbox
           # tier refuses to move a gate that a ceremony already owns, so the
           # two must not be combined on one database.
+          # Demo data is seeded by the API itself at boot (CP_API_DEMO_DATA,
+          # D-115), through the same wired services a request goes through, so
+          # the market, portfolio and activity specs have fills to look at
+          # rather than skipping on an empty catalogue.
           # Settlement asset: buying power and holdings answer 422 UNSUPPORTED
           # without it, and the specs assert real figures.
           db="${CP_TEST_DATABASE_URL##*/}"; db="${db%%\?*}"
@@ -585,7 +589,7 @@ jobs:
             echo "CP_API_SETTLEMENT_MINT=${asset#* }"
           } >> "$GITHUB_ENV"
           go build -o bin/api ./cmd/api
-          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=SANDBOX CP_API_PAYOUT_POLICY=SANDBOX             CP_API_ENABLED_CAPABILITIES=CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE             CP_API_SANDBOX_GATES=CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE             CP_PROVIDER_PAYOUT_NAME=sandbox_payout CP_PROVIDER_PAYOUT_MODE=sandbox             CP_API_RATE_LIMIT_GENERAL=6000/1m CP_API_RATE_LIMIT_AUTH=600/1m CP_API_RATE_LIMIT_COMMAND=1200/1m CP_API_RATE_LIMIT_QUOTE=1200/1m             ./bin/api > api.log 2>&1 &
+          CP_API_SETTLEMENT_CHAIN="${asset% *}" CP_API_SETTLEMENT_MINT="${asset#* }"             CP_API_LEGAL_POLICY=SANDBOX CP_API_PAYOUT_POLICY=SANDBOX CP_API_DEMO_DATA=true             CP_API_ENABLED_CAPABILITIES=CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE             CP_API_SANDBOX_GATES=CREDIT_PURCHASE,NATIVE_ASSET_CREATION,NATIVE_MARKET_TRADING,MARKETPLACE,PAYOUT_RESERVE,PAYOUT_SETTLE             CP_PROVIDER_PAYOUT_NAME=sandbox_payout CP_PROVIDER_PAYOUT_MODE=sandbox             CP_API_RATE_LIMIT_GENERAL=6000/1m CP_API_RATE_LIMIT_AUTH=600/1m CP_API_RATE_LIMIT_COMMAND=1200/1m CP_API_RATE_LIMIT_QUOTE=1200/1m             ./bin/api > api.log 2>&1 &
           for i in $(seq 1 40); do
             if curl -sf -m 2 http://127.0.0.1:18099/v1/healthz >/dev/null; then
               echo "api up"; exit 0

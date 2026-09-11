@@ -970,12 +970,18 @@ export function useAcceptTerms(): UseMutationResult<TermsState, unknown, AcceptT
       });
       return validated<TermsState>(data, termsStateSpec, "/me/terms-acceptances");
     },
-    onSuccess: () => {
-      // `/me` carries the onboarding timestamps, and accepting the last
-      // outstanding document is what completes that step.
-      void qc.invalidateQueries({ queryKey: keys.me });
-      void qc.invalidateQueries({ queryKey: meKeys.terms });
-    },
+    // `/me` carries the onboarding timestamps, and accepting the last
+    // outstanding document is what completes that step. The refetch is AWAITED:
+    // the mutation stays pending until `/me` says onboarding is complete, so a
+    // page that navigates on success navigates to a gate that already knows.
+    // Fired and forgotten, the refetch raced the customer's next click, and on
+    // a slow connection the dashboard gate read the stale answer and sent them
+    // back to a terms page with nothing left to accept (F-222).
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.me }),
+        qc.invalidateQueries({ queryKey: meKeys.terms }),
+      ]).then(() => undefined),
   });
 }
 
@@ -1007,9 +1013,9 @@ export function useUpdateProfile(): UseMutationResult<UserProfile, unknown, Prof
       });
       return validated<UserProfile>(data, userProfileSpec, "/me/profile");
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.me });
-    },
+    // Awaited for the same reason as the terms acceptance (F-222): the profile
+    // step's completion lives on `/me`, and the next screen is gated on it.
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.me }),
   });
 }
 

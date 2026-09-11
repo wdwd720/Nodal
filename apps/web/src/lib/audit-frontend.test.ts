@@ -181,3 +181,34 @@ test("audit: min_output rounds towards the customer on every remainder", () => {
     }
   }
 });
+
+/* --------------------------------------------------------------------------
+ * A mutation that completes an onboarding step waits for `/me` to say so
+ * ------------------------------------------------------------------------ */
+
+test("the onboarding mutations await the profile refetch before they succeed", () => {
+  // The dashboard gate reads `onboarding.complete` off the `/me` query. A
+  // mutation whose success handler fires the refetch and forgets it lets the
+  // page navigate on a stale answer, and on a slow connection the gate sent a
+  // customer who had just accepted everything back to the terms page (F-222).
+  // The handler must RETURN the invalidation so the mutation stays pending
+  // until the fresh `/me` has landed.
+  const queries = sourceFiles().find((f) => f.path === "src/api/queries.ts");
+  assert.ok(queries, "src/api/queries.ts must exist");
+  for (const hook of ["useAcceptTerms", "useUpdateProfile"]) {
+    const start = queries.text.indexOf(`export function ${hook}(`);
+    assert.notEqual(start, -1, `${hook} must exist`);
+    const end = queries.text.indexOf("\nexport function ", start + 1);
+    const body = queries.text.slice(start, end === -1 ? undefined : end);
+    assert.doesNotMatch(
+      body,
+      /void qc\.invalidateQueries\(\{ queryKey: keys\.me \}\)/,
+      `${hook} fires the /me refetch and forgets it; return it instead`,
+    );
+    assert.match(
+      body,
+      /onSuccess: \(\) =>\s*(qc\.invalidateQueries\(\{ queryKey: keys\.me \}\)|Promise\.all\(\[)/,
+      `${hook}'s success handler must return the /me invalidation`,
+    );
+  }
+});

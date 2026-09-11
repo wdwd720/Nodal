@@ -38,10 +38,12 @@ import (
 	"time"
 
 	"github.com/nodal/controlplane/internal/audit"
+	"github.com/nodal/controlplane/internal/capresolver"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/demo"
+	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/nativeasset"
@@ -107,6 +109,17 @@ func run() error {
 
 	clk := clock.System()
 	led := ledger.NewService(clk, "demodata")
+	// The same answer to "which capabilities are ACTIVE" the API gives itself:
+	// the gate rows, read as a sandbox tier reads them when this is one, and
+	// only for the capabilities the deployment declares enabled. Without it the
+	// ledger fails closed on every cross-domain posting, so every demo trade
+	// was refused on a database whose gates were sandbox-active (F-223). A gate
+	// that really is missing still refuses, with the capability's own words.
+	checker, err := gates.NewChecker(env, enabledCapabilities(), clk)
+	if err != nil {
+		return err
+	}
+	led.SetCapabilityResolver(capresolver.New(checker.WithSandbox(sandbox), d))
 	credits := credit.NewService(led, clk)
 	markets := nativemarket.NewService(led, credits, valuation.NewPriceStore(clk), audit.NewWriter(),
 		instruments.NewRepository(), nativemarket.NewRiskGate(risk.NewStore(), clk), clk)
@@ -143,4 +156,18 @@ func run() error {
 	fmt.Println("say so, their Credits are PROMOTIONAL and no payout policy in this build lets a")
 	fmt.Println("promotional Credit leave. They exist only on a sandbox tier and nowhere else.")
 	return nil
+}
+
+// enabledCapabilities reads CP_API_ENABLED_CAPABILITIES the way cmd/api does:
+// condition 1 of POLICY_AUTHORITY §1, the deployment's own declaration. Unset
+// means nothing is enabled, which fails closed exactly as the API would.
+func enabledCapabilities() func(gates.Capability) bool {
+	enabled := map[gates.Capability]bool{}
+	for _, raw := range strings.Split(os.Getenv("CP_API_ENABLED_CAPABILITIES"), ",") {
+		name := gates.Capability(strings.ToUpper(strings.TrimSpace(raw)))
+		if name != "" && name.Valid() {
+			enabled[name] = true
+		}
+	}
+	return func(c gates.Capability) bool { return enabled[c] }
 }

@@ -180,6 +180,8 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-219 | P3 | PRODUCTIZATION | fixed | `openapi.yaml` said quote fees are Credits at price_scale; they are at the Credit asset's scale, twelve orders of magnitude apart |
 | F-220 | P3 | PRODUCTIZATION | fixed | Two honesty checks settled the network after reading the page, so they read it mid-fetch |
 | F-221 | P3 | PRODUCTIZATION | fixed | Adding a payout destination minted an idempotency key per press, so a retry registered it twice |
+| F-222 | P2 | PRODUCTIZATION | fixed | Finishing onboarding raced the profile refetch, so a slow connection sent a new customer back to a terms page with nothing left to accept |
+| F-223 | P3 | PRODUCTIZATION | fixed | The demodata command gave its ledger no capability resolver, so it refused every demo trade on a database whose gates were sandbox-active |
 | F-185 | P1 | PRODUCTIZATION | fixed | Any authenticated person could end the API process by closing a stream while an event was published |
 | F-186 | P2 | PRODUCTIZATION | fixed | Three clocks for one notification, and Last-Event-ID compared two of them, so a resume skipped what the lap wrote |
 | F-187 | P2 | PRODUCTIZATION | fixed | An agent was granted authority over a strategy version its owner never owned, never named and never accepted |
@@ -7996,6 +7998,70 @@ confirmation (F-203).
 **Evidence.** `apps/web/src/pages/withdraw/Destinations.tsx`,
 `apps/web/src/lib/idempotency.ts`; the e2e-browser audit observes the network
 for the retry shape.
+
+## F-222 · Finishing onboarding raced the profile refetch · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the merged tree's Playwright run under load (the full Go
+integration matrix was running beside it): the suite's own sign-in setup, which
+had passed on every quiet run, failed at its last step and the other 157 cases
+never ran.
+
+`useAcceptTerms` and `useUpdateProfile` fired the `/me` invalidation and forgot
+it (`void qc.invalidateQueries`), so the terms page navigated to "You're in" the
+instant the acceptance returned, while the refetch that would say onboarding is
+complete was still in flight. The dashboard gate (`OnboardingGate` in
+`App.tsx`) reads `onboarding.complete` off that query: with the API answering in
+84 ms instead of 20, the customer's click on "Go to dashboard" beat the refetch,
+the gate read the stale `next_step: TERMS`, and sent them to `/welcome/terms`,
+which then read the fresh terms state and rendered "Nothing outstanding" with a
+Continue button. Not data loss; a wrong screen after the last step of arriving,
+for anybody on a slow connection.
+
+**Fix.** Both success handlers return their invalidation, so the mutation stays
+pending until the fresh `/me` has landed and the page that navigates on success
+navigates to a gate that already knows (TanStack Query awaits a promise returned
+from the hook-level `onSuccess` before the `mutate` callbacks fire). The
+source-scan test `the onboarding mutations await the profile refetch before
+they succeed` refuses the fire-and-forget form in either hook.
+
+**Evidence.** `apps/web/src/api/queries.ts`; `apps/web/src/lib/audit-frontend.test.ts`;
+the API log of the failing run (POST `/v1/me/terms-acceptances` 200 at
+22:58:30.686, the `/v1/me` refetch at 30.856, the diverted page's terms read at
+30.887); the merged Playwright run after the fix.
+
+## F-223 · The demodata command gave its ledger no capability resolver · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same run: `go run ./scripts/demodata` created six objects and
+then refused its first trade with `CAPABILITY_NOT_APPROVED: moving value from
+INTERNAL_CREDIT to INTERNAL_NATIVE_ASSET requires capability
+NATIVE_MARKET_TRADING to be ACTIVE`, on a database whose six gates the API had
+just sandbox-activated at boot.
+
+The command built the ledger, the Credit service and the native market exactly
+as `cmd/api` does, and never called `ledger.SetCapabilityResolver`. A ledger
+with no resolver fails closed on every cross-domain posting -- correct for a
+process that has not been told otherwise -- so the demo catalogue's markets were
+created and none of its trades were, and the command's own documentation ("where
+a gate is missing its trades fail with the capability's own refusal") described a
+refusal that had nothing to do with the gates. The resolver that answers the
+question lived as a private type in `cmd/api`, so a second composition root had
+no way to read the same source.
+
+**Fix.** The resolver is `internal/capresolver` (the type and the list moved
+unchanged; `cmd/api` keeps its name for it and its two tests against
+`settlement.AllRequiredCapabilities()`). The command builds a `gates.Checker`
+from `CP_ENV` and `CP_API_ENABLED_CAPABILITIES`, marks it a sandbox reader when
+the deployment is one, and installs the resolver on its ledger -- so a
+sandbox-active gate now permits the trade and a missing one refuses it in the
+capability's own words. CI's browser job and the local recipe additionally seed
+through the API's own boot path (`CP_API_DEMO_DATA=true`, D-115), and the recipe
+surfaces the command's exit code instead of piping it into `tail`.
+
+**Evidence.** `internal/capresolver/resolver.go`, `cmd/api/capabilities.go`,
+`scripts/demodata/main.go`, `.github/workflows/ci.yml`;
+`TestCapabilities_ResolverAnswersEverythingTheCompilerCanRequire`,
+`TestCapabilities_EveryAnsweredKeyIsADeclaredGate`; the merged Playwright run's
+`DEMODATA_EXIT=0`.
 
 ## F-185 · Any authenticated person could end the API process by closing a stream · PRODUCTIZATION · P1 · FIXED
 

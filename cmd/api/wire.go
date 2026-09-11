@@ -561,12 +561,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// pulling MARKETPLACE stops sales without a restart. Until it is ACTIVE,
 	// internal/commerce refuses every purchase on its own -- the compiler in
 	// front of it is an addition, not the only check.
-	commerceSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
+	commerceSvc.SetCapabilityResolver(newGateCapabilityResolver(gateChecker, database))
 
 	// The ledger's value-domain isolation consults the same gate checker every
 	// other capability decision uses, so turning a capability off stops the
 	// movement at the journal rather than only in a service.
-	ledgerSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
+	ledgerSvc.SetCapabilityResolver(newGateCapabilityResolver(gateChecker, database))
 
 	// --- realtime ----------------------------------------------------------
 	// The hub is mounted so the endpoint honors Last-Event-ID, heartbeats and
@@ -658,7 +658,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// whose rehearsal policy is a named, versioned policy too. A real
 			// policy is a persisted version with evidence, never a name here.
 			PayoutPolicy: payoutPolicyFor(cfg),
-			Capabilities: gateCapabilityResolver{checker: gateChecker, q: database},
+			Capabilities: newGateCapabilityResolver(gateChecker, database),
 			// The emergency controls, at the boundary. Authoritative checks stay
 			// inside each domain service's transaction (D-092).
 			KillSwitches: killPreCheck,
