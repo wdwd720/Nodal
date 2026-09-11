@@ -175,6 +175,267 @@ func (e AdminActionStatus) Valid() bool {
 	}
 }
 
+// Defines values for AgentMode.
+const (
+	AgentModeBACKTEST AgentMode = "BACKTEST"
+	AgentModeCANARY   AgentMode = "CANARY"
+	AgentModeLIMITED  AgentMode = "LIMITED"
+	AgentModeLIVE     AgentMode = "LIVE"
+	AgentModePAPER    AgentMode = "PAPER"
+	AgentModeSHADOW   AgentMode = "SHADOW"
+)
+
+// Valid indicates whether the value is a known member of the AgentMode enum.
+func (e AgentMode) Valid() bool {
+	switch e {
+	case AgentModeBACKTEST:
+		return true
+	case AgentModeCANARY:
+		return true
+	case AgentModeLIMITED:
+		return true
+	case AgentModeLIVE:
+		return true
+	case AgentModePAPER:
+		return true
+	case AgentModeSHADOW:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentStage.
+const (
+	AgentStageBACKTESTELIGIBLE AgentStage = "BACKTEST_ELIGIBLE"
+	AgentStageCANARY           AgentStage = "CANARY"
+	AgentStageCOMPILED         AgentStage = "COMPILED"
+	AgentStageDRAFT            AgentStage = "DRAFT"
+	AgentStageLIMITED          AgentStage = "LIMITED"
+	AgentStageLIVE             AgentStage = "LIVE"
+	AgentStageSHADOW           AgentStage = "SHADOW"
+	AgentStageVALIDATED        AgentStage = "VALIDATED"
+)
+
+// Valid indicates whether the value is a known member of the AgentStage enum.
+func (e AgentStage) Valid() bool {
+	switch e {
+	case AgentStageBACKTESTELIGIBLE:
+		return true
+	case AgentStageCANARY:
+		return true
+	case AgentStageCOMPILED:
+		return true
+	case AgentStageDRAFT:
+		return true
+	case AgentStageLIMITED:
+		return true
+	case AgentStageLIVE:
+		return true
+	case AgentStageSHADOW:
+		return true
+	case AgentStageVALIDATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentState.
+const (
+	AgentStateBACKTESTELIGIBLE AgentState = "BACKTEST_ELIGIBLE"
+	AgentStateCANARY           AgentState = "CANARY"
+	AgentStateCOMPILED         AgentState = "COMPILED"
+	AgentStateDRAFT            AgentState = "DRAFT"
+	AgentStateFAILED           AgentState = "FAILED"
+	AgentStateLIMITED          AgentState = "LIMITED"
+	AgentStateLIVE             AgentState = "LIVE"
+	AgentStatePAUSED           AgentState = "PAUSED"
+	AgentStateREVOKED          AgentState = "REVOKED"
+	AgentStateSHADOW           AgentState = "SHADOW"
+	AgentStateSUPERSEDED       AgentState = "SUPERSEDED"
+	AgentStateVALIDATED        AgentState = "VALIDATED"
+)
+
+// Valid indicates whether the value is a known member of the AgentState enum.
+func (e AgentState) Valid() bool {
+	switch e {
+	case AgentStateBACKTESTELIGIBLE:
+		return true
+	case AgentStateCANARY:
+		return true
+	case AgentStateCOMPILED:
+		return true
+	case AgentStateDRAFT:
+		return true
+	case AgentStateFAILED:
+		return true
+	case AgentStateLIMITED:
+		return true
+	case AgentStateLIVE:
+		return true
+	case AgentStatePAUSED:
+		return true
+	case AgentStateREVOKED:
+		return true
+	case AgentStateSHADOW:
+		return true
+	case AgentStateSUPERSEDED:
+		return true
+	case AgentStateVALIDATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentStatus.
+const (
+	AgentStatusDISABLED AgentStatus = "DISABLED"
+	AgentStatusENABLED  AgentStatus = "ENABLED"
+	AgentStatusFAILED   AgentStatus = "FAILED"
+	AgentStatusPAUSED   AgentStatus = "PAUSED"
+	AgentStatusSTOPPED  AgentStatus = "STOPPED"
+)
+
+// Valid indicates whether the value is a known member of the AgentStatus enum.
+func (e AgentStatus) Valid() bool {
+	switch e {
+	case AgentStatusDISABLED:
+		return true
+	case AgentStatusENABLED:
+		return true
+	case AgentStatusFAILED:
+		return true
+	case AgentStatusPAUSED:
+		return true
+	case AgentStatusSTOPPED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentBudgetSource.
+const (
+	COMMITTEDINTENTS AgentBudgetSource = "COMMITTED_INTENTS"
+	NOINTENTSCREATED AgentBudgetSource = "NO_INTENTS_CREATED"
+	NORUNSRECORDED   AgentBudgetSource = "NO_RUNS_RECORDED"
+)
+
+// Valid indicates whether the value is a known member of the AgentBudgetSource enum.
+func (e AgentBudgetSource) Valid() bool {
+	switch e {
+	case COMMITTEDINTENTS:
+		return true
+	case NOINTENTSCREATED:
+		return true
+	case NORUNSRECORDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentPauseOpenOrdersPolicy.
+const (
+	CANCELCANCELABLE AgentPauseOpenOrdersPolicy = "CANCEL_CANCELABLE"
+	LEAVE            AgentPauseOpenOrdersPolicy = "LEAVE"
+)
+
+// Valid indicates whether the value is a known member of the AgentPauseOpenOrdersPolicy enum.
+func (e AgentPauseOpenOrdersPolicy) Valid() bool {
+	switch e {
+	case CANCELCANCELABLE:
+		return true
+	case LEAVE:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentPausePausedByActorType.
+const (
+	AgentPausePausedByActorTypeOPERATOR AgentPausePausedByActorType = "OPERATOR"
+	AgentPausePausedByActorTypeSYSTEM   AgentPausePausedByActorType = "SYSTEM"
+	AgentPausePausedByActorTypeUSER     AgentPausePausedByActorType = "USER"
+)
+
+// Valid indicates whether the value is a known member of the AgentPausePausedByActorType enum.
+func (e AgentPausePausedByActorType) Valid() bool {
+	switch e {
+	case AgentPausePausedByActorTypeOPERATOR:
+		return true
+	case AgentPausePausedByActorTypeSYSTEM:
+		return true
+	case AgentPausePausedByActorTypeUSER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeEvaluator.
+const (
+	AgentRuntimeEvaluatorIDLE        AgentRuntimeEvaluator = "IDLE"
+	AgentRuntimeEvaluatorNOTDEPLOYED AgentRuntimeEvaluator = "NOT_DEPLOYED"
+	AgentRuntimeEvaluatorRUNNING     AgentRuntimeEvaluator = "RUNNING"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeEvaluator enum.
+func (e AgentRuntimeEvaluator) Valid() bool {
+	switch e {
+	case AgentRuntimeEvaluatorIDLE:
+		return true
+	case AgentRuntimeEvaluatorNOTDEPLOYED:
+		return true
+	case AgentRuntimeEvaluatorRUNNING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentRuntimeExecutor.
+const (
+	AgentRuntimeExecutorIDLE        AgentRuntimeExecutor = "IDLE"
+	AgentRuntimeExecutorNOTDEPLOYED AgentRuntimeExecutor = "NOT_DEPLOYED"
+	AgentRuntimeExecutorRUNNING     AgentRuntimeExecutor = "RUNNING"
+)
+
+// Valid indicates whether the value is a known member of the AgentRuntimeExecutor enum.
+func (e AgentRuntimeExecutor) Valid() bool {
+	switch e {
+	case AgentRuntimeExecutorIDLE:
+		return true
+	case AgentRuntimeExecutorNOTDEPLOYED:
+		return true
+	case AgentRuntimeExecutorRUNNING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AgentScheduleKind.
+const (
+	INTERVAL AgentScheduleKind = "INTERVAL"
+	MANUAL   AgentScheduleKind = "MANUAL"
+)
+
+// Valid indicates whether the value is a known member of the AgentScheduleKind enum.
+func (e AgentScheduleKind) Valid() bool {
+	switch e {
+	case INTERVAL:
+		return true
+	case MANUAL:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AssetKind.
 const (
 	FIAT         AssetKind = "FIAT"
@@ -223,6 +484,39 @@ func (e AssetStatus) Valid() bool {
 	case AssetStatusHALTED:
 		return true
 	case AssetStatusRESTRICTED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AuthorityLevelName.
+const (
+	AUTONOMOUSPORTFOLIO AuthorityLevelName = "AUTONOMOUS_PORTFOLIO"
+	AUTONOMOUSSELECTION AuthorityLevelName = "AUTONOMOUS_SELECTION"
+	BOUNDEDDISCRETION   AuthorityLevelName = "BOUNDED_DISCRETION"
+	PREPARETRANSACTION  AuthorityLevelName = "PREPARE_TRANSACTION"
+	RECOMMENDATION      AuthorityLevelName = "RECOMMENDATION"
+	RESEARCHONLY        AuthorityLevelName = "RESEARCH_ONLY"
+	USERAPPROVEDRULE    AuthorityLevelName = "USER_APPROVED_RULE"
+)
+
+// Valid indicates whether the value is a known member of the AuthorityLevelName enum.
+func (e AuthorityLevelName) Valid() bool {
+	switch e {
+	case AUTONOMOUSPORTFOLIO:
+		return true
+	case AUTONOMOUSSELECTION:
+		return true
+	case BOUNDEDDISCRETION:
+		return true
+	case PREPARETRANSACTION:
+		return true
+	case RECOMMENDATION:
+		return true
+	case RESEARCHONLY:
+		return true
+	case USERAPPROVEDRULE:
 		return true
 	default:
 		return false
@@ -346,6 +640,33 @@ func (e CapabilityGateState) Valid() bool {
 	case CapabilityGateStateSANDBOX:
 		return true
 	case CapabilityGateStateSUSPENDED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CompileResultOutcome.
+const (
+	CompileResultOutcomeMODELUNAVAILABLE   CompileResultOutcome = "MODEL_UNAVAILABLE"
+	CompileResultOutcomeNEEDSCLARIFICATION CompileResultOutcome = "NEEDS_CLARIFICATION"
+	CompileResultOutcomeREJECTED           CompileResultOutcome = "REJECTED"
+	CompileResultOutcomeSUCCESS            CompileResultOutcome = "SUCCESS"
+	CompileResultOutcomeTIMEOUT            CompileResultOutcome = "TIMEOUT"
+)
+
+// Valid indicates whether the value is a known member of the CompileResultOutcome enum.
+func (e CompileResultOutcome) Valid() bool {
+	switch e {
+	case CompileResultOutcomeMODELUNAVAILABLE:
+		return true
+	case CompileResultOutcomeNEEDSCLARIFICATION:
+		return true
+	case CompileResultOutcomeREJECTED:
+		return true
+	case CompileResultOutcomeSUCCESS:
+		return true
+	case CompileResultOutcomeTIMEOUT:
 		return true
 	default:
 		return false
@@ -1483,6 +1804,72 @@ func (e StartDepositRequestFiatCurrency) Valid() bool {
 	}
 }
 
+// Defines values for StrategySourceKind.
+const (
+	CLONE           StrategySourceKind = "CLONE"
+	NATURALLANGUAGE StrategySourceKind = "NATURAL_LANGUAGE"
+	TYPESCRIPTSDK   StrategySourceKind = "TYPESCRIPT_SDK"
+)
+
+// Valid indicates whether the value is a known member of the StrategySourceKind enum.
+func (e StrategySourceKind) Valid() bool {
+	switch e {
+	case CLONE:
+		return true
+	case NATURALLANGUAGE:
+		return true
+	case TYPESCRIPTSDK:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyStatus.
+const (
+	StrategyStatusACTIVE   StrategyStatus = "ACTIVE"
+	StrategyStatusARCHIVED StrategyStatus = "ARCHIVED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyStatus enum.
+func (e StrategyStatus) Valid() bool {
+	switch e {
+	case StrategyStatusACTIVE:
+		return true
+	case StrategyStatusARCHIVED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StrategyVersionStatus.
+const (
+	StrategyVersionStatusACCEPTED   StrategyVersionStatus = "ACCEPTED"
+	StrategyVersionStatusCOMPILED   StrategyVersionStatus = "COMPILED"
+	StrategyVersionStatusREJECTED   StrategyVersionStatus = "REJECTED"
+	StrategyVersionStatusREVOKED    StrategyVersionStatus = "REVOKED"
+	StrategyVersionStatusSUPERSEDED StrategyVersionStatus = "SUPERSEDED"
+)
+
+// Valid indicates whether the value is a known member of the StrategyVersionStatus enum.
+func (e StrategyVersionStatus) Valid() bool {
+	switch e {
+	case StrategyVersionStatusACCEPTED:
+		return true
+	case StrategyVersionStatusCOMPILED:
+		return true
+	case StrategyVersionStatusREJECTED:
+		return true
+	case StrategyVersionStatusREVOKED:
+		return true
+	case StrategyVersionStatusSUPERSEDED:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SubmitIntentRequestMode.
 const (
 	SubmitIntentRequestModeLIVE  SubmitIntentRequestMode = "LIVE"
@@ -1837,6 +2224,33 @@ func (e PostAdminGatesCapabilityActionParamsAction) Valid() bool {
 	}
 }
 
+// Defines values for PostAgentsAgentIdActionParamsAction.
+const (
+	PostAgentsAgentIdActionParamsActionArchive PostAgentsAgentIdActionParamsAction = "archive"
+	PostAgentsAgentIdActionParamsActionDisable PostAgentsAgentIdActionParamsAction = "disable"
+	PostAgentsAgentIdActionParamsActionEnable  PostAgentsAgentIdActionParamsAction = "enable"
+	PostAgentsAgentIdActionParamsActionPause   PostAgentsAgentIdActionParamsAction = "pause"
+	PostAgentsAgentIdActionParamsActionResume  PostAgentsAgentIdActionParamsAction = "resume"
+)
+
+// Valid indicates whether the value is a known member of the PostAgentsAgentIdActionParamsAction enum.
+func (e PostAgentsAgentIdActionParamsAction) Valid() bool {
+	switch e {
+	case PostAgentsAgentIdActionParamsActionArchive:
+		return true
+	case PostAgentsAgentIdActionParamsActionDisable:
+		return true
+	case PostAgentsAgentIdActionParamsActionEnable:
+		return true
+	case PostAgentsAgentIdActionParamsActionPause:
+		return true
+	case PostAgentsAgentIdActionParamsActionResume:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetInternalOrdersParamsRole.
 const (
 	BUYER  GetInternalOrdersParamsRole = "BUYER"
@@ -1965,6 +2379,159 @@ type AdminActionProposal struct {
 	TargetType string                  `json:"target_type"`
 }
 
+// Agent defines model for Agent.
+type Agent struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+	Archived  bool `json:"archived"`
+
+	// Authority One rung of the authority ladder, rendered from the matrix the code enforces rather than written out beside it. Disabled levels are returned rather than hidden, with the capability each would need.
+	Authority AuthorityLevel `json:"authority"`
+
+	// Budget granted is the ceiling; used is derived from the intents this agent's runs created that reached a state where value is committed. source names where used came from, so a zero is never mistaken for a measurement that was not made.
+	Budget    AgentBudget `json:"budget"`
+	CreatedAt Timestamp   `json:"created_at"`
+	GrantedAt *Timestamp  `json:"granted_at,omitempty"`
+
+	// GrantedByUserId UUIDv7 in canonical form
+	GrantedByUserId *UUID `json:"granted_by_user_id,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id            UUID       `json:"id"`
+	LastRunAt     *Timestamp `json:"last_run_at,omitempty"`
+	LastRunStatus *string    `json:"last_run_status,omitempty"`
+
+	// Limits The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created.
+	Limits    AgentLimits `json:"limits"`
+	Mode      *AgentMode  `json:"mode,omitempty"`
+	Name      string      `json:"name"`
+	Pause     *AgentPause `json:"pause,omitempty"`
+	RunsTotal *int        `json:"runs_total,omitempty"`
+
+	// Runtime What is actually evaluating and executing, derived from agent runs and from which worker processes this deployment runs. It is not the agent's lifecycle state: an agent can be enabled, correct and evaluated by nothing at all, and NOT_DEPLOYED says exactly that.
+	Runtime AgentRuntime `json:"runtime"`
+
+	// Stage The furthest rung of the promotion ladder this agent has reached.
+	Stage AgentStage `json:"stage"`
+	State AgentState `json:"state"`
+
+	// Status The product's own word for the state, which is what a person is actually asking. STOPPED means created and never enabled; ENABLED means the owner granted it the right to be evaluated, which is not the same as something evaluating it - read runtime for that.
+	Status AgentStatus `json:"status"`
+
+	// StrategyId UUIDv7 in canonical form
+	StrategyId UUID `json:"strategy_id"`
+
+	// StrategyVersionId UUIDv7 in canonical form
+	StrategyVersionId UUID       `json:"strategy_version_id"`
+	UpdatedAt         *Timestamp `json:"updated_at,omitempty"`
+}
+
+// AgentMode defines model for Agent.Mode.
+type AgentMode string
+
+// AgentStage The furthest rung of the promotion ladder this agent has reached.
+type AgentStage string
+
+// AgentState defines model for Agent.State.
+type AgentState string
+
+// AgentStatus The product's own word for the state, which is what a person is actually asking. STOPPED means created and never enabled; ENABLED means the owner granted it the right to be evaluated, which is not the same as something evaluating it - read runtime for that.
+type AgentStatus string
+
+// AgentActionRequest defines model for AgentActionRequest.
+type AgentActionRequest struct {
+	Reason *string `json:"reason,omitempty"`
+}
+
+// AgentBudget granted is the ceiling; used is derived from the intents this agent's runs created that reached a state where value is committed. source names where used came from, so a zero is never mistaken for a measurement that was not made.
+type AgentBudget struct {
+	// GrantedCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	GrantedCredits Quantity          `json:"granted_credits"`
+	Source         AgentBudgetSource `json:"source"`
+
+	// UsedCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UsedCredits Quantity `json:"used_credits"`
+}
+
+// AgentBudgetSource defines model for AgentBudget.Source.
+type AgentBudgetSource string
+
+// AgentLimits The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created.
+type AgentLimits struct {
+	AllowedAssetIds []UUID `json:"allowed_asset_ids"`
+
+	// BudgetCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	BudgetCredits Quantity `json:"budget_credits"`
+
+	// DailyLossStopCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	DailyLossStopCredits Quantity `json:"daily_loss_stop_credits"`
+
+	// MaxPositionShareBps Basis points; 10000 == 100%
+	MaxPositionShareBps BPS `json:"max_position_share_bps"`
+
+	// PerTradeCapCredits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PerTradeCapCredits Quantity `json:"per_trade_cap_credits"`
+
+	// Schedule How often the agent may evaluate. MANUAL carries no interval.
+	Schedule AgentSchedule `json:"schedule"`
+}
+
+// AgentPage defines model for AgentPage.
+type AgentPage struct {
+	// AuthorityLevels Every declared level and whether this build permits it.
+	AuthorityLevels []AuthorityLevel `json:"authority_levels"`
+	Items           []Agent          `json:"items"`
+	NextCursor      *string          `json:"next_cursor,omitempty"`
+}
+
+// AgentPause defines model for AgentPause.
+type AgentPause struct {
+	OpenOrdersPolicy  *AgentPauseOpenOrdersPolicy `json:"open_orders_policy,omitempty"`
+	PausedAt          Timestamp                   `json:"paused_at"`
+	PausedByActorType AgentPausePausedByActorType `json:"paused_by_actor_type"`
+	Reason            string                      `json:"reason"`
+	ReasonCode        string                      `json:"reason_code"`
+}
+
+// AgentPauseOpenOrdersPolicy defines model for AgentPause.OpenOrdersPolicy.
+type AgentPauseOpenOrdersPolicy string
+
+// AgentPausePausedByActorType defines model for AgentPause.PausedByActorType.
+type AgentPausePausedByActorType string
+
+// AgentRuntime What is actually evaluating and executing, derived from agent runs and from which worker processes this deployment runs. It is not the agent's lifecycle state: an agent can be enabled, correct and evaluated by nothing at all, and NOT_DEPLOYED says exactly that.
+type AgentRuntime struct {
+	Detail        string                `json:"detail"`
+	Evaluator     AgentRuntimeEvaluator `json:"evaluator"`
+	Executor      AgentRuntimeExecutor  `json:"executor"`
+	LastHeartbeat *Timestamp            `json:"last_heartbeat,omitempty"`
+}
+
+// AgentRuntimeEvaluator defines model for AgentRuntime.Evaluator.
+type AgentRuntimeEvaluator string
+
+// AgentRuntimeExecutor defines model for AgentRuntime.Executor.
+type AgentRuntimeExecutor string
+
+// AgentSchedule How often the agent may evaluate. MANUAL carries no interval.
+type AgentSchedule struct {
+	IntervalMinutes *int              `json:"interval_minutes,omitempty"`
+	Kind            AgentScheduleKind `json:"kind"`
+}
+
+// AgentScheduleKind defines model for AgentSchedule.Kind.
+type AgentScheduleKind string
+
 // Asset defines model for Asset.
 type Asset struct {
 	Chain    string `json:"chain"`
@@ -1988,6 +2555,18 @@ type AssetKind string
 
 // AssetStatus defines model for Asset.Status.
 type AssetStatus string
+
+// AuthorityLevel One rung of the authority ladder, rendered from the matrix the code enforces rather than written out beside it. Disabled levels are returned rather than hidden, with the capability each would need.
+type AuthorityLevel struct {
+	Enabled            bool               `json:"enabled"`
+	Level              int                `json:"level"`
+	Name               AuthorityLevelName `json:"name"`
+	RequiredCapability *string            `json:"required_capability,omitempty"`
+	Summary            string             `json:"summary"`
+}
+
+// AuthorityLevelName defines model for AuthorityLevel.Name.
+type AuthorityLevelName string
 
 // BPS Basis points; 10000 == 100%
 type BPS = int
@@ -2096,6 +2675,47 @@ type CapabilityGate struct {
 // CapabilityGateState defines model for CapabilityGate.State.
 type CapabilityGateState string
 
+// CompileResult defines model for CompileResult.
+type CompileResult struct {
+	// AttemptId UUIDv7 in canonical form
+	AttemptId UUID `json:"attempt_id"`
+	AttemptNo int  `json:"attempt_no"`
+
+	// Clarifications What the compiler could not decide. It never guesses.
+	Clarifications *[]string `json:"clarifications,omitempty"`
+	Detail         string    `json:"detail"`
+
+	// FailureCodes Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment has no compiler backend configured, so nothing was attempted and nothing was inferred.
+	FailureCodes *[]string            `json:"failure_codes,omitempty"`
+	Outcome      CompileResultOutcome `json:"outcome"`
+
+	// StrategyId UUIDv7 in canonical form
+	StrategyId UUID             `json:"strategy_id"`
+	Version    *StrategyVersion `json:"version,omitempty"`
+}
+
+// CompileResultOutcome defines model for CompileResult.Outcome.
+type CompileResultOutcome string
+
+// CreateAgentRequest defines model for CreateAgentRequest.
+type CreateAgentRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AuthorityLevel 0 to 3 are the product. 4, 5 and 6 are declared, disabled by policy, and refused with the capability each would need.
+	AuthorityLevel int `json:"authority_level"`
+
+	// Limits The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created.
+	Limits AgentLimits `json:"limits"`
+	Name   string      `json:"name"`
+
+	// StrategyId UUIDv7 in canonical form
+	StrategyId UUID `json:"strategy_id"`
+
+	// StrategyVersionId UUIDv7 in canonical form
+	StrategyVersionId UUID `json:"strategy_version_id"`
+}
+
 // CreateCreditPurchaseRequest Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write.
 type CreateCreditPurchaseRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -2153,6 +2773,17 @@ type CreatePayoutRequest struct {
 
 	// DestinationId UUIDv7 in canonical form
 	DestinationId *UUID `json:"destination_id,omitempty"`
+}
+
+// CreateStrategyRequest defines model for CreateStrategyRequest.
+type CreateStrategyRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Constraints Optional structured bounds stated up front, recorded with the description.
+	Constraints *map[string]interface{} `json:"constraints,omitempty"`
+	Description string                  `json:"description"`
+	Name        string                  `json:"name"`
 }
 
 // CreditBalance The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other.
@@ -3481,6 +4112,59 @@ type StatusChange struct {
 	To            string  `json:"to"`
 }
 
+// Strategy defines model for Strategy.
+type Strategy struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// CompilerConfigured Whether this deployment can compile at all. False means a compile attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR.
+	CompilerConfigured bool             `json:"compiler_configured"`
+	CreatedAt          Timestamp        `json:"created_at"`
+	CurrentVersion     *StrategyVersion `json:"current_version,omitempty"`
+	Description        string           `json:"description"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID               `json:"id"`
+	Name       string             `json:"name"`
+	SourceKind StrategySourceKind `json:"source_kind"`
+	Status     StrategyStatus     `json:"status"`
+	UpdatedAt  *Timestamp         `json:"updated_at,omitempty"`
+}
+
+// StrategySourceKind defines model for Strategy.SourceKind.
+type StrategySourceKind string
+
+// StrategyStatus defines model for Strategy.Status.
+type StrategyStatus string
+
+// StrategyPage defines model for StrategyPage.
+type StrategyPage struct {
+	CompilerConfigured bool       `json:"compiler_configured"`
+	Items              []Strategy `json:"items"`
+	NextCursor         *string    `json:"next_cursor,omitempty"`
+}
+
+// StrategyVersion defines model for StrategyVersion.
+type StrategyVersion struct {
+	BuiltAt   *Timestamp `json:"built_at,omitempty"`
+	EffectSet []string   `json:"effect_set"`
+
+	// HumanReadable The compiled strategy in words, which is what a person reviews before approving it.
+	HumanReadable string `json:"human_readable"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Ir The typed intermediate representation itself.
+	Ir      *map[string]interface{} `json:"ir,omitempty"`
+	IrHash  string                  `json:"ir_hash"`
+	Status  StrategyVersionStatus   `json:"status"`
+	Version int                     `json:"version"`
+}
+
+// StrategyVersionStatus defines model for StrategyVersion.Status.
+type StrategyVersionStatus string
+
 // SubmitIntentRequest defines model for SubmitIntentRequest.
 type SubmitIntentRequest struct {
 	// AccountId UUIDv7 in canonical form
@@ -3726,6 +4410,9 @@ type WithdrawalRequest struct {
 // AccountId UUIDv7 in canonical form
 type AccountId = UUID
 
+// AgentId UUIDv7 in canonical form
+type AgentId = UUID
+
 // AssetId UUIDv7 in canonical form
 type AssetId = UUID
 
@@ -3764,6 +4451,9 @@ type ProductId = UUID
 
 // SessionId UUIDv7 in canonical form
 type SessionId = UUID
+
+// StrategyId UUIDv7 in canonical form
+type StrategyId = UUID
 
 // GetAccountsAccountIdActivityParams defines parameters for GetAccountsAccountIdActivity.
 type GetAccountsAccountIdActivityParams struct {
@@ -3836,6 +4526,24 @@ type PostAdminActionsActionIdDecisionParams struct {
 // PostAdminActionsActionIdDecisionParamsDecision defines parameters for PostAdminActionsActionIdDecision.
 type PostAdminActionsActionIdDecisionParamsDecision string
 
+// GetAdminAgentsParams defines parameters for GetAdminAgents.
+type GetAdminAgentsParams struct {
+	AccountId       *UUID  `form:"account_id,omitempty" json:"account_id,omitempty"`
+	IncludeArchived *bool  `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+	Limit           *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdminAgentsAgentIdPauseJSONBody defines parameters for PostAdminAgentsAgentIdPause.
+type PostAdminAgentsAgentIdPauseJSONBody struct {
+	Reason string `json:"reason"`
+}
+
+// PostAdminAgentsAgentIdPauseParams defines parameters for PostAdminAgentsAgentIdPause.
+type PostAdminAgentsAgentIdPauseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // PostAdminGatesCapabilityActionParams defines parameters for PostAdminGatesCapabilityAction.
 type PostAdminGatesCapabilityActionParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
@@ -3870,6 +4578,28 @@ type PostAdminReconciliationRecordsRecordIdResolveParams struct {
 	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
+
+// GetAgentsParams defines parameters for GetAgents.
+type GetAgentsParams struct {
+	AccountId       UUID   `form:"account_id" json:"account_id"`
+	IncludeArchived *bool  `form:"include_archived,omitempty" json:"include_archived,omitempty"`
+	Limit           *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAgentsParams defines parameters for PostAgents.
+type PostAgentsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentsAgentIdActionParams defines parameters for PostAgentsAgentIdAction.
+type PostAgentsAgentIdActionParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAgentsAgentIdActionParamsAction defines parameters for PostAgentsAgentIdAction.
+type PostAgentsAgentIdActionParamsAction string
 
 // GetAuthCallbackParams defines parameters for GetAuthCallback.
 type GetAuthCallbackParams struct {
@@ -4041,6 +4771,24 @@ type PostPayoutsPayoutIdCancelParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetStrategiesParams defines parameters for GetStrategies.
+type GetStrategiesParams struct {
+	AccountId UUID   `form:"account_id" json:"account_id"`
+	Limit     *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostStrategiesParams defines parameters for PostStrategies.
+type PostStrategiesParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostStrategiesStrategyIdCompileParams defines parameters for PostStrategiesStrategyIdCompile.
+type PostStrategiesStrategyIdCompileParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // PostWebhooksProviderJSONBody defines parameters for PostWebhooksProvider.
 type PostWebhooksProviderJSONBody = map[string]interface{}
 
@@ -4062,6 +4810,9 @@ type PostAdminActionsJSONRequestBody = AdminActionProposal
 // PostAdminActionsActionIdDecisionJSONRequestBody defines body for PostAdminActionsActionIdDecision for application/json ContentType.
 type PostAdminActionsActionIdDecisionJSONRequestBody PostAdminActionsActionIdDecisionJSONBody
 
+// PostAdminAgentsAgentIdPauseJSONRequestBody defines body for PostAdminAgentsAgentIdPause for application/json ContentType.
+type PostAdminAgentsAgentIdPauseJSONRequestBody PostAdminAgentsAgentIdPauseJSONBody
+
 // PostAdminGatesCapabilityActionJSONRequestBody defines body for PostAdminGatesCapabilityAction for application/json ContentType.
 type PostAdminGatesCapabilityActionJSONRequestBody = GateActionRequest
 
@@ -4073,6 +4824,12 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
+
+// PostAgentsJSONRequestBody defines body for PostAgents for application/json ContentType.
+type PostAgentsJSONRequestBody = CreateAgentRequest
+
+// PostAgentsAgentIdActionJSONRequestBody defines body for PostAgentsAgentIdAction for application/json ContentType.
+type PostAgentsAgentIdActionJSONRequestBody = AgentActionRequest
 
 // PostFundingDepositsJSONRequestBody defines body for PostFundingDeposits for application/json ContentType.
 type PostFundingDepositsJSONRequestBody = StartDepositRequest
@@ -4115,6 +4872,9 @@ type PostPayoutsPayoutIdCancelJSONRequestBody PostPayoutsPayoutIdCancelJSONBody
 
 // PostQuotesPreviewJSONRequestBody defines body for PostQuotesPreview for application/json ContentType.
 type PostQuotesPreviewJSONRequestBody = QuotePreviewRequest
+
+// PostStrategiesJSONRequestBody defines body for PostStrategies for application/json ContentType.
+type PostStrategiesJSONRequestBody = CreateStrategyRequest
 
 // PostWebhooksProviderJSONRequestBody defines body for PostWebhooksProvider for application/json ContentType.
 type PostWebhooksProviderJSONRequestBody = PostWebhooksProviderJSONBody
@@ -4160,6 +4920,12 @@ type ServerInterface interface {
 	// PostAdminActionsActionIdDecision Approve or reject a proposed action (approver ≠ proposer; step-up)
 	// (POST /admin/actions/{actionId}/{decision})
 	PostAdminActionsActionIdDecision(w http.ResponseWriter, r *http.Request, actionId UUID, decision PostAdminActionsActionIdDecisionParamsDecision, params PostAdminActionsActionIdDecisionParams)
+	// GetAdminAgents Every account's agents, with owner, authority level, status and limits
+	// (GET /admin/agents)
+	GetAdminAgents(w http.ResponseWriter, r *http.Request, params GetAdminAgentsParams)
+	// PostAdminAgentsAgentIdPause Operator pause of a customer's agent, with a reason
+	// (POST /admin/agents/{agentId}/pause)
+	PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAdminAgentsAgentIdPauseParams)
 	// GetAdminGates Production capability gates for this environment
 	// (GET /admin/gates)
 	GetAdminGates(w http.ResponseWriter, r *http.Request)
@@ -4184,6 +4950,18 @@ type ServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams)
+	// GetAgents Your agents
+	// (GET /agents)
+	GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams)
+	// PostAgents Create an agent from a compiled strategy version, with the authority and limits granted to it
+	// (POST /agents)
+	PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams)
+	// GetAgentsAgentId One agent - authority, limits, budget used, last run and honest runtime state
+	// (GET /agents/{agentId})
+	GetAgentsAgentId(w http.ResponseWriter, r *http.Request, agentId AgentId)
+	// PostAgentsAgentIdAction Enable, pause, resume, disable or archive your own agent
+	// (POST /agents/{agentId}/{action})
+	PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request, agentId AgentId, action PostAgentsAgentIdActionParamsAction, params PostAgentsAgentIdActionParams)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(w http.ResponseWriter, r *http.Request)
@@ -4316,6 +5094,18 @@ type ServerInterface interface {
 	// DeleteSessionsSessionId Revoke one of the caller's sessions
 	// (DELETE /sessions/{sessionId})
 	DeleteSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+	// GetStrategies Your strategies
+	// (GET /strategies)
+	GetStrategies(w http.ResponseWriter, r *http.Request, params GetStrategiesParams)
+	// PostStrategies Describe a strategy in your own words
+	// (POST /strategies)
+	PostStrategies(w http.ResponseWriter, r *http.Request, params PostStrategiesParams)
+	// GetStrategiesStrategyId One strategy and its current compiled version
+	// (GET /strategies/{strategyId})
+	GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request, strategyId StrategyId)
+	// PostStrategiesStrategyIdCompile Compile the description into a reviewable strategy
+	// (POST /strategies/{strategyId}/compile)
+	PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request, strategyId StrategyId, params PostStrategiesStrategyIdCompileParams)
 	// GetVersion Build version and non-secret configuration hash (PART 222)
 	// (GET /version)
 	GetVersion(w http.ResponseWriter, r *http.Request)
@@ -4402,6 +5192,18 @@ func (_ Unimplemented) PostAdminActionsActionIdDecision(w http.ResponseWriter, r
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetAdminAgents Every account's agents, with owner, authority level, status and limits
+// (GET /admin/agents)
+func (_ Unimplemented) GetAdminAgents(w http.ResponseWriter, r *http.Request, params GetAdminAgentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdminAgentsAgentIdPause Operator pause of a customer's agent, with a reason
+// (POST /admin/agents/{agentId}/pause)
+func (_ Unimplemented) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAdminAgentsAgentIdPauseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetAdminGates Production capability gates for this environment
 // (GET /admin/gates)
 func (_ Unimplemented) GetAdminGates(w http.ResponseWriter, r *http.Request) {
@@ -4445,6 +5247,30 @@ func (_ Unimplemented) GetAdminReconciliationRecords(w http.ResponseWriter, r *h
 // PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 // (POST /admin/reconciliation/records/{recordId}/resolve)
 func (_ Unimplemented) PostAdminReconciliationRecordsRecordIdResolve(w http.ResponseWriter, r *http.Request, recordId UUID, params PostAdminReconciliationRecordsRecordIdResolveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAgents Your agents
+// (GET /agents)
+func (_ Unimplemented) GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAgents Create an agent from a compiled strategy version, with the authority and limits granted to it
+// (POST /agents)
+func (_ Unimplemented) PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAgentsAgentId One agent - authority, limits, budget used, last run and honest runtime state
+// (GET /agents/{agentId})
+func (_ Unimplemented) GetAgentsAgentId(w http.ResponseWriter, r *http.Request, agentId AgentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAgentsAgentIdAction Enable, pause, resume, disable or archive your own agent
+// (POST /agents/{agentId}/{action})
+func (_ Unimplemented) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request, agentId AgentId, action PostAgentsAgentIdActionParamsAction, params PostAgentsAgentIdActionParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4698,6 +5524,30 @@ func (_ Unimplemented) GetSessions(w http.ResponseWriter, r *http.Request) {
 // DeleteSessionsSessionId Revoke one of the caller's sessions
 // (DELETE /sessions/{sessionId})
 func (_ Unimplemented) DeleteSessionsSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetStrategies Your strategies
+// (GET /strategies)
+func (_ Unimplemented) GetStrategies(w http.ResponseWriter, r *http.Request, params GetStrategiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostStrategies Describe a strategy in your own words
+// (POST /strategies)
+func (_ Unimplemented) PostStrategies(w http.ResponseWriter, r *http.Request, params PostStrategiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetStrategiesStrategyId One strategy and its current compiled version
+// (GET /strategies/{strategyId})
+func (_ Unimplemented) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request, strategyId StrategyId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostStrategiesStrategyIdCompile Compile the description into a reviewable strategy
+// (POST /strategies/{strategyId}/compile)
+func (_ Unimplemented) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request, strategyId StrategyId, params PostStrategiesStrategyIdCompileParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -5294,6 +6144,119 @@ func (siw *ServerInterfaceWrapper) PostAdminActionsActionIdDecision(w http.Respo
 	handler.ServeHTTP(w, r)
 }
 
+// GetAdminAgents operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdminAgentsParams
+
+	// ------------- Optional query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdminAgentsAgentIdPause operation middleware
+func (siw *ServerInterfaceWrapper) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agentId" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agentId", chi.URLParam(r, "agentId"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agentId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdminAgentsAgentIdPauseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdminAgentsAgentIdPause(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetAdminGates operation middleware
 func (siw *ServerInterfaceWrapper) GetAdminGates(w http.ResponseWriter, r *http.Request) {
 
@@ -5615,6 +6578,199 @@ func (siw *ServerInterfaceWrapper) PostAdminReconciliationRecordsRecordIdResolve
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAdminReconciliationRecordsRecordIdResolve(w, r, recordId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgents operation middleware
+func (siw *ServerInterfaceWrapper) GetAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_archived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_archived", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgents operation middleware
+func (siw *ServerInterfaceWrapper) PostAgents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentsAgentId operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentsAgentId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agentId" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agentId", chi.URLParam(r, "agentId"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agentId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentsAgentId(w, r, agentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAgentsAgentIdAction operation middleware
+func (siw *ServerInterfaceWrapper) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "agentId" -------------
+	var agentId AgentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agentId", chi.URLParam(r, "agentId"), &agentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agentId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "action" -------------
+	var action PostAgentsAgentIdActionParamsAction
+
+	err = runtime.BindStyledParameterWithOptions("simple", "action", chi.URLParam(r, "action"), &action, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAgentsAgentIdActionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAgentsAgentIdAction(w, r, agentId, action, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7217,6 +8373,177 @@ func (siw *ServerInterfaceWrapper) DeleteSessionsSessionId(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// GetStrategies operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetStrategiesParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostStrategies operation middleware
+func (siw *ServerInterfaceWrapper) PostStrategies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostStrategiesParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostStrategies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStrategiesStrategyId operation middleware
+func (siw *ServerInterfaceWrapper) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "strategyId" -------------
+	var strategyId StrategyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "strategyId", chi.URLParam(r, "strategyId"), &strategyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "strategyId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStrategiesStrategyId(w, r, strategyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostStrategiesStrategyIdCompile operation middleware
+func (siw *ServerInterfaceWrapper) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "strategyId" -------------
+	var strategyId StrategyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "strategyId", chi.URLParam(r, "strategyId"), &strategyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "strategyId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostStrategiesStrategyIdCompileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostStrategiesStrategyIdCompile(w, r, strategyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetVersion operation middleware
 func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Request) {
 
@@ -7615,6 +8942,36 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/version", wrapper.GetVersion)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/strategies", wrapper.GetStrategies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/strategies", wrapper.PostStrategies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/strategies/{strategyId}", wrapper.GetStrategiesStrategyId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/strategies/{strategyId}/compile", wrapper.PostStrategiesStrategyIdCompile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/agents", wrapper.GetAgents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/agents", wrapper.PostAgents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/agents/{agentId}", wrapper.GetAgentsAgentId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/agents/{agentId}/{action}", wrapper.PostAgentsAgentIdAction)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/agents", wrapper.GetAdminAgents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/agents/{agentId}/pause", wrapper.PostAdminAgentsAgentIdPause)
 	})
 
 	return r
@@ -8037,6 +9394,112 @@ func (response PostAdminActionsActionIdDecision409ApplicationProblemPlusJSONResp
 	return err
 }
 
+type GetAdminAgentsRequestObject struct {
+	Params GetAdminAgentsParams
+}
+
+type GetAdminAgentsResponseObject interface {
+	VisitGetAdminAgentsResponse(w http.ResponseWriter) error
+}
+
+type GetAdminAgents200JSONResponse AgentPage
+
+func (response GetAdminAgents200JSONResponse) VisitGetAdminAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdminAgents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdminAgents403ApplicationProblemPlusJSONResponse) VisitGetAdminAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPauseRequestObject struct {
+	AgentId AgentId `json:"agentId"`
+	Params  PostAdminAgentsAgentIdPauseParams
+	Body    *PostAdminAgentsAgentIdPauseJSONRequestBody
+}
+
+type PostAdminAgentsAgentIdPauseResponseObject interface {
+	VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error
+}
+
+type PostAdminAgentsAgentIdPause200JSONResponse Agent
+
+func (response PostAdminAgentsAgentIdPause200JSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdminAgentsAgentIdPause403ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdminAgentsAgentIdPause404ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdminAgentsAgentIdPause409ApplicationProblemPlusJSONResponse) VisitPostAdminAgentsAgentIdPauseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetAdminGatesRequestObject struct {
 }
 
@@ -8283,6 +9746,260 @@ func (response PostAdminReconciliationRecordsRecordIdResolve403ApplicationProble
 type PostAdminReconciliationRecordsRecordIdResolve422ApplicationProblemPlusJSONResponse Problem
 
 func (response PostAdminReconciliationRecordsRecordIdResolve422ApplicationProblemPlusJSONResponse) VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsRequestObject struct {
+	Params GetAgentsParams
+}
+
+type GetAgentsResponseObject interface {
+	VisitGetAgentsResponse(w http.ResponseWriter) error
+}
+
+type GetAgents200JSONResponse AgentPage
+
+func (response GetAgents200JSONResponse) VisitGetAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAgents403ApplicationProblemPlusJSONResponse) VisitGetAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsRequestObject struct {
+	Params PostAgentsParams
+	Body   *PostAgentsJSONRequestBody
+}
+
+type PostAgentsResponseObject interface {
+	VisitPostAgentsResponse(w http.ResponseWriter) error
+}
+
+type PostAgents200JSONResponse Agent
+
+func (response PostAgents200JSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents201JSONResponse Agent
+
+func (response PostAgents201JSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAgents403ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgents409ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgents422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgents422ApplicationProblemPlusJSONResponse) VisitPostAgentsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsAgentIdRequestObject struct {
+	AgentId AgentId `json:"agentId"`
+}
+
+type GetAgentsAgentIdResponseObject interface {
+	VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error
+}
+
+type GetAgentsAgentId200JSONResponse Agent
+
+func (response GetAgentsAgentId200JSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsAgentId403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAgentsAgentId403ApplicationProblemPlusJSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAgentsAgentId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAgentsAgentId404ApplicationProblemPlusJSONResponse) VisitGetAgentsAgentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdActionRequestObject struct {
+	AgentId AgentId                             `json:"agentId"`
+	Action  PostAgentsAgentIdActionParamsAction `json:"action"`
+	Params  PostAgentsAgentIdActionParams
+	Body    *PostAgentsAgentIdActionJSONRequestBody
+}
+
+type PostAgentsAgentIdActionResponseObject interface {
+	VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error
+}
+
+type PostAgentsAgentIdAction200JSONResponse Agent
+
+func (response PostAgentsAgentIdAction200JSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAgentsAgentIdAction403ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgentsAgentIdAction404ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgentsAgentIdAction409ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAgentsAgentIdAction422ApplicationProblemPlusJSONResponse) VisitPostAgentsAgentIdActionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -10103,6 +11820,258 @@ func (response DeleteSessionsSessionId404ApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type GetStrategiesRequestObject struct {
+	Params GetStrategiesParams
+}
+
+type GetStrategiesResponseObject interface {
+	VisitGetStrategiesResponse(w http.ResponseWriter) error
+}
+
+type GetStrategies200JSONResponse StrategyPage
+
+func (response GetStrategies200JSONResponse) VisitGetStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategies403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetStrategies403ApplicationProblemPlusJSONResponse) VisitGetStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesRequestObject struct {
+	Params PostStrategiesParams
+	Body   *PostStrategiesJSONRequestBody
+}
+
+type PostStrategiesResponseObject interface {
+	VisitPostStrategiesResponse(w http.ResponseWriter) error
+}
+
+type PostStrategies200JSONResponse Strategy
+
+func (response PostStrategies200JSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies201JSONResponse Strategy
+
+func (response PostStrategies201JSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostStrategies403ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategies409ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategies422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategies422ApplicationProblemPlusJSONResponse) VisitPostStrategiesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategiesStrategyIdRequestObject struct {
+	StrategyId StrategyId `json:"strategyId"`
+}
+
+type GetStrategiesStrategyIdResponseObject interface {
+	VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error
+}
+
+type GetStrategiesStrategyId200JSONResponse Strategy
+
+func (response GetStrategiesStrategyId200JSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetStrategiesStrategyId403ApplicationProblemPlusJSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStrategiesStrategyId404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetStrategiesStrategyId404ApplicationProblemPlusJSONResponse) VisitGetStrategiesStrategyIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompileRequestObject struct {
+	StrategyId StrategyId `json:"strategyId"`
+	Params     PostStrategiesStrategyIdCompileParams
+}
+
+type PostStrategiesStrategyIdCompileResponseObject interface {
+	VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error
+}
+
+type PostStrategiesStrategyIdCompile200JSONResponse CompileResult
+
+func (response PostStrategiesStrategyIdCompile200JSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostStrategiesStrategyIdCompile403ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdCompile404ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdCompile409ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostStrategiesStrategyIdCompile422ApplicationProblemPlusJSONResponse) VisitPostStrategiesStrategyIdCompileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetVersionRequestObject struct {
 }
 
@@ -10244,6 +12213,12 @@ type StrictServerInterface interface {
 	// PostAdminActionsActionIdDecision Approve or reject a proposed action (approver ≠ proposer; step-up)
 	// (POST /admin/actions/{actionId}/{decision})
 	PostAdminActionsActionIdDecision(ctx context.Context, request PostAdminActionsActionIdDecisionRequestObject) (PostAdminActionsActionIdDecisionResponseObject, error)
+	// GetAdminAgents Every account's agents, with owner, authority level, status and limits
+	// (GET /admin/agents)
+	GetAdminAgents(ctx context.Context, request GetAdminAgentsRequestObject) (GetAdminAgentsResponseObject, error)
+	// PostAdminAgentsAgentIdPause Operator pause of a customer's agent, with a reason
+	// (POST /admin/agents/{agentId}/pause)
+	PostAdminAgentsAgentIdPause(ctx context.Context, request PostAdminAgentsAgentIdPauseRequestObject) (PostAdminAgentsAgentIdPauseResponseObject, error)
 	// GetAdminGates Production capability gates for this environment
 	// (GET /admin/gates)
 	GetAdminGates(ctx context.Context, request GetAdminGatesRequestObject) (GetAdminGatesResponseObject, error)
@@ -10268,6 +12243,18 @@ type StrictServerInterface interface {
 	// PostAdminReconciliationRecordsRecordIdResolve Resolve a mismatch (reason + evidence; material resolutions require an approved admin action; corrections post a compensating journal transaction)
 	// (POST /admin/reconciliation/records/{recordId}/resolve)
 	PostAdminReconciliationRecordsRecordIdResolve(ctx context.Context, request PostAdminReconciliationRecordsRecordIdResolveRequestObject) (PostAdminReconciliationRecordsRecordIdResolveResponseObject, error)
+	// GetAgents Your agents
+	// (GET /agents)
+	GetAgents(ctx context.Context, request GetAgentsRequestObject) (GetAgentsResponseObject, error)
+	// PostAgents Create an agent from a compiled strategy version, with the authority and limits granted to it
+	// (POST /agents)
+	PostAgents(ctx context.Context, request PostAgentsRequestObject) (PostAgentsResponseObject, error)
+	// GetAgentsAgentId One agent - authority, limits, budget used, last run and honest runtime state
+	// (GET /agents/{agentId})
+	GetAgentsAgentId(ctx context.Context, request GetAgentsAgentIdRequestObject) (GetAgentsAgentIdResponseObject, error)
+	// PostAgentsAgentIdAction Enable, pause, resume, disable or archive your own agent
+	// (POST /agents/{agentId}/{action})
+	PostAgentsAgentIdAction(ctx context.Context, request PostAgentsAgentIdActionRequestObject) (PostAgentsAgentIdActionResponseObject, error)
 	// GetAssets Registered assets with chain, mint, decimals and safety status
 	// (GET /assets)
 	GetAssets(ctx context.Context, request GetAssetsRequestObject) (GetAssetsResponseObject, error)
@@ -10400,6 +12387,18 @@ type StrictServerInterface interface {
 	// DeleteSessionsSessionId Revoke one of the caller's sessions
 	// (DELETE /sessions/{sessionId})
 	DeleteSessionsSessionId(ctx context.Context, request DeleteSessionsSessionIdRequestObject) (DeleteSessionsSessionIdResponseObject, error)
+	// GetStrategies Your strategies
+	// (GET /strategies)
+	GetStrategies(ctx context.Context, request GetStrategiesRequestObject) (GetStrategiesResponseObject, error)
+	// PostStrategies Describe a strategy in your own words
+	// (POST /strategies)
+	PostStrategies(ctx context.Context, request PostStrategiesRequestObject) (PostStrategiesResponseObject, error)
+	// GetStrategiesStrategyId One strategy and its current compiled version
+	// (GET /strategies/{strategyId})
+	GetStrategiesStrategyId(ctx context.Context, request GetStrategiesStrategyIdRequestObject) (GetStrategiesStrategyIdResponseObject, error)
+	// PostStrategiesStrategyIdCompile Compile the description into a reviewable strategy
+	// (POST /strategies/{strategyId}/compile)
+	PostStrategiesStrategyIdCompile(ctx context.Context, request PostStrategiesStrategyIdCompileRequestObject) (PostStrategiesStrategyIdCompileResponseObject, error)
 	// GetVersion Build version and non-secret configuration hash (PART 222)
 	// (GET /version)
 	GetVersion(ctx context.Context, request GetVersionRequestObject) (GetVersionResponseObject, error)
@@ -10791,6 +12790,66 @@ func (sh *strictHandler) PostAdminActionsActionIdDecision(w http.ResponseWriter,
 	}
 }
 
+// GetAdminAgents operation middleware
+func (sh *strictHandler) GetAdminAgents(w http.ResponseWriter, r *http.Request, params GetAdminAgentsParams) {
+	var request GetAdminAgentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdminAgents(ctx, request.(GetAdminAgentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdminAgents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdminAgentsResponseObject); ok {
+		if err := validResponse.VisitGetAdminAgentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdminAgentsAgentIdPause operation middleware
+func (sh *strictHandler) PostAdminAgentsAgentIdPause(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAdminAgentsAgentIdPauseParams) {
+	var request PostAdminAgentsAgentIdPauseRequestObject
+
+	request.AgentId = agentId
+	request.Params = params
+
+	var body PostAdminAgentsAgentIdPauseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdminAgentsAgentIdPause(ctx, request.(PostAdminAgentsAgentIdPauseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdminAgentsAgentIdPause")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdminAgentsAgentIdPauseResponseObject); ok {
+		if err := validResponse.VisitPostAdminAgentsAgentIdPauseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetAdminGates operation middleware
 func (sh *strictHandler) GetAdminGates(w http.ResponseWriter, r *http.Request) {
 	var request GetAdminGatesRequestObject
@@ -11021,6 +13080,129 @@ func (sh *strictHandler) PostAdminReconciliationRecordsRecordIdResolve(w http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PostAdminReconciliationRecordsRecordIdResolveResponseObject); ok {
 		if err := validResponse.VisitPostAdminReconciliationRecordsRecordIdResolveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgents operation middleware
+func (sh *strictHandler) GetAgents(w http.ResponseWriter, r *http.Request, params GetAgentsParams) {
+	var request GetAgentsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgents(ctx, request.(GetAgentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentsResponseObject); ok {
+		if err := validResponse.VisitGetAgentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAgents operation middleware
+func (sh *strictHandler) PostAgents(w http.ResponseWriter, r *http.Request, params PostAgentsParams) {
+	var request PostAgentsRequestObject
+
+	request.Params = params
+
+	var body PostAgentsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAgents(ctx, request.(PostAgentsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAgents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAgentsResponseObject); ok {
+		if err := validResponse.VisitPostAgentsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgentsAgentId operation middleware
+func (sh *strictHandler) GetAgentsAgentId(w http.ResponseWriter, r *http.Request, agentId AgentId) {
+	var request GetAgentsAgentIdRequestObject
+
+	request.AgentId = agentId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgentsAgentId(ctx, request.(GetAgentsAgentIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgentsAgentId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentsAgentIdResponseObject); ok {
+		if err := validResponse.VisitGetAgentsAgentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAgentsAgentIdAction operation middleware
+func (sh *strictHandler) PostAgentsAgentIdAction(w http.ResponseWriter, r *http.Request, agentId AgentId, action PostAgentsAgentIdActionParamsAction, params PostAgentsAgentIdActionParams) {
+	var request PostAgentsAgentIdActionRequestObject
+
+	request.AgentId = agentId
+	request.Action = action
+	request.Params = params
+
+	var body PostAgentsAgentIdActionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAgentsAgentIdAction(ctx, request.(PostAgentsAgentIdActionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAgentsAgentIdAction")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAgentsAgentIdActionResponseObject); ok {
+		if err := validResponse.VisitPostAgentsAgentIdActionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -12259,6 +14441,118 @@ func (sh *strictHandler) DeleteSessionsSessionId(w http.ResponseWriter, r *http.
 	}
 }
 
+// GetStrategies operation middleware
+func (sh *strictHandler) GetStrategies(w http.ResponseWriter, r *http.Request, params GetStrategiesParams) {
+	var request GetStrategiesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategies(ctx, request.(GetStrategiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategiesResponseObject); ok {
+		if err := validResponse.VisitGetStrategiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostStrategies operation middleware
+func (sh *strictHandler) PostStrategies(w http.ResponseWriter, r *http.Request, params PostStrategiesParams) {
+	var request PostStrategiesRequestObject
+
+	request.Params = params
+
+	var body PostStrategiesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostStrategies(ctx, request.(PostStrategiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostStrategies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostStrategiesResponseObject); ok {
+		if err := validResponse.VisitPostStrategiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStrategiesStrategyId operation middleware
+func (sh *strictHandler) GetStrategiesStrategyId(w http.ResponseWriter, r *http.Request, strategyId StrategyId) {
+	var request GetStrategiesStrategyIdRequestObject
+
+	request.StrategyId = strategyId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStrategiesStrategyId(ctx, request.(GetStrategiesStrategyIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStrategiesStrategyId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStrategiesStrategyIdResponseObject); ok {
+		if err := validResponse.VisitGetStrategiesStrategyIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostStrategiesStrategyIdCompile operation middleware
+func (sh *strictHandler) PostStrategiesStrategyIdCompile(w http.ResponseWriter, r *http.Request, strategyId StrategyId, params PostStrategiesStrategyIdCompileParams) {
+	var request PostStrategiesStrategyIdCompileRequestObject
+
+	request.StrategyId = strategyId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostStrategiesStrategyIdCompile(ctx, request.(PostStrategiesStrategyIdCompileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostStrategiesStrategyIdCompile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostStrategiesStrategyIdCompileResponseObject); ok {
+		if err := validResponse.VisitPostStrategiesStrategyIdCompileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetVersion operation middleware
 func (sh *strictHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	var request GetVersionRequestObject
@@ -12354,273 +14648,331 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -168,6 +168,12 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{payoutId}":     testSessionID,
 		"{paymentId}":    testSessionID,
 		"{productId}":    testOrderID.String(),
+		// The agent surface. `{action}` is shared with the gate route above and
+		// is already mapped; an agent action that is not one of the five is
+		// refused by the handler, and these probes never reach a handler --
+		// authorization answers first, which is what they measure.
+		"{agentId}":    testSessionID,
+		"{strategyId}": testSessionID,
 	}
 
 	requiredQuery := map[string]string{
@@ -177,6 +183,8 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/credits/balance":  "account_id=" + testAccountID.String(),
 		"/v1/payouts":          "account_id=" + testAccountID.String(),
 		"/v1/internal-orders":  "account_id=" + testAccountID.String(),
+		"/v1/agents":           "account_id=" + testAccountID.String(),
+		"/v1/strategies":       "account_id=" + testAccountID.String(),
 	}
 
 	var out []routeProbe

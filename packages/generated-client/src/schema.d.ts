@@ -489,6 +489,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every account's agents, with owner, authority level, status and limits */
+        get: {
+            parameters: {
+                query?: {
+                    account_id?: components["schemas"]["UUID"];
+                    include_archived?: boolean;
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of agents */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AgentPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/agents/{agentId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator pause of a customer's agent, with a reason
+         * @description Writes an agent_pauses row under the OPERATOR reason code and moves the agent to PAUSED, so the owner's own history shows plainly that somebody else stopped it. Open orders are left alone.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    agentId: components["parameters"]["AgentId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        reason: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The agent after the pause */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/gates": {
         parameters: {
             query?: never;
@@ -798,6 +892,182 @@ export interface paths {
                     };
                 };
                 403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your agents */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    include_archived?: boolean;
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of agents */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AgentPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Create an agent from a compiled strategy version, with the authority and limits granted to it
+         * @description The agent is created stopped. Authority levels are 0 research only, 1 recommendation, 2 prepared action a person confirms, 3 rule-based execution inside the limits on this request. Levels 4 to 6 are declared in the architecture, disabled by policy, and refused here with the capability each would need. The budget is a ceiling on Credits at risk; no Credits move when an agent is created.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateAgentRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                /** @description Created, stopped */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One agent - authority, limits, budget used, last run and honest runtime state */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    agentId: components["parameters"]["AgentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Agent */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable, pause, resume, disable or archive your own agent
+         * @description enable moves the agent onto the first rung at which it may be evaluated, needs a recent strong authentication, and for an authority level that acts without a person confirming each action it needs the capability gate that governs agent trading to be active. pause opens a pause record and leaves open orders alone; nothing is ever cancelled implicitly. disable revokes authority and is final. archive only hides a stopped agent.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    action: "enable" | "pause" | "resume" | "disable" | "archive";
+                    agentId: components["parameters"]["AgentId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AgentActionRequest"];
+                };
+            };
+            responses: {
+                /** @description The agent after the action */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Agent"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
             };
         };
@@ -2647,6 +2917,176 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/strategies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your strategies */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of strategies */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StrategyPage"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Describe a strategy in your own words
+         * @description Records what you want, exactly as you wrote it. Nothing is compiled here and nothing is activated: describing a strategy and asking for it to be compiled are two separate acts, because you must see the compiled result before anything can act on your behalf.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateStrategyRequest"];
+                };
+            };
+            responses: {
+                /** @description Idempotent replay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Strategy"];
+                    };
+                };
+                /** @description Recorded */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Strategy"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{strategyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One strategy and its current compiled version */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    strategyId: components["parameters"]["StrategyId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Strategy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Strategy"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/strategies/{strategyId}/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compile the description into a reviewable strategy
+         * @description Every attempt is recorded, successful or not, including an attempt made on a deployment that has no compiler backend configured: that attempt is recorded with outcome MODEL_UNAVAILABLE and the failure code COMPILER_UNAVAILABLE, and no IR is produced. Natural-language text is never turned into financial authority without a compiled strategy the owner has read.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    strategyId: components["parameters"]["StrategyId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The attempt and what it produced, if anything */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CompileResult"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/version": {
         parameters: {
             query?: never;
@@ -2857,6 +3297,89 @@ export interface components {
             target_id: string;
             target_type: string;
         };
+        Agent: {
+            account_id: components["schemas"]["UUID"];
+            archived: boolean;
+            authority: components["schemas"]["AuthorityLevel"];
+            budget: components["schemas"]["AgentBudget"];
+            created_at: components["schemas"]["Timestamp"];
+            granted_at?: components["schemas"]["Timestamp"];
+            granted_by_user_id?: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            last_run_at?: components["schemas"]["Timestamp"];
+            last_run_status?: string;
+            limits: components["schemas"]["AgentLimits"];
+            /** @enum {string} */
+            mode?: "BACKTEST" | "PAPER" | "SHADOW" | "CANARY" | "LIMITED" | "LIVE";
+            name: string;
+            pause?: components["schemas"]["AgentPause"];
+            runs_total?: number;
+            runtime: components["schemas"]["AgentRuntime"];
+            /**
+             * @description The furthest rung of the promotion ladder this agent has reached.
+             * @enum {string}
+             */
+            stage: "DRAFT" | "COMPILED" | "VALIDATED" | "BACKTEST_ELIGIBLE" | "SHADOW" | "CANARY" | "LIMITED" | "LIVE";
+            /** @enum {string} */
+            state: "DRAFT" | "COMPILED" | "VALIDATED" | "BACKTEST_ELIGIBLE" | "SHADOW" | "CANARY" | "LIMITED" | "LIVE" | "PAUSED" | "FAILED" | "REVOKED" | "SUPERSEDED";
+            /**
+             * @description The product's own word for the state, which is what a person is actually asking. STOPPED means created and never enabled; ENABLED means the owner granted it the right to be evaluated, which is not the same as something evaluating it - read runtime for that.
+             * @enum {string}
+             */
+            status: "STOPPED" | "ENABLED" | "PAUSED" | "DISABLED" | "FAILED";
+            strategy_id: components["schemas"]["UUID"];
+            strategy_version_id: components["schemas"]["UUID"];
+            updated_at?: components["schemas"]["Timestamp"];
+        };
+        AgentActionRequest: {
+            reason?: string;
+        };
+        /** @description granted is the ceiling; used is derived from the intents this agent's runs created that reached a state where value is committed. source names where used came from, so a zero is never mistaken for a measurement that was not made. */
+        AgentBudget: {
+            granted_credits: components["schemas"]["Quantity"];
+            /** @enum {string} */
+            source: "NO_RUNS_RECORDED" | "NO_INTENTS_CREATED" | "COMMITTED_INTENTS";
+            used_credits: components["schemas"]["Quantity"];
+        };
+        /** @description The bounds the owner granted. Every Credit figure is an exact integer string of base units; none of them is a currency amount and none is ever a floating-point number. The budget is a ceiling on Credits at risk, not a reservation - no Credits move when an agent is created. */
+        AgentLimits: {
+            allowed_asset_ids: components["schemas"]["UUID"][];
+            budget_credits: components["schemas"]["Quantity"];
+            daily_loss_stop_credits: components["schemas"]["Quantity"];
+            max_position_share_bps: components["schemas"]["BPS"];
+            per_trade_cap_credits: components["schemas"]["Quantity"];
+            schedule: components["schemas"]["AgentSchedule"];
+        };
+        AgentPage: {
+            /** @description Every declared level and whether this build permits it. */
+            authority_levels: components["schemas"]["AuthorityLevel"][];
+            items: components["schemas"]["Agent"][];
+            next_cursor?: string;
+        };
+        AgentPause: {
+            /** @enum {string} */
+            open_orders_policy?: "LEAVE" | "CANCEL_CANCELABLE";
+            paused_at: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            paused_by_actor_type: "USER" | "OPERATOR" | "SYSTEM";
+            reason: string;
+            reason_code: string;
+        };
+        /** @description What is actually evaluating and executing, derived from agent runs and from which worker processes this deployment runs. It is not the agent's lifecycle state: an agent can be enabled, correct and evaluated by nothing at all, and NOT_DEPLOYED says exactly that. */
+        AgentRuntime: {
+            detail: string;
+            /** @enum {string} */
+            evaluator: "NOT_DEPLOYED" | "IDLE" | "RUNNING";
+            /** @enum {string} */
+            executor: "NOT_DEPLOYED" | "IDLE" | "RUNNING";
+            last_heartbeat?: components["schemas"]["Timestamp"];
+        };
+        /** @description How often the agent may evaluate. MANUAL carries no interval. */
+        AgentSchedule: {
+            interval_minutes?: number;
+            /** @enum {string} */
+            kind: "MANUAL" | "INTERVAL";
+        };
         Asset: {
             chain: string;
             decimals: number;
@@ -2872,6 +3395,15 @@ export interface components {
             status: "ACTIVE" | "CLOSE_ONLY" | "RESTRICTED" | "HALTED" | "DELISTING" | "DELISTED";
             symbol: string;
             token_extensions?: string[];
+        };
+        /** @description One rung of the authority ladder, rendered from the matrix the code enforces rather than written out beside it. Disabled levels are returned rather than hidden, with the capability each would need. */
+        AuthorityLevel: {
+            enabled: boolean;
+            level: number;
+            /** @enum {string} */
+            name: "RESEARCH_ONLY" | "RECOMMENDATION" | "PREPARE_TRANSACTION" | "USER_APPROVED_RULE" | "BOUNDED_DISCRETION" | "AUTONOMOUS_SELECTION" | "AUTONOMOUS_PORTFOLIO";
+            required_capability?: string;
+            summary: string;
         };
         /** @description Basis points; 10000 == 100% */
         BPS: number;
@@ -2932,6 +3464,28 @@ export interface components {
             /** @enum {string} */
             state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
         };
+        CompileResult: {
+            attempt_id: components["schemas"]["UUID"];
+            attempt_no: number;
+            /** @description What the compiler could not decide. It never guesses. */
+            clarifications?: string[];
+            detail: string;
+            /** @description Machine-readable reasons. COMPILER_UNAVAILABLE means this deployment has no compiler backend configured, so nothing was attempted and nothing was inferred. */
+            failure_codes?: string[];
+            /** @enum {string} */
+            outcome: "SUCCESS" | "REJECTED" | "NEEDS_CLARIFICATION" | "MODEL_UNAVAILABLE" | "TIMEOUT";
+            strategy_id: components["schemas"]["UUID"];
+            version?: components["schemas"]["StrategyVersion"];
+        };
+        CreateAgentRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description 0 to 3 are the product. 4, 5 and 6 are declared, disabled by policy, and refused with the capability each would need. */
+            authority_level: number;
+            limits: components["schemas"]["AgentLimits"];
+            name: string;
+            strategy_id: components["schemas"]["UUID"];
+            strategy_version_id: components["schemas"]["UUID"];
+        };
         /** @description Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write. */
         CreateCreditPurchaseRequest: {
             account_id: components["schemas"]["UUID"];
@@ -2966,6 +3520,15 @@ export interface components {
             account_id: components["schemas"]["UUID"];
             amount: components["schemas"]["Quantity"];
             destination_id?: components["schemas"]["UUID"];
+        };
+        CreateStrategyRequest: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Optional structured bounds stated up front, recorded with the description. */
+            constraints?: {
+                [key: string]: unknown;
+            };
+            description: string;
+            name: string;
         };
         /** @description The breakdown PART XX requires. gross is every remaining unit; payout_eligible is what the named policy version permits to be withdrawn right now. They are different numbers and the product must never show one where it means the other. */
         CreditBalance: {
@@ -3609,6 +4172,41 @@ export interface components {
             reason: string;
             to: string;
         };
+        Strategy: {
+            account_id: components["schemas"]["UUID"];
+            /** @description Whether this deployment can compile at all. False means a compile attempt will be recorded with COMPILER_UNAVAILABLE and produce no IR. */
+            compiler_configured: boolean;
+            created_at: components["schemas"]["Timestamp"];
+            current_version?: components["schemas"]["StrategyVersion"];
+            description: string;
+            id: components["schemas"]["UUID"];
+            name: string;
+            /** @enum {string} */
+            source_kind: "NATURAL_LANGUAGE" | "TYPESCRIPT_SDK" | "CLONE";
+            /** @enum {string} */
+            status: "ACTIVE" | "ARCHIVED";
+            updated_at?: components["schemas"]["Timestamp"];
+        };
+        StrategyPage: {
+            compiler_configured: boolean;
+            items: components["schemas"]["Strategy"][];
+            next_cursor?: string;
+        };
+        StrategyVersion: {
+            built_at?: components["schemas"]["Timestamp"];
+            effect_set: string[];
+            /** @description The compiled strategy in words, which is what a person reviews before approving it. */
+            human_readable: string;
+            id: components["schemas"]["UUID"];
+            /** @description The typed intermediate representation itself. */
+            ir?: {
+                [key: string]: unknown;
+            };
+            ir_hash: string;
+            /** @enum {string} */
+            status: "COMPILED" | "ACCEPTED" | "REJECTED" | "SUPERSEDED" | "REVOKED";
+            version: number;
+        };
         StreamEvent: {
             data?: {
                 [key: string]: unknown;
@@ -3738,6 +4336,7 @@ export interface components {
     };
     parameters: {
         AccountId: components["schemas"]["UUID"];
+        AgentId: components["schemas"]["UUID"];
         AssetId: components["schemas"]["UUID"];
         Cursor: string;
         DepositId: components["schemas"]["UUID"];
@@ -3752,6 +4351,7 @@ export interface components {
         PayoutId: components["schemas"]["UUID"];
         ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];
+        StrategyId: components["schemas"]["UUID"];
     };
     requestBodies: never;
     headers: never;
