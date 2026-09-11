@@ -167,7 +167,13 @@ export function validatedList<T>(value: readonly unknown[] | undefined, spec: Sp
 
 export const principalSpec: Spec = {
   required: { subject_id: "uuid", actor_type: "string", auth_time: "timestamp" },
-  optional: { step_up_valid_until: "timestamp" },
+  // `profile` and `onboarding` were added to `/me` additively and are absent
+  // for a principal with no profile row, so they are optional here and checked
+  // only for shape. Their contents are validated where they are used, by
+  // `userProfileSpec` and `onboardingSpec`: a principal that arrives without a
+  // usable profile must still sign in, because the screen that fixes it is
+  // behind the session.
+  optional: { step_up_valid_until: "timestamp", profile: "object", onboarding: "object" },
 };
 
 export const accountSpec: Spec = {
@@ -612,3 +618,62 @@ export const payoutRequestSpec: Spec = {
 export function itemsSpec(item: Spec): Spec {
   return { arrays: { items: { required: true, spec: item } } };
 }
+
+/* ---------------------------------------------------------------------------
+ * The product surfaces: profile, onboarding, legal documents, notifications.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The profile is product state, not identity. It carries no e-mail address,
+ * legal name or date of birth — those are sealed in `identity_pii` and this
+ * surface has no route to them — so nothing here needs redacting.
+ */
+export const userProfileSpec: Spec = {
+  required: { user_id: "uuid", locale: "string", time_zone: "string", avatar_seed: "string", created_at: "timestamp" },
+  optional: { display_name: "string", handle: "string", updated_at: "timestamp" },
+};
+
+/**
+ * Onboarding is timestamps, not a state machine (D-053). The steps are
+ * independent, may be done in any order, and cannot be undone, so the client
+ * reads `complete` per step rather than deriving a position in a sequence.
+ */
+export const onboardingSpec: Spec = {
+  required: { started_at: "timestamp", complete: "boolean" },
+  optional: { completed_at: "timestamp", next_step: "string" },
+  arrays: {
+    steps: { required: true, spec: { required: { key: "string", complete: "boolean" }, optional: { completed_at: "timestamp" } } },
+  },
+};
+
+/**
+ * One legal document at one version.
+ *
+ * `body` is optional in the contract and is the thing that matters: the
+ * acceptance record hashes the exact bytes shown, so a screen that asks for an
+ * acceptance must render `body` and nothing else. A document that arrives
+ * without one cannot honestly be accepted, and the terms step says so rather
+ * than substituting text of its own.
+ */
+export const legalDocumentSpec: Spec = {
+  required: {
+    document_id: "string",
+    version: "string",
+    title: "string",
+    content_hash: "string",
+    requirement: "string",
+    counsel_review_required: "boolean",
+    accepted: "boolean",
+  },
+  optional: { body: "string", accepted_at: "timestamp" },
+};
+
+export const termsStateSpec: Spec = {
+  arrays: {
+    documents: { required: true, spec: legalDocumentSpec },
+  },
+};
+
+export const unreadCountSpec: Spec = {
+  required: { count: "integer" },
+};

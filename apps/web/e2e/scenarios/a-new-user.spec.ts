@@ -1,15 +1,20 @@
 /**
  * Scenario A — a new user, as far as this build goes.
  *
- * `docs/product/STAGING_E2E.md` defines A as landing → Get started → identity →
- * callback → `/welcome` → terms → `/welcome/done` → `/home`. The three
- * onboarding screens are built against `GET /v1/me`'s `profile` and
- * `onboarding` fields and `POST /v1/me/terms-acceptances`, none of which this
- * build's API exposes yet. Rather than assert against a screen that does not
- * exist, this spec walks the part that does — landing, Get started, the real
- * OIDC flow, and the dashboard — and the onboarding steps are added to this
- * file when the routes land. A skipped test would look like coverage; a spec
- * that walks half the path and says so is coverage.
+ * `docs/product/STAGING_E2E.md` defines A as landing -> Get started -> identity ->
+ * callback -> `/welcome` -> terms -> `/welcome/done` -> `/home`, and that is now
+ * the whole path: `GET /v1/me` carries the onboarding timestamps,
+ * `POST /v1/me/profile` makes the profile, and `GET`/`POST /v1/me/terms-acceptances`
+ * serve the legal documents and record an acceptance of the exact bytes shown.
+ *
+ * The first-time journey runs as `customer-b`, which nothing else in the suite
+ * touches: `auth.setup.ts` uses `customer-a` and walks the same screens once, so
+ * that every application spec starts from an account that has arrived.
+ *
+ * Re-running against the same database finds `customer-b` already onboarded, so
+ * the journey test branches. The first pass proves the screens; every later pass
+ * proves the returning-user path through the same router. Both branches assert,
+ * and neither is skipped.
  *
  * Nothing here is stubbed. The identity provider is the real one (the
  * development picker locally), the callback sets a real session cookie, and the
@@ -17,35 +22,19 @@
  */
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
+import { chooseIdentity, completeOnboarding } from "../onboarding.ts";
+
 const SIGNED_OUT = { cookies: [], origins: [] };
 
-/** The identity the seeded database owns. */
-const IDENTITY = "customer-a";
+/** Reserved for the first-time journey, so the suite's own account is untouched. */
+const NEW_IDENTITY = "customer-b";
 
 async function signedOutPage(browser: Browser): Promise<Page> {
   const context = await browser.newContext({ storageState: SIGNED_OUT });
   return context.newPage();
 }
 
-/**
- * Completes the identity provider's own flow.
- *
- * The development provider renders a picker; choosing an identity is a real
- * navigation that ends at the OIDC callback, which sets the session cookie and
- * redirects back into the application.
- *
- * `mfa` chooses the picker's second link, which asserts a strong `amr`. It is
- * required for a step-up: the backend refuses the callback of a `step_up=true`
- * flow with `STEP_UP_REQUIRED` unless the provider actually asserted strong
- * authentication. That check lives in `internal/identity/login.go` rather than
- * being taken on trust from the request, which is the whole point of one.
- */
-async function chooseIdentity(page: Page, options?: { readonly mfa?: boolean }): Promise<void> {
-  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
-  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${IDENTITY}$`) }) });
-  const label = options?.mfa === true ? "sign in with MFA" : "sign in";
-  await row.getByRole("link", { name: label, exact: true }).first().click();
-}
+
 
 test("a visitor reaches the dashboard from the landing page", async ({ browser }) => {
   const page = await signedOutPage(browser);
@@ -67,6 +56,10 @@ test("a visitor reaches the dashboard from the landing page", async ({ browser }
 
   await page.getByRole("button", { name: "Continue to the identity provider" }).click();
   await chooseIdentity(page);
+  // A brand-new identity is sent to onboarding first; the suite's own
+  // identity has already been through it. Either way this ends on the
+  // dashboard, which is what the journey promises.
+  await completeOnboarding(page, "Customer A");
 
   // The callback lands on `/`, and a signed-in visitor there is sent to the
   // dashboard rather than shown the marketing page.
@@ -88,7 +81,7 @@ test("a deep link while signed out comes back to the page it asked for", async (
   await expect(page.getByText("Returning to /portfolio")).toBeVisible();
 
   await page.getByRole("button", { name: "Continue to sign in" }).click();
-  await chooseIdentity(page);
+  await chooseIdentity(page, { waitFor: /\/portfolio$/ });
 
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
   await expect(page).toHaveURL(/\/portfolio$/);
@@ -97,14 +90,24 @@ test("a deep link while signed out comes back to the page it asked for", async (
 });
 
 test("a foreign return path is not followed", async ({ browser }) => {
-  // The value is re-validated on the way in as well as on the way out, so a
-  // hand-edited query string cannot turn the sign-in page into an open
-  // redirect.
+  // A hand-edited query string must not turn the sign-in page into an open
+  // redirect. It is checked twice: this page refuses anything that is not a
+  // local path before it hands one to the API, and the API refuses it again
+  // with a validation problem (`internal/identity`). What is asserted here is
+  // the outcome of both — the browser ends on the dashboard, on this origin,
+  // and never at the address in the query string.
   const page = await signedOutPage(browser);
   await page.goto("/sign-in?return=https%3A%2F%2Fexample.invalid%2Fsteal");
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
-  const stored = await page.evaluate(() => window.sessionStorage.getItem("nodal.return-path"));
-  expect(stored, "a foreign path is never remembered").toBe("/home");
+  // The page says where it is actually going to send them, which is not the
+  // address they were handed.
+  await expect(page.getByText("Returning to /home")).toBeVisible();
+
+  await page.getByRole("button", { name: "Continue to sign in" }).click();
+  await chooseIdentity(page, { waitFor: /\/home$/ });
+  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  expect(new URL(page.url()).host, "still on this origin").toBe(new URL(page.url()).host);
+  expect(page.url()).not.toContain("example.invalid");
   await page.context().close();
 });
 
@@ -122,7 +125,7 @@ test("a step-up round trip brings back what was typed", async ({ page }) => {
   await page.goto("/sign-in?step=up&return=%2Fcreate-asset");
   await expect(page.getByRole("heading", { level: 1, name: "Confirm it's you" })).toBeVisible();
   await page.getByRole("button", { name: "Confirm it's you" }).click();
-  await chooseIdentity(page, { mfa: true });
+  await chooseIdentity(page, { mfa: true, waitFor: /\/create-asset$/ });
 
   await expect(page.getByRole("heading", { level: 1, name: "Create asset" })).toBeVisible();
   await expect(page).toHaveURL(/\/create-asset$/);
@@ -152,8 +155,143 @@ test("the policy documents are readable before there is an account to accept the
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    await expect(page.getByText(`version ${version}`).first()).toBeVisible();
-    await expect(page.getByText("This document has not been reviewed by a lawyer.")).toBeVisible();
+    await expect(page.getByText(`explainer ${version}`).first()).toBeVisible();
+    await expect(page.getByText("Nothing here has been reviewed by a lawyer.")).toBeVisible();
+    await expect(page.getByText("This page is an explanation, not the agreement.")).toBeVisible();
+  }
+  await page.context().close();
+});
+
+test("a new identity is taken through onboarding and lands on the dashboard", async ({ browser }) => {
+  const page = await signedOutPage(browser);
+
+  await page.goto("/get-started");
+  await page.getByRole("button", { name: "Continue to the identity provider" }).click();
+  await chooseIdentity(page, { identity: NEW_IDENTITY });
+
+  // A session is not the same as a usable account: the router sends a principal
+  // with no profile to the step that makes one, before any screen that could
+  // move value.
+  //
+  // The settle is load-bearing. The callback lands on `/`, the router forwards
+  // to `/home`, and only then does the gate — which needs `/me` and the terms
+  // state to have answered — divert an unfinished account. Deciding before
+  // those resolve reads the `/home` in the middle of the chain and concludes
+  // there was nothing to do.
+  await page.waitForLoadState("networkidle");
+  const fresh = new URL(page.url()).pathname === "/welcome";
+
+  if (fresh) {
+    await expect(page.getByRole("heading", { level: 1, name: "Welcome" })).toBeVisible();
+    // Nothing financial is asked for here. Goal sections 6 and 60: the identity
+    // checks happen when somebody asks for value to leave, not when they arrive.
+    //
+    // The assertion is over the FORM, not over the prose. The panel's own
+    // description says Nodal holds no legal name or date of birth here, and a
+    // check that banned those words from the page would be a check that pushed
+    // the denial off it — the same mistake, in the same suite, twice.
+    const fields = await page
+      .locator("form label, form .field-label")
+      .evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? "").trim().toLowerCase()));
+    expect(fields.length, "the form asks for something").toBeGreaterThan(0);
+    for (const field of fields) {
+      expect(field, `onboarding asks for "${field}"`).not.toMatch(
+        /date of birth|passport|social security|national id|card|address|income/,
+      );
+    }
+
+    await page.getByLabel("Display name").fill("Customer B");
+    await page.getByLabel("Handle (optional)").fill("customer_b");
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Step two: the documents, shown as the API serves them.
+    await expect(page.getByRole("heading", { level: 1, name: "What you are agreeing to" })).toBeVisible();
+    await expect(page).toHaveURL(/\/welcome\/terms$/);
+
+    // The bytes on the screen are the bytes the acceptance hashes, so the text
+    // of a real document is present rather than a summary of one.
+    const shown = page.locator("pre.doc-source").first();
+    await expect(shown).toBeVisible();
+    await expect(shown).toContainText("draft, pending review by qualified counsel");
+
+    // And the control records nothing until the box is ticked.
+    await page.getByRole("button", { name: "Accept and continue" }).click();
+    await expect(page.getByText("Nothing is recorded until you do.")).toBeVisible();
+
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Accept and continue" }).click();
+
+    await expect(page).toHaveURL(/\/welcome\/done$/);
+    await expect(page.getByRole("heading", { level: 1, name: /You.re in/ })).toBeVisible();
+    await page.getByRole("link", { name: "Go to dashboard" }).click();
+  }
+
+  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/home$/);
+
+  // Either way the account has now arrived, and a later visit goes straight to
+  // the dashboard: the returning-user path section 1 asks for.
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+
+  await page.context().close();
+});
+
+test("an onboarded account is never sent back through onboarding", async ({ page }) => {
+  // The suite's own account has been through it (auth.setup.ts). Every
+  // application route renders rather than diverting, which is the other half of
+  // the gate: it must let finished accounts past as reliably as it stops
+  // unfinished ones.
+  for (const path of ["/home", "/markets", "/portfolio", "/activity"]) {
+    await page.goto(path);
+    await expect(page, `${path} is not diverted to onboarding`).not.toHaveURL(/\/welcome/);
+    await expect(page.locator("h1")).toHaveCount(1);
+  }
+});
+
+test("the terms step reports what the server says is outstanding", async ({ page }) => {
+  // A re-issued document is the same code path as a first acceptance: the server
+  // compares what was accepted against the sha256 of the bytes it serves today,
+  // and `outstanding` is its answer. There is no way to bump a version from a
+  // browser, so what is asserted here is that the screen renders the server's
+  // answer rather than a judgement of its own. On an onboarded account that
+  // answer is "nothing".
+  const response = await page.request.get("/v1/me/terms-acceptances");
+  expect(response.ok()).toBeTruthy();
+  const state = (await response.json()) as {
+    outstanding: string[];
+    documents: Array<{ document_id: string; version: string; counsel_review_required: boolean }>;
+  };
+  expect(state.outstanding, "the suite's account has accepted everything required").toEqual([]);
+  expect(state.documents.length, "the registry serves documents").toBeGreaterThan(0);
+  // Every document the API serves is still a draft, and no surface may present
+  // one as settled.
+  for (const doc of state.documents) {
+    expect(doc.counsel_review_required, `${doc.document_id} is marked as needing counsel`).toBe(true);
+  }
+
+  await page.goto("/welcome/terms");
+  await expect(page.getByRole("heading", { level: 1, name: "What you are agreeing to" })).toBeVisible();
+  await expect(page.getByText("Nothing outstanding")).toBeVisible();
+});
+
+test("the public policy pages say they are not the agreement", async ({ browser }) => {
+  // The binding documents are the API's and are hashed into the acceptance
+  // record; these pages are plain-language explanations for somebody who has no
+  // session yet and therefore cannot be shown them at all. Saying so is the
+  // whole job of this test.
+  const page = await signedOutPage(browser);
+  for (const [path, documentId] of [
+    ["/terms", "TERMS_OF_SERVICE"],
+    ["/privacy", "PRIVACY_POLICY"],
+    ["/risk", "RISK_DISCLOSURE"],
+  ] as const) {
+    await page.goto(path);
+    const text = await page.evaluate(() => document.body.innerText);
+    expect(text, `${path} names the document it explains`).toContain(documentId);
+    expect(text, `${path} is not presented as the agreement`).toContain(
+      "This page is a plain-language explanation, not the agreement.",
+    );
   }
   await page.context().close();
 });

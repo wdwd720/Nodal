@@ -60,8 +60,25 @@ export const APP_ROUTES: readonly RouteUnderTest[] = [
   { path: "/settings", heading: "Settings and security" },
 ];
 
+/**
+ * Onboarding. A session, but not the application shell and not the gate — a
+ * person on these screens has not finished arriving, and the shell's
+ * destinations are the ones the gate would send them back from.
+ *
+ * They are listed apart from `APP_ROUTES` because a check that walks the
+ * application must not walk these: `/welcome` is a form, and `/welcome/terms`
+ * reports whatever the API says is outstanding, which on an onboarded account
+ * is nothing.
+ */
+export const ONBOARDING_ROUTES: readonly RouteUnderTest[] = [
+  { path: "/welcome", heading: "Welcome" },
+  { path: "/welcome/terms", heading: "What you are agreeing to" },
+  // `/welcome/done` greets by display name, so its heading is not fixed and it
+  // is checked by the scenario rather than by the route-list sweeps.
+];
+
 /** Everything, for a check that genuinely applies to every page. */
-export const ALL_ROUTES: readonly RouteUnderTest[] = [...PUBLIC_ROUTES, ...APP_ROUTES];
+export const ALL_ROUTES: readonly RouteUnderTest[] = [...PUBLIC_ROUTES, ...ONBOARDING_ROUTES, ...APP_ROUTES];
 
 /** The widths the design system claims to work at (UI_UX_SYSTEM §8). */
 export const NARROW_WIDTH = 375;

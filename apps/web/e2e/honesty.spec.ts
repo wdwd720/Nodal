@@ -236,3 +236,25 @@ test("no page puts a Credit figure and a currency figure together", async ({ pag
     ).toBeFalsy();
   }
 });
+
+test("the shell says whether this deployment is a rehearsal", async ({ page }) => {
+  // The label comes from `GET /v1/version`, which the client never second-
+  // guesses. Both directions are asserted, because a real deployment wearing a
+  // sandbox label is the same lie as a sandbox deployment without one.
+  const response = await page.request.get("/v1/version");
+  expect(response.ok()).toBeTruthy();
+  const version = (await response.json()) as { sandbox_tier?: boolean };
+
+  await page.goto("/home");
+  await expect(page.locator("h1")).toHaveCount(1);
+  const line = page.locator(".sandbox-line");
+
+  if (version.sandbox_tier === true) {
+    await expect(line).toBeVisible();
+    await expect(line).toContainText("nothing moves real value");
+    // And it is part of the document, not something that can be dismissed.
+    await expect(line.getByRole("button")).toHaveCount(0);
+  } else {
+    await expect(line, "a deployment that is not a sandbox tier wears no sandbox label").toHaveCount(0);
+  }
+});

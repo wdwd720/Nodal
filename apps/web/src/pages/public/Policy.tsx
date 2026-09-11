@@ -25,6 +25,7 @@ import {
   CONTACT_NOTE,
   DRAFT_NOTICE,
   POLICIES,
+  SERVER_DOCUMENT_NOTE,
   policyBySlug,
   type PolicySlug,
 } from "../../content/policies/index.ts";
@@ -54,15 +55,26 @@ export function PolicyPage(props: { readonly slug: PolicySlug }): ReactNode {
       <SitePageHead title={doc.title} lead={doc.summary}>
         <p className="policy-meta mono-small">
           <StatusBadge tone="warn">Draft</StatusBadge>
-          <span>version {doc.id}</span>
-          <span>drafted {doc.drafted}</span>
+          <StatusBadge tone="info">Explains {doc.explains}</StatusBadge>
+          <span>explainer {doc.id}</span>
+          <span>written {doc.drafted}</span>
         </p>
       </SitePageHead>
 
-      <SiteSection title="Before you read it" lead="A statement of fact about this document.">
+      <SiteSection title="Before you read it" lead="Two statements of fact about this page.">
         <div className="policy">
           <Refusal
-            what="This document has not been reviewed by a lawyer."
+            what="This page is an explanation, not the agreement."
+            rule={SERVER_DOCUMENT_NOTE}
+            code={doc.explains}
+            remedy="The document itself is shown in full, and recorded as you accept it, when you create an account."
+          >
+            <p className="refusal-body">
+              <Link to="/get-started">Create an account</Link> to read it.
+            </p>
+          </Refusal>
+          <Refusal
+            what="Nothing here has been reviewed by a lawyer."
             rule={DRAFT_NOTICE}
             code="LEGAL_APPROVED=false"
             remedy="Read it as a description of what the software does. It is not a final agreement and it is not legal advice."
@@ -70,7 +82,7 @@ export function PolicyPage(props: { readonly slug: PolicySlug }): ReactNode {
         </div>
       </SiteSection>
 
-      <SiteSection title={doc.title} lead={`Version ${doc.id}, drafted ${doc.drafted}.`}>
+      <SiteSection title={doc.title} lead={`Explainer ${doc.id}, written ${doc.drafted}. It explains ${doc.explains}.`}>
         <article className="policy">
           {doc.sections.map((section) => (
             <section key={section.heading}>
@@ -88,13 +100,18 @@ export function PolicyPage(props: { readonly slug: PolicySlug }): ReactNode {
             </section>
           ))}
           <section>
-            <h2>Version</h2>
+            <h2>What you actually agree to</h2>
             <p>
-              This is <span className="mono-small">{doc.id}</span>, drafted{" "}
-              <span className="mono-small">{doc.drafted}</span>. A change to these words is a new
-              version with a new identifier, never an edit to this one, because an edited document
-              with an unchanged identifier makes every recorded acceptance a claim about words
-              nobody agreed to.
+              This page is explainer <span className="mono-small">{doc.id}</span>, written{" "}
+              <span className="mono-small">{doc.drafted}</span>. It explains{" "}
+              <span className="mono-small">{doc.explains}</span>, which is a document Nodal serves
+              from its own registry.
+            </p>
+            <p>
+              When you create an account that document is shown in full, and accepting it records
+              its identifier, its version and the exact bytes you were shown. Nothing on this page
+              is recorded, and where this page and that document differ, the document is what was
+              agreed.
             </p>
             <p>{CONTACT_NOTE}</p>
           </section>
@@ -102,12 +119,12 @@ export function PolicyPage(props: { readonly slug: PolicySlug }): ReactNode {
       </SiteSection>
 
       <SiteSection title="The other documents" lead="All three are drafts pending legal review.">
-        <Panel title="Documents" description="What this build asks a new account to acknowledge.">
+        <Panel title="Explainers" description="Nodal serves five legal documents; these three pages explain the ones a new account is asked to accept. The Credits Terms and the Withdrawal and Verification Disclosure are shown in the product, at the points they apply.">
           <ul className="policy-index">
             {POLICIES.map((other) => (
               <li key={other.id}>
                 <Link to={`/${other.slug}`} aria-current={other.id === doc.id ? "page" : undefined}>
-                  {other.title} — {other.id}
+                  {other.title} — explains {other.explains}
                 </Link>
               </li>
             ))}
