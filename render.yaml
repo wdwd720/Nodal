@@ -90,6 +90,13 @@ services:
       # `openssl rand -base64 32`. The database never holds it.
       - key: NODAL_PII_KEYRING
         sync: false
+      # The first operator (ADR-0024): "<issuer>|<subject>=ADMIN", reconciled
+      # into operator_roles at that person's next login and never taken from a
+      # provider claim. The subject is read out of the identity provider by a
+      # person (HUMAN_ACTIONS_QUEUE §5); PROD accepts an empty value or exactly
+      # one ADMIN. Not a secret, but specific to one deployment and one person.
+      - key: CP_AUTH_BOOTSTRAP_OPERATORS
+        sync: false
 
       # --- core ----------------------------------------------------------
       # STAGING, not PROD, and the difference is one thing only: whose money
@@ -99,13 +106,6 @@ services:
       # makes this a rehearsal rather than a launch. Going live is two
       # changes: this value, and every CP_PROVIDER_*_MODE below to `live`
       # with live keys. internal/config refuses any other pairing.
-      # The first operator (ADR-0024): "<issuer>|<subject>=ADMIN", reconciled
-      # into operator_roles at that person's next login and never taken from a
-      # provider claim. The subject is read out of the identity provider by a
-      # person (HUMAN_ACTIONS_QUEUE §5); PROD accepts an empty value or exactly
-      # one ADMIN. Not a secret, but specific to one deployment and one person.
-      - key: CP_AUTH_BOOTSTRAP_OPERATORS
-        sync: false
       - key: CP_ENV
         value: STAGING
       - key: CP_SERVICE_NAME
