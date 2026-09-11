@@ -159,6 +159,15 @@ The audit narrative is in `INDEPENDENT_AUDIT.md`; this is the register.
 | F-133 | P2 | BASELINE | fixed | Expired sessions were never purged: the job existed, was documented as the ops role's, and nothing on any tier ran it |
 | F-134 | P2 | PRODUCTIZATION | fixed | The Go e2e suite could not sign in since F-87; three stale expectations behind it |
 | F-135 | P3 | PRODUCTIZATION | fixed | The chaos purchase world set a platform fee the service overwrites |
+| F-151 | P0 | PRODUCTIZATION | fixed | The pricing policy minted a count of Credits into a field that means base units, so $10 bought 0.001 Credits |
+| F-152 | P1 | PRODUCTIZATION | fixed | A chargeback destroyed whichever lots sorted first and stranded the units it reversed |
+| F-153 | P1 | PRODUCTIZATION | fixed | A failed provider call or an abandoned checkout held the money-at-risk ceiling forever |
+| F-154 | P1 | PRODUCTIZATION | fixed | The sweep that recovers a swallowed provider event had no caller in the deployed topology |
+| F-155 | P2 | PRODUCTIZATION | fixed | A card-network inquiry closing settled a funding before its reversibility window |
+| F-156 | P3 | PRODUCTIZATION | fixed | The reversed balance bucket was returned by the API and rendered nowhere |
+| F-157 | P3 | PRODUCTIZATION | fixed | SandboxPolicy permitted an origin the document it implements says it refuses |
+| F-158 | P3 | PRODUCTIZATION | fixed | The sandbox flag on a purchase was the deployment's mode today, not a recorded fact |
+| F-159 | P3 | PRODUCTIZATION | fixed | The money-at-risk ceiling added in unchecked int64 |
 | F-174 | P2 | PRODUCTIZATION | fixed | The closure cooling-off period was measured against a timestamp the INSERTing role chose, so a row stamped in the future effected a closure inside the wait |
 | F-175 | P2 | PRODUCTIZATION | fixed | The operator directory -- the only source of operator authority -- was freely rewritable by the application role, so a revocation did not stay revoked and a role could be rewritten in place |
 | F-176 | P2 | PRODUCTIZATION | fixed | Both account-lifecycle edge sets existed only in Go: a terminal closure request could be walked back and a CLOSED user reopened |
@@ -7489,6 +7498,109 @@ before creating its product. Commit 2521945.
 
 **Evidence.** TEST_CHAOS: `make chaos` — green on a fresh database.
 
+## F-151 · The pricing policy minted a count of Credits into a field that means base units, so $10 bought 0.001 Credits · PRODUCTIZATION · P0 · FIXED
+
+**Found by** the credits-payments audit of goal §54, reading `internal/credit/pricing.go` against every consumer of the quantity it produces.
+
+`PricingPolicy.creditsFor` returned `minor × CreditsPerMajorUnit / MinorUnitsPerMajorUnit` with no `10^decimals`. `CreditsPerMajorUnit` is a count of whole CREDITS per dollar; a `money.Quantity` is asset BASE UNITS everywhere it appears — `internal/money` documents it, the OpenAPI `Quantity` schema documents it, `credit_fundings.credit_quantity` stores it, the `credit_lots` row holds it and the ledger entry moves it. The CREDIT asset is registered with six decimals (`scripts/seedeconomy`, `cmd/api/sandboxtier.go`, `internal/demo`, `CREDIT_ECONOMY.md` §1), so the shipped policy issued a millionth of what it charged for: $10.00 at 100 Credits per dollar minted 1,000 base units — 0.001 Credits — and `BuyCredits.tsx` rendered "100 Credits per 1 USD" above "0.001000 Credits" without either half being able to see the other was wrong.
+
+Nothing in the system could catch it. Every row agreed with every other row, `VerifyProvenance` reconciled, and `PricingPolicy.Validate`'s own guard — "it would take money and give nothing" — only asks whether the minimum purchase issues a POSITIVE quantity, which 100 base units is. The defect was in the unit, not in the arithmetic between the rows. `internal/payout` had the conversion right in the other direction the whole time (`creditsToMoney`, `moneyToCredits`, both scaled), which is what made the omission legible once the two were read together.
+
+**Fix (D-093).** `PricingPolicy` carries `Decimals`, hashed like every other field so a scale change is a new version; `creditsFor` multiplies by `10^Decimals`. `NewPurchaseService` takes a querier, reads the registered CREDIT asset's scale and refuses to build a service whose policy prices a different one — the check `Validate` cannot make because it never sees a deployment — and `cmd/api` moved its Credit-asset registration above the purchase path so there is something to compare against. `GET /v1/credits/pricing` publishes the whole conversion (`decimals`, `minor_units_per_major_unit`, `rounding`) and `GET /v1/credits/balance` carries `credit_decimals` with its figures, so the browser reads the scale rather than hardcoding six.
+
+**Evidence.** TEST_UNIT: `TestAudit_PricingPolicyIssuesBaseUnitsAsIfACreditHadNoDecimals`, `TestAudit_TheSeededCatalogueIsBuyableAtTheShippedRate`, `TestAudit_PricingValidateSeesTheScaleItPricesAt`, `TestPricingPolicy_TheScaleIsTheAssetsAndNotAConstant`. TEST_INTEGRATION: `TestIntegration_APurchaseServiceRefusesAPolicyAtTheWrongScale`, `TestIntegration_APurchaseMintsWhatTheFundingPagePromised` — $10.00 mints a lot of 1,000,000,000 base units and `VerifyProvenance` holds. STATIC_PROOF: `internal/credit/pricing.go`, `internal/credit/purchase.go`, `apps/web/src/lib/credits.ts`.
+
+## F-152 · A chargeback destroyed whichever lots sorted first and stranded the units it reversed · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit, reading `Service.reverseTo` against `openLotsQuery`'s consumption order.
+
+`reverseTo` computed `covered = min(account balance, lot.Quantity)` and handed it to `Consume` with no `AllowedOrigins` and no lot restriction. `Consume` walks an account's lots in CONSUMPTION order — promotional first, competition reward second, purchased fourth — so the units a chargeback destroyed were whichever lots sorted first, not the lot the chargeback was about. The reversed funding's own lot was then stamped REVERSED with its remaining quantity untouched.
+
+Reproduced against a real database: a 300-unit promotional grant and a 1,000-unit card purchase, nothing spent, chargeback of the purchase. The grant ended at zero, 300 units of the charged-back purchase survived inside a REVERSED lot, and the account was left holding `CREDIT_BALANCE` it could never spend, never withdraw and never clear — while `VerifyProvenance` reconciled perfectly, which is why nothing caught it.
+
+**Fix.** The units a funding minted are in exactly two places: still in its lot, or already spent. `reverseTo` destroys the first (`lot.Remaining`) and books the second (`lot.Quantity − lot.Remaining`) as the existing DEFICIT posting, so it needs no balance read to split them. `ConsumeRequest` gains a `LotIDs` restriction — an origin filter is not enough, because two purchases produce two lots of the same origin — and the reversal asserts it consumed exactly its own lot. A provenance check stands in front of the posting: a lot holding more than the account's `CREDIT_BALANCE` is a reconciliation incident, not something to absorb.
+
+**Evidence.** TEST_INTEGRATION: `TestAudit_ChargebackDestroysTheLotItReverses` (the grant survives, the reversed lot ends at zero, `reversed` is 0 and `spendable` is 300), `TestAudit_ChargebackOfSpentCreditsBooksADeficitAndTakesNoOtherLot` (nothing to destroy, 1,000 owed, the grant untouched). STATIC_PROOF: `internal/credit/funding.go` (`reverseTo`), `repository.go` (`openLotsQuery` `$5`).
+
+## F-153 · A failed provider call or an abandoned checkout held the money-at-risk ceiling forever · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit, following every exit from the pre-capture funding states.
+
+`StartPurchase` commits the funding row in phase 1 — deliberately, so a lost response leaves a record to reconcile against (F-96) — and calls the provider in phase 2. A phase-2 failure returns an error to the caller and leaves a committed row in CREATED with a NULL `provider_reference`. `CREATED` and `AUTHORIZATION_PENDING` are both in `capacity.atRiskFundingStates`, and nothing ever moved a funding out of one: `SettleDue` selects `REVERSIBLE`; the reconciliation sweep's `stale()` required `provider_reference IS NOT NULL` and `Reconcile` returned early for an empty reference anyway; nothing else in the binary wrote CANCELED or FAILED. An abandoned checkout was the same hole reached the ordinary way — the provider reports `requires_payment_method` forever, which maps to an at-risk state, so reconciliation had nothing left to do on every subsequent pass.
+
+Two abandoned $1,000 checkouts exhaust `CP_CAPACITY_MAX_AT_RISK_MINOR=200000` and every honest purchase after them is refused `AT_CAPACITY` with no remedy: F-90's failure — "the deployment would have refused every Credit purchase with AT_CAPACITY, permanently" — reached through a different door.
+
+**Fix.** `PurchaseService.ExpireInFlight` ends a pre-capture funding older than `DefaultInFlightLifetime` (24h) through the real CANCELED transition, run by `cmd/api` on the credit ticker and by `cmd/reconciliation-worker`. It asks the provider first, so a payment that got somewhere is reconciled instead of cancelled, and it cancels the PaymentIntent AT THE PROVIDER before cancelling the funding — a funding marked CANCELED over a live intent is a card that can still be charged against a terminal funding that will never mint. `CancelPurchase` joined `PurchaseProvider` for that reason: without it an unfinished purchase is permanent. `CAPTURE_PENDING` is deliberately not expired — once the provider is processing, cancelling is not ours to do and the money really is at risk.
+
+**Evidence.** TEST_INTEGRATION: `TestAudit_AFailedProviderCreateIsCancelledAndReleasesTheCeiling` (the ceiling recovers and an honest purchase is admitted again), `TestAudit_AnAbandonedCheckoutIsCancelledWithTheProviderAndLeavesTheCeiling` (the PaymentIntent is CANCELED at the provider), `TestAudit_ExpiryNeverCancelsAPaymentTheProviderSaysSucceeded`. STATIC_PROOF: `internal/credit/purchase.go` (`ExpireInFlight`, `preCaptureStates`), `internal/provider/stripecredit/client.go` (`CancelPurchase`), `cmd/api/creditsettle.go` (`expireOnce`).
+
+## F-154 · The sweep that recovers a swallowed provider event had no caller in the deployed topology · PRODUCTIZATION · P1 · FIXED
+
+**Found by** the same audit: `grep -rn "\.Reconcile(" cmd/ internal/` named only `cmd/reconciliation-worker`, and `render.yaml` declares two services, both `type: web`, neither of them that worker.
+
+The window is real. `StartPurchase` commits the provider reference in phase 3, AFTER the provider call returns, and a provider can deliver `payment_intent.succeeded` before that commit lands. An event naming a reference no funding holds is `Ignored`, the webhook pipeline records the event id as processed, and the provider's redelivery of the same event id is answered `Duplicate` and never reaches `Dispatch` again. `Reconcile` is the recovery and it was the only one — `cmd/api` deliberately runs `SettleDue` itself for exactly this reason ("the launch tier has no worker tier", F-90) and did not run `Reconcile`. So on the deployed tier a card was charged and no Credits were ever minted.
+
+The listing the recovery depended on made it worse: `stale()` required `provider_reference IS NOT NULL`, which excludes precisely the fundings a crash between phases leaves behind.
+
+**Fix.** `PurchaseService.ReconcileDue` moves the sweep's discipline into the package that owns the state machine — one transaction per funding with the provider call outside it (F-27), rows taken `FOR UPDATE SKIP LOCKED`, idempotent — and `cmd/api` runs it beside `runCreditSettlement` on the same ticker. The provider-reference filter is gone; the listing measures staleness from `created_at`, because `updated_at` is trigger-maintained and any unrelated write would restart it, the same reasoning `SettleDue` gives for measuring from `reversible_at`. `cmd/reconciliation-worker` calls the same method, so the two tiers cannot drift.
+
+**Evidence.** TEST_INTEGRATION: `TestAudit_ASwallowedSucceededEventIsRecoveredByTheInProcessPass` (the funding mints, and a second pass mints nothing more), `TestAudit_TheInFlightListingDoesNotSkipFundingsWithNoProviderReference`. TEST_UNIT: `test/reachability` — `internal/credit.Reconcile` now names its deployment caller instead of failing. STATIC_PROOF: `cmd/api/creditsettle.go` (`reconcileOnce`), `internal/credit/purchase.go` (`InFlightFundings`, `ReconcileDue`).
+
+## F-155 · A card-network inquiry closing settled a funding before its reversibility window · PRODUCTIZATION · P2 · FIXED
+
+**Found by** the same audit, reading `stripecredit.disputeStatus` against `FundingStateFor`.
+
+`charge.dispute.closed` with status `warning_closed` — the close of an early-fraud-warning INQUIRY — mapped to `PurchaseDisputeWon`, which mapped to `FundingSettled`. `SettleFunding` promoted the lot REVERSIBLE → SETTLED, which is what `FundingFinality.PayoutEligible()` reads. Stripe's documentation is explicit that an inquiry is not a dispute and that a chargeback may still follow one; the adapter's own comment agreed — "an early-warning notice that closed without becoming a dispute". So the money was exactly as reversible as it had been before the notice arrived, and the funding was now in the state `FundingState` documents as "the money is ours", that `internal/capacity` stops counting as money at risk, and that `CREDIT_ECONOMY.md` calls final.
+
+`ManualResolution` refuses to let an operator assert SETTLED for precisely this reason — "an operator who could assert it by hand could make value payout-eligible by closing a ticket". A card network inquiry could.
+
+**Fix (D-094).** `warning_closed` becomes its own status, `PurchaseDisputeLifted`, and both it and `PurchaseDisputeWon` map to `FundingReversible`: winning a dispute is evidence the money is ours, not the fact SETTLED records, which is that the window CLOSED. `DISPUTED → REVERSIBLE` joins the transition table and `apply` unfreezes the lot with it. 00743's trigger coalesces `reversible_at`, so the funding returns to the window it was already in rather than restarting it, and `SettleDue` is the only thing left that settles anything.
+
+**Evidence.** TEST_INTEGRATION: `TestAudit_AnInquiryThatClosesUnfreezesTheFundingAndDoesNotSettleIt` (payout-eligible 0, spendable restored, `settled_at` nil, `reversible_at` unchanged), `TestAudit_AWonDisputeReturnsTheFundingToItsWindowRatherThanSettlingIt` (and a second dispute is still representable). TEST_UNIT: `stripecredit` dispute-status table. STATIC_PROOF: `internal/credit/purchaseprovider.go`, `internal/credit/funding.go` (`UnfreezeFunding`).
+
+## F-156 · The reversed balance bucket was returned by the API and rendered nowhere · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, comparing `credit.Balances` against every page that renders it.
+
+`GET /v1/credits/balance` and `GET /v1/me/portfolio` return `reversed` — units whose funding was clawed back and which still have remaining quantity recorded, which `types.go` says "should be transient and is worth surfacing when it is not". `Home.tsx` and `Portfolio.tsx` built their segmented bar from `[spendable, frozen]` over `total = gross`, and no page rendered the figure at all. Under F-152 that bucket held every stranded unit a chargeback left behind, so the one number that would have made the P1 visible on screen was the one number the interface dropped — and `SegmentedBar` drew short and said nothing, because segments that do not reach their total were simply not drawn.
+
+**Fix.** Home and Portfolio render `reversed` as a third segment, and as a field when it is not zero, with the sentence "Removed after a payment was reversed. Not spendable and not withdrawable." `SegmentedBar` draws whatever its segments do not account for as a labelled "Not accounted for" part, in exact integer arithmetic, so the next bucket a caller forgets is visible rather than silently missing. The difference is computed in `lib/credits.ts` (`unaccountedBaseUnits`) rather than in the component, where the source guards keep money arithmetic out.
+
+**Evidence.** TEST_UNIT: `apps/web/src/lib/credits.test.ts` — "a segmented bar's parts either reach its whole or the difference is visible", including the exact F-152 shape (gross 300, parts 0 and 0) and refusing to draw parts that overshoot their whole. STATIC_PROOF: `apps/web/src/components/SegmentedBar.tsx`, `apps/web/src/pages/home/Home.tsx`, `apps/web/src/pages/portfolio/Portfolio.tsx`, `openapi/openapi.yaml` (`reversed` now required on `CreditBalance`).
+
+## F-157 · SandboxPolicy permitted an origin the document it implements says it refuses · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, holding `valuedomain.SandboxPolicy` against `CREDIT_ECONOMY.md` §4.
+
+The section states that `SandboxPolicy` "permits PURCHASED and the five earning origins once the account reaches PAYOUT_KYC, and refuses PROMOTIONAL, REFUND, ADMIN_ADJUSTMENT and PROVIDER_SETTLEMENT outright", and draws the conclusion the whole section rests on: "A granted Credit that could leave the system would be the first rule somebody copied." That is six permitted origins. The policy permitted seven. `COMPETITION_REWARD` — "a prize or reward from a platform competition", not `EarnedByUser()`, nobody paid for it and nobody earned it — was withdrawable, which gives a platform a payout path whose only gate is a competition it runs itself.
+
+`TestSandboxPolicy` could not see it: it asserted three permitted origins and four closed ones out of eleven, so the other four could be anything.
+
+**Fix (D-095).** `COMPETITION_REWARD` is closed, beside the other four grants. `TestSandboxPolicy` asserts over every origin, and `internal/eligibility`'s per-origin explanation reports `ORIGIN_NOT_WITHDRAWABLE` for it. Nothing in this build issues a `COMPETITION_REWARD` lot, so no held value changes.
+
+**Evidence.** TEST_UNIT: `TestAudit_SandboxPolicyPermitsOnlyTheOriginsTheDocumentLists` (permits exactly the documented six), `TestSandboxPolicy`, `TestExplainWithdrawal_TheSandboxPolicyPerOrigin`. STATIC_PROOF: `internal/valuedomain/sandboxpolicy.go`.
+
+## F-158 · The sandbox flag on a purchase was the deployment's mode today, not a recorded fact · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, tracing `CreditPurchase.sandbox` back to its source.
+
+`toAPICreditPurchase` rendered it from `httpapi.Options.CreditPurchaseSandbox`, a boolean `cmd/api` computed once at startup from `cfg.Providers.CreditPurchase.Mode`. Every funding the endpoint returned carried that same value, including ones opened months earlier under a different mode. It answered "what mode is this deployment in now" to a question that asks "was this payment real", and the direction that costs is the cheap one: a deployment promoted from sandbox to live re-labels every sandbox purchase it ever made as real value — in the API, and in the browser, where `BuyCredits.tsx` picks the ECONOMY rather than SIMULATED temperature from it. A sandbox outcome has to be labelled sandbox everywhere it is stored and shown, and a label recomputed from today's configuration is not stored at all.
+
+**Fix (D-096).** Migration 00793 adds `credit_fundings.provider_mode`, written once at `CreateFunding` from the mode that opened the payment and write-once by privilege (00743 left `cp_app` no UPDATE that could reach it). `CreateFundingRequest.Validate` refuses a request without a mode. `Dispatch` cross-checks the recorded mode against the provider snapshot's `livemode` on every event and parks a disagreement for a person — the check that had nothing to compare against before. A funding with no recorded mode predates the column and renders as sandbox: an unrecorded mode cannot be asserted to be real money. `Options.CreditPurchaseSandbox` is gone.
+
+**Evidence.** TEST_UNIT: `TestCreditPurchaseCarriesItsTemperature` (three modes plus the unrecorded case), `TestCreateFundingRequest_Validate`. TEST_INTEGRATION: `test/integration/enums` pairs `credit_fundings_provider_mode_check` with `credit.AllProviderModes()`; `test/integration/migrations` green on 00793. STATIC_PROOF: `migrations/00793_a_funding_records_the_mode_that_opened_its_payment.sql`, `internal/httpapi/handlers_credits.go`.
+
+## F-159 · The money-at-risk ceiling added in unchecked int64 · PRODUCTIZATION · P3 · FIXED
+
+**Found by** the same audit, reading `capacity.Guard.AdmitAmount`.
+
+It computed `after := r.AtRiskMinor + amountMinor` in int64 and refused only when `after > MaxAtRiskMinor`. The sum is unchecked, so an amount near `math.MaxInt64` wraps negative, the comparison passes, and the guard whose entire job is to answer "what could this deployment owe after the action" answers with a number below zero.
+
+It was inert only because `internal/credit` calls the guard BEFORE pricing and `PricingPolicy.CreditsFor` then refuses the amount for exceeding `MaxAmountMinor`. The order of those two calls was the only thing between that arithmetic and a ceiling that could be stepped over, and the guard itself refused nothing.
+
+**Fix.** The comparison is headroom — `amountMinor > MaxAtRiskMinor − AtRiskMinor` — which cannot overflow for any non-negative amount, and which refuses everything when a tier is already past its cap. `POST /v1/payments` bounds `amount_minor` against the maximum `GET /v1/credits/pricing` publishes before any guard measures anything against it, so the guard no longer depends on its caller having done so.
+
+**Evidence.** TEST_UNIT: `TestAudit_AdmitAmountRefusesAnAmountThatWouldOverflowTheSum` (`math.MaxInt64` is refused `AT_CAPACITY`; the headroom boundary still decides the ordinary cases), `TestAudit_AGuardAlreadyPastItsCeilingRefusesEveryAmount`. STATIC_PROOF: `internal/capacity/capacity.go`, `internal/httpapi/handlers_credits.go`.
 ## F-174 · A cooling-off period was measured against a timestamp its caller chose · PRODUCTIZATION · P2 · FIXED
 
 **Found by** the accounts-auth adversarial audit (goal §54), reproduced by

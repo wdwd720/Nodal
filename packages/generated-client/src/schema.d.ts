@@ -5088,6 +5088,11 @@ export interface components {
             by_origin?: {
                 [key: string]: components["schemas"]["Quantity"];
             };
+            /**
+             * @description The scale of the CREDIT asset every quantity in this response is expressed in. One Credit is 10^credit_decimals base units. It is carried with the figures because a client that has to assume the scale is a client that can render a balance a million times wrong.
+             * @example 6
+             */
+            credit_decimals: number;
             frozen: components["schemas"]["Quantity"];
             gross: components["schemas"]["Quantity"];
             ineligible: components["schemas"]["Quantity"];
@@ -5096,7 +5101,8 @@ export interface components {
             payout_eligible: components["schemas"]["Quantity"];
             policy_hash?: string;
             policy_version: string;
-            reversed?: components["schemas"]["Quantity"];
+            /** @description Units whose funding was clawed back and which still have remaining quantity recorded. It should be transient, and it is returned so that it is visible when it is not. */
+            reversed: components["schemas"]["Quantity"];
             spendable: components["schemas"]["Quantity"];
         };
         /**
@@ -5104,15 +5110,23 @@ export interface components {
          * @enum {string}
          */
         CreditOrigin: "PURCHASED" | "PROMOTIONAL" | "REFUND" | "CREATOR_EARNING" | "DATA_SALE_EARNING" | "AGENT_SERVICE_EARNING" | "MARKET_CREATOR_EARNING" | "MARKET_TRADING_PROCEEDS" | "COMPETITION_REWARD" | "ADMIN_ADJUSTMENT" | "PROVIDER_SETTLEMENT";
-        /** @description The versioned policy that converts money into Credits. version is recorded on every purchase, so a purchase made under one rate is still explicable after two more have replaced it. */
+        /** @description The versioned policy that converts money into Credits. version is recorded on every purchase, so a purchase made under one rate is still explicable after two more have replaced it.
+         *
+         *     Every term of the conversion is published, because a client that has credits_per_major_unit and nothing else cannot compute what it is about to be charged for: the quantity the server issues is `amount_minor * credits_per_major_unit * 10^decimals / minor_units_per_major_unit`, rounded as `rounding` says. Publishing only the rate is what let a page render "100 Credits per 1 USD" over a server that issued a millionth of that. */
         CreditPricing: {
             /**
              * Format: int64
+             * @description Whole Credits one major unit of currency buys.
              * @example 100
              */
             credits_per_major_unit: number;
             /** @example USD */
             currency: string;
+            /**
+             * @description The scale of the CREDIT asset this policy prices, and the scale every Credit quantity in this API is expressed in. One Credit is 10^decimals base units.
+             * @example 6
+             */
+            decimals: number;
             /**
              * Format: int64
              * @example 1000000
@@ -5123,6 +5137,18 @@ export interface components {
              * @example 100
              */
             min_amount_minor: number;
+            /**
+             * Format: int64
+             * @description 100 for USD. Stated rather than assumed, so a zero-decimal currency does not silently multiply by 100.
+             * @example 100
+             */
+            minor_units_per_major_unit: number;
+            /**
+             * @description How a payment that does not divide evenly into whole base units is resolved.
+             * @example down
+             * @enum {string}
+             */
+            rounding: "down" | "up" | "half_even" | "half_up" | "floor" | "ceil" | "exact";
             /** @example credit-pricing-v1 */
             version: string;
         };
@@ -5139,13 +5165,18 @@ export interface components {
             failure_reason?: string;
             pricing_version: string;
             provider: string;
+            /**
+             * @description The provider mode that opened THIS payment, recorded on it when it was created. It is absent for a purchase made before the mode was recorded, which is rendered as sandbox rather than as live: an unrecorded mode cannot be asserted to be real money.
+             * @enum {string}
+             */
+            provider_mode?: "fake" | "sandbox" | "live";
             purchase_id: components["schemas"]["UUID"];
             /**
              * Format: date-time
              * @description When the reversibility window opened. The settlement window is measured from here.
              */
             reversible_at?: string;
-            /** @description True when the provider this purchase runs through is not a live one: the card was a test card and the Credits it mints are sandbox value. The UI renders such a figure at the simulated temperature and says so; the flag is the deployment's provider mode, not a claim about the person. */
+            /** @description True when the provider this purchase ran through was not a live one: the card was a test card and the Credits it mints are sandbox value. The UI renders such a figure at the simulated temperature and says so; it is a fact about the payment, not a claim about the person, and not the deployment's mode today -- rendering it from today's configuration re-labelled every sandbox purchase a deployment had ever made on the day it went live. */
             sandbox?: boolean;
             /** Format: date-time */
             settled_at?: string;

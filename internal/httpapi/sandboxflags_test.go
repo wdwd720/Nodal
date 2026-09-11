@@ -31,12 +31,26 @@ func TestVersionSaysWhetherThisIsASandboxTier(t *testing.T) {
 	}
 }
 
+// The temperature comes from the mode that opened the payment, recorded on the
+// funding row, and not from the deployment's current configuration (F-158).
 func TestCreditPurchaseCarriesItsTemperature(t *testing.T) {
 	t.Parallel()
-	f := credit.Funding{ID: credit.NewFundingID(), AccountID: testAccountID, State: credit.FundingCaptured, Provider: "stripe_credit"}
-	for _, sandbox := range []bool{false, true} {
-		out := toAPICreditPurchase(f, sandbox)
-		require.NotNil(t, out.Sandbox)
-		assert.Equal(t, sandbox, *out.Sandbox)
+	base := credit.Funding{ID: credit.NewFundingID(), AccountID: testAccountID, State: credit.FundingCaptured, Provider: "stripe_credit"}
+	for mode, sandbox := range map[string]bool{"fake": true, "sandbox": true, "live": false} {
+		f := base
+		f.ProviderMode = mode
+		out := toAPICreditPurchase(f)
+		require.NotNil(t, out.Sandbox, mode)
+		assert.Equal(t, sandbox, *out.Sandbox, mode)
+		require.NotNil(t, out.ProviderMode, mode)
+		assert.Equal(t, mode, string(*out.ProviderMode), "the recorded fact is published, not only its interpretation")
 	}
+
+	// A funding written before 00793 recorded no mode. It is rendered as
+	// sandbox: an unrecorded mode cannot be asserted to be real money, and
+	// over-labelling value as simulated is the safe direction of that mistake.
+	out := toAPICreditPurchase(base)
+	require.NotNil(t, out.Sandbox)
+	assert.True(t, *out.Sandbox)
+	assert.Nil(t, out.ProviderMode, "and the API does not invent a mode it was never told")
 }

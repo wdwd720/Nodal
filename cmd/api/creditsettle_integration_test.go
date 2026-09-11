@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/clock"
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
@@ -19,7 +20,33 @@ import (
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/ledger"
+	"github.com/nodal/controlplane/internal/valuedomain"
 )
+
+// theCreditAsset registers the deployment's single CREDIT asset, or returns the
+// one already there.
+//
+// The purchase service needs it: since F-151 it compares the scale its pricing
+// policy prices at against the scale of the asset the deployment registered,
+// and refuses to build when they disagree. Migration 00711 permits exactly one,
+// so this is get-or-create rather than create.
+func theCreditAsset(t *testing.T, d *db.DB) assets.AssetID {
+	t.Helper()
+	ctx := context.Background()
+	var existing assets.AssetID
+	if err := d.QueryRow(ctx, `SELECT id FROM assets WHERE kind = 'CREDIT'`).Scan(&existing); err == nil {
+		return existing
+	}
+	created, err := assets.NewRepository().Create(ctx, d, assets.Asset{
+		Chain: assets.InternalChain, Kind: assets.KindCredit,
+		ValueDomain: valuedomain.InternalCredit,
+		Symbol:      "CREDIT", Name: "Nodal Credit",
+		Decimals:  uint8(credit.DefaultCreditDecimals),
+		RiskClass: assets.RiskUnsupported, Status: assets.StatusActive,
+	})
+	require.NoError(t, err)
+	return created.ID
+}
 
 // The sandbox tier's settlement window against the real table (D-086).
 //
@@ -75,7 +102,8 @@ func TestIntegration_ASandboxTierSettlesInMinutesAndAChargebackWindowDoesNot(t *
 	acct, err := repo.CreateAccount(ctx, d, user.ID, accounts.KindCustomer)
 	require.NoError(t, err)
 
-	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
+	require.False(t, theCreditAsset(t, d).IsZero())
+	svc, err := credit.NewPurchaseService(ctx, d, credit.PurchaseServiceConfig{
 		Credits: credit.NewService(ledger.NewService(clk, "settle-itest"), clk),
 		// SettleDue touches neither of these -- it is one bounded UPDATE over
 		// rows whose window has closed -- but the constructor requires both,
@@ -83,6 +111,7 @@ func TestIntegration_ASandboxTierSettlesInMinutesAndAChargebackWindowDoesNot(t *
 		// would be one that could sell Credits without one.
 		Provider: settleTestProvider{}, Gates: settleTestGate{},
 		Pricing: credit.DefaultPricingPolicy(), Clock: clk, Environment: "TEST",
+		ProviderMode: "fake",
 	})
 	require.NoError(t, err)
 
@@ -147,6 +176,10 @@ func (settleTestProvider) CreatePurchase(context.Context, credit.CreatePurchaseR
 
 func (settleTestProvider) GetPurchase(context.Context, string) (credit.PurchaseSnapshot, error) {
 	panic("the settlement sweep must not call the provider")
+}
+
+func (settleTestProvider) CancelPurchase(context.Context, string, string) (credit.PurchaseSnapshot, error) {
+	panic("the settlement sweep must not cancel a payment")
 }
 
 func (settleTestProvider) ParseWebhook(context.Context, []byte, http.Header) (credit.PurchaseEvent, error) {

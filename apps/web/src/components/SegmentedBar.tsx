@@ -14,10 +14,21 @@
  *
  * TWO RULES ABOUT THE ARITHMETIC.
  *
- * First, this component NEVER SUMS. The backend computes; the interface
- * formats. The whole is a figure the caller must take from the same response
- * the parts came from, and if it is absent the bar shows relative proportions
- * and says so rather than inventing a denominator.
+ * First, this component NEVER SUMS INTO A FIGURE IT PRESENTS AS A BALANCE. The
+ * backend computes; the interface formats. The whole is a figure the caller
+ * must take from the same response the parts came from, and if it is absent the
+ * bar shows relative proportions and says so rather than inventing a
+ * denominator.
+ *
+ * It does subtract, in one place and for one reason. A bar whose segments do
+ * not reach its own total used to draw short and say nothing, so a bucket the
+ * API returned and the caller forgot to pass simply vanished from the picture
+ * — which is what happened to the `reversed` balance: returned by
+ * `GET /v1/credits/balance`, rendered by no page, and therefore able to be
+ * wrong forever without anybody seeing it. The unaccounted part is now drawn,
+ * in exact integer arithmetic, labelled as unaccounted rather than as anything
+ * the holder has, and the legend says the response is the authority. A caller
+ * that passes every bucket never sees it.
  *
  * Second, the widths are GEOMETRY, not finance. They are handed to the browser
  * as flex ratios of the exact base-unit strings, so nothing here divides. The
@@ -30,6 +41,7 @@
  */
 import type { ReactNode } from "react";
 
+import { unaccountedBaseUnits } from "../lib/credits.ts";
 import { fromBaseUnits, percentOfTotal } from "../lib/format.ts";
 import { Figure } from "./Figure.tsx";
 
@@ -81,8 +93,26 @@ export function SegmentedBar(props: {
    */
   readonly total?: string;
 }): ReactNode {
-  const empty = isAllZero(props.segments);
-  const description = props.segments
+  const rest = unaccountedBaseUnits(
+    props.segments.map((segment) => segment.baseUnits),
+    props.total,
+  );
+  const segments: readonly Segment[] =
+    rest === undefined
+      ? props.segments
+      : [
+          ...props.segments,
+          {
+            key: "unaccounted",
+            label: "Not accounted for",
+            baseUnits: rest,
+            explanation:
+              "Part of the total that none of the parts above covers. The response is the authority on both; this is the difference, shown rather than hidden.",
+            texture: "sparse",
+          },
+        ];
+  const empty = isAllZero(segments);
+  const description = segments
     .map((segment) => `${describe(segment, props.total)}: ${fromBaseUnits(segment.baseUnits, props.scale)}`)
     .join("; ");
 
@@ -98,7 +128,7 @@ export function SegmentedBar(props: {
         }
       >
         {!empty &&
-          props.segments.map((segment) => (
+          segments.map((segment) => (
             <span
               key={segment.key}
               className={`segment ${TEXTURE_CLASS[segment.texture]}`}
@@ -107,7 +137,7 @@ export function SegmentedBar(props: {
           ))}
       </div>
       <ul className="segbar-legend">
-        {props.segments.map((segment) => (
+        {segments.map((segment) => (
           <li key={segment.key}>
             <span className={`segbar-swatch ${TEXTURE_CLASS[segment.texture]}`} aria-hidden="true" />
             <span className="eyebrow">{segment.label}</span>

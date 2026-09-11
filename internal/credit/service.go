@@ -32,6 +32,10 @@ type Service struct {
 	// only ever be one (migration 00711's partial unique index), so caching it
 	// cannot go stale in a way that matters.
 	assetID assets.AssetID
+	// decimals is that asset's scale, cached beside it and for the same
+	// reason: a lot's quantity is a count of base units, and an asset's
+	// decimals is immutable once registered.
+	decimals uint8
 }
 
 // NewService returns a Service. Neither argument may be nil.
@@ -65,6 +69,35 @@ func (s *Service) AssetID(ctx context.Context, q db.Querier) (assets.AssetID, er
 	}
 	s.assetID = got
 	return got, nil
+}
+
+// AssetDecimals returns the scale of the registered CREDIT asset.
+//
+// Every Credit figure this package stores, returns and posts is an integer
+// count of that asset's BASE UNITS. Anything that has to turn a count of whole
+// Credits into one of those figures -- a pricing policy, a payout quote, a
+// browser rendering a balance -- needs this number, and every place that
+// assumed it was six instead of reading it was a place that could be wrong
+// about money (F-151). It is resolved once and cached, because an asset's
+// decimals is immutable after registration (migration 00711).
+func (s *Service) AssetDecimals(ctx context.Context, q db.Querier) (uint8, error) {
+	if !s.assetID.IsZero() && s.decimals > 0 {
+		return s.decimals, nil
+	}
+	var (
+		got      assets.AssetID
+		decimals uint8
+	)
+	err := q.QueryRow(ctx, `SELECT id, decimals FROM assets WHERE kind = 'CREDIT'`).Scan(&got, &decimals)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, errs.New(errs.CodeNotFound,
+				"no Credit asset is registered; the internal economy is not provisioned in this environment")
+		}
+		return 0, errs.Wrap(err, errs.CodeInternal, "credit: resolve credit asset scale")
+	}
+	s.assetID, s.decimals = got, decimals
+	return decimals, nil
 }
 
 // Issue mints Credits into an account and records where they came from.
@@ -202,7 +235,8 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 	if err != nil {
 		return nil, err
 	}
-	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID, r.RequireSpendableFinality, r.AllowedOrigins)
+	lots, err := s.openLotsForUpdate(ctx, tx, r.AccountID, assetID,
+		r.RequireSpendableFinality, r.AllowedOrigins, r.LotIDs)
 	if err != nil {
 		return nil, err
 	}

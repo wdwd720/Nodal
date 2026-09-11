@@ -262,6 +262,7 @@ func cmdRun(ctx context.Context, d *deps) error {
 		case <-creditTick.C:
 			d.credits.settle(ctx, batch)
 			d.credits.reconcile(ctx, batch)
+			d.credits.expire(ctx, batch)
 		case <-fullTick.C:
 			d.log.InfoContext(ctx, "full balance reconciliation is scheduled per account by the composition root")
 		}

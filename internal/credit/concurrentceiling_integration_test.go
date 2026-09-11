@@ -3,12 +3,14 @@
 package credit
 
 import (
+	"context"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/nodal/controlplane/internal/capacity"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
 )
@@ -35,7 +37,11 @@ func TestIntegration_ConcurrentPurchasesCannotAllPassOneCeiling(t *testing.T) {
 		workers = 8
 		each    = int64(10_000)
 	)
-	f := newPurchaseFixtureWithCeiling(t, 3*each)
+	// The ceiling is a GLOBAL sum over credit_fundings and this suite shares
+	// one database, so the headroom three purchases need has to be measured
+	// rather than assumed. It was assumed, which made this test a function of
+	// how much money every test declared before it had left in flight.
+	f := newPurchaseFixtureWithCeiling(t, atRiskMinor(t)+3*each)
 
 	var (
 		wg       sync.WaitGroup
@@ -76,10 +82,23 @@ func TestIntegration_ConcurrentPurchasesCannotAllPassOneCeiling(t *testing.T) {
 	}
 
 	// And the database agrees with the count, so this is not a guard that
-	// refused after writing.
+	// refused after writing. Scoped to this fixture's own account, which is
+	// fresh, so the shared database's other rows cannot flatter it.
 	var atRisk int64
 	require.NoError(t, testDB.QueryRow(f.ctx,
 		`SELECT coalesce(sum(paid_amount_minor), 0)::bigint FROM credit_fundings WHERE account_id = $1`,
 		f.account).Scan(&atRisk))
 	assert.Equal(t, 3*each, atRisk, "money at risk passed the ceiling it was measured against")
+}
+
+// atRiskMinor is what internal/capacity would measure right now, over the whole
+// database, using the same state list the guard uses.
+func atRiskMinor(t *testing.T) int64 {
+	t.Helper()
+	requireEnv(t)
+	var total int64
+	require.NoError(t, testDB.QueryRow(context.Background(),
+		`SELECT coalesce(sum(paid_amount_minor), 0)::bigint FROM credit_fundings WHERE state = ANY($1)`,
+		capacity.AtRiskFundingStates()).Scan(&total))
+	return total
 }

@@ -115,12 +115,14 @@ var reachedThroughInterface = map[string]string{
 	"internal/credit.Refund":   "credit.PurchaseService.apply, on a charge.refunded event arriving through Dispatch",
 	"internal/credit.Reverse":  "credit.PurchaseService.apply, on a chargeback arriving through Dispatch",
 
-	"internal/credit.CreateFunding":  "credit.PurchaseService.StartPurchase, through httpapi.CreditsPort at POST /v1/payments",
-	"internal/credit.AdvanceFunding": "credit.PurchaseService.apply and StartPurchase",
-	"internal/credit.SettleFunding":  "credit.PurchaseService.apply and SettleDue, the latter run by cmd/reconciliation-worker",
-	"internal/credit.DisputeFunding": "credit.PurchaseService.apply, on charge.dispute.created arriving through Dispatch",
-	"internal/credit.MintFrom":       "credit.PurchaseService.apply, on the CAPTURED edge",
-	"internal/credit.SetFinality":    "credit.Service.SettleFunding and DisputeFunding, both reached as above",
+	"internal/credit.CreateFunding":   "credit.PurchaseService.StartPurchase, through httpapi.CreditsPort at POST /v1/payments",
+	"internal/credit.AdvanceFunding":  "credit.PurchaseService.apply and StartPurchase",
+	"internal/credit.SettleFunding":   "credit.PurchaseService.apply and SettleDue, the latter run by cmd/api's runCreditSettlement ticker and by cmd/reconciliation-worker",
+	"internal/credit.DisputeFunding":  "credit.PurchaseService.apply, on charge.dispute.created arriving through Dispatch",
+	"internal/credit.UnfreezeFunding": "credit.PurchaseService.apply, on charge.dispute.closed arriving through Dispatch: the freeze lifts and the funding returns to REVERSIBLE (D-094)",
+	"internal/credit.Reconcile":       "credit.PurchaseService.ReconcileDue and ExpireInFlight, both run on cmd/api's credit ticker (cmd/api/creditsettle.go reconcileOnce and expireOnce) and by cmd/reconciliation-worker",
+	"internal/credit.MintFrom":        "credit.PurchaseService.apply, on the CAPTURED edge",
+	"internal/credit.SetFinality":     "credit.Service.SettleFunding and DisputeFunding, both reached as above",
 }
 
 var (

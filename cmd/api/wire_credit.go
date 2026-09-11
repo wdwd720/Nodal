@@ -135,7 +135,7 @@ func wireCreditPurchase(
 		return disabled("no capacity ceilings are available", nil)
 	}
 
-	svc, err := credit.NewPurchaseService(credit.PurchaseServiceConfig{
+	svc, err := credit.NewPurchaseService(ctx, database, credit.PurchaseServiceConfig{
 		Credits:  credits,
 		Provider: prov,
 		// The shipped policy. Changing the rate is a new version through the
@@ -149,6 +149,10 @@ func wireCreditPurchase(
 		Capacity:    capGuard,
 		Clock:       clk,
 		Environment: string(cfg.Env),
+		// The mode is recorded on every funding this service opens, so a
+		// deployment promoted from sandbox to live cannot re-label the
+		// purchases it made before (D-096).
+		ProviderMode: string(slot.Mode),
 	})
 	if err != nil {
 		log.Warn("credit purchase service could not be built; selling Credits is disabled",

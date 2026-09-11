@@ -54,7 +54,7 @@ import { SegmentedBar } from "../../components/SegmentedBar.tsx";
 import { SkeletonField } from "../../components/Skeleton.tsx";
 import { StatusBadge } from "../../components/StatusBadge.tsx";
 import { Temp, temperatureOf } from "../../components/Temperature.tsx";
-import { CREDIT_DECIMALS } from "../../lib/credits.ts";
+import { creditScale, hasCredits } from "../../lib/credits.ts";
 import { EMPTY_STATES } from "../../lib/errors.ts";
 import { CREDITS_DISCLOSURE, NATIVE_ASSET_RISK, PROVENANCE_NOTE } from "../../lib/honesty.ts";
 import { useActiveAccountId } from "../../session.tsx";
@@ -129,9 +129,11 @@ function Held(props: { readonly data: PortfolioData }): ReactNode {
   const { data } = props;
   const credits = data.credits as CreditBalance;
   const totals = data.totals as PortfolioTotals;
+  // The scale the response states, not one this page assumes (F-151).
+  const creditScaleNow = creditScale(credits.credit_decimals);
   const creditValue = (base: string): { readonly base: string; readonly scale: number } => ({
     base,
-    scale: CREDIT_DECIMALS,
+    scale: creditScaleNow,
   });
 
   const columns: ReadonlyArray<Column<PortfolioPosition>> = [
@@ -261,10 +263,20 @@ function Held(props: { readonly data: PortfolioData }): ReactNode {
           <Field label="Frozen" note="Held by a restriction or an open dispute.">
             <Figure kind="units" value={creditValue(credits.frozen)} symbol="Credits" />
           </Field>
+          {/* Shown only when it is not zero; see Home for why it exists at all
+              (F-156). */}
+          {hasCredits(credits.reversed) && (
+            <Field
+              label="Removed"
+              note="Removed after a payment was reversed. Not spendable and not withdrawable."
+            >
+              <Figure kind="units" value={creditValue(credits.reversed)} symbol="Credits" />
+            </Field>
+          )}
         </FieldGrid>
         <SegmentedBar
           caption="How this balance is held"
-          scale={CREDIT_DECIMALS}
+          scale={creditScaleNow}
           symbol="Credits"
           total={credits.gross}
           segments={[
@@ -281,6 +293,14 @@ function Held(props: { readonly data: PortfolioData }): ReactNode {
               baseUnits: credits.frozen,
               explanation: "Held by a restriction or an open dispute.",
               texture: "hatch",
+            },
+            {
+              key: "reversed",
+              label: "Removed",
+              baseUnits: credits.reversed,
+              explanation:
+                "Removed after a payment was reversed. Not spendable and not withdrawable.",
+              texture: "sparse",
             },
           ]}
         />

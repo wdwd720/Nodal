@@ -290,6 +290,16 @@ type ConsumeRequest struct {
 	// Payout reservation uses it to consume only value the policy permits, so
 	// that a payout can never quietly take a promotional grant.
 	AllowedOrigins []valuedomain.CreditOrigin
+
+	// LotIDs, when non-empty, restricts consumption to these exact lots.
+	//
+	// A clawback is the case it exists for. A chargeback reverses ONE funding,
+	// and the units it must destroy are the units THAT funding minted -- not
+	// whichever lots sort first in consumption order, which is what an
+	// unrestricted Consume takes and which is a promotional grant every time
+	// (F-152). The origin filter is not enough: two purchases produce two lots
+	// of the same origin, and a chargeback of one must not destroy the other.
+	LotIDs []LotID
 }
 
 // Validate checks the request without touching the database.
@@ -310,6 +320,11 @@ func (r ConsumeRequest) Validate() error {
 	for _, o := range r.AllowedOrigins {
 		if !o.Valid() {
 			return errs.Newf(errs.CodeValidationFailed, "credit: unknown allowed origin %q", o)
+		}
+	}
+	for i, l := range r.LotIDs {
+		if l.IsZero() {
+			return errs.Newf(errs.CodeValidationFailed, "credit: consume lot restriction %d has no lot id", i)
 		}
 	}
 	return nil
@@ -355,6 +370,11 @@ func (r RestoreRequest) Validate() error {
 // so that a user is never told "18,500 Credits = $185 withdrawable" unless
 // policy actually says so.
 type Balances struct {
+	// CreditDecimals is the scale of the CREDIT asset every quantity below is
+	// expressed in. It travels WITH the figures because a consumer that has to
+	// assume the scale is a consumer that can render a balance a million times
+	// wrong, which is what the browser did (F-151).
+	CreditDecimals uint8
 	// Gross is every remaining unit the account holds, regardless of state.
 	Gross money.Quantity
 	// Spendable is what can fund new internal activity now.

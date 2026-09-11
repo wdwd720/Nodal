@@ -3,6 +3,7 @@ package credit
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/nodal/controlplane/internal/accounts"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/ledger"
@@ -140,8 +142,19 @@ var fundingTransitions = map[FundingState][]FundingState{
 	FundingCaptured:   {FundingReversible, FundingFailed, FundingManualReview},
 	FundingReversible: {FundingSettled, FundingDisputed, FundingReversed, FundingRefunded, FundingManualReview},
 	// A card network can dispute a payment a processor already calls settled.
-	FundingSettled:  {FundingDisputed, FundingRefunded, FundingManualReview},
-	FundingDisputed: {FundingSettled, FundingReversed, FundingManualReview},
+	FundingSettled: {FundingDisputed, FundingRefunded, FundingManualReview},
+	// DISPUTED -> REVERSIBLE is how a dispute that did not take the money ends
+	// (D-094, F-155). It is not DISPUTED -> SETTLED: settlement means the
+	// reversibility window closed, which is a fact about a clock and a policy,
+	// and a dispute closing in our favour is not that fact. The funding returns
+	// to the window it was already in -- 00743's trigger coalesces
+	// reversible_at, so re-entering REVERSIBLE cannot restart the clock -- and
+	// SettleDue remains the only thing that settles anything.
+	//
+	// DISPUTED -> SETTLED stays legal so that an operator resolving a review
+	// and a provider that reports settlement after a dispute are still
+	// representable; nothing in this binary now takes that edge on its own.
+	FundingDisputed: {FundingReversible, FundingSettled, FundingReversed, FundingManualReview},
 	// An operator resolving a review may send the funding anywhere a provider
 	// event could legitimately have sent it -- with one exception. There is no
 	// resolution to SETTLED. Settlement means the dispute window closed, which
@@ -187,19 +200,47 @@ func LotFinalityFor(s FundingState) (valuedomain.FundingFinality, bool) {
 	return "", false
 }
 
+// AllProviderModes returns every provider mode a funding may record.
+//
+// It is this package's list because credit_fundings.provider_mode is this
+// package's column, and it is built from internal/config's constants rather
+// than spelled out, so the two cannot drift. test/integration/enums holds it
+// against the CHECK in migration 00793.
+func AllProviderModes() []string {
+	return []string{
+		string(config.ProviderModeFake),
+		string(config.ProviderModeSandbox),
+		string(config.ProviderModeLive),
+	}
+}
+
+// SandboxMode reports whether a recorded provider mode means simulated value.
+//
+// An empty mode -- a funding written before 00793 recorded one -- is SANDBOX.
+// An unrecorded mode cannot be asserted to be live, and over-labelling value as
+// simulated is the safe direction of that mistake (D-096).
+func SandboxMode(mode string) bool { return mode != string(config.ProviderModeLive) }
+
 // Funding is a credit_fundings row.
 type Funding struct {
 	ID                FundingID
 	AccountID         accounts.AccountID
 	Provider          string
 	ProviderReference string
-	State             FundingState
-	CreditQuantity    money.Quantity
-	PaidAmount        money.USD
-	PaidCurrency      string
-	FeeAmount         money.USD
-	IdempotencyKey    string
-	LotID             *LotID
+	// ProviderMode is the mode of the provider that opened this payment, as it
+	// was at that moment. It is not the deployment's current mode: rendering
+	// the sandbox flag from today's configuration re-labelled every sandbox
+	// purchase a deployment had ever made the day it went live (F-158).
+	//
+	// Empty means a funding written before migration 00793.
+	ProviderMode   string
+	State          FundingState
+	CreditQuantity money.Quantity
+	PaidAmount     money.USD
+	PaidCurrency   string
+	FeeAmount      money.USD
+	IdempotencyKey string
+	LotID          *LotID
 	// ReversibleAt is when the Credits were minted and the reversibility
 	// window began. It is what the settlement sweep measures from, and what a
 	// funding page needs in order to answer "when does this settle".
@@ -211,7 +252,8 @@ type Funding struct {
 	UpdatedAt     time.Time
 }
 
-const fundingColumns = `id, account_id, provider, coalesce(provider_reference,''), state, credit_quantity::text,
+const fundingColumns = `id, account_id, provider, coalesce(provider_reference,''), coalesce(provider_mode,''),
+	state, credit_quantity::text,
 	paid_amount_minor, paid_currency, fee_amount_minor, idempotency_key, lot_id,
 	reversible_at, settled_at, reversed_at, coalesce(failure_reason,''), created_at, updated_at`
 
@@ -223,7 +265,7 @@ func scanFunding(row pgx.Row) (Funding, error) {
 		fee   int64
 		state string
 	)
-	if err := row.Scan(&f.ID, &f.AccountID, &f.Provider, &f.ProviderReference, &state, &qty,
+	if err := row.Scan(&f.ID, &f.AccountID, &f.Provider, &f.ProviderReference, &f.ProviderMode, &state, &qty,
 		&paid, &f.PaidCurrency, &fee, &f.IdempotencyKey, &f.LotID,
 		&f.ReversibleAt, &f.SettledAt, &f.ReversedAt, &f.FailureReason, &f.CreatedAt, &f.UpdatedAt); err != nil {
 		return Funding{}, err
@@ -244,11 +286,16 @@ type CreateFundingRequest struct {
 	AccountID         accounts.AccountID
 	Provider          string
 	ProviderReference string
-	CreditQuantity    money.Quantity
-	PaidAmount        money.USD
-	PaidCurrency      string
-	FeeAmount         money.USD
-	IdempotencyKey    string
+	// ProviderMode is the mode of the provider opening this payment. It is
+	// required, and it is recorded on the row rather than recomputed later:
+	// the sandbox label on a purchase is a fact about the payment, not about
+	// the configuration the deployment happens to be running today (D-096).
+	ProviderMode   string
+	CreditQuantity money.Quantity
+	PaidAmount     money.USD
+	PaidCurrency   string
+	FeeAmount      money.USD
+	IdempotencyKey string
 }
 
 // Validate checks the request without touching the database.
@@ -258,6 +305,10 @@ func (r CreateFundingRequest) Validate() error {
 	}
 	if strings.TrimSpace(r.Provider) == "" {
 		return errs.New(errs.CodeValidationFailed, "credit: funding requires a provider")
+	}
+	if !slices.Contains(AllProviderModes(), r.ProviderMode) {
+		return errs.Newf(errs.CodeValidationFailed,
+			"credit: %q is not a provider mode; a funding records the mode that opened its payment", r.ProviderMode)
 	}
 	if r.CreditQuantity.Sign() <= 0 {
 		return errs.New(errs.CodeValidationFailed, "credit: funding must buy a positive number of Credits")
@@ -286,12 +337,12 @@ func (s *Service) CreateFunding(ctx context.Context, tx pgx.Tx, r CreateFundingR
 	}
 	f, err := scanFunding(tx.QueryRow(ctx,
 		`INSERT INTO credit_fundings
-		   (id, account_id, provider, provider_reference, state, credit_quantity,
+		   (id, account_id, provider, provider_reference, provider_mode, state, credit_quantity,
 		    paid_amount_minor, paid_currency, fee_amount_minor, idempotency_key)
-		 VALUES ($1,$2,$3,$4,'CREATED',$5::numeric,$6,$7,$8,$9)
+		 VALUES ($1,$2,$3,$4,$5,'CREATED',$6::numeric,$7,$8,$9,$10)
 		 ON CONFLICT (idempotency_key) DO NOTHING
 		 RETURNING `+fundingColumns,
-		NewFundingID(), r.AccountID, r.Provider, providerRef, r.CreditQuantity.String(),
+		NewFundingID(), r.AccountID, r.Provider, providerRef, r.ProviderMode, r.CreditQuantity.String(),
 		r.PaidAmount.Minor(), currency, r.FeeAmount.Minor(), r.IdempotencyKey))
 	if err == nil {
 		return f, nil
@@ -446,12 +497,15 @@ func (s *Service) MintFrom(ctx context.Context, tx pgx.Tx, id FundingID, effecti
 // ReverseResult describes what a chargeback actually did.
 type ReverseResult struct {
 	// Destroyed is the value clawed back out of the account's Credit balance.
+	// It is what the reversed funding's own lot still held, never units from
+	// anywhere else.
 	Destroyed money.Quantity
-	// Deficit is what the account had already spent and therefore owes. It is
-	// the uncollateralised hole PART XI is about, made visible and collectable
-	// instead of absorbed silently.
+	// Deficit is what the account had already spent OUT OF THAT LOT and
+	// therefore owes. It is the uncollateralised hole PART XI is about, made
+	// visible and collectable instead of absorbed silently.
 	Deficit money.Quantity
-	// LotIDs are the provenance lots the reversal touched.
+	// LotIDs are the provenance lots the reversal touched, which is the
+	// reversed funding's lot and nothing else.
 	LotIDs []LotID
 }
 
@@ -517,16 +571,45 @@ func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effect
 		return ReverseResult{}, err
 	}
 
-	// What the account can actually give back is bounded by its balance, not
-	// by what the lot still records: the user may have spent Credits from
-	// other lots too.
+	// What a clawback may destroy is what THIS funding's lot still holds, and
+	// nothing else.
+	//
+	// It used to be min(account balance, lot quantity), consumed with no lot
+	// restriction -- so Consume walked the account's lots in CONSUMPTION order
+	// and took whatever sorted first, which is a promotional grant before a
+	// purchase every time. A cardholder charging back a $10 purchase destroyed
+	// a grant the platform had given them, the charged-back lot kept its units
+	// and was stamped REVERSED, and the account was left holding CREDIT_BALANCE
+	// it could never spend, withdraw or clear. Provenance still reconciled,
+	// which is why nothing caught it (F-152).
+	//
+	// The units this funding minted are in exactly two places: still in its
+	// lot, or already spent. The first are destroyed; the second are the
+	// DEFICIT the account owes. Splitting it that way needs no balance read --
+	// the lot's own remaining quantity is the answer, and it can never exceed
+	// the account's CREDIT_BALANCE because the provenance invariant says the
+	// sum of remaining lot quantities IS that balance.
+	covered := lot.Remaining
+	shortfall := lot.Quantity.Sub(covered)
+
+	// The provenance invariant, checked at the one moment it would cost money
+	// to be wrong about. VerifyProvenance says the sum of an account's
+	// remaining lot quantities IS its CREDIT_BALANCE, so a single lot can never
+	// hold more than the balance -- and if it does, provenance and the ledger
+	// have come apart and destroying these units would drive the balance
+	// negative against a number nobody can explain. That is a reconciliation
+	// incident, never something to absorb.
 	balance, err := s.creditBalance(ctx, tx, f.AccountID, assetID)
 	if err != nil {
 		return ReverseResult{}, err
 	}
-	amount := lot.Quantity
-	covered := balance.Min(amount)
-	shortfall := amount.Sub(covered)
+	if covered.Cmp(balance) > 0 {
+		return ReverseResult{}, errs.Newf(errs.CodeReconciliationRequired,
+			"credit: lot %s holds %s and the account's CREDIT_BALANCE is %s; a clawback cannot destroy units the ledger does not show",
+			lot.ID, covered, balance).
+			WithField("account_id", f.AccountID.String()).
+			WithField("lot_id", lot.ID.String())
+	}
 
 	custBalance := ledger.CustomerAccount(f.AccountID, ledger.CodeCreditBalance, assetID)
 	custIssuance := ledger.CustomerAccount(f.AccountID, ledger.CodeCreditIssuance, assetID)
@@ -551,17 +634,32 @@ func (s *Service) reverseTo(ctx context.Context, tx pgx.Tx, id FundingID, effect
 		if err != nil {
 			return ReverseResult{}, err
 		}
-		// Consume against the reversal so the lots record where the destroyed
-		// units came from. Finality is not required to be spendable here: a
-		// clawback must work on disputed value too.
-		if _, err := s.Consume(ctx, tx, ConsumeRequest{
+		// Consume against the reversal so the lot records where the destroyed
+		// units went. LotIDs pins it to the reversed funding's own lot, which
+		// is the whole of F-152: without it Consume walks consumption order and
+		// destroys somebody's grant. Finality is not required to be spendable
+		// here -- a clawback must work on disputed value too -- and the lot is
+		// about to be stamped REVERSED, so it must be reachable while it still
+		// is not.
+		allocs, cerr := s.Consume(ctx, tx, ConsumeRequest{
 			AccountID:   f.AccountID,
 			Quantity:    covered,
 			JournalTxID: post.TransactionID,
 			Reference:   Reference{Type: "credit_funding_reversal", ID: f.ID.String()},
 			Reason:      reason,
-		}); err != nil {
-			return ReverseResult{}, err
+			LotIDs:      []LotID{lot.ID},
+		})
+		if cerr != nil {
+			return ReverseResult{}, cerr
+		}
+		// One lot was offered and it held exactly `covered`, so one allocation
+		// for the whole amount is the only possible outcome. Asserting it here
+		// means a future change to lot selection cannot quietly spread a
+		// clawback across lots it was never about.
+		if len(allocs) != 1 || allocs[0].LotID != lot.ID || allocs[0].Quantity.Cmp(covered) != 0 {
+			return ReverseResult{}, errs.Newf(errs.CodeInternal,
+				"credit: a reversal of funding %s consumed %d allocations instead of its own lot",
+				f.ID, len(allocs))
 		}
 	}
 	if shortfall.IsPositive() {
@@ -605,6 +703,30 @@ func (s *Service) SettleFunding(ctx context.Context, tx pgx.Tx, id FundingID, re
 		return nil
 	}
 	return s.SetFinality(ctx, tx, *f.LotID, valuedomain.FinalitySettled,
+		Reference{Type: "credit_funding", ID: f.ID.String()}, reason)
+}
+
+// UnfreezeFunding returns a funding whose dispute did not take the money to
+// REVERSIBLE, and unfreezes the Credits with it.
+//
+// The two halves have to happen together for the same reason DisputeFunding's
+// do: a funding row that says REVERSIBLE over a lot still marked DISPUTED would
+// report the value as spendable on every operator screen while the ledger
+// refused to spend it.
+//
+// It deliberately does not settle. See D-094 and fundingTransitions.
+func (s *Service) UnfreezeFunding(ctx context.Context, tx pgx.Tx, id FundingID, reason string) error {
+	f, err := s.Funding(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	if _, err := s.AdvanceFunding(ctx, tx, id, FundingReversible, reason, ""); err != nil {
+		return err
+	}
+	if f.LotID == nil {
+		return nil
+	}
+	return s.SetFinality(ctx, tx, *f.LotID, valuedomain.FinalityReversible,
 		Reference{Type: "credit_funding", ID: f.ID.String()}, reason)
 }
 

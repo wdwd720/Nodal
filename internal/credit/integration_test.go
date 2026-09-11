@@ -426,6 +426,7 @@ func TestIntegration_ChargebackAfterTheCreditsAreSpent(t *testing.T) {
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
 				AccountID:      f.account,
 				Provider:       "test-provider",
+				ProviderMode:   "fake",
 				CreditQuantity: q(10_000),
 				PaidAmount:     money.USDFromMinor(10_000),
 				IdempotencyKey: "funding-" + uuid.NewString(),
@@ -498,7 +499,7 @@ func TestIntegration_MintingIsExactlyOnceUnderWebhookReplay(t *testing.T) {
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
-				AccountID: f.account, Provider: "test-provider",
+				AccountID: f.account, Provider: "test-provider", ProviderMode: "fake",
 				CreditQuantity: q(2_500), PaidAmount: money.USDFromMinor(2_500),
 				IdempotencyKey: "funding-" + uuid.NewString(),
 			})
@@ -547,7 +548,7 @@ func TestIntegration_FundingStateChangeRequiresItsTransitionRow(t *testing.T) {
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			funding, err = f.svc.CreateFunding(ctx, tx, CreateFundingRequest{
-				AccountID: f.account, Provider: "test-provider",
+				AccountID: f.account, Provider: "test-provider", ProviderMode: "fake",
 				CreditQuantity: q(100), PaidAmount: money.USDFromMinor(100),
 				IdempotencyKey: "funding-" + uuid.NewString(),
 			})

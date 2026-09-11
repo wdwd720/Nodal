@@ -400,6 +400,26 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// startup. A deployment with no Credit asset provisioned still gets the
 	// routes, and they answer NOT_FOUND with a reason rather than 404-ing as
 	// though the feature did not exist.
+
+	// THE Credit asset, on a sandbox tier that has none. Everything below reads
+	// it -- the quote's scale, credit.Service.AssetID, the demo seeder -- and
+	// `scripts/seedeconomy`, the only thing that ever wrote one, refuses to run
+	// anywhere but LOCAL, DEV and TEST, which are exactly the environments that
+	// are not the sandbox tier. See creditAssetAtBoot for why PROD is refused.
+	//
+	// It is registered HERE, above the Credit purchase path, and the order is
+	// load-bearing since F-151: a purchase service compares the scale its
+	// pricing policy prices at against the scale of the asset this deployment
+	// registered, and refuses to build when they disagree. Built before the
+	// asset existed, it would have found nothing to compare against on the one
+	// tier that actually sells.
+	if err := creditAssetAtBoot(ctx, database, cfg, assetRepo, log); err != nil {
+		return nil, err
+	}
+	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
+	if err != nil {
+		return nil, err
+	}
 	creditSvc := credit.NewService(ledgerSvc, clk)
 
 	// The Credit purchase path (pgf.md). Separate from the funding block
@@ -520,18 +540,6 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	compositeVerification, err := verification.NewResolver(verificationResolver, verificationRepo, database, clk)
 	if err != nil {
 		return nil, fmt.Errorf("verification resolver: %w", err)
-	}
-	// THE Credit asset, on a sandbox tier that has none. Everything below reads
-	// it -- the quote's scale, credit.Service.AssetID, the demo seeder -- and
-	// `scripts/seedeconomy`, the only thing that ever wrote one, refuses to run
-	// anywhere but LOCAL, DEV and TEST, which are exactly the environments that
-	// are not the sandbox tier. See creditAssetAtBoot for why PROD is refused.
-	if err := creditAssetAtBoot(ctx, database, cfg, assetRepo, log); err != nil {
-		return nil, err
-	}
-	creditDecimals, err := creditAssetDecimals(ctx, database, assetRepo)
-	if err != nil {
-		return nil, err
 	}
 	commerceSvc := commerce.NewService(ledgerSvc, creditSvc, audit.NewWriter(), clk)
 	// The marketplace gate is resolved from the database on every purchase, so
@@ -858,26 +866,29 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		BuildVersion: config.BuildVersion,
 		ConfigHash:   cfg.Hash(),
 		SandboxTier:  cfg.SandboxTier(),
-		// Anything but live is a rehearsal: test cards, sandbox Credits.
-		CreditPurchaseSandbox: cfg.Providers.CreditPurchase.Mode != config.ProviderModeLive,
-		PublicBaseURL:         cfg.HTTP.PublicBaseURL,
-		CORSOrigins:           cfg.HTTP.CORSOrigins,
-		TrustedProxyCIDRs:     cfg.HTTP.TrustedProxyCIDRs,
-		MaxBodyBytes:          cfg.HTTP.MaxBodyBytes,
-		CookieName:            cookieName,
-		CookieDomain:          cfg.Auth.CookieDomain,
-		CookieSecure:          cfg.Auth.CookieSecure,
-		PostLoginURL:          cfg.Auth.PostLoginURL,
-		SessionTTL:            cfg.Auth.SessionTTL,
-		StepUpMaxAge:          cfg.Auth.StepUpMaxAge,
-		IdempotencyTTL:        httpapi.DefaultIdempotencyTTL,
-		Clock:                 clk,
-		Logger:                log,
-		Meter:                 meter,
-		Limits:                limits,
-		Authenticator:         httpmw.Session(sessionMgr, database, cookieName),
-		NonSpecRoutes:         nonSpecRoutes,
-		Ports:                 ports,
+		// There is no CreditPurchaseSandbox here any more. Whether a purchase
+		// was a rehearsal is a fact about that purchase, recorded on its row
+		// when it was opened (D-096); computing it from the mode this process
+		// booted with re-labelled every purchase a deployment had ever made on
+		// the day it changed mode.
+		PublicBaseURL:     cfg.HTTP.PublicBaseURL,
+		CORSOrigins:       cfg.HTTP.CORSOrigins,
+		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
+		MaxBodyBytes:      cfg.HTTP.MaxBodyBytes,
+		CookieName:        cookieName,
+		CookieDomain:      cfg.Auth.CookieDomain,
+		CookieSecure:      cfg.Auth.CookieSecure,
+		PostLoginURL:      cfg.Auth.PostLoginURL,
+		SessionTTL:        cfg.Auth.SessionTTL,
+		StepUpMaxAge:      cfg.Auth.StepUpMaxAge,
+		IdempotencyTTL:    httpapi.DefaultIdempotencyTTL,
+		Clock:             clk,
+		Logger:            log,
+		Meter:             meter,
+		Limits:            limits,
+		Authenticator:     httpmw.Session(sessionMgr, database, cookieName),
+		NonSpecRoutes:     nonSpecRoutes,
+		Ports:             ports,
 	})
 }
 

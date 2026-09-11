@@ -348,7 +348,7 @@ func TestParseWebhook_DisputeOutcomes(t *testing.T) {
 		{EventDisputeCreated, "needs_response", credit.PurchaseDisputed},
 		{EventDisputeClosed, "lost", credit.PurchaseChargeback},
 		{EventDisputeClosed, "won", credit.PurchaseDisputeWon},
-		{EventDisputeClosed, "warning_closed", credit.PurchaseDisputeWon},
+		{EventDisputeClosed, "warning_closed", credit.PurchaseDisputeLifted},
 		{EventDisputeFundsWithdrawn, "under_review", credit.PurchaseChargeback},
 		{EventDisputeFundsReinstated, "won", credit.PurchaseDisputeWon},
 		// An outcome this binary has never seen must stop, because guessing

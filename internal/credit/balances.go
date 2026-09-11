@@ -36,8 +36,13 @@ func (s *Service) Balances(ctx context.Context, q db.Querier, r BalanceRequest) 
 	if err != nil {
 		return Balances{}, err
 	}
+	decimals, err := s.AssetDecimals(ctx, q)
+	if err != nil {
+		return Balances{}, err
+	}
 
 	b := Balances{
+		CreditDecimals:    decimals,
 		Gross:             money.Quantity{},
 		Spendable:         money.Quantity{},
 		Frozen:            money.Quantity{},

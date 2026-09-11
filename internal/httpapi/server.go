@@ -124,19 +124,23 @@ type Options struct {
 	Env          config.Environment
 	BuildVersion string
 	ConfigHash   string
-	// SandboxTier says whether this deployment is a sandbox tier (ADR-0023);
-	// CreditPurchaseSandbox whether the Credit purchase provider is anything
-	// but live. Both are published so the UI labels temperatures from what
-	// the API says rather than from where it was loaded.
-	SandboxTier           bool
-	CreditPurchaseSandbox bool
-	PublicBaseURL         string
-	CORSOrigins           []string
-	TrustedProxyCIDRs     []string
-	MaxBodyBytes          int64
-	CookieName            string
-	CookieDomain          string
-	CookieSecure          bool
+	// SandboxTier says whether this deployment is a sandbox tier (ADR-0023).
+	// It is published so the UI labels temperatures from what the API says
+	// rather than from where it was loaded.
+	//
+	// There is deliberately no deployment-wide Credit-purchase sandbox flag
+	// beside it any more. One existed, and it was the answer to "what mode is
+	// this deployment in now" stamped onto every purchase the API returned,
+	// including ones opened months earlier under another mode (F-158). A
+	// purchase carries the mode that opened it, on its own row.
+	SandboxTier       bool
+	PublicBaseURL     string
+	CORSOrigins       []string
+	TrustedProxyCIDRs []string
+	MaxBodyBytes      int64
+	CookieName        string
+	CookieDomain      string
+	CookieSecure      bool
 	// PostLoginURL is where the OIDC callback sends the browser once the
 	// session cookie is set. Empty means the API's own root. When the web app
 	// lives on another origin this is its origin; a local return-to path,
