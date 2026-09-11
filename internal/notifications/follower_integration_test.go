@@ -57,16 +57,21 @@ func aTransition(t *testing.T, d *db.DB, fundingID, from, to string, at time.Tim
 	return transitionID
 }
 
-func cursorOf(t *testing.T, d *db.DB, source string) (time.Time, string, *time.Time) {
+// cursorOf returns the position on record. The third value used to be
+// `pending_at`; 00803 dropped the column, because it was written and cleared in
+// the same transaction as the emits and no other session could ever observe it
+// (F-191). The signature keeps its shape so the tests that only want the first
+// two values read the same as they did.
+func cursorOf(t *testing.T, d *db.DB, source string) (time.Time, string, int64) {
 	t.Helper()
 	var at time.Time
 	var rowID string
-	var pending *time.Time
+	var emitted int64
 	err := d.QueryRow(context.Background(),
-		`SELECT last_at, last_id::text, pending_at FROM notification_follower_cursors WHERE source = $1`,
-		source).Scan(&at, &rowID, &pending)
+		`SELECT last_at, last_id::text, emitted FROM notification_follower_cursors WHERE source = $1`,
+		source).Scan(&at, &rowID, &emitted)
 	require.NoError(t, err)
-	return at.UTC(), rowID, pending
+	return at.UTC(), rowID, emitted
 }
 
 // TestIntegration_EverySourceQueryRunsAgainstTheRealSchema.
@@ -85,9 +90,9 @@ func TestIntegration_EverySourceQueryRunsAgainstTheRealSchema(t *testing.T) {
 	assert.Zero(t, n)
 
 	for _, source := range f.SourceNames() {
-		at, _, pending := cursorOf(t, d, source)
+		at, _, emitted := cursorOf(t, d, source)
 		assert.False(t, at.IsZero(), "%s: a source with no cursor starts at now, not at the beginning of history", source)
-		assert.Nil(t, pending, "%s: a pass that finished leaves nothing in flight", source)
+		assert.Zero(t, emitted, "%s: a pass over an empty window emitted nothing", source)
 	}
 }
 
@@ -125,10 +130,10 @@ func TestIntegration_TheFollowerNotifiesOnceForACapturedPurchase(t *testing.T) {
 	require.NotEmpty(t, rec.signals)
 	assert.Equal(t, notifications.Signal{UserID: uid.String(), Scope: notifications.ScopeBalance}, rec.signals[0])
 
-	at, lastID, pending := cursorOf(t, d, "credit_funding_transitions")
+	at, lastID, emitted := cursorOf(t, d, "credit_funding_transitions")
 	assert.Equal(t, transitionID, lastID)
 	assert.False(t, at.IsZero())
-	assert.Nil(t, pending)
+	assert.EqualValues(t, 1, emitted, "the pass that wrote it counted it")
 
 	// The next pass re-reads its own lap and must publish nothing.
 	rec2 := &recorder{}
@@ -166,13 +171,15 @@ func TestIntegration_ACrashBetweenReadingAndEmittingDuplicatesNothing(t *testing
 	before, _, _ := cursorOf(t, d, "credit_funding_transitions")
 
 	// The crash: the pass ran, the notification committed, and the position on
-	// record is the one from before it. (An interrupted pass leaves exactly
-	// this state, with pending_at set to say a pass was in flight.)
+	// record is the one from before it. That is the whole of the state an
+	// interrupted pass can leave -- the emits and the cursor advance are one
+	// transaction, so either both happened or neither did, and there is no
+	// third "in flight" state to record (00803, F-191).
 	_, err = d.Exec(ctx,
 		`UPDATE notification_follower_cursors
-		    SET last_at = $1, last_id = '00000000-0000-0000-0000-000000000000', pending_at = $2
+		    SET last_at = $1, last_id = '00000000-0000-0000-0000-000000000000'
 		  WHERE source = 'credit_funding_transitions'`,
-		before.Add(-time.Minute), before)
+		before.Add(-time.Minute))
 	require.NoError(t, err)
 
 	rec2 := &recorder{}
@@ -182,8 +189,8 @@ func TestIntegration_ACrashBetweenReadingAndEmittingDuplicatesNothing(t *testing
 	assert.Empty(t, rec2.notified)
 	assert.Equal(t, 1, countFor(t, d, uid))
 
-	_, _, pending := cursorOf(t, d, "credit_funding_transitions")
-	assert.Nil(t, pending, "a completed pass clears the in-flight marker it found")
+	at, _, _ := cursorOf(t, d, "credit_funding_transitions")
+	assert.False(t, at.Before(before), "the re-read pass left the cursor no further back than it found it")
 }
 
 // TestIntegration_TheFollowerFindsARowThatCommittedBehindItsCursor.
@@ -274,8 +281,25 @@ func TestIntegration_ANewSessionTellsThePersonWhoSignedIn(t *testing.T) {
 	assert.Equal(t, notifications.SeverityCritical, got.Severity)
 	var loginData map[string]any
 	require.NoError(t, json.Unmarshal(got.Data, &loginData))
-	assert.Equal(t, "203.0.113.7", loginData["ip"], "was this me is only answerable with the address and the agent")
-	assert.Equal(t, "Firefox", loginData["user_agent"])
+	// A coarse locality and a browser, and a pointer at the trail that holds
+	// the exact address. This row can never be deleted by anybody; the security
+	// event it came from is dropped a month at a time (D-106, F-188).
+	assert.NotContains(t, loginData, "ip", "the exact address must not land in a table nothing can purge")
+	assert.NotContains(t, loginData, "user_agent", "nor the fingerprintable header")
+	assert.Equal(t, "203.0.113.0/24", loginData["ip_prefix"])
+	assert.Equal(t, "Firefox", loginData["device"])
+	assert.Equal(t, "/v1/me/audit", loginData["exact_address_at"])
+	assert.Contains(t, got.Body, "203.0.113.0/24")
+	assert.Contains(t, got.Body, "exact address")
+	assert.NotContains(t, got.Body, "203.0.113.7")
+
+	// And the exact address is still recorded, in the table that has a
+	// retention policy: nothing was lost, it is read from the copy that can be
+	// forgotten.
+	var exact string
+	require.NoError(t, d.QueryRow(ctx,
+		`SELECT host(ip) FROM security_events WHERE session_id = $1::uuid`, sessionID).Scan(&exact))
+	assert.Equal(t, "203.0.113.7", exact)
 
 	// It cannot be switched off, so a preference does not stop the next one.
 	require.NoError(t, notifications.SavePreferences(asUser(uid), d, uid,

@@ -488,9 +488,20 @@ func accountStatusBody(status, reason string) string {
 // session forever. The 'login' security event is written in the same
 // transaction as the session it describes (internal/identity), is immutable,
 // and is the durable record the retention policy deliberately keeps.
+// AuditRoute is where the exact address of a sign-in is served from: the
+// caller's own security trail, which is partitioned by month and dropped by
+// the retention pass. The new-session notification names it rather than
+// carrying the address (D-106).
+const AuditRoute = "/v1/me/audit"
+
 func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID string, limit int) ([]Change, error) {
+	// The address is masked in SQL, so the exact one is never read into this
+	// process at all: /24 for IPv4 and /48 for IPv6, which is the coarsest
+	// thing that still says "this is not where I live". The masking cannot be
+	// forgotten downstream because there is nothing downstream to forget it.
 	rows, err := q.Query(ctx, `SELECT e.occurred_at, e.id::text, e.user_id, e.session_id::text,
-			coalesce(host(e.ip), ''), coalesce(e.user_agent, '')
+			coalesce(network(set_masklen(e.ip, CASE WHEN family(e.ip) = 4 THEN 24 ELSE 48 END))::text, ''),
+			coalesce(e.user_agent, '')
 		FROM security_events e
 		WHERE `+keysetOn("e.occurred_at", "e.id")+`
 		  AND e.kind = 'login' AND e.user_id IS NOT NULL AND e.session_id IS NOT NULL
@@ -503,15 +514,26 @@ func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID stri
 	var out []Change
 	for rows.Next() {
 		var (
-			occurredAt         time.Time
-			eventID, sessionID string
-			ip, userAgent      string
-			userID             accounts.UserID
+			occurredAt          time.Time
+			eventID, sessionID  string
+			ipPrefix, userAgent string
+			userID              accounts.UserID
 		)
-		if err := rows.Scan(&occurredAt, &eventID, &userID, &sessionID, &ip, &userAgent); err != nil {
+		if err := rows.Scan(&occurredAt, &eventID, &userID, &sessionID, &ipPrefix, &userAgent); err != nil {
 			return nil, fmt.Errorf("read login security events: %w", err)
 		}
-		body := "A new session was created for your account. If this was not you, sign out every session from Settings and sign in again."
+		// What a person needs to recognise their own sign-in, and not one
+		// character more: this row can never be deleted by anybody (the
+		// notifications guard refuses DELETE for every role), while the trail
+		// it was copied from is dropped a month at a time. See device.go.
+		device := deviceSummary(userAgent)
+		data := map[string]any{"session_id": sessionID, "exact_address_at": AuditRoute}
+		if ipPrefix != "" {
+			data["ip_prefix"] = ipPrefix
+		}
+		if device != "" {
+			data["device"] = device
+		}
 		out = append(out, Change{
 			At:    occurredAt,
 			RowID: eventID,
@@ -519,13 +541,11 @@ func readNewSessions(ctx context.Context, q db.Querier, at time.Time, rowID stri
 				UserID:     userID,
 				Kind:       KindSecurityNewSession,
 				Title:      "New sign-in to your account",
-				Body:       body,
+				Body:       newSessionBody(device, ipPrefix),
 				Ref:        Ref{Type: "session", ID: sessionID},
 				Occurrence: eventID,
 				OccurredAt: occurredAt,
-				// The address and the agent are the person's own, and they are
-				// what makes "was this me?" answerable at all.
-				Data: mustJSON(map[string]any{"session_id": sessionID, "ip": ip, "user_agent": userAgent}),
+				Data:       mustJSON(data),
 			}},
 		})
 	}

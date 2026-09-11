@@ -40,13 +40,19 @@ var appendOnlyTables = []*regexp.Regexp{
 // transient records whose retention is an operational policy, never financial
 // history. Everything else is append-only for every role except the migration
 // role.
+//
+// `notifications` was on this list and never belonged: 00640's
+// notifications_guard raises NOTIFICATION_IMMUTABLE on DELETE for every role
+// including the table's owner, so the DELETE grant named a capability the
+// database refuses and this list asserted a retention capability that has never
+// existed. 00803 revokes the grant, and the content written into the table is
+// bounded instead (D-106, F-188).
 var opsHousekeeping = map[string]bool{
 	"outbox_events":    true,
 	"inbox_messages":   true,
 	"idempotency_keys": true,
 	"sessions":         true,
 	"login_attempts":   true,
-	"notifications":    true,
 }
 
 // TestIntegration_ApplicationRolePrivileges asserts the least-privilege
@@ -134,7 +140,12 @@ func TestIntegration_ApplicationRolePrivileges(t *testing.T) {
 		// strong direction, like cp_transition_key, because the bootstrap's
 		// blanket default would grant all of it back to a table that was
 		// recreated without this migration's REVOKE.
-		if tbl == "identity_pii" || tbl == "sessions" {
+		//
+		// `notifications` joined them in 00803 under the same rule (ADR-0021
+		// §4): it holds what a customer was TOLD -- a sign-in, a restriction, a
+		// failed payout -- which is personal data, and neither analytics nor
+		// housekeeping has a use for a copy of somebody's inbox (D-106).
+		if tbl == "identity_pii" || tbl == "sessions" || tbl == "notifications" {
 			for _, ro := range []string{"cp_readonly", "cp_ops"} {
 				assert.False(t, priv(ro, tbl, "SELECT"),
 					"%s: %s can read personal data or session material; 00754 withholds it and F-47 says why", tbl, ro)

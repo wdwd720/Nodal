@@ -4,6 +4,7 @@ package notifications_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -167,13 +168,23 @@ func TestAuditAgnot_AnUnsuppressibleKindIgnoresAStoredPreference(t *testing.T) {
 	assert.True(t, out.Suppressed)
 }
 
-// F-agnot: the follower copies a person's IP address and User-Agent out of
+// F-188 (was TestAuditAgnot_ALoginsIPAddressLandsInATableNothingCanPurge on
+// audit/agents-notifications @ 8a69aaa, which asserted the address was there).
+//
+// The follower copied a person's IP address and User-Agent out of
 // security_events -- a partitioned table whose partitions exist so months can
 // be DROPped (00740) -- into notifications.data, a table no role can delete a
 // row from: notifications_guard raises NOTIFICATION_IMMUTABLE on DELETE for
 // every role including the owner, and no retention pass in cmd/api names the
-// table. cp_readonly and cp_ops both hold SELECT on it.
-func TestAuditAgnot_ALoginsIPAddressLandsInATableNothingCanPurge(t *testing.T) {
+// table. cp_readonly and cp_ops both held SELECT on it.
+//
+// Three things changed and this asserts all three: the notification carries a
+// /24 locality and a two-word device summary instead of the address and the
+// header; the exact address is still in the trail that CAN be dropped, one
+// documented route away; and neither analytics role can read the table at all
+// (D-106). What has not changed is the guard: nothing deletes a notification,
+// which is exactly why what goes into one is now bounded.
+func TestAuditAgnot_ALoginsIPAddressDoesNotLandInATableNothingCanPurge(t *testing.T) {
 	d := openDB(t)
 	ctx := context.Background()
 	uid := newUser(t, d)
@@ -195,24 +206,40 @@ func TestAuditAgnot_ALoginsIPAddressLandsInATableNothingCanPurge(t *testing.T) {
 	_, err = f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
 
-	var ip, ua string
+	var data []byte
 	require.NoError(t, d.QueryRow(ctx,
-		`SELECT data->>'ip', data->>'user_agent' FROM notifications
+		`SELECT data FROM notifications
 		  WHERE user_id = $1 AND kind = 'SECURITY_NEW_SESSION' ORDER BY created_at DESC LIMIT 1`,
-		uid).Scan(&ip, &ua))
-	require.Equal(t, "198.51.100.42", ip)
-	require.Equal(t, "Mozilla/5.0 (fingerprintable)", ua)
+		uid).Scan(&data))
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.NotContains(t, got, "ip")
+	assert.NotContains(t, got, "user_agent")
+	assert.Equal(t, "198.51.100.0/24", got["ip_prefix"], "a /24 says 'not where you live' and nothing finer")
+	assert.Equal(t, "/v1/me/audit", got["exact_address_at"])
 
-	// Both analytics roles can read it.
+	// The exact address is still recorded -- in the partitioned trail the
+	// retention pass drops a month at a time.
+	var exact string
+	require.NoError(t, d.QueryRow(ctx,
+		`SELECT host(ip) FROM security_events WHERE user_id = $1 AND kind = 'login'`, uid).Scan(&exact))
+	assert.Equal(t, "198.51.100.42", exact)
+
+	// Neither analytics role can read the table at all (ADR-0021 section 4),
+	// and the DELETE grant cp_ops held, which the guard refuses anyway, is
+	// gone with it.
 	for _, role := range []string{"cp_readonly", "cp_ops"} {
-		var can bool
+		var canRead, canDelete bool
 		require.NoError(t, d.QueryRow(ctx,
-			`SELECT has_table_privilege($1, 'public.notifications', 'SELECT')`, role).Scan(&can))
-		assert.True(t, can, "%s can SELECT a customer's IP address out of notifications.data", role)
+			`SELECT has_table_privilege($1, 'public.notifications', 'SELECT'),
+			        has_table_privilege($1, 'public.notifications', 'DELETE')`, role).Scan(&canRead, &canDelete))
+		assert.False(t, canRead, "%s can read a customer's notification centre", role)
+		assert.False(t, canDelete, "%s holds a DELETE the table's own guard refuses", role)
 	}
 
 	// And nothing can delete it. The owner role is the strongest the deployment
-	// has and the guard refuses it too.
+	// has and the guard refuses it too -- which is the whole reason the address
+	// above is coarse: what is written here is kept forever.
 	ownerURL := os.Getenv("CP_TEST_MIGRATE_DATABASE_URL")
 	if ownerURL == "" {
 		t.Skip("CP_TEST_MIGRATE_DATABASE_URL not set")
@@ -223,6 +250,4 @@ func TestAuditAgnot_ALoginsIPAddressLandsInATableNothingCanPurge(t *testing.T) {
 	_, derr := owner.Exec(ctx, `DELETE FROM notifications WHERE user_id = $1`, uid)
 	require.Error(t, derr, "expected the guard to refuse")
 	assert.Contains(t, derr.Error(), "NOTIFICATION_IMMUTABLE")
-	t.Fatalf("a login IP address is stored in notifications.data, readable by cp_readonly and cp_ops, "+
-		"and undeletable by every role: %v", derr)
 }

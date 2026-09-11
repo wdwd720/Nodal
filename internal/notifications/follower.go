@@ -200,9 +200,6 @@ func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub
 			return nil
 		}
 		last := changes[len(changes)-1]
-		if err := markPending(ctx, tx, s.name, last.At); err != nil {
-			return err
-		}
 		written := 0
 		for _, c := range changes {
 			for _, n := range c.Notify {
@@ -261,19 +258,10 @@ func loadCursor(ctx context.Context, q db.Querier, name string) (time.Time, stri
 	}
 }
 
-func markPending(ctx context.Context, q db.Querier, name string, at time.Time) error {
-	_, err := q.Exec(ctx,
-		`UPDATE notification_follower_cursors SET pending_at = $2 WHERE source = $1`, name, at.UTC())
-	if err != nil {
-		return fmt.Errorf("record the pass in flight: %w", err)
-	}
-	return nil
-}
-
 func saveCursor(ctx context.Context, q db.Querier, name string, at time.Time, rowID string, written int) error {
 	_, err := q.Exec(ctx,
 		`UPDATE notification_follower_cursors
-		    SET last_at = $2, last_id = $3::uuid, pending_at = NULL, emitted = emitted + $4
+		    SET last_at = $2, last_id = $3::uuid, emitted = emitted + $4
 		  WHERE source = $1`, name, at.UTC(), rowID, written)
 	if err != nil {
 		return fmt.Errorf("advance the cursor: %w", err)
