@@ -130,9 +130,26 @@ it.
 | `Submit(ctx, SubmitRequest) (SubmitResult, error)` | one payout under a key Nodal chose and persisted first. `SubmitRequest` carries the idempotency key, Nodal's reference, the destination's provider reference and kind, the amount in minor units and the currency; `Validate()` refuses an empty one |
 | `Lookup(ctx, idempotencyKey) (SubmitResult, error)` | what happened to a key. A provider without it cannot be registered at all, because a timed-out submission would be permanently ambiguous |
 
-`verification.Provider` (`internal/verification/provider.go`): `Name`,
-`Capabilities`, `Start`, `Poll` and `ParseWebhook`. `IngestWebhook` exists on the
-service and has no production caller and no route.
+`verification.Provider` (`internal/verification/provider.go`):
+
+| Method | What it does |
+|---|---|
+| `Name() string` | identifies the provider in configuration, evidence and audit |
+| `Capabilities() Capabilities` | what the provider's contract says it performs, never inferred from marketing copy |
+| `Start(ctx, SessionRequest) (StartedSession, error)` | opens a hosted session; the returned URL is single-use, expires, and is handed to the browser that asked for it -- never stored (ADR-0025 section 3, D-125) |
+| `Get(ctx, providerRef) (Result, error)` | the reconciliation poll. `verification.Service.Poll` is the CALLER and `Get` is the contract method; the two are not the same name |
+| `Resume(ctx, providerRef) (StartedSession, error)` | a fresh hosted URL on the SAME session, so the failed-attempt history a provider counts against its own limits survives. It is shipped, not a design target |
+| `ParseWebhook(headers, body) (Result, error)` | verifies the provider's signature over the RAW bytes and returns what it said |
+
+`IngestWebhook` exists on the service and has no production caller and no route.
+
+This table is held to the code by `TestAuditWV2_ProviderBoundaryNamesTheShippedInterfaceMethods`
+(`test/docs`), which reflects over both interfaces and fails when this section
+names a method they do not have or omits one they do. It exists because the
+previous version of this paragraph named `Poll` -- the service's method -- as a
+provider method and omitted `Resume` entirely, so a reader who trusted it
+concluded that resuming a hosted session was still to be built (F-268; F-234's
+defect class, turned on F-234's own fix).
 
 **The gap between 3a and 3b, stated so nobody rediscovers it.** A real adapter
 will add: a `Capabilities` that takes a jurisdiction (the union needs

@@ -91,3 +91,53 @@ func TestNoNeverStoredFieldReachesTheIdempotencyRecord(t *testing.T) {
 	assert.True(t, strings.Contains(session, `"resume"`),
 		"a replay has to be able to say why the link is not there")
 }
+
+// TestRedactForStorageStoresNothingRecognisableWhenItCannotInspectABody is the
+// fail-closed half of the same rule (F-267, D-135).
+//
+// The two branches of redactForStorage that exist to refuse a body nobody has
+// inspected returned nil, and nil is CommandResult's sentinel for "there is
+// nothing special to store, keep Body" -- so both stored the whole answer, and
+// the comment beside them said the opposite of what happened. Today's routes
+// all answer with a JSON object, so the branch was unreachable from the
+// outside; a route that answers with a list, a string or `null` reaches it.
+//
+// The assertion is about what the RECORD holds, not about what the function
+// returned, because the return value only matters through stored().
+func TestRedactForStorageStoresNothingRecognisableWhenItCannotInspectABody(t *testing.T) {
+	t.Parallel()
+
+	const op = "PostMeVerificationSessions"
+	require.Contains(t, neverStored, op, "this operation declares a never-stored field")
+
+	for _, shape := range []struct {
+		name string
+		body string
+	}{
+		{"a list", `["https://verify.example/s/single-use-token"]`},
+		{"a bare string", `"https://verify.example/s/single-use-token"`},
+		{"null", `null`},
+		{"not JSON at all", `https://verify.example/s/single-use-token`},
+	} {
+		t.Run(shape.name, func(t *testing.T) {
+			body := []byte(shape.body)
+			stored := CommandResult{Body: body, StoredBody: redactForStorage(op, body)}.stored()
+			assert.Equal(t, "{}", string(stored),
+				"a body this function cannot inspect is recorded as an empty document")
+			assert.NotContains(t, string(stored), "single-use-token",
+				"the credential reached the record by the path that exists to keep it out")
+		})
+	}
+
+	// And the ordinary path is untouched: an object still keeps everything but
+	// the declared field, and a body with nothing to strip is stored verbatim.
+	object := []byte(`{"session":{"id":"s1"},"hosted_url":"https://verify.example/s/single-use-token"}`)
+	redacted := string(CommandResult{Body: object, StoredBody: redactForStorage(op, object)}.stored())
+	assert.Contains(t, redacted, `"session"`)
+	assert.Contains(t, redacted, `"resume"`)
+	assert.NotContains(t, redacted, "single-use-token")
+
+	plain := []byte(`{"quote":{"id":"q1"}}`)
+	assert.Equal(t, string(plain),
+		string(CommandResult{Body: plain, StoredBody: redactForStorage("GetMeEligibility", plain)}.stored()))
+}

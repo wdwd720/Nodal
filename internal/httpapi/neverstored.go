@@ -56,6 +56,17 @@ var neverStored = map[string][]string{
 const resumeSentence = "the single-use link for this session was handed to the browser that asked for it and is " +
 	"not stored, so this replay cannot return it; start a new session to get another"
 
+// emptyDocument is what this function stores when it cannot inspect a body that
+// belongs to an operation declaring a never-stored field.
+//
+// It is an explicit empty JSON object rather than nil. Nil is CommandResult's
+// sentinel for "there is nothing special to store, keep Body" -- so the two
+// branches below that exist to refuse to store a body nobody could inspect were
+// storing the WHOLE body, credential and all, while their comments said the
+// opposite (F-267). An empty document replays as a body with no fields in it,
+// which is the safe direction the comments always claimed.
+var emptyDocument = []byte("{}")
+
 // redactForStorage returns what may be persisted as the idempotent record for
 // an operation, given the response body the caller is getting.
 //
@@ -70,8 +81,16 @@ func redactForStorage(operation string, body []byte) []byte {
 	if err := json.Unmarshal(body, &doc); err != nil {
 		// Not an object: nothing to strip by name, and storing a body this
 		// function cannot read would be storing something nobody has checked.
-		// An empty record replays as "no body", which is the safe direction.
-		return nil
+		// An empty record replays as "no body", which is the safe direction --
+		// and saying so requires an empty DOCUMENT, because nil means "keep the
+		// whole body" one function along.
+		return emptyDocument
+	}
+	if doc == nil {
+		// A literal `null` parses into a nil map without error. It carries no
+		// field to strip and it is not a document either, so it is treated the
+		// same way as a body that would not parse at all.
+		return emptyDocument
 	}
 	removed := false
 	for _, f := range fields {
@@ -86,7 +105,10 @@ func redactForStorage(operation string, body []byte) []byte {
 	doc["resume"] = mustJSON(resumeSentence)
 	out, err := json.Marshal(doc)
 	if err != nil {
-		return nil
+		// The redacted document did not marshal. Whatever is in it, the body it
+		// came from carries a field this operation declares must never be
+		// written down, so the record gets nothing rather than the original.
+		return emptyDocument
 	}
 	return out
 }
