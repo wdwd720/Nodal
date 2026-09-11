@@ -37,8 +37,15 @@ func (s *Server) GetAuthLogin(ctx context.Context, request api.GetAuthLoginReque
 		return nil, errs.New(errs.CodeInternal, "internal error")
 	}
 	stepUp := request.Params.StepUp != nil && *request.Params.StepUp
+	returnTo := ""
+	if request.Params.ReturnTo != nil {
+		returnTo = *request.Params.ReturnTo
+	}
+	// The identity service refuses anything that is not a local path, so an
+	// open redirect cannot be built here; the app origin is configuration.
 	res, err := s.opts.Ports.Identity.Begin(ctx, identity.BeginRequest{
 		StepUp:    stepUp,
+		ReturnTo:  returnTo,
 		IP:        clientIP(r, s.trusted),
 		UserAgent: userAgent(r),
 	})

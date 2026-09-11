@@ -946,6 +946,24 @@ func TestLoginRedirectsToTheIdentityProvider(t *testing.T) {
 	assert.NotContains(t, state.Value, "abc", "the cookie carries a digest, not the state itself")
 }
 
+// The login endpoint forwards the app's return path to the identity service,
+// which stores it with the attempt and refuses anything that is not a local
+// path (internal/identity). Until now the contract exposed only step_up, so
+// the web app had to carry the path in the tab across the round trip.
+func TestLoginForwardsTheReturnPath(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.as(nil)
+	res := h.do(http.MethodGet, "/v1/auth/login?return_to=/markets/abc&step_up=true", nil)
+	require.Equal(t, http.StatusFound, res.Code)
+	assert.Equal(t, "/markets/abc", h.ports.identity.lastBegin.ReturnTo)
+	assert.True(t, h.ports.identity.lastBegin.StepUp)
+
+	res = h.do(http.MethodGet, "/v1/auth/login", nil)
+	require.Equal(t, http.StatusFound, res.Code)
+	assert.Empty(t, h.ports.identity.lastBegin.ReturnTo, "no parameter, no path: the identity service's default applies")
+}
+
 func TestCallbackSetsAnHttpOnlySessionCookie(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

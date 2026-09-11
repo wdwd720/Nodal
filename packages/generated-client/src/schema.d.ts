@@ -1163,6 +1163,8 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    /** @description Local path within the web app to return to after the callback, e.g. /portfolio. Must start with a single slash; anything else is refused with a validation problem. It is stored with the login attempt, never echoed from the request, and appended to the app origin the deployment configures (CP_AUTH_POST_LOGIN_URL). */
+                    return_to?: string;
                     /** @description Request strong authentication (MFA/passkey) for a sensitive action */
                     step_up?: boolean;
                 };
@@ -1179,6 +1181,7 @@ export interface paths {
                     };
                     content?: never;
                 };
+                400: components["responses"]["Problem"];
                 503: components["responses"]["Problem"];
             };
         };

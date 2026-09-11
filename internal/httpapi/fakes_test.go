@@ -42,12 +42,14 @@ type fakeIdentity struct {
 	complete  identity.Completed
 	loggedIn  bool
 	loggedOut bool
+	lastBegin identity.BeginRequest
 }
 
-func (f *fakeIdentity) Begin(context.Context, identity.BeginRequest) (identity.BeginResult, error) {
+func (f *fakeIdentity) Begin(_ context.Context, req identity.BeginRequest) (identity.BeginResult, error) {
 	if err := f.fail(); err != nil {
 		return identity.BeginResult{}, err
 	}
+	f.lastBegin = req
 	return f.begun, nil
 }
 

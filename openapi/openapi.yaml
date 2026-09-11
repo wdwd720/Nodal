@@ -37,8 +37,17 @@ paths:
           name: step_up
           schema: { type: boolean }
           description: Request strong authentication (MFA/passkey) for a sensitive action
+        - in: query
+          name: return_to
+          schema: { type: string, maxLength: 512 }
+          description: >-
+            Local path within the web app to return to after the callback, e.g. /portfolio.
+            Must start with a single slash; anything else is refused with a validation
+            problem. It is stored with the login attempt, never echoed from the request,
+            and appended to the app origin the deployment configures (CP_AUTH_POST_LOGIN_URL).
       responses:
         "302": { description: Redirect to the identity provider }
+        "400": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /auth/callback:
     get:
