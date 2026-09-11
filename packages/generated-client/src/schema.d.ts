@@ -807,6 +807,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operator support view of one user (read only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    userId: components["parameters"]["UserId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Support view */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUserView"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userId}/closure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide a user open closure request (cancel, refuse, or effect it after the cooling-off period)
+         * @description The only mutation the support surface offers, and it acts on a request the user themselves opened. EFFECT is refused before the cooling-off period has passed, by the database as well as by the service, and an operator may not decide a request of their own.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    userId: components["parameters"]["UserId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ClosureDecision"];
+                };
+            };
+            responses: {
+                /** @description Support view after the decision */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminUserView"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assets": {
         parameters: {
             query?: never;
@@ -1810,6 +1899,286 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The standing of the caller own account, with any restrictions and open closure request */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account standing */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyAccount"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for the caller own account to be closed (a request with a cooling-off period, never a deletion)
+         * @description Requires a recent strong authentication. The request waits out a cooling-off period during which the caller can cancel it, and is then effected by an operator. Nothing is deleted: financial and audit records are retained.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CloseAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Account standing, including the open request */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyAccount"];
+                    };
+                };
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/account/close/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel the caller own open closure request
+         * @description Deliberately does NOT require a step-up. Requesting closure is the dangerous direction and asks for one; stopping a request must never be harder than starting it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account standing after cancelling */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MyAccount"];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update the caller own profile (display name, handle, locale, time zone)
+         * @description Every field is optional and only the ones present change; an empty handle clears it. There is no id in the path, so this route can reach no profile but the caller own.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ProfileUpdate"];
+                };
+            };
+            responses: {
+                /** @description Updated profile */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserProfile"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the system knows about the security of the caller own account
+         * @description Derived entirely from the session store and the claims of the current session. It holds no secret and creates nothing.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Security summary */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SecuritySummary"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/terms-acceptances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Legal documents, which of them the caller has accepted, and which are outstanding */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Acceptance state */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TermsState"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Accept the named documents at the versions currently served
+         * @description The record names the document, its version and the sha256 of the exact bytes shown. Accepting the same bytes twice is idempotent and produces one record, not two.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TermsAcceptanceRequest"];
+                };
+            };
+            responses: {
+                /** @description Acceptance state after accepting */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TermsState"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/native-assets": {
         parameters: {
             query?: never;
@@ -2796,12 +3165,20 @@ export interface components {
             id: components["schemas"]["UUID"];
             /** @enum {string} */
             kind: "CUSTOMER" | "CANARY" | "PLATFORM";
+            owner_user_id?: components["schemas"]["UUID"];
             /** @enum {string} */
             status: "ACTIVE" | "RESTRICTED" | "FROZEN" | "CLOSED";
             status_reason?: string;
         };
         AccountPage: components["schemas"]["Page"] & {
             items: components["schemas"]["Account"][];
+        };
+        /** @description A restriction, written for the person it applies to. The free text an operator wrote on a status change is deliberately not here: it was written for other operators and appears in the support view instead. */
+        AccountRestriction: {
+            account_id?: components["schemas"]["UUID"];
+            /** @enum {string} */
+            code: "USER_SUSPENDED" | "USER_CLOSED" | "ACCOUNT_RESTRICTED" | "ACCOUNT_FROZEN" | "ACCOUNT_CLOSED" | "CLOSURE_PENDING";
+            message: string;
         };
         AccountStatusChange: {
             reason: string;
@@ -2856,6 +3233,31 @@ export interface components {
             reason: string;
             target_id: string;
             target_type: string;
+        };
+        /** @description Read only. There is no field here an operator can write, and the only mutation the support surface offers is deciding a closure request the user themselves opened (PART 38). */
+        AdminUserView: {
+            acceptances?: components["schemas"]["TermsAcceptance"][];
+            accounts: components["schemas"]["Account"][];
+            active_sessions: number;
+            /** @description Where this user history is recorded, so the support view points at the evidence rather than restating it. */
+            audit_stream: string;
+            closure_request?: components["schemas"]["ClosureRequest"];
+            created_at: components["schemas"]["Timestamp"];
+            /** @description The identity provider asserted a verified address. The address itself is sealed and is not reachable from here. */
+            email_verified: boolean;
+            idp_issuer: string;
+            idp_subject: string;
+            onboarding?: components["schemas"]["Onboarding"];
+            profile?: components["schemas"]["UserProfile"];
+            restrictions: components["schemas"]["AccountRestriction"][];
+            user_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            user_status: "ACTIVE" | "SUSPENDED" | "CLOSED";
+            /** @description The verification level Nodal has established. known is false when this deployment wired no resolver, which is reported as not known here and never as NONE. */
+            verification: {
+                known: boolean;
+                level?: string;
+            };
         };
         Asset: {
             chain: string;
@@ -2931,6 +3333,26 @@ export interface components {
             security_approval_ref?: string;
             /** @enum {string} */
             state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
+        };
+        CloseAccountRequest: {
+            /** @description Optional. A person leaving does not owe an explanation. */
+            reason?: string;
+        };
+        ClosureDecision: {
+            /** @enum {string} */
+            decision: "CANCEL" | "REFUSE" | "EFFECT";
+            reason: string;
+        };
+        ClosureRequest: {
+            cooling_off_until: components["schemas"]["Timestamp"];
+            decided_at?: components["schemas"]["Timestamp"];
+            decided_reason?: string;
+            /** @description The cooling-off period has passed and an operator may now effect the request. */
+            effectable?: boolean;
+            id: components["schemas"]["UUID"];
+            requested_at: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            state: "PENDING" | "CANCELLED" | "REFUSED" | "EFFECTED";
         };
         /** @description Note the absence of a Credit quantity. A client that could state one could state nine million, and the only thing between that request and a ledger issuance would be a validation somebody remembered to write. */
         CreateCreditPurchaseRequest: {
@@ -3258,6 +3680,34 @@ export interface components {
             /** @default * */
             scope_id: string;
         };
+        LegalDocument: {
+            accepted: boolean;
+            accepted_at?: components["schemas"]["Timestamp"];
+            /** @description The document text, as Markdown, so a client renders exactly what it records acceptance of. */
+            body?: string;
+            content_hash: string;
+            /** @description The document has not been reviewed by a lawyer. Every document currently served is marked, and a surface must say so rather than presenting a draft as settled. */
+            counsel_review_required: boolean;
+            /** @enum {string} */
+            document_id: "TERMS_OF_SERVICE" | "PRIVACY_POLICY" | "RISK_DISCLOSURE" | "CREDITS_TERMS" | "WITHDRAWAL_DISCLOSURE";
+            /**
+             * @description When acceptance is required. A WITHDRAWAL document is not asked for at signup.
+             * @enum {string}
+             */
+            requirement: "ONBOARDING" | "WITHDRAWAL";
+            title: string;
+            version: string;
+        };
+        MyAccount: {
+            accounts: components["schemas"]["Account"][];
+            closure_request?: components["schemas"]["ClosureRequest"];
+            /** @description How long a new closure request would wait before it could be effected. */
+            cooling_off_days: number;
+            restrictions: components["schemas"]["AccountRestriction"][];
+            user_id: components["schemas"]["UUID"];
+            /** @enum {string} */
+            user_status: "ACTIVE" | "SUSPENDED" | "CLOSED";
+        };
         NativeAsset: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_id: components["schemas"]["UUID"];
@@ -3384,6 +3834,20 @@ export interface components {
             pool_supply: components["schemas"]["Quantity"];
             treasury_allocation: components["schemas"]["Quantity"];
         };
+        /** @description Timestamps, not a state machine. The steps are independent, may be done in any order, and cannot be undone (D-053). */
+        Onboarding: {
+            complete: boolean;
+            completed_at?: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            next_step?: "PROFILE" | "TERMS";
+            started_at: components["schemas"]["Timestamp"];
+            steps: {
+                complete: boolean;
+                completed_at?: components["schemas"]["Timestamp"];
+                /** @enum {string} */
+                key: "PROFILE" | "TERMS";
+            }[];
+        };
         Order: {
             account_id: components["schemas"]["UUID"];
             created_at: components["schemas"]["Timestamp"];
@@ -3453,6 +3917,9 @@ export interface components {
             actor_type: "USER" | "OPERATOR";
             amr: string[];
             auth_time: components["schemas"]["Timestamp"];
+            break_glass_until?: components["schemas"]["Timestamp"];
+            onboarding?: components["schemas"]["Onboarding"];
+            profile?: components["schemas"]["UserProfile"];
             roles: string[];
             step_up_valid_until?: components["schemas"]["Timestamp"];
             subject_id: components["schemas"]["UUID"];
@@ -3469,6 +3936,13 @@ export interface components {
             status: number;
             title: string;
             type: string;
+        };
+        /** @description Only the fields present are changed. An empty handle clears it. */
+        ProfileUpdate: {
+            display_name?: string;
+            handle?: string;
+            locale?: string;
+            time_zone?: string;
         };
         ProviderStatus: {
             disable_reason?: string;
@@ -3583,6 +4057,18 @@ export interface components {
             /** @description Where earnings are attributed. Omit for the selling account itself, which is the ordinary case. */
             payout_account_id?: components["schemas"]["UUID"];
         };
+        /** @description Derived from the session store and the claims of the current session. Nothing here is a secret and nothing here is created by asking. */
+        SecuritySummary: {
+            active_sessions: number;
+            amr: string[];
+            current_session_id?: components["schemas"]["UUID"];
+            last_login_at?: components["schemas"]["Timestamp"];
+            last_step_up_at?: components["schemas"]["Timestamp"];
+            /** @description The identity provider asserted a strong authentication method for the current session. */
+            mfa_present: boolean;
+            step_up_max_age_seconds: number;
+            step_up_valid_until?: components["schemas"]["Timestamp"];
+        };
         SessionSummary: {
             created_at: components["schemas"]["Timestamp"];
             current?: boolean;
@@ -3637,6 +4123,22 @@ export interface components {
             quote_id?: components["schemas"]["UUID"];
             target_exposure_usd?: components["schemas"]["USD"];
         };
+        TermsAcceptance: {
+            accepted_at: components["schemas"]["Timestamp"];
+            content_hash: string;
+            document_id: string;
+            id: components["schemas"]["UUID"];
+            version: string;
+        };
+        TermsAcceptanceRequest: {
+            document_ids: ("TERMS_OF_SERVICE" | "PRIVACY_POLICY" | "RISK_DISCLOSURE" | "CREDITS_TERMS" | "WITHDRAWAL_DISCLOSURE")[];
+        };
+        TermsState: {
+            acceptances?: components["schemas"]["TermsAcceptance"][];
+            documents: components["schemas"]["LegalDocument"][];
+            /** @description Documents required at onboarding whose current bytes the caller has not accepted. */
+            outstanding: string[];
+        };
         /** Format: date-time */
         Timestamp: string;
         TradeIntent: {
@@ -3689,6 +4191,18 @@ export interface components {
          * @example 1234.56
          */
         USD: string;
+        /** @description Product-level state only. It carries no e-mail address, phone number, legal name or date of birth: those are sealed in identity_pii and this surface has no route to them. */
+        UserProfile: {
+            /** @description Sixteen hex characters a client renders an identicon from. Nodal accepts no avatar upload. */
+            avatar_seed: string;
+            created_at: components["schemas"]["Timestamp"];
+            display_name?: string;
+            handle?: string;
+            locale: string;
+            time_zone: string;
+            updated_at?: components["schemas"]["Timestamp"];
+            user_id: components["schemas"]["UUID"];
+        };
         /**
          * Format: uuid
          * @description UUIDv7 in canonical form
@@ -3752,6 +4266,7 @@ export interface components {
         PayoutId: components["schemas"]["UUID"];
         ProductId: components["schemas"]["UUID"];
         SessionId: components["schemas"]["UUID"];
+        UserId: components["schemas"]["UUID"];
     };
     requestBodies: never;
     headers: never;
