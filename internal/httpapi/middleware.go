@@ -431,8 +431,10 @@ type RateLimits struct {
 // counted against them but against the crowd (F-88).
 //
 // clientIP reads X-Forwarded-For only when the peer is in a configured trusted
-// network, so an untrusted caller still cannot forge its own key. When no
-// networks are trusted it returns the peer address unchanged -- the old
+// network, so an untrusted caller still cannot forge its own key; and when it
+// does read the header it takes the right-most entry no trusted hop added,
+// because everything to the left of that is the caller's own writing (F-166).
+// When no networks are trusted it returns the peer address unchanged -- the old
 // behaviour -- which is why config.Validate now requires the list to be stated
 // in a production-like environment.
 func principalKey(trusted []*net.IPNet) func(*http.Request) string {
@@ -502,36 +504,79 @@ func rateLimit(l RateLimits, trusted []*net.IPNet) func(http.Handler) http.Handl
 // configured trusted networks; an untrusted client must not be able to forge
 // its own address. An address that cannot be parsed yields the empty string,
 // which audit reads as "not recorded" rather than as a bad value.
+//
+// # Why the list is walked from the RIGHT (F-166)
+//
+// A reverse proxy APPENDS to whatever X-Forwarded-For the client sent --
+// nginx's `$proxy_add_x_forwarded_for` is the canonical form of it -- so the
+// header this process reads is "<whatever the client wrote>, <the address the
+// proxy saw>". Only the right-most entry is the proxy's own word for who
+// called; everything to its left is client input that arrived inside a header.
+//
+// Reading the LEFT-most entry therefore let any caller behind the platform
+// router choose its own value for both things this function feeds: the
+// rate-limit key for every unauthenticated class, including the auth budget
+// that exists to stop brute force, and the address recorded in `sessions`,
+// `login_attempts`, `security_events` and `terms_acceptances.source_ip`.
+//
+// So the walk is right to left, discarding entries that are themselves trusted
+// proxies -- a chain of two balancers appends twice -- and the first entry that
+// is not one is the closest address any trusted hop actually observed. A list
+// of nothing but trusted addresses, or nothing parsable, falls back to
+// RemoteAddr, which is the peer and is never forgeable.
 func clientIP(r *http.Request, trusted []*net.IPNet) string {
 	remote := plainIP(r.RemoteAddr)
 	if remote == "" || len(trusted) == 0 {
 		return remote
 	}
-	peer, err := netip.ParseAddr(remote)
-	if err != nil {
-		return remote
-	}
-	isTrusted := false
-	for _, n := range trusted {
-		if n.Contains(net.IP(peer.AsSlice())) {
-			isTrusted = true
-			break
-		}
-	}
-	if !isTrusted {
+	if !isTrustedProxy(remote, trusted) {
 		return remote
 	}
 	fwd := r.Header.Get("X-Forwarded-For")
 	if fwd == "" {
 		return remote
 	}
-	// The left-most entry is the original client as recorded by the first
-	// trusted proxy.
-	first := plainIP(strings.TrimSpace(strings.Split(fwd, ",")[0]))
-	if first == "" {
-		return remote
+	entries := strings.Split(fwd, ",")
+	// The list is caller-controlled and unbounded; only the right-hand end of
+	// it can say anything, so a header with thousands of entries is truncated
+	// to its last few before a single one is parsed. 32 is far more hops than
+	// any real deployment has and bounds the work one request can ask for.
+	if len(entries) > maxForwardedForEntries {
+		entries = entries[len(entries)-maxForwardedForEntries:]
 	}
-	return first
+	for i := len(entries) - 1; i >= 0; i-- {
+		ip := plainIP(entries[i])
+		switch {
+		case ip == "":
+			// An unparsable entry is not evidence of anything, and stopping
+			// here would let a caller end the walk on a value it chose.
+			continue
+		case isTrustedProxy(ip, trusted):
+			continue
+		default:
+			return ip
+		}
+	}
+	return remote
+}
+
+// maxForwardedForEntries bounds how much of an X-Forwarded-For list is parsed.
+const maxForwardedForEntries = 32
+
+// isTrustedProxy reports whether a plain IP is inside one of the configured
+// trusted networks.
+func isTrustedProxy(ip string, trusted []*net.IPNet) bool {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	as := net.IP(addr.AsSlice())
+	for _, n := range trusted {
+		if n.Contains(as) {
+			return true
+		}
+	}
+	return false
 }
 
 // plainIP normalises "host:port", "[v6]:port" or a bare address to a canonical
