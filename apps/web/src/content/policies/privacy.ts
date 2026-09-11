@@ -18,6 +18,7 @@ import type { PolicyDocument } from "./types.ts";
 export const PRIVACY_V1: PolicyDocument = {
   id: "privacy-v1",
   slug: "privacy",
+  explains: "PRIVACY_POLICY",
   title: "Privacy",
   summary:
     "The personal data the product holds, how it is sealed, who it is shared with, and what the " +
