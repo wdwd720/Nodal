@@ -160,6 +160,15 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("kill switch controller: %w", cerr)
 	}
 	killChecker := killswitch.NewChecker(killswitch.Policy{})
+	// The boundary pre-check. POLICY_AUTHORITY §2 allows an in-process cache to
+	// serve pre-checks for at most one second, and never to be the last word:
+	// every domain service still calls killChecker inside its own transaction.
+	// What this buys is a command refused by an active switch being refused
+	// before a quote is consumed or a provider is called.
+	killPreCheck, kerr := killswitch.NewCachedChecker(killChecker, database, clk, killswitch.MaxCacheTTL)
+	if kerr != nil {
+		return nil, fmt.Errorf("kill switch pre-check: %w", kerr)
+	}
 
 	// From the configuration, not the environment: this list is condition 1 of
 	// the policy authority, and it belongs in the hash that proves which
@@ -445,7 +454,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		return nil, fmt.Errorf("sandbox payout provider: %w", err)
 	}
 	payoutEngine := payout.NewEngine(creditSvc)
-	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk)
+	// The emergency controls reach the conversion-request path: Create,
+	// CompleteVerification and Submit each check the WITHDRAW class inside
+	// their own transaction, and read the account's status there too. Before
+	// D-092 this package imported no kill switch, so WITHDRAWALS_DISABLE,
+	// GLOBAL_NEW_RISK_KILL and ACCOUNT_FREEZE stopped nothing on the one
+	// withdrawal surface a deployment can actually reach (F-163).
+	payoutSvc := payout.NewService(ledgerSvc, creditSvc, payoutEngine, payoutRegistry, clk, killChecker, accountRepo)
 	// Submit and Reconcile had no caller anywhere in cmd/, so a reserved payout
 	// sat in VERIFIED forever with the customer's Credits held in
 	// PAYOUT_RESERVED and the provider never told. See runPayoutSweeps for why
@@ -615,6 +630,9 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 			// policy is a persisted version with evidence, never a name here.
 			PayoutPolicy: payoutPolicyFor(cfg),
 			Capabilities: gateCapabilityResolver{checker: gateChecker, q: database},
+			// The emergency controls, at the boundary. Authoritative checks stay
+			// inside each domain service's transaction (D-092).
+			KillSwitches: killPreCheck,
 			// The verification level Nodal can establish BY ITSELF, and no
 			// level above it: NODAL_IDENTITY when the identity provider
 			// asserted a verified email address, otherwise NONE.

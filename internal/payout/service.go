@@ -13,6 +13,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/observability"
@@ -39,6 +40,19 @@ type Credits interface {
 // does not force every caller to import internal/assets.
 type assetIDType = assetsAssetID
 
+// KillSwitchChecker is the emergency-control guard. *killswitch.Checker
+// satisfies it, and internal/withdrawal declares the same interface for the
+// same reason: the check reads Postgres inside the transaction that authorizes
+// the action, so a switch activated a moment ago is always seen.
+type KillSwitchChecker interface {
+	Check(ctx context.Context, q db.Querier, a killswitch.Action) error
+}
+
+// Accounts reads account status. *accounts.Repository satisfies it.
+type Accounts interface {
+	Get(ctx context.Context, q db.Querier, accountID accountsAccountID) (accountsAccount, error)
+}
+
 // Service creates, reserves, submits and reconciles payouts.
 type Service struct {
 	poster    Poster
@@ -46,14 +60,52 @@ type Service struct {
 	engine    *Engine
 	providers *Registry
 	clk       clock.Clock
+	kills     KillSwitchChecker
+	accounts  Accounts
 }
 
 // NewService returns a Service. No argument may be nil.
-func NewService(poster Poster, credits Credits, engine *Engine, providers *Registry, clk clock.Clock) *Service {
-	if poster == nil || credits == nil || engine == nil || providers == nil || clk == nil {
-		panic("payout: NewService requires a poster, credits, an engine, a provider registry and a clock")
+//
+// kills and accounts are required rather than optional for the reason F-163
+// records: this package creates, reserves and submits every conversion request
+// the product has, and it imported no kill switch at all, so WITHDRAWALS_DISABLE,
+// GLOBAL_NEW_RISK_KILL and ACCOUNT_FREEZE stopped none of it while
+// POLICY_AUTHORITY §2 said all three blocked the WITHDRAW class. A guard a
+// caller may leave nil is a guard that is eventually left nil.
+func NewService(poster Poster, credits Credits, engine *Engine, providers *Registry, clk clock.Clock, kills KillSwitchChecker, accts Accounts) *Service {
+	if poster == nil || credits == nil || engine == nil || providers == nil || clk == nil || kills == nil || accts == nil {
+		panic("payout: NewService requires a poster, credits, an engine, a provider registry, a clock, a kill-switch checker and an account reader")
 	}
-	return &Service{poster: poster, credits: credits, engine: engine, providers: providers, clk: clk}
+	return &Service{poster: poster, credits: credits, engine: engine, providers: providers, clk: clk, kills: kills, accounts: accts}
+}
+
+// guardWithdraw is the WITHDRAW-class check every entry point that moves a
+// conversion request forward makes, inside the transaction that authorizes it.
+//
+// Two controls, in the order an operator would expect them to fire: the kill
+// switches (WITHDRAWALS_DISABLE and GLOBAL_NEW_RISK_KILL are global, and
+// ACCOUNT_FREEZE names the account), then the account's own status. Both are
+// what internal/withdrawal -- the older crypto-address path, which refuses
+// everything today -- has always done at the same boundary; the conversion
+// request is the withdrawal surface that actually reaches a provider, and it
+// made neither check (F-163, D-092).
+func (s *Service) guardWithdraw(ctx context.Context, q db.Querier, accountID accountsAccountID) error {
+	if err := s.kills.Check(ctx, q, killswitch.Action{Class: killswitch.Withdraw, AccountID: accountID.String()}); err != nil {
+		return err
+	}
+	acct, err := s.accounts.Get(ctx, q, accountID)
+	if err != nil {
+		return err
+	}
+	if acct.Status != accountsStatusActive {
+		code := errs.CodeForbidden
+		if acct.Status == accountsStatusFrozen {
+			code = errs.CodeAccountFrozen
+		}
+		return errs.Newf(code, "account status %s does not allow a conversion request", acct.Status).
+			WithField("account_status", string(acct.Status))
+	}
+	return nil
 }
 
 // Provider returns a registered payout provider, so callers can ask what it
@@ -117,6 +169,13 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 	}
 	if tx == nil {
 		return Request{}, Decision{}, errs.New(errs.CodeInternal, "payout: Create requires a transaction")
+	}
+	// The emergency controls, in the transaction that authorizes the request and
+	// before anything is consumed, decided or written: a quote is burned by the
+	// branch below, and burning it under an active WITHDRAWALS_DISABLE would be a
+	// switch that costs the user something while stopping nothing.
+	if err := s.guardWithdraw(ctx, tx, r.AccountID); err != nil {
+		return Request{}, Decision{}, err
 	}
 	if existing, found, err := s.byIdempotencyKey(ctx, tx, r.IdempotencyKey); err != nil {
 		return Request{}, Decision{}, err
@@ -258,6 +317,12 @@ func (s *Service) CompleteVerification(ctx context.Context, tx pgx.Tx, requestID
 		return Request{}, Decision{}, errs.Newf(errs.CodeInvalidStateTransition,
 			"only a payout awaiting verification can complete it; this one is %s", req.State).
 			WithField("payout_id", requestID.String())
+	}
+	// The same guard as Create, for the same reason it re-evaluates eligibility
+	// rather than trusting the earlier decision: days can pass here, and this is
+	// the call that reserves the value.
+	if err := s.guardWithdraw(ctx, tx, req.AccountID); err != nil {
+		return Request{}, Decision{}, err
 	}
 
 	in.AccountID = req.AccountID
@@ -411,6 +476,17 @@ func (s *Service) Submit(ctx context.Context, d *db.DB, requestID RequestID, pro
 			return errs.Newf(errs.CodeInvalidStateTransition,
 				"a payout is submitted from VERIFIED; this one is %s", r.State).
 				WithField("payout_id", requestID.String())
+		}
+		// The last point at which a switch can still stop value leaving. The
+		// reservation is already made and the request is about to be claimed and
+		// handed to a provider under a committed idempotency key, after which only
+		// reconciliation can answer what happened -- so an operator who activates
+		// WITHDRAWALS_DISABLE, GLOBAL_NEW_RISK_KILL or ACCOUNT_FREEZE between the
+		// request and the sweep gets what they asked for. The request stays in
+		// VERIFIED with the value reserved, and the next sweep submits it once the
+		// switch is released.
+		if err := s.guardWithdraw(ctx, tx, r.AccountID); err != nil {
+			return err
 		}
 		key := "nodal-payout-" + r.ID.String()
 		if _, err := tx.Exec(ctx,

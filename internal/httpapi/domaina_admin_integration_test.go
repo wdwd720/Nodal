@@ -27,6 +27,7 @@ import (
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/instruments"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/money"
@@ -129,7 +130,8 @@ func newDomainAHarness(t *testing.T, d *db.DB) *domainAHarness {
 	// because DomainAExecutors registers PAYOUT_MANUAL_REVIEW_RESOLVE only when
 	// it is given one. It was built after, so the executor was never registered
 	// on this harness and the kind had no test of any kind (F-80).
-	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk)
+	payoutSvc := payout.NewService(led, credits, payout.NewEngine(credits), payout.NewRegistry(true), clk,
+		killswitch.NewChecker(killswitch.Policy{}), accounts.NewRepository())
 
 	fx := newFixtures()
 	ports := fx.ports()

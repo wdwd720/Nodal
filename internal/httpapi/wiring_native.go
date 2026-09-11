@@ -18,6 +18,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
@@ -78,6 +79,22 @@ type NativeEconomyDeps struct {
 	// Clock is used by the compiler for deadline checks. Nil falls back to
 	// the system clock.
 	Clock clock.Clock
+	// KillSwitches pre-checks the emergency controls at the boundary, before a
+	// quote is consumed or a provider is called. Nil skips the pre-check and
+	// changes nothing about the authoritative one, which every domain service
+	// makes inside its own transaction -- see preCheckKillSwitches.
+	KillSwitches KillSwitchPreChecker
+}
+
+// KillSwitchPreChecker answers whether an active switch blocks an action, from
+// an in-process snapshot at most one second old (*killswitch.CachedChecker).
+//
+// It is a PRE-check by name because POLICY_AUTHORITY §2 permits a cache to
+// serve only pre-checks: the authoritative answer is Checker.Check with the
+// authorizing transaction's own Querier, which is where internal/payout and the
+// other domain services make it.
+type KillSwitchPreChecker interface {
+	PreCheck(ctx context.Context, a killswitch.Action) error
 }
 
 // now is the compiler's notion of the present.
