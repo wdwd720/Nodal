@@ -155,7 +155,12 @@ test("example data on the public site is labelled as an example", async ({ brows
 });
 
 test("a page showing balances discloses that they are USDC", async ({ page }) => {
-  for (const route of ["/home", "/portfolio"]) {
+  // `/home` is not in this list any more, and that is the point rather than an
+  // omission: D-077 moved the dashboard onto Credits, which are not USDC and
+  // must not be described as though they were. What Home owes is the Credit
+  // disclosure, which the test below this one requires. `/portfolio` still
+  // shows a USD valuation of a settlement token, so it still owes this one.
+  for (const route of ["/portfolio"]) {
     await page.goto(route);
     const text = await visibleText(page);
     expect(text, `${route} names the settlement asset`).toContain("USDC");
@@ -191,9 +196,17 @@ test("a model score never appears without the denial beside it", async ({ page }
 });
 
 test("pending settlement is never hidden", async ({ page }) => {
-  await page.goto("/settings");
+  // The claim under test is that value which is not yet usable is shown
+  // SEPARATELY and is named as not usable. On the closed-loop product that
+  // lives on the dashboard's Credit module — a frozen bucket and a
+  // payout-eligible split, each with its own figure — rather than on the
+  // hosted rail's funding panel, which D-077 removed with its page.
+  await page.goto("/home");
   const text = await visibleText(page);
-  expect(text).toContain("not spendable until the backend marks them available");
+  expect(text, "value that is held is named as not spendable").toContain("Not spendable until");
+  expect(text, "and what may be paid out is a separate question").toContain(
+    "Payout-eligible value",
+  );
 });
 
 test("the risk statement is on every page", async ({ browser, page }) => {

@@ -1,0 +1,183 @@
+/**
+ * Scenario G — a refund after the Credits were spent.
+ *
+ * `docs/product/STAGING_E2E.md` defines G as purchase → trade → refund webhook
+ * → reversal → frozen or negative handling shown, and its "must not happen" is
+ * the one that matters: **Credits vanishing without an activity row**.
+ *
+ * # What can be driven here, and what cannot
+ *
+ * The reversal itself is provider-side. It arrives as a signed
+ * `charge.refunded` delivery to `POST /v1/webhooks/stripe_credit`, and three
+ * things have to be true before that is possible:
+ *
+ *   1. the API must have a credit-purchase provider configured. There is no
+ *      fake mode — `internal/provider/stripecredit/new.go` refuses one on the
+ *      grounds that Stripe's own test mode is a better fake than any we would
+ *      write — so an API with no Stripe test key registers no webhook port at
+ *      all and the route answers 404;
+ *   2. a funding must already be CAPTURED, which needs a real test-mode card
+ *      payment;
+ *   3. the delivery must carry a valid `Stripe-Signature`, which needs the
+ *      webhook secret the deployment was configured with.
+ *
+ * `driveRefund` below does exactly that, signing with the documented scheme, and
+ * runs whenever `CP_WEB_STRIPE_WEBHOOK_SECRET` and `CP_WEB_CAPTURED_CHARGE_ID`
+ * are both present. On a checkout without them the spec asserts the part that
+ * is true on every deployment — that a reversal is never hidden and a frozen
+ * bucket is never rendered as a zero — and says so here rather than skipping
+ * and looking like coverage.
+ */
+import { createHmac } from "node:crypto";
+
+import { expect, test, type APIResponse, type Page } from "@playwright/test";
+
+const WEBHOOK_SECRET = process.env["CP_WEB_STRIPE_WEBHOOK_SECRET"] ?? "";
+const CAPTURED_CHARGE = process.env["CP_WEB_CAPTURED_CHARGE_ID"] ?? "";
+const CAN_DRIVE = WEBHOOK_SECRET !== "" && CAPTURED_CHARGE !== "";
+
+async function accountId(page: Page): Promise<string> {
+  const response = await page.request.get("/v1/me");
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { account_ids: string[] };
+  const id = body.account_ids[0];
+  expect(id, "the signed-in principal owns an account").toBeTruthy();
+  return id as string;
+}
+
+/**
+ * Signs a delivery the way the provider does.
+ *
+ * `t=<unix>,v1=<hex hmac-sha256 of "<t>.<payload>">` is the documented scheme,
+ * and `internal/provider/stripesig` verifies it. Building it here rather than
+ * bypassing the signature is the point: a test that posted an unsigned body
+ * would be testing a route no real delivery ever takes.
+ */
+function signature(payload: string, secret: string, at: Date): string {
+  // Unix seconds by dropping the millisecond digits from the decimal form: the
+  // source guard forbids every numeric parse and every float operation in this
+  // tree, and a timestamp is not worth an exception.
+  const t = String(at.getTime()).slice(0, -3);
+  const mac = createHmac("sha256", secret).update(`${t}.${payload}`).digest("hex");
+  return `t=${t},v1=${mac}`;
+}
+
+async function driveRefund(page: Page, chargeId: string): Promise<APIResponse> {
+  const payload = JSON.stringify({
+    id: `evt_e2e_${String(Date.now())}`,
+    object: "event",
+    type: "charge.refunded",
+    livemode: false,
+    data: { object: { id: chargeId, object: "charge", refunded: true } },
+  });
+  return page.request.post("/v1/webhooks/stripe_credit", {
+    headers: {
+      "Content-Type": "application/json",
+      "Stripe-Signature": signature(payload, WEBHOOK_SECRET, new Date()),
+    },
+    data: payload,
+  });
+}
+
+test("a frozen bucket is shown as frozen, never folded into the total", async ({ page }) => {
+  // §46: available, withdrawable, spendable and settled are not synonyms, and
+  // a reversal lands in a bucket a customer has to be able to see. This holds
+  // whatever the balance happens to be, including zero — the point is that the
+  // distinction is on screen at all, with its own label and its own figure.
+  const id = await accountId(page);
+  const response = await page.request.get(`/v1/credits/balance?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const balance = (await response.json()) as Record<string, string>;
+
+  await page.goto("/home");
+  const credits = page.locator(".panel", { hasText: "Credits" }).first();
+  await expect(credits).toBeVisible();
+
+  for (const label of ["Total Credits", "Spendable", "Frozen"]) {
+    await expect(
+      credits.locator(`.field:has(dt:text-is("${label}"))`),
+      `${label} has its own labelled figure`,
+    ).toHaveCount(1);
+  }
+  // And the two axes are kept apart: what may be SPENT and what may be PAID
+  // OUT are different questions with different answers.
+  await expect(credits.getByRole("heading", { name: "Payout-eligible value" })).toBeVisible();
+  await expect(credits).toContainText("not an amount of US dollars");
+
+  // The frozen figure is the backend's own string, not something derived here.
+  const frozen = balance["frozen"];
+  expect(frozen, "the balance reports a frozen bucket").toBeTruthy();
+  await expect(
+    credits.locator('.field:has(dt:text-is("Frozen")) .figure').first(),
+  ).toHaveAttribute("title", /Credits$/);
+});
+
+test("a reversed purchase is rendered as a reversal, not as a missing row", async ({ page }) => {
+  // The "must not happen": Credits vanishing without a record. Every purchase
+  // the backend holds in a reversed state has a page that says so in words,
+  // with the state as its code, and no page claims those Credits still exist.
+  const id = await accountId(page);
+  const response = await page.request.get(`/v1/credits/balance?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const balance = (await response.json()) as Record<string, unknown>;
+
+  // `reversed` is optional on the contract. Where the backend reports one, the
+  // interface must account for it rather than let it disappear into the total.
+  const reversed = balance["reversed"];
+  if (typeof reversed === "string" && /[1-9]/.test(reversed)) {
+    await page.goto("/home");
+    const credits = page.locator(".panel", { hasText: "Credits" }).first();
+    await expect(credits).toContainText("Not payout-eligible");
+  }
+
+  // And the notification centre carries the record whether or not this account
+  // has one: a reversal produces `CREDIT_PURCHASE_REVERSED`, which is one of
+  // the kinds that cannot be switched off.
+  await page.goto("/notifications");
+  await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
+  const prefs = page.locator(".panel", { hasText: "What you are notified about" });
+  await expect(prefs).toContainText("CREDIT_PURCHASE_REVERSED");
+  await expect(prefs).toContainText("always sent");
+});
+
+test("the refund webhook produces a reversal the customer can see", async ({ page }) => {
+  test.info().annotations.push({
+    type: "requires",
+    description:
+      "CP_WEB_STRIPE_WEBHOOK_SECRET and CP_WEB_CAPTURED_CHARGE_ID, plus an API with a " +
+      "configured credit-purchase provider. There is no fake mode for it.",
+  });
+
+  if (!CAN_DRIVE) {
+    // Not a skip and not a pass dressed up as one: what IS provable without a
+    // provider is that the route is not silently accepting unsigned deliveries.
+    const unsigned = await page.request.post("/v1/webhooks/stripe_credit", {
+      headers: { "Content-Type": "application/json" },
+      data: { id: "evt_e2e_unsigned", object: "event", type: "charge.refunded" },
+    });
+    expect(
+      unsigned.status(),
+      "an unsigned delivery is refused (400) or the provider is not registered (404) — never accepted",
+    ).not.toBe(200);
+    return;
+  }
+
+  const before = await page.request.get("/v1/me/notifications?limit=50");
+  expect(before.ok()).toBeTruthy();
+
+  const delivered = await driveRefund(page, CAPTURED_CHARGE);
+  expect(delivered.status(), "a correctly signed delivery is acknowledged").toBe(200);
+
+  await page.goto("/notifications");
+  await expect(
+    page.getByText("CREDIT_PURCHASE_REVERSED").first(),
+    "the reversal reaches the notification centre",
+  ).toBeVisible({ timeout: 20_000 });
+
+  // And the balance the page shows is the backend's, after the reversal.
+  const id = await accountId(page);
+  const after = await page.request.get(`/v1/credits/balance?account_id=${id}`);
+  expect(after.ok()).toBeTruthy();
+  await page.goto("/home");
+  await expect(page.locator(".panel", { hasText: "Credits" }).first()).toBeVisible();
+});

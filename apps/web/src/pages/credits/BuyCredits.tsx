@@ -57,7 +57,7 @@ import {
   type CreditPurchase,
 } from "../../api/queries.ts";
 import { Button, LinkButton } from "../../components/Button.tsx";
-import { AsyncPanel, EmptyState, Explanation } from "../../components/DataState.tsx";
+import { EmptyState, Explanation } from "../../components/DataState.tsx";
 import { Field, FieldGrid, FormField } from "../../components/Field.tsx";
 import { Figure } from "../../components/Figure.tsx";
 import { Disclosure, Page, Panel } from "../../components/Layout.tsx";
@@ -254,63 +254,84 @@ export function BuyCredits(): ReactNode {
       title="Buy Credits"
       lead="Credits are internal platform value, bought with money through an approved payment provider."
     >
-      <AsyncPanel
-        query={pricing}
-        loadingLabel="Asking the backend what a Credit costs…"
-        skeleton={<Skeleton shape="text" count={3} label="The pricing policy is loading" />}
-      >
-        {(policy: CreditPricing) => (
-          <>
-            {current === undefined ? (
-              <ChooseAmount
-                policy={policy}
-                typed={typed}
-                busy={start.isPending}
-                error={start.error}
-                onRetry={() => {
-                  start.reset();
-                }}
-                onConfirm={(amountMinor) => {
-                  // The key is minted HERE — at the moment of confirmation —
-                  // and kept, so every retry of this same confirmation reuses
-                  // it. Never on render.
-                  const existing = key.value === "" ? newIdempotencyKey() : key.value;
-                  key.set(existing);
-                  start.mutate(
-                    {
-                      accountId,
-                      amountMinor,
-                      currency: policy.currency,
-                      idempotencyKey: existing,
-                    },
-                    {
-                      onSuccess: (created) => {
-                        setPurchase(created);
-                      },
-                    },
-                  );
-                }}
-              />
-            ) : (
-              <TakePayment
-                purchase={current}
-                clientSecret={purchase?.client_secret}
-                publishableKey={publishableKey}
-                outcome={outcome}
-                stateQuery={state}
-                onOutcome={setOutcome}
-                onStartOver={() => {
-                  setPurchase(undefined);
-                  setOutcome(undefined);
-                  key.set("");
-                  typed.clear();
-                  start.reset();
-                }}
-              />
-            )}
-          </>
-        )}
-      </AsyncPanel>
+      {/* The five states, written out rather than delegated, because the error
+          one is special here. On a deployment with no credit-purchase provider
+          the pricing port is unwired and this route answers UNSUPPORTED, which
+          is a statement about the PRODUCT — "this deployment does not sell
+          Credits" — and deserves that sentence rather than the generic "this
+          response could not be used". */}
+      {pricing.isPending && (
+        <Panel title="Buying Credits">
+          <Skeleton shape="text" count={3} label="The pricing policy is loading" />
+        </Panel>
+      )}
+
+      {pricing.isError && (
+        <Panel title="Buying Credits">
+          {purchaseRefusal(pricing.error) ?? (
+            <Refused
+              what="Buying Credits"
+              error={pricing.error}
+              onRetry={() => {
+                void pricing.refetch();
+              }}
+            />
+          )}
+          <p className="field-note">
+            No amount is offered and no card fields are rendered, because the server has not said
+            what an amount buys. Nothing is wrong with your account and no balance has changed.
+          </p>
+        </Panel>
+      )}
+
+      {pricing.data !== undefined &&
+        (current === undefined ? (
+          <ChooseAmount
+            policy={pricing.data}
+            typed={typed}
+            busy={start.isPending}
+            error={start.error}
+            onRetry={() => {
+              start.reset();
+            }}
+            onConfirm={(amountMinor) => {
+              // The key is minted HERE — at the moment of confirmation — and
+              // kept, so every retry of this same confirmation reuses it.
+              // Never on render.
+              const existing = key.value === "" ? newIdempotencyKey() : key.value;
+              key.set(existing);
+              start.mutate(
+                {
+                  accountId,
+                  amountMinor,
+                  currency: (pricing.data as CreditPricing).currency,
+                  idempotencyKey: existing,
+                },
+                {
+                  onSuccess: (created) => {
+                    setPurchase(created);
+                  },
+                },
+              );
+            }}
+          />
+        ) : (
+          <TakePayment
+            purchase={current}
+            clientSecret={purchase?.client_secret}
+            publishableKey={publishableKey}
+            outcome={outcome}
+            stateQuery={state}
+            onOutcome={setOutcome}
+            onStartOver={() => {
+              setPurchase(undefined);
+              setOutcome(undefined);
+              key.set("");
+              typed.clear();
+              start.reset();
+            }}
+          />
+        ))}
 
       <SandboxNote sandbox={current?.sandbox} />
 
