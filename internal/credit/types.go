@@ -88,6 +88,17 @@ type Lot struct {
 	// least withdrawable thing that funded it, and neither half of that is the
 	// application's to assert (D-131, F-261).
 	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin this lot's provenance bottoms out in, read
+	// from the same trigger-maintained projection and computed by the same
+	// recursive rule as OriginFloor -- of which it is the most restricted
+	// member.
+	//
+	// It exists because one ranked origin cannot be conservative for a policy
+	// it was not ranked by: a lot funded half by a purchase and half by trading
+	// gains records one of them as its floor, and a policy that releases that
+	// one and refuses the other would release the lot (D-138, F-275).
+	// `valuedomain.Policy.Permits` reads the whole set.
+	RootOrigins []valuedomain.CreditOrigin
 
 	FundingReference *Reference
 	JournalTxID      ledger.TransactionID
@@ -151,11 +162,18 @@ func ConsumptionOrderSQL() string { return consumptionOrderSQL }
 
 // Allocation is how much of one lot a single consumption took.
 type Allocation struct {
-	LotID    LotID
-	Origin   valuedomain.CreditOrigin
-	Finality valuedomain.FundingFinality
-	Quantity money.Quantity
-	EventID  LotEventID
+	LotID  LotID
+	Origin valuedomain.CreditOrigin
+	// OriginFloor is the lot's floor at the moment the units were taken. It
+	// travels with the allocation so a consumer recording what left can record
+	// what it WAS: `payout_allocations` stores both, and a payout of
+	// MARKET_TRADING_PROCEEDS whose provenance is a settled purchase is a
+	// different fact from one whose provenance is a promotional grant, however
+	// identical the origin column looks (D-136, F-270).
+	OriginFloor valuedomain.CreditOrigin
+	Finality    valuedomain.FundingFinality
+	Quantity    money.Quantity
+	EventID     LotEventID
 }
 
 // IssueRequest mints Credits into an account with a recorded provenance.
@@ -311,9 +329,23 @@ type ConsumeRequest struct {
 	// a reversal, which must be able to claw back value regardless.
 	RequireSpendableFinality bool
 
+	// RequirePayoutFinality, when true, refuses to consume lots whose funding
+	// is not PAYOUT-ELIGIBLE -- which is a strictly smaller set than the
+	// spendable one, because `valuedomain.FundingFinality.Spendable()` admits
+	// REVERSIBLE and `PayoutEligible()` does not.
+	//
+	// Payout reservation sets it and nothing else does. Spending keeps
+	// RequireSpendableFinality: a card payment inside its dispute window may
+	// buy things, and that is the deliberate product answer with a dispute
+	// reserve behind it. What it may not do is LEAVE, and the reservation used
+	// to ask the spendable question, so a payout approved on a settled lot
+	// could be filled from a reversible one of the same origin (D-136, F-270).
+	RequirePayoutFinality bool
+
 	// AllowedOrigins, when non-empty, restricts consumption to these origins.
-	// Payout reservation uses it to consume only value the policy permits, so
-	// that a payout can never quietly take a promotional grant.
+	//
+	// It is the coarse filter, and it is no longer what a payout reservation
+	// uses: a decision is made per LOT and an origin is not a lot. See LotIDs.
 	AllowedOrigins []valuedomain.CreditOrigin
 
 	// LotIDs, when non-empty, restricts consumption to these exact lots.
@@ -324,6 +356,16 @@ type ConsumeRequest struct {
 	// unrestricted Consume takes and which is a promotional grant every time
 	// (F-152). The origin filter is not enough: two purchases produce two lots
 	// of the same origin, and a chargeback of one must not destroy the other.
+	//
+	// A PAYOUT RESERVATION is the second case, and it is the same sentence with
+	// different money in it. `payout.Engine.Evaluate` approves specific lots --
+	// it reads each lot's finality, its origin and its provenance roots -- and
+	// the reservation used to pass only the SET OF ORIGINS those lots carried.
+	// Two lots of one origin are one origin, so a decision approving a settled
+	// purchase was filled from a reversible one, and a decision approving
+	// proceeds whose provenance is a purchase was filled from proceeds whose
+	// provenance is a promotional grant (D-136, F-270). A payout now takes
+	// exactly the units its decision evaluated.
 	LotIDs []LotID
 }
 

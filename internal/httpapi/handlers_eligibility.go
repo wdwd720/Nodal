@@ -87,6 +87,19 @@ func toAPIWithdrawalEligibility(e eligibility.WithdrawalExplanation) api.Withdra
 			// is noise on ten of the eleven buckets a fresh account has.
 			item.OriginFloor = ptr(api.CreditOrigin(b.OriginFloor))
 		}
+		if b.Finality != "" {
+			item.Finality = ptr(api.FundingFinality(b.Finality))
+		}
+		if len(b.RootOrigins) > 0 {
+			roots := make([]api.CreditOrigin, 0, len(b.RootOrigins))
+			for _, r := range b.RootOrigins {
+				roots = append(roots, api.CreditOrigin(r))
+			}
+			item.RootOrigins = &roots
+		}
+		if b.RefusedRoot != "" {
+			item.RefusedRoot = ptr(api.CreditOrigin(b.RefusedRoot))
+		}
 		if b.RequiredVerification != "" {
 			item.RequiredVerification = ptr(api.VerificationLevel(b.RequiredVerification))
 		}

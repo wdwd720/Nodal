@@ -42,10 +42,19 @@ import (
 // because the engine never selects it. Nothing here changes that order — it
 // reports it.
 
-// ProvenanceSlice is one origin's contribution to a payout.
+// ProvenanceSlice is one provenance's contribution to a payout.
+//
+// A provenance is an ORIGIN AND A FLOOR, not an origin. Folding by origin alone
+// reported a payout drawn on trading proceeds out of a settled purchase and one
+// drawn on trading proceeds out of a promotional grant as one line of
+// MARKET_TRADING_PROCEEDS -- which is the same collapse that let the
+// reservation take the wrong lot, one surface along (D-136, F-270).
 type ProvenanceSlice struct {
 	Origin valuedomain.CreditOrigin
-	// Quantity is the base-unit amount of this origin the payout takes.
+	// OriginFloor is the most restricted origin in the provenance of the units
+	// in this slice. It equals Origin for value nothing else funded.
+	OriginFloor valuedomain.CreditOrigin
+	// Quantity is the base-unit amount of this provenance the payout takes.
 	Quantity money.Quantity
 	// ConsumptionRank is where this origin sits in the consumption order.
 	// Lower leaves first. It is reported so a client can render the order
@@ -72,25 +81,28 @@ func (s *Service) Provenance(ctx context.Context, q db.Querier, id RequestID) ([
 	return foldProvenance(allocations), nil
 }
 
-// foldProvenance sums allocations per origin and orders them by consumption
-// rank, with the origin name breaking a tie so the answer is deterministic.
+// foldProvenance sums allocations per (origin, floor) and orders them by
+// consumption rank, with the floor and then the origin name breaking a tie so
+// the answer is deterministic.
 //
 // Outstanding and returned slices are kept apart: folding them together would
 // report a cancelled payout as though it still held the value.
 func foldProvenance(allocations []Allocation) []ProvenanceSlice {
 	type key struct {
 		origin   valuedomain.CreditOrigin
+		floor    valuedomain.CreditOrigin
 		returned bool
 	}
 	sums := map[key]money.Quantity{}
 	for _, a := range allocations {
-		k := key{origin: a.Origin, returned: a.Returned}
+		k := key{origin: a.Origin, floor: a.OriginFloor, returned: a.Returned}
 		sums[k] = sums[k].Add(a.Quantity)
 	}
 	out := make([]ProvenanceSlice, 0, len(sums))
 	for k, qty := range sums {
 		out = append(out, ProvenanceSlice{
 			Origin:          k.origin,
+			OriginFloor:     k.floor,
 			Quantity:        qty,
 			ConsumptionRank: credit.ConsumptionRank(k.origin),
 			Returned:        k.returned,
@@ -107,8 +119,12 @@ func foldProvenance(allocations []Allocation) []ProvenanceSlice {
 // ineligible value" needs an answer before the customer commits, and a decision
 // that reserved nothing still knows which lots it selected.
 func DecisionProvenance(d Decision) []ProvenanceSlice {
+	type key struct {
+		origin valuedomain.CreditOrigin
+		floor  valuedomain.CreditOrigin
+	}
 	remaining := d.Eligible
-	sums := map[valuedomain.CreditOrigin]money.Quantity{}
+	sums := map[key]money.Quantity{}
 	for _, lot := range d.Lots {
 		if !remaining.IsPositive() {
 			break
@@ -117,15 +133,17 @@ func DecisionProvenance(d Decision) []ProvenanceSlice {
 		if !take.IsPositive() {
 			continue
 		}
-		sums[lot.Origin] = sums[lot.Origin].Add(take)
+		k := key{origin: lot.Origin, floor: lot.OriginFloor}
+		sums[k] = sums[k].Add(take)
 		remaining = remaining.Sub(take)
 	}
 	out := make([]ProvenanceSlice, 0, len(sums))
-	for origin, qty := range sums {
+	for k, qty := range sums {
 		out = append(out, ProvenanceSlice{
-			Origin:          origin,
+			Origin:          k.origin,
+			OriginFloor:     k.floor,
 			Quantity:        qty,
-			ConsumptionRank: credit.ConsumptionRank(origin),
+			ConsumptionRank: credit.ConsumptionRank(k.origin),
 		})
 	}
 	sortProvenance(out)
@@ -133,7 +151,12 @@ func DecisionProvenance(d Decision) []ProvenanceSlice {
 }
 
 // sortProvenance orders slices the way the engine consumes them: outstanding
-// before returned, then by consumption rank, then by origin name.
+// before returned, then by consumption rank, then by the most restricted floor,
+// then by origin name.
+//
+// The floor is the third key rather than a display afterthought: two slices of
+// one origin differ only in it, and an order that left them in map order would
+// make one payout's provenance render differently on two reads.
 func sortProvenance(in []ProvenanceSlice) {
 	sort.SliceStable(in, func(i, j int) bool {
 		switch {
@@ -141,6 +164,8 @@ func sortProvenance(in []ProvenanceSlice) {
 			return !in[i].Returned
 		case in[i].ConsumptionRank != in[j].ConsumptionRank:
 			return in[i].ConsumptionRank < in[j].ConsumptionRank
+		case in[i].OriginFloor != in[j].OriginFloor:
+			return valuedomain.MoreRestricted(in[i].OriginFloor, in[j].OriginFloor)
 		default:
 			return in[i].Origin < in[j].Origin
 		}

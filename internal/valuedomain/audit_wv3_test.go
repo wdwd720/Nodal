@@ -66,9 +66,15 @@ func TestAuditWV3_TheFloorIsTheMostRestrictedParentUnderThePolicyThatJudgesIt(t 
 	require.Equal(t, OriginMarketTradingProceeds, floor,
 		"fixture check: the tie between two OriginClosedSomewhere origins breaks on the name")
 
+	// The lot as the projection now carries it: one floor for display, and the
+	// SET of origins its provenance bottoms out in for the permission answer
+	// (D-138). The floor is still MARKET_TRADING_PROCEEDS -- the rank did not
+	// change and is not meant to -- and PURCHASED is still in the provenance.
+	roots := []CreditOrigin{OriginPurchased, OriginMarketTradingProceeds}
 	ok, reasons := gainsOnly.Permits(PermitInput{
 		Origin:      OriginMarketTradingProceeds,
 		OriginFloor: floor,
+		RootOrigins: roots,
 		Finality:    FinalitySettled,
 		Domain:      InternalCredit,
 		Verified:    VerificationPayoutKYC,
@@ -81,4 +87,39 @@ func TestAuditWV3_TheFloorIsTheMostRestrictedParentUnderThePolicyThatJudgesIt(t 
 			"restriction ordering is computed from DefaultPolicy and SandboxPolicy and ties "+
 			"break on the origin's name, so 'the most restricted parent' is not the most "+
 			"restricted parent under the policy doing the judging; reasons=%v", reasons)
+	assert.Contains(t, reasons, ReasonOriginForbidden,
+		"and it is refused as an origin refusal rather than as a malformed input")
+
+	// Not vacuous: the refusal is the POLICY refusing a root, and the same lot
+	// under a policy that releases both roots is released. A test that refused
+	// everything would agree with any implementation.
+	both := Policy{Version: "audit-wv3-both", Rules: map[CreditOrigin]OriginRule{}}
+	for _, o := range AllOrigins() {
+		both.Rules[o] = OriginRule{PayoutAllowed: false, RequiredVerification: VerificationNone}
+	}
+	for _, o := range roots {
+		both.Rules[o] = OriginRule{
+			PayoutAllowed:        true,
+			RequiredCapability:   CapPayoutReserve,
+			RequiredVerification: VerificationPayoutKYC,
+		}
+	}
+	require.NoError(t, both.Validate())
+	permitted, why := both.Permits(PermitInput{
+		Origin:      OriginMarketTradingProceeds,
+		OriginFloor: floor,
+		RootOrigins: roots,
+		Finality:    FinalitySettled,
+		Domain:      InternalCredit,
+		Verified:    VerificationPayoutKYC,
+		ActiveCaps:  map[CapabilityKey]bool{CapPayoutReserve: true},
+		PolicyValid: true,
+	})
+	assert.True(t, permitted, "a policy that releases every root releases the lot; reasons=%v", why)
+
+	// And the reason names the root the policy refuses, which is the one a
+	// person has to read about: it is PURCHASED, not the ranked floor.
+	refused, found := gainsOnly.RefusedRoot(roots)
+	assert.True(t, found)
+	assert.Equal(t, OriginPurchased, refused)
 }

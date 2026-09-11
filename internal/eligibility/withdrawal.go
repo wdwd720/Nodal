@@ -2,7 +2,9 @@ package eligibility
 
 import (
 	"sort"
+	"strings"
 
+	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/valuedomain"
 )
@@ -132,9 +134,21 @@ var withdrawalReasonRank = func() map[WithdrawalReason]int {
 	return m
 }()
 
-// OriginHolding is what an account holds of one provenance, as
-// `credit.Balances` broke it down. The caller supplies it; this package
-// computes nothing about a ledger.
+// OriginHolding is what an account holds of one PROVENANCE -- one (origin,
+// origin floor, root set, finality) -- as `credit.Balances` broke it down. The
+// caller supplies it; this package computes nothing about a ledger.
+//
+// It used to be one bucket per ORIGIN, folded conservatively: the least final
+// finality and the most restricted floor in the bucket. That made every figure
+// derived from it a lower bound, and `withdrawable_now` -- the sum of the
+// buckets -- then contradicted `payout_eligible`, which `credit.Balances`
+// computes per lot. One refused lot zeroed every other lot of its origin, the
+// page reported `eligible: false` beside a positive `payout_eligible`, and
+// POST /v1/payouts reserved the value the page said could not leave (F-272).
+//
+// Homogeneous buckets make the two equal by construction rather than by
+// arithmetic: every lot in a bucket gets the same answer from `Permits`, so the
+// sum of what may leave IS the per-lot sum. `ExplainWithdrawal` asserts it.
 type OriginHolding struct {
 	Origin valuedomain.CreditOrigin
 	// OriginFloor is the most restricted origin anywhere in the provenance of
@@ -146,7 +160,14 @@ type OriginHolding struct {
 	// It has no permissive zero value. An unstated floor is read as an unknown
 	// origin and refuses.
 	OriginFloor valuedomain.CreditOrigin
-	// Quantity is everything the account holds of this origin.
+	// RootOrigins is every origin the units in this bucket bottom out in. A
+	// bucket is HOMOGENEOUS in it, like the origin, the floor and the finality:
+	// the caller keys its buckets on all four, because those are exactly the
+	// inputs `valuedomain.Policy.Permits` reads about the value itself, and a
+	// bucket that mixes them has to answer one question for two different
+	// answers (D-138, F-272).
+	RootOrigins []valuedomain.CreditOrigin
+	// Quantity is everything the account holds of this provenance.
 	Quantity money.Quantity
 	// Finality is the least final funding state among those units. Least,
 	// because a bucket containing one reversible lot is a bucket that is not
@@ -225,6 +246,18 @@ type OriginBucket struct {
 	// answer nobody can act on: what the person needs to read is "this came
 	// from a promotional grant", not a word about the trade (D-131).
 	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin the units in this bucket bottom out in, and
+	// Finality is their funding state. Both are reported because both are
+	// inputs to the verdict and a bucket is homogeneous in them, so a reader
+	// can see why two buckets of one origin got two answers (F-272).
+	RootOrigins []valuedomain.CreditOrigin
+	Finality    valuedomain.FundingFinality
+	// RefusedRoot is the first root this policy will not release, empty when it
+	// releases them all. It is what a person needs to read when the answer is
+	// ORIGIN_NOT_WITHDRAWABLE: the origin the policy refused, which under a
+	// policy this build does not ship need not be the most restricted one by
+	// this build's rank (D-138).
+	RefusedRoot valuedomain.CreditOrigin
 	// Quantity is what is held; Withdrawable is what could leave right now.
 	Quantity     money.Quantity
 	Withdrawable money.Quantity
@@ -259,9 +292,12 @@ type WithdrawalExplanation struct {
 	// have to subtract.
 	Ineligible money.Quantity
 
-	// Buckets is one entry per declared origin, in the canonical origin order,
-	// including the empty ones. An origin missing from the list would read as
-	// "we did not consider it".
+	// Buckets is one entry per PROVENANCE the account holds -- one (origin,
+	// floor, root set, finality) -- plus one empty entry for every declared
+	// origin the account holds nothing of, in the canonical origin order. An
+	// origin missing from the list would read as "we did not consider it", and
+	// two provenances of one origin summed into one bucket would read as one
+	// answer where there are two (F-272).
 	Buckets []OriginBucket
 	// Reasons is the union of the buckets' reasons plus the account-level
 	// ones, de-duplicated and in report order.
@@ -292,7 +328,7 @@ type WithdrawalExplanation struct {
 // per-origin refusals come from the payout policy, evaluated with exactly the
 // inputs `valuedomain.Policy.Permits` takes, so this function and the payout
 // engine reach the same verdict from the same rules.
-func ExplainWithdrawal(in WithdrawalInput) WithdrawalExplanation {
+func ExplainWithdrawal(in WithdrawalInput) (WithdrawalExplanation, error) {
 	hash, err := in.Policy.Hash()
 	if err != nil {
 		hash = ""
@@ -332,31 +368,66 @@ func ExplainWithdrawal(in WithdrawalInput) WithdrawalExplanation {
 	}
 	blocked := len(accountLevel) > 0
 
-	held := make(map[valuedomain.CreditOrigin]OriginHolding, len(in.Holdings))
-	for _, h := range in.Holdings {
-		held[h.Origin] = h
-	}
-
 	reasons := newReasonSet()
 	for _, r := range accountLevel {
 		reasons.add(r)
 	}
 
+	// One bucket per provenance the account holds, plus an empty one for every
+	// origin it holds nothing of, in the canonical origin order.
+	byOrigin := map[valuedomain.CreditOrigin][]OriginHolding{}
+	for _, h := range in.Holdings {
+		byOrigin[h.Origin] = append(byOrigin[h.Origin], h)
+	}
 	total := money.Quantity{}
 	for _, origin := range valuedomain.AllOrigins() {
-		h := held[origin]
-		h.Origin = origin
-		bucket := explainOrigin(in, h, accountLevel, blocked)
-		total = total.Add(bucket.Withdrawable)
-		for _, r := range bucket.Reasons {
-			reasons.add(r)
+		holdings := byOrigin[origin]
+		if len(holdings) == 0 {
+			holdings = []OriginHolding{{Origin: origin}}
+		} else {
+			sortHoldings(holdings)
 		}
-		if bucket.VerificationWouldSuffice {
-			out.VerificationWouldSuffice = true
+		for _, h := range holdings {
+			h.Origin = origin
+			bucket := explainOrigin(in, h, accountLevel, blocked)
+			total = total.Add(bucket.Withdrawable)
+			for _, r := range bucket.Reasons {
+				reasons.add(r)
+			}
+			if bucket.VerificationWouldSuffice {
+				out.VerificationWouldSuffice = true
+			}
+			out.Buckets = append(out.Buckets, bucket)
 		}
-		out.Buckets = append(out.Buckets, bucket)
 	}
 	out.WithdrawableNow = total
+
+	// The invariant that makes this function and the commit path one answer.
+	//
+	// `payout_eligible` is `credit.Balances`' per-lot figure and is exactly what
+	// POST /v1/payouts will reserve. `withdrawable_now` is the sum of the
+	// buckets. With homogeneous buckets the two are the same sum taken in a
+	// different order, so any difference means the caller's buckets do not
+	// describe the lots its figure was computed from -- a stale read between the
+	// two queries, a fold that lost a lot, or a Permits input this function
+	// keys on and the fold does not.
+	//
+	// It REFUSES rather than reporting the smaller number. A response whose
+	// verdict contradicts its own figures is the defect F-272 names, and a page
+	// that says "you may withdraw nothing" over a conversion request the engine
+	// approves is worse than an error, because the person believes it.
+	//
+	// Only when nothing account-level is refusing: a block zeroes every bucket
+	// by design and leaves `payout_eligible` -- a statement about the VALUE --
+	// untouched, which is not a contradiction but the two facts it takes to
+	// explain a freeze.
+	if !blocked && total.Cmp(in.PayoutEligible) != 0 {
+		return WithdrawalExplanation{}, errs.Newf(errs.CodeInternal,
+			"eligibility: the withdrawal explanation does not agree with itself: the buckets sum to %s "+
+				"and the per-lot payout-eligible figure is %s; a response carrying both would contradict "+
+				"the conversion path",
+			total.String(), in.PayoutEligible.String())
+	}
 
 	// The minimum is judged on the WHOLE withdrawable amount rather than per
 	// bucket: a payout draws across origins, and refusing each bucket
@@ -378,7 +449,33 @@ func ExplainWithdrawal(in WithdrawalInput) WithdrawalExplanation {
 		out.Eligible = false
 	}
 	out.Reasons = reasons.sorted()
-	return out
+	return out, nil
+}
+
+// sortHoldings orders the buckets of one origin: most restricted floor first,
+// then least final, then the root set, so one account's explanation renders in
+// the same order on every read.
+func sortHoldings(in []OriginHolding) {
+	sort.SliceStable(in, func(i, j int) bool {
+		switch {
+		case in[i].OriginFloor != in[j].OriginFloor:
+			return valuedomain.MoreRestricted(in[i].OriginFloor, in[j].OriginFloor)
+		case in[i].Finality != in[j].Finality:
+			return valuedomain.LessFinal(in[i].Finality, in[j].Finality)
+		default:
+			return rootKey(in[i].RootOrigins) < rootKey(in[j].RootOrigins)
+		}
+	})
+}
+
+// rootKey is a canonical string for a root set, used for ordering only.
+func rootKey(roots []valuedomain.CreditOrigin) string {
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		out = append(out, string(r))
+	}
+	sort.Strings(out)
+	return strings.Join(out, ",")
 }
 
 // explainOrigin evaluates one bucket against the same rule the payout engine
@@ -388,6 +485,8 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 	bucket := OriginBucket{
 		Origin:               h.Origin,
 		OriginFloor:          h.OriginFloor,
+		RootOrigins:          h.RootOrigins,
+		Finality:             h.Finality,
 		Quantity:             h.Quantity,
 		Withdrawable:         money.Quantity{},
 		PayoutAllowed:        rule.PayoutAllowed,
@@ -408,6 +507,7 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 	permitted, permitReasons := in.Policy.Permits(valuedomain.PermitInput{
 		Origin:      h.Origin,
 		OriginFloor: h.OriginFloor,
+		RootOrigins: h.RootOrigins,
 		Finality:    h.Finality,
 		Domain:      valuedomain.InternalCredit,
 		Verified:    in.Verified,
@@ -415,6 +515,9 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 		ActiveCaps:  in.ActiveCaps,
 		PolicyValid: in.PolicyValid,
 	})
+	if refused, ok := in.Policy.RefusedRoot(h.RootOrigins); ok {
+		bucket.RefusedRoot = refused
+	}
 	for _, r := range permitReasons {
 		if mapped, ok := mapPermitReason(r); ok {
 			reasons.add(mapped)
@@ -431,11 +534,12 @@ func explainOrigin(in WithdrawalInput, h OriginHolding, accountLevel []Withdrawa
 	// floor the policy forbids is never fixed by verifying, and telling
 	// somebody it would be is the refusal §19 says not to make, dressed as
 	// encouragement.
-	if !permitted && rule.PayoutAllowed && in.Policy.Rule(h.OriginFloor).PayoutAllowed &&
+	if !permitted && rule.PayoutAllowed && bucket.RefusedRoot == "" &&
 		!in.Verified.AtLeast(rule.RequiredVerification) {
 		raised, _ := in.Policy.Permits(valuedomain.PermitInput{
 			Origin:      h.Origin,
 			OriginFloor: h.OriginFloor,
+			RootOrigins: h.RootOrigins,
 			Finality:    h.Finality,
 			Domain:      valuedomain.InternalCredit,
 			Verified:    rule.RequiredVerification,

@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -267,18 +269,32 @@ func (a eligibilityAdapter) Withdrawal(ctx context.Context, accountID accounts.A
 	}
 	policy := a.deps.policyOf()
 
-	balances, err := a.deps.Credits.Balances(ctx, a.db, credit.BalanceRequest{
-		AccountID:  accountID,
-		Policy:     policy,
-		Verified:   level,
-		ActiveCaps: caps,
-		Now:        now,
-	})
-	if err != nil {
-		return zero, err
-	}
-	lots, err := a.deps.Credits.Lots(ctx, a.db, accountID)
-	if err != nil {
+	// Both reads in ONE snapshot. `payout_eligible` is computed from the lots
+	// Balances read and `withdrawable_now` from the lots Lots read, and
+	// eligibility.ExplainWithdrawal now refuses a response in which the two
+	// disagree -- so two snapshots would turn an ordinary concurrent mint into
+	// a failed page. REPEATABLE READ rather than a second query: the two
+	// figures are one statement about one instant, and that is the isolation
+	// level that says so.
+	var (
+		balances credit.Balances
+		lots     []credit.Lot
+	)
+	if err := a.db.InTx(ctx, db.TxOptions{Isolation: pgx.RepeatableRead, ReadOnly: true},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var berr error
+			if balances, berr = a.deps.Credits.Balances(ctx, tx, credit.BalanceRequest{
+				AccountID:  accountID,
+				Policy:     policy,
+				Verified:   level,
+				ActiveCaps: caps,
+				Now:        now,
+			}); berr != nil {
+				return berr
+			}
+			lots, berr = a.deps.Credits.Lots(ctx, tx, accountID)
+			return berr
+		}); err != nil {
 		return zero, err
 	}
 
@@ -303,7 +319,7 @@ func (a eligibilityAdapter) Withdrawal(ctx context.Context, accountID accounts.A
 		return zero, err
 	}
 	a.applyProviderFacts(ctx, accountID, &in)
-	return eligibility.ExplainWithdrawal(in), nil
+	return eligibility.ExplainWithdrawal(in)
 }
 
 // applyAccountFacts reads the jurisdiction verdict, the account status and the
@@ -375,81 +391,86 @@ func (a eligibilityAdapter) applyProviderFacts(ctx context.Context, accountID ac
 	}
 }
 
-// foldHoldings turns lots into per-origin buckets.
+// foldHoldings turns lots into HOMOGENEOUS provenance buckets: one per
+// (origin, origin floor, root set, finality).
 //
-// Two deliberately conservative choices, both stated on eligibility's type: the
-// bucket's finality is the LEAST final among its lots, and its age is that of
-// the YOUNGEST. A bucket containing one reversible lot is not wholly final, and
-// a bucket clears a hold period only when all of it does. Both choices make a
-// mixed bucket refuse rather than permit, which is the direction a mistake here
-// should fall.
+// Those four are exactly what `valuedomain.Policy.Permits` reads about the
+// value itself, so every lot in a bucket gets the same verdict and the sum of
+// what may leave equals the per-lot sum `credit.Balances` reports. That is the
+// whole of F-272's fix: the key was the ORIGIN alone, and the fold then had to
+// take the least final finality and the most restricted floor in the bucket --
+// conservative, documented, and a lower bound. One refused lot zeroed every
+// other lot of its origin, `withdrawable_now` contradicted `payout_eligible` in
+// the same payload, and `eligible` followed the false one while POST
+// /v1/payouts reserved the value the page said could not leave.
+//
+// One conservative fold remains and is unavoidable: the bucket's age is that of
+// the YOUNGEST lot, because a bucket clears a hold period only when all of it
+// does. A policy with a positive MinHoldDays can therefore still make a bucket
+// heterogeneous, and that is the case ExplainWithdrawal's invariant refuses
+// loudly instead of rendering. Neither policy this build ships has one.
 func foldHoldings(lots []credit.Lot, now time.Time) []eligibility.OriginHolding {
-	type acc struct {
-		qty      money.Quantity
-		finality valuedomain.FundingFinality
+	type key struct {
+		origin   valuedomain.CreditOrigin
 		floor    valuedomain.CreditOrigin
-		age      int
-		seen     bool
+		roots    string
+		finality valuedomain.FundingFinality
 	}
-	byOrigin := map[valuedomain.CreditOrigin]*acc{}
+	type acc struct {
+		holding eligibility.OriginHolding
+		seen    bool
+	}
+	buckets := map[key]*acc{}
+	var order []key
 	for _, l := range lots {
 		if !l.Remaining.IsPositive() {
 			continue
 		}
-		a, ok := byOrigin[l.Origin]
+		k := key{
+			origin: l.Origin, floor: l.OriginFloor,
+			roots: rootKeyOf(l.RootOrigins), finality: l.Finality,
+		}
+		a, ok := buckets[k]
 		if !ok {
-			a = &acc{}
-			byOrigin[l.Origin] = a
+			a = &acc{holding: eligibility.OriginHolding{
+				Origin: l.Origin, OriginFloor: l.OriginFloor,
+				RootOrigins: append([]valuedomain.CreditOrigin(nil), l.RootOrigins...),
+				Finality:    l.Finality,
+			}}
+			buckets[k] = a
+			order = append(order, k)
 		}
-		a.qty = a.qty.Add(l.Remaining)
+		a.holding.Quantity = a.holding.Quantity.Add(l.Remaining)
 		age := l.AgeDays(now)
-		if !a.seen || age < a.age {
-			a.age = age
-		}
-		if !a.seen || finalityRank(l.Finality) < finalityRank(a.finality) {
-			a.finality = l.Finality
-		}
-		// The most restricted floor in the bucket, for the reason the finality
-		// is the least final one: a bucket holding one lot funded by a grant is
-		// not wholly withdrawable, and the conservative reading is the true one
-		// (D-131).
-		if !a.seen || valuedomain.MoreRestricted(l.OriginFloor, a.floor) {
-			a.floor = l.OriginFloor
+		if !a.seen || age < a.holding.HeldDays {
+			a.holding.HeldDays = age
 		}
 		a.seen = true
 	}
-	out := make([]eligibility.OriginHolding, 0, len(byOrigin))
-	for _, origin := range valuedomain.AllOrigins() {
-		a, ok := byOrigin[origin]
-		if !ok {
-			continue
-		}
-		out = append(out, eligibility.OriginHolding{
-			Origin: origin, OriginFloor: a.floor,
-			Quantity: a.qty, Finality: a.finality, HeldDays: a.age,
-		})
+	// Canonical origin order first, then the order the lots came in -- which is
+	// consumption order, so the buckets of one origin appear in the order a
+	// payout would draw on them. eligibility sorts within an origin anyway; this
+	// only has to be deterministic.
+	rank := map[valuedomain.CreditOrigin]int{}
+	for i, o := range valuedomain.AllOrigins() {
+		rank[o] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool { return rank[order[i].origin] < rank[order[j].origin] })
+	out := make([]eligibility.OriginHolding, 0, len(order))
+	for _, k := range order {
+		out = append(out, buckets[k].holding)
 	}
 	return out
 }
 
-// finalityRank orders finalities from least final to most. Lower is worse, so
-// taking the minimum takes the worst.
-func finalityRank(f valuedomain.FundingFinality) int {
-	switch f {
-	case valuedomain.FinalityReversed:
-		return 0
-	case valuedomain.FinalityDisputed:
-		return 1
-	case valuedomain.FinalityReversible:
-		return 2
-	case valuedomain.FinalityUnfunded:
-		return 3
-	case valuedomain.FinalitySettled:
-		return 4
+// rootKeyOf is a canonical string for a lot's root set, used as a map key only.
+func rootKeyOf(roots []valuedomain.CreditOrigin) string {
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		out = append(out, string(r))
 	}
-	// An undeclared finality is worse than every declared one: Policy.Permits
-	// reads it as UNKNOWN_FUNDING_FINALITY and refuses.
-	return -1
+	sort.Strings(out)
+	return strings.Join(out, ",")
 }
 
 // creditsForMinor converts an amount of money in minor units into Credits,

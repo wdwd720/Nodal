@@ -4488,8 +4488,38 @@ components:
     WithdrawalOriginBucket:
       type: object
       required: [origin, quantity, withdrawable, reasons, payout_allowed, consumption_rank]
+      description: >-
+        One PROVENANCE an account holds, and what may leave it: an origin, an
+        origin floor, a root set and a funding finality. Those four are what
+        the payout policy reads about the value itself, so every unit in a
+        bucket gets one answer and `withdrawable_now` is the sum of the buckets.
+
+        More than one bucket may therefore carry the same `origin`. Until D-136
+        there was exactly one per origin, folded to the least final finality and
+        the most restricted floor in it -- so one refused lot zeroed every other
+        lot of its origin and `withdrawable_now` contradicted `payout_eligible`
+        in the same payload. A client that keys on `origin` alone must key on
+        (origin, origin_floor, finality, root_origins) instead.
       properties:
         origin: { $ref: "#/components/schemas/CreditOrigin" }
+        finality:
+          allOf: [{ $ref: "#/components/schemas/FundingFinality" }]
+          description: The funding finality of every unit in this bucket.
+        root_origins:
+          type: array
+          items: { $ref: "#/components/schemas/CreditOrigin" }
+          description: >-
+            Every origin the units in this bucket ultimately came from. The
+            payout policy must release the bucket's own origin and all of these.
+        refused_root:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            The first of `root_origins` this policy will not release, absent
+            when it releases them all. It is the origin a person needs to read
+            about when the reason is ORIGIN_NOT_WITHDRAWABLE, and it is not
+            always `origin_floor`: the floor is ranked by the policies this
+            build ships, and a policy persisted later can refuse a different one
+            (D-138).
         origin_floor:
           allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
           description: >-
@@ -4675,13 +4705,37 @@ components:
       type: object
       required: [origin, quantity, consumption_rank]
       description: >-
-        One origin's contribution to a payout (§23). The order is the
+        One provenance's contribution to a payout (§23). The order is the
         consumption order: among the origins a policy permits, the most
         restricted permitted one leaves first.
+
+        A provenance is an origin AND an origin floor. Two slices can carry the
+        same `origin` and different `origin_floor` values -- trading proceeds
+        out of a settled purchase and trading proceeds out of a promotional
+        grant are one origin and are not one kind of money -- and they are
+        reported separately rather than summed (D-136).
       properties:
         origin: { $ref: "#/components/schemas/CreditOrigin" }
+        origin_floor:
+          allOf: [{ $ref: "#/components/schemas/CreditOrigin" }]
+          description: >-
+            What these units ultimately came from: the most restricted origin
+            anywhere in their provenance. Equal to `origin` for value nothing
+            else funded.
         quantity: { $ref: "#/components/schemas/Quantity" }
         consumption_rank: { type: integer }
         returned:
           type: boolean
           description: True for a slice a cancellation gave back to the exact lots it came from.
+    FundingFinality:
+      type: string
+      description: >-
+        How certain it is that value credited to an account cannot be taken back
+        by whoever supplied it (PART XI). UNFUNDED is value nothing external
+        funded; REVERSIBLE is a card payment inside its dispute window;
+        DISPUTED and REVERSED are a dispute in progress and one that succeeded.
+
+        Only SETTLED and UNFUNDED may ever be paid out, which is a strictly
+        smaller set than the one that may be SPENT: reversible value buys things
+        and does not leave.
+      enum: [UNFUNDED, REVERSIBLE, SETTLED, DISPUTED, REVERSED]

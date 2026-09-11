@@ -408,10 +408,19 @@ func (s *Service) CompleteVerification(ctx context.Context, tx pgx.Tx, requestID
 // reservation of the net would leave the fee spendable and the account short at
 // settlement (D-119).
 //
-// Consumption is restricted to exactly the origins the decision approved, so
-// lot selection cannot stray outside it even though the two run a moment apart
-// — a promotional grant can never be swept into a payout approved for creator
-// earnings.
+// Consumption is restricted to exactly the LOTS the decision approved, and to
+// payout-eligible finality, so what leaves is what was evaluated.
+//
+// It used to be restricted to their ORIGINS. Eligibility is decided per lot --
+// `credit.EligibleLots` asks `valuedomain.Policy.Permits` about each lot's
+// finality, its origin and its provenance roots -- and an origin is not a lot.
+// So a decision that approved a SETTLED purchase was filled from a REVERSIBLE
+// one of the same origin, because `RequireSpendableFinality` admits REVERSIBLE
+// and whichever lot sorts first in consumption order is the one taken; and a
+// decision that approved MARKET_TRADING_PROCEEDS whose provenance is a settled
+// purchase was filled from proceeds whose provenance is a promotional grant,
+// which is F-261's laundering route reopened one filter along. Both are D-136:
+// a payout takes exactly the units its decision evaluated (F-270).
 func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decision, effectiveAt time.Time, correlationID string) (Request, error) {
 	conv := valuedomain.ConversionKey{From: valuedomain.InternalCredit, To: valuedomain.PayoutPending}
 	post, err := s.poster.Post(ctx, tx, ledger.Posting{
@@ -445,7 +454,11 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 		Reference:                credit.Reference{Type: "payout_request", ID: req.ID.String()},
 		Reason:                   "reserved against a payout request",
 		RequireSpendableFinality: true,
-		AllowedOrigins:           d.Origins,
+		// A payout's finality bar is PayoutEligible(), not Spendable(). The two
+		// differ by REVERSIBLE, which is precisely the value a card issuer can
+		// still reclaim.
+		RequirePayoutFinality: true,
+		LotIDs:                credit.EligibleLotIDs(d.Lots),
 	})
 	if err != nil {
 		return Request{}, err
@@ -458,9 +471,10 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 	// constraint, so the order inside the transaction does not matter.
 	for _, a := range allocs {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, quantity)
-			 VALUES ($1,$2,$3,$4,$5::numeric)`,
-			NewAllocationID(), req.ID, a.LotID, string(a.Origin), a.Quantity.String()); err != nil {
+			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, origin_floor, quantity)
+			 VALUES ($1,$2,$3,$4,$5,$6::numeric)`,
+			NewAllocationID(), req.ID, a.LotID, string(a.Origin), string(a.OriginFloor),
+			a.Quantity.String()); err != nil {
 			return Request{}, mapError(err)
 		}
 	}

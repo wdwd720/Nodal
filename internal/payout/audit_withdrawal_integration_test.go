@@ -557,7 +557,7 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 
 	// And the explanation no longer tells the person to wait for something that
 	// cannot happen.
-	exp := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
+	exp, eerr := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
 		Policy:      policy,
 		Verified:    valuedomain.VerificationPayoutKYC,
 		ActiveCaps:  map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
@@ -575,6 +575,7 @@ func TestAuditWV_AnEarnedCreditCanReachAPayoutEligibleFinality(t *testing.T) {
 		DestinationConfigured: true,
 		DisclosureAccepted:    true,
 	})
+	require.NoError(t, eerr, "the explanation must agree with itself before it is read")
 	assert.NotContains(t, exp.Reasons, eligibility.WithdrawalFundingNotSettled,
 		"F-230: the eligibility explanation reported FUNDING_NOT_SETTLED, which it documents as a "+
 			"reason waiting fixes, on value whose finality nothing could ever move")
@@ -713,7 +714,7 @@ func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
 		"fixture check: the resolver reports PAYOUT_KYC, because PEP is not required for it")
 
 	// What the person is told.
-	exp := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
+	exp, eerr := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
 		Policy:      valuedomain.SandboxPolicy(),
 		Verified:    level,
 		ActiveCaps:  map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true},
@@ -732,6 +733,7 @@ func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
 		// Exactly what httpapi.eligibilityAdapter.applyAccountFacts appends.
 		AccountRestrictions: []string{"SANCTIONS_" + string(profile.SanctionsState)},
 	})
+	require.NoError(t, eerr, "the explanation must agree with itself before it is read")
 	require.Contains(t, exp.Reasons, eligibility.WithdrawalAccountRestricted)
 	require.False(t, exp.Eligible)
 	require.Equal(t, "0", exp.WithdrawableNow.String(),

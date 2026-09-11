@@ -109,12 +109,14 @@ func TestPolicy_PermitsReadsTheFloorAsWellAsTheOrigin(t *testing.T) {
 
 	granted := base
 	granted.OriginFloor = OriginPromotional
+	granted.RootOrigins = []CreditOrigin{OriginPromotional}
 	ok, reasons := p.Permits(granted)
 	assert.False(t, ok, "a grant round-tripped through a market is still a grant (goal §23)")
 	assert.Contains(t, reasons, ReasonOriginForbidden)
 
 	bought := base
 	bought.OriginFloor = OriginPurchased
+	bought.RootOrigins = []CreditOrigin{OriginPurchased}
 	ok, reasons = p.Permits(bought)
 	assert.True(t, ok, "proceeds of a purchase are withdrawable: %v", reasons)
 
@@ -123,13 +125,23 @@ func TestPolicy_PermitsReadsTheFloorAsWellAsTheOrigin(t *testing.T) {
 	grant := base
 	grant.Origin = OriginPromotional
 	grant.OriginFloor = OriginPurchased
+	grant.RootOrigins = []CreditOrigin{OriginPurchased}
 	ok, _ = p.Permits(grant)
 	assert.False(t, ok, "a promotional lot is refused whatever funded it")
 
 	// An unstated floor refuses rather than defaulting to the origin.
 	missing := base
+	missing.RootOrigins = []CreditOrigin{OriginPurchased}
 	ok, reasons = p.Permits(missing)
 	assert.False(t, ok)
 	assert.Contains(t, reasons, ReasonUnknownOrigin,
 		"a caller that has not established the provenance has not established that it may leave")
+
+	// And so does an unstated ROOT SET, for exactly the same reason (D-138).
+	rootless := bought
+	rootless.RootOrigins = nil
+	ok, reasons = p.Permits(rootless)
+	assert.False(t, ok)
+	assert.Contains(t, reasons, ReasonUnknownOrigin,
+		"a lot whose provenance roots nobody stated is a lot nobody has placed")
 }

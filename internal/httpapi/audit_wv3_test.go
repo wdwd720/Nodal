@@ -43,7 +43,7 @@ func TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave(t *testing
 	policy := valuedomain.SandboxPolicy()
 	caps := map[valuedomain.CapabilityKey]bool{valuedomain.CapPayoutReserve: true}
 
-	qty := func(n int64) money.Quantity { return money.QuantityFromInt64(n) }
+	qty := money.QuantityFromInt64
 
 	// Two lots of ONE origin. Both are MARKET_TRADING_PROCEEDS; one was round
 	// tripped out of a promotional grant and carries that floor (D-131), the
@@ -52,6 +52,10 @@ func TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave(t *testing
 		{
 			ID: credit.NewLotID(), Origin: valuedomain.OriginMarketTradingProceeds,
 			OriginFloor: valuedomain.OriginPromotional,
+			// D-138: the roots are stated because a lot the database returns
+			// carries them and `Permits` refuses a lot whose provenance nobody
+			// established. The fixture is otherwise the auditor's.
+			RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPromotional},
 			Finality:    valuedomain.FinalityUnfunded,
 			Quantity:    qty(200_000_000), Remaining: qty(200_000_000),
 			CreatedAt: now.Add(-48 * time.Hour),
@@ -59,6 +63,7 @@ func TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave(t *testing
 		{
 			ID: credit.NewLotID(), Origin: valuedomain.OriginMarketTradingProceeds,
 			OriginFloor: valuedomain.OriginPurchased,
+			RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPurchased},
 			Finality:    valuedomain.FinalitySettled,
 			Quantity:    qty(200_000_000), Remaining: qty(200_000_000),
 			CreatedAt: now.Add(-24 * time.Hour),
@@ -70,8 +75,9 @@ func TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave(t *testing
 	payoutEligible := money.Quantity{}
 	for _, l := range lots {
 		ok, _ := policy.Permits(valuedomain.PermitInput{
-			Origin: l.Origin, OriginFloor: l.OriginFloor, Finality: l.Finality,
-			Domain: valuedomain.InternalCredit, Verified: valuedomain.VerificationPayoutKYC,
+			Origin: l.Origin, OriginFloor: l.OriginFloor, RootOrigins: l.RootOrigins,
+			Finality: l.Finality,
+			Domain:   valuedomain.InternalCredit, Verified: valuedomain.VerificationPayoutKYC,
 			HeldDays: l.AgeDays(now), ActiveCaps: caps, PolicyValid: true,
 		})
 		if ok {
@@ -83,7 +89,7 @@ func TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave(t *testing
 
 	// What the page reports, through the product's own folding.
 	gross := qty(400_000_000)
-	out := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
+	out, err := eligibility.ExplainWithdrawal(eligibility.WithdrawalInput{
 		Policy:      policy,
 		Verified:    valuedomain.VerificationPayoutKYC,
 		ActiveCaps:  caps,
@@ -99,6 +105,13 @@ func TestAuditWV3_TheEligibilityPageAgreesWithItselfAboutWhatMayLeave(t *testing
 		DestinationConfigured: true,
 		DisclosureAccepted:    true,
 	})
+	// The invariant the fix added: rather than rendering a payload whose two
+	// figures for one pot of money disagree, ExplainWithdrawal refuses. The
+	// assertions below are the auditor's and still hold -- on a response that
+	// now exists.
+	require.NoError(t, err,
+		"F-wv3-3: the explanation refused to agree with itself; the buckets and the per-lot "+
+			"figure describe the same lots and must sum to the same amount")
 
 	assert.Equal(t, out.PayoutEligible.String(), out.WithdrawableNow.String(),
 		"F-wv3-3: one response says payout_eligible=%s and withdrawable_now=%s. "+

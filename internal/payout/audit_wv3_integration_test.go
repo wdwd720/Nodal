@@ -59,6 +59,19 @@ func floorOf(t *testing.T, id credit.LotID) valuedomain.CreditOrigin {
 	return out
 }
 
+// rootsOf reads a lot's provenance root set from the same projection.
+func rootsOf(t *testing.T, id credit.LotID) []valuedomain.CreditOrigin {
+	t.Helper()
+	var raw []string
+	require.NoError(t, testDB.QueryRow(context.Background(),
+		`SELECT root_origins FROM credit_lot_state WHERE lot_id = $1`, id).Scan(&raw))
+	out := make([]valuedomain.CreditOrigin, 0, len(raw))
+	for _, o := range raw {
+		out = append(out, valuedomain.CreditOrigin(o))
+	}
+	return out
+}
+
 // createPayout is the whole commit path: a quote, then POST /v1/payouts'
 // domain call, on a sandbox tier with everything else permitting.
 func (f *auditFixture) createPayout(t *testing.T, qty int64, key string) payout.Request {
@@ -165,12 +178,16 @@ func TestAuditWV3_APayoutApprovedOnAPurchasedFloorIsFilledFromAPromotionalOne(t 
 	// The grant round-tripped through a market: proceeds whose floor is the
 	// grant. Minted FIRST so it sorts first in consumption order.
 	laundered := f.derive(valuedomain.OriginMarketTradingProceeds, 200_000_000,
-		[]credit.LotParent{{LotID: grant.ID, Quantity: money.QuantityFromInt64(200_000_000),
-			Finality: valuedomain.FinalityUnfunded}})
+		[]credit.LotParent{{
+			LotID: grant.ID, Quantity: money.QuantityFromInt64(200_000_000),
+			Finality: valuedomain.FinalityUnfunded,
+		}})
 	// Honest proceeds out of the settled purchase.
 	honest := f.derive(valuedomain.OriginMarketTradingProceeds, 200_000_000,
-		[]credit.LotParent{{LotID: purchase.ID, Quantity: money.QuantityFromInt64(200_000_000),
-			Finality: valuedomain.FinalitySettled}})
+		[]credit.LotParent{{
+			LotID: purchase.ID, Quantity: money.QuantityFromInt64(200_000_000),
+			Finality: valuedomain.FinalitySettled,
+		}})
 
 	require.Equal(t, valuedomain.OriginPromotional, floorOf(t, laundered.ID),
 		"fixture check: D-131 gives the round trip a PROMOTIONAL floor")
@@ -229,6 +246,14 @@ func TestAuditWV3_APayoutApprovedOnAPurchasedFloorIsFilledFromAPromotionalOne(t 
 // LESS withdrawable. The direction that could launder is OMITTING a parent."
 // Nothing is omitted here; every true parent row is written, and the floor is
 // still better than the provenance.
+//
+// INVERTED by the fix (D-137, 00819). The auditor asserted the floor the bad
+// ordering produced; the fix makes that ordering unwritable, so what is asserted
+// is the refusal. `cp_credit_lot_parent_has_no_descendant_yet` refuses a parent
+// row for a lot that is already somebody else's parent, which is the failure
+// mode D-137 chose precisely because the alternative -- recomputing every
+// affected descendant at COMMIT -- fails by leaving a wrong floor that looks
+// settled. The narrative is the auditor's; the assertions are its negatives.
 // ---------------------------------------------------------------------------
 
 func TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted(t *testing.T) {
@@ -241,7 +266,7 @@ func TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted(t *testing.
 	// way a chain of derived value inside a single settlement would. The only
 	// thing the audit chooses is the order of the two parent rows.
 	var child, grandchild credit.Lot
-	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+	insertErr := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
 		func(ctx context.Context, tx pgx.Tx) error {
 			var err error
 			// Both lots exist before either gets its provenance. No Parents
@@ -277,28 +302,83 @@ func TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted(t *testing.
 				grandchild.ID, child.ID, "100000000"); err != nil {
 				return err
 			}
-			// ...and only then the child's own, which lowers ITS floor to the
-			// grant and does not revisit the grandchild.
+			// ...and only then the child's own, which used to lower ITS floor to
+			// the grant without revisiting the grandchild. It is now refused:
+			// the child is already the grandchild's parent.
 			_, err = tx.Exec(ctx,
 				`INSERT INTO credit_lot_parents (lot_id, parent_lot_id, quantity)
 				 VALUES ($1,$2,$3::numeric)`,
 				child.ID, grant.ID, "100000000")
 			return err
+		})
+	require.Error(t, insertErr,
+		"F-wv3-2: a lot's provenance was written after something had already been derived from "+
+			"it, so the derived lot's floor was computed from a parent floor that had not fallen "+
+			"yet. 00816 says a floor is 'the most restricted origin anywhere in this value's "+
+			"provenance'; the ordering that makes that false must not be writable")
+	assert.Contains(t, insertErr.Error(), "CREDIT_PARENT_AFTER_DESCENDANT",
+		"and it is refused by name, so an operator reading the log knows which rule stopped it")
+
+	// The transaction rolled back, so neither lot exists. A refusal that left
+	// half a chain behind would be worse than the defect.
+	var lots int
+	require.NoError(t, testDB.QueryRow(f.ctx,
+		`SELECT count(*) FROM credit_lots WHERE id = ANY($1::uuid[])`,
+		[]string{child.ID.String(), grandchild.ID.String()}).Scan(&lots))
+	assert.Zero(t, lots, "the refused mint left no lots behind")
+
+	// The same chain in the only order the constraint allows: the child's
+	// provenance first, then the grandchild's. Written this way the grandchild
+	// carries the grant's floor, which is what 00816 always claimed.
+	var okChild, okGrand credit.Lot
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			if okChild, err = f.credits.Issue(ctx, tx, credit.IssueRequest{
+				AccountID: f.account, Quantity: money.QuantityFromInt64(100_000_000),
+				Origin:   valuedomain.OriginMarketTradingProceeds,
+				Finality: valuedomain.FinalityUnfunded,
+				Parents: []credit.LotParent{{
+					LotID:    grant.ID,
+					Quantity: money.QuantityFromInt64(100_000_000),
+					Finality: valuedomain.FinalityUnfunded,
+				}},
+				Reference:      credit.Reference{Type: "audit_wv3", ID: uuid.NewString()},
+				IdempotencyKey: "audit3-chain-ok-child-" + uuid.NewString(),
+				Reason:         "wv3: a lot whose provenance is written before anything derives from it",
+				EffectiveAt:    f.clk.Now(),
+			}); err != nil {
+				return err
+			}
+			okGrand, err = f.credits.Issue(ctx, tx, credit.IssueRequest{
+				AccountID: f.account, Quantity: money.QuantityFromInt64(100_000_000),
+				Origin:   valuedomain.OriginMarketTradingProceeds,
+				Finality: valuedomain.FinalityUnfunded,
+				Parents: []credit.LotParent{{
+					LotID:    okChild.ID,
+					Quantity: money.QuantityFromInt64(100_000_000),
+					Finality: valuedomain.FinalityUnfunded,
+				}},
+				Reference:      credit.Reference{Type: "audit_wv3", ID: uuid.NewString()},
+				IdempotencyKey: "audit3-chain-ok-grand-" + uuid.NewString(),
+				Reason:         "wv3: a child of a child",
+				EffectiveAt:    f.clk.Now(),
+			})
+			return err
 		}))
-
-	require.Equal(t, valuedomain.OriginPromotional, floorOf(t, child.ID),
+	require.Equal(t, valuedomain.OriginPromotional, floorOf(t, okChild.ID),
 		"fixture check: the child of a grant floors at PROMOTIONAL")
-	assert.Equal(t, valuedomain.OriginPromotional, floorOf(t, grandchild.ID),
-		"F-wv3-2: the grandchild of a promotional grant carries a "+
-			"MARKET_TRADING_PROCEEDS floor because its parent row was written before its "+
-			"parent's was. 00816 says a floor is 'the most restricted origin anywhere in "+
-			"this value's provenance'; here it is computed from a parent's floor that had "+
-			"not fallen yet, and nothing recomputes it afterwards")
+	assert.Equal(t, valuedomain.OriginPromotional, floorOf(t, okGrand.ID),
+		"F-wv3-2: the grandchild of a promotional grant must floor at PROMOTIONAL, in whatever "+
+			"order its ancestry was written")
+	assert.Equal(t, []valuedomain.CreditOrigin{valuedomain.OriginPromotional}, rootsOf(t, okGrand.ID),
+		"and its provenance roots say the same thing as a set (D-138)")
 
-	// And the consequence: SandboxPolicy releases it.
+	// And the consequence: SandboxPolicy refuses it.
 	ok, reasons := valuedomain.SandboxPolicy().Permits(valuedomain.PermitInput{
 		Origin:      valuedomain.OriginMarketTradingProceeds,
-		OriginFloor: floorOf(t, grandchild.ID),
+		OriginFloor: floorOf(t, okGrand.ID),
+		RootOrigins: rootsOf(t, okGrand.ID),
 		Finality:    valuedomain.FinalityUnfunded,
 		Domain:      valuedomain.InternalCredit,
 		Verified:    valuedomain.VerificationPayoutKYC,
@@ -308,6 +388,7 @@ func TestAuditWV3_AFloorCannotDependOnTheOrderParentRowsWereInserted(t *testing.
 	assert.False(t, ok,
 		"F-wv3-2: value whose provenance bottoms out in a promotional grant is withdrawable "+
 			"under SandboxPolicy; reasons=%v", reasons)
+	assert.Contains(t, reasons, valuedomain.ReasonOriginForbidden)
 }
 
 // ---------------------------------------------------------------------------
@@ -343,10 +424,14 @@ func TestAuditWV3_ADerivedLotAtUnfundedIsStillFrozenByADisputedParent(t *testing
 	// The seller's earning, funded by both, exactly as internal/commerce mints
 	// one: the parents are the lots the buyer's spend consumed.
 	earning := f.derive(valuedomain.OriginCreatorEarning, 100_000_000, []credit.LotParent{
-		{LotID: grant.ID, Quantity: money.QuantityFromInt64(60_000_000),
-			Finality: valuedomain.FinalityUnfunded},
-		{LotID: purchase.ID, Quantity: money.QuantityFromInt64(40_000_000),
-			Finality: valuedomain.FinalitySettled},
+		{
+			LotID: grant.ID, Quantity: money.QuantityFromInt64(60_000_000),
+			Finality: valuedomain.FinalityUnfunded,
+		},
+		{
+			LotID: purchase.ID, Quantity: money.QuantityFromInt64(40_000_000),
+			Finality: valuedomain.FinalitySettled,
+		},
 	})
 	require.Equal(t, valuedomain.FinalityUnfunded, f.finalityOf(earning.ID),
 		"fixture check: the least final parent is the UNFUNDED grant")

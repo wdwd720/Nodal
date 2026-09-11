@@ -167,7 +167,8 @@ func TestIntegration_TheEligibilityExplanationReportsItAsAStep(t *testing.T) {
 		PolicyValid: true, JurisdictionSupported: true, ProviderAvailable: true,
 		DestinationConfigured: true, DisclosureAccepted: accepted,
 	}
-	e := eligibility.ExplainWithdrawal(in)
+	e, err := eligibility.ExplainWithdrawal(in)
+	require.NoError(t, err)
 	assert.False(t, e.Eligible)
 	assert.Contains(t, reasonCodes(e.Reasons), string(eligibility.WithdrawalTermsNotAccepted),
 		"the eligibility page names the step before anybody reaches the quote")
@@ -179,7 +180,9 @@ func TestIntegration_TheEligibilityExplanationReportsItAsAStep(t *testing.T) {
 
 	in.DisclosureAccepted, err = deps.disclosureAccepted(ctx, pool, acct)
 	require.NoError(t, err)
-	assert.NotContains(t, reasonCodes(eligibility.ExplainWithdrawal(in).Reasons),
+	accepted2, aerr := eligibility.ExplainWithdrawal(in)
+	require.NoError(t, aerr)
+	assert.NotContains(t, reasonCodes(accepted2.Reasons),
 		string(eligibility.WithdrawalTermsNotAccepted))
 }
 

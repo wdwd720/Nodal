@@ -68,6 +68,9 @@ func toAPIProvenance(slices []payout.ProvenanceSlice) []api.PayoutProvenanceSlic
 			Quantity:        qtyString(s.Quantity),
 			ConsumptionRank: s.ConsumptionRank,
 		}
+		if s.OriginFloor != "" {
+			item.OriginFloor = ptr(api.CreditOrigin(s.OriginFloor))
+		}
 		if s.Returned {
 			item.Returned = ptr(true)
 		}

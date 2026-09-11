@@ -22,9 +22,41 @@ func qty(n int64) money.Quantity { return money.QuantityFromInt64(n) }
 // and gets its own test rather than a default nobody reads.
 func holding(o valuedomain.CreditOrigin, n int64) OriginHolding {
 	return OriginHolding{
-		Origin: o, OriginFloor: o, Quantity: qty(n),
+		Origin: o, OriginFloor: o, RootOrigins: []valuedomain.CreditOrigin{o},
+		Quantity: qty(n),
 		Finality: valuedomain.FinalitySettled, HeldDays: 400,
 	}
+}
+
+// payoutEligibleOf is the per-lot figure `credit.Balances` reports, computed
+// here from the same holdings with the same rule -- which is what the adapter
+// does with the same lots, and what ExplainWithdrawal's invariant compares its
+// buckets against. A fixture that stated a figure its buckets could not produce
+// would be a fixture asserting the contradiction F-272 is about.
+func payoutEligibleOf(in WithdrawalInput) money.Quantity {
+	out := money.Quantity{}
+	for _, h := range in.Holdings {
+		ok, _ := in.Policy.Permits(valuedomain.PermitInput{
+			Origin: h.Origin, OriginFloor: h.OriginFloor, RootOrigins: h.RootOrigins,
+			Finality: h.Finality, Domain: valuedomain.InternalCredit,
+			Verified: in.Verified, HeldDays: h.HeldDays,
+			ActiveCaps: in.ActiveCaps, PolicyValid: in.PolicyValid,
+		})
+		if ok {
+			out = out.Add(h.Quantity)
+		}
+	}
+	return out
+}
+
+// explain runs the explanation and fails the test on the internal invariant,
+// which is what the HTTP layer does with it.
+func explain(t *testing.T, in WithdrawalInput) WithdrawalExplanation {
+	t.Helper()
+	in.PayoutEligible = payoutEligibleOf(in)
+	out, err := ExplainWithdrawal(in)
+	require.NoError(t, err)
+	return out
 }
 
 // baseInput is a deployment where nothing account-level or provider-level is
@@ -42,6 +74,8 @@ func baseInput(policy valuedomain.Policy, level valuedomain.VerificationLevel, h
 		PolicyValid: policy.Validate() == nil,
 		Gross:       gross,
 		Spendable:   gross,
+		// PayoutEligible is filled in by explain(), from the same holdings and
+		// the same rule the adapter uses.
 
 		JurisdictionSupported: true,
 		ProviderAvailable:     true,
@@ -72,7 +106,7 @@ func reasonsOf(b OriginBucket) []string {
 // missing from the list would read as "we did not consider it".
 func TestExplainWithdrawal_EveryOriginGetsABucket(t *testing.T) {
 	t.Parallel()
-	e := ExplainWithdrawal(baseInput(valuedomain.SandboxPolicy(), valuedomain.VerificationPayoutKYC))
+	e := explain(t, baseInput(valuedomain.SandboxPolicy(), valuedomain.VerificationPayoutKYC))
 	require.Len(t, e.Buckets, len(valuedomain.AllOrigins()))
 	for i, o := range valuedomain.AllOrigins() {
 		assert.Equalf(t, o, e.Buckets[i].Origin, "buckets must be in the canonical origin order")
@@ -92,7 +126,7 @@ func TestExplainWithdrawal_TheDefaultPolicyRefusesEveryOrigin(t *testing.T) {
 		holdings = append(holdings, holding(o, 1_000_000))
 	}
 	in := baseInput(valuedomain.DefaultPolicy(), valuedomain.VerificationEnhanced, holdings...)
-	e := ExplainWithdrawal(in)
+	e := explain(t, in)
 
 	assert.False(t, e.Eligible)
 	assert.Equal(t, "0", e.WithdrawableNow.String())
@@ -116,7 +150,7 @@ func TestExplainWithdrawal_TheSandboxPolicyPerOrigin(t *testing.T) {
 		holdings = append(holdings, holding(o, 1_000_000))
 	}
 	policy := valuedomain.SandboxPolicy()
-	e := ExplainWithdrawal(baseInput(policy, valuedomain.VerificationPayoutKYC, holdings...))
+	e := explain(t, baseInput(policy, valuedomain.VerificationPayoutKYC, holdings...))
 
 	withdrawable := map[valuedomain.CreditOrigin]bool{
 		valuedomain.OriginPurchased:             true,
@@ -154,7 +188,7 @@ func TestExplainWithdrawal_VerificationIsANextStepNotADenial(t *testing.T) {
 	in := baseInput(policy, valuedomain.VerificationNodalIdentity,
 		holding(valuedomain.OriginPurchased, 5_000),
 		holding(valuedomain.OriginPromotional, 9_000))
-	e := ExplainWithdrawal(in)
+	e := explain(t, in)
 
 	purchased := bucketOf(e, valuedomain.OriginPurchased)
 	assert.Equal(t, "0", purchased.Withdrawable.String())
@@ -181,7 +215,7 @@ func TestExplainWithdrawal_AccountAndPlatformRefusalsApplyEverywhere(t *testing.
 	build := func(mutate func(*WithdrawalInput)) WithdrawalExplanation {
 		in := baseInput(policy, valuedomain.VerificationPayoutKYC, holding(valuedomain.OriginPurchased, 5_000))
 		mutate(&in)
-		return ExplainWithdrawal(in)
+		return explain(t, in)
 	}
 
 	cases := []struct {
@@ -222,10 +256,11 @@ func TestExplainWithdrawal_WaitingIsItsOwnReason(t *testing.T) {
 
 	reversible := baseInput(policy, valuedomain.VerificationPayoutKYC, OriginHolding{
 		Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
-		Quantity: qty(5_000),
-		Finality: valuedomain.FinalityReversible, HeldDays: 400,
+		RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPurchased},
+		Quantity:    qty(5_000),
+		Finality:    valuedomain.FinalityReversible, HeldDays: 400,
 	})
-	e := ExplainWithdrawal(reversible)
+	e := explain(t, reversible)
 	assert.Contains(t, reasonsOf(bucketOf(e, valuedomain.OriginPurchased)), string(WithdrawalFundingNotSettled))
 	assert.Equal(t, "0", e.WithdrawableNow.String())
 
@@ -233,9 +268,10 @@ func TestExplainWithdrawal_WaitingIsItsOwnReason(t *testing.T) {
 	// refused, because UNFUNDED — the tempting default — is payout-eligible.
 	unknown := baseInput(policy, valuedomain.VerificationPayoutKYC, OriginHolding{
 		Origin: valuedomain.OriginPurchased, OriginFloor: valuedomain.OriginPurchased,
-		Quantity: qty(5_000), HeldDays: 400,
+		RootOrigins: []valuedomain.CreditOrigin{valuedomain.OriginPurchased},
+		Quantity:    qty(5_000), HeldDays: 400,
 	})
-	e = ExplainWithdrawal(unknown)
+	e = explain(t, unknown)
 	assert.Contains(t, reasonsOf(bucketOf(e, valuedomain.OriginPurchased)), string(WithdrawalFundingNotSettled))
 	assert.Equal(t, "0", e.WithdrawableNow.String())
 }
@@ -251,13 +287,13 @@ func TestExplainWithdrawal_TheMinimumIsJudgedOnTheWhole(t *testing.T) {
 		holding(valuedomain.OriginPurchased, 400),
 		holding(valuedomain.OriginCreatorEarning, 400))
 	in.MinimumQuantity = qty(1_000)
-	e := ExplainWithdrawal(in)
+	e := explain(t, in)
 	assert.False(t, e.Eligible)
 	assert.Contains(t, e.Reasons, WithdrawalMinimumNotMet)
 	assert.Equal(t, "800", e.WithdrawableNow.String(), "the buckets still say what they hold")
 
 	in.MinimumQuantity = qty(800)
-	e = ExplainWithdrawal(in)
+	e = explain(t, in)
 	assert.True(t, e.Eligible)
 	assert.NotContains(t, e.Reasons, WithdrawalMinimumNotMet)
 
@@ -265,7 +301,7 @@ func TestExplainWithdrawal_TheMinimumIsJudgedOnTheWhole(t *testing.T) {
 	// will do" — but with nothing to compare against, the reason is simply not
 	// reported rather than invented.
 	in.MinimumQuantity = money.Quantity{}
-	e = ExplainWithdrawal(in)
+	e = explain(t, in)
 	assert.True(t, e.Eligible)
 	assert.NotContains(t, e.Reasons, WithdrawalMinimumNotMet)
 }
@@ -280,9 +316,9 @@ func TestExplainWithdrawal_IsDeterministic(t *testing.T) {
 	}
 	in := baseInput(valuedomain.SandboxPolicy(), valuedomain.VerificationNone, holdings...)
 	in.AccountRestrictions = []string{"COMPLIANCE_HOLD"}
-	first := ExplainWithdrawal(in)
+	first := explain(t, in)
 	for i := 0; i < 20; i++ {
-		assert.Equal(t, first, ExplainWithdrawal(in))
+		assert.Equal(t, first, explain(t, in))
 	}
 	// And the reasons are in the declared report order, not discovery order.
 	ranks := make([]int, 0, len(first.Reasons))
@@ -325,7 +361,7 @@ func TestExplainWithdrawal_TheDisclosureIsAStepAndNotARefusal(t *testing.T) {
 	policy := valuedomain.SandboxPolicy()
 	in := baseInput(policy, valuedomain.VerificationPayoutKYC, holding(valuedomain.OriginPurchased, 1_000_000))
 	in.DisclosureAccepted = false
-	e := ExplainWithdrawal(in)
+	e := explain(t, in)
 
 	assert.False(t, e.Eligible, "nothing may leave until the disclosure is accepted")
 	assert.Contains(t, reasonStrings(e.Reasons), string(WithdrawalTermsNotAccepted))
@@ -337,7 +373,7 @@ func TestExplainWithdrawal_TheDisclosureIsAStepAndNotARefusal(t *testing.T) {
 
 	// Accepted, and the verdict is the one the buckets already supported.
 	in.DisclosureAccepted = true
-	accepted := ExplainWithdrawal(in)
+	accepted := explain(t, in)
 	assert.True(t, accepted.Eligible)
 	assert.NotContains(t, reasonStrings(accepted.Reasons), string(WithdrawalTermsNotAccepted))
 }
