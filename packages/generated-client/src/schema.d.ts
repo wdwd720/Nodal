@@ -4699,7 +4699,7 @@ export interface components {
          * @description The closed set of activity kinds. A domain joins the feed by adding a Source and a summary template in internal/activity; see that package's doc.go for the extension point.
          * @enum {string}
          */
-        ActivityFeedKind: "CREDIT_PURCHASE" | "CREDIT_REVERSAL" | "NATIVE_TRADE" | "NATIVE_ASSET_CREATED" | "PAYOUT_REQUESTED" | "PAYOUT_STATE_CHANGED" | "ADMIN_ADJUSTMENT";
+        ActivityFeedKind: "CREDIT_PURCHASE" | "CREDIT_REVERSAL" | "NATIVE_TRADE" | "NATIVE_ASSET_CREATED" | "PAYOUT_REQUESTED" | "PAYOUT_STATE_CHANGED" | "ADMIN_ADJUSTMENT" | "VERIFICATION_UPDATED" | "PAYOUT_DESTINATION_ADDED" | "PAYOUT_DESTINATION_DISABLED" | "TERMS_ACCEPTED" | "ACCOUNT_CLOSURE_REQUESTED" | "ACCOUNT_CLOSURE_DECIDED" | "AGENT_CREATED" | "AGENT_PAUSED" | "AGENT_RESUMED" | "AGENT_DISABLED" | "NATIVE_MARKET_PAUSED";
         ActivityFeedPage: components["schemas"]["Page"] & {
             items: components["schemas"]["ActivityFeedItem"][];
         };
@@ -6441,10 +6441,10 @@ export interface components {
             withdrawable: components["schemas"]["Quantity"];
         };
         /**
-         * @description A machine-readable reason value cannot leave. Each names something that could change. REQUIRES_VERIFICATION is a NEXT STEP and not a denial, and the product must present it as one.
+         * @description A machine-readable reason value cannot leave. Each names something that could change. REQUIRES_VERIFICATION and TERMS_NOT_ACCEPTED are NEXT STEPS and not denials, and the product must present them as such: TERMS_NOT_ACCEPTED means the withdrawal disclosure has not been accepted at the version now served, which is the normal state of somebody who has never withdrawn. The eligible figures stay true beside it.
          * @enum {string}
          */
-        WithdrawalReason: "REQUIRES_VERIFICATION" | "ORIGIN_NOT_WITHDRAWABLE" | "CAPABILITY_INACTIVE" | "JURISDICTION_RESTRICTED" | "ACCOUNT_RESTRICTED" | "PROVIDER_UNAVAILABLE" | "MINIMUM_NOT_MET" | "FUNDING_NOT_SETTLED" | "HOLD_PERIOD_NOT_ELAPSED" | "NO_VALUE" | "POLICY_INVALID";
+        WithdrawalReason: "REQUIRES_VERIFICATION" | "ORIGIN_NOT_WITHDRAWABLE" | "CAPABILITY_INACTIVE" | "JURISDICTION_RESTRICTED" | "ACCOUNT_RESTRICTED" | "PROVIDER_UNAVAILABLE" | "MINIMUM_NOT_MET" | "FUNDING_NOT_SETTLED" | "HOLD_PERIOD_NOT_ELAPSED" | "NO_VALUE" | "POLICY_INVALID" | "TERMS_NOT_ACCEPTED";
         WithdrawalRequest: {
             account_id: components["schemas"]["UUID"];
             asset_id: components["schemas"]["UUID"];
