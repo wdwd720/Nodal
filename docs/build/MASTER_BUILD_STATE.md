@@ -1529,7 +1529,12 @@ ten commits, each the way its own register entry said it would:
 `docs/audit/FINAL_CHECKPOINT_2026-09-10.md` §15 states the flags and §16 the
 human actions. The first three are one paste, one paste and one push: the next
 deploy of this HEAD needs `NODAL_ALERT_WEBHOOK_URL` and `NODAL_PII_KEYRING` in
-the Render dashboard and refuses to start without them, by design.
+the Render dashboard and refuses to start without them, by design — which
+became true of the VALUES and not merely of the `env://` references pointing at
+them in F-137, where the config-deploy audit found that both rules were
+satisfied by a reference the blueprint always writes, so a STAGING that had
+never been given either secret booted, served, alerted nobody and stored no
+personal data. `config.Load` resolves both references now.
 
 **What is left is not launch work**, and §17 of the checkpoint orders it:
 F-84's route-pattern authorisation, F-122's residual birth controls, F-95's

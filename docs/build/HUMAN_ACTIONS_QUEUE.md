@@ -26,6 +26,7 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Key:** `NODAL_ALERT_WEBHOOK_URL`
 - **Value:** the single line in `scratchpad\secrets\alert_webhook_url.txt` (paste it; no quotes, no trailing newline)
 - **Why:** STAGING config refuses to boot without an alert destination (`RuleAlertDestination`); the topic is a free ntfy.sh topic, $0.
+- **This is now true of the VALUE, not just the reference.** Until F-137 the rule only saw `env://NODAL_ALERT_WEBHOOK_URL`, which render.yaml always writes, so a deployment that skipped this item booted healthy and alerted nobody. `config.Load` resolves the reference now: with this variable unset, `nodal-api` fails its configuration check and does not serve.
 - **Do not press "Save, rebuild, and deploy" yet** — add item 2 first, then save once.
 
 ## 2. Render: set the PII keyring secret (OPEN)
@@ -34,6 +35,7 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Key:** `NODAL_PII_KEYRING`
 - **Value:** the entire contents of `scratchpad\secrets\pii_keyring.json` (single-line JSON, 72 bytes; paste as one line)
 - **Why:** STAGING config refuses to boot without a keyring (`RulePIIKeyring`); it seals `identity_pii`.
+- **Also true of the value now** (F-137): unset, or set to something `internal/pii` cannot parse, and the service refuses to start rather than serving and storing no personal data at all.
 - Then press **Save, rebuild, and deploy** once. Expect one deploy of the currently live commit; the service stays on the free plan.
 - **Verify (Claude does this, or you can):** the value fingerprints are in `scratchpad\secrets\fingerprints.txt`; after the deploy, `GET https://api-nodal.actorvia.xyz/v1/readyz` must be 200.
 
@@ -42,7 +44,7 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Where:** Git Bash, `C:\Dev\Nodal`
 - **What:** `git push origin main` — main is at `9906c9f` (ADR-0022 + D-051 on top of the audited checkpoint `024c691`); nothing else is on it.
 - **Why:** the goal's §2 orders the push after the secrets exist, because `9906c9f` validates both at boot and would fail its health check without them (Render would keep the old build live, but the failed deploy is avoidable).
-- **Unblocks:** live verification of `/v1/healthz`, `/v1/readyz`, `/v1/version` (build commit `9906c9f`, config hash) — tell Claude "secrets set, main pushed" and it verifies and records the evidence in `docs/audit/PRODUCTION_EVIDENCE_INDEX.md`.
+- **Unblocks:** live verification of `/v1/healthz`, `/v1/readyz`, `/v1/version` (config hash, and `build_version` — which reports the pushed commit as of F-142; before that it was the literal `dev` for every build ever deployed, so the comparison this step promises could not be made) — tell Claude "secrets set, main pushed" and it verifies and records the evidence in `docs/audit/PRODUCTION_EVIDENCE_INDEX.md`.
 - If the push asks for credentials, sign in to GitHub in the credential prompt (account that owns `wdwd720/Nodal`).
 
 ## 4. GoDaddy: CNAME for the web app (OPEN, later — after `nodal-web` exists on Render)
@@ -52,7 +54,15 @@ sha256sum "$SP/secrets/"* | tr -d '\\' > "$SP/secrets/fingerprints.txt"
 - **Then:** Render → `nodal-web` → Settings → Custom Domains → confirm `app-nodal.actorvia.xyz` verifies (Render issues the certificate itself, $0).
 - **Do not** touch `api-nodal`, `api`, `www`, `releases` or any other Actorvia record.
 
-## 5. ZITADEL: the first operator's subject, for CP_AUTH_BOOTSTRAP_OPERATORS (OPEN, before any admin surface is used)
+## 5. Render: delete `NODAL_DB_MIGRATE_URL` from the `nodal-api` environment (OPEN, any time)
+
+- **Where:** https://dashboard.render.com/web/srv-dah02lht0dsc73e1la50/env → **Edit** → the row `NODAL_DB_MIGRATE_URL` → **Delete** → **Save, rebuild, and deploy**
+- **Why:** it is the `cp_migrate` DSN, and `cp_migrate` owns every table. An owner can `ALTER TABLE ... DISABLE TRIGGER`, and since 00743–00753 every state machine in this system is enforced by triggers — the transition bindings, `forbid_mutation` on fifty-three append-only tables, and the eleven that write state columns the application cannot. Nothing in `cmd/api` has ever read it (F-136).
+- **Why a person has to do it:** the entry is gone from `render.yaml`, and a blueprint sync does **not** remove a value that already exists in the dashboard. Until somebody deletes it by hand, the credential stays in the container's environment.
+- **How migrations are run instead — unchanged, and this is the whole reason the variable bought nothing:** an operator runs `go run ./cmd/migrate up` from their own machine, against Neon, with `CP_DATABASE_MIGRATE_URL` in that shell and nowhere else. `cmd/migrate` reads it straight from its own environment; no service does. This tier deploys no worker and no cron job (both are paid service types on Render, and a fixed monthly charge is the one thing it may not have), so the migrations and the reconciliation sweep are operator-run — `docs/operations/LAUNCH_TIER.md` §10 states it, and §8 is where that stops being true.
+- **Verify:** the dashboard shows no variable whose name contains `MIGRATE`; `go test ./test/infra/ -run TestTheWebServiceIsNotGivenTheSchemaOwner` keeps the file that way.
+
+## 6. ZITADEL: the first operator's subject, for CP_AUTH_BOOTSTRAP_OPERATORS (OPEN, before any admin surface is used)
 
 - **Why:** `operator_roles` is the only source of operator authority and nothing in the product writes it, so a deployment that has never had an operator cannot get one -- the gate ceremony, the kill switches and the §38 support surface are all unreachable. ADR-0024 decided the mechanism; it needs one value only a person can read out of the identity provider.
 - **Where:** ZITADEL console (`https://nodal-az1hxe.us1.zitadel.cloud`) -> Users -> the person who will be the first operator -> copy their **User ID** (an opaque numeric string, e.g. `284169943049306115`). It is not an e-mail address and not a username.
