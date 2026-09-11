@@ -653,14 +653,40 @@ func TestAuditWV4_ACycleMakesTheBackfillAnswerTheLotsOwnOrigin(t *testing.T) {
 		`SELECT o FROM unnest($1::text[]) AS o ORDER BY cp_credit_origin_floor_rank(o), o LIMIT 1`,
 		backfilled).Scan(&backfilledFloor))
 
-	assert.NotEqual(t, string(valuedomain.OriginMarketTradingProceeds), backfilledFloor,
-		"F-wv4-6: 00819's backfill reads a NULL root set as 'this lot has no parents' and writes "+
-			"the lot's OWN origin: root_origins=%v, origin_floor=%s. The lot is a round trip out "+
-			"of a promotional grant; SandboxPolicy releases MARKET_TRADING_PROCEEDS and refuses "+
-			"PROMOTIONAL, so the coalesce turns a provenance the database cannot compute into the "+
-			"permissive answer, in the migration whose subject is that a floor must be "+
-			"conservative. The trigger path raises CREDIT_PARENT_ROOTLESS on the same input",
+	// INVERTED from the reproduction, which asserted that the backfill's answer
+	// was not the permissive one. It is, and it always will be: a migration that
+	// has been applied is not rewritten, and the expression above is 00819's own
+	// text. The narrative is the auditor's -- the coalesce turns a provenance the
+	// database cannot compute into the lot's OWN origin, which for a round trip
+	// out of a promotional grant is the answer SandboxPolicy releases, in the
+	// migration whose subject is that a floor must be conservative.
+	//
+	// What changes is that the expression can no longer be reached with such a
+	// row in the table. 00825 refuses to migrate while any lot has parent rows
+	// and no computable root, because a migration that cannot compute a
+	// provenance has two honest options and writing down a guess is not one of
+	// them (F-283, D-137 amended).
+	assert.Equal(t, string(valuedomain.OriginMarketTradingProceeds), backfilledFloor,
+		"F-wv4-6: 00819's backfill reads a NULL root set as 'this lot has no parents' and would "+
+			"write the lot's OWN origin: root_origins=%v, origin_floor=%s. That is why a database "+
+			"holding one may not be migrated, rather than migrated with a guess",
 		backfilled, backfilledFloor)
+
+	var unknowable []credit.LotID
+	rows3, qerr3 := testDB.Query(f.ctx, `SELECT * FROM cp_credit_lots_without_computable_roots()`)
+	require.NoError(t, qerr3)
+	for rows3.Next() {
+		var lot credit.LotID
+		require.NoError(t, rows3.Scan(&lot))
+		unknowable = append(unknowable, lot)
+	}
+	rows3.Close()
+	require.NoError(t, rows3.Err())
+	assert.Contains(t, unknowable, proceeds.ID,
+		"F-wv4-6: 00825 names every lot whose provenance is unknowable and refuses to move the "+
+			"schema while there is one. The trigger path already raised CREDIT_PARENT_ROOTLESS on "+
+			"the same input; the backfill was the one reader that substituted")
+	assert.Contains(t, unknowable, grant.ID)
 }
 
 // ---------------------------------------------------------------------------
