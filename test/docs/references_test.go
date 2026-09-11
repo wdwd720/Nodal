@@ -63,6 +63,12 @@ var inScope = []string{
 	// defect when the document's purpose is to be accurate (F-111).
 	"docs/security/SECURITY.md",
 	"docs/threat-model/THREAT_MODEL.md",
+	// The register of WHY every control is shaped the way it is -- the document
+	// a fixer opens before changing one. Its citations had never been resolved
+	// by anything, and one of them (D-024's "Test change") named a function that
+	// has never existed under that name: the F-25 shape surviving four audits by
+	// living one document outside this list (F-248).
+	"docs/build/DECISION_REGISTER.md",
 }
 
 var (

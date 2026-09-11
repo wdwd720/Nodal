@@ -148,7 +148,7 @@ Last updated: 2026-09-09
 
 - **Problem:** the relay computed a row's retry eligibility as `recorded_at + min(base·2^(attempts−1), max)`; once `max` had elapsed since `recorded_at`, a permanently failing row was eligible on every poll (hot loop bounded only by the run-level backoff).
 - **Chosen (2026-09-06):** migration 00642 adds `outbox_events.next_attempt_at` (default `now()`, set to `recorded_at` on enqueue); the relay claims `WHERE published_at IS NULL AND next_attempt_at <= now` and on failure sets `next_attempt_at = failure_time + backoff(attempts)` (doubling from `RetryBackoffBase`, capped at `RetryBackoffMax`, overflow-free). Ordering stays `(recorded_at, id)` so the per-partition guard is unchanged.
-- **Test change (PART 235):** `TestIntegration_RelayRetriesWithBackoff` encoded the old derived timing (second retry at `recorded_at + 2s`); it now asserts failure-based timing (`recorded_at + 3s`). The old expectation was the defect being fixed.
+- **Test change (PART 235):** `TestIntegration_RelayFailedPublishBacksOffAndRetries` (`internal/event/relay_integration_test.go`) encoded the old derived timing (second retry at `recorded_at + 2s`); it now asserts failure-based timing (`recorded_at + 3s`). The old expectation was the defect being fixed.
 
 ## D-025 — Observer agreement never picks the optimistic answer
 
