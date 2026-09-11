@@ -1,0 +1,973 @@
+package docsref
+
+// Adversarial audit of the docs-vs-reality surface (goal §54, wave B area 10).
+//
+// Every test in this file is a REPRODUCTION of a finding, not a proposed
+// invariant. Each one fails on `productization` at 6e620f9. Nothing here
+// changes product code or a document; the fixes belong to whoever the
+// orchestrator assigns them to.
+//
+// The area's rule, from the brief: a finding is a sentence, table row, count,
+// route, file path, test name, flag or number in a document that the code, the
+// schema, the tests or the configuration does not bear out -- or a mechanism
+// the code has that the documents say does not exist. The second half is what
+// most of this file is about, because the existing checks in this package all
+// look for the first.
+//
+// The findings, in the order they appear below:
+//
+//	F-docs-1   POLICY_AUTHORITY §1 condition 4 names LIVE_* and WITHDRAWALS as
+//	           the capabilities that need the four evidence references;
+//	           gates.IsHighRisk is true for eighteen of twenty, CREDIT_PURCHASE
+//	           and both payout capabilities among them. §1's state machine also
+//	           omits SANDBOX, which has been a gate state since 00755
+//	F-docs-2   VERIFICATION_AND_WITHDRAWAL §2 sends a caller to
+//	           POST /v1/me/terms/accept; no such route exists anywhere
+//	F-docs-3   USER_JOURNEY §1 says onboarding calls PUT /v1/me/profile; the
+//	           route is POST and PUT is not served
+//	F-docs-4   SECURITY.md tells a reviewer that test/security, test/contract,
+//	           infra/ and docs/runbooks/ do not exist, that the security CI step
+//	           passes vacuously, and lists as "Planned" seven adversarial suites
+//	           that are written and pass
+//	F-docs-5   THREAT_MODEL's top-ten residual risks 9 and 10 name as unbuilt
+//	           the two test trees, the Terraform, the git remote and
+//	           internal/{reconciliation,settlement,execution}
+//	F-docs-6   .env.example gives the settlement pair as `solana` + the MAINNET
+//	           USDC mint; scripts/seed registers `solana-devnet` + the devnet
+//	           mint, and cmd/api refuses to start on a pair it cannot resolve
+//	F-docs-7   PROVIDER_BOUNDARY §4 calls PAYOUT_KYC a capability that is
+//	           DISABLED; internal/gates declares twenty and that is not one
+//	F-docs-8   CREDIT_ECONOMY §7 says the activity feed carries no verification,
+//	           profile or agent events and that they are "the documented
+//	           extension point"; internal/activity/doc.go says the opposite and
+//	           eleven such Sources exist. CURRENT_SYSTEM_INVENTORY says seven
+//	           kinds; there are eighteen
+//	F-docs-9   UI_UX_SYSTEM §10 says Buy Credits is not a shell action, that no
+//	           endpoint sells Credits, and that the shell offers "Add funds" --
+//	           the phrase USER_JOURNEY forbids by name
+//	F-docs-10  PRODUCT_ARCHITECTURE's domain table and ADR-0027 name
+//	           internal/credits and internal/payments; neither exists
+//	F-docs-11  README calls apps/web a Next.js app and reports the e2e, UI-e2e
+//	           and chaos tiers as pending
+//	F-docs-12  BACKUP_RESTORE marks DISASTER_RECOVERY.md and
+//	           docs/runbooks/database-corruption.md "(pending)"; both exist
+//	F-docs-13  CURRENT_SYSTEM_INVENTORY says "Routes added (nine)" over a table
+//	           of ten rows
+//	F-docs-14  the decision register's test citations are checked by nothing,
+//	           and one of them names a function that does not exist
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/nodal/controlplane/internal/gates"
+)
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+// read returns a document's bytes as a string, failing the test if it is gone.
+// A check that silently skips a document it cannot open is a check that stops
+// running the day somebody renames the file.
+func read(t *testing.T, root, rel string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	require(t, err == nil, "reading %s: %v", rel, err)
+	return string(body)
+}
+
+// lineOf returns the 1-based line number of the first occurrence of needle, or
+// 0. Findings are reported with a file:line, so the tests carry one too.
+func lineOf(body, needle string) int {
+	idx := strings.Index(body, needle)
+	if idx < 0 {
+		return 0
+	}
+	return 1 + strings.Count(body[:idx], "\n")
+}
+
+func exists(root, rel string) bool {
+	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
+	return err == nil
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-2, F-docs-3: a route a document tells a caller to use
+// ---------------------------------------------------------------------------
+
+// servedRoutes reads the route table out of the generated chi server. That
+// table -- not openapi.yaml -- is what the process actually mounts, which is
+// the thing a documented call meets.
+func servedRoutes(t *testing.T, root string) map[string][]string {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("internal/gen/api/api.gen.go")))
+	require(t, err == nil, "reading the generated server: %v", err)
+	re := regexp.MustCompile(`r\.(Get|Post|Put|Delete|Patch|Head|Options)\(options\.BaseURL\+"([^"]+)"`)
+	out := map[string][]string{}
+	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+		out[strings.ToUpper(m[1])] = append(out[strings.ToUpper(m[1])], m[2])
+	}
+	require(t, len(out) >= 4 && len(out["GET"]) > 30,
+		"only %d methods and %d GET routes found; the generated router changed shape and this check stopped seeing it",
+		len(out), len(out["GET"]))
+	return out
+}
+
+// routeMatches is chi's matching rule, narrowed to what a document can write: a
+// {param} segment eats exactly one non-empty segment. It is what makes
+// `POST /v1/webhooks/stripe_credit` a true citation of `/webhooks/{provider}`
+// and `POST /v1/me/terms/accept` a false one.
+func routeMatches(template, concrete string) bool {
+	tp := strings.Split(strings.Trim(template, "/"), "/")
+	cp := strings.Split(strings.Trim(concrete, "/"), "/")
+	if len(tp) != len(cp) {
+		return false
+	}
+	for i := range tp {
+		if strings.HasPrefix(tp[i], "{") {
+			if cp[i] == "" {
+				return false
+			}
+			continue
+		}
+		if tp[i] != cp[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// routeDocs are the documents that tell somebody which call to make. A page, a
+// client or a reviewer follows these; a route named here that the process does
+// not mount is an instruction that fails on the first attempt.
+var routeDocs = []string{
+	"docs/product/USER_JOURNEY.md",
+	"docs/product/VERIFICATION_AND_WITHDRAWAL.md",
+	"docs/product/CREDIT_ECONOMY.md",
+	"docs/product/PRODUCT_ARCHITECTURE.md",
+	"docs/product/STAGING_E2E.md",
+	"docs/product/PROVIDER_BOUNDARY.md",
+}
+
+var docRoute = regexp.MustCompile(`\b(GET|POST|PUT|PATCH|DELETE) ` + "`?" + `(/v1/[A-Za-z0-9_{}:/.-]+)`)
+
+func TestAuditDocs_EveryRouteAProductDocumentNamesIsServed(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	served := servedRoutes(t, root)
+
+	var problems []string
+	cited := 0
+	for _, rel := range routeDocs {
+		body := read(t, root, rel)
+		for _, line := range strings.Split(body, "\n") {
+			for _, m := range docRoute.FindAllStringSubmatch(line, -1) {
+				method, p := m[1], strings.TrimRight(m[2], "`.,;)")
+				p = strings.TrimPrefix(p, "/v1")
+				if p == "" {
+					continue
+				}
+				cited++
+				hit, anyMethod := false, false
+				for meth, tmpls := range served {
+					for _, tmpl := range tmpls {
+						if !routeMatches(tmpl, p) {
+							continue
+						}
+						anyMethod = true
+						if meth == method {
+							hit = true
+						}
+					}
+				}
+				if hit {
+					continue
+				}
+				why := "no route matches that path"
+				if anyMethod {
+					why = "the path is served, but not with " + method
+				}
+				problems = append(problems, rel+":"+strconv.Itoa(lineOf(body, m[0]))+
+					" tells a caller to use "+method+" /v1"+p+" -- "+why)
+			}
+		}
+	}
+	require(t, cited > 40, "only %d routes cited across the product documents; this check stopped seeing them", cited)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d documented call(s) the process does not answer:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-10: a package a document names
+// ---------------------------------------------------------------------------
+
+// The existing path check next door resolves only citations that name a Go TEST
+// file or something under test/, because those are cheap to resolve exactly. A
+// domain table that points a reader at the package owning a domain is the other
+// citation a reader follows, and nothing resolved it: PRODUCT_ARCHITECTURE has
+// pointed at `internal/credits` and `internal/payments` since it was written,
+// and the packages are `internal/credit` and -- for payments -- no package at
+// all, because PaymentIntents live in internal/credit beside the mint they
+// cause.
+var packageDocs = []string{
+	"docs/product/PRODUCT_ARCHITECTURE.md",
+	"docs/product/CREDIT_ECONOMY.md",
+	"docs/product/VERIFICATION_AND_WITHDRAWAL.md",
+	"docs/product/PROVIDER_BOUNDARY.md",
+	"docs/adr/0022-one-identity-source-of-truth.md",
+	"docs/adr/0023-the-sandbox-tier.md",
+	"docs/adr/0024-how-a-principal-becomes-an-operator.md",
+	"docs/adr/0025-verification-is-provider-hosted-and-evidence-based.md",
+	"docs/adr/0026-the-conversion-request-is-payout-requests.md",
+	"docs/adr/0027-a-position-is-the-sum-of-its-fills.md",
+	"docs/adr/0028-notifications-and-realtime-on-one-instance.md",
+	"docs/adr/0029-agents-as-a-constrained-authority-management-surface.md",
+}
+
+// pkgRef matches a backticked Go package directory: `internal/x`, `cmd/y`,
+// `internal/x/y`. A selector (`internal/gates.Checker`) and a file
+// (`internal/gates/sandbox.go`) are deliberately out: the first is a symbol and
+// the second is already covered next door.
+var pkgRef = regexp.MustCompile("`((?:internal|cmd)/[a-z0-9]+(?:/[a-z0-9]+)*)`")
+
+func TestAuditDocs_EveryPackageAProductDocumentNamesExists(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	var problems []string
+	cited := 0
+	for _, rel := range packageDocs {
+		body := read(t, root, rel)
+		seen := map[string]bool{}
+		for _, m := range pkgRef.FindAllStringSubmatch(body, -1) {
+			if seen[m[1]] {
+				continue
+			}
+			seen[m[1]] = true
+			cited++
+			if exists(root, m[1]) {
+				continue
+			}
+			problems = append(problems, rel+":"+strconv.Itoa(lineOf(body, m[0]))+" names "+m[1])
+		}
+	}
+	require(t, cited > 50, "only %d package citations found; this check stopped seeing them", cited)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d package(s) a document points a reader at do not exist:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-7: a capability a document names
+// ---------------------------------------------------------------------------
+
+// A capability name is not decoration: it is the thing an operator types into
+// `POST /v1/admin/gates/{capability}/{action}` and the thing a reviewer looks
+// for in `capability_gates`. A document that reports a capability as DISABLED
+// when no such capability is declared describes a control that is not there --
+// and PROVIDER_BOUNDARY does, for PAYOUT_KYC, which is a verification LEVEL.
+var capabilityDocs = []string{
+	"docs/product/PROVIDER_BOUNDARY.md",
+	"docs/product/PRODUCT_ARCHITECTURE.md",
+	"docs/product/CREDIT_ECONOMY.md",
+	"docs/audit/LAUNCH_GATE_MATRIX.md",
+}
+
+// capabilityClaim matches "the `A`, `B` and `C` capabilities" and "the `A`
+// capability": the shape that asserts the names ARE capabilities. Prose that
+// merely mentions a name is not caught, and should not be. `(?s)` because the
+// list that carries the defect is wrapped across two lines.
+var capabilityClaim = regexp.MustCompile("(?s)((?:`[A-Z][A-Z_]{2,}`[\\s,]*(?:and[\\s]*)?)+)capabilit(?:y|ies)")
+
+var backtickedUpper = regexp.MustCompile("`([A-Z][A-Z_]{2,})`")
+
+func TestAuditDocs_EveryCapabilityADocumentNamesIsDeclared(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	declared := map[string]bool{}
+	for _, c := range gates.AllCapabilities() {
+		declared[string(c)] = true
+	}
+	require(t, len(declared) > 10, "only %d capabilities declared; this check is looking at the wrong thing", len(declared))
+
+	var problems []string
+	claims := 0
+	for _, rel := range capabilityDocs {
+		body := read(t, root, rel)
+		for _, m := range capabilityClaim.FindAllStringSubmatch(body, -1) {
+			for _, n := range backtickedUpper.FindAllStringSubmatch(m[1], -1) {
+				claims++
+				if declared[n[1]] {
+					continue
+				}
+				problems = append(problems, rel+":"+strconv.Itoa(lineOf(body, m[0]))+
+					" calls "+n[1]+" a capability; internal/gates declares "+
+					strconv.Itoa(len(declared))+" and that is not one")
+			}
+		}
+	}
+	require(t, claims > 3, "only %d capability claims found; this check stopped seeing them", claims)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d name(s) a document calls a capability are not:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-4, F-docs-5, F-docs-12: an absence the tree contradicts
+// ---------------------------------------------------------------------------
+
+// A document may name an absent thing only while saying it is absent -- that is
+// the rule references_test.go already states, and it is the right one. Its
+// converse was never checked: a document may not say a thing is absent when it
+// is there.
+//
+// Empirically that is the direction these documents decayed in, and it is not a
+// smaller defect. SECURITY.md and THREAT_MODEL.md are the two documents a
+// reviewer scores security posture from, and between them they report four
+// directories as missing, the security CI step as vacuous, and the
+// reconciliation, settlement and execution code as unbuilt. §14 then hands an
+// operator incident fallbacks "until they exist" while nineteen runbooks sit in
+// docs/runbooks. THREAT_MODEL's own residual risk 8 states the rule this
+// breaks: "Listing a closed control among the top ten residual risks
+// understates the system in a document a reviewer uses to score its posture,
+// which is a truthfulness defect in the same way an overstatement is."
+//
+// Each row is one sentence, quoted, and the path it is wrong about.
+type absenceClaim struct {
+	doc      string
+	sentence string // quoted from the document; must still be present
+	path     string // what it says is missing
+}
+
+func absenceClaims() []absenceClaim {
+	return []absenceClaim{
+		{"docs/security/SECURITY.md",
+			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/security"},
+		{"docs/security/SECURITY.md",
+			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "test/contract"},
+		{"docs/security/SECURITY.md",
+			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "infra/terraform"},
+		{"docs/security/SECURITY.md",
+			"ls test/security test/contract infra docs/runbooks   # each is absent or empty today", "docs/runbooks"},
+		{"docs/security/SECURITY.md", "DESIGNED, pending Terraform (`infra/` is empty; EB-012)", "infra/terraform"},
+		{"docs/security/SECURITY.md", "compiler DESIGNED (`internal/strategy` absent)", "internal/strategy"},
+		{"docs/security/SECURITY.md", "DESIGNED (`internal/model` absent)", "internal/model"},
+		{"docs/security/SECURITY.md",
+			"`./test/contract/...` — the directory does not exist, so the step is vacuous today", "test/contract"},
+		{"docs/security/SECURITY.md",
+			"**the directory does not exist, so the security step passes vacuously**", "test/security"},
+		{"docs/security/SECURITY.md", "**Runbooks**: `docs/runbooks/` does not exist.", "docs/runbooks"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"`make security`, `make contract` and `make iac-scan` pass on empty directories; no git remote", "test/security"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/reconciliation"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/settlement"},
+		{"docs/threat-model/THREAT_MODEL.md",
+			"the reconciliation, settlement and execution code that must keep running does not exist", "internal/execution"},
+		{"docs/threat-model/THREAT_MODEL.md", "no Terraform, IAM task roles", "infra/terraform"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"`docs/operations/DISASTER_RECOVERY.md` (pending)", "docs/operations/DISASTER_RECOVERY.md"},
+		{"docs/operations/BACKUP_RESTORE.md",
+			"`docs/runbooks/database-corruption.md` (pending)", "docs/runbooks/database-corruption.md"},
+	}
+}
+
+// writerClaims are absences about CODE rather than about a directory. Same
+// defect, and the sharpest instance of it: SECURITY.md §12 says in bold that
+// nothing on disk records a security event, while REQUIREMENTS_TRACEABILITY's
+// R-130-1 -- IN_PROGRESS, in the other document a reviewer reads -- lists the
+// four packages that do. Two documents in the same tree, opposite answers, and
+// the security one is the one somebody scores posture from.
+type writerClaim struct {
+	doc, sentence, what string
+	writers             []string // files that must contain `INSERT INTO <what>`
+}
+
+func writerClaims() []writerClaim {
+	return []writerClaim{
+		{"docs/security/SECURITY.md",
+			"**no writer exists** — nothing on disk records a security event yet",
+			"security_events",
+			[]string{"internal/identity/login.go", "internal/funding/service.go",
+				"internal/signing/repository.go", "internal/webhook/handler.go"}},
+	}
+}
+
+func TestAuditDocs_NoDocumentDeclaresAnAbsenceTheTreeContradicts(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	var problems []string
+	for _, c := range writerClaims() {
+		body := read(t, root, c.doc)
+		if !strings.Contains(body, c.sentence) {
+			problems = append(problems, c.doc+" no longer contains the sentence this check reads: "+
+				strconv.Quote(c.sentence))
+			continue
+		}
+		var found []string
+		for _, f := range c.writers {
+			src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f)))
+			if err != nil {
+				continue
+			}
+			if strings.Contains(string(src), "INSERT INTO "+c.what) {
+				found = append(found, f)
+			}
+		}
+		if len(found) > 0 {
+			problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
+				" says nothing writes "+c.what+"; "+strings.Join(found, ", ")+" do")
+		}
+	}
+	for _, c := range absenceClaims() {
+		body := read(t, root, c.doc)
+		if !strings.Contains(body, c.sentence) {
+			// The sentence moved. That is not a pass: a claim that moved is a
+			// claim nobody is checking any more (the rule counts_test.go states).
+			problems = append(problems, c.doc+" no longer contains the sentence this check reads: "+
+				strconv.Quote(c.sentence))
+			continue
+		}
+		if !exists(root, c.path) {
+			continue // the document is right
+		}
+		problems = append(problems, c.doc+":"+strconv.Itoa(lineOf(body, c.sentence))+
+			" says "+c.path+" is absent; it is in the repository")
+	}
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d stated absence(s) the tree contradicts:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// TestAuditDocs_NothingListedAsPlannedIsAlreadyWritten answers the question the
+// brief asks about SECURITY.md's PART 155 matrix directly: is the "Planned
+// (traceability)" column honest, or is it F-111's claim-dressed-as-a-plan?
+//
+// It is honest in FORM and false in SUBSTANCE. The column names the suites by
+// the filename they were going to take; the suites landed under different
+// filenames in the same directory and pass today. And because
+// references_test.go exempts any paragraph containing the word "planned" from
+// its path check, the whole table is invisible to the control that would
+// otherwise have caught the left-hand column going stale with it -- which is
+// how "IDOR ... (primitive only; no HTTP handlers exist)" survived cmd/api.
+//
+// Each row is a PART 155 item, the suite the matrix calls planned, and a test
+// function that proves the work is done.
+func plannedButWritten() []struct{ item, planned, proof string } {
+	return []struct{ item, planned, proof string }{
+		{"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
+			"TestIDOR_CoversEveryAccountScopedRoute"},
+		{"IDOR / cross-tenant reads / cross-tenant writes", "test/security/{idor,cross_tenant}_test.go",
+			"TestIDOR_CrossTenantAccountReadsAreRefused"},
+		{"Prompt injection", "test/security/prompt_injection_test.go",
+			"TestPromptInjection_UntrustedTextNeverEntersTheInstructionChannel"},
+		{"Agent withdrawal attempt", "test/security/agent_withdrawal_attempt_test.go",
+			"TestAgentPrincipalPermissionSetIsClosed"},
+		{"Admin privilege misuse", "test/security/admin_privilege_misuse_test.go",
+			"TestDualControl_AProposerCannotApproveItsOwnAction"},
+		{"Production capability bypass", "test/security/production_capability_bypass_test.go",
+			"TestProductionRefusesFakeProviders"},
+		{"Fake provider activation in production", "test/security/fake_provider_in_prod_test.go",
+			"TestLocalDefaultsAreNotProductionValid"},
+		{"Stolen session scenarios", "test/security/stolen_session_test.go",
+			"TestReplay_ForgedSessionCookiesAreRefused"},
+	}
+}
+
+func TestAuditDocs_NothingListedAsPlannedIsAlreadyWritten(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	const doc = "docs/security/SECURITY.md"
+	body := read(t, root, doc)
+	require(t, strings.Contains(body, "| PART 155 item | Exists today (file → test) | Planned (traceability) |"),
+		"%s no longer carries the PART 155 matrix this check reads", doc)
+
+	declared := declaredTests(t, root)
+	var problems []string
+	for _, r := range plannedButWritten() {
+		require(t, strings.Contains(body, r.planned),
+			"%s no longer lists %q as planned; the claim moved", doc, r.planned)
+		if !declared[r.proof] {
+			continue // still genuinely unwritten
+		}
+		problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, r.planned))+
+			" lists "+r.item+" as planned ("+r.planned+"); "+r.proof+" is written and passes")
+	}
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d PART 155 row(s) call written work planned:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-8: the activity feed
+// ---------------------------------------------------------------------------
+
+// CREDIT_ECONOMY §7 exists to say what is NOT built, "so nobody has to discover
+// it". One of its five bullets is false in the understating direction, and the
+// package it cites as the authority contradicts it in as many words.
+//
+// The count is derived from internal/activity rather than recalled, for the
+// reason counts_test.go already gives: a number somebody verified once is a
+// number that will be wrong within a week and nobody will know which week.
+func activityKinds(t *testing.T, root string) []string {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("internal/activity/activity.go")))
+	require(t, err == nil, "reading internal/activity/activity.go: %v", err)
+	re := regexp.MustCompile(`Kind[A-Za-z0-9]+ Kind = "([A-Z_]+)"`)
+	var out []string
+	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+		out = append(out, m[1])
+	}
+	require(t, len(out) > 5, "only %d activity kinds parsed; this check stopped seeing them", len(out))
+	return out
+}
+
+func TestAuditDocs_TheActivityFeedIsDescribedAsItIsBuilt(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	kinds := activityKinds(t, root)
+	have := map[string]bool{}
+	for _, k := range kinds {
+		have[k] = true
+	}
+
+	var problems []string
+
+	// (a) The "not built" bullet.
+	const ce = "docs/product/CREDIT_ECONOMY.md"
+	ceBody := read(t, root, ce)
+	const bullet = "**No verification, profile, security or agent events in the activity feed.**"
+	require(t, strings.Contains(ceBody, bullet), "%s no longer carries the bullet this check reads", ce)
+	var present []string
+	for _, k := range []string{"VERIFICATION_UPDATED", "TERMS_ACCEPTED", "ACCOUNT_CLOSURE_REQUESTED",
+		"ACCOUNT_CLOSURE_DECIDED", "AGENT_CREATED", "AGENT_PAUSED", "AGENT_RESUMED", "AGENT_DISABLED",
+		"PAYOUT_DESTINATION_ADDED", "PAYOUT_DESTINATION_DISABLED"} {
+		if have[k] {
+			present = append(present, k)
+		}
+	}
+	if len(present) > 0 {
+		problems = append(problems, ce+":"+strconv.Itoa(lineOf(ceBody, bullet))+
+			" says the feed carries no verification, profile or agent events; internal/activity declares "+
+			strings.Join(present, ", "))
+	}
+
+	// (b) The package it cites as the authority says the opposite.
+	docGo, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("internal/activity/doc.go")))
+	require(t, err == nil, "reading internal/activity/doc.go: %v", err)
+	if strings.Contains(string(docGo), "have landed (D-081)") {
+		problems = append(problems, ce+" cites internal/activity/doc.go as the extension point for those kinds; "+
+			"doc.go says they \"have landed (D-081)\"")
+	}
+
+	// (c) The inventory's count.
+	const inv = "docs/build/CURRENT_SYSTEM_INVENTORY.md"
+	invBody := read(t, root, inv)
+	const seven = "the §16 timeline: seven kinds"
+	require(t, strings.Contains(invBody, seven), "%s no longer carries the sentence this check reads", inv)
+	if len(kinds) != 7 {
+		problems = append(problems, inv+":"+strconv.Itoa(lineOf(invBody, seven))+
+			" says the timeline has seven kinds; internal/activity declares "+strconv.Itoa(len(kinds)))
+	}
+
+	// (d) The traceability row that keeps R-PG-016-1 at IN_PROGRESS. The brief's
+	// other half: a row whose status says PARTIAL must not be quietly complete.
+	// This one is held open by an evidence cell that is simply out of date, and
+	// the counts in the summary table are computed from statuses, so a row kept
+	// IN_PROGRESS by a stale sentence understates the whole matrix.
+	const trace = "docs/build/REQUIREMENTS_TRACEABILITY.md"
+	traceBody := read(t, root, trace)
+	const stale = "Verification, profile, security and agent kinds are the documented extension point and are not declared yet"
+	require(t, strings.Contains(traceBody, stale), "%s no longer carries the sentence this check reads", trace)
+	if len(present) > 0 {
+		problems = append(problems, trace+":"+strconv.Itoa(lineOf(traceBody, stale))+
+			" (R-PG-016-1, IN_PROGRESS) says those kinds are not declared yet; "+
+			strconv.Itoa(len(present))+" of them are")
+	}
+
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d claim(s) about the activity feed the code does not bear out:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-9: the shell
+// ---------------------------------------------------------------------------
+
+// UI_UX_SYSTEM §10 is the design system's list of where it departs from the
+// brief. Three of its entries describe a shell that is not the one apps/web
+// ships, and one of them puts the exact phrase USER_JOURNEY forbids -- "Add
+// funds", never that, always "Buy Credits" -- into the design system as what
+// the product says. A copywriter reading the design system for the product's
+// own vocabulary is told to use the banned word.
+func TestAuditDocs_TheDesignSystemDescribesTheShellThatShipped(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	const doc = "docs/product/UI_UX_SYSTEM.md"
+	body := read(t, root, doc)
+	shell, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("apps/web/src/components/AppShell.tsx")))
+	require(t, err == nil, "reading AppShell.tsx: %v", err)
+	shellSrc := string(shell)
+
+	var problems []string
+
+	claims := []struct{ sentence, why string }{
+		{"**8. Search and notifications are not in the shell.**", "notifications"},
+		{`the shell offers "Add funds"`, "addfunds"},
+		{"No endpoint in this\ndeployment sells Credits", "sells"},
+	}
+	for _, c := range claims {
+		require(t, strings.Contains(body, c.sentence),
+			"%s no longer contains %q; the claim moved", doc, c.sentence)
+		at := doc + ":" + strconv.Itoa(lineOf(body, c.sentence))
+		switch c.why {
+		case "notifications":
+			if strings.Contains(shellSrc, `label: "Notifications"`) {
+				problems = append(problems, at+" says notifications are not in the shell; "+
+					"AppShell.tsx declares a Notifications destination and renders an unread count")
+			}
+		case "addfunds":
+			if strings.Contains(shellSrc, `label: "Buy Credits"`) {
+				problems = append(problems, at+` says the shell offers "Add funds"; AppShell.tsx labels it `+
+					`"Buy Credits", and USER_JOURNEY.md forbids "add funds" by name`)
+			}
+		case "sells":
+			served := servedRoutes(t, root)
+			for _, p := range served["POST"] {
+				if p == "/payments" {
+					problems = append(problems, at+" says no endpoint in this deployment sells Credits; "+
+						"POST /v1/payments is mounted and GET /v1/credits/pricing publishes the rate")
+				}
+			}
+		}
+	}
+
+	// §11's remaining work lists two items that are done.
+	done := []struct{ sentence, evidence string }{
+		{"put `SegmentedBar` on Home, once the backend response that carries the whole is settled",
+			"apps/web/src/pages/home/Home.tsx"},
+		{"replace the generic `Explanation` with `Refusal`", "apps/web/src/components/Refusal.tsx"},
+	}
+	for _, d := range done {
+		require(t, strings.Contains(body, d.sentence), "%s no longer contains %q", doc, d.sentence)
+		src, rerr := os.ReadFile(filepath.Join(root, filepath.FromSlash(d.evidence)))
+		if rerr != nil {
+			continue
+		}
+		if strings.Contains(d.sentence, "SegmentedBar") && strings.Contains(string(src), "SegmentedBar") {
+			problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, d.sentence))+
+				" lists putting SegmentedBar on Home as still to do; Home.tsx renders one")
+		}
+		if strings.Contains(d.sentence, "Explanation") && !exists(root, "apps/web/src/components/Explanation.tsx") {
+			problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, d.sentence))+
+				" lists replacing the generic Explanation as still to do; Explanation.tsx is gone and Refusal.tsx is there")
+		}
+	}
+
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d claim(s) in the design system the shipped app contradicts:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-1: the authority model
+// ---------------------------------------------------------------------------
+
+// POLICY_AUTHORITY is the contract for who may do what. Two of its statements
+// about the capability gate are now wrong, both in the direction that makes the
+// control look smaller than it is:
+//
+//   - condition 4 parenthesises the capabilities that need the four evidence
+//     references as "LIVE_* and WITHDRAWALS". gates.IsHighRisk -- which is what
+//     Propose and cp_gate_is_high_risk actually consult -- is true for eighteen
+//     of twenty, CREDIT_PURCHASE, PAYOUT_RESERVE, PAYOUT_SETTLE, MARKETPLACE and
+//     NATIVE_MARKET_TRADING among them. A reviewer scoping the ceremony from this
+//     document would under-plan every one of them, and CREDIT_PURCHASE is the
+//     gate LAUNCH_GATE_MATRIX says holds the money path shut;
+//   - the state machine it prints has seven states. SANDBOX has been the eighth
+//     since migration 00755, and ADR-0023 cites this very section as the thing
+//     it constrains.
+func TestAuditDocs_ThePolicyAuthorityDescribesTheGateTheCodeEnforces(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	const doc = "docs/architecture/POLICY_AUTHORITY.md"
+	body := read(t, root, doc)
+
+	var problems []string
+
+	const cond4 = "(LIVE_* and WITHDRAWALS require legal review, provider contract, risk approval, security approval)"
+	require(t, strings.Contains(body, cond4), "%s no longer states condition 4 the way this check reads it", doc)
+	var highRisk []string
+	for _, c := range gates.AllCapabilities() {
+		if gates.IsHighRisk(c) {
+			highRisk = append(highRisk, string(c))
+		}
+	}
+	var unnamed []string
+	for _, c := range highRisk {
+		if strings.HasPrefix(c, "LIVE_") || c == "WITHDRAWALS" {
+			continue
+		}
+		unnamed = append(unnamed, c)
+	}
+	if len(unnamed) > 0 {
+		sort.Strings(unnamed)
+		problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, cond4))+
+			" names LIVE_* and WITHDRAWALS as the capabilities condition 4 applies to; gates.IsHighRisk is true for "+
+			strconv.Itoa(len(highRisk))+" of "+strconv.Itoa(len(gates.AllCapabilities()))+
+			", including "+strings.Join(unnamed, ", "))
+	}
+
+	const machine = "State machine: `DISABLED → PENDING_APPROVAL → APPROVED → ACTIVE`"
+	require(t, strings.Contains(body, machine), "%s no longer prints the state machine this check reads", doc)
+	// The section that prints the machine, up to the next heading.
+	section := body[strings.Index(body, machine):]
+	if i := strings.Index(section, "\n## "); i > 0 {
+		section = section[:i]
+	}
+	for _, s := range []gates.GateState{gates.StateSandbox} {
+		if !strings.Contains(section, string(s)) {
+			problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, machine))+
+				" prints a gate state machine with no "+string(s)+
+				" state; internal/gates declares it and migration 00755 created it")
+		}
+	}
+
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d claim(s) in the authority contract the gate code does not bear out:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-6: the example environment
+// ---------------------------------------------------------------------------
+
+// .env.example is the file README tells a developer to copy. Its settlement
+// pair is `solana` plus the MAINNET USDC mint. scripts/seed -- the only thing
+// that registers a settlement asset locally -- registers `solana-devnet` plus
+// the devnet mint, and cmd/api's composition calls repo.GetByMint on the
+// configured pair and returns an error when it does not resolve. So the
+// documented local configuration does not boot.
+//
+// It is also the claim render.yaml refuses in as many words: "Devnet, not
+// mainnet ... pointing at mainnet USDC would claim a settlement path this
+// deployment does not have."
+func TestAuditDocs_TheExampleEnvironmentNamesTheSettlementAssetTheSeedRegisters(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	env := read(t, root, ".env.example")
+	seed := read(t, root, "scripts/seed/main.go")
+
+	value := regexp.MustCompile(`(?m)^CP_API_SETTLEMENT_(CHAIN|MINT)=(.+)$`)
+	got := map[string]string{}
+	for _, m := range value.FindAllStringSubmatch(env, -1) {
+		got[m[1]] = strings.TrimSpace(m[2])
+	}
+	require(t, got["CHAIN"] != "" && got["MINT"] != "",
+		".env.example no longer sets CP_API_SETTLEMENT_CHAIN and CP_API_SETTLEMENT_MINT")
+
+	constant := regexp.MustCompile(`(?m)^\s*(chain|usdcDevMint)\s+= "([^"]+)"`)
+	want := map[string]string{}
+	for _, m := range constant.FindAllStringSubmatch(seed, -1) {
+		want[m[1]] = m[2]
+	}
+	require(t, want["chain"] != "" && want["usdcDevMint"] != "",
+		"scripts/seed no longer declares the chain and mint constants this check reads")
+
+	var problems []string
+	if got["CHAIN"] != want["chain"] {
+		problems = append(problems, ".env.example:"+strconv.Itoa(lineOf(env, "CP_API_SETTLEMENT_CHAIN="))+
+			" sets CP_API_SETTLEMENT_CHAIN="+got["CHAIN"]+"; scripts/seed registers assets on "+want["chain"])
+	}
+	if got["MINT"] != want["usdcDevMint"] {
+		problems = append(problems, ".env.example:"+strconv.Itoa(lineOf(env, "CP_API_SETTLEMENT_MINT="))+
+			" sets CP_API_SETTLEMENT_MINT="+got["MINT"]+"; scripts/seed registers "+want["usdcDevMint"]+
+			" and cmd/api refuses to start on a pair it cannot resolve")
+	}
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("the documented local configuration does not resolve against the documented seed:\n  %s",
+			strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-11: the README
+// ---------------------------------------------------------------------------
+
+// The README is the first document anybody reads. Its architecture summary
+// names a framework the repository does not use, and its test-strategy
+// paragraph reports three whole tiers as pending while CI runs all three.
+func TestAuditDocs_TheReadmeDescribesTheTreeItShipsWith(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	body := read(t, root, "README.md")
+	pkg := read(t, root, "apps/web/package.json")
+	ci := read(t, root, ".github/workflows/ci.yml")
+
+	var problems []string
+
+	const nextjs = "Next.js web app in `apps/web`"
+	require(t, strings.Contains(body, nextjs), "README no longer contains %q; the claim moved", nextjs)
+	if !strings.Contains(pkg, `"next"`) {
+		problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, nextjs))+
+			" calls apps/web a Next.js app; apps/web/package.json declares vite and react-router and no next dependency")
+	}
+
+	const pending = "API e2e, Playwright UI e2e, and chaos tiers are pending"
+	require(t, strings.Contains(body, pending), "README no longer contains %q; the claim moved", pending)
+	for _, tier := range []struct{ dir, job string }{
+		{"test/e2e", "  e2e:"},
+		{"apps/web/e2e/scenarios", "  web-e2e:"},
+		{"test/chaos", "  chaos:"},
+	} {
+		if exists(root, tier.dir) && strings.Contains(ci, tier.job) {
+			problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, pending))+
+				" calls "+tier.dir+" pending; it exists and CI has a"+strings.TrimSuffix(tier.job, ":")+" job")
+		}
+	}
+
+	const load = "unmeasured until an API binary exists"
+	require(t, strings.Contains(body, load), "README no longer contains %q; the claim moved", load)
+	if exists(root, "cmd/api/main.go") {
+		problems = append(problems, "README.md:"+strconv.Itoa(lineOf(body, load))+
+			" says the load tier is unmeasured until an API binary exists; cmd/api exists and is deployed")
+	}
+
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d README claim(s) the tree contradicts:\n  %s", len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-13: a count over a table in the same document
+// ---------------------------------------------------------------------------
+
+// The inventory states how many routes each wave added and then lists them. The
+// agent wave's count and its table disagree by one. Same defect as F-111's
+// "this table lists N capabilities" -- a number recalled beside the rows that
+// would have produced it.
+func TestAuditDocs_EveryRoutesAddedCountMatchesItsTable(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	const doc = "docs/build/CURRENT_SYSTEM_INVENTORY.md"
+	body := read(t, root, doc)
+	lines := strings.Split(body, "\n")
+
+	words := map[string]int{"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+		"six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+	// Both spellings the document uses: "**Routes added (10).**" and
+	// "**Routes added** (nine; ...".
+	header := regexp.MustCompile(`Routes added\**\s*\(?(\d+|[a-z]+)`)
+	row := regexp.MustCompile("^\\| ?`?(GET|POST|PUT|PATCH|DELETE)")
+
+	var problems []string
+	counted := 0
+	for i, line := range lines {
+		m := header.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		claimed, err := strconv.Atoi(m[1])
+		if err != nil {
+			var ok bool
+			if claimed, ok = words[m[1]]; !ok {
+				continue // "Routes added (all under /v1 ...)" -- no count claimed
+			}
+		}
+		counted++
+		// The rows of the first table after the header, and only that table: a
+		// run of table rows, ending at the first line that is not one.
+		rows, started := 0, false
+		for j := i + 1; j < len(lines); j++ {
+			if row.MatchString(lines[j]) {
+				rows++
+				started = true
+				continue
+			}
+			if started {
+				break
+			}
+			if strings.HasPrefix(lines[j], "## ") || strings.HasPrefix(lines[j], "### ") {
+				break
+			}
+		}
+		if rows > 0 && rows != claimed {
+			problems = append(problems, doc+":"+strconv.Itoa(i+1)+" says "+strconv.Itoa(claimed)+
+				" routes were added; the table under it has "+strconv.Itoa(rows)+" rows")
+		}
+	}
+	require(t, counted >= 2, "only %d 'Routes added (n)' headers found; this check stopped seeing them", counted)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("%d route count(s) disagree with their own table:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F-docs-14: the decision register's citations
+// ---------------------------------------------------------------------------
+
+// references_test.go's inScope list is the documents "a reviewer would use to
+// decide whether the system is ready". DECISION_REGISTER.md is not on it, and
+// it is the document that records WHY every control is shaped the way it is --
+// the one a fixer opens before changing one. Its citations have never been
+// resolved by anything, and one of them does not resolve: D-024's "Test change
+// (PART 235)" line names TestIntegration_RelayRetriesWithBackoff, which has
+// never existed under that name. The test is
+// TestIntegration_RelayFailedPublishBacksOffAndRetries.
+//
+// This is the F-25 shape -- a citation pointing at nothing -- surviving four
+// audits because it lives one document outside the check's scope.
+func TestAuditDocs_TheDecisionRegisterCitesTestsThatExist(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	const doc = "docs/build/DECISION_REGISTER.md"
+	body := read(t, root, doc)
+	declared := declaredTests(t, root)
+	require(t, len(declared) > 500, "expected the repository's tests, found %d", len(declared))
+
+	var problems []string
+	cited := 0
+	for _, para := range paragraphs(body) {
+		excused := absencePhrase.MatchString(para)
+		for _, name := range distinct(refPattern.FindAllStringSubmatch(para, -1)) {
+			cited++
+			if satisfied(name, declared) || excused {
+				continue
+			}
+			problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, name))+" names "+name)
+		}
+	}
+	require(t, cited > 200, "only %d test citations found in the register; this check stopped seeing them", cited)
+	sort.Strings(problems)
+	if len(problems) > 0 {
+		t.Fatalf("the decision register cites %d test(s) that do not exist:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+}
