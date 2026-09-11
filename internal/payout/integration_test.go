@@ -1145,12 +1145,20 @@ func TestIntegration_ASecondSubmitDoesNotCallTheProviderAgain(t *testing.T) {
 
 	// A submission that lands the request in SUBMITTED and stays there: the
 	// provider answered, but the process died before the answer was recorded.
-	f.provider.TimeoutNext()
-	_, err = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
-	require.NoError(t, err)
+	//
+	// The crash is produced rather than forged. An earlier version wrote the
+	// state by hand, which meant the fixture was asserting against a row no
+	// crash could actually leave -- and migration 00807 now refuses it, because
+	// PAYOUT_STATUS_UNKNOWN -> SUBMITTED is not an edge (F-226).
+	f.provider.CrashNext()
+	require.Panics(t, func() { _, _ = f.svc.Submit(f.ctx, testDB, req.ID, "sandbox") },
+		"fixture check: the provider takes the payout and the process then dies")
 	before := f.provider.Submits()
 	require.Positive(t, before)
-	f.forceState(t, req.ID, payout.StateSubmitted, "crash between the call and recording it")
+	crashed, err := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, err)
+	require.Equal(t, payout.StateSubmitted, crashed.State,
+		"fixture check: phase one committed SUBMITTED before the provider was called")
 
 	after, err := f.svc.Submit(f.ctx, testDB, req.ID, "sandbox")
 	require.NoError(t, err)
@@ -1182,27 +1190,4 @@ func TestIntegration_APayoutGoesToTheProviderItWasClaimedFor(t *testing.T) {
 	require.Error(t, err, "a payout claimed for one provider was submitted to another")
 	assert.Equal(t, errs.CodeConflict, errs.CodeOf(err))
 	assert.Zero(t, other.Submits(), "the second provider was called with the first's idempotency key")
-}
-
-// forceState moves a request directly, for the crash windows no Go path offers.
-func (f *fixture) forceState(t *testing.T, id payout.RequestID, to payout.State, reason string) {
-	t.Helper()
-	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
-		func(ctx context.Context, tx pgx.Tx) error {
-			var from string
-			if err := tx.QueryRow(ctx, `SELECT state FROM payout_requests WHERE id = $1`, id).Scan(&from); err != nil {
-				return err
-			}
-			if from == string(to) {
-				return nil
-			}
-			if _, err := tx.Exec(ctx,
-				`INSERT INTO payout_request_transitions (id, request_id, from_state, to_state, actor_type, actor_id, reason)
-				 VALUES (gen_random_uuid(), $1, $2, $3, 'SERVICE', 'itest', $4)`,
-				id, from, string(to), reason); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `UPDATE payout_requests SET state = $2 WHERE id = $1`, id, string(to))
-			return err
-		}))
 }

@@ -42,6 +42,9 @@ type Sandbox struct {
 	// lookupDown makes Lookup fail, so a reconciliation attempt leaves the
 	// request unresolved rather than resolving it wrongly.
 	lookupDown bool
+	// crashNext makes the next submission record the payout and then panic,
+	// which is the process dying with the request committed in SUBMITTED.
+	crashNext bool
 
 	submits int
 }
@@ -93,6 +96,22 @@ func (s *Sandbox) TimeoutNext() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.timeoutNext = true
+}
+
+// CrashNext makes the next submission record the payout at the provider and
+// then panic, which is what a process dying between Submit's phase-one commit
+// and applyProviderResult looks like from inside this process.
+//
+// It exists because that crash window leaves a request in SUBMITTED with a
+// committed idempotency key, and SUBMITTED is precisely the state F-115's
+// "do not resubmit" branch got wrong. The only other way to produce it was for
+// a test to write the state by hand, which migration 00807 rightly refuses:
+// PAYOUT_STATUS_UNKNOWN -> SUBMITTED is an edge the state machine does not have
+// and a fixture should not have been able to forge (F-226).
+func (s *Sandbox) CrashNext() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.crashNext = true
 }
 
 // SetLookupDown controls whether Lookup works.
@@ -154,6 +173,12 @@ func (s *Sandbox) Submit(_ context.Context, req payout.SubmitRequest) (payout.Su
 		// Recorded, then lost. The caller learns nothing; the provider has
 		// paid.
 		return payout.SubmitResult{}, payout.ErrProviderUnavailable
+	}
+	if s.crashNext {
+		s.crashNext = false
+		// Recorded, and then this process stops existing. The request stays in
+		// SUBMITTED, committed, with the key on disk.
+		panic("payouttest: the process died after the provider took the payout")
 	}
 	return res, nil
 }

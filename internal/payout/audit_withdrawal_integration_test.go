@@ -458,7 +458,8 @@ func TestAuditWV_AnOpenSanctionsReviewStopsAConversionRequest(t *testing.T) {
 
 	// The level the payout path resolves, from the same resolver cmd/api wires.
 	resolver, err := verification.NewResolver(
-		verification.StaticBase(valuedomain.VerificationNodalIdentity), repo, testDB, f.clk)
+		verification.StaticBase(valuedomain.VerificationNodalIdentity), repo, testDB, f.clk,
+	)
 	require.NoError(t, err)
 	level, err := resolver.Level(f.ctx, f.account)
 	require.NoError(t, err)
@@ -647,17 +648,59 @@ func TestAuditWV_TheConversionRequestStateMachineIsEnforcedByTheDatabase(t *test
 				 WHERE id = $1`, req.ID, f.provider.Name())
 			return uerr
 		})
-	assert.Error(t, err,
-		"F-wv-6: cp_app moved a REJECTED conversion request to SETTLED with a forged provider "+
+	require.Error(t, err,
+		"F-226: cp_app moved a REJECTED conversion request to SETTLED with a forged provider "+
 			"reference and a settled quantity, with no ledger posting and no allocation")
+	assert.Equal(t, "AD001", db.SQLState(err), "got %v", err)
+	assert.Contains(t, err.Error(), "PAYOUT_TRANSITION_ILLEGAL_EDGE")
 
-	if err == nil {
-		after, gerr := f.svc.Get(f.ctx, testDB, req.ID)
-		require.NoError(t, gerr)
-		t.Logf("F-wv-6: %s is now state=%s settled=%s provider_reference=%s with %d allocations",
-			req.ID, after.State, after.SettledQuantity.String(), after.ProviderReference,
-			countAllocations(t, req.ID))
+	// The edge is half of it. The money columns were writable beside a LAWFUL
+	// move too, which is what 00733's header describes and could not stop for
+	// the columns it left granted: each of these is now refused on privilege,
+	// with no transition row anywhere in sight.
+	for _, forgery := range []struct {
+		what string
+		sql  string
+	}{
+		{"the state", `UPDATE payout_requests SET state = 'VERIFIED' WHERE id = $1`},
+		{"the reservation", `UPDATE payout_requests SET reserved_quantity = requested_quantity WHERE id = $1`},
+		{"the settlement", `UPDATE payout_requests SET settled_quantity = requested_quantity WHERE id = $1`},
+		{"the settled instant", `UPDATE payout_requests SET settled_at = now() WHERE id = $1`},
+		{"the provider's reference", `UPDATE payout_requests SET provider_reference = 'forged' WHERE id = $1`},
+	} {
+		_, ferr := testDB.Exec(f.ctx, forgery.sql, req.ID)
+		require.Error(t, ferr, "cp_app rewrote %s of a conversion request", forgery.what)
+		assert.Equal(t, db.SQLStateInsufficientPrivilege, db.SQLState(ferr), "%s: got %v", forgery.what, ferr)
 	}
+
+	after, gerr := f.svc.Get(f.ctx, testDB, req.ID)
+	require.NoError(t, gerr)
+	assert.Equal(t, payout.StateRejected, after.State)
+	assert.Equal(t, "0", after.SettledQuantity.String())
+	assert.Empty(t, after.ProviderReference)
+	assert.Zero(t, countAllocations(t, req.ID))
+
+	// The positive control: the service's own legal move still commits, money
+	// and all, through the trigger that now owns those columns.
+	f.issue(valuedomain.OriginPurchased, valuedomain.FinalitySettled, 1_000_000_000)
+	var lawful payout.Request
+	dest2 := f.destination
+	require.NoError(t, testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.ReadCommitted},
+		func(ctx context.Context, tx pgx.Tx) error {
+			var cerr error
+			lawful, _, cerr = f.svc.Create(ctx, tx, payout.CreateRequest{
+				AccountID: f.account, DestinationID: &dest2,
+				Quantity:           money.QuantityFromInt64(100_000_000),
+				DisclosureAccepted: true,
+				IdempotencyKey:     "audit-sqledge-ok-" + uuid.NewString(),
+				EffectiveAt:        f.clk.Now(),
+			}, f.sandboxInput())
+			return cerr
+		}))
+	require.Equal(t, payout.StateVerified, lawful.State,
+		"the trigger that writes the state refused a move the state machine has")
+	assert.Equal(t, "100000000", lawful.ReservedQuantity.String(),
+		"the reservation must reach the row through the transition that carries it")
 }
 
 func countAllocations(t *testing.T, id payout.RequestID) int {

@@ -150,6 +150,23 @@ var stateTransitions = map[State][]State{
 	StateReversed:     {},
 }
 
+// StateEdges returns every legal edge as a flat from,to sequence, in
+// declaration order.
+//
+// Migration 00807 populates `payout_request_state_edges` from it and
+// cp_payout_apply_state_transition consults it, so an edge this table does not
+// have cannot be written by inserting a transition row that claims it. The
+// enum parity suite holds the two identical.
+func StateEdges() []string {
+	out := make([]string, 0, 48)
+	for _, from := range allStates {
+		for _, to := range stateTransitions[from] {
+			out = append(out, string(from), string(to))
+		}
+	}
+	return out
+}
+
 // CanTransition reports whether from → to is legal.
 //
 // Note what is absent: PAYOUT_STATUS_UNKNOWN cannot go back to VERIFIED or

@@ -291,11 +291,11 @@ func (s *Service) Create(ctx context.Context, tx pgx.Tx, r CreateRequest, in Eli
 	if err != nil {
 		return Request{}, Decision{}, err
 	}
-	final, err := s.transition(ctx, tx, reserved.ID, StateVerified, "eligible and reserved", "")
+	final, err := s.transitionWith(ctx, tx, reserved.ID, StateVerified,
+		s.reservedChange("eligible and reserved", reserved.ReservedQuantity))
 	if err != nil {
 		return Request{}, Decision{}, err
 	}
-	final.ReservedQuantity = reserved.ReservedQuantity
 	return final, decision, nil
 }
 
@@ -331,9 +331,18 @@ func (s *Service) CompleteVerification(ctx context.Context, tx pgx.Tx, requestID
 	if err != nil {
 		return Request{}, Decision{}, err
 	}
+	// The re-decision, recorded whole. The reasons used to be left at whatever
+	// Create wrote, so a request that became eligible on verification still
+	// rendered the shortfall it no longer had.
+	reasons, err := json.Marshal(decision.ReasonStrings())
+	if err != nil {
+		return Request{}, Decision{}, errs.Wrap(err, errs.CodeInternal, "payout: encode reasons")
+	}
 	if _, err := tx.Exec(ctx,
-		`UPDATE payout_requests SET verification_level = $2, policy_version = $3, policy_hash = $4 WHERE id = $1`,
-		req.ID, string(in.Verified), decision.PolicyVersion, decision.PolicyHash); err != nil {
+		`UPDATE payout_requests
+		    SET verification_level = $2, policy_version = $3, policy_hash = $4, eligibility_reasons = $5
+		  WHERE id = $1`,
+		req.ID, string(in.Verified), decision.PolicyVersion, decision.PolicyHash, reasons); err != nil {
 		return Request{}, Decision{}, mapError(err)
 	}
 	if !decision.Sufficient() {
@@ -345,11 +354,11 @@ func (s *Service) CompleteVerification(ctx context.Context, tx pgx.Tx, requestID
 	if err != nil {
 		return Request{}, Decision{}, err
 	}
-	final, err := s.transition(ctx, tx, reserved.ID, StateVerified, "verification complete; value reserved", "")
+	final, err := s.transitionWith(ctx, tx, reserved.ID, StateVerified,
+		s.reservedChange("verification complete; value reserved", reserved.ReservedQuantity))
 	if err != nil {
 		return Request{}, Decision{}, err
 	}
-	final.ReservedQuantity = reserved.ReservedQuantity
 	return final, decision, nil
 }
 
@@ -398,11 +407,11 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 		return Request{}, err
 	}
 
-	if _, err := tx.Exec(ctx,
-		`UPDATE payout_requests SET reserved_quantity = $2::numeric, reserved_at = $3 WHERE id = $1`,
-		req.ID, d.Requested.String(), s.clk.Now()); err != nil {
-		return Request{}, mapError(err)
-	}
+	// The reservation is NOT written here. 00807 made the quantities on
+	// payout_requests the transition row's to write, and the reservation
+	// belongs to the VERIFIED step both callers take immediately after this
+	// returns; the allocations below are balanced against it by a DEFERRED
+	// constraint, so the order inside the transaction does not matter.
 	for _, a := range allocs {
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, quantity)
@@ -413,6 +422,19 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 	}
 	req.ReservedQuantity = d.Requested
 	return req, nil
+}
+
+// reservedChange is the VERIFIED step a reservation rides on.
+func (s *Service) reservedChange(reason string, qty money.Quantity) stateChange {
+	at := s.clk.Now().UTC()
+	return stateChange{Reason: reason, ReservedQuantity: &qty, ReservedAt: &at}
+}
+
+// releasedChange is the step a returned reservation rides on: the quantity goes
+// to zero in the same row that records why.
+func releasedChange(reason string) stateChange {
+	zero := money.Quantity{}
+	return stateChange{Reason: reason, ReservedQuantity: &zero}
 }
 
 // Submit hands a reserved payout to its provider.
@@ -581,12 +603,12 @@ func (s *Service) applyProviderResultTx(ctx context.Context, d *db.DB, requestID
 			out = r
 			return err // handled below when it is a posting failure
 		case result.Status == ProviderAccepted:
-			if _, err := tx.Exec(ctx,
-				`UPDATE payout_requests SET provider_reference = $2, provider_status = $3 WHERE id = $1`,
-				requestID, result.ProviderReference, result.RawStatus); err != nil {
-				return mapError(err)
-			}
-			r, err := s.transition(ctx, tx, requestID, StateProviderPending, "provider accepted the payout", result.RawStatus)
+			r, err := s.transitionWith(ctx, tx, requestID, StateProviderPending, stateChange{
+				Reason:            "provider accepted the payout",
+				ProviderEvent:     result.RawStatus,
+				ProviderReference: result.ProviderReference,
+				ProviderStatus:    result.RawStatus,
+			})
 			out = r
 			return err
 		case result.Status == ProviderFailed:
@@ -634,15 +656,16 @@ func (s *Service) settle(ctx context.Context, tx pgx.Tx, requestID RequestID, re
 	}); err != nil {
 		return Request{}, err
 	}
-	if _, err := tx.Exec(ctx,
-		`UPDATE payout_requests
-		    SET settled_quantity = reserved_quantity, settled_at = $2,
-		        provider_reference = $3, provider_status = $4
-		  WHERE id = $1`,
-		req.ID, s.clk.Now(), result.ProviderReference, result.RawStatus); err != nil {
-		return Request{}, mapError(err)
-	}
-	return s.transition(ctx, tx, req.ID, StateSettled, "provider settled the payout", result.RawStatus)
+	settledAt := s.clk.Now().UTC()
+	settled := req.ReservedQuantity
+	return s.transitionWith(ctx, tx, req.ID, StateSettled, stateChange{
+		Reason:            "provider settled the payout",
+		ProviderEvent:     result.RawStatus,
+		SettledQuantity:   &settled,
+		SettledAt:         &settledAt,
+		ProviderReference: result.ProviderReference,
+		ProviderStatus:    result.RawStatus,
+	})
 }
 
 // fail returns the reserved units to the exact lots they came from.
@@ -664,11 +687,10 @@ func (s *Service) fail(ctx context.Context, tx pgx.Tx, requestID RequestID, reas
 		}
 	}
 	if _, err := tx.Exec(ctx,
-		`UPDATE payout_requests SET failure_reason = $2, reserved_quantity = 0 WHERE id = $1`,
-		req.ID, reason); err != nil {
+		`UPDATE payout_requests SET failure_reason = $2 WHERE id = $1`, req.ID, reason); err != nil {
 		return Request{}, mapError(err)
 	}
-	return s.transition(ctx, tx, req.ID, StateFailed, reason, "")
+	return s.transitionWith(ctx, tx, req.ID, StateFailed, releasedChange(reason))
 }
 
 // FlagForManualReview sends a payout to a human.
@@ -764,12 +786,8 @@ func (s *Service) ResolveManualReview(
 			if rerr := s.returnReservation(ctx, tx, req, reason); rerr != nil {
 				return Request{}, rerr
 			}
-			if _, uerr := tx.Exec(ctx,
-				`UPDATE payout_requests SET reserved_quantity = 0 WHERE id = $1`, req.ID); uerr != nil {
-				return Request{}, mapError(uerr)
-			}
 		}
-		return s.transition(ctx, tx, req.ID, StateRejected, reason, "")
+		return s.transitionWith(ctx, tx, req.ID, StateRejected, releasedChange(reason))
 	default: // ResolveRetryVerification
 		// A payout that reached MANUAL_REVIEW from SUBMITTED, PROVIDER_PENDING
 		// or PAYOUT_STATUS_UNKNOWN may already exist at the provider. Sending
@@ -868,11 +886,8 @@ func (s *Service) Cancel(ctx context.Context, tx pgx.Tx, requestID RequestID, re
 		if err := s.returnReservation(ctx, tx, req, reason); err != nil {
 			return Request{}, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE payout_requests SET reserved_quantity = 0 WHERE id = $1`, req.ID); err != nil {
-			return Request{}, mapError(err)
-		}
 	}
-	return s.transition(ctx, tx, req.ID, StateRejected, reason, "")
+	return s.transitionWith(ctx, tx, req.ID, StateRejected, releasedChange(reason))
 }
 
 // returnReservation posts the unwind and restores the exact lot slices.
@@ -1070,13 +1085,42 @@ func (s *Service) OpenRequests(ctx context.Context, q db.Querier, olderThan time
 	return out, mapError(rows.Err())
 }
 
+// stateChange is everything one move of a conversion request carries.
+//
+// The money is here rather than in an UPDATE beside the transition row because
+// 00807 made the transition row the only thing that can write it. Every place
+// this package changed a quantity it was also moving the state -- reserving is
+// the VERIFIED step, settling is the SETTLED step, returning a reservation is
+// the FAILED or REJECTED step -- so the two were always one event, and writing
+// them as one is what stops a quantity being rewritten beside a lawful move
+// (F-226).
+//
+// A nil pointer means "this change says nothing about that number", which is
+// what an ordinary state move says; the trigger leaves the column alone.
+type stateChange struct {
+	Reason        string
+	ProviderEvent string
+
+	ReservedQuantity *money.Quantity
+	SettledQuantity  *money.Quantity
+	ReservedAt       *time.Time
+	SettledAt        *time.Time
+
+	ProviderReference string
+	ProviderStatus    string
+}
+
 // transition moves a request's state and writes the transition row the 00603
-// binding requires.
+// binding requires and the 00807 trigger reads.
 func (s *Service) transition(ctx context.Context, tx pgx.Tx, id RequestID, to State, reason, providerEvent string) (Request, error) {
+	return s.transitionWith(ctx, tx, id, to, stateChange{Reason: reason, ProviderEvent: providerEvent})
+}
+
+func (s *Service) transitionWith(ctx context.Context, tx pgx.Tx, id RequestID, to State, ch stateChange) (Request, error) {
 	if !to.Valid() {
 		return Request{}, errs.Newf(errs.CodeValidationFailed, "unknown payout state %q", to)
 	}
-	if strings.TrimSpace(reason) == "" {
+	if strings.TrimSpace(ch.Reason) == "" {
 		return Request{}, errs.New(errs.CodeValidationFailed, "a payout state change requires a reason")
 	}
 	req, err := s.forUpdate(ctx, tx, id)
@@ -1094,19 +1138,34 @@ func (s *Service) transition(ctx context.Context, tx pgx.Tx, id RequestID, to St
 			WithField("to", string(to))
 	}
 	actorType, actorID := actorFrom(ctx)
-	var event any
-	if providerEvent != "" {
-		event = providerEvent
+	optional := func(v string) any {
+		if v == "" {
+			return nil
+		}
+		return v
+	}
+	quantity := func(q *money.Quantity) any {
+		if q == nil {
+			return nil
+		}
+		return q.String()
 	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO payout_request_transitions
-		   (id, request_id, from_state, to_state, actor_type, actor_id, reason, provider_event)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-		NewTransitionID(), id, string(req.State), string(to), actorType, actorID, reason, event); err != nil {
+		   (id, request_id, from_state, to_state, actor_type, actor_id, reason, provider_event,
+		    reserved_quantity, settled_quantity, reserved_at, settled_at,
+		    provider_reference, provider_status)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::numeric,$10::numeric,$11,$12,$13,$14)`,
+		NewTransitionID(), id, string(req.State), string(to), actorType, actorID, ch.Reason,
+		optional(ch.ProviderEvent),
+		quantity(ch.ReservedQuantity), quantity(ch.SettledQuantity), ch.ReservedAt, ch.SettledAt,
+		optional(ch.ProviderReference), optional(ch.ProviderStatus)); err != nil {
 		return Request{}, mapError(err)
 	}
+	// The trigger wrote the row; nothing here does, and cp_app holds no UPDATE
+	// on any of the columns it writes.
 	updated, err := scanRequest(tx.QueryRow(ctx,
-		`UPDATE payout_requests SET state = $2 WHERE id = $1 RETURNING `+requestColumns, id, string(to)))
+		`SELECT `+requestColumns+` FROM payout_requests WHERE id = $1`, id))
 	if err != nil {
 		return Request{}, mapError(err)
 	}
