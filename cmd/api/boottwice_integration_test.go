@@ -55,6 +55,9 @@ func sandboxEnv(t *testing.T, addr, appURL string) map[string]string {
 		// and sandboxGatesAtBoot becomes a fourth idempotence claim under test.
 		"CP_API_ENABLED_CAPABILITIES": sandboxCapabilities,
 		"CP_API_SANDBOX_GATES":        sandboxCapabilities,
+		// The demo catalogue has its own switch since F-144 (D-115): a sandbox
+		// tier seeds it only when the deployment asks, as render.yaml does.
+		"CP_API_DEMO_DATA": "true",
 	}
 }
 
@@ -201,6 +204,7 @@ func TestIntegration_ADeploymentThatIsNotASandboxTierSeedsNothing(t *testing.T) 
 	// than ignored, so they come out too: config.Validate is not this test's
 	// subject.
 	delete(env, "CP_API_SANDBOX_GATES")
+	delete(env, "CP_API_DEMO_DATA")
 	delete(env, "CP_API_ENABLED_CAPABILITIES")
 	bootOnce(t, env)
 
