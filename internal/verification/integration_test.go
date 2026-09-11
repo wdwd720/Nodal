@@ -152,6 +152,11 @@ func TestIntegration_TheVerificationStateIsNotTheApplicationsToWrite(t *testing.
 			`identity_state = 'VERIFIED'`,
 			`verified_at = now()`,
 			`expires_at = now()`,
+			// The sanctions screen joined them in 00796. It is a screening
+			// DECISION that internal/eligibility reads as a payout gate, and
+			// 00761 left it in the attribute grant, where one UPDATE changed it
+			// with no edge, no actor and no evidence (F-168).
+			`sanctions_state = 'CLEAR'`,
 		} {
 			_, err := testDB.Exec(ctx, `UPDATE compliance_profiles SET `+set+` WHERE user_id = $1`, userID)
 			require.Errorf(t, err, "UPDATE ... SET %s must be refused", set)
@@ -159,7 +164,7 @@ func TestIntegration_TheVerificationStateIsNotTheApplicationsToWrite(t *testing.
 		}
 		// And the attribute half it DOES own still works, which is what keeps
 		// the row lock available (00744's rule).
-		_, err := testDB.Exec(ctx, `UPDATE compliance_profiles SET sanctions_state = 'CLEAR' WHERE user_id = $1`, userID)
+		_, err := testDB.Exec(ctx, `UPDATE compliance_profiles SET residency_country = 'US' WHERE user_id = $1`, userID)
 		require.NoError(t, err)
 	})
 
