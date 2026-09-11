@@ -1407,9 +1407,18 @@ export const payoutDestinationSpec: Spec = {
   },
 };
 
+/**
+ * One provenance's contribution to a payout.
+ *
+ * A provenance is an origin, a floor AND a root set: two slices can share the
+ * first two and differ in the third, because the floor is the most restricted
+ * root and two sets share a minimum whenever they share their most restricted
+ * member. The policy reads the set, so the record reports it (D-141).
+ * `root_origins` is an array of strings and is checked beside the slice.
+ */
 export const payoutProvenanceSliceSpec: Spec = {
   required: { origin: "string", quantity: "quantity", consumption_rank: "integer" },
-  optional: { returned: "boolean" },
+  optional: { returned: "boolean", origin_floor: "string" },
 };
 
 /**
@@ -1467,6 +1476,10 @@ export function validatedPayout<T>(raw: unknown, path: string): T {
     if (!Array.isArray(slices)) throw new ContractViolation(`${path}.provenance`, "expected an array");
     slices.forEach((slice, index) => {
       validated<unknown>(slice, payoutProvenanceSliceSpec, `${path}.provenance[${String(index)}]`);
+      const roots = (slice as Record<string, unknown>)["root_origins"];
+      if (roots !== undefined && roots !== null) {
+        validatedStrings(roots, `${path}.provenance[${String(index)}].root_origins`);
+      }
     });
   }
   const reasons = record["eligibility_reasons"];

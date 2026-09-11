@@ -323,7 +323,8 @@ func (s *Service) Consume(ctx context.Context, tx pgx.Tx, r ConsumeRequest) ([]A
 		}
 		allocs = append(allocs, Allocation{
 			LotID: lot.ID, Origin: lot.Origin, OriginFloor: lot.OriginFloor,
-			Finality: lot.Finality, Quantity: take, EventID: ev,
+			RootOrigins: append([]valuedomain.CreditOrigin(nil), lot.RootOrigins...),
+			Finality:    lot.Finality, Quantity: take, EventID: ev,
 		})
 		remaining = remaining.Sub(take)
 	}

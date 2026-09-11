@@ -437,8 +437,21 @@ func TestAuditWV4_TheAllocationRecordFoldsTwoRootSetsIntoOneProvenance(t *testin
 			outstanding = append(outstanding, s)
 		}
 	}
-	require.Len(t, outstanding, 1, "fixture check: both lots fold into one (origin, floor)")
-	require.Equal(t, "600000000", outstanding[0].Quantity.String())
+	// INVERTED from the reproduction, whose fixture check was that both lots
+	// folded into one (origin, floor). The fold keys on the root set as well
+	// now, so two provenances are two slices and the sum is unchanged (D-141,
+	// F-282).
+	require.Len(t, outstanding, 2,
+		"two root sets behind one floor are two provenances, not one line of MARKET_TRADING_PROCEEDS")
+	total := money.Quantity{}
+	for _, slice := range outstanding {
+		assert.Equal(t, "300000000", slice.Quantity.String())
+		assert.NotEmpty(t, slice.RootOrigins, "each slice says what is behind it")
+		total = total.Add(slice.Quantity)
+	}
+	require.Equal(t, "600000000", total.String(), "and together they are the whole payout")
+	require.NotEqual(t, outstanding[0].RootOrigins, outstanding[1].RootOrigins,
+		"which is what tells them apart: the floors are equal and the sets are not")
 
 	// What the table itself holds about the two lots.
 	rows, qerr := testDB.Query(f.ctx,
@@ -465,6 +478,24 @@ func TestAuditWV4_TheAllocationRecordFoldsTwoRootSetsIntoOneProvenance(t *testin
 	require.Equal(t, records[0].floor, records[1].floor)
 	require.NotEqual(t, records[0].rootsOnJoin, records[1].rootsOnJoin,
 		"fixture check: and the two provenances really are different")
+
+	// And the table itself holds the set, so a reader of the record alone --
+	// 00820's "only reader that can ever answer what actually left" -- can tell
+	// the two apart without knowing to join.
+	var recordedSets [][]string
+	rows2, qerr2 := testDB.Query(f.ctx,
+		`SELECT root_origins FROM payout_allocations WHERE request_id = $1 ORDER BY lot_id`, req.ID)
+	require.NoError(t, qerr2)
+	for rows2.Next() {
+		var set []string
+		require.NoError(t, rows2.Scan(&set))
+		recordedSets = append(recordedSets, set)
+	}
+	rows2.Close()
+	require.NoError(t, rows2.Err())
+	require.Len(t, recordedSets, 2)
+	assert.NotEqual(t, recordedSets[0], recordedSets[1],
+		"the record distinguishes what the join distinguishes")
 
 	var hasRootColumn bool
 	require.NoError(t, testDB.QueryRow(f.ctx,

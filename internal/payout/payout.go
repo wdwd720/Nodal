@@ -376,6 +376,15 @@ type Allocation struct {
 	// one out of a settled purchase and one out of a promotional grant, are the
 	// same origin and are not the same value (D-136, F-270).
 	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin these units ultimately came from. It is what
+	// the policy actually reads -- a lot is released only when the policy
+	// releases its own origin and every root (D-138) -- and the floor is only
+	// the most restricted of them, so two different sets share a floor whenever
+	// they share a minimum. Recorded rather than joined for: 00820's own reason
+	// for recording the floor is that this table is the only reader that can
+	// answer "what actually left" after the lot has been consumed (D-141,
+	// F-282).
+	RootOrigins []valuedomain.CreditOrigin
 	Quantity    money.Quantity
 	Returned    bool
 	CreatedAt   time.Time

@@ -171,6 +171,12 @@ type Allocation struct {
 	// different fact from one whose provenance is a promotional grant, however
 	// identical the origin column looks (D-136, F-270).
 	OriginFloor valuedomain.CreditOrigin
+	// RootOrigins is every origin the lot's provenance bottoms out in, at the
+	// moment the units were taken. It travels beside the floor because the
+	// floor is only the most restricted of them, and two different sets share a
+	// floor whenever they share a minimum -- while `valuedomain.Policy.Permits`
+	// reads the whole set (D-138, F-282).
+	RootOrigins []valuedomain.CreditOrigin
 	Finality    valuedomain.FundingFinality
 	Quantity    money.Quantity
 	EventID     LotEventID

@@ -390,7 +390,24 @@ function Credits(props: { readonly base: string | undefined; readonly big?: bool
   );
 }
 
-/** The order value leaves in, as the backend ranked it. */
+/**
+ * The order value leaves in, as the backend ranked it.
+ *
+ * One row is one provenance, which is an origin, a floor and a root set — the
+ * same identity the eligibility buckets carry, and for the same reason. Keying
+ * on the origin and the rank was unique only while a payout could draw one
+ * provenance per origin, which stopped being true at D-136 and stopped being
+ * true a second time at D-141 (F-282).
+ */
+function provenanceKey(slice: PayoutProvenanceSlice): string {
+  return [
+    slice.origin,
+    slice.origin_floor ?? "",
+    (slice.root_origins ?? []).join("+"),
+    slice.returned === true ? "returned" : "outstanding",
+  ].join("|");
+}
+
 function ProvenanceTable(props: {
   readonly slices: readonly PayoutProvenanceSlice[];
   readonly caption: string;
@@ -400,7 +417,7 @@ function ProvenanceTable(props: {
     <DataTable
       caption={props.caption}
       rows={ordered}
-      rowKey={(slice: PayoutProvenanceSlice) => `${slice.origin}-${String(slice.consumption_rank)}`}
+      rowKey={provenanceKey}
       columns={[
         {
           key: "rank",
@@ -415,6 +432,21 @@ function ProvenanceTable(props: {
           cell: (slice: PayoutProvenanceSlice) => (
             <span className="mono-small">{slice.origin}</span>
           ),
+        },
+        {
+          key: "came_from",
+          header: "Came from",
+          cell: (slice: PayoutProvenanceSlice) => {
+            const roots = (slice.root_origins ?? []).filter((root) => root !== slice.origin);
+            const floor = stated(slice.origin_floor);
+            const shown =
+              roots.length > 0 ? roots : floor !== undefined && floor !== slice.origin ? [floor] : [];
+            return shown.length === 0 ? (
+              <span className="absent">nothing else funded it</span>
+            ) : (
+              <span className="mono-small">{shown.join(" + ")}</span>
+            );
+          },
         },
         {
           key: "quantity",

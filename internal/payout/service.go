@@ -522,10 +522,11 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req Request, d Decisio
 	// constraint, so the order inside the transaction does not matter.
 	for _, a := range allocs {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO payout_allocations (id, request_id, lot_id, origin, origin_floor, quantity)
-			 VALUES ($1,$2,$3,$4,$5,$6::numeric)`,
+			`INSERT INTO payout_allocations
+			     (id, request_id, lot_id, origin, origin_floor, root_origins, quantity)
+			 VALUES ($1,$2,$3,$4,$5,$6::text[],$7::numeric)`,
 			NewAllocationID(), req.ID, a.LotID, string(a.Origin), string(a.OriginFloor),
-			a.Quantity.String()); err != nil {
+			originStrings(a.RootOrigins), a.Quantity.String()); err != nil {
 			return Request{}, mapError(err)
 		}
 	}
