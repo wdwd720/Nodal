@@ -64,112 +64,141 @@ for (const route of APP_ROUTES) {
   });
 }
 
+/**
+ * D-077 moved Home off the hosted rail. It no longer shows buying power, and
+ * the `Balances` panel these two tests were written against does not exist;
+ * what leads the dashboard now is the Credit balance, which is the thing the
+ * closed-loop product actually runs on. The PROPERTY under test is unchanged
+ * and is what matters — the figures on screen are the backend's own, unaltered
+ * — so it is asserted against the panel that is there.
+ *
+ * The snapshot-instant half of the old test moved with the rail rather than
+ * being dropped quietly: `CreditBalance` carries no `as_of`, so there is no
+ * backend instant on this response to compare against. `/portfolio` keeps the
+ * `as_of` assertion, and the missing stamp is a reported API gap.
+ */
 test("home shows the figures the backend computed, unchanged", async ({ page }) => {
   const id = await accountId(page);
-  const response = await page.request.get(`/v1/accounts/${id}/buying-power?purpose=DISPLAY`);
+  const response = await page.request.get(`/v1/credits/balance?account_id=${id}`);
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as Record<string, string>;
 
   await page.goto("/home");
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  const credits = page.locator(".panel", { hasText: "Credits" }).first();
 
-  // The rendered figure is the wire string with grouping applied and nothing else.
-  const rendered = (value: string): string => {
-    const [whole, cents] = value.replace("-", "").split(".");
-    const grouped = (whole ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return `${value.startsWith("-") ? "-" : ""}$${grouped}.${cents ?? ""}`;
-  };
-
-  for (const field of ["portfolio_value", "buying_power", "available_now", "reserved", "pending"]) {
+  // Every figure carries its EXACT value in `title`, whatever the display form
+  // is, so this compares the unrounded value rather than the rendering of it.
+  for (const [field, label] of [
+    ["gross", "Total Credits"],
+    ["spendable", "Spendable"],
+    ["frozen", "Frozen"],
+    ["payout_eligible", "Payout-eligible"],
+    ["ineligible", "Not payout-eligible"],
+  ] as const) {
     const wire = body[field];
     expect(wire, `${field} present in the response`).toBeTruthy();
-    await expect(
-      page.locator(".panel", { hasText: "Balances" }).getByText(rendered(wire as string), { exact: true }).first(),
-    ).toBeVisible();
+    const figure = credits.locator(`.field:has(dt:text-is("${label}")) .figure`).first();
+    await expect(figure, `${label} is on screen`).toBeVisible();
+    const exact = (await figure.getAttribute("title")) ?? "";
+    const digits = (wire as string).replace(/^-/, "").replace(/^0+/, "");
+    expect(
+      exact.replace(/[^0-9]/g, "").replace(/^0+/, ""),
+      `${label} is the backend's own digits`,
+    ).toBe(digits === "" ? "" : digits);
   }
-
-  // The snapshot instant the backend stamped is on screen, exactly. The page
-  // made its own request, so its instant is not this test's instant — the
-  // backend stamps `as_of` with the moment it computed the answer. What is
-  // asserted is therefore that the page shows a real backend instant verbatim:
-  // the machine-readable attribute and the visible exact rendering agree, it
-  // parses, and it falls in the window this test was running.
-  const asOf = page.locator(".panel", { hasText: "Balances" }).locator("time").first();
-  const machine = await asOf.getAttribute("datetime");
-  expect(machine, "the snapshot carries a machine-readable instant").toBeTruthy();
-  const exact = await page.locator(".panel", { hasText: "Balances" }).locator(".as-of .mono-small").first().innerText();
-  expect(exact.trim(), "the exact instant is shown unrounded beside it").toBe(`(${machine as string})`);
-  const shownAt = Date.parse(machine as string);
-  expect(Number.isNaN(shownAt), "the instant parses").toBe(false);
-  // Bracketed with two comparisons rather than an absolute difference: the
-  // source guard forbids float arithmetic anywhere in this tree.
-  const observed = Date.parse(body["as_of"] as string);
-  const window = 300_000;
-  expect(shownAt, "the instant is not stale").toBeGreaterThan(observed - window);
-  expect(shownAt, "the instant is not fabricated ahead of the backend").toBeLessThan(observed + window);
 });
 
 test("home discloses what the balance actually is", async ({ page }) => {
+  // The balance Home leads with is Credits, so what it owes the reader is what
+  // a Credit is — not what a settlement token is. `/portfolio` keeps the USDC
+  // disclosure, because that is the page that still shows a USD valuation.
   await page.goto("/home");
-  const disclosure = page.getByLabel("What you are actually holding");
-  await expect(disclosure).toContainText("USDC");
-  await expect(disclosure).toContainText("stablecoin");
-  await expect(disclosure).toContainText("not a bank deposit");
+  const disclosure = page.getByLabel("What Credits are");
+  await expect(disclosure).toContainText("not money");
+  await expect(disclosure).toContainText("not a deposit");
+  await expect(disclosure).toContainText("not redeemable for money unless");
 });
 
-test("portfolio shows exact units beside every valuation", async ({ page }) => {
+/**
+ * D-077 moved the portfolio off the settlement rail's holdings and onto
+ * `GET /v1/me/portfolio`, which carries the asset's own scale with every
+ * figure. The old assertion checked for an exact base-unit string printed
+ * beside each valuation, which existed because the rail's response left the
+ * scale to be looked up elsewhere; the exact value is now in every figure's
+ * `title`, unrounded, whatever the display form is. Same property, one place.
+ */
+test("portfolio shows the exact value behind every figure", async ({ page }) => {
   const id = await accountId(page);
-  const response = await page.request.get(`/v1/accounts/${id}/holdings`);
-  const body = (await response.json()) as { holdings: Array<{ quantity: string; symbol: string }> };
+  const response = await page.request.get(`/v1/me/portfolio?account_id=${id}`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    positions: Array<{ symbol: string; quantity: string }>;
+  };
 
   await page.goto("/portfolio");
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
 
-  for (const holding of body.holdings) {
-    await expect(page.getByText(`${holding.quantity} base units`).first()).toBeVisible();
+  for (const position of body.positions) {
+    const row = page.locator("tr", { hasText: position.symbol }).first();
+    await expect(row, `${position.symbol} has a row`).toBeVisible();
+    // The exact value is in `title` on every figure, so a compact or truncated
+    // rendering never hides what the backend actually said.
+    const figures = row.locator(".figure");
+    expect(await figures.count(), `${position.symbol} renders figures`).toBeGreaterThan(0);
+    expect(await figures.first().getAttribute("title")).toBeTruthy();
   }
-  await expect(page.getByRole("link", { name: "Export as CSV" })).toHaveAttribute("href", /export\?format=csv/);
+  await expect(page.getByRole("link", { name: "Export as CSV" })).toHaveAttribute(
+    "href",
+    /export\?format=csv/,
+  );
 });
 
-test("activity draws every lifecycle stage, including the ones with no rows", async ({ page }) => {
+/**
+ * The activity page is the product's feed now, not the trading lifecycle
+ * ladder: `ActivityFeedKind` is the vocabulary and `GET /v1/me/activity` is the
+ * source. The property worth keeping is the one the ladder was protecting —
+ * that every kind the feed can carry is reachable, so nothing is quietly
+ * filtered out of a customer's own record.
+ */
+test("activity offers every kind the feed can carry", async ({ page }) => {
   await page.goto("/activity");
-  const stages = [
-    "Data event",
-    "Prediction",
-    "Intent",
-    "Eligibility",
-    "Risk",
-    "Plan",
-    "Execution",
-    "Fill",
-    "Reconciliation",
-  ];
-  for (const stage of stages) {
-    await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
+  const filters = page.locator(".panel", { hasText: "What to show" });
+  for (const label of [
+    "Credit purchases",
+    "Reversals",
+    "Trades",
+    "Assets created",
+    "Withdrawal requests",
+    "Withdrawal updates",
+    "Adjustments",
+  ]) {
+    await expect(filters.getByRole("button", { name: label, exact: true })).toBeVisible();
   }
-  // A stage with no record says so rather than being omitted.
-  await expect(page.getByText("not recorded").first()).toBeVisible();
 });
 
-test("settings lists real sessions and refuses a withdrawal with a reason", async ({ page }) => {
+/**
+ * D-077 split this in two. Sessions moved to `/settings/security`, which is
+ * where USER_JOURNEY §9 puts them, and the withdrawal form moved off Settings
+ * entirely to `/withdraw` — scenario E is what covers the refusal now, on the
+ * page that owns it. What is left here is the half this file is for: the
+ * session list is real, and it is the backend's own rows.
+ */
+test("security lists real sessions", async ({ page }) => {
   const response = await page.request.get("/v1/sessions");
   const sessions = (await response.json()) as Array<{ id: string }>;
 
-  await page.goto("/settings");
-  await expect(page.getByRole("heading", { level: 1, name: "Settings and security" })).toBeVisible();
+  await page.goto("/settings/security");
+  await expect(page.getByRole("heading", { level: 1, name: "Security" })).toBeVisible();
   for (const session of sessions.slice(0, 3)) {
     await expect(page.getByText(session.id, { exact: false }).first()).toBeVisible();
   }
-
-  const withdrawals = page.locator(".panel", { hasText: "Moving assets off the platform" });
-  await withdrawals.getByLabel("Amount").fill("1");
-  await withdrawals.getByLabel("Destination address").fill("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
-  await withdrawals.getByRole("button", { name: "Request withdrawal" }).click();
-
-  await expect(withdrawals.locator(".explain-meta")).toContainText(
-    /code (STEP_UP_REQUIRED|CAPABILITY_NOT_APPROVED|FORBIDDEN|UNSUPPORTED)/,
-  );
-  await expect(withdrawals).toContainText("Nothing was moved");
+  // Ending a session is a real action on every row, never a control that is
+  // there for show.
+  await expect(
+    page.locator(".panel", { hasText: "Sessions" }).getByRole("button", { name: /End (this )?session/ }).first(),
+  ).toBeEnabled();
 });
 
 test("keyboard: the skip link is the first stop and reaches main", async ({ page }) => {

@@ -677,3 +677,293 @@ export const termsStateSpec: Spec = {
 export const unreadCountSpec: Spec = {
   required: { count: "integer" },
 };
+
+/* --------------------------------------------------------------------------
+ * Buying Credits, the account's own standing, and the notification centre.
+ *
+ * Three things are worth pointing at here.
+ *
+ * `creditPurchaseSpec` marks `sandbox` optional rather than required. The
+ * backend populates it on every purchase, but the schema declares it optional
+ * and an older API answers without it — and "this deployment did not say"
+ * is a different fact from "this is real money". An absent flag labels
+ * nothing; it never silently means live.
+ *
+ * `creditPricingSpec` checks the bounds as integers. They are minor units of
+ * the pricing currency, which is the one place in this application where a
+ * money-adjacent value legitimately arrives as a JSON number, because a count
+ * of cents is a count.
+ *
+ * `notificationSpec` does NOT validate `data`, beyond it being an object. The
+ * contract says it carries identifiers and state names and never a figure, so
+ * there is no money field in it to protect; validating an open map would be
+ * this file inventing a shape the API does not promise.
+ * ------------------------------------------------------------------------ */
+
+export const creditPricingSpec: Spec = {
+  required: {
+    version: "string",
+    currency: "string",
+    credits_per_major_unit: "integer",
+    min_amount_minor: "integer",
+    max_amount_minor: "integer",
+  },
+};
+
+export const creditPurchaseSpec: Spec = {
+  required: {
+    purchase_id: "uuid",
+    account_id: "uuid",
+    state: "string",
+    credit_quantity: "quantity",
+    amount_minor: "integer",
+    currency: "string",
+    pricing_version: "string",
+    provider: "string",
+  },
+  optional: {
+    sandbox: "boolean",
+    client_secret: "string",
+    reversible_at: "timestamp",
+    settled_at: "timestamp",
+    failure_reason: "string",
+    created_at: "timestamp",
+  },
+};
+
+export const notificationSpec: Spec = {
+  required: {
+    id: "uuid",
+    kind: "string",
+    severity: "string",
+    title: "string",
+    body: "string",
+    occurred_at: "timestamp",
+    sandbox: "boolean",
+  },
+  optional: {
+    account_id: "uuid",
+    resource_type: "string",
+    resource_id: "string",
+    data: "object",
+    read_at: "timestamp",
+  },
+};
+
+export const notificationPreferenceSpec: Spec = {
+  required: { kind: "string", channel: "string", enabled: "boolean", enforced: "boolean" },
+};
+
+export const markedReadSpec: Spec = { required: { updated: "integer" } };
+
+export const accountRestrictionSpec: Spec = {
+  required: { code: "string", message: "string" },
+  optional: { account_id: "uuid" },
+};
+
+export const closureRequestSpec: Spec = {
+  required: { id: "uuid", state: "string", requested_at: "timestamp", cooling_off_until: "timestamp" },
+  optional: { effectable: "boolean", decided_at: "timestamp", decided_reason: "string" },
+};
+
+export const myAccountSpec: Spec = {
+  required: { user_id: "uuid", user_status: "string", cooling_off_days: "integer" },
+  optional: { closure_request: "object" },
+  arrays: {
+    accounts: { required: true, spec: accountSpec },
+    restrictions: { required: true, spec: accountRestrictionSpec },
+  },
+};
+
+export const securitySummarySpec: Spec = {
+  required: {
+    active_sessions: "integer",
+    mfa_present: "boolean",
+    step_up_max_age_seconds: "integer",
+  },
+  optional: {
+    last_login_at: "timestamp",
+    last_step_up_at: "timestamp",
+    step_up_valid_until: "timestamp",
+    current_session_id: "uuid",
+  },
+};
+
+export const meAuditEntrySpec: Spec = {
+  // `id` is a string and not a uuid: the trail is stitched from two tables and
+  // the identifiers are theirs, not this surface's to reshape.
+  required: { id: "string", source: "string", action: "string", occurred_at: "timestamp" },
+  optional: {
+    severity: "string",
+    resource_type: "string",
+    resource_id: "string",
+    actor_type: "string",
+    ip: "string",
+    user_agent: "string",
+  },
+};
+
+export const authorityLevelSpec: Spec = {
+  required: { level: "integer", name: "string", summary: "string", enabled: "boolean" },
+  optional: { required_capability: "string" },
+};
+
+export const agentSpec: Spec = {
+  required: {
+    id: "uuid",
+    account_id: "uuid",
+    strategy_id: "uuid",
+    name: "string",
+    stage: "string",
+    state: "string",
+    status: "string",
+    authority: "object",
+    limits: "object",
+    budget: "object",
+    runtime: "object",
+    archived: "boolean",
+    created_at: "timestamp",
+  },
+  optional: { mode: "string", pause: "object", runs_total: "integer", last_run_at: "timestamp", last_run_status: "string" },
+};
+
+/* --------------------------------------------------------------------------
+ * Portfolio, the activity feed, and market discovery (goal §15, §16, §12).
+ *
+ * Every figure in these three responses is `quantity` — exact base units as an
+ * integer string — and not one is `usd`, with a single exception noted below.
+ * That is the contract enforcing PART LIV at the boundary: there is no approved
+ * external value for a Credit, so a response that tried to hand this app a
+ * dollar figure for a position would be refused here rather than rendered.
+ *
+ * The exception is `ActivityAmount` with `unit: "MONEY_MINOR"`, which is the
+ * money side of a Credit purchase. It arrives as minor units of `currency` in
+ * the same integer-string form, so it is `quantity` here too and is scaled by
+ * the currency's minor units where it is rendered, never here.
+ *
+ * P&L is `quantity` rather than a separate kind because `SignedQuantity` has
+ * exactly the same pattern — an optional sign and digits. A loss is a real
+ * outcome, so P&L is signed where a balance is not, and the sign is carried
+ * through to the glyph rather than being dropped into a colour.
+ */
+
+export const portfolioPositionSpec: Spec = {
+  required: {
+    asset_id: "uuid",
+    symbol: "string",
+    asset_decimals: "integer",
+    price_scale: "integer",
+    quantity: "quantity",
+    cost_basis_credits: "quantity",
+    market_value_credits: "quantity",
+    fees_paid_credits: "quantity",
+    realized_pnl_credits: "quantity",
+    unrealized_pnl_credits: "quantity",
+    total_pnl_credits: "quantity",
+    temperature: "string",
+  },
+  optional: {
+    name: "string",
+    market_id: "uuid",
+    market_status: "string",
+    average_cost_credits: "quantity",
+    spot_price: "quantity",
+    allocation_units: "quantity",
+    units_bought_total: "quantity",
+    units_sold_total: "quantity",
+    fill_count: "integer",
+    first_acquired_at: "timestamp",
+    last_trade_at: "timestamp",
+    demo: "boolean",
+  },
+};
+
+export const portfolioTotalsSpec: Spec = {
+  required: {
+    cost_basis_credits: "quantity",
+    market_value_credits: "quantity",
+    fees_paid_credits: "quantity",
+    realized_pnl_credits: "quantity",
+    unrealized_pnl_credits: "quantity",
+    total_pnl_credits: "quantity",
+    position_count: "integer",
+    open_position_count: "integer",
+  },
+};
+
+/**
+ * The portfolio envelope.
+ *
+ * `credits` and `totals` are checked as objects here and then validated against
+ * their own specs where the response is decoded: `Spec` describes arrays of
+ * objects and flat fields, and bolting a nested-object form onto it to save two
+ * lines at the call site would make every other spec in this file harder to
+ * read.
+ */
+export const portfolioSpec: Spec = {
+  required: {
+    account_id: "uuid",
+    as_of: "timestamp",
+    credits: "object",
+    totals: "object",
+    temperature: "string",
+  },
+  arrays: { positions: { required: true, spec: portfolioPositionSpec } },
+};
+
+export const activityAmountSpec: Spec = {
+  required: { unit: "string", value: "quantity", temperature: "string" },
+  optional: { currency: "string", symbol: "string", origin: "string" },
+};
+
+export const activityFeedItemSpec: Spec = {
+  required: {
+    id: "string",
+    kind: "string",
+    occurred_at: "timestamp",
+    summary: "string",
+    simulated: "boolean",
+    reference: "object",
+  },
+  optional: { status: "string" },
+  arrays: { amounts: { required: true, spec: activityAmountSpec } },
+};
+
+export const nativeMarketSummarySpec: Spec = {
+  required: {
+    market_id: "uuid",
+    asset_id: "uuid",
+    credit_asset_id: "uuid",
+    creator_account_id: "uuid",
+    symbol: "string",
+    name: "string",
+    market_status: "string",
+    asset_status: "string",
+    asset_decimals: "integer",
+    price_scale: "integer",
+    last_price: "quantity",
+    liquidity_credits: "quantity",
+    credit_volume_24h: "quantity",
+    circulating_supply: "quantity",
+    max_supply: "quantity",
+    real_credit_reserve: "quantity",
+    virtual_credit_reserve: "quantity",
+    asset_reserve: "quantity",
+    initial_asset_reserve: "quantity",
+    platform_fee_bps: "integer",
+    creator_fee_bps: "integer",
+    trades_24h: "integer",
+    created_at: "timestamp",
+    demo: "boolean",
+  },
+  optional: {
+    description: "string",
+    image_url: "string",
+    moderation_state: "string",
+    activated_at: "timestamp",
+    state_version: "integer",
+    change_24h_bps: "integer",
+    has_24h_change: "boolean",
+    reference_price_24h: "quantity",
+  },
+};
