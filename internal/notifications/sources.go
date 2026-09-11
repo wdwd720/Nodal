@@ -327,11 +327,10 @@ func readMarketPauses(ctx context.Context, q db.Querier, at time.Time, rowID str
 
 	out := make([]Change, 0, len(pauses))
 	for _, p := range pauses {
-		// Everyone who has ever traded this market. The fan-out is bounded by
-		// the launch tier's own account ceiling (CP_CAPACITY_MAX_ACCOUNTS), so
-		// it is not capped here: a cap would silently leave some holders
-		// untold, which is worse than a slow pass.
-		holders, err := marketParticipants(ctx, q, p.marketID)
+		// Everyone who has ever traded this market and has not been told yet,
+		// up to MaxPauseFanOut in one pass. See marketParticipants.
+		holders, err := marketParticipants(ctx, q, p.marketID,
+			DedupKey(KindNativeMarketPaused, Ref{Type: "native_market", ID: p.marketID}, p.transitionID))
 		if err != nil {
 			return nil, err
 		}
@@ -367,10 +366,58 @@ type participant struct {
 	accountID accounts.AccountID
 }
 
-func marketParticipants(ctx context.Context, q db.Querier, marketID string) ([]participant, error) {
+// suppressibleKind is the kind name for a preference filter, or NULL when the
+// kind cannot be switched off. The NULL turns the clause off rather than
+// filtering on a preference Emit would ignore, so a kind that becomes
+// unsuppressible tomorrow cannot silently start skipping people here.
+func suppressibleKind(k Kind) any {
+	if !k.Suppressible() {
+		return nil
+	}
+	return string(k)
+}
+
+// MaxPauseFanOut bounds how many people one market pause notifies in one pass
+// (D-107).
+//
+// The old comment here said the fan-out was "bounded by the launch tier's own
+// account ceiling (CP_CAPACITY_MAX_ACCOUNTS)". That variable may be zero --
+// capacity.Budget documents zero as "no ceiling of this kind", which is how a
+// paid tier turns the infrastructure ceilings off -- and config validation
+// requires it to be stated only in STAGING and PROD. So on any other tier the
+// bound was nothing at all, and one pause on a popular market was one
+// transaction holding a pool connection while it wrote a notification per
+// holder (F-192).
+//
+// Five hundred is a pass, not a limit on who is told. The query skips whoever
+// already has this pause's notification, so consecutive passes drain the
+// remainder while the transition row is still inside the follower's lap, and
+// the dedup key makes re-reading it free. It is compiled in rather than
+// configured for D-086's reason: this is a property of the tier's one process,
+// not a risk determination somebody should be able to change in a dashboard.
+const MaxPauseFanOut = 500
+
+// marketParticipants lists who to tell about one market pause: everyone who has
+// ever traded it, minus whoever has already been told (dedupKey), minus whoever
+// switched this kind off, oldest user id first, capped at MaxPauseFanOut.
+//
+// The two exclusions are what make the cap safe to page across passes. Without
+// the first, every pass would return the same first five hundred for as long as
+// the lap re-reads the row. Without the second, a holder who switched the kind
+// off -- who never gets a row, so the first exclusion never excludes them --
+// would occupy a place in that five hundred forever and starve whoever sorts
+// after them.
+func marketParticipants(ctx context.Context, q db.Querier, marketID, dedupKey string) ([]participant, error) {
 	rows, err := q.Query(ctx, `SELECT DISTINCT a.owner_user_id, f.account_id
 		FROM native_market_fills f JOIN accounts a ON a.id = f.account_id
-		WHERE f.market_id = $1::uuid`, marketID)
+		WHERE f.market_id = $1::uuid
+		  AND NOT EXISTS (SELECT 1 FROM notifications n
+		                   WHERE n.user_id = a.owner_user_id AND n.dedup_key = $2)
+		  AND ($3::text IS NULL OR NOT EXISTS (SELECT 1 FROM notification_preferences p
+		                   WHERE p.user_id = a.owner_user_id AND p.kind = $3::text
+		                     AND p.channel = $4 AND p.enabled = false))
+		ORDER BY a.owner_user_id
+		LIMIT $5`, marketID, dedupKey, suppressibleKind(KindNativeMarketPaused), ChannelInApp, MaxPauseFanOut)
 	if err != nil {
 		return nil, fmt.Errorf("read market participants: %w", err)
 	}

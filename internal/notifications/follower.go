@@ -202,6 +202,7 @@ func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub
 		last := changes[len(changes)-1]
 		written := 0
 		for _, c := range changes {
+			created := false
 			for _, n := range c.Notify {
 				em, err := f.producer.Emit(ctx, tx, n)
 				if err != nil {
@@ -209,10 +210,23 @@ func (f *Follower) runSource(ctx context.Context, database *db.DB, s source, pub
 				}
 				if em.Created {
 					written++
+					created = true
 					published = append(published, em.Notification)
 				}
 			}
-			signals = append(signals, c.Signal...)
+			// A change's signals travel with its notifications, on the pass
+			// that WROTE them. The lap re-reads two minutes of rows on every
+			// pass and the dedup key refuses the second telling, but the
+			// signals were appended unconditionally -- so one fill's
+			// invalidations were broadcast once per pass for the whole lap
+			// (eight times at a fifteen-second tick), and a market pause's
+			// broadcast signal went to every connected client eight times
+			// (F-190). Created is the same branch that decides whether anybody
+			// is told at all, which is the question a "this is now stale"
+			// signal is answering.
+			if created {
+				signals = append(signals, c.Signal...)
+			}
 		}
 		return saveCursor(ctx, tx, s.name, last.At, last.RowID, written)
 	})

@@ -89,10 +89,24 @@ func TestIntegration_EverySourceQueryRunsAgainstTheRealSchema(t *testing.T) {
 	require.NoError(t, err, "every source query must execute against the real schema")
 	assert.Zero(t, n)
 
+	before := map[string]int64{}
 	for _, source := range f.SourceNames() {
 		at, _, emitted := cursorOf(t, d, source)
 		assert.False(t, at.IsZero(), "%s: a source with no cursor starts at now, not at the beginning of history", source)
-		assert.Zero(t, emitted, "%s: a pass over an empty window emitted nothing", source)
+		before[source] = emitted
+	}
+
+	// A second pass over the same empty window. The counter each cursor keeps
+	// is what an operator reads to ask "is this source doing anything", so a
+	// pass that wrote nothing must not move it. (Counted per source rather than
+	// asserted to be zero: this package's suites share a database, and another
+	// test's notifications are not this one's business.)
+	n, err = f.RunOnce(context.Background(), d, &recorder{})
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	for _, source := range f.SourceNames() {
+		_, _, emitted := cursorOf(t, d, source)
+		assert.Equal(t, before[source], emitted, "%s: a pass that wrote nothing counted something", source)
 	}
 }
 
@@ -108,6 +122,7 @@ func TestIntegration_TheFollowerNotifiesOnceForACapturedPurchase(t *testing.T) {
 	// Start the cursor before anything happens, the way a running process does.
 	_, err := f.RunOnce(ctx, d, &recorder{})
 	require.NoError(t, err)
+	_, _, emittedBefore := cursorOf(t, d, "credit_funding_transitions")
 
 	fundingID := aCreditFunding(t, d, acct)
 	transitionID := aTransition(t, d, fundingID, "CREATED", "CAPTURED", time.Now())
@@ -133,7 +148,7 @@ func TestIntegration_TheFollowerNotifiesOnceForACapturedPurchase(t *testing.T) {
 	at, lastID, emitted := cursorOf(t, d, "credit_funding_transitions")
 	assert.Equal(t, transitionID, lastID)
 	assert.False(t, at.IsZero())
-	assert.EqualValues(t, 1, emitted, "the pass that wrote it counted it")
+	assert.Equal(t, emittedBefore+1, emitted, "the pass that wrote it counted it, once")
 
 	// The next pass re-reads its own lap and must publish nothing.
 	rec2 := &recorder{}
