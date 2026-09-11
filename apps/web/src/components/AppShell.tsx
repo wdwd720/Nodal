@@ -48,6 +48,7 @@ import { Link, NavLink } from "react-router-dom";
 
 import { useSignOut, useUnreadCount } from "../api/queries.ts";
 import { RISK_FOOTER } from "../lib/honesty.ts";
+import { clearAllFormState } from "../lib/survives-sign-in.ts";
 import { useSession } from "../session.tsx";
 import { useVersion } from "../api/queries.ts";
 import { BrandLockup } from "./Brand.tsx";
@@ -227,7 +228,15 @@ function AccountMenu(props: { readonly open: boolean; readonly onClose: () => vo
               // The backend revokes the session and clears the cookie; a full
               // reload is what makes the app ask again from nothing, rather
               // than keeping a cache that belongs to a session that is gone.
+              //
+              // `onSettled`, and the stash is emptied before the reload,
+              // because signing out is the shared-computer case: the tab does
+              // not die, and a draft left behind hands the next person an
+              // amount and a payout destination the previous customer typed.
+              // It runs whether or not the revocation succeeded — the intent
+              // to stop using this tab is the customer's, not the backend's.
               onSettled: () => {
+                clearAllFormState();
                 window.location.assign("/");
               },
             });
