@@ -716,27 +716,38 @@ func TestAuditDocs_ThePolicyAuthorityDescribesTheGateTheCodeEnforces(t *testing.
 
 	var problems []string
 
-	const cond4 = "(LIVE_* and WITHDRAWALS require legal review, provider contract, risk approval, security approval)"
-	require(t, strings.Contains(body, cond4), "%s no longer states condition 4 the way this check reads it", doc)
-	var highRisk []string
+	// Condition 4's scope. The defect was a closed list -- "LIVE_* and
+	// WITHDRAWALS" -- beside a predicate that is true for eighteen of twenty.
+	// The fix names gates.IsHighRisk as the authority and writes the only two
+	// parts of the list that a reader can hold in their head: the count, and
+	// the EXCEPTIONS. Both are derived here, so adding a capability or flipping
+	// IsHighRisk fails this check instead of quietly under-scoping the ceremony.
+	var highRisk, exceptions []string
 	for _, c := range gates.AllCapabilities() {
 		if gates.IsHighRisk(c) {
 			highRisk = append(highRisk, string(c))
-		}
-	}
-	var unnamed []string
-	for _, c := range highRisk {
-		if strings.HasPrefix(c, "LIVE_") || c == "WITHDRAWALS" {
 			continue
 		}
-		unnamed = append(unnamed, c)
+		exceptions = append(exceptions, string(c))
 	}
-	if len(unnamed) > 0 {
-		sort.Strings(unnamed)
-		problems = append(problems, doc+":"+strconv.Itoa(lineOf(body, cond4))+
-			" names LIVE_* and WITHDRAWALS as the capabilities condition 4 applies to; gates.IsHighRisk is true for "+
-			strconv.Itoa(len(highRisk))+" of "+strconv.Itoa(len(gates.AllCapabilities()))+
-			", including "+strings.Join(unnamed, ", "))
+	const cond4 = "every capability `gates.IsHighRisk` returns true for requires all four"
+	require(t, strings.Contains(body, cond4), "%s no longer states condition 4 the way this check reads it", doc)
+	para := paragraphOf(body, cond4)
+	at := doc + ":" + strconv.Itoa(lineOf(body, cond4))
+	count := numberWord(len(highRisk)) + " of the " + numberWord(len(gates.AllCapabilities())) + " declared"
+	if !strings.Contains(para, count) {
+		problems = append(problems, at+" does not say condition 4 applies to "+count+
+			" capabilities; that is what gates.IsHighRisk answers today")
+	}
+	for _, e := range exceptions {
+		if !strings.Contains(para, "`"+e+"`") {
+			problems = append(problems, at+" does not name "+e+
+				", which is one of the capabilities gates.IsHighRisk returns false for")
+		}
+	}
+	if phrase := "The " + numberWord(len(exceptions)) + " exceptions are"; !strings.Contains(para, phrase) {
+		problems = append(problems, at+" does not say there are "+numberWord(len(exceptions))+
+			" exceptions; gates.IsHighRisk returns false for exactly "+strings.Join(exceptions, ", "))
 	}
 
 	const machine = "State machine: `DISABLED → PENDING_APPROVAL → APPROVED → ACTIVE`"
@@ -970,4 +981,41 @@ func TestAuditDocs_TheDecisionRegisterCitesTestsThatExist(t *testing.T) {
 		t.Fatalf("the decision register cites %d test(s) that do not exist:\n  %s",
 			len(problems), strings.Join(problems, "\n  "))
 	}
+}
+
+// ---------------------------------------------------------------------------
+// helpers the fixes added
+// ---------------------------------------------------------------------------
+
+// numberWord spells a small number the way these documents write one. A
+// document says "eighteen of the twenty declared", not "18 of the 20", and a
+// check that derives the number from the code has to be able to write it the
+// same way.
+func numberWord(n int) string {
+	words := []string{"zero", "one", "two", "three", "four", "five", "six", "seven",
+		"eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+		"sixteen", "seventeen", "eighteen", "nineteen", "twenty"}
+	if n >= 0 && n < len(words) {
+		return words[n]
+	}
+	return strconv.Itoa(n)
+}
+
+// paragraphOf returns the blank-line-delimited paragraph containing needle, so
+// a check can say "this sentence names X" rather than "the document does
+// somewhere".
+func paragraphOf(body, needle string) string {
+	idx := strings.Index(body, needle)
+	if idx < 0 {
+		return ""
+	}
+	start := 0
+	if i := strings.LastIndex(body[:idx], "\n\n"); i >= 0 {
+		start = i + 2
+	}
+	end := len(body)
+	if i := strings.Index(body[idx:], "\n\n"); i >= 0 {
+		end = idx + i
+	}
+	return body[start:end]
 }
