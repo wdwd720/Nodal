@@ -77,7 +77,7 @@ func (s *Server) PostPayments(ctx context.Context, request api.PostPaymentsReque
 				return api.CreditPurchase{}, commandMeta{}, cerr
 			}
 			clientSecret = started.ClientSecret
-			return toAPICreditPurchase(started.Funding), commandMeta{
+			return toAPICreditPurchase(started.Funding, s.opts.CreditPurchaseSandbox), commandMeta{
 				Status:       http.StatusCreated,
 				ResourceType: "credit_purchase",
 				ResourceID:   started.Funding.ID.String(),
@@ -112,7 +112,7 @@ func (s *Server) GetPaymentsPaymentId(ctx context.Context, request api.GetPaymen
 	if _, err := accountScope(ctx, uuid.MustParse(f.AccountID.String())); err != nil {
 		return nil, err
 	}
-	return api.GetPaymentsPaymentId200JSONResponse(toAPICreditPurchase(f)), nil
+	return api.GetPaymentsPaymentId200JSONResponse(toAPICreditPurchase(f, s.opts.CreditPurchaseSandbox)), nil
 }
 
 // toAPICreditPurchase renders a funding for the API.
@@ -120,8 +120,9 @@ func (s *Server) GetPaymentsPaymentId(ctx context.Context, request api.GetPaymen
 // It never renders a client secret. The secret is not stored on the funding at
 // all, so there is nothing here that could leak it -- which is a stronger
 // guarantee than remembering to omit a field.
-func toAPICreditPurchase(f credit.Funding) api.CreditPurchase {
+func toAPICreditPurchase(f credit.Funding, sandbox bool) api.CreditPurchase {
 	out := api.CreditPurchase{
+		Sandbox:        &sandbox,
 		PurchaseId:     uuid.MustParse(f.ID.String()),
 		AccountId:      uuid.MustParse(f.AccountID.String()),
 		State:          api.CreditPurchaseState(f.State),

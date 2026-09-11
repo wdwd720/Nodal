@@ -744,6 +744,14 @@ func (g gatesAdapter) List(ctx context.Context) ([]GateView, error) {
 	return out, nil
 }
 
+func (g gatesAdapter) History(ctx context.Context, capability gates.Capability) ([]gates.Transition, error) {
+	gate, err := gates.Get(ctx, g.q, capability, g.env)
+	if err != nil {
+		return nil, err
+	}
+	return gates.Transitions(ctx, g.q, gate.ID)
+}
+
 func (g gatesAdapter) Act(ctx context.Context, capability gates.Capability, action GateAction, req gates.Proposal, note string) (GateView, error) {
 	var gate gates.Gate
 	err := g.db.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {

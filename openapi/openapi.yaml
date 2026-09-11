@@ -432,6 +432,22 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/CapabilityGate" } } }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /admin/gates/{capability}/history:
+    get:
+      tags: [admin]
+      summary: Every recorded transition of a gate, oldest first, with who moved it
+      description: >-
+        The rows of capability_gate_transitions, written by cp_gate_transition and
+        cp_gate_sandbox in the same statement as the state change they record. A
+        SANDBOX entry names the operator who moved it or the SYSTEM actor
+        config:CP_API_SANDBOX_GATES; it is not an approval and says so.
+      parameters:
+        - { in: path, name: capability, required: true, schema: { $ref: "#/components/schemas/Capability" } }
+      responses:
+        "200":
+          description: Transitions, oldest first
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/CapabilityGateTransition" } } } }
+        "404": { $ref: "#/components/responses/Problem" }
   /admin/kill-switches:
     get:
       tags: [admin]
@@ -975,6 +991,9 @@ paths:
                   build_version: { type: string }
                   config_hash: { type: string }
                   environment: { type: string }
+                  sandbox_tier:
+                    type: boolean
+                    description: True when this deployment is a sandbox tier (ADR-0023). Everything it mints, verifies or pays is a rehearsal; the UI labels the whole product accordingly.
 
   # ---- profile, terms and account lifecycle ----
   /me/profile:
@@ -1740,6 +1759,14 @@ components:
         currency: { type: string }
         pricing_version: { type: string }
         provider: { type: string }
+        sandbox:
+          type: boolean
+          description: >-
+            True when the provider this purchase runs through is not a live
+            one: the card was a test card and the Credits it mints are sandbox
+            value. The UI renders such a figure at the simulated temperature
+            and says so; the flag is the deployment's provider mode, not a
+            claim about the person.
         client_secret:
           type: string
           description: >-
@@ -2470,6 +2497,19 @@ components:
         approvers: { type: array, items: { type: object, additionalProperties: true } }
         effective_at: { $ref: "#/components/schemas/Timestamp" }
         expires_at: { $ref: "#/components/schemas/Timestamp" }
+    CapabilityGateTransition:
+      type: object
+      required: [transition_id, from, to, actor_type, actor_id, reason, occurred_at, sandbox]
+      properties:
+        transition_id: { $ref: "#/components/schemas/UUID" }
+        from: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED, SANDBOX] }
+        to: { type: string, enum: [DISABLED, PENDING_APPROVAL, APPROVED, ACTIVE, SUSPENDED, REVOKED, EXPIRED, SANDBOX] }
+        actor_type: { type: string, description: "OPERATOR for a person, SYSTEM for a boot-time sandbox activation" }
+        actor_id: { type: string }
+        reason: { type: string }
+        evidence_hash: { type: string, description: "Hex SHA-256 of the evidence references at the time, empty when there were none" }
+        occurred_at: { type: string, format: date-time }
+        sandbox: { type: boolean, description: "True when the transition entered SANDBOX: never an approval" }
     GateActionRequest:
       type: object
       required: [reason]

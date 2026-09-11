@@ -670,6 +670,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/gates/{capability}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every recorded transition of a gate, oldest first, with who moved it
+         * @description The rows of capability_gate_transitions, written by cp_gate_transition and cp_gate_sandbox in the same statement as the state change they record. A SANDBOX entry names the operator who moved it or the SYSTEM actor config:CP_API_SANDBOX_GATES; it is not an approval and says so.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    capability: components["schemas"]["Capability"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Transitions, oldest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CapabilityGateTransition"][];
+                    };
+                };
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/instruments/{instrumentId}/status": {
         parameters: {
             query?: never;
@@ -3748,6 +3790,8 @@ export interface paths {
                             build_version: string;
                             config_hash: string;
                             environment: string;
+                            /** @description True when this deployment is a sandbox tier (ADR-0023). Everything it mints, verifies or pays is a rehearsal; the UI labels the whole product accordingly. */
+                            sandbox_tier?: boolean;
                         };
                     };
                 };
@@ -4131,6 +4175,23 @@ export interface components {
             /** @enum {string} */
             state: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
         };
+        CapabilityGateTransition: {
+            actor_id: string;
+            /** @description OPERATOR for a person, SYSTEM for a boot-time sandbox activation */
+            actor_type: string;
+            /** @description Hex SHA-256 of the evidence references at the time, empty when there were none */
+            evidence_hash?: string;
+            /** @enum {string} */
+            from: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
+            /** Format: date-time */
+            occurred_at: string;
+            reason: string;
+            /** @description True when the transition entered SANDBOX: never an approval */
+            sandbox: boolean;
+            /** @enum {string} */
+            to: "DISABLED" | "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "SANDBOX";
+            transition_id: components["schemas"]["UUID"];
+        };
         CloseAccountRequest: {
             /** @description Optional. A person leaving does not owe an explanation. */
             reason?: string;
@@ -4283,6 +4344,8 @@ export interface components {
              * @description When the reversibility window opened. The settlement window is measured from here.
              */
             reversible_at?: string;
+            /** @description True when the provider this purchase runs through is not a live one: the card was a test card and the Credits it mints are sandbox value. The UI renders such a figure at the simulated temperature and says so; the flag is the deployment's provider mode, not a claim about the person. */
+            sandbox?: boolean;
             /** Format: date-time */
             settled_at?: string;
             /**
