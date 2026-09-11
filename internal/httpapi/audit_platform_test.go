@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -90,7 +91,8 @@ func TestAudit_TheAuthBudgetIsBypassedByRewritingOneHeader(t *testing.T) {
 	require.NoError(t, err)
 
 	h := rateLimit(RateLimits{Auth: auth}, auditTrustedPrivate(t))(
-		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+	)
 
 	send := func(forwarded string) int {
 		r := httptest.NewRequest(http.MethodGet, "/v1/auth/login", nil)
@@ -135,7 +137,10 @@ func TestAudit_TheMemoryRateLimitStoreIsNeverSwept(t *testing.T) {
 
 	const distinct = 50_000
 	for i := 0; i < distinct; i++ {
-		_, _, err := store.Incr(nil, fmt.Sprintf("auth:ip:203.0.113.%d.%d", i/256, i%256), time.Minute, now) //nolint:staticcheck // MemoryStore ignores ctx
+		// context.Background() rather than nil: MemoryStore ignores the context
+		// either way, and `make lint` runs staticcheck directly, where SA1012 is
+		// not silenced by a golangci-lint directive.
+		_, _, err := store.Incr(context.Background(), fmt.Sprintf("auth:ip:203.0.113.%d.%d", i/256, i%256), time.Minute, now)
 		require.NoError(t, err)
 	}
 
