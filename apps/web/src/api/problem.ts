@@ -237,7 +237,7 @@ export function explain(error: unknown): Explanation {
 
   return {
     ...base,
-    title: error.isBusinessRejection ? "The backend refused this" : "Something went wrong",
+    title: error.isBusinessRejection ? "The backend refused this" : unmappedTitle(error),
     body: joinDetail(
       `The backend answered ${error.code}${error.status ? ` with HTTP ${String(error.status)}` : ""}.`,
       error.detail,
@@ -246,6 +246,24 @@ export function explain(error: unknown): Explanation {
     needsSignIn: false,
     needsStepUp: false,
   };
+}
+
+/**
+ * The heading for a code this build has no sentence for.
+ *
+ * `UI_UX_SYSTEM.md` §4 forbids the generic apology by name, and it is right to:
+ * it tells the reader nothing, and it is not even true — the backend said
+ * exactly what happened, in a `title` this app was throwing away. So the
+ * backend's own title is used where it gave one that is not just the code
+ * repeated back, and where it did not, the honest fallback says what is known:
+ * the request reached the backend and the backend did not complete it. The
+ * stable code and the correlation id are on `base` in both cases, which is what
+ * support actually acts on.
+ */
+function unmappedTitle(error: ApiProblem): string {
+  const title = error.message.trim();
+  if (title !== "" && title !== error.code) return title;
+  return "The backend did not complete this";
 }
 
 function joinDetail(body: string, detail: string | undefined): string {
