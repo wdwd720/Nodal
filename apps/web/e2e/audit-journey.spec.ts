@@ -455,11 +455,25 @@ test("journey 7 · the authority ladder is shown whole, with 4 to 6 disabled by 
   }
   expect(lower).toContain("this level is disabled by policy in this deployment");
 
-  // And this tier says, before anything is typed, that no agent can be created
-  // here at all — with the API's own code rather than a vague apology.
-  const agents = await page.request.get(`/v1/agents?account_id=${account}`);
-  const listed = (await agents.json()) as { readonly compiler_configured?: boolean };
-  if (listed.compiler_configured !== true) {
+  // And the tier says, before anything is typed, which of two honest things is
+  // true. The compiler fact lives on the strategies page (`compiler_configured`
+  // on `GET /v1/strategies`), not on the agents list -- this test used to read
+  // the agents list, where the field never existed, and so always asserted the
+  // "no compiler" branch; it passed only while no tier had a compiler.
+  const strategies = await page.request.get(`/v1/strategies?account_id=${account}`);
+  const listed = (await strategies.json()) as {
+    readonly compiler_configured: boolean;
+    readonly compiler?: { readonly name?: string; readonly structured?: boolean };
+  };
+  if (listed.compiler_configured) {
+    // A sandbox tier with the structured compiler: the form builds the
+    // strategy from typed fields and says the words are recorded, never
+    // interpreted (D-129); nothing claims a compiler is missing.
+    expect(listed.compiler?.structured, "this build's only compiler is the structured one").toBe(true);
+    expect(lower).toContain("recorded, never interpreted");
+    expect(lower).not.toContain("no agent can be created on this deployment.");
+  } else {
+    // No compiler: said with the API's own code rather than a vague apology.
     expect(lower).toContain("no agent can be created on this deployment.");
     expect(lower).toContain("compiler_unavailable");
     await expect(page.getByRole("button", { name: /Create this agent/ })).toBeDisabled();
