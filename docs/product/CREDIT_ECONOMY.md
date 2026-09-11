@@ -332,9 +332,15 @@ Stated so nobody has to discover it:
   has no order book and therefore no matched self-trade to prevent. A deployment
   that would rather prevent records a safety policy with
   `creator_may_buy_own_asset: false`.
-- **No verification, profile, security or agent events in the activity feed.**
-  Those are the documented extension point in `internal/activity/doc.go`, added
-  by the domains that will raise them.
+- **No security events in the activity feed.** Verification, profile and agent
+  kinds landed with D-081: `internal/activity` declares eighteen kinds,
+  including `VERIFICATION_UPDATED`, `TERMS_ACCEPTED`, `ACCOUNT_CLOSURE_REQUESTED`,
+  `ACCOUNT_CLOSURE_DECIDED`, `PAYOUT_DESTINATION_ADDED`,
+  `PAYOUT_DESTINATION_DISABLED` and the four agent lifecycle kinds. Security
+  events are absent deliberately, and `internal/activity/doc.go` says why:
+  `internal/notifications` already tells a person about a new sign-in, and a
+  page that reads `security_events` is a different surface with a different
+  retention policy from a timeline of what happened to an account's value.
 - **No Credit purchase has ever been made against a live provider.**
   `CREDIT_PURCHASE` is not ACTIVE in any deployment; see
   `docs/build/BLOCKERS.md` and `docs/audit/LAUNCH_GATE_MATRIX.md`.

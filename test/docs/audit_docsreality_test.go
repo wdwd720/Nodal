@@ -712,56 +712,80 @@ func TestAuditDocs_TheActivityFeedIsDescribedAsItIsBuilt(t *testing.T) {
 
 	var problems []string
 
-	// (a) The "not built" bullet.
+	// (a) The "not built" bullet. The document may state ONE absence here --
+	// security events -- and every other kind it used to deny has to be
+	// declared, derived from the package rather than recalled.
 	const ce = "docs/product/CREDIT_ECONOMY.md"
 	ceBody := read(t, root, ce)
-	const bullet = "**No verification, profile, security or agent events in the activity feed.**"
+	const bullet = "**No security events in the activity feed.**"
 	require(t, strings.Contains(ceBody, bullet), "%s no longer carries the bullet this check reads", ce)
-	var present []string
+	at := ce + ":" + strconv.Itoa(lineOf(ceBody, bullet))
 	for _, k := range []string{"VERIFICATION_UPDATED", "TERMS_ACCEPTED", "ACCOUNT_CLOSURE_REQUESTED",
 		"ACCOUNT_CLOSURE_DECIDED", "AGENT_CREATED", "AGENT_PAUSED", "AGENT_RESUMED", "AGENT_DISABLED",
 		"PAYOUT_DESTINATION_ADDED", "PAYOUT_DESTINATION_DISABLED"} {
-		if have[k] {
-			present = append(present, k)
+		if !have[k] {
+			problems = append(problems, at+" says only security events are missing from the feed; "+
+				k+" is not declared either")
 		}
 	}
-	if len(present) > 0 {
-		problems = append(problems, ce+":"+strconv.Itoa(lineOf(ceBody, bullet))+
-			" says the feed carries no verification, profile or agent events; internal/activity declares "+
-			strings.Join(present, ", "))
+	for _, k := range kinds {
+		if strings.HasPrefix(k, "SECURITY_") || k == "LOGIN_ANOMALY" || k == "SESSION_REVOKED" {
+			problems = append(problems, at+" says the feed carries no security events; internal/activity declares "+k)
+		}
 	}
 
-	// (b) The package it cites as the authority says the opposite.
+	// (b) The package it cites as the authority has to still say it. The
+	// defect was a document citing doc.go for the opposite of what doc.go said.
 	docGo, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("internal/activity/doc.go")))
 	require(t, err == nil, "reading internal/activity/doc.go: %v", err)
-	if strings.Contains(string(docGo), "have landed (D-081)") {
-		problems = append(problems, ce+" cites internal/activity/doc.go as the extension point for those kinds; "+
-			"doc.go says they \"have landed (D-081)\"")
+	if !strings.Contains(string(docGo), "Security events are still absent") {
+		problems = append(problems, ce+" cites internal/activity/doc.go for the security absence; "+
+			"doc.go no longer states it")
+	}
+	if !strings.Contains(string(docGo), "have landed (D-081)") {
+		problems = append(problems, ce+" says the verification, profile and agent kinds landed with D-081; "+
+			"internal/activity/doc.go no longer says so")
 	}
 
-	// (c) The inventory's count.
+	// (c) The inventory's count, read out of the sentence and compared with the
+	// package. A number recalled beside the rows that would have produced it is
+	// the F-111 shape; this one is derived on both sides.
 	const inv = "docs/build/CURRENT_SYSTEM_INVENTORY.md"
 	invBody := read(t, root, inv)
-	const seven = "the §16 timeline: seven kinds"
-	require(t, strings.Contains(invBody, seven), "%s no longer carries the sentence this check reads", inv)
-	if len(kinds) != 7 {
-		problems = append(problems, inv+":"+strconv.Itoa(lineOf(invBody, seven))+
-			" says the timeline has seven kinds; internal/activity declares "+strconv.Itoa(len(kinds)))
+	countRe := regexp.MustCompile(`the §16 timeline: ([a-z]+) kinds`)
+	m := countRe.FindStringSubmatch(invBody)
+	require(t, m != nil, "%s no longer carries the §16 timeline count this check reads", inv)
+	if m[1] != numberWord(len(kinds)) {
+		problems = append(problems, inv+":"+strconv.Itoa(lineOf(invBody, m[0]))+
+			" says the timeline has "+m[1]+" kinds; internal/activity declares "+numberWord(len(kinds)))
 	}
 
-	// (d) The traceability row that keeps R-PG-016-1 at IN_PROGRESS. The brief's
-	// other half: a row whose status says PARTIAL must not be quietly complete.
-	// This one is held open by an evidence cell that is simply out of date, and
-	// the counts in the summary table are computed from statuses, so a row kept
-	// IN_PROGRESS by a stale sentence understates the whole matrix.
+	// (d) The traceability row. It was held at IN_PROGRESS by an evidence cell
+	// that was simply out of date, and the summary counts are computed from
+	// statuses, so a row kept open by a stale sentence understates the matrix.
 	const trace = "docs/build/REQUIREMENTS_TRACEABILITY.md"
 	traceBody := read(t, root, trace)
-	const stale = "Verification, profile, security and agent kinds are the documented extension point and are not declared yet"
-	require(t, strings.Contains(traceBody, stale), "%s no longer carries the sentence this check reads", trace)
-	if len(present) > 0 {
-		problems = append(problems, trace+":"+strconv.Itoa(lineOf(traceBody, stale))+
-			" (R-PG-016-1, IN_PROGRESS) says those kinds are not declared yet; "+
-			strconv.Itoa(len(present))+" of them are")
+	var row string
+	for _, line := range strings.Split(traceBody, "\n") {
+		if strings.HasPrefix(line, "| R-PG-016-1 |") {
+			row = line
+		}
+	}
+	require(t, row != "", "%s no longer carries R-PG-016-1", trace)
+	if strings.Contains(row, "| IN_PROGRESS |") || strings.Contains(row, "| NOT_STARTED |") {
+		problems = append(problems, trace+":"+strconv.Itoa(lineOf(traceBody, row))+
+			" keeps R-PG-016-1 open; internal/activity declares "+strconv.Itoa(len(kinds))+" kinds")
+	}
+	declared := declaredTests(t, root)
+	cites := false
+	for _, name := range distinct(refPattern.FindAllStringSubmatch(row, -1)) {
+		if declared[name] {
+			cites = true
+		}
+	}
+	if !cites {
+		problems = append(problems, trace+":"+strconv.Itoa(lineOf(traceBody, row))+
+			" names no test that exists; a VERIFIED row without one is the rule this document states")
 	}
 
 	sort.Strings(problems)
