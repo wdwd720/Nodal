@@ -1447,7 +1447,7 @@ deployed, verified in a browser, adversarially audited and reconciled with the
 architecture. The pre-productization checkpoint is `024c691`; ADR-0022 (one
 identity source of truth) is the first productization decision.
 
-**State at the last update (2026-09-10, 16:45 PDT; refreshed at least hourly while the wave runs).**
+**State at the last update (2026-09-10, 17:00 PDT; refreshed at least hourly while the wave runs).**
 
 - **Done on `productization`:** deploy enablement for the web app (`df48cb4`:
   Render static site `nodal-web`, `CP_AUTH_POST_LOGIN_URL`, same-site cookie
@@ -1460,6 +1460,13 @@ identity source of truth) is the first productization decision.
   secrets, the push of `main` (`9906c9f`), and later the `app-nodal` CNAME.
   §2's live verification happens the moment those are done; nothing else
   waits for it.
+- **Merged since:** the operator console (`wt/admin` → `b6e3b5b`: SANDBOX
+  rendered as "not an approval", the §38 account view, a live break-glass
+  self-approval bug fixed, §62 clean, generated artefacts guarded; its
+  decision is D-079); the contract's `Capability` enum completed (10 → 20)
+  and the provider catalogue's two economy slots (`7b66da3`); Stripe's
+  Payment Element allowed by the static site's CSP with the publishable key
+  as build-time configuration (`d793884`, D-078).
 - **Also done:** the design-system foundation (`653fc44`, `docs/product/UI_UX_SYSTEM.md`),
   `PRODUCT_ARCHITECTURE.md` and `USER_JOURNEY.md` (`d9c03a0`), D-077 (the
   customer app's route map) and `STAGING_E2E.md` (`d36fa29`).
@@ -1471,7 +1478,7 @@ identity source of truth) is the first productization decision.
   `wt/markets`, 00771–00780), notifications + realtime (N,
   `wt/notifications`, 00781–00785), agents surface (A2, `wt/agents`,
   00786–00790); frontend — public site/shell/sign-in/policies (F1,
-  `wt/web-shell`); operator console (X, `wt/admin`). Decision numbers are
+  `wt/web-shell`). Decision numbers are
   reserved per agent (P D-053–056, V D-057–062, M D-063–068, N D-069–072, A2
   D-073–076; orchestrator from D-077). Merge order: P, V, M, N, A2, then one
   `make restore-drill` + `BACKUP_RESTORE.md`, the docs count test, `make
