@@ -220,7 +220,14 @@ record carries the floor (D-136); the floor is computed from the provenance
 roots and a parent row written after a descendant is refused (D-137);
 provenance is a set of root origins judged in full by whatever policy applies
 (D-138); a reserved payout that cannot be sent says why, where its holder can
-read it (D-139). A narrow fourth round audits only that fix *(pending)*.
+read it (D-139). The narrow fourth round found six (one P1: a
+derived lot frozen by a disputed funding was never thawed when the dispute
+was won — the mirror D-094 promised for D-124's freeze; two P2; three P3) and
+declared the area flat: the repaired invariants held under exhaustive attack,
+and what remained was the ordinary cost of a large change. `fix/withdrawal-4`
+(the thaw clause, D-140; the page naming the floor; a state guard on the
+blocked reason; an explicit lot restriction; the root set on the allocation;
+a backfill that refuses a cycle) is the last fix of the area *(pending)*.
 
 ## 13 · Conversion
 
@@ -286,9 +293,10 @@ fixed on `productization` (F-251, F-252), one to each fix branch (F-250,
 F-253), one duplicate, one closed by the auditor's own test landing. Both
 wave-B fix branches are merged (F-224–F-250, F-253); the agents gap is closed
 (F-255–F-257, F-258 a residual). The withdrawal area's second round found 11
-(4 P1) and its third 6 (1 P1) — F-259–F-269 fixed and merged, F-270–F-277 on
-`fix/withdrawal-3`; flattening, with a narrow fourth round to confirm it
-*(pending)*. Current open: the wave-B findings until their branches merge
+(4 P1) and its third 6 (1 P1) and its narrow fourth 6 (1 P1, five small) — F-259–F-277
+fixed and merged, F-278–F-283 on `fix/withdrawal-4`; the fourth round's
+verdict is that the area has flattened and a fifth round is not warranted
+*(the last fix pending)*. Current open: the wave-B findings until their branches merge
 *(pending)*. The register: `docs/audit/AUDIT_FINDINGS.md`; the P0/P1 list:
 `docs/audit/LAUNCH_GATE_MATRIX.md` "What the productization wave changed".
 
