@@ -15,8 +15,8 @@ importers:
         version: link:../../packages/generated-client
     devDependencies:
       '@types/node':
-        specifier: 24.10.1
-        version: 24.10.1
+        specifier: 26.5.1
+        version: 26.5.1
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -49,8 +49,8 @@ importers:
         specifier: 1.63.0
         version: 1.63.0
       '@types/node':
-        specifier: 24.10.1
-        version: 24.10.1
+        specifier: 26.5.1
+        version: 26.5.1
       '@types/react':
         specifier: 19.2.18
         version: 19.2.18
@@ -59,7 +59,7 @@ importers:
         version: 19.2.7(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: 6.1.1
-        version: 6.1.1(vite@8.2.2(@types/node@24.10.1))
+        version: 6.1.1(vite@8.2.2(@types/node@26.5.1))
       axe-core:
         specifier: 4.13.0
         version: 4.13.0
@@ -68,7 +68,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: 8.2.2
-        version: 8.2.2(@types/node@24.10.1)
+        version: 8.2.2(@types/node@26.5.1)
 
   packages/generated-client:
     dependencies:
@@ -77,8 +77,8 @@ importers:
         version: 0.14.0
     devDependencies:
       '@types/node':
-        specifier: 24.10.1
-        version: 24.10.1
+        specifier: 26.5.1
+        version: 26.5.1
       openapi-typescript:
         specifier: 7.9.1
         version: 7.9.1(typescript@5.9.3)
@@ -89,8 +89,8 @@ importers:
   packages/strategy-sdk:
     devDependencies:
       '@types/node':
-        specifier: 24.10.1
-        version: 24.10.1
+        specifier: 26.5.1
+        version: 26.5.1
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -235,8 +235,8 @@ packages:
     peerDependencies:
       react: ^18 || ^19
 
-  '@types/node@24.10.1':
-    resolution: {integrity: sha512-GNWcUTRBgIRJD5zj+Tq0fKOJ5XZajIiBroOF0yvj2bSU1WvNdYS/dn9UxwsujGW4JX06dnHyjV2y9rRaybH0iQ==}
+  '@types/node@26.5.1':
+    resolution: {integrity: sha512-CzNm2FezW4VR/LjG6yUdiEgLE/rAQ9Slj5gCu/C2VrdcW7I0ahNZ8DRbHT7zOZ6r3ONgd/bsQIeSaoDGrd1C6g==}
 
   '@types/react-dom@19.2.7':
     resolution: {integrity: sha512-I8bPpDLcHBv1qiIiXDCy71Rt8eQDKJP0sMSWJphDdAcdqiJ1sGpZamavoEIRZmYzjia9LuEb2HlYdDpmoENpvQ==}
@@ -537,8 +537,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  undici-types@7.16.0:
-    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
   uri-js-replace@1.0.1:
     resolution: {integrity: sha512-W+C9NWNLFOoBI2QWDp4UT9pv65r2w5Cx+3sTYFvtMdDBxkKt1syCqsUdSFAChbEe1uK5TfS04wt/nGwmaeIQ0g==}
@@ -691,9 +691,9 @@ snapshots:
       '@tanstack/query-core': 5.102.8
       react: 19.2.8
 
-  '@types/node@24.10.1':
+  '@types/node@26.5.1':
     dependencies:
-      undici-types: 7.16.0
+      undici-types: 8.9.0
 
   '@types/react-dom@19.2.7(@types/react@19.2.18)':
     dependencies:
@@ -703,10 +703,10 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@vitejs/plugin-react@6.1.1(vite@8.2.2(@types/node@24.10.1))':
+  '@vitejs/plugin-react@6.1.1(vite@8.2.2(@types/node@26.5.1))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.2(@types/node@24.10.1)
+      vite: 8.2.2(@types/node@26.5.1)
 
   agent-base@7.1.4: {}
 
@@ -924,11 +924,11 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  undici-types@7.16.0: {}
+  undici-types@8.9.0: {}
 
   uri-js-replace@1.0.1: {}
 
-  vite@8.2.2(@types/node@24.10.1):
+  vite@8.2.2(@types/node@26.5.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -936,7 +936,7 @@ snapshots:
       rolldown: 1.2.7
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 24.10.1
+      '@types/node': 26.5.1
       fsevents: 2.3.3
 
   yaml-ast-parser@0.0.43: {}
