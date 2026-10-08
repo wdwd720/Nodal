@@ -56,9 +56,14 @@ var scanned = map[string]bool{
 }
 
 // skipped are directories whose contents nobody reviews line by line.
+//
+// .claude holds agent worktrees: other branches' checkouts, not this tree's
+// content. Scanning them made this test report files that are not in the
+// repository and change its verdict with work in progress elsewhere.
 var skipped = map[string]bool{
 	".git": true, "node_modules": true, "dist": true, "bin": true,
 	".next": true, "coverage": true, "vendor": true, "testdata": true,
+	".claude": true,
 }
 
 // TestSource_NoBidirectionalControlCharacters: a reviewer must see what the
