@@ -39,6 +39,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
@@ -209,6 +210,17 @@ func registry() []pair {
 		{table: "prediction_resolutions", constraint: "prediction_resolutions_kind_check", source: "predmarket.AllResolutionKinds()", values: str(predmarket.AllResolutionKinds())},
 		{table: "prediction_settlements", constraint: "prediction_settlements_kind_check", source: "predmarket.AllSettlementKinds()", values: str(predmarket.AllSettlementKinds())},
 		{table: "prediction_settlements", constraint: "prediction_settlements_rounding_policy_check", source: "predmarket.AllRoundingPolicies()", values: str(predmarket.AllRoundingPolicies())},
+
+		// Migration 00741 (futures, perpetuals and options).
+		{table: "derivative_positions", constraint: "derivative_positions_status_check", source: "derivatives.AllPositionStatuses()", values: str(derivatives.AllPositionStatuses())},
+		{table: "derivative_position_transitions", constraint: "derivative_position_transitions_from_status_check", source: "derivatives.AllPositionStatuses()", values: str(derivatives.AllPositionStatuses())},
+		{table: "derivative_position_transitions", constraint: "derivative_position_transitions_to_status_check", source: "derivatives.AllPositionStatuses()", values: str(derivatives.AllPositionStatuses())},
+		{table: "derivative_fills", constraint: "derivative_fills_source_check", source: "derivatives.AllFillSources()", values: str(derivatives.AllFillSources())},
+		{table: "derivative_fills", constraint: "derivative_fills_side_check", source: "derivatives.AllFillSides()", values: str(derivatives.AllFillSides())},
+		{table: "derivative_cash_flows", constraint: "derivative_cash_flows_kind_check", source: "derivatives.AllCashFlowKinds()", values: str(derivatives.AllCashFlowKinds())},
+		{table: "derivative_settlements", constraint: "derivative_settlements_kind_check", source: "derivatives.AllSettlementKinds()", values: str(derivatives.AllSettlementKinds())},
+		{table: "funding_accruals", constraint: "funding_accruals_direction_check", source: "derivatives.AllFundingDirections()", values: str(derivatives.AllFundingDirections())},
+		{table: "option_exercises", constraint: "option_exercises_kind_check", source: "derivatives.AllExerciseKinds()", values: str(derivatives.AllExerciseKinds())},
 	}
 	for _, table := range []string{
 		"agent_runs", "agents", "calibration_snapshots", "cost_accounting", "counterfactuals",

@@ -232,22 +232,6 @@ func (s *Service) serializeClearing(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
-// checkTransitionsPerStatement makes the transition bindings of economic
-// intents and effects check after every statement instead of at COMMIT, so
-// one transaction can move an intent through several statuses: on this
-// branch the deferred binding keeps a single edge per entity per transaction,
-// and only the last step would find its edge at COMMIT. Every step writes its
-// transition row before its UPDATE (econ.IntentStore.Transition,
-// econ.EffectStore.Apply), so the immediate check sees exactly the edge the
-// step needs; the binding itself is unchanged. Migration 00733 on main makes
-// the edges accumulate, after which this helper and its calls are deleted.
-func checkTransitionsPerStatement(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, `SET CONSTRAINTS economic_intents_require_transition, economic_effects_require_transition IMMEDIATE`); err != nil {
-		return dbErr("check intent and effect transitions per statement", err)
-	}
-	return nil
-}
-
 // advance moves an intent one step along its lifecycle.
 func (s *Service) advance(ctx context.Context, tx pgx.Tx, in econ.Intent, to econ.IntentStatus, reason string) (econ.Intent, error) {
 	return s.intents.Transition(ctx, tx, in.ID, to, s.actor, reason, "")

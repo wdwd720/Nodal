@@ -12,7 +12,7 @@ an external provider's sandbox) · `BLOCKED_EXTERNAL` · `LIVE_CAPABLE_BUT_DISAB
 code (`gates.DecideMode` → `LIVE_NOT_IMPLEMENTED`) and unrepresentable in the database (D-049). The live
 column below says what activation would need, never that it is near.
 
-Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740) and prediction markets (00749) merged; other subsystem lanes in progress.
+Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + faucet (00744), margin (00740), derivatives (00741) and prediction markets (00749) merged; other subsystem lanes in progress.
 
 ## Summary
 
@@ -26,7 +26,7 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 | 6 | Risk Kernel V2 (§21) | VERIFIED_LOCAL | — | — |
 | 7 | Stable asset subsystem (§5) | IN_PROGRESS | SANDBOX/DEVNET | B-16 |
 | 8 | Margin + leverage engine (§6) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15 |
-| 9 | Derivatives: futures, perps, options (§7) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
+| 9 | Derivatives: futures, perps, options (§7) | VERIFIED_LOCAL (API in progress) | PAPER/SANDBOX | B-15, B-17 |
 | 10 | Equities abstraction (§8) | IN_PROGRESS | PAPER/SANDBOX | B-15, B-17 |
 | 11 | Internal matching engine (§9) | IN_PROGRESS (pure engine VERIFIED_LOCAL; persistent book in progress) | internal simulation | B-15 |
 | 12 | Customer-to-customer transfers (§10) | VERIFIED_LOCAL (API in progress) | SANDBOX | B-15 |
@@ -96,3 +96,9 @@ Last updated: 2026-10-08 — foundation, kernel amendments (00733), transfers + 
 - **DB:** `00749_prediction_markets.sql` (PM001–PM005; settlement rows check their own conservation in SQL).
 - **Tests:** `TestProp_SettlementPaysExactlyTheEscrow`, `TestProp_PayoutConservation`, `TestProp_RefundConservesAndBoundsTheResidual`, `TestIntegration_ConcurrentSettlementsSettleOnce`, `TestIntegration_ADisputedMarketCannotSettle`, `TestIntegration_NoSettlementBeforeResolution`, `TestIntegration_OracleReplayIsIdempotentAndAConflictingReportIsRefused`, `TestIntegration_ReconciliationDetectsAnEscrowDivergence`, `TestIntegration_ScenarioH_CreateTradeCloseResolveSettle`, `FuzzDecodeOracleReport`.
 - **Limitations:** settlement is all-or-nothing (a holder Risk V2 refuses blocks it until resolved); shares outside customer wallets or reserved by open orders make settlement refuse with RECONCILIATION_REQUIRED.
+
+### 9. Derivatives: futures, perpetuals, options
+- **Implementation:** `internal/derivatives` (contract specs, positions with fills as the single trade path, variation margin runs once per interval, perpetual funding with a premium index, European/American options with exact payoff grids, exercise and FIFO assignment, expiry settlement, a SIMULATED clearing house that absorbs one-sided books and nets to zero, reference analytics -- price and Greeks from `internal/quant` -- that are labelled and never posted). `MarginReader` feeds buying power V2 through `buyingpower.CombinedMarginReader` (D-054).
+- **DB:** `00741_derivatives.sql` (DV001–DV004; one settlement per instrument, one funding accrual per position and interval).
+- **Tests:** `TestProp_RoundTripRealizedPnLIsExact`, `TestProp_FundingConservesOnABalancedBook`, `TestProp_OptionPayoffIsExactAndPutCallParityHolds`, `TestProp_AssignFIFOConserves`, `TestProp_AnalyticsGreeksAreSane`, `TestProp_EveryPostingTemplateBalancesPerParty`, integration (`FuturesPnLIsExactThroughTheLedger`, `AmericanExerciseAndFIFOAssignmentConserve`, `OptionExpirySettlementIsExact`, `ConcurrentSettlementPostsOnce`, `VariationMarginRunsOncePerInterval`, `StaleOraclePreventsARiskIncreasingOrderButNotClosing`, `ConcurrentOpensCannotOverspendMargin`, `TheClearingHouseNetsToZeroForAMatchedBook`).
+- **Limitations:** only cash-settled, 24x7 instruments with a whole-unit tick value; funding rounds down once per contract per interval; variation margin settles at the mark current when the run happens; every flow-producing derivative operation serializes on one clearing-house lock.
