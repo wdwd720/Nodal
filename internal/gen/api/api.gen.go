@@ -855,16 +855,16 @@ func (e InstrumentTermsOptionRight) Valid() bool {
 
 // Defines values for InstrumentTermsSettlementStyle.
 const (
-	CASH     InstrumentTermsSettlementStyle = "CASH"
-	PHYSICAL InstrumentTermsSettlementStyle = "PHYSICAL"
+	InstrumentTermsSettlementStyleCASH     InstrumentTermsSettlementStyle = "CASH"
+	InstrumentTermsSettlementStylePHYSICAL InstrumentTermsSettlementStyle = "PHYSICAL"
 )
 
 // Valid indicates whether the value is a known member of the InstrumentTermsSettlementStyle enum.
 func (e InstrumentTermsSettlementStyle) Valid() bool {
 	switch e {
-	case CASH:
+	case InstrumentTermsSettlementStyleCASH:
 		return true
-	case PHYSICAL:
+	case InstrumentTermsSettlementStylePHYSICAL:
 		return true
 	default:
 		return false
@@ -1090,6 +1090,234 @@ func (e KillSwitchRequestAction) Valid() bool {
 	case KillSwitchRequestActionActivate:
 		return true
 	case KillSwitchRequestActionRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginAccountStatus.
+const (
+	MarginAccountStatusBANKRUPT    MarginAccountStatus = "BANKRUPT"
+	MarginAccountStatusCLOSED      MarginAccountStatus = "CLOSED"
+	MarginAccountStatusLIQUIDATING MarginAccountStatus = "LIQUIDATING"
+	MarginAccountStatusMARGINCALL  MarginAccountStatus = "MARGIN_CALL"
+	MarginAccountStatusNORMAL      MarginAccountStatus = "NORMAL"
+	MarginAccountStatusWARNING     MarginAccountStatus = "WARNING"
+)
+
+// Valid indicates whether the value is a known member of the MarginAccountStatus enum.
+func (e MarginAccountStatus) Valid() bool {
+	switch e {
+	case MarginAccountStatusBANKRUPT:
+		return true
+	case MarginAccountStatusCLOSED:
+		return true
+	case MarginAccountStatusLIQUIDATING:
+		return true
+	case MarginAccountStatusMARGINCALL:
+		return true
+	case MarginAccountStatusNORMAL:
+		return true
+	case MarginAccountStatusWARNING:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginCallStatus.
+const (
+	MarginCallStatusLIQUIDATED MarginCallStatus = "LIQUIDATED"
+	MarginCallStatusMET        MarginCallStatus = "MET"
+	MarginCallStatusOPEN       MarginCallStatus = "OPEN"
+)
+
+// Valid indicates whether the value is a known member of the MarginCallStatus enum.
+func (e MarginCallStatus) Valid() bool {
+	switch e {
+	case MarginCallStatusLIQUIDATED:
+		return true
+	case MarginCallStatusMET:
+		return true
+	case MarginCallStatusOPEN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginCaseStatus.
+const (
+	MarginCaseStatusAWAITINGPRICE MarginCaseStatus = "AWAITING_PRICE"
+	MarginCaseStatusAWAITINGVENUE MarginCaseStatus = "AWAITING_VENUE"
+	MarginCaseStatusBANKRUPT      MarginCaseStatus = "BANKRUPT"
+	MarginCaseStatusCOMPLETED     MarginCaseStatus = "COMPLETED"
+	MarginCaseStatusINPROGRESS    MarginCaseStatus = "IN_PROGRESS"
+	MarginCaseStatusMANUALREVIEW  MarginCaseStatus = "MANUAL_REVIEW"
+)
+
+// Valid indicates whether the value is a known member of the MarginCaseStatus enum.
+func (e MarginCaseStatus) Valid() bool {
+	switch e {
+	case MarginCaseStatusAWAITINGPRICE:
+		return true
+	case MarginCaseStatusAWAITINGVENUE:
+		return true
+	case MarginCaseStatusBANKRUPT:
+		return true
+	case MarginCaseStatusCOMPLETED:
+		return true
+	case MarginCaseStatusINPROGRESS:
+		return true
+	case MarginCaseStatusMANUALREVIEW:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginLiquidationTarget.
+const (
+	INITIALMARGIN         MarginLiquidationTarget = "INITIAL_MARGIN"
+	MAINTENANCEPLUSBUFFER MarginLiquidationTarget = "MAINTENANCE_PLUS_BUFFER"
+)
+
+// Valid indicates whether the value is a known member of the MarginLiquidationTarget enum.
+func (e MarginLiquidationTarget) Valid() bool {
+	switch e {
+	case INITIALMARGIN:
+		return true
+	case MAINTENANCEPLUSBUFFER:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginMode.
+const (
+	MarginModeCASH     MarginMode = "CASH"
+	MarginModeCROSS    MarginMode = "CROSS"
+	MarginModeISOLATED MarginMode = "ISOLATED"
+)
+
+// Valid indicates whether the value is a known member of the MarginMode enum.
+func (e MarginMode) Valid() bool {
+	switch e {
+	case MarginModeCASH:
+		return true
+	case MarginModeCROSS:
+		return true
+	case MarginModeISOLATED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginPlanDecision.
+const (
+	MarginPlanDecisionAPPLYCOLLATERAL MarginPlanDecision = "APPLY_COLLATERAL"
+	MarginPlanDecisionAWAITPRICE      MarginPlanDecision = "AWAIT_PRICE"
+	MarginPlanDecisionAWAITVENUE      MarginPlanDecision = "AWAIT_VENUE"
+	MarginPlanDecisionBANKRUPT        MarginPlanDecision = "BANKRUPT"
+	MarginPlanDecisionCOMPLETE        MarginPlanDecision = "COMPLETE"
+	MarginPlanDecisionMANUALREVIEW    MarginPlanDecision = "MANUAL_REVIEW"
+	MarginPlanDecisionSELL            MarginPlanDecision = "SELL"
+	MarginPlanDecisionSELLALL         MarginPlanDecision = "SELL_ALL"
+)
+
+// Valid indicates whether the value is a known member of the MarginPlanDecision enum.
+func (e MarginPlanDecision) Valid() bool {
+	switch e {
+	case MarginPlanDecisionAPPLYCOLLATERAL:
+		return true
+	case MarginPlanDecisionAWAITPRICE:
+		return true
+	case MarginPlanDecisionAWAITVENUE:
+		return true
+	case MarginPlanDecisionBANKRUPT:
+		return true
+	case MarginPlanDecisionCOMPLETE:
+		return true
+	case MarginPlanDecisionMANUALREVIEW:
+		return true
+	case MarginPlanDecisionSELL:
+		return true
+	case MarginPlanDecisionSELLALL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginStepAction.
+const (
+	MarginStepActionAPPLYCOLLATERAL MarginStepAction = "APPLY_COLLATERAL"
+	MarginStepActionSELL            MarginStepAction = "SELL"
+)
+
+// Valid indicates whether the value is a known member of the MarginStepAction enum.
+func (e MarginStepAction) Valid() bool {
+	switch e {
+	case MarginStepActionAPPLYCOLLATERAL:
+		return true
+	case MarginStepActionSELL:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MarginStressScenario.
+const (
+	BRIDGEDELAYED     MarginStressScenario = "BRIDGE_DELAYED"
+	COLLATERALDEPEG   MarginStressScenario = "COLLATERAL_DEPEG"
+	EXTREMESPREAD     MarginStressScenario = "EXTREME_SPREAD"
+	GAPDOWN10         MarginStressScenario = "GAP_DOWN_10"
+	GAPDOWN25         MarginStressScenario = "GAP_DOWN_25"
+	GAPDOWN5          MarginStressScenario = "GAP_DOWN_5"
+	GAPDOWN50         MarginStressScenario = "GAP_DOWN_50"
+	GAPUP10           MarginStressScenario = "GAP_UP_10"
+	GAPUP25           MarginStressScenario = "GAP_UP_25"
+	GAPUP5            MarginStressScenario = "GAP_UP_5"
+	GAPUP50           MarginStressScenario = "GAP_UP_50"
+	ORACLEUNAVAILABLE MarginStressScenario = "ORACLE_UNAVAILABLE"
+	PARTIALFILL       MarginStressScenario = "PARTIAL_FILL"
+	VENUEUNAVAILABLE  MarginStressScenario = "VENUE_UNAVAILABLE"
+)
+
+// Valid indicates whether the value is a known member of the MarginStressScenario enum.
+func (e MarginStressScenario) Valid() bool {
+	switch e {
+	case BRIDGEDELAYED:
+		return true
+	case COLLATERALDEPEG:
+		return true
+	case EXTREMESPREAD:
+		return true
+	case GAPDOWN10:
+		return true
+	case GAPDOWN25:
+		return true
+	case GAPDOWN5:
+		return true
+	case GAPDOWN50:
+		return true
+	case GAPUP10:
+		return true
+	case GAPUP25:
+		return true
+	case GAPUP5:
+		return true
+	case GAPUP50:
+		return true
+	case ORACLEUNAVAILABLE:
+		return true
+	case PARTIALFILL:
+		return true
+	case VENUEUNAVAILABLE:
 		return true
 	default:
 		return false
@@ -1641,31 +1869,31 @@ func (e ReconciliationRecordMode) Valid() bool {
 
 // Defines values for ReconciliationRecordStatus.
 const (
-	ESCALATED         ReconciliationRecordStatus = "ESCALATED"
-	INVESTIGATING     ReconciliationRecordStatus = "INVESTIGATING"
-	MATCHED           ReconciliationRecordStatus = "MATCHED"
-	MISMATCH          ReconciliationRecordStatus = "MISMATCH"
-	OPEN              ReconciliationRecordStatus = "OPEN"
-	RESOLVEDAUTOMATIC ReconciliationRecordStatus = "RESOLVED_AUTOMATIC"
-	RESOLVEDMANUAL    ReconciliationRecordStatus = "RESOLVED_MANUAL"
+	ReconciliationRecordStatusESCALATED         ReconciliationRecordStatus = "ESCALATED"
+	ReconciliationRecordStatusINVESTIGATING     ReconciliationRecordStatus = "INVESTIGATING"
+	ReconciliationRecordStatusMATCHED           ReconciliationRecordStatus = "MATCHED"
+	ReconciliationRecordStatusMISMATCH          ReconciliationRecordStatus = "MISMATCH"
+	ReconciliationRecordStatusOPEN              ReconciliationRecordStatus = "OPEN"
+	ReconciliationRecordStatusRESOLVEDAUTOMATIC ReconciliationRecordStatus = "RESOLVED_AUTOMATIC"
+	ReconciliationRecordStatusRESOLVEDMANUAL    ReconciliationRecordStatus = "RESOLVED_MANUAL"
 )
 
 // Valid indicates whether the value is a known member of the ReconciliationRecordStatus enum.
 func (e ReconciliationRecordStatus) Valid() bool {
 	switch e {
-	case ESCALATED:
+	case ReconciliationRecordStatusESCALATED:
 		return true
-	case INVESTIGATING:
+	case ReconciliationRecordStatusINVESTIGATING:
 		return true
-	case MATCHED:
+	case ReconciliationRecordStatusMATCHED:
 		return true
-	case MISMATCH:
+	case ReconciliationRecordStatusMISMATCH:
 		return true
-	case OPEN:
+	case ReconciliationRecordStatusOPEN:
 		return true
-	case RESOLVEDAUTOMATIC:
+	case ReconciliationRecordStatusRESOLVEDAUTOMATIC:
 		return true
-	case RESOLVEDMANUAL:
+	case ReconciliationRecordStatusRESOLVEDMANUAL:
 		return true
 	default:
 		return false
@@ -3347,6 +3575,1092 @@ type KillSwitchRequest struct {
 // KillSwitchRequestAction defines model for KillSwitchRequest.Action.
 type KillSwitchRequestAction string
 
+// MarginAccount defines model for MarginAccount.
+type MarginAccount struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InsuranceFundId UUIDv7 in canonical form
+	InsuranceFundId UUID `json:"insurance_fund_id"`
+
+	// IsolatedAssetId UUIDv7 in canonical form
+	IsolatedAssetId *UUID `json:"isolated_asset_id,omitempty"`
+
+	// LendingPoolId UUIDv7 in canonical form
+	LendingPoolId UUID `json:"lending_pool_id"`
+
+	// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+	MarginMode MarginMode   `json:"margin_mode"`
+	Mode       AdvancedMode `json:"mode"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId UUID                `json:"numeraire_asset_id"`
+	OpenedAt         Timestamp           `json:"opened_at"`
+	PolicyVersion    string              `json:"policy_version"`
+	Status           MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginAccountDetail defines model for MarginAccountDetail.
+type MarginAccountDetail struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation MarginEvaluation `json:"evaluation"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// InsuranceFundId UUIDv7 in canonical form
+	InsuranceFundId UUID `json:"insurance_fund_id"`
+
+	// IsolatedAssetId UUIDv7 in canonical form
+	IsolatedAssetId *UUID       `json:"isolated_asset_id,omitempty"`
+	LatestCase      *MarginCase `json:"latest_case,omitempty"`
+
+	// LendingPoolId UUIDv7 in canonical form
+	LendingPoolId UUID         `json:"lending_pool_id"`
+	Loans         []MarginLoan `json:"loans"`
+
+	// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+	MarginMode MarginMode   `json:"margin_mode"`
+	Mode       AdvancedMode `json:"mode"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId UUID                `json:"numeraire_asset_id"`
+	OpenCall         *MarginCall         `json:"open_call,omitempty"`
+	OpenedAt         Timestamp           `json:"opened_at"`
+	PolicyVersion    string              `json:"policy_version"`
+	Status           MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginAccountRef defines model for MarginAccountRef.
+type MarginAccountRef struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+}
+
+// MarginAccountStatus defines model for MarginAccountStatus.
+type MarginAccountStatus string
+
+// MarginAmountRequest defines model for MarginAmountRequest.
+type MarginAmountRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Amount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Amount Quantity `json:"amount"`
+}
+
+// MarginBatchRequest defines model for MarginBatchRequest.
+type MarginBatchRequest struct {
+	Limit *int `json:"limit,omitempty"`
+}
+
+// MarginCall defines model for MarginCall.
+type MarginCall struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Deficiency Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficiency Quantity `json:"deficiency"`
+
+	// Equity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Equity         Quantity `json:"equity"`
+	EvaluationHash string   `json:"evaluation_hash"`
+
+	// Id UUIDv7 in canonical form
+	Id       UUID      `json:"id"`
+	IssuedAt Timestamp `json:"issued_at"`
+
+	// MaintenanceMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceMargin Quantity `json:"maintenance_margin"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID             `json:"numeraire_asset_id"`
+	NumeraireDecimals int              `json:"numeraire_decimals"`
+	ResolvedAt        *Timestamp       `json:"resolved_at,omitempty"`
+	Status            MarginCallStatus `json:"status"`
+}
+
+// MarginCallPage defines model for MarginCallPage.
+type MarginCallPage struct {
+	Items      []MarginCall              `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginCallStatus defines model for MarginCallStatus.
+type MarginCallStatus string
+
+// MarginCase defines model for MarginCase.
+type MarginCase struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID       `json:"account_id"`
+	ClosedAt  *Timestamp `json:"closed_at,omitempty"`
+
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit *Quantity `json:"deficit,omitempty"`
+
+	// DeficitCoverageJournalTransactionId UUIDv7 in canonical form
+	DeficitCoverageJournalTransactionId *UUID      `json:"deficit_coverage_journal_transaction_id,omitempty"`
+	DeficitCoveredAt                    *Timestamp `json:"deficit_covered_at,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID   `json:"id"`
+	LastReason string `json:"last_reason"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// MarginCallId UUIDv7 in canonical form
+	MarginCallId UUID `json:"margin_call_id"`
+	MaxSteps     int  `json:"max_steps"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID                    `json:"numeraire_asset_id"`
+	NumeraireDecimals int                     `json:"numeraire_decimals"`
+	OpenedAt          Timestamp               `json:"opened_at"`
+	PolicyVersion     string                  `json:"policy_version"`
+	Status            MarginCaseStatus        `json:"status"`
+	StepsExecuted     int                     `json:"steps_executed"`
+	Target            MarginLiquidationTarget `json:"target"`
+}
+
+// MarginCaseDetail defines model for MarginCaseDetail.
+type MarginCaseDetail struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID       `json:"account_id"`
+	ClosedAt  *Timestamp `json:"closed_at,omitempty"`
+
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit *Quantity `json:"deficit,omitempty"`
+
+	// DeficitCoverageJournalTransactionId UUIDv7 in canonical form
+	DeficitCoverageJournalTransactionId *UUID      `json:"deficit_coverage_journal_transaction_id,omitempty"`
+	DeficitCoveredAt                    *Timestamp `json:"deficit_covered_at,omitempty"`
+
+	// Id UUIDv7 in canonical form
+	Id         UUID   `json:"id"`
+	LastReason string `json:"last_reason"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// MarginCallId UUIDv7 in canonical form
+	MarginCallId UUID `json:"margin_call_id"`
+	MaxSteps     int  `json:"max_steps"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID                    `json:"numeraire_asset_id"`
+	NumeraireDecimals int                     `json:"numeraire_decimals"`
+	OpenedAt          Timestamp               `json:"opened_at"`
+	PolicyVersion     string                  `json:"policy_version"`
+	Status            MarginCaseStatus        `json:"status"`
+	Steps             []MarginLiquidationStep `json:"steps"`
+	StepsExecuted     int                     `json:"steps_executed"`
+	Target            MarginLiquidationTarget `json:"target"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginCasePage defines model for MarginCasePage.
+type MarginCasePage struct {
+	Items      []MarginCase              `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginCaseStatus defines model for MarginCaseStatus.
+type MarginCaseStatus string
+
+// MarginCollateralRequest defines model for MarginCollateralRequest.
+type MarginCollateralRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// MarginCollateralResult defines model for MarginCollateralResult.
+type MarginCollateralResult struct {
+	// EffectId UUIDv7 in canonical form
+	EffectId UUID `json:"effect_id"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation *MarginEvaluation `json:"evaluation,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId *UUID `json:"intent_id,omitempty"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// MoveId UUIDv7 in canonical form
+	MoveId UUID `json:"move_id"`
+
+	// Replayed the service found this operation already applied and posted nothing; no evaluation is reported
+	Replayed bool `json:"replayed"`
+
+	// ReservationId UUIDv7 in canonical form
+	ReservationId *UUID               `json:"reservation_id,omitempty"`
+	Status        MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginDeficitResult defines model for MarginDeficitResult.
+type MarginDeficitResult struct {
+	Case MarginCase `json:"case"`
+
+	// CaseId UUIDv7 in canonical form
+	CaseId UUID `json:"case_id"`
+
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit Quantity `json:"deficit"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+	Replayed             bool `json:"replayed"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginEvaluated defines model for MarginEvaluated.
+type MarginEvaluated struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID        `json:"account_id"`
+	Call      *MarginCall `json:"call,omitempty"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation MarginEvaluation `json:"evaluation"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID                `json:"margin_account_id"`
+	PreviousStatus  MarginAccountStatus `json:"previous_status"`
+	Status          MarginAccountStatus `json:"status"`
+}
+
+// MarginEvaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+type MarginEvaluation struct {
+	// AccruedFees Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AccruedFees Quantity `json:"accrued_fees"`
+
+	// AccruedInterest Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	AccruedInterest Quantity  `json:"accrued_interest"`
+	At              Timestamp `json:"at"`
+
+	// BorrowLiabilities Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	BorrowLiabilities Quantity `json:"borrow_liabilities"`
+
+	// Capacity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Capacity Quantity `json:"capacity"`
+
+	// EffectiveLeverageBps basis points, rounded up
+	EffectiveLeverageBps int64 `json:"effective_leverage_bps"`
+
+	// EligibleCollateral Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EligibleCollateral Quantity `json:"eligible_collateral"`
+
+	// Equity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Equity Quantity `json:"equity"`
+
+	// GrossExposure Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	GrossExposure Quantity            `json:"gross_exposure"`
+	Hash          string              `json:"hash"`
+	Health        MarginAccountStatus `json:"health"`
+	Holdings      []MarginHolding     `json:"holdings"`
+
+	// InitialMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialMargin Quantity `json:"initial_margin"`
+
+	// LeverageCapBps basis points of gross exposure over equity (50000 = 5x)
+	LeverageCapBps    int64 `json:"leverage_cap_bps"`
+	LeverageUnbounded bool  `json:"leverage_unbounded"`
+	Levered           bool  `json:"levered"`
+
+	// LiquidationBuffer Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	LiquidationBuffer   Quantity `json:"liquidation_buffer"`
+	LiquidationEligible bool     `json:"liquidation_eligible"`
+
+	// MaintenanceMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceMargin Quantity `json:"maintenance_margin"`
+
+	// MarginAvailable Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarginAvailable Quantity `json:"margin_available"`
+
+	// MarketValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValue  Quantity `json:"market_value"`
+	MissingMarks bool     `json:"missing_marks"`
+
+	// NetAssetValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	NetAssetValue Quantity `json:"net_asset_value"`
+
+	// NetExposure Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	NetExposure  Quantity   `json:"net_exposure"`
+	NewestMarkAt *Timestamp `json:"newest_mark_at,omitempty"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID       `json:"numeraire_asset_id"`
+	NumeraireDecimals int        `json:"numeraire_decimals"`
+	OldestMarkAt      *Timestamp `json:"oldest_mark_at,omitempty"`
+	PolicyHash        string     `json:"policy_hash"`
+	PolicyVersion     string     `json:"policy_version"`
+	PricesFresh       bool       `json:"prices_fresh"`
+
+	// RealizedPnl Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	RealizedPnl Quantity `json:"realized_pnl"`
+	StaleAssets []UUID   `json:"stale_assets"`
+
+	// UnrealizedPnl Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	UnrealizedPnl Quantity `json:"unrealized_pnl"`
+
+	// Usd The engine's cent rendering, rounded so the account can only look less healthy (assets and equity down, liabilities and requirements up).
+	Usd MarginEvaluationUSD `json:"usd"`
+
+	// WarningThreshold Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	WarningThreshold Quantity `json:"warning_threshold"`
+}
+
+// MarginEvaluationUSD The engine's cent rendering, rounded so the account can only look less healthy (assets and equity down, liabilities and requirements up).
+type MarginEvaluationUSD struct {
+	// AccruedInterest USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	AccruedInterest USD `json:"accrued_interest"`
+
+	// BorrowLiabilities USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	BorrowLiabilities USD `json:"borrow_liabilities"`
+
+	// EligibleCollateral USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EligibleCollateral USD `json:"eligible_collateral"`
+
+	// Equity USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	Equity USD `json:"equity"`
+
+	// GrossExposure USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	GrossExposure USD `json:"gross_exposure"`
+
+	// InitialMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	InitialMargin USD `json:"initial_margin"`
+
+	// LiquidationBuffer USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	LiquidationBuffer USD `json:"liquidation_buffer"`
+
+	// MaintenanceMargin USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaintenanceMargin USD `json:"maintenance_margin"`
+
+	// MarginAvailable USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MarginAvailable USD `json:"margin_available"`
+
+	// MarketValue USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MarketValue USD `json:"market_value"`
+
+	// WarningThreshold USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	WarningThreshold USD `json:"warning_threshold"`
+}
+
+// MarginFacilities defines model for MarginFacilities.
+type MarginFacilities struct {
+	AssetDecimals int `json:"asset_decimals"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId       UUID           `json:"asset_id"`
+	InsuranceFund MarginFacility `json:"insurance_fund"`
+	LendingPool   MarginFacility `json:"lending_pool"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginFacility defines model for MarginFacility.
+type MarginFacility struct {
+	// Cash POOL_CASH or INSURANCE_FUND_CASH in the sandbox dollar
+	//
+	// Examples: 1500000000
+	Cash Quantity `json:"cash"`
+
+	// Id UUIDv7 in canonical form
+	Id     UUID   `json:"id"`
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// MarginFailure defines model for MarginFailure.
+type MarginFailure struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId *UUID  `json:"account_id,omitempty"`
+	Code      string `json:"code"`
+	Detail    string `json:"detail"`
+}
+
+// MarginHaircut defines model for MarginHaircut.
+type MarginHaircut struct {
+	// ConcentrationBps Basis points; 10000 == 100%
+	ConcentrationBps BPS `json:"concentration_bps"`
+
+	// CrossChainBps Basis points; 10000 == 100%
+	CrossChainBps BPS `json:"cross_chain_bps"`
+
+	// LiquidityBps Basis points; 10000 == 100%
+	LiquidityBps BPS `json:"liquidity_bps"`
+
+	// OracleBps Basis points; 10000 == 100%
+	OracleBps BPS `json:"oracle_bps"`
+
+	// SettlementBps Basis points; 10000 == 100%
+	SettlementBps BPS `json:"settlement_bps"`
+
+	// TotalBps Basis points; 10000 == 100%
+	TotalBps BPS `json:"total_bps"`
+
+	// VenueBps Basis points; 10000 == 100%
+	VenueBps BPS `json:"venue_bps"`
+
+	// VolatilityBps Basis points; 10000 == 100%
+	VolatilityBps BPS `json:"volatility_bps"`
+
+	// ZeroValue A stale, missing or future mark (or a delayed bridge) makes the collateral worthless.
+	ZeroValue bool `json:"zero_value"`
+}
+
+// MarginHolding defines model for MarginHolding.
+type MarginHolding struct {
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// CollateralValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	CollateralValue Quantity `json:"collateral_value"`
+
+	// ConcentrationShareBps Basis points; 10000 == 100%
+	ConcentrationShareBps BPS `json:"concentration_share_bps"`
+
+	// Exposure Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Exposure Quantity      `json:"exposure"`
+	Fresh    bool          `json:"fresh"`
+	Haircut  MarginHaircut `json:"haircut"`
+
+	// InitialMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialMargin Quantity `json:"initial_margin"`
+
+	// MaintenanceMargin Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceMargin Quantity `json:"maintenance_margin"`
+
+	// Mark the mark the evaluation used; present on reads
+	Mark   *MarginPrice `json:"mark,omitempty"`
+	MarkAt *Timestamp   `json:"mark_at,omitempty"`
+
+	// MarketValue Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MarketValue Quantity `json:"market_value"`
+	Numeraire   bool     `json:"numeraire"`
+	Priced      bool     `json:"priced"`
+
+	// Quantity base units of the asset
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// MarginLeveragedBuyRequest defines model for MarginLeveragedBuyRequest.
+type MarginLeveragedBuyRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+}
+
+// MarginLeveragedBuyResult defines model for MarginLeveragedBuyResult.
+type MarginLeveragedBuyResult struct {
+	// BorrowJournalTransactionId UUIDv7 in canonical form
+	BorrowJournalTransactionId UUID `json:"borrow_journal_transaction_id"`
+
+	// CollateralJournalTransactionId UUIDv7 in canonical form
+	CollateralJournalTransactionId UUID `json:"collateral_journal_transaction_id"`
+
+	// Cost numeraire base units borrowed: quantity × execution price, rounded up
+	//
+	// Examples: 1500000000
+	Cost Quantity `json:"cost"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation *MarginEvaluation `json:"evaluation,omitempty"`
+
+	// ExecutionPrice mark × (1 + slippage_bps)
+	ExecutionPrice *MarginPrice `json:"execution_price,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// LotId UUIDv7 in canonical form
+	LotId *UUID `json:"lot_id,omitempty"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// Mark The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	Mark     *MarginPrice `json:"mark,omitempty"`
+	Replayed bool         `json:"replayed"`
+
+	// ReservationId UUIDv7 in canonical form
+	ReservationId *UUID `json:"reservation_id,omitempty"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps *BPS                `json:"slippage_bps,omitempty"`
+	Status      MarginAccountStatus `json:"status"`
+
+	// TradeJournalTransactionId UUIDv7 in canonical form
+	TradeJournalTransactionId UUID `json:"trade_journal_transaction_id"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginLiquidateRequest defines model for MarginLiquidateRequest.
+type MarginLiquidateRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// ExpectedStep The step meant (1 for the first); 0 or absent means whatever step is next. A step already executed is returned, not repeated.
+	ExpectedStep *int `json:"expected_step,omitempty"`
+}
+
+// MarginLiquidationOrder defines model for MarginLiquidationOrder.
+type MarginLiquidationOrder struct {
+	Action MarginStepAction `json:"action"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// Excess Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Excess Quantity `json:"excess"`
+
+	// ExecutionPrice The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	ExecutionPrice *MarginPrice `json:"execution_price,omitempty"`
+
+	// Fee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Fee Quantity `json:"fee"`
+
+	// Mark The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	Mark *MarginPrice `json:"mark,omitempty"`
+
+	// Proceeds Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Proceeds Quantity `json:"proceeds"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// Repay Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Repay Quantity `json:"repay"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps BPS `json:"slippage_bps"`
+}
+
+// MarginLiquidationResult defines model for MarginLiquidationResult.
+type MarginLiquidationResult struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId     UUID                `json:"account_id"`
+	AccountStatus MarginAccountStatus `json:"account_status"`
+	Case          *MarginCase         `json:"case,omitempty"`
+	Decision      MarginPlanDecision  `json:"decision"`
+
+	// Eligible false when the account needed no liquidation and no case was opened
+	Eligible bool `json:"eligible"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId   UUID                   `json:"margin_account_id"`
+	NumeraireDecimals int                    `json:"numeraire_decimals"`
+	Plan              *MarginPlan            `json:"plan,omitempty"`
+	Reason            string                 `json:"reason"`
+	Replayed          bool                   `json:"replayed"`
+	Step              *MarginLiquidationStep `json:"step,omitempty"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginLiquidationStep defines model for MarginLiquidationStep.
+type MarginLiquidationStep struct {
+	Action MarginStepAction `json:"action"`
+
+	// AssetId UUIDv7 in canonical form
+	AssetId UUID `json:"asset_id"`
+
+	// EquityAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EquityAfter Quantity `json:"equity_after"`
+
+	// EquityBefore Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EquityBefore Quantity `json:"equity_before"`
+
+	// Excess Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Excess Quantity `json:"excess"`
+
+	// ExcessJournalTransactionId UUIDv7 in canonical form
+	ExcessJournalTransactionId *UUID     `json:"excess_journal_transaction_id,omitempty"`
+	ExecutedAt                 Timestamp `json:"executed_at"`
+
+	// ExecutionPrice The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	ExecutionPrice *MarginPrice `json:"execution_price,omitempty"`
+
+	// Fee Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Fee Quantity `json:"fee"`
+
+	// Id UUIDv7 in canonical form
+	Id UUID `json:"id"`
+
+	// Mark The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+	Mark     *MarginPrice `json:"mark,omitempty"`
+	PlanHash string       `json:"plan_hash"`
+
+	// Proceeds Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Proceeds Quantity `json:"proceeds"`
+
+	// Quantity Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Quantity Quantity `json:"quantity"`
+
+	// ReleaseJournalTransactionId UUIDv7 in canonical form
+	ReleaseJournalTransactionId *UUID `json:"release_journal_transaction_id,omitempty"`
+
+	// Repaid Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Repaid Quantity `json:"repaid"`
+
+	// RepayJournalTransactionId UUIDv7 in canonical form
+	RepayJournalTransactionId *UUID `json:"repay_journal_transaction_id,omitempty"`
+
+	// SlippageBps Basis points; 10000 == 100%
+	SlippageBps BPS `json:"slippage_bps"`
+
+	// SlippageCapBps Basis points; 10000 == 100%
+	SlippageCapBps BPS `json:"slippage_cap_bps"`
+	StepNo         int `json:"step_no"`
+
+	// TradeJournalTransactionId UUIDv7 in canonical form
+	TradeJournalTransactionId *UUID `json:"trade_journal_transaction_id,omitempty"`
+}
+
+// MarginLiquidationTarget defines model for MarginLiquidationTarget.
+type MarginLiquidationTarget string
+
+// MarginLoan defines model for MarginLoan.
+type MarginLoan struct {
+	AccruedThrough Timestamp `json:"accrued_through"`
+
+	// Interest interest posted (capitalized) and not yet repaid
+	//
+	// Examples: 1500000000
+	Interest Quantity `json:"interest"`
+
+	// LotId UUIDv7 in canonical form
+	LotId UUID `json:"lot_id"`
+
+	// Principal outstanding principal
+	//
+	// Examples: 1500000000
+	Principal Quantity `json:"principal"`
+
+	// RateBps annual simple rate
+	RateBps int64 `json:"rate_bps"`
+}
+
+// MarginLoanAllocation defines model for MarginLoanAllocation.
+type MarginLoanAllocation struct {
+	// Interest Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Interest Quantity `json:"interest"`
+
+	// LotId UUIDv7 in canonical form
+	LotId UUID `json:"lot_id"`
+
+	// Principal Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Principal Quantity `json:"principal"`
+}
+
+// MarginLoanResult defines model for MarginLoanResult.
+type MarginLoanResult struct {
+	Allocations []MarginLoanAllocation `json:"allocations"`
+
+	// EffectId UUIDv7 in canonical form
+	EffectId UUID `json:"effect_id"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation *MarginEvaluation `json:"evaluation,omitempty"`
+
+	// IntentId UUIDv7 in canonical form
+	IntentId UUID `json:"intent_id"`
+
+	// JournalTransactionId UUIDv7 in canonical form
+	JournalTransactionId UUID `json:"journal_transaction_id"`
+
+	// LotId UUIDv7 in canonical form
+	LotId *UUID `json:"lot_id,omitempty"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID                `json:"margin_account_id"`
+	Replayed        bool                `json:"replayed"`
+	Status          MarginAccountStatus `json:"status"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginMarkToMarketResult defines model for MarginMarkToMarketResult.
+type MarginMarkToMarketResult struct {
+	Evaluated []MarginEvaluated `json:"evaluated"`
+	Failures  []MarginFailure   `json:"failures"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+type MarginMode string
+
+// MarginOpenRequest defines model for MarginOpenRequest.
+type MarginOpenRequest struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// IsolatedAssetId UUIDv7 in canonical form
+	IsolatedAssetId *UUID `json:"isolated_asset_id,omitempty"`
+
+	// MarginMode CASH takes no leverage; ISOLATED margins one risky asset; CROSS shares the collateral across positions.
+	MarginMode MarginMode   `json:"margin_mode"`
+	Mode       AdvancedMode `json:"mode"`
+}
+
+// MarginPlan defines model for MarginPlan.
+type MarginPlan struct {
+	Decision MarginPlanDecision `json:"decision"`
+
+	// DeficitUnits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	DeficitUnits Quantity                 `json:"deficit_units"`
+	Hash         string                   `json:"hash"`
+	Orders       []MarginLiquidationOrder `json:"orders"`
+	Reason       string                   `json:"reason"`
+	StepsTaken   int                      `json:"steps_taken"`
+	Target       MarginLiquidationTarget  `json:"target"`
+
+	// TargetUnits Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	TargetUnits Quantity `json:"target_units"`
+}
+
+// MarginPlanDecision defines model for MarginPlanDecision.
+type MarginPlanDecision string
+
+// MarginPrice The price of one whole unit in the numeraire, exactly mantissa × 10^-scale.
+type MarginPrice struct {
+	// Mantissa Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Mantissa   Quantity   `json:"mantissa"`
+	ObservedAt *Timestamp `json:"observed_at,omitempty"`
+	Scale      int        `json:"scale"`
+	Source     *string    `json:"source,omitempty"`
+}
+
+// MarginQueue defines model for MarginQueue.
+type MarginQueue struct {
+	Items []MarginQueueEntry `json:"items"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginQueueEntry defines model for MarginQueueEntry.
+type MarginQueueEntry struct {
+	Account MarginAccount `json:"account"`
+
+	// Evaluation The margin engine's deterministic evaluation. equity = eligible_collateral + realized_pnl + unrealized_pnl − borrow_liabilities − accrued_fees − accrued_interest; liquidation_buffer = equity − maintenance_margin (negative once eligible for liquidation). Quantities are numeraire base units.
+	Evaluation        *MarginEvaluation `json:"evaluation,omitempty"`
+	EvaluationError   *MarginFailure    `json:"evaluation_error,omitempty"`
+	LatestCase        *MarginCase       `json:"latest_case,omitempty"`
+	NumeraireDecimals int               `json:"numeraire_decimals"`
+	OpenCall          *MarginCall       `json:"open_call,omitempty"`
+}
+
+// MarginQueueRunResult defines model for MarginQueueRunResult.
+type MarginQueueRunResult struct {
+	Failures []MarginFailure           `json:"failures"`
+	Results  []MarginLiquidationResult `json:"results"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginSeedRequest defines model for MarginSeedRequest.
+type MarginSeedRequest struct {
+	// FundAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	FundAmount Quantity `json:"fund_amount"`
+
+	// PoolAmount Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	PoolAmount Quantity `json:"pool_amount"`
+}
+
+// MarginStepAction defines model for MarginStepAction.
+type MarginStepAction string
+
+// MarginStressResult defines model for MarginStressResult.
+type MarginStressResult struct {
+	// Deficit Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	Deficit Quantity `json:"deficit"`
+
+	// DeficitUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	DeficitUsd USD `json:"deficit_usd"`
+
+	// EquityAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	EquityAfter Quantity `json:"equity_after"`
+
+	// EquityAfterUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	EquityAfterUsd USD  `json:"equity_after_usd"`
+	Executable     bool `json:"executable"`
+
+	// InitialAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InitialAfter Quantity `json:"initial_after"`
+
+	// InsuranceFundDraw Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	InsuranceFundDraw Quantity `json:"insurance_fund_draw"`
+
+	// InsuranceFundDrawUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	InsuranceFundDrawUsd USD `json:"insurance_fund_draw_usd"`
+
+	// MaintenanceAfter Exact asset base units as an integer string
+	//
+	// Examples: 1500000000
+	MaintenanceAfter Quantity `json:"maintenance_after"`
+
+	// MaintenanceAfterUsd USD as a decimal string with exactly two fraction digits
+	//
+	// Examples: 1234.56
+	MaintenanceAfterUsd USD                  `json:"maintenance_after_usd"`
+	Outcome             MarginPlanDecision   `json:"outcome"`
+	Scenario            MarginStressScenario `json:"scenario"`
+
+	// ShockBps Basis points; 10000 == 100%
+	ShockBps       BPS  `json:"shock_bps"`
+	StepsSimulated int  `json:"steps_simulated"`
+	WouldLiquidate bool `json:"would_liquidate"`
+}
+
+// MarginStressRun defines model for MarginStressRun.
+type MarginStressRun struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID   `json:"id"`
+	InputHash string `json:"input_hash"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID                 `json:"numeraire_asset_id"`
+	NumeraireDecimals int                  `json:"numeraire_decimals"`
+	PolicyHash        string               `json:"policy_hash"`
+	PolicyVersion     string               `json:"policy_version"`
+	ReportHash        string               `json:"report_hash"`
+	Results           []MarginStressResult `json:"results"`
+	RunAt             Timestamp            `json:"run_at"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginStressRunPage defines model for MarginStressRunPage.
+type MarginStressRunPage struct {
+	Items      []MarginStressRunSummary  `json:"items"`
+	NextCursor nullable.Nullable[string] `json:"next_cursor"`
+
+	// ValueDomain Every figure of the advanced capabilities is simulated value with no economic substance.
+	ValueDomain ValueDomainSimulated `json:"value_domain"`
+}
+
+// MarginStressRunSummary defines model for MarginStressRunSummary.
+type MarginStressRunSummary struct {
+	// AccountId UUIDv7 in canonical form
+	AccountId UUID `json:"account_id"`
+
+	// Id UUIDv7 in canonical form
+	Id        UUID   `json:"id"`
+	InputHash string `json:"input_hash"`
+
+	// MarginAccountId UUIDv7 in canonical form
+	MarginAccountId UUID `json:"margin_account_id"`
+
+	// NumeraireAssetId UUIDv7 in canonical form
+	NumeraireAssetId  UUID      `json:"numeraire_asset_id"`
+	NumeraireDecimals int       `json:"numeraire_decimals"`
+	PolicyHash        string    `json:"policy_hash"`
+	PolicyVersion     string    `json:"policy_version"`
+	ReportHash        string    `json:"report_hash"`
+	RunAt             Timestamp `json:"run_at"`
+}
+
+// MarginStressScenario defines model for MarginStressScenario.
+type MarginStressScenario string
+
 // NativeAsset defines model for NativeAsset.
 type NativeAsset struct {
 	ActivatedAt *Timestamp `json:"activated_at,omitempty"`
@@ -4523,6 +5837,128 @@ type GetAdvancedIntentsParams struct {
 	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetAdvancedMarginAccountParams defines parameters for GetAdvancedMarginAccount.
+type GetAdvancedMarginAccountParams struct {
+	AccountId UUID `form:"account_id" json:"account_id"`
+}
+
+// PostAdvancedMarginAccountParams defines parameters for PostAdvancedMarginAccount.
+type PostAdvancedMarginAccountParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginAccountCloseParams defines parameters for PostAdvancedMarginAccountClose.
+type PostAdvancedMarginAccountCloseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginBorrowParams defines parameters for PostAdvancedMarginBorrow.
+type PostAdvancedMarginBorrowParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginCallsParams defines parameters for GetAdvancedMarginCalls.
+type GetAdvancedMarginCallsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetAdvancedMarginCasesParams defines parameters for GetAdvancedMarginCases.
+type GetAdvancedMarginCasesParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginCollateralPostParams defines parameters for PostAdvancedMarginCollateralPost.
+type PostAdvancedMarginCollateralPostParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginCollateralReleaseParams defines parameters for PostAdvancedMarginCollateralRelease.
+type PostAdvancedMarginCollateralReleaseParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginLeveragedBuysParams defines parameters for PostAdvancedMarginLeveragedBuys.
+type PostAdvancedMarginLeveragedBuysParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginOpsCallsParams defines parameters for GetAdvancedMarginOpsCalls.
+type GetAdvancedMarginOpsCallsParams struct {
+	Status *MarginCallStatus `form:"status,omitempty" json:"status,omitempty"`
+	Cursor *Cursor           `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit            `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams defines parameters for PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit.
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsFacilitiesSeedParams defines parameters for PostAdvancedMarginOpsFacilitiesSeed.
+type PostAdvancedMarginOpsFacilitiesSeedParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsLiquidationsParams defines parameters for PostAdvancedMarginOpsLiquidations.
+type PostAdvancedMarginOpsLiquidationsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsMarkToMarketParams defines parameters for PostAdvancedMarginOpsMarkToMarket.
+type PostAdvancedMarginOpsMarkToMarketParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginOpsQueueParams defines parameters for GetAdvancedMarginOpsQueue.
+type GetAdvancedMarginOpsQueueParams struct {
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginOpsQueueRunParams defines parameters for PostAdvancedMarginOpsQueueRun.
+type PostAdvancedMarginOpsQueueRunParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginOpsStressRunsParams defines parameters for PostAdvancedMarginOpsStressRuns.
+type PostAdvancedMarginOpsStressRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PostAdvancedMarginRepayParams defines parameters for PostAdvancedMarginRepay.
+type PostAdvancedMarginRepayParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAdvancedMarginStressRunsParams defines parameters for GetAdvancedMarginStressRuns.
+type GetAdvancedMarginStressRunsParams struct {
+	AccountId UUID    `form:"account_id" json:"account_id"`
+	Cursor    *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit     *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// PostAdvancedMarginStressRunsParams defines parameters for PostAdvancedMarginStressRuns.
+type PostAdvancedMarginStressRunsParams struct {
+	// IdempotencyKey Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetAdvancedRiskDecisionsParams defines parameters for GetAdvancedRiskDecisions.
 type GetAdvancedRiskDecisionsParams struct {
 	AccountId UUID   `form:"account_id" json:"account_id"`
@@ -4732,6 +6168,45 @@ type PostAdminKillSwitchesJSONRequestBody = KillSwitchRequest
 // PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody defines body for PostAdminReconciliationRecordsRecordIdResolve for application/json ContentType.
 type PostAdminReconciliationRecordsRecordIdResolveJSONRequestBody = ReconciliationResolution
 
+// PostAdvancedMarginAccountJSONRequestBody defines body for PostAdvancedMarginAccount for application/json ContentType.
+type PostAdvancedMarginAccountJSONRequestBody = MarginOpenRequest
+
+// PostAdvancedMarginAccountCloseJSONRequestBody defines body for PostAdvancedMarginAccountClose for application/json ContentType.
+type PostAdvancedMarginAccountCloseJSONRequestBody = MarginAccountRef
+
+// PostAdvancedMarginBorrowJSONRequestBody defines body for PostAdvancedMarginBorrow for application/json ContentType.
+type PostAdvancedMarginBorrowJSONRequestBody = MarginAmountRequest
+
+// PostAdvancedMarginCollateralPostJSONRequestBody defines body for PostAdvancedMarginCollateralPost for application/json ContentType.
+type PostAdvancedMarginCollateralPostJSONRequestBody = MarginCollateralRequest
+
+// PostAdvancedMarginCollateralReleaseJSONRequestBody defines body for PostAdvancedMarginCollateralRelease for application/json ContentType.
+type PostAdvancedMarginCollateralReleaseJSONRequestBody = MarginCollateralRequest
+
+// PostAdvancedMarginLeveragedBuysJSONRequestBody defines body for PostAdvancedMarginLeveragedBuys for application/json ContentType.
+type PostAdvancedMarginLeveragedBuysJSONRequestBody = MarginLeveragedBuyRequest
+
+// PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody defines body for PostAdvancedMarginOpsFacilitiesSeed for application/json ContentType.
+type PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody = MarginSeedRequest
+
+// PostAdvancedMarginOpsLiquidationsJSONRequestBody defines body for PostAdvancedMarginOpsLiquidations for application/json ContentType.
+type PostAdvancedMarginOpsLiquidationsJSONRequestBody = MarginLiquidateRequest
+
+// PostAdvancedMarginOpsMarkToMarketJSONRequestBody defines body for PostAdvancedMarginOpsMarkToMarket for application/json ContentType.
+type PostAdvancedMarginOpsMarkToMarketJSONRequestBody = MarginBatchRequest
+
+// PostAdvancedMarginOpsQueueRunJSONRequestBody defines body for PostAdvancedMarginOpsQueueRun for application/json ContentType.
+type PostAdvancedMarginOpsQueueRunJSONRequestBody = MarginBatchRequest
+
+// PostAdvancedMarginOpsStressRunsJSONRequestBody defines body for PostAdvancedMarginOpsStressRuns for application/json ContentType.
+type PostAdvancedMarginOpsStressRunsJSONRequestBody = MarginAccountRef
+
+// PostAdvancedMarginRepayJSONRequestBody defines body for PostAdvancedMarginRepay for application/json ContentType.
+type PostAdvancedMarginRepayJSONRequestBody = MarginAmountRequest
+
+// PostAdvancedMarginStressRunsJSONRequestBody defines body for PostAdvancedMarginStressRuns for application/json ContentType.
+type PostAdvancedMarginStressRunsJSONRequestBody = MarginAccountRef
+
 // PostFundingDepositsJSONRequestBody defines body for PostFundingDeposits for application/json ContentType.
 type PostFundingDepositsJSONRequestBody = StartDepositRequest
 
@@ -4863,6 +6338,72 @@ type ServerInterface interface {
 	// GetAdvancedIntentsIntentId One economic intent
 	// (GET /advanced/intents/{intentId})
 	GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID)
+	// GetAdvancedMarginAccount An account's margin account, evaluated by the margin engine at the instant of the read
+	// (GET /advanced/margin/account)
+	GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginAccountParams)
+	// PostAdvancedMarginAccount Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+	// (POST /advanced/margin/account)
+	PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountParams)
+	// PostAdvancedMarginAccountClose Close a margin account that holds nothing and owes the lending pool nothing
+	// (POST /advanced/margin/account/close)
+	PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountCloseParams)
+	// PostAdvancedMarginBorrow Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+	// (POST /advanced/margin/borrow)
+	PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginBorrowParams)
+	// GetAdvancedMarginCalls Margin calls of an account, newest first
+	// (GET /advanced/margin/calls)
+	GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCallsParams)
+	// GetAdvancedMarginCases Liquidation cases of an account, newest first
+	// (GET /advanced/margin/cases)
+	GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCasesParams)
+	// GetAdvancedMarginCasesMarginCaseId One liquidation case with every step it executed
+	// (GET /advanced/margin/cases/{marginCaseId})
+	GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request, marginCaseId UUID)
+	// PostAdvancedMarginCollateralPost Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+	// (POST /advanced/margin/collateral/post)
+	PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralPostParams)
+	// PostAdvancedMarginCollateralRelease Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+	// (POST /advanced/margin/collateral/release)
+	PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralReleaseParams)
+	// PostAdvancedMarginLeveragedBuys Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+	// (POST /advanced/margin/leveraged-buys)
+	PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginLeveragedBuysParams)
+	// GetAdvancedMarginOpsCalls Operator — margin calls across every account, newest first
+	// (GET /advanced/margin/ops/calls)
+	GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsCallsParams)
+	// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+	// (POST /advanced/margin/ops/cases/{marginCaseId}/cover-deficit)
+	PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request, marginCaseId UUID, params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams)
+	// PostAdvancedMarginOpsFacilitiesSeed Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+	// (POST /advanced/margin/ops/facilities/seed)
+	PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsFacilitiesSeedParams)
+	// PostAdvancedMarginOpsLiquidations Operator — execute at most one deterministic liquidation step of one account (step-up)
+	// (POST /advanced/margin/ops/liquidations)
+	PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsLiquidationsParams)
+	// PostAdvancedMarginOpsMarkToMarket Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+	// (POST /advanced/margin/ops/mark-to-market)
+	PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsMarkToMarketParams)
+	// GetAdvancedMarginOpsQueue Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+	// (GET /advanced/margin/ops/queue)
+	GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsQueueParams)
+	// PostAdvancedMarginOpsQueueRun Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+	// (POST /advanced/margin/ops/queue/run)
+	PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsQueueRunParams)
+	// PostAdvancedMarginOpsStressRuns Operator — run every stress scenario against any account's margin account and store the report
+	// (POST /advanced/margin/ops/stress-runs)
+	PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsStressRunsParams)
+	// PostAdvancedMarginRepay Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+	// (POST /advanced/margin/repay)
+	PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginRepayParams)
+	// GetAdvancedMarginStressRuns Stored stress runs of an account, newest first
+	// (GET /advanced/margin/stress-runs)
+	GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginStressRunsParams)
+	// PostAdvancedMarginStressRuns Run every stress scenario against your margin account and store the report (moves no value)
+	// (POST /advanced/margin/stress-runs)
+	PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginStressRunsParams)
+	// GetAdvancedMarginStressRunsMarginStressRunId One stored stress run with every scenario's result
+	// (GET /advanced/margin/stress-runs/{marginStressRunId})
+	GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request, marginStressRunId UUID)
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(w http.ResponseWriter, r *http.Request, params GetAdvancedRiskDecisionsParams)
@@ -5169,6 +6710,138 @@ func (_ Unimplemented) GetAdvancedIntents(w http.ResponseWriter, r *http.Request
 // GetAdvancedIntentsIntentId One economic intent
 // (GET /advanced/intents/{intentId})
 func (_ Unimplemented) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *http.Request, intentId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginAccount An account's margin account, evaluated by the margin engine at the instant of the read
+// (GET /advanced/margin/account)
+func (_ Unimplemented) GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginAccountParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginAccount Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+// (POST /advanced/margin/account)
+func (_ Unimplemented) PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginAccountClose Close a margin account that holds nothing and owes the lending pool nothing
+// (POST /advanced/margin/account/close)
+func (_ Unimplemented) PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountCloseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginBorrow Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+// (POST /advanced/margin/borrow)
+func (_ Unimplemented) PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginBorrowParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginCalls Margin calls of an account, newest first
+// (GET /advanced/margin/calls)
+func (_ Unimplemented) GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCallsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginCases Liquidation cases of an account, newest first
+// (GET /advanced/margin/cases)
+func (_ Unimplemented) GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCasesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginCasesMarginCaseId One liquidation case with every step it executed
+// (GET /advanced/margin/cases/{marginCaseId})
+func (_ Unimplemented) GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request, marginCaseId UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginCollateralPost Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+// (POST /advanced/margin/collateral/post)
+func (_ Unimplemented) PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralPostParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginCollateralRelease Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+// (POST /advanced/margin/collateral/release)
+func (_ Unimplemented) PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralReleaseParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginLeveragedBuys Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+// (POST /advanced/margin/leveraged-buys)
+func (_ Unimplemented) PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginLeveragedBuysParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginOpsCalls Operator — margin calls across every account, newest first
+// (GET /advanced/margin/ops/calls)
+func (_ Unimplemented) GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsCallsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+// (POST /advanced/margin/ops/cases/{marginCaseId}/cover-deficit)
+func (_ Unimplemented) PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request, marginCaseId UUID, params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsFacilitiesSeed Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+// (POST /advanced/margin/ops/facilities/seed)
+func (_ Unimplemented) PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsFacilitiesSeedParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsLiquidations Operator — execute at most one deterministic liquidation step of one account (step-up)
+// (POST /advanced/margin/ops/liquidations)
+func (_ Unimplemented) PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsLiquidationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsMarkToMarket Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+// (POST /advanced/margin/ops/mark-to-market)
+func (_ Unimplemented) PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsMarkToMarketParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginOpsQueue Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+// (GET /advanced/margin/ops/queue)
+func (_ Unimplemented) GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsQueueParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsQueueRun Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+// (POST /advanced/margin/ops/queue/run)
+func (_ Unimplemented) PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsQueueRunParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginOpsStressRuns Operator — run every stress scenario against any account's margin account and store the report
+// (POST /advanced/margin/ops/stress-runs)
+func (_ Unimplemented) PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsStressRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginRepay Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+// (POST /advanced/margin/repay)
+func (_ Unimplemented) PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginRepayParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginStressRuns Stored stress runs of an account, newest first
+// (GET /advanced/margin/stress-runs)
+func (_ Unimplemented) GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginStressRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// PostAdvancedMarginStressRuns Run every stress scenario against your margin account and store the report (moves no value)
+// (POST /advanced/margin/stress-runs)
+func (_ Unimplemented) PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginStressRunsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdvancedMarginStressRunsMarginStressRunId One stored stress run with every scenario's result
+// (GET /advanced/margin/stress-runs/{marginStressRunId})
+func (_ Unimplemented) GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request, marginStressRunId UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -6608,6 +8281,999 @@ func (siw *ServerInterfaceWrapper) GetAdvancedIntentsIntentId(w http.ResponseWri
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAdvancedIntentsIntentId(w, r, intentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginAccount operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginAccountParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginAccount operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginAccountParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginAccount(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginAccountClose operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginAccountCloseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginAccountClose(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginBorrow operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginBorrowParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginBorrow(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginCalls operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginCallsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginCalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginCases operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginCasesParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginCases(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginCasesMarginCaseId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marginCaseId" -------------
+	var marginCaseId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marginCaseId", chi.URLParam(r, "marginCaseId"), &marginCaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marginCaseId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginCasesMarginCaseId(w, r, marginCaseId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginCollateralPost operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginCollateralPostParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginCollateralPost(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginCollateralRelease operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginCollateralReleaseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginCollateralRelease(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginLeveragedBuys operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginLeveragedBuysParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginLeveragedBuys(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginOpsCalls operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginOpsCallsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginOpsCalls(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marginCaseId" -------------
+	var marginCaseId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marginCaseId", chi.URLParam(r, "marginCaseId"), &marginCaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marginCaseId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w, r, marginCaseId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsFacilitiesSeed operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsFacilitiesSeedParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsFacilitiesSeed(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsLiquidations operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsLiquidationsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsLiquidations(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsMarkToMarket operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsMarkToMarketParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsMarkToMarket(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginOpsQueue operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginOpsQueueParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginOpsQueue(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsQueueRun operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsQueueRunParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsQueueRun(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginOpsStressRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginOpsStressRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginOpsStressRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginRepay operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginRepayParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginRepay(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginStressRuns operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAdvancedMarginStressRunsParams
+
+	// ------------- Required query parameter "account_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "account_id", r.URL.Query(), &params.AccountId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "account_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "account_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginStressRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PostAdvancedMarginStressRuns operation middleware
+func (siw *ServerInterfaceWrapper) PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostAdvancedMarginStressRunsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PostAdvancedMarginStressRuns(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAdvancedMarginStressRunsMarginStressRunId operation middleware
+func (siw *ServerInterfaceWrapper) GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "marginStressRunId" -------------
+	var marginStressRunId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "marginStressRunId", chi.URLParam(r, "marginStressRunId"), &marginStressRunId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "marginStressRunId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdvancedMarginStressRunsMarginStressRunId(w, r, marginStressRunId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8679,6 +11345,72 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/advanced/buying-power", wrapper.GetAdvancedBuyingPower)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/account", wrapper.GetAdvancedMarginAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/account", wrapper.PostAdvancedMarginAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/account/close", wrapper.PostAdvancedMarginAccountClose)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/collateral/post", wrapper.PostAdvancedMarginCollateralPost)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/collateral/release", wrapper.PostAdvancedMarginCollateralRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/borrow", wrapper.PostAdvancedMarginBorrow)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/repay", wrapper.PostAdvancedMarginRepay)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/leveraged-buys", wrapper.PostAdvancedMarginLeveragedBuys)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/calls", wrapper.GetAdvancedMarginCalls)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/cases", wrapper.GetAdvancedMarginCases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/cases/{marginCaseId}", wrapper.GetAdvancedMarginCasesMarginCaseId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/stress-runs", wrapper.GetAdvancedMarginStressRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/stress-runs", wrapper.PostAdvancedMarginStressRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/stress-runs/{marginStressRunId}", wrapper.GetAdvancedMarginStressRunsMarginStressRunId)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/facilities/seed", wrapper.PostAdvancedMarginOpsFacilitiesSeed)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/mark-to-market", wrapper.PostAdvancedMarginOpsMarkToMarket)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/ops/queue", wrapper.GetAdvancedMarginOpsQueue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/queue/run", wrapper.PostAdvancedMarginOpsQueueRun)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/liquidations", wrapper.PostAdvancedMarginOpsLiquidations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/cases/{marginCaseId}/cover-deficit", wrapper.PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/advanced/margin/ops/stress-runs", wrapper.PostAdvancedMarginOpsStressRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/advanced/margin/ops/calls", wrapper.GetAdvancedMarginOpsCalls)
+	})
 
 	return r
 }
@@ -9609,6 +12341,1514 @@ type GetAdvancedIntentsIntentId404ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetAdvancedIntentsIntentId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedIntentsIntentIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccountRequestObject struct {
+	Params GetAdvancedMarginAccountParams
+}
+
+type GetAdvancedMarginAccountResponseObject interface {
+	VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginAccount200JSONResponse MarginAccountDetail
+
+func (response GetAdvancedMarginAccount200JSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccount403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginAccount403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccount404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginAccount404ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginAccount409ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginAccount409ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountRequestObject struct {
+	Params PostAdvancedMarginAccountParams
+	Body   *PostAdvancedMarginAccountJSONRequestBody
+}
+
+type PostAdvancedMarginAccountResponseObject interface {
+	VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginAccount200JSONResponse MarginAccount
+
+func (response PostAdvancedMarginAccount200JSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginAccount400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccount422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccount422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountCloseRequestObject struct {
+	Params PostAdvancedMarginAccountCloseParams
+	Body   *PostAdvancedMarginAccountCloseJSONRequestBody
+}
+
+type PostAdvancedMarginAccountCloseResponseObject interface {
+	VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginAccountClose200JSONResponse MarginAccount
+
+func (response PostAdvancedMarginAccountClose200JSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginAccountClose400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccountClose403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccountClose404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginAccountClose409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginAccountClose409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginAccountCloseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrowRequestObject struct {
+	Params PostAdvancedMarginBorrowParams
+	Body   *PostAdvancedMarginBorrowJSONRequestBody
+}
+
+type PostAdvancedMarginBorrowResponseObject interface {
+	VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginBorrow200JSONResponse MarginLoanResult
+
+func (response PostAdvancedMarginBorrow200JSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginBorrow400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginBorrow422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginBorrow422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginBorrowResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCallsRequestObject struct {
+	Params GetAdvancedMarginCallsParams
+}
+
+type GetAdvancedMarginCallsResponseObject interface {
+	VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginCalls200JSONResponse MarginCallPage
+
+func (response GetAdvancedMarginCalls200JSONResponse) VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCalls400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginCalls400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCalls403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginCalls403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCasesRequestObject struct {
+	Params GetAdvancedMarginCasesParams
+}
+
+type GetAdvancedMarginCasesResponseObject interface {
+	VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginCases200JSONResponse MarginCasePage
+
+func (response GetAdvancedMarginCases200JSONResponse) VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCases400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginCases400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCases403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginCases403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCasesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCasesMarginCaseIdRequestObject struct {
+	MarginCaseId UUID `json:"marginCaseId"`
+}
+
+type GetAdvancedMarginCasesMarginCaseIdResponseObject interface {
+	VisitGetAdvancedMarginCasesMarginCaseIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginCasesMarginCaseId200JSONResponse MarginCaseDetail
+
+func (response GetAdvancedMarginCasesMarginCaseId200JSONResponse) VisitGetAdvancedMarginCasesMarginCaseIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginCasesMarginCaseId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginCasesMarginCaseId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginCasesMarginCaseIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPostRequestObject struct {
+	Params PostAdvancedMarginCollateralPostParams
+	Body   *PostAdvancedMarginCollateralPostJSONRequestBody
+}
+
+type PostAdvancedMarginCollateralPostResponseObject interface {
+	VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginCollateralPost200JSONResponse MarginCollateralResult
+
+func (response PostAdvancedMarginCollateralPost200JSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginCollateralPost400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralPost422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralPost422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralPostResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralReleaseRequestObject struct {
+	Params PostAdvancedMarginCollateralReleaseParams
+	Body   *PostAdvancedMarginCollateralReleaseJSONRequestBody
+}
+
+type PostAdvancedMarginCollateralReleaseResponseObject interface {
+	VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginCollateralRelease200JSONResponse MarginCollateralResult
+
+func (response PostAdvancedMarginCollateralRelease200JSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginCollateralRelease400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginCollateralRelease422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginCollateralRelease422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginCollateralReleaseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuysRequestObject struct {
+	Params PostAdvancedMarginLeveragedBuysParams
+	Body   *PostAdvancedMarginLeveragedBuysJSONRequestBody
+}
+
+type PostAdvancedMarginLeveragedBuysResponseObject interface {
+	VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginLeveragedBuys200JSONResponse MarginLeveragedBuyResult
+
+func (response PostAdvancedMarginLeveragedBuys200JSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginLeveragedBuys400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginLeveragedBuys422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginLeveragedBuys422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginLeveragedBuysResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsCallsRequestObject struct {
+	Params GetAdvancedMarginOpsCallsParams
+}
+
+type GetAdvancedMarginOpsCallsResponseObject interface {
+	VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginOpsCalls200JSONResponse MarginCallPage
+
+func (response GetAdvancedMarginOpsCalls200JSONResponse) VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsCalls400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginOpsCalls400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsCalls403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginOpsCalls403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginOpsCallsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject struct {
+	MarginCaseId UUID `json:"marginCaseId"`
+	Params       PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponseObject interface {
+	VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit200JSONResponse MarginDeficitResult
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit200JSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeedRequestObject struct {
+	Params PostAdvancedMarginOpsFacilitiesSeedParams
+	Body   *PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody
+}
+
+type PostAdvancedMarginOpsFacilitiesSeedResponseObject interface {
+	VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed200JSONResponse MarginFacilities
+
+func (response PostAdvancedMarginOpsFacilitiesSeed200JSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsFacilitiesSeed400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsFacilitiesSeed403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsFacilitiesSeed409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsFacilitiesSeed409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidationsRequestObject struct {
+	Params PostAdvancedMarginOpsLiquidationsParams
+	Body   *PostAdvancedMarginOpsLiquidationsJSONRequestBody
+}
+
+type PostAdvancedMarginOpsLiquidationsResponseObject interface {
+	VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsLiquidations200JSONResponse MarginLiquidationResult
+
+func (response PostAdvancedMarginOpsLiquidations200JSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsLiquidations400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsLiquidations403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsLiquidations404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsLiquidations409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsLiquidations409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsLiquidationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsMarkToMarketRequestObject struct {
+	Params PostAdvancedMarginOpsMarkToMarketParams
+	Body   *PostAdvancedMarginOpsMarkToMarketJSONRequestBody
+}
+
+type PostAdvancedMarginOpsMarkToMarketResponseObject interface {
+	VisitPostAdvancedMarginOpsMarkToMarketResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsMarkToMarket200JSONResponse MarginMarkToMarketResult
+
+func (response PostAdvancedMarginOpsMarkToMarket200JSONResponse) VisitPostAdvancedMarginOpsMarkToMarketResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsMarkToMarket403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsMarkToMarket403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsMarkToMarketResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsQueueRequestObject struct {
+	Params GetAdvancedMarginOpsQueueParams
+}
+
+type GetAdvancedMarginOpsQueueResponseObject interface {
+	VisitGetAdvancedMarginOpsQueueResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginOpsQueue200JSONResponse MarginQueue
+
+func (response GetAdvancedMarginOpsQueue200JSONResponse) VisitGetAdvancedMarginOpsQueueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginOpsQueue403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginOpsQueue403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginOpsQueueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsQueueRunRequestObject struct {
+	Params PostAdvancedMarginOpsQueueRunParams
+	Body   *PostAdvancedMarginOpsQueueRunJSONRequestBody
+}
+
+type PostAdvancedMarginOpsQueueRunResponseObject interface {
+	VisitPostAdvancedMarginOpsQueueRunResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsQueueRun200JSONResponse MarginQueueRunResult
+
+func (response PostAdvancedMarginOpsQueueRun200JSONResponse) VisitPostAdvancedMarginOpsQueueRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsQueueRun403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsQueueRun403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsQueueRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRunsRequestObject struct {
+	Params PostAdvancedMarginOpsStressRunsParams
+	Body   *PostAdvancedMarginOpsStressRunsJSONRequestBody
+}
+
+type PostAdvancedMarginOpsStressRunsResponseObject interface {
+	VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginOpsStressRuns200JSONResponse MarginStressRun
+
+func (response PostAdvancedMarginOpsStressRuns200JSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginOpsStressRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsStressRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginOpsStressRuns404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginOpsStressRuns404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginOpsStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepayRequestObject struct {
+	Params PostAdvancedMarginRepayParams
+	Body   *PostAdvancedMarginRepayJSONRequestBody
+}
+
+type PostAdvancedMarginRepayResponseObject interface {
+	VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginRepay200JSONResponse MarginLoanResult
+
+func (response PostAdvancedMarginRepay200JSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginRepay400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginRepay422ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginRepay422ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginRepayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRunsRequestObject struct {
+	Params GetAdvancedMarginStressRunsParams
+}
+
+type GetAdvancedMarginStressRunsResponseObject interface {
+	VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginStressRuns200JSONResponse MarginStressRunPage
+
+func (response GetAdvancedMarginStressRuns200JSONResponse) VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRunsRequestObject struct {
+	Params PostAdvancedMarginStressRunsParams
+	Body   *PostAdvancedMarginStressRunsJSONRequestBody
+}
+
+type PostAdvancedMarginStressRunsResponseObject interface {
+	VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error
+}
+
+type PostAdvancedMarginStressRuns200JSONResponse MarginStressRun
+
+func (response PostAdvancedMarginStressRuns200JSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PostAdvancedMarginStressRuns400ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginStressRuns403ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns404ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginStressRuns404ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PostAdvancedMarginStressRuns409ApplicationProblemPlusJSONResponse Problem
+
+func (response PostAdvancedMarginStressRuns409ApplicationProblemPlusJSONResponse) VisitPostAdvancedMarginStressRunsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunIdRequestObject struct {
+	MarginStressRunId UUID `json:"marginStressRunId"`
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunIdResponseObject interface {
+	VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w http.ResponseWriter) error
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunId200JSONResponse MarginStressRun
+
+func (response GetAdvancedMarginStressRunsMarginStressRunId200JSONResponse) VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAdvancedMarginStressRunsMarginStressRunId404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetAdvancedMarginStressRunsMarginStressRunId404ApplicationProblemPlusJSONResponse) VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -11653,6 +15893,72 @@ type StrictServerInterface interface {
 	// GetAdvancedIntentsIntentId One economic intent
 	// (GET /advanced/intents/{intentId})
 	GetAdvancedIntentsIntentId(ctx context.Context, request GetAdvancedIntentsIntentIdRequestObject) (GetAdvancedIntentsIntentIdResponseObject, error)
+	// GetAdvancedMarginAccount An account's margin account, evaluated by the margin engine at the instant of the read
+	// (GET /advanced/margin/account)
+	GetAdvancedMarginAccount(ctx context.Context, request GetAdvancedMarginAccountRequestObject) (GetAdvancedMarginAccountResponseObject, error)
+	// PostAdvancedMarginAccount Open a margin account in PAPER or SANDBOX mode with the sandbox dollar as numeraire
+	// (POST /advanced/margin/account)
+	PostAdvancedMarginAccount(ctx context.Context, request PostAdvancedMarginAccountRequestObject) (PostAdvancedMarginAccountResponseObject, error)
+	// PostAdvancedMarginAccountClose Close a margin account that holds nothing and owes the lending pool nothing
+	// (POST /advanced/margin/account/close)
+	PostAdvancedMarginAccountClose(ctx context.Context, request PostAdvancedMarginAccountCloseRequestObject) (PostAdvancedMarginAccountCloseResponseObject, error)
+	// PostAdvancedMarginBorrow Borrow the numeraire from the lending pool into the wallet (MARGIN_BORROW; Risk Kernel V2 decides)
+	// (POST /advanced/margin/borrow)
+	PostAdvancedMarginBorrow(ctx context.Context, request PostAdvancedMarginBorrowRequestObject) (PostAdvancedMarginBorrowResponseObject, error)
+	// GetAdvancedMarginCalls Margin calls of an account, newest first
+	// (GET /advanced/margin/calls)
+	GetAdvancedMarginCalls(ctx context.Context, request GetAdvancedMarginCallsRequestObject) (GetAdvancedMarginCallsResponseObject, error)
+	// GetAdvancedMarginCases Liquidation cases of an account, newest first
+	// (GET /advanced/margin/cases)
+	GetAdvancedMarginCases(ctx context.Context, request GetAdvancedMarginCasesRequestObject) (GetAdvancedMarginCasesResponseObject, error)
+	// GetAdvancedMarginCasesMarginCaseId One liquidation case with every step it executed
+	// (GET /advanced/margin/cases/{marginCaseId})
+	GetAdvancedMarginCasesMarginCaseId(ctx context.Context, request GetAdvancedMarginCasesMarginCaseIdRequestObject) (GetAdvancedMarginCasesMarginCaseIdResponseObject, error)
+	// PostAdvancedMarginCollateralPost Move collateral from the wallet into the margin account (MARGIN_COLLATERAL_MOVE)
+	// (POST /advanced/margin/collateral/post)
+	PostAdvancedMarginCollateralPost(ctx context.Context, request PostAdvancedMarginCollateralPostRequestObject) (PostAdvancedMarginCollateralPostResponseObject, error)
+	// PostAdvancedMarginCollateralRelease Release collateral from the margin account to the wallet (Risk Kernel V2 decides)
+	// (POST /advanced/margin/collateral/release)
+	PostAdvancedMarginCollateralRelease(ctx context.Context, request PostAdvancedMarginCollateralReleaseRequestObject) (PostAdvancedMarginCollateralReleaseResponseObject, error)
+	// PostAdvancedMarginLeveragedBuys Buy an asset entirely on margin at mark plus the disclosed paper slippage (Risk Kernel V2 decides)
+	// (POST /advanced/margin/leveraged-buys)
+	PostAdvancedMarginLeveragedBuys(ctx context.Context, request PostAdvancedMarginLeveragedBuysRequestObject) (PostAdvancedMarginLeveragedBuysResponseObject, error)
+	// GetAdvancedMarginOpsCalls Operator — margin calls across every account, newest first
+	// (GET /advanced/margin/ops/calls)
+	GetAdvancedMarginOpsCalls(ctx context.Context, request GetAdvancedMarginOpsCallsRequestObject) (GetAdvancedMarginOpsCallsResponseObject, error)
+	// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit Operator — have the insurance fund cover a bankrupt case's deficit (DEFICIT_COVERAGE; step-up)
+	// (POST /advanced/margin/ops/cases/{marginCaseId}/cover-deficit)
+	PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(ctx context.Context, request PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject) (PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponseObject, error)
+	// PostAdvancedMarginOpsFacilitiesSeed Operator — fund the lending pool and the insurance fund in sandbox dollars (FACILITY_FUNDING; step-up)
+	// (POST /advanced/margin/ops/facilities/seed)
+	PostAdvancedMarginOpsFacilitiesSeed(ctx context.Context, request PostAdvancedMarginOpsFacilitiesSeedRequestObject) (PostAdvancedMarginOpsFacilitiesSeedResponseObject, error)
+	// PostAdvancedMarginOpsLiquidations Operator — execute at most one deterministic liquidation step of one account (step-up)
+	// (POST /advanced/margin/ops/liquidations)
+	PostAdvancedMarginOpsLiquidations(ctx context.Context, request PostAdvancedMarginOpsLiquidationsRequestObject) (PostAdvancedMarginOpsLiquidationsResponseObject, error)
+	// PostAdvancedMarginOpsMarkToMarket Operator — evaluate open margin accounts, moving them between NORMAL, WARNING and MARGIN_CALL
+	// (POST /advanced/margin/ops/mark-to-market)
+	PostAdvancedMarginOpsMarkToMarket(ctx context.Context, request PostAdvancedMarginOpsMarkToMarketRequestObject) (PostAdvancedMarginOpsMarkToMarketResponseObject, error)
+	// GetAdvancedMarginOpsQueue Operator — accounts in MARGIN_CALL or LIQUIDATING under the service's policy, with their live evaluation
+	// (GET /advanced/margin/ops/queue)
+	GetAdvancedMarginOpsQueue(ctx context.Context, request GetAdvancedMarginOpsQueueRequestObject) (GetAdvancedMarginOpsQueueResponseObject, error)
+	// PostAdvancedMarginOpsQueueRun Operator — run one liquidation step for each of the most under-margined accounts (step-up)
+	// (POST /advanced/margin/ops/queue/run)
+	PostAdvancedMarginOpsQueueRun(ctx context.Context, request PostAdvancedMarginOpsQueueRunRequestObject) (PostAdvancedMarginOpsQueueRunResponseObject, error)
+	// PostAdvancedMarginOpsStressRuns Operator — run every stress scenario against any account's margin account and store the report
+	// (POST /advanced/margin/ops/stress-runs)
+	PostAdvancedMarginOpsStressRuns(ctx context.Context, request PostAdvancedMarginOpsStressRunsRequestObject) (PostAdvancedMarginOpsStressRunsResponseObject, error)
+	// PostAdvancedMarginRepay Repay loans from the wallet, interest first and oldest lot first (MARGIN_REPAY)
+	// (POST /advanced/margin/repay)
+	PostAdvancedMarginRepay(ctx context.Context, request PostAdvancedMarginRepayRequestObject) (PostAdvancedMarginRepayResponseObject, error)
+	// GetAdvancedMarginStressRuns Stored stress runs of an account, newest first
+	// (GET /advanced/margin/stress-runs)
+	GetAdvancedMarginStressRuns(ctx context.Context, request GetAdvancedMarginStressRunsRequestObject) (GetAdvancedMarginStressRunsResponseObject, error)
+	// PostAdvancedMarginStressRuns Run every stress scenario against your margin account and store the report (moves no value)
+	// (POST /advanced/margin/stress-runs)
+	PostAdvancedMarginStressRuns(ctx context.Context, request PostAdvancedMarginStressRunsRequestObject) (PostAdvancedMarginStressRunsResponseObject, error)
+	// GetAdvancedMarginStressRunsMarginStressRunId One stored stress run with every scenario's result
+	// (GET /advanced/margin/stress-runs/{marginStressRunId})
+	GetAdvancedMarginStressRunsMarginStressRunId(ctx context.Context, request GetAdvancedMarginStressRunsMarginStressRunIdRequestObject) (GetAdvancedMarginStressRunsMarginStressRunIdResponseObject, error)
 	// GetAdvancedRiskDecisions Risk Kernel V2 decisions about an account's intents, newest first
 	// (GET /advanced/risk/decisions)
 	GetAdvancedRiskDecisions(ctx context.Context, request GetAdvancedRiskDecisionsRequestObject) (GetAdvancedRiskDecisionsResponseObject, error)
@@ -12589,6 +16895,676 @@ func (sh *strictHandler) GetAdvancedIntentsIntentId(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetAdvancedIntentsIntentIdResponseObject); ok {
 		if err := validResponse.VisitGetAdvancedIntentsIntentIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginAccount operation middleware
+func (sh *strictHandler) GetAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginAccountParams) {
+	var request GetAdvancedMarginAccountRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginAccount(ctx, request.(GetAdvancedMarginAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginAccountResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginAccount operation middleware
+func (sh *strictHandler) PostAdvancedMarginAccount(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountParams) {
+	var request PostAdvancedMarginAccountRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginAccountJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginAccount(ctx, request.(PostAdvancedMarginAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginAccountResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginAccountClose operation middleware
+func (sh *strictHandler) PostAdvancedMarginAccountClose(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginAccountCloseParams) {
+	var request PostAdvancedMarginAccountCloseRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginAccountCloseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginAccountClose(ctx, request.(PostAdvancedMarginAccountCloseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginAccountClose")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginAccountCloseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginAccountCloseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginBorrow operation middleware
+func (sh *strictHandler) PostAdvancedMarginBorrow(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginBorrowParams) {
+	var request PostAdvancedMarginBorrowRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginBorrowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginBorrow(ctx, request.(PostAdvancedMarginBorrowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginBorrow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginBorrowResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginBorrowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginCalls operation middleware
+func (sh *strictHandler) GetAdvancedMarginCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCallsParams) {
+	var request GetAdvancedMarginCallsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginCalls(ctx, request.(GetAdvancedMarginCallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginCalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginCallsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginCallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginCases operation middleware
+func (sh *strictHandler) GetAdvancedMarginCases(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginCasesParams) {
+	var request GetAdvancedMarginCasesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginCases(ctx, request.(GetAdvancedMarginCasesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginCases")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginCasesResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginCasesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginCasesMarginCaseId operation middleware
+func (sh *strictHandler) GetAdvancedMarginCasesMarginCaseId(w http.ResponseWriter, r *http.Request, marginCaseId UUID) {
+	var request GetAdvancedMarginCasesMarginCaseIdRequestObject
+
+	request.MarginCaseId = marginCaseId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginCasesMarginCaseId(ctx, request.(GetAdvancedMarginCasesMarginCaseIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginCasesMarginCaseId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginCasesMarginCaseIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginCasesMarginCaseIdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginCollateralPost operation middleware
+func (sh *strictHandler) PostAdvancedMarginCollateralPost(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralPostParams) {
+	var request PostAdvancedMarginCollateralPostRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginCollateralPostJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginCollateralPost(ctx, request.(PostAdvancedMarginCollateralPostRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginCollateralPost")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginCollateralPostResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginCollateralPostResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginCollateralRelease operation middleware
+func (sh *strictHandler) PostAdvancedMarginCollateralRelease(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginCollateralReleaseParams) {
+	var request PostAdvancedMarginCollateralReleaseRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginCollateralReleaseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginCollateralRelease(ctx, request.(PostAdvancedMarginCollateralReleaseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginCollateralRelease")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginCollateralReleaseResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginCollateralReleaseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginLeveragedBuys operation middleware
+func (sh *strictHandler) PostAdvancedMarginLeveragedBuys(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginLeveragedBuysParams) {
+	var request PostAdvancedMarginLeveragedBuysRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginLeveragedBuysJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginLeveragedBuys(ctx, request.(PostAdvancedMarginLeveragedBuysRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginLeveragedBuys")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginLeveragedBuysResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginLeveragedBuysResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginOpsCalls operation middleware
+func (sh *strictHandler) GetAdvancedMarginOpsCalls(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsCallsParams) {
+	var request GetAdvancedMarginOpsCallsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginOpsCalls(ctx, request.(GetAdvancedMarginOpsCallsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginOpsCalls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginOpsCallsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginOpsCallsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(w http.ResponseWriter, r *http.Request, marginCaseId UUID, params PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitParams) {
+	var request PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject
+
+	request.MarginCaseId = marginCaseId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit(ctx, request.(PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsCasesMarginCaseIdCoverDeficitResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsFacilitiesSeed operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsFacilitiesSeed(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsFacilitiesSeedParams) {
+	var request PostAdvancedMarginOpsFacilitiesSeedRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsFacilitiesSeedJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsFacilitiesSeed(ctx, request.(PostAdvancedMarginOpsFacilitiesSeedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsFacilitiesSeed")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsFacilitiesSeedResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsFacilitiesSeedResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsLiquidations operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsLiquidations(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsLiquidationsParams) {
+	var request PostAdvancedMarginOpsLiquidationsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsLiquidationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsLiquidations(ctx, request.(PostAdvancedMarginOpsLiquidationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsLiquidations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsLiquidationsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsLiquidationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsMarkToMarket operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsMarkToMarket(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsMarkToMarketParams) {
+	var request PostAdvancedMarginOpsMarkToMarketRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsMarkToMarketJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsMarkToMarket(ctx, request.(PostAdvancedMarginOpsMarkToMarketRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsMarkToMarket")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsMarkToMarketResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsMarkToMarketResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginOpsQueue operation middleware
+func (sh *strictHandler) GetAdvancedMarginOpsQueue(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginOpsQueueParams) {
+	var request GetAdvancedMarginOpsQueueRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginOpsQueue(ctx, request.(GetAdvancedMarginOpsQueueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginOpsQueue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginOpsQueueResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginOpsQueueResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsQueueRun operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsQueueRun(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsQueueRunParams) {
+	var request PostAdvancedMarginOpsQueueRunRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsQueueRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsQueueRun(ctx, request.(PostAdvancedMarginOpsQueueRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsQueueRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsQueueRunResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsQueueRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginOpsStressRuns operation middleware
+func (sh *strictHandler) PostAdvancedMarginOpsStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginOpsStressRunsParams) {
+	var request PostAdvancedMarginOpsStressRunsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginOpsStressRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginOpsStressRuns(ctx, request.(PostAdvancedMarginOpsStressRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginOpsStressRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginOpsStressRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginOpsStressRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginRepay operation middleware
+func (sh *strictHandler) PostAdvancedMarginRepay(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginRepayParams) {
+	var request PostAdvancedMarginRepayRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginRepayJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginRepay(ctx, request.(PostAdvancedMarginRepayRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginRepay")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginRepayResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginRepayResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginStressRuns operation middleware
+func (sh *strictHandler) GetAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params GetAdvancedMarginStressRunsParams) {
+	var request GetAdvancedMarginStressRunsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginStressRuns(ctx, request.(GetAdvancedMarginStressRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginStressRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginStressRunsResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginStressRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PostAdvancedMarginStressRuns operation middleware
+func (sh *strictHandler) PostAdvancedMarginStressRuns(w http.ResponseWriter, r *http.Request, params PostAdvancedMarginStressRunsParams) {
+	var request PostAdvancedMarginStressRunsRequestObject
+
+	request.Params = params
+
+	var body PostAdvancedMarginStressRunsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PostAdvancedMarginStressRuns(ctx, request.(PostAdvancedMarginStressRunsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostAdvancedMarginStressRuns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PostAdvancedMarginStressRunsResponseObject); ok {
+		if err := validResponse.VisitPostAdvancedMarginStressRunsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAdvancedMarginStressRunsMarginStressRunId operation middleware
+func (sh *strictHandler) GetAdvancedMarginStressRunsMarginStressRunId(w http.ResponseWriter, r *http.Request, marginStressRunId UUID) {
+	var request GetAdvancedMarginStressRunsMarginStressRunIdRequestObject
+
+	request.MarginStressRunId = marginStressRunId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAdvancedMarginStressRunsMarginStressRunId(ctx, request.(GetAdvancedMarginStressRunsMarginStressRunIdRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAdvancedMarginStressRunsMarginStressRunId")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAdvancedMarginStressRunsMarginStressRunIdResponseObject); ok {
+		if err := validResponse.VisitGetAdvancedMarginStressRunsMarginStressRunIdResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -13948,308 +18924,397 @@ func (sh *strictHandler) PostWithdrawals(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

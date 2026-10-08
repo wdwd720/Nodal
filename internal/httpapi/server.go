@@ -68,6 +68,9 @@ type Ports struct {
 	Advanced AdvancedCorePort
 
 	// >>> advanced:margin port
+	// Margin serves margin, leverage, borrowing and liquidation of simulated
+	// positions (internal/margin); every figure is value domain SIMULATED.
+	Margin MarginPort
 
 	// >>> advanced:derivatives port
 
