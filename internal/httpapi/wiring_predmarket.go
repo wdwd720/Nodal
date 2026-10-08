@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -26,7 +25,8 @@ type (
 
 // newPredmarketAdapter serves PredictionMarketsPort over the real service.
 // The oracle is optional: a deployment without one answers
-// PROVIDER_UNAVAILABLE wherever an oracle is needed.
+// PROVIDER_UNAVAILABLE wherever an oracle is needed. The service holds the
+// same sandbox oracle and stores what it observes; the adapter only names it.
 func newPredmarketAdapter(d WireDeps) PredictionMarketsPort {
 	repo := d.Assets
 	if repo == nil {
@@ -145,6 +145,9 @@ func (a predmarketAdapter) Market(ctx context.Context, id predmarket.MarketID) (
 		if v.Disputes, err = a.svc.Disputes(ctx, tx, id); err != nil {
 			return err
 		}
+		if v.VoidProposals, err = a.svc.VoidProposals(ctx, tx, id); err != nil {
+			return err
+		}
 		st, found, err := a.svc.SettlementOf(ctx, tx, id)
 		if err != nil {
 			return err
@@ -207,6 +210,13 @@ func (a predmarketAdapter) Positions(ctx context.Context, id predmarket.MarketID
 			if p.AccountID == account {
 				v.Positions = append(v.Positions, p)
 			}
+		}
+		held, found, err := a.svc.HeldPayoutOf(ctx, tx, id, account)
+		if err != nil {
+			return err
+		}
+		if found {
+			v.HeldPayout = &held
 		}
 		return nil
 	})
@@ -303,30 +313,25 @@ func (a predmarketAdapter) RequestResolution(ctx context.Context, id predmarket.
 	})
 }
 
-// Observe tells the sandbox oracle what it saw for a market and returns the
-// report it signs for that observation. The market must exist; whether the
-// outcome is one of its outcomes, and whether the observation is timely, is
-// decided by the service when a resolution verifies the report.
-func (a predmarketAdapter) Observe(ctx context.Context, id predmarket.MarketID, outcome string, observedAt time.Time, evidence []byte) (predmarket.OracleReport, error) {
-	if a.oracle == nil {
-		return predmarket.OracleReport{}, errNoOracle()
-	}
-	if _, err := a.svc.Get(ctx, a.db, id); err != nil {
-		return predmarket.OracleReport{}, err
-	}
-	if err := a.oracle.Observe(id, outcome, observedAt, evidence); err != nil {
-		return predmarket.OracleReport{}, err
-	}
-	return a.oracle.Sign(predmarket.OracleReport{
-		MarketID: id, Outcome: outcome, ObservedAt: observedAt, Evidence: append([]byte(nil), evidence...),
+// Observe records, as the requesting operator, what the sandbox oracle saw
+// for a market: the service signs it and stores it, with its audit event, in
+// this transaction, so every replica resolves from the same observation.
+func (a predmarketAdapter) Observe(ctx context.Context, req predmarket.ObservationRequest) (predmarket.ObservationResult, error) {
+	var out predmarket.ObservationResult
+	err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = a.svc.RecordObservation(ctx, tx, req)
+		return err
 	})
+	return out, err
 }
 
-// Resolve fetches the configured oracle's report -- the external step, outside
-// any transaction -- and hands it to the service, which verifies it against
-// the market's registered key before accepting it.
+// Resolve fetches the market's report -- the latest stored sandbox observation,
+// verified, or an external oracle's, which is asked outside any transaction --
+// and hands it to the service, which verifies it against the market's
+// registered key again before accepting it.
 func (a predmarketAdapter) Resolve(ctx context.Context, cmd PredictionResolveCommand) (PredictionResolveView, error) {
-	report, err := a.svc.FetchReport(ctx, cmd.MarketID)
+	report, err := a.svc.FetchReport(ctx, a.db, cmd.MarketID)
 	if err != nil {
 		return PredictionResolveView{}, err
 	}
@@ -373,10 +378,44 @@ func (a predmarketAdapter) Uphold(ctx context.Context, req predmarket.RulingRequ
 	return v, err
 }
 
-func (a predmarketAdapter) Void(ctx context.Context, req predmarket.VoidRequest) (PredictionSettleView, error) {
-	return a.settlement(ctx, func(ctx context.Context, tx pgx.Tx) (predmarket.SettleResult, error) {
-		return a.svc.Void(ctx, tx, req)
+// ProposeVoid records one operator's proposal to void a market; nothing is
+// refunded until another operator approves it.
+func (a predmarketAdapter) ProposeVoid(ctx context.Context, req predmarket.VoidProposalRequest) (PredictionVoidProposalView, error) {
+	var v PredictionVoidProposalView
+	err := a.write(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		p, err := a.svc.ProposeVoid(ctx, tx, req)
+		if err != nil {
+			return err
+		}
+		v.Proposal = p
+		m, err := a.svc.Get(ctx, tx, req.MarketID)
+		if err != nil {
+			return err
+		}
+		v.Record, err = a.record(ctx, tx, m)
+		return err
 	})
+	return v, err
+}
+
+// ApproveVoid approves a void proposal, which voids the market and refunds
+// its shares in the same transaction.
+func (a predmarketAdapter) ApproveVoid(ctx context.Context, req predmarket.VoidApprovalRequest) (PredictionSettleView, error) {
+	return a.settlement(ctx, func(ctx context.Context, tx pgx.Tx) (predmarket.SettleResult, error) {
+		return a.svc.ApproveVoid(ctx, tx, req)
+	})
+}
+
+// Claim delivers a held payout to its holder. Like an issuance, a refused
+// claim keeps its REJECTED intent (and risk decision) on record.
+func (a predmarketAdapter) Claim(ctx context.Context, req predmarket.ClaimRequest) (predmarket.ClaimResult, error) {
+	var out predmarket.ClaimResult
+	err := a.keepingRefusal(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = a.svc.ClaimHeldPayout(ctx, tx, req)
+		return err
+	})
+	return out, err
 }
 
 func (a predmarketAdapter) Settle(ctx context.Context, req predmarket.SettleRequest) (PredictionSettleView, error) {
@@ -392,7 +431,7 @@ func (a predmarketAdapter) settlement(ctx context.Context, fn func(ctx context.C
 		if err != nil {
 			return err
 		}
-		v.Settlement, v.Plan, v.Lines, v.Replay = res.Settlement, res.Plan, res.Lines, res.Replay
+		v.Settlement, v.Plan, v.Lines, v.Held, v.Replay = res.Settlement, res.Plan, res.Lines, res.Held, res.Replay
 		v.Record, err = a.record(ctx, tx, res.Market)
 		return err
 	})

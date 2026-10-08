@@ -320,10 +320,13 @@ func TestIntegration_ConcurrentSettlementPostsOnce(t *testing.T) {
 	assert.Equal(t, errs.CodeInvalidStateTransition, errs.CodeOf(err))
 	assert.Zero(t, f.count(`SELECT count(*) FROM derivative_positions WHERE instrument_id = $1 AND status = 'OPEN'`, fut))
 
-	// And the database refuses a second settlement row outright.
+	// And the database refuses a second settlement row outright, even one the
+	// expiry rule fully explains.
+	var mark uuid.UUID
+	require.NoError(t, testDB.QueryRow(f.ctx, `SELECT mark_id FROM derivative_settlements WHERE instrument_id = $1`, fut).Scan(&mark))
 	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO derivative_settlements (id, instrument_id, kind, settlement_mantissa, price_scale, price_source, positions, settled_at)
-			VALUES ($1,$2,'FUTURE',1,2,'raw',0,now())`, uuid.New(), fut)
+		_, err := tx.Exec(ctx, `INSERT INTO derivative_settlements (id, instrument_id, kind, settlement_mantissa, price_scale, price_source,
+			price_rule, mark_id, positions, settled_at) VALUES ($1,$2,'FUTURE',6600000,2,'raw','EXPIRY_MARK',$3,0,now())`, uuid.New(), fut, mark)
 		return err
 	})
 	require.Error(t, err)
@@ -372,25 +375,4 @@ func TestIntegration_AnUnpayableObligationIsCollectedFromMarginThenRecordedAsASh
 	rep := f.reconcile()
 	assert.True(t, rep.Matched, "%+v", rep)
 	assert.Equal(t, "210250000", rep.RegisterShortfall.String())
-}
-
-// settlementPriceOnTick checks a settlement price given explicitly.
-func TestIntegration_SettlementPriceMustBeOnTheTickGrid(t *testing.T) {
-	f := newFixture(t)
-	expiry := start.Add(time.Hour)
-	fut := f.future(expiry)
-	f.clk.Set(expiry)
-	off := money.QuantityFromInt64(6_600_010)
-	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		_, err := f.svc.SettleExpiry(ctx, tx, SettleRequest{InstrumentID: fut, Price: &off, PriceSource: "operator"})
-		return err
-	})
-	require.Error(t, err)
-	assert.Equal(t, errs.CodeValidationFailed, errs.CodeOf(err))
-	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
-		_, err := f.svc.SettleExpiry(ctx, tx, SettleRequest{InstrumentID: fut})
-		return err
-	})
-	require.Error(t, err, "no mark at expiry: never settled on a stale price")
-	assert.Equal(t, errs.CodeStaleMarketData, errs.CodeOf(err))
 }

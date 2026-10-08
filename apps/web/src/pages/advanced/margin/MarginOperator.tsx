@@ -2,7 +2,8 @@
  * MARGIN — operator: the liquidation queue (every account in a margin call
  * or being liquidated, with its live evaluation), the commands that run it,
  * marking the book to market, funding the lending pool and the insurance
- * fund, and every margin call across accounts.
+ * fund, every margin call across accounts, and the manual review queue where
+ * two operators resolve a case a person owns.
  *
  * These are sandbox:operate commands; those that move simulated value need a
  * recent strong sign-in. A principal without the permission is refused by the
@@ -48,6 +49,7 @@ import { QUANTITY_PATTERN } from "../../../lib/money.ts";
 import { CursorPager, ScrollTable } from "../shared.tsx";
 import { CallRow } from "./MarginHistory.tsx";
 import { CommandFlow, Failures, MarginNav, caseHref, type Prepared } from "./parts.tsx";
+import { ReviewQueuePanel } from "./Reviews.tsx";
 
 /** Batch sizes an operator may choose; absent means the service's own bound. */
 const BATCH_CHOICES: readonly number[] = [1, 5, 10, 25, 50, 100];
@@ -63,6 +65,7 @@ export function MarginOperatorPage(): ReactNode {
       <SimulatedNotice />
       <MarginNav />
       <QueuePanel assets={registry} />
+      <ReviewQueuePanel />
       <RunQueuePanel />
       <LiquidatePanel />
       <MarkToMarketPanel />

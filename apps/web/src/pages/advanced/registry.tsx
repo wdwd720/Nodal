@@ -32,8 +32,10 @@ import { MarginSection } from "./margin/MarginSection.tsx";
 import { DerivativesSection } from "./derivatives/DerivativesSection.tsx";
 
 // >>> advanced:equities import
+import { EquitiesSection } from "./equities/EquitiesSection.tsx";
 
 // >>> advanced:orders import
+import { OrderBooksSection } from "./orders/OrderBooksSection.tsx";
 
 // >>> advanced:transfers import
 import { TransfersSection } from "./transfers/Transfers.tsx";
@@ -43,8 +45,10 @@ import { TreasurySection } from "./treasury/TreasurySection.tsx";
 import { FeesSection } from "./fees/FeesSection.tsx";
 
 // >>> advanced:stable import
+import { StableAssetsSection } from "./stable/StableSection.tsx";
 
 // >>> advanced:bridge import
+import { BridgeSection } from "./bridge/BridgeSection.tsx";
 
 // >>> advanced:predmarket import
 import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
@@ -55,6 +59,7 @@ import { StrategiesSection } from "./marketplace/StrategiesSection.tsx";
 // >>> advanced:delegation import
 
 // >>> advanced:operator import
+import { OperatorConsole } from "./operator/OperatorConsole.tsx";
 
 /** One section of the advanced area. A registry entry is a single object literal of this type. */
 export interface AdvancedSection {
@@ -119,8 +124,22 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:equities section
+  {
+    path: "equities",
+    title: "Equities",
+    description:
+      "Equities and ETFs in paper and sandbox mode: listings with the session in force, orders filled by a deterministic paper venue, every disclosed charge, T+1 settlement and corporate actions.",
+    element: <EquitiesSection />,
+  },
 
   // >>> advanced:orders section
+  {
+    path: "order-books",
+    title: "Order books",
+    description:
+      "The internal order books: disclosed fee schedules and crossing rule, depth, limit and market orders between accounts, the account's orders and trades, and each trade's audit proof.",
+    element: <OrderBooksSection />,
+  },
 
   // >>> advanced:transfers section
   {
@@ -148,8 +167,22 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:stable section
+  {
+    path: "stable-assets",
+    title: "Stable assets",
+    description:
+      "The platform's sandbox stable assets on a simulated chain: issuing and redeeming against a fully reserved policy in the sandbox dollar, the reserve and its coverage, signed reserve snapshots anyone can verify, and the operator's controls.",
+    element: <StableAssetsSection />,
+  },
 
   // >>> advanced:bridge section
+  {
+    path: "bridge",
+    title: "Bridge",
+    description:
+      "Simulated holdings by chain, value in flight between the simulated chains and the haircut it counts at, bridge routes and transfers with every leg's progress on both chains, the chains' state, and the operator's controls.",
+    element: <BridgeSection />,
+  },
 
   // >>> advanced:predmarket section
   {
@@ -172,4 +205,11 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:delegation section
 
   // >>> advanced:operator section
+  {
+    path: "operator",
+    title: "Operator console",
+    description:
+      "For operators: the dual-control items awaiting a second operator, the sandbox reference marks and their freshness, circuit breakers, capability gates, the liquidation queue, reconciliation and reserve results, the simulated chains, and each subsystem's operator page.",
+    element: <OperatorConsole />,
+  },
 ];

@@ -19,7 +19,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type Page, type Request, type Response } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page, type Request, type Response } from "@playwright/test";
 
 const NOTICE = "Simulated value — sandbox only";
 
@@ -429,4 +429,157 @@ test("the margin pages reflow at 390px without sideways scrolling", async ({ pag
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${path} does not scroll horizontally at 390px`).toBeLessThanOrEqual(1);
   }
+});
+
+/* --------------------------------------------------------------------------
+ * The covered deficit, and leaving MANUAL_REVIEW under dual control
+ * ------------------------------------------------------------------------ */
+
+/** A canonical id nobody holds: a random UUID stamped as version 7. */
+function unknownId(): string {
+  const v4 = randomUUID();
+  return `${v4.slice(0, 14)}7${v4.slice(15)}`;
+}
+
+/** A command as the browser would send it: same-origin, JSON, with a fresh idempotency key. */
+async function command(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
+  const response = await page.request.post(path, {
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "Sec-Fetch-Site": "same-origin" },
+    data: JSON.stringify(body),
+  });
+  return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
+}
+
+/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
+async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto("/v1/auth/login");
+  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
+  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
+  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  return { context, page };
+}
+
+interface DeficitBody {
+  readonly value_domain: string;
+  readonly margin_account_id?: string;
+  readonly deficit?: string;
+  readonly outstanding?: string;
+  readonly repayments: ReadonlyArray<{ readonly id: string }>;
+}
+
+test("the covered deficit is the backend's answer, and a repayment it cannot take is refused with its code", async ({ page }) => {
+  const id = await accountId(page);
+  const read = await page.request.get(`/v1/advanced/margin/deficit?account_id=${id}`);
+  expect(read.status()).toBe(200);
+  const deficit = (await read.json()) as DeficitBody;
+  expect(deficit.value_domain).toBe("SIMULATED");
+  if (deficit.margin_account_id === undefined) {
+    // No margin account: nothing is owed, nothing is shown as owed, and nothing can be repaid.
+    expect(deficit.deficit).toBeUndefined();
+    expect(deficit.repayments).toEqual([]);
+    const refused = await command(page, "/v1/advanced/margin/deficit/repayments", { account_id: id, amount: "1000000" });
+    expect([404, 409]).toContain(refused.status);
+    return;
+  }
+  await page.goto("/advanced/margin");
+  await settle(page);
+  const panel = page.getByRole("region", { name: "Covered deficit", exact: true });
+  await expect(panel).toBeVisible();
+  if (deficit.deficit === undefined) {
+    await expect(panel).toContainText("No covered deficit");
+    await expect(panel.getByRole("form", { name: "Repay the covered deficit" })).toHaveCount(0);
+    // Repaying a deficit the account does not owe is refused, and nothing moves.
+    const refused = await command(page, "/v1/advanced/margin/deficit/repayments", { account_id: id, amount: "1000000" });
+    expect(refused.status).toBe(409);
+    expect((refused.body as Problem).code).toBe("INVALID_STATE_TRANSITION");
+    return;
+  }
+  // A deficit is owed: the page shows the backend's figures, and more than is
+  // still owed is refused.
+  await expect(panel.locator('[data-field="deficit-outstanding"]')).toBeVisible();
+  for (const repayment of deficit.repayments) {
+    await expect(panel.locator(`[data-repayment="${repayment.id}"]`)).toBeVisible();
+  }
+  const beyond = (BigInt(deficit.outstanding ?? "0") + 1n).toString();
+  const refused = await command(page, "/v1/advanced/margin/deficit/repayments", { account_id: id, amount: beyond });
+  expect(refused.status).toBe(400);
+  expect((refused.body as Problem).code).toBe("VALIDATION_FAILED");
+});
+
+test("a customer is refused the review queue and every resolution command, with the code on screen", async ({ page }) => {
+  const reviews = await page.request.get("/v1/advanced/margin/ops/reviews");
+  expect(reviews.status(), "a customer holds no sandbox:operate").toBe(403);
+  const propose = await command(page, `/v1/advanced/margin/ops/cases/${unknownId()}/resolutions`, {
+    outcome: "RESUME",
+    reason: "a customer may not propose",
+  });
+  expect(propose.status).toBe(403);
+  const decide = await command(page, `/v1/advanced/margin/ops/resolutions/${unknownId()}/decision`, {
+    decision: "APPROVED",
+    reason: "a customer may not decide",
+  });
+  expect(decide.status).toBe(403);
+  await page.goto("/advanced/margin/operator");
+  await settle(page);
+  await expect(
+    page.getByRole("region", { name: "Manual review queue", exact: true }).locator(".explain-meta"),
+  ).toContainText(`code ${((await reviews.json()) as Problem).code}`);
+});
+
+test("an operator reads the review queue, and a resolution for a case that is not in review is refused", async ({
+  page,
+  browser,
+}) => {
+  const customerAccount = await accountId(page);
+  const admin = await signIn(browser, "admin", true);
+  const queue = await admin.page.request.get("/v1/advanced/margin/ops/reviews");
+  expect(queue.status()).toBe(200);
+  const body = (await queue.json()) as { value_domain: string; items: Array<{ case: { id: string } }> };
+  expect(body.value_domain).toBe("SIMULATED");
+  await admin.page.goto("/advanced/margin/operator");
+  await settle(admin.page);
+  const region = admin.page.getByRole("region", { name: "Manual review queue", exact: true });
+  if (body.items.length === 0) {
+    await expect(region).toContainText("No case in manual review");
+  } else {
+    for (const item of body.items) {
+      await expect(region.locator(`[data-review-case="${item.case.id}"]`)).toBeVisible();
+    }
+  }
+
+  // An unknown case, and a case that is not in review, are refused.
+  const unknown = await command(admin.page, `/v1/advanced/margin/ops/cases/${unknownId()}/resolutions`, {
+    outcome: "RESUME",
+    reason: "end-to-end check of a refused proposal",
+  });
+  expect(unknown.status).toBe(404);
+  const cases = await admin.page.request.get(`/v1/advanced/margin/cases?account_id=${customerAccount}&limit=200`);
+  if (cases.ok()) {
+    const notInReview = ((await cases.json()) as { items: Array<{ id: string; status: string }> }).items.find(
+      (item) => item.status !== "MANUAL_REVIEW",
+    );
+    if (notInReview !== undefined) {
+      const refused = await command(admin.page, `/v1/advanced/margin/ops/cases/${notInReview.id}/resolutions`, {
+        outcome: "RESUME",
+        reason: "end-to-end check of a case that is not in review",
+      });
+      expect(refused.status).toBe(409);
+      expect((refused.body as Problem).code).toBe("INVALID_STATE_TRANSITION");
+    }
+  }
+  const undecided = await command(admin.page, `/v1/advanced/margin/ops/resolutions/${unknownId()}/decision`, {
+    decision: "REJECTED",
+    reason: "end-to-end check of an unknown resolution",
+  });
+  expect(undecided.status).toBe(404);
+  // A decision outside the declared set never reaches the service.
+  const malformed = await command(admin.page, `/v1/advanced/margin/ops/resolutions/${unknownId()}/decision`, {
+    decision: "MAYBE",
+    reason: "end-to-end check of a malformed decision",
+  });
+  expect(malformed.status).toBe(400);
+  await admin.context.close();
 });

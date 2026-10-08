@@ -51,12 +51,24 @@ func requireRefusal(t *testing.T, err error, code errs.Code, reason string) *Ref
 	return r
 }
 
-// TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotClosing: a
+func (f *fixture) tryClose(r CloseRequest) (Outcome, error) {
+	var out Outcome
+	err := f.do(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = f.svc.ClosePosition(ctx, tx, r)
+		return err
+	})
+	return out, err
+}
+
+// TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotAPricedClose: a
 // mark older than the risk policy's 30 seconds refuses new risk with
 // RISK_ORACLE_STALE (recorded: the intent is REJECTED and the decision
-// persisted), one older than the instrument's own 60 seconds is unusable
-// altogether -- and neither stops the customer closing.
-func TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotClosing(t *testing.T) {
+// persisted) but still prices a close, since it is fresh within the
+// instrument's own 60 seconds; a mark older than that prices nothing -- not
+// even a close, which is refused as STALE_MARKET_DATA (recorded) until a
+// fresh mark arrives, and then goes through.
+func TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotAPricedClose(t *testing.T) {
 	f := newFixture(t)
 	perp := f.perp()
 	a := f.account()
@@ -80,13 +92,21 @@ func TestIntegration_StaleOraclePreventsARiskIncreasingOrderButNotClosing(t *tes
 	assert.Equal(t, "REJECTED", status)
 	assert.Equal(t, "RISK_REJECTED", code)
 
+	one := q(1)
+	partial, err := f.tryClose(CloseRequest{IntentRequest: f.req(a, perp), Quantity: &one})
+	require.NoError(t, err, "the risk kernel never refuses a close, and the mark still prices it")
+	assert.Equal(t, econ.StatusCompleted, partial.Intent.Status)
+
 	f.clk.Advance(30 * time.Second) // 75 seconds: beyond the instrument's own limit
 	_, err = f.tryOpen(OpenRequest{IntentRequest: f.req(a, perp), Side: Long, Quantity: q(1)})
 	requireRefusal(t, err, errs.CodeRiskRejected, risk.ReasonOracleUnavailable)
-	assert.Equal(t, "2", f.position(a, perp).Quantity.String(), "no refused order changed the position")
+	_, err = f.tryClose(CloseRequest{IntentRequest: f.req(a, perp)})
+	requireRefusal(t, err, errs.CodeStaleMarketData, ReasonMarkStale)
+	assert.Equal(t, "1", f.position(a, perp).Quantity.String(), "no refused order changed the position")
 
+	f.mark(perp, 65_000, 65_000)
 	closed := f.closeAll(a, perp)
-	assert.Equal(t, econ.StatusCompleted, closed.Intent.Status, "closing on a stale mark is never refused")
+	assert.Equal(t, econ.StatusCompleted, closed.Intent.Status, "a fresh mark prices the close")
 	assert.Equal(t, PositionClosed, f.position(a, perp).Status)
 }
 

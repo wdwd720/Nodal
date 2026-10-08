@@ -229,6 +229,12 @@ func startAPI(ctx context.Context, root, bin string) (func(), error) {
 		"CP_API_RATE_LIMIT_AUTH=200000/1m",
 		"CP_API_RATE_LIMIT_QUOTE=200000/1m",
 		"CP_API_RATE_LIMIT_COMMAND=200000/1m",
+		// The sandbox chain the stable asset, the bridge and delegated
+		// authority run on, so their routes are served and probed rather
+		// than answering UNSUPPORTED. The seed is the published LOCAL-only
+		// one from .env.example; a plain secret is refused outside LOCAL/TEST.
+		"CP_SANDBOX_DEVNET_NETWORK=advsec-sandbox",
+		"CP_SANDBOX_DEVNET_SEED_REF=8ba28c49ce9db1683cc3976600f4b291512c0d860ac74b76d175b3d72673f374",
 	)
 	cmd.Stdout = &lockedWriter{}
 	cmd.Stderr = &lockedWriter{}

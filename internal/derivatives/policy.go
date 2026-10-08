@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/audit"
@@ -53,13 +54,22 @@ type Policy struct {
 	PaperSlippageBPS money.BPS `json:"paper_slippage_bps"`
 	// VariationMarginIntervalMS is the length of a variation-margin interval.
 	VariationMarginIntervalMS int64 `json:"variation_margin_interval_ms"`
+	// MaxMarkLagMS is how long after its observation a mark may still be
+	// recorded. An older observation is refused (RecordMark): whoever records
+	// marks cannot reach back and choose a price once they know what came
+	// after it.
+	MaxMarkLagMS int64 `json:"max_mark_lag_ms"`
+	// SettlementOverrideMaxBPS bounds an operator override of a final
+	// settlement price: within this many basis points of the settlement rule's
+	// reference price, and never further.
+	SettlementOverrideMaxBPS money.BPS `json:"settlement_override_max_bps"`
 }
 
 // DefaultPolicy is the sandbox policy. It describes simulated contracts only
 // and is never a statement that any live activity would be acceptable.
 func DefaultPolicy() Policy {
 	return Policy{
-		Version: "derivatives-sandbox-v1",
+		Version: "derivatives-sandbox-v2",
 		Linear: []ClassRates{
 			{RiskClass: assets.RiskSettlement, InitialBPS: 500, MaintenanceBPS: 250},
 			{RiskClass: assets.RiskMajor, InitialBPS: 1_000, MaintenanceBPS: 500},
@@ -75,6 +85,8 @@ func DefaultPolicy() Policy {
 		ExpiryGapShockBPS:         5_000,
 		PaperSlippageBPS:          10,
 		VariationMarginIntervalMS: 3600 * 1000,
+		MaxMarkLagMS:              60 * 1000,
+		SettlementOverrideMaxBPS:  1_000,
 	}
 }
 
@@ -126,6 +138,14 @@ func (p Policy) Validate() error {
 	if p.VariationMarginIntervalMS <= 0 {
 		problems = append(problems, "variation margin interval must be positive")
 	}
+	if p.MaxMarkLagMS <= 0 {
+		problems = append(problems, "the maximum mark lag must be positive")
+	}
+	// The database bounds an override's deviation to (0, 100%] as well
+	// (derivative_settlement_overrides.max_deviation_bps).
+	if p.SettlementOverrideMaxBPS <= 0 || p.SettlementOverrideMaxBPS > money.OneHundredPercent {
+		problems = append(problems, "the settlement override bound must be in (0, 100%]")
+	}
 	if len(problems) > 0 {
 		return errs.New(errs.CodeValidationFailed, "derivatives: invalid policy").WithField("problems", problems)
 	}
@@ -155,6 +175,9 @@ func (p Policy) linearRates(c assets.RiskClass) (ClassRates, error) {
 	return ClassRates{}, errs.Newf(errs.CodeUnsupported, "derivatives: no margin rate for risk class %q in policy %s", c, p.Version).
 		WithField("risk_class", string(c))
 }
+
+// maxMarkLag is MaxMarkLagMS as a duration.
+func (p Policy) maxMarkLag() time.Duration { return time.Duration(p.MaxMarkLagMS) * time.Millisecond }
 
 // maxInitialBPS is the highest linear initial rate in the policy.
 func (p Policy) maxInitialBPS() money.BPS {

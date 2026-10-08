@@ -27,6 +27,7 @@ import (
 	"github.com/nodal/controlplane/internal/auth/httpmw"
 	"github.com/nodal/controlplane/internal/auth/oidc"
 	"github.com/nodal/controlplane/internal/auth/pgstore"
+	"github.com/nodal/controlplane/internal/bridge"
 	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/capital/buyingpower"
 	"github.com/nodal/controlplane/internal/clock"
@@ -37,9 +38,11 @@ import (
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
+	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/feeledger"
+	"github.com/nodal/controlplane/internal/fees"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/httpapi"
@@ -52,6 +55,7 @@ import (
 	"github.com/nodal/controlplane/internal/legalrouter"
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/marketplace"
+	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
 	"github.com/nodal/controlplane/internal/notification"
@@ -67,6 +71,7 @@ import (
 	"github.com/nodal/controlplane/internal/risk"
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
+	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/stream"
 	"github.com/nodal/controlplane/internal/transfers"
 	"github.com/nodal/controlplane/internal/treasury"
@@ -315,6 +320,14 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// movement at the journal rather than only in a service.
 	ledgerSvc.SetCapabilityResolver(gateCapabilityResolver{checker: gateChecker, q: database})
 
+	// The persistent simulated chain host the sandbox capabilities run on,
+	// opened once for all of them; nil when no sandbox chain is configured
+	// (see openSandboxChain).
+	sandboxChain, _, err := openSandboxChain(ctx, cfg, in.resolver, database, clk)
+	if err != nil {
+		return nil, err
+	}
+
 	// --- advanced financial capabilities (ADR-0020) ----------------------
 	//
 	// Constructed unconditionally and decided per request, like the native
@@ -398,8 +411,100 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:equities services
+	//
+	// Paper and sandbox equities (internal/equities). The broker boundary is
+	// chosen from the environment and the execution provider's mode:
+	// equities.NewExecutionAdapter refuses provider mode live unconditionally
+	// and fake or sandbox outside LOCAL, TEST and DEV, so in STAGING and PROD
+	// there is no adapter, no service, and the equities routes answer
+	// UNSUPPORTED. Where it runs it is the deterministic paper venue, never a
+	// test double: its calendar is XNYS with the closures recorded when the
+	// process started (the service itself reads the recorded closures on
+	// every order, so a closure added later still stops orders on its day).
+	// Identity is the advanced capabilities' one rule (D-055).
+	//
+	// Charges: one schedule, in the sandbox dollar, every component of it
+	// itemized on each fill's stored disclosure -- a 10 bps spread, a 10 bps
+	// platform fee, 5 bps more for a strategy-originated order, and a 50 bps
+	// slippage reserve that is held against adverse execution and never
+	// charged. No venue fee is passed through: the paper venue charges none.
+	// A market order's protection price (and its reservation) is 1% beyond
+	// the venue's indicative price; the smallest order is worth one sandbox
+	// dollar. Settlement is the sandbox dollar; nothing here creates an asset.
+	var equitiesSvc *equities.Service
+	equitiesHolidays, err := equities.Holidays(ctx, database, equities.CalendarXNYS)
+	if err != nil {
+		return nil, fmt.Errorf("equities holidays: %w", err)
+	}
+	equitiesCalendar, err := equities.NewCalendar(equities.CalendarXNYS, equitiesHolidays)
+	if err != nil {
+		return nil, fmt.Errorf("equities calendar: %w", err)
+	}
+	equitiesVenue, venueErr := equities.NewExecutionAdapter(cfg.Env, cfg.Providers.Execution.Mode, equities.PaperConfig{
+		Name: "nodal-paper-equities", Calendar: equitiesCalendar, SlippageBPS: 10,
+	})
+	if venueErr != nil {
+		log.Warn("no equities execution adapter in this deployment; the equities endpoints are disabled",
+			"environment", string(cfg.Env), "error", venueErr.Error())
+	} else {
+		equitiesRouter, rerr := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+		if rerr != nil {
+			return nil, rerr
+		}
+		if equitiesRouter == nil {
+			if equitiesRouter, rerr = legalrouter.New(legalrouter.ConservativePolicy()); rerr != nil {
+				return nil, fmt.Errorf("equities legal router: %w", rerr)
+			}
+		}
+		equitiesSvc, err = equities.NewService(equities.Config{
+			Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), KillSwitches: killChecker, Router: equitiesRouter,
+			RiskPolicy: risk.DefaultAdvancedPolicy(), Capital: capitalSvc, Ledger: ledgerSvc, Prices: priceStore,
+			Audit: auditWriter, Adapter: equitiesVenue,
+			Schedules: []fees.Schedule{{
+				Version: "equities-sandbox-v1", QuoteAsset: econ.SandboxDollarID(), QuoteDecimals: econ.SandboxDollarDecimals,
+				SpreadBPS: 10, PercentageFeeBPS: 10, StrategyFeeBPS: 5, SlippageReserveBPS: 50, Rounding: fees.DefaultRounding(),
+			}},
+			MarketCollarBPS: 100, MinOrderNotional: money.USDFromMinor(1_00),
+			Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("equities service: %w", err)
+		}
+	}
 
 	// >>> advanced:orders services
+	//
+	// The internal order book (internal/orders) and the pipeline that runs a
+	// customer order one stage per transaction. An operator opens each book;
+	// nothing here opens one. Identity is the advanced capabilities' one rule
+	// (D-055), and the legal router the determination the rest of the API
+	// applies. No exchange calendar is wired to the book, so only "24x7"
+	// instruments are in session (the package's fail-closed default).
+	ordersRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if ordersRouter == nil {
+		if ordersRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("orders legal router: %w", err)
+		}
+	}
+	ordersSvc, err := orders.NewService(orders.Config{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc,
+		Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Risk: risk.NewStore(),
+		RiskPolicy: risk.DefaultAdvancedPolicy(), Router: ordersRouter, Instruments: instrumentRepo, Assets: assetRepo,
+		Prices: priceStore, KillSwitches: killChecker,
+		Verification: httpapi.AdvancedVerificationLevels{Rule: compliance.NewAccountVerification(clk)},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("orders service: %w", err)
+	}
+	ordersPipeline, err := orders.NewPipeline(ordersSvc, database)
+	if err != nil {
+		return nil, fmt.Errorf("orders pipeline: %w", err)
+	}
 
 	// >>> advanced:transfers services
 	//
@@ -470,32 +575,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// PRINCIPAL_TRADING and INTERNAL_MATCHING gates and kill switches, its
 	// versioned limits, Risk Kernel V2, the order book's own house rules); this
 	// block hands it its collaborators. It places house orders on the internal
-	// book through an order service of its own, built from the same
-	// collaborators as every other advanced service and judged against the
-	// deployment's legal policy (conservative unless one is configured): the
-	// book itself is the database's, so two services over it agree by
-	// construction.
-	treasuryRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
-	if err != nil {
-		return nil, err
-	}
-	if treasuryRouter == nil {
-		if treasuryRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
-			return nil, fmt.Errorf("treasury legal router: %w", err)
-		}
-	}
-	treasuryOrders, err := orders.NewService(orders.Config{
-		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc, Intents: econ.NewIntentStore(clk, outbox, auditWriter),
-		Effects: econ.NewEffectStore(clk, outbox, auditWriter), Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
-		Registry: econ.NewRegistry(), Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: treasuryRouter,
-		Instruments: instrumentRepo, Assets: assetRepo, Prices: priceStore, KillSwitches: killChecker,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("treasury order service: %w", err)
-	}
+	// book through the one order service above, and since 00759 nothing else
+	// can place a house order at all.
 	treasurySvc, err := treasury.NewService(treasury.Config{
 		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
-		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Orders: treasuryOrders,
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Orders: ordersSvc,
 		Prices: priceStore, Assets: assetRepo, Instruments: instrumentRepo, KillSwitches: killChecker, Audit: auditWriter,
 		RiskPolicy: risk.DefaultAdvancedPolicy(),
 	})
@@ -514,8 +598,87 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	}
 
 	// >>> advanced:stable services
+	//
+	// The sandbox stable asset (internal/stableasset) runs on the sandbox chain
+	// opened above, which exists only where one is configured
+	// (CP_SANDBOX_DEVNET_NETWORK names its journal, CP_SANDBOX_DEVNET_SEED_REF
+	// resolves to the seed every platform sandbox key derives from). Without
+	// it every stable asset and bridge route answers UNSUPPORTED. The service
+	// gets the collaborators every other advanced service gets; the account
+	// facts it routes on come from the deployment's own resolvers (D-055
+	// identity, the verification Nodal establishes itself, no jurisdiction
+	// determination), never from a request.
+	var stableDeps httpapi.StableDeps
+	if sandboxChain != nil {
+		chain := *sandboxChain
+		var stableRouter *legalrouter.Router
+		if stableRouter, err = legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy); err != nil {
+			return nil, err
+		}
+		if stableRouter == nil {
+			if stableRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+				return nil, fmt.Errorf("stable asset legal router: %w", err)
+			}
+		}
+		var stableSvc *stableasset.Service
+		if stableSvc, err = stableasset.New(stableasset.Deps{
+			DB: database, Clock: clk, Host: chain.Host,
+			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Facilities: econ.NewRegistry(), Ledger: ledgerSvc,
+			Capital: capitalSvc, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: stableRouter,
+			Prices: priceStore, Kills: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
+			Audit: auditWriter, Accounts: accountRepo, Assets: assetRepo,
+			Issuer: chain.Keys.Issuer, Custody: chain.Keys.Custody, Snapshots: chain.Keys.Snapshots,
+		}); err != nil {
+			return nil, fmt.Errorf("stable assets: %w", err)
+		}
+		stableDeps = httpapi.StableDeps{
+			Service: stableSvc, Host: chain.Host, HolderAddress: chain.Keys.Custody.HolderAddress,
+			SnapshotKey: chain.Keys.Snapshots.PublicKey(), Capital: capitalSvc,
+			Identity: compliance.NewAccountVerification(clk), Verification: verificationResolver,
+		}
+	} else {
+		log.Warn("no sandbox chain is configured; the stable asset and bridge routes answer UNSUPPORTED",
+			"network_var", "CP_SANDBOX_DEVNET_NETWORK", "seed_var", "CP_SANDBOX_DEVNET_SEED_REF")
+	}
 
 	// >>> advanced:bridge services
+	//
+	// Cross-chain capital (internal/bridge) over the same sandbox chain: the
+	// custodial wallet signer is its holder signer (the bridge never holds a
+	// customer key) and its attester is the one the host's genesis pins. The
+	// holdings route reports the bridge's part of buying power under the
+	// default haircut policy, which counts nothing that is not final; no
+	// configuration chooses another. Buying power V2 itself takes no bridge
+	// reader: its loader has no slot that would not count the bridge's pending
+	// locks twice (they are capital reservations it already reads).
+	var bridgeDeps httpapi.BridgeDeps
+	if sandboxChain != nil {
+		var bridgeRouter *legalrouter.Router
+		if bridgeRouter, err = legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy); err != nil {
+			return nil, err
+		}
+		if bridgeRouter == nil {
+			if bridgeRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+				return nil, fmt.Errorf("bridge legal router: %w", err)
+			}
+		}
+		var bridgeSvc *bridge.Service
+		if bridgeSvc, err = bridge.New(bridge.Deps{
+			DB: database, Clock: clk, Host: sandboxChain.Host,
+			Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+			Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Facilities: econ.NewRegistry(), Ledger: ledgerSvc,
+			Capital: capitalSvc, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(), Router: bridgeRouter,
+			Kills: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter), Audit: auditWriter,
+			Accounts: accountRepo, Assets: assetRepo, Holder: sandboxChain.Keys.Custody, Attester: sandboxChain.Keys.Attester,
+		}); err != nil {
+			return nil, fmt.Errorf("bridge: %w", err)
+		}
+		bridgeDeps = httpapi.BridgeDeps{
+			Service: bridgeSvc, Host: sandboxChain.Host, Haircut: bridge.DefaultHaircutPolicy(),
+			Identity: compliance.NewAccountVerification(clk), Verification: verificationResolver,
+		}
+	}
 
 	// >>> advanced:predmarket services
 	//
@@ -529,7 +692,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// from a fixed seed anyone can read, exists only where fake providers are
 	// allowed (LOCAL, TEST, DEV). Everywhere else no oracle is configured, so
 	// resolution answers PROVIDER_UNAVAILABLE instead of trusting a key whose
-	// private half is in the source tree.
+	// private half is in the source tree. The sandbox oracle only signs: every
+	// observation an operator records is stored in the database (shared by
+	// every replica, kept across restarts, audited), and resolution reads it
+	// back from there. OutcomeBooks is not wired yet: until the order book's
+	// adapter is, a settlement or void that finds outcome shares still
+	// reserved by resting orders is refused, naming the reservations.
 	var predmarketOracle *predmarket.SandboxOracle
 	if cfg.Env.AllowsFakeProviders() {
 		predmarketOracle, err = predmarket.NewSandboxOracle("nodal-sandbox-oracle", []byte("nodal.predmarket.sandbox-oracle!"))
@@ -566,11 +734,11 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
 		Audit:          auditWriter,
 	}
-	if predmarketOracle != nil {
-		// Only a real oracle: a nil *SandboxOracle in the interface field
-		// would not compare equal to nil and would be called.
-		predmarketConfig.Oracle = predmarketOracle
-	}
+	predmarketConfig.SandboxOracle = predmarketOracle
+	// The order book cancels the working orders on a market's outcome books
+	// at close, void and settlement, so no reservation still holds a share
+	// when the escrow pays out (review-2 F5).
+	predmarketConfig.Books = ordersSvc
 	predmarketSvc, err := predmarket.NewService(predmarketConfig)
 	if err != nil {
 		return nil, fmt.Errorf("prediction markets: %w", err)
@@ -657,6 +825,19 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// >>> advanced:delegation services
 
 	// >>> advanced:operator services
+	//
+	// The operator console reads the database at the instant of each request and
+	// records sandbox reference marks through the same price store every
+	// advanced reader values a SIMULATED asset at, quoted in the sandbox dollar.
+	// A mark is accepted only while it is younger than the bound buying power V2
+	// and the transfer valuer accept one, and the console calls older marks
+	// stale. The chains it reports are the sandbox chain's host, where one is
+	// configured; elsewhere /advanced/ops/chains answers UNSUPPORTED rather than
+	// describing chains that do not exist here.
+	operatorDeps := httpapi.OperatorDeps{Prices: priceStore, Audit: auditWriter, MaxMarkAge: 5 * time.Minute}
+	if sandboxChain != nil {
+		operatorDeps.Chains = sandboxChain.Host
+	}
 
 	advancedDeps := httpapi.AdvancedDeps{
 		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
@@ -687,8 +868,13 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		},
 
 		// >>> advanced:equities deps
+		// Nil where no execution adapter exists (STAGING, PROD): the routes
+		// then answer UNSUPPORTED. Listings show the freshest mark from the
+		// price store the service prices orders with.
+		Equities: httpapi.EquitiesDeps{Service: equitiesSvc, Prices: priceStore},
 
 		// >>> advanced:orders deps
+		Orders: httpapi.OrdersDeps{Service: ordersSvc, Pipeline: ordersPipeline},
 
 		// >>> advanced:transfers deps
 		Transfers: httpapi.TransfersDeps{
@@ -699,8 +885,12 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		Treasury: httpapi.TreasuryDeps{Service: treasurySvc, Fees: feeLedgerSvc},
 
 		// >>> advanced:stable deps
+		// Empty -- every route UNSUPPORTED -- unless a sandbox chain is
+		// configured (see the services block).
+		Stable: stableDeps,
 
 		// >>> advanced:bridge deps
+		Bridge: bridgeDeps,
 
 		// >>> advanced:predmarket deps
 		PredictionMarkets: predmarketSvc,
@@ -712,6 +902,7 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// >>> advanced:delegation deps
 
 		// >>> advanced:operator deps
+		Operator: operatorDeps,
 	}
 
 	// --- realtime ----------------------------------------------------------

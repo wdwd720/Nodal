@@ -171,3 +171,35 @@ func SettlementPosting(m Market, kind SettlementKind, line PlanLine, meta postin
 	l.cr(f.Account(ledger.CodePredictionEscrow, cash), line.Amount)
 	return finish(jk, meta, l)
 }
+
+// ClaimPosting delivers a held payout (or a held refund) to its holder: the
+// amount the settlement kept in the market's escrow moves to the holder's
+// wallet. The holder's shares were retired at settlement, so no share moves.
+//
+//	C: Dr WALLET(cash) / Cr TRADING_INFLOW(cash)
+//	F: Dr PREDICTION_COLLATERAL / Cr PREDICTION_ESCROW (cash)
+func ClaimPosting(m Market, kind SettlementKind, account accounts.AccountID, amount money.Quantity, meta postingMeta) (ledger.Posting, error) {
+	if err := m.requireBookable(); err != nil {
+		return ledger.Posting{}, err
+	}
+	var jk ledger.Kind
+	switch kind {
+	case SettlementPayout:
+		jk = ledger.KindPredictionPayout
+	case SettlementRefund:
+		jk = ledger.KindPredictionRefund
+	default:
+		return ledger.Posting{}, errs.Newf(errs.CodeValidationFailed, "predmarket: unknown settlement kind %q", kind)
+	}
+	if !amount.IsPositive() {
+		return ledger.Posting{}, errs.New(errs.CodeInternal, "predmarket: a claim delivers a positive amount")
+	}
+	f := m.Facility()
+	cash := m.CollateralAssetID
+	var l legs
+	l.dr(ledger.CustomerAccount(account, ledger.CodeWallet, cash), amount)
+	l.cr(ledger.CustomerAccount(account, ledger.CodeTradingInflow, cash), amount)
+	l.dr(f.Account(ledger.CodePredictionCollateral, cash), amount)
+	l.cr(f.Account(ledger.CodePredictionEscrow, cash), amount)
+	return finish(jk, meta, l)
+}

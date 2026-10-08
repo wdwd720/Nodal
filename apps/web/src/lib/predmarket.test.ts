@@ -13,6 +13,8 @@ import { test } from "node:test";
 import { advancedKeys } from "../api/advanced/core.ts";
 import {
   booksSpec,
+  claimResultSpec,
+  heldPayoutSpec,
   marketDetailSpec,
   marketListSpec,
   observationSpec,
@@ -21,6 +23,8 @@ import {
   reconciliationSpec,
   setResultSpec,
   settlementResultSpec,
+  voidProposalResultSpec,
+  voidProposalSpec,
 } from "../api/advanced/predmarket.ts";
 import { ContractViolation, validated, type Spec } from "../api/contract.ts";
 import {
@@ -28,12 +32,14 @@ import {
   DISPUTE_WINDOW_CHOICES,
   MARKET_STATUSES,
   STATUS_MEANING,
+  claimable,
   isEd25519KeyHex,
   lifecycleSteps,
   localInputToInstant,
   parseCompleteSets,
   parseMarketStatus,
   parseOutcomes,
+  pendingVoidProposals,
   reasonProblem,
 } from "./predmarket.ts";
 
@@ -102,6 +108,7 @@ const settlement = {
   rounding_policy: "EXACT",
   escrow_before: "5000000",
   total_paid: "5000000",
+  total_held: "2000000",
   residual: "0",
   holder_count: 2,
   evidence_ref: "proof://predmarket/settlement.json",
@@ -131,6 +138,7 @@ const detail = {
     },
   ],
   disputes: [],
+  void_proposals: [] as unknown[],
   settlement,
 };
 
@@ -145,6 +153,7 @@ const books = {
   escrow: "5000000",
   collateral: "5000000",
   residual: "0",
+  held: "0",
   outcomes: [
     { index: 0, symbol: "YES", share_asset_id: ID_C, shares_issued: "5000000", shares_outstanding: "5000000", held_by_customers: "5000000" },
     { index: 1, symbol: "NO", share_asset_id: ID_D, shares_issued: "5000000", shares_outstanding: "5000000", held_by_customers: "5000000" },
@@ -189,6 +198,32 @@ const setResult = {
   },
   journal_transaction_id: ID_C,
   risk_decision_hash: "decision-hash",
+};
+
+const heldPayout = {
+  id: ID_D,
+  market_id: MARKET,
+  settlement_id: ID_A,
+  account_id: ACCOUNT,
+  kind: "PAYOUT",
+  amount: "2000000",
+  reason_codes: ["RISK_ACCOUNT_STATUS"],
+  refused_intent_id: ID_B,
+  journal_transaction_id: ID_C,
+  held_at: AT,
+  claimed: false,
+};
+
+const proposal = {
+  id: ID_C,
+  market_id: MARKET,
+  market_status: "DISPUTED",
+  resolution_id: ID_B,
+  reason: "the event was cancelled by its organiser",
+  evidence_ref: "proof://predmarket/void-proposal.json",
+  evidence_sha256: "0e",
+  proposed_by: { actor_type: "OPERATOR", actor_id: ID_A },
+  proposed_at: AT,
 };
 
 /* --------------------------------------------------------------------------
@@ -364,12 +399,14 @@ test("a settlement answer lists what it paid; a replay lists nothing", () => {
     market,
     settlement,
     replay: false,
+    held_payouts: [] as unknown[],
     lines: [
       {
         account_id: ACCOUNT,
         amount: "3000000",
         intent_id: ID_A,
         journal_transaction_id: ID_B,
+        held: false,
         shares: [
           { outcome_symbol: "YES", quantity: "3000000" },
           { outcome_symbol: "NO", quantity: "3000000" },
@@ -378,14 +415,21 @@ test("a settlement answer lists what it paid; a replay lists nothing", () => {
     ],
   };
   accepts(result, settlementResultSpec);
-  accepts({ ...result, replay: true, lines: [] }, settlementResultSpec);
+  accepts({ ...result, replay: true, lines: [], held_payouts: [] }, settlementResultSpec);
+  accepts({ ...result, held_payouts: [heldPayout] }, settlementResultSpec);
+  refuses(() => validated(broken(result, (c) => delete c["held_payouts"]), settlementResultSpec, "/x"), /held_payouts$/);
+  refuses(() => validated(broken(result, (c) => delete (c["lines"] as Array<Record<string, unknown>>)[0]!["held"]), settlementResultSpec, "/x"), /held$/);
   refuses(() => validated(broken(result, (c) => ((c["lines"] as Array<Record<string, unknown>>)[0]!["amount"] = "3.00")), settlementResultSpec, "/x"), /amount$/);
 });
 
 test("an observation and a reconciliation are accepted only in their contract's shape", () => {
   const observation = {
     value_domain: "SIMULATED",
+    observation_id: ID_D,
     report_hash: "feed",
+    recorded_by: { actor_type: "OPERATOR", actor_id: ID_A },
+    recorded_at: AT,
+    replay: false,
     report: {
       market_id: MARKET,
       outcome: "YES",
@@ -397,6 +441,7 @@ test("an observation and a reconciliation are accepted only in their contract's 
   };
   accepts(observation, observationSpec);
   refuses(() => validated(broken(observation, (c) => delete c["report"]), observationSpec, "/x"), /report$/);
+  refuses(() => validated(broken(observation, (c) => delete c["recorded_by"]), observationSpec, "/x"), /recorded_by$/);
 
   const record = {
     value_domain: "SIMULATED",
@@ -416,4 +461,68 @@ test("an observation and a reconciliation are accepted only in their contract's 
   accepts(record, reconciliationSpec);
   refuses(() => validated(broken(record, (c) => (c["kind"] = "WALLET_BALANCE")), reconciliationSpec, "/x"), /kind$/);
   refuses(() => validated(broken(record, (c) => (c["status"] = "FINE")), reconciliationSpec, "/x"), /status$/);
+});
+
+test("a void proposal waits for a second operator until it is approved or the market ends", () => {
+  const approved = { ...proposal, id: ID_D, approval: { id: ID_A, approved_by: { actor_type: "OPERATOR", actor_id: ID_B }, reason: "confirmed", approved_at: AT } };
+  assert.deepEqual(pendingVoidProposals([proposal, approved], "DISPUTED"), [proposal]);
+  assert.deepEqual(pendingVoidProposals([proposal], "VOIDED"), [], "a voided market waits for nothing");
+  assert.deepEqual(pendingVoidProposals([proposal], "SETTLED"), [], "a settled market can no longer be voided");
+});
+
+test("a held payout can be claimed until it has been", () => {
+  assert.equal(claimable(undefined), false, "nothing held, nothing to claim");
+  assert.equal(claimable({ claimed: false }), true);
+  assert.equal(claimable({ claimed: true }), false);
+});
+
+test("void proposals, held payouts and claims are accepted only in their contract's shape", () => {
+  accepts(proposal, voidProposalSpec);
+  accepts(broken(proposal, (c) => delete c["resolution_id"]), voidProposalSpec);
+  refuses(() => validated(broken(proposal, (c) => (c["market_status"] = "LIVE")), voidProposalSpec, "/x"), /market_status$/);
+  refuses(() => validated(broken(proposal, (c) => delete c["proposed_by"]), voidProposalSpec, "/x"), /proposed_by$/);
+  refuses(
+    () => validated(broken(proposal, (c) => (c["approval"] = { id: ID_A, reason: "x", approved_at: AT })), voidProposalSpec, "/x"),
+    /approval\.approved_by$/,
+  );
+  accepts({ value_domain: "SIMULATED", market, proposal }, voidProposalResultSpec);
+  accepts({ ...detail, void_proposals: [proposal] }, marketDetailSpec);
+  refuses(() => validated(broken(detail, (c) => delete c["void_proposals"]), marketDetailSpec, "/x"), /void_proposals$/);
+
+  accepts(heldPayout, heldPayoutSpec);
+  refuses(() => validated(broken(heldPayout, (c) => (c["amount"] = "2.00")), heldPayoutSpec, "/x"), /amount$/);
+  refuses(() => validated(broken(heldPayout, (c) => (c["reason_codes"] = "RISK_ACCOUNT_STATUS")), heldPayoutSpec, "/x"), /reason_codes$/);
+  refuses(() => validated(broken(heldPayout, (c) => (c["kind"] = "BONUS")), heldPayoutSpec, "/x"), /kind$/);
+  const claimed = {
+    ...heldPayout,
+    claimed: true,
+    claim: { id: ID_A, amount: "2000000", intent_id: ID_B, journal_transaction_id: ID_C, claimed_by: { actor_type: "USER", actor_id: ACCOUNT }, claimed_at: AT },
+  };
+  accepts(claimed, heldPayoutSpec);
+  const claim = {
+    value_domain: "SIMULATED",
+    market_id: MARKET,
+    account_id: ACCOUNT,
+    held_payout: claimed,
+    replay: false,
+    intent: { ...intent, kind: "RESOLVE_PREDICTION_POSITION" },
+    journal_transaction_id: ID_C,
+    risk_decision_hash: "decision-hash-claim",
+  };
+  accepts(claim, claimResultSpec);
+  refuses(() => validated(broken(claim, (c) => (c["value_domain"] = "REAL")), claimResultSpec, "/x"), /value_domain$/);
+  refuses(() => validated(broken(claim, (c) => delete c["held_payout"]), claimResultSpec, "/x"), /held_payout$/);
+
+  accepts({ ...books, held: "2000000" }, booksSpec);
+  refuses(() => validated(broken(books, (c) => delete c["held"]), booksSpec, "/x"), /held$/);
+  const list = {
+    value_domain: "SIMULATED",
+    market_id: MARKET,
+    account_id: ACCOUNT,
+    share_decimals: 6,
+    items: [],
+    held_payout: heldPayout,
+  };
+  accepts(list, positionListSpec);
+  refuses(() => validated(broken(list, (c) => ((c["held_payout"] as Record<string, unknown>)["claimed"] = "no")), positionListSpec, "/x"), /held_payout\.claimed$/);
 });

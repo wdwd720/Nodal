@@ -60,7 +60,17 @@ type DerivativesPort interface {
 	RecordMark(ctx context.Context, c DerivativeMarkCommand) (derivatives.Mark, error)
 	RunVariationMargin(ctx context.Context, c DerivativeRunCommand) (DerivativeRunView, error)
 	RunFunding(ctx context.Context, c DerivativeRunCommand) (DerivativeRunView, error)
+	// SettleExpiry settles by the settlement rule; the command's price only
+	// confirms the rule's.
 	SettleExpiry(ctx context.Context, c DerivativeSettleCommand) (DerivativeSettlementView, error)
+	// ProposeSettlementOverride, ApproveSettlementOverride and
+	// RejectSettlementOverride are the dual-controlled override of a final
+	// settlement price: proposed by the calling operator, approved (and
+	// settled) or rejected by another. A proposal of any other contract than
+	// the command names is NOT_FOUND.
+	ProposeSettlementOverride(ctx context.Context, c DerivativeOverrideProposalCommand) (derivatives.SettlementOverride, error)
+	ApproveSettlementOverride(ctx context.Context, c DerivativeOverrideDecisionCommand) (DerivativeOverrideApprovalView, error)
+	RejectSettlementOverride(ctx context.Context, c DerivativeOverrideDecisionCommand) (derivatives.SettlementOverride, error)
 	FundClearingHouse(ctx context.Context, c DerivativeClearingFundCommand) (DerivativeClearingFundView, error)
 	ReconcileClearing(ctx context.Context, asset assets.AssetID) (DerivativeClearingReportView, error)
 }
@@ -73,16 +83,9 @@ type DerivativeAssetView struct {
 	Decimals uint8
 }
 
-// DerivativeSettlementRecord is a contract's final settlement.
-type DerivativeSettlementRecord struct {
-	ID            derivatives.SettlementID
-	Kind          derivatives.SettlementKind
-	PriceMantissa money.Quantity
-	PriceScale    int32
-	PriceSource   string
-	Positions     int
-	SettledAt     time.Time
-}
+// DerivativeSettlementRecord is a contract's final settlement as the service
+// records it.
+type DerivativeSettlementRecord = derivatives.SettlementRecord
 
 // DerivativeContractView is a derivative instrument with the terms in force,
 // the asset it settles in, its latest mark and its final settlement.
@@ -94,6 +97,11 @@ type DerivativeContractView struct {
 	LatestMark *derivatives.Mark
 	// Settled is nil until the contract has been finally settled.
 	Settled *DerivativeSettlementRecord
+	// Preview and Overrides are set only for a dated contract read on its
+	// own: what the settlement rule says about it now, and the override
+	// proposals for its final settlement.
+	Preview   *derivatives.SettlementPreview
+	Overrides []derivatives.SettlementOverride
 }
 
 // DerivativePositionView is a position with what a reader needs to read its
@@ -228,12 +236,44 @@ type DerivativeRunView struct {
 	Settlement   DerivativeAssetView
 }
 
-// DerivativeSettleCommand settles one expired contract.
+// DerivativeSettleCommand settles one expired contract by the settlement
+// rule. Price and PriceSource, when given, confirm the rule's price and source
+// (any other refuses the command); they never choose it.
 type DerivativeSettleCommand struct {
 	InstrumentID  instruments.InstrumentID
 	Price         *DerivativePriceInput
 	PriceSource   string
 	CorrelationID string
+}
+
+// DerivativeOverrideProposalCommand proposes, as the calling operator, a
+// settlement price for an expired contract the rule cannot settle (or
+// settles wrongly), with a reason and evidence.
+type DerivativeOverrideProposalCommand struct {
+	InstrumentID   instruments.InstrumentID
+	Price          DerivativePriceInput
+	Reason         string
+	EvidenceRef    string
+	EvidenceSHA256 []byte
+	CorrelationID  string
+}
+
+// DerivativeOverrideDecisionCommand approves (and settles at) or rejects a
+// proposal, as the calling operator. Price, when given on an approval,
+// confirms the proposal's price.
+type DerivativeOverrideDecisionCommand struct {
+	InstrumentID  instruments.InstrumentID
+	OverrideID    derivatives.SettlementOverrideID
+	Reason        string
+	Price         *DerivativePriceInput
+	CorrelationID string
+}
+
+// DerivativeOverrideApprovalView is an approved proposal and the settlement
+// its approval made.
+type DerivativeOverrideApprovalView struct {
+	Override   derivatives.SettlementOverride
+	Settlement DerivativeSettlementView
 }
 
 // DerivativeSettlementView is a final settlement.

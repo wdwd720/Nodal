@@ -3,7 +3,9 @@ package derivatives
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -148,7 +150,10 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	if !r.Side.Valid() {
 		return Outcome{}, errs.New(errs.CodeValidationFailed, "derivatives: side must be LONG or SHORT")
 	}
-	spec, err := loadSpec(ctx, tx, s.instruments, r.InstrumentID)
+	if err := s.serializeClearing(ctx, tx); err != nil {
+		return Outcome{}, err
+	}
+	spec, err := lockSpec(ctx, tx, s.instruments, r.InstrumentID)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -160,7 +165,7 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	if early != nil || err != nil {
 		return derefOutcome(early), err
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -181,6 +186,9 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	if err != nil {
 		return Outcome{}, err
 	}
+	// A mark recorded under terms the contract no longer has prices nothing:
+	// the kernel sees no usable mark and refuses the new risk.
+	hasMark = hasMark && markPriceable(spec, mark)
 	tr := tradeRisk{spec: spec, mark: mark, hasMark: hasMark, riskIncreasing: true}
 	var price, im, premium money.Quantity
 	if hasMark {
@@ -258,23 +266,15 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 		return Outcome{}, err
 	}
 	iid := in.ID
-	fr, err := s.ApplyFill(ctx, tx, Fill{
+	// The fill consumes the reservation for exactly the margin and premium
+	// it takes, and refuses to take anything else.
+	fr, err := s.executeFill(ctx, tx, Fill{
 		Key: "intent:" + in.ID.String(), AccountID: r.AccountID, InstrumentID: r.InstrumentID, Side: side, Quantity: qty,
 		Price: price, Source: SourcePaper, MarkID: mark.ID, SlippageBPS: s.policy.PaperSlippageBPS, Direction: FillOpens,
-		IntentID: &iid, DecisionID: did, OccurredAt: now, CorrelationID: r.CorrelationID,
+		IntentID: &iid, DecisionID: did, OccurredAt: now, CorrelationID: r.CorrelationID, reservation: reservation,
 	})
 	if err != nil {
 		return Outcome{}, err
-	}
-	if reservation != nil {
-		used := fr.InitialMargin.Add(fr.PremiumPaid)
-		if !used.Equal(reserve) {
-			return Outcome{}, errs.New(errs.CodeInternal, "derivatives: the fill posted a different margin and premium than was reserved").
-				WithField("reserved", reserve.String()).WithField("posted", used.String())
-		}
-		if _, err := s.capital.Consume(ctx, tx, reservation.ID, used, 0, ""); err != nil {
-			return Outcome{}, err
-		}
 	}
 	if in, err = s.advance(ctx, tx, in, econ.StatusCompleted, "position opened"); err != nil {
 		return Outcome{}, err
@@ -283,14 +283,27 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 }
 
 // ClosePosition reduces or closes a position with a paper fill. Closing is
-// never risk-increasing: a stale mark does not prevent it (it is priced at
-// the last mark there is), and no margin is reserved; the released margin
-// returns to the wallet and any loss is collected as an obligation.
+// never risk-increasing: the risk kernel never refuses it for a stale oracle,
+// and no margin is reserved; the released margin returns to the wallet and
+// any loss is collected as an obligation, from the margin it frees and the
+// customer's available funds.
+//
+// A paper close is priced at the mark, so it needs a mark that is fresh now
+// (within the instrument's oracle max age, on its current terms). With a
+// stale or missing mark there is no price to close at: the close is refused
+// with STALE_MARKET_DATA (reason MARK_STALE or MARK_MISSING), and the refusal
+// is recorded -- the intent is REJECTED with that code, its transition and
+// audit record name the mark -- in the caller's transaction, to be committed
+// like every refusal. Pricing it at an old mark would hand the holder a free
+// option on a stalled feed, paid by the clearing house.
 func (s *Service) ClosePosition(ctx context.Context, tx pgx.Tx, r CloseRequest) (Outcome, error) {
 	if err := r.IntentRequest.validate(); err != nil {
 		return Outcome{}, err
 	}
-	spec, err := loadSpec(ctx, tx, s.instruments, r.InstrumentID)
+	if err := s.serializeClearing(ctx, tx); err != nil {
+		return Outcome{}, err
+	}
+	spec, err := lockSpec(ctx, tx, s.instruments, r.InstrumentID)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -303,7 +316,7 @@ func (s *Service) ClosePosition(ctx context.Context, tx pgx.Tx, r CloseRequest) 
 	if early != nil || err != nil {
 		return derefOutcome(early), err
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -330,7 +343,11 @@ func (s *Service) ClosePosition(ctx context.Context, tx pgx.Tx, r CloseRequest) 
 		return Outcome{}, err
 	}
 	if !hasMark {
-		return s.refuse(ctx, tx, in, errs.CodeStaleMarketData, "the contract has never been marked; a paper close needs a price", nil, nil)
+		return s.refuse(ctx, tx, in, errs.CodeStaleMarketData, "the contract has never been marked; a paper close needs a price",
+			[]string{ReasonMarkMissing}, nil)
+	}
+	if !markFresh(spec, mark, now) || !markPriceable(spec, mark) {
+		return s.refuseStaleClose(ctx, tx, in, spec, mark, now)
 	}
 	side := Sell
 	d := n.Neg()
@@ -366,7 +383,7 @@ func (s *Service) ClosePosition(ctx context.Context, tx pgx.Tx, r CloseRequest) 
 		return Outcome{}, err
 	}
 	iid := in.ID
-	fr, err := s.ApplyFill(ctx, tx, Fill{
+	fr, err := s.executeFill(ctx, tx, Fill{
 		Key: "intent:" + in.ID.String(), AccountID: r.AccountID, InstrumentID: r.InstrumentID, Side: side, Quantity: n,
 		Price: price, Source: SourcePaper, MarkID: mark.ID, SlippageBPS: s.policy.PaperSlippageBPS, Direction: FillReduces,
 		IntentID: &iid, DecisionID: did, OccurredAt: now, CorrelationID: r.CorrelationID,
@@ -392,7 +409,10 @@ func (s *Service) ExerciseOption(ctx context.Context, tx pgx.Tx, r ExerciseReque
 	if err := r.IntentRequest.validate(); err != nil {
 		return Outcome{}, err
 	}
-	spec, err := loadSpec(ctx, tx, s.instruments, r.InstrumentID)
+	if err := s.serializeClearing(ctx, tx); err != nil {
+		return Outcome{}, err
+	}
+	spec, err := lockSpec(ctx, tx, s.instruments, r.InstrumentID)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -408,7 +428,7 @@ func (s *Service) ExerciseOption(ctx context.Context, tx pgx.Tx, r ExerciseReque
 	if early != nil || err != nil {
 		return derefOutcome(early), err
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -451,8 +471,9 @@ func (s *Service) ExerciseOption(ctx context.Context, tx pgx.Tx, r ExerciseReque
 	if err != nil {
 		return Outcome{}, err
 	}
-	if !hasMark || !markUsable(spec, mark, now) {
-		return s.refuse(ctx, tx, in, errs.CodeStaleMarketData, "an exercise settles at a fresh index and there is none", nil, nil)
+	if !hasMark || !markUsable(spec, mark, now) || !markPriceable(spec, mark) {
+		return s.refuse(ctx, tx, in, errs.CodeStaleMarketData, "an exercise settles at a fresh index and there is none",
+			[]string{ReasonMarkStale}, nil)
 	}
 	underlying, err := alignIndex(spec, mark.IndexMantissa, mark.IndexScale, money.RoundHalfEven)
 	if err != nil {
@@ -514,6 +535,59 @@ func (s *Service) ExerciseOption(ctx context.Context, tx pgx.Tx, r ExerciseReque
 		out.ExerciseID = &e
 	}
 	return out, nil
+}
+
+// Reasons a paper close or an exercise is refused for want of a price.
+const (
+	// ReasonMarkMissing: the contract has never been marked.
+	ReasonMarkMissing = "MARK_MISSING"
+	// ReasonMarkStale: the latest mark is older than the instrument's oracle
+	// max age (or was recorded under terms the contract no longer has).
+	ReasonMarkStale = "MARK_STALE"
+)
+
+// staleCloseEvidence is the archived record of a close refused for want of a
+// fresh mark: what was seen, and the limit it failed.
+type staleCloseEvidence struct {
+	IntentID         string    `json:"intent_id"`
+	AccountID        string    `json:"account_id"`
+	InstrumentID     string    `json:"instrument_id"`
+	Reason           string    `json:"reason"`
+	MarkID           string    `json:"mark_id"`
+	MarkObservedAt   time.Time `json:"mark_observed_at"`
+	MarkRecordedAt   time.Time `json:"mark_recorded_at"`
+	MarkScale        int32     `json:"mark_scale"`
+	PriceScale       int32     `json:"price_scale"`
+	EvaluatedAt      time.Time `json:"evaluated_at"`
+	OracleMaxAgeMS   int64     `json:"oracle_max_age_ms"`
+	PolicyVersion    string    `json:"policy_version"`
+	RefusalCode      string    `json:"refusal_code"`
+	RefusalStatement string    `json:"refusal_statement"`
+}
+
+// refuseStaleClose refuses a close that has no fresh mark to be priced at. The
+// refusal is recorded like every refusal (the intent REJECTED with
+// STALE_MARKET_DATA, its transition naming the mark) and its inputs are
+// archived as evidence under derivatives/refusal/<intent id>, so a close a
+// stalled feed blocked can be found and explained.
+func (s *Service) refuseStaleClose(ctx context.Context, tx pgx.Tx, in econ.Intent, spec Spec, mark Mark, now time.Time) (Outcome, error) {
+	statement := "a paper close is priced only at a mark fresh within the contract's oracle max age"
+	if _, err := econ.RecordEvidence(ctx, tx, econ.Evidence{Key: "derivatives/refusal/" + in.ID.String(), Document: staleCloseEvidence{
+		IntentID: in.ID.String(), AccountID: in.AccountID.String(), InstrumentID: spec.InstrumentID.String(), Reason: ReasonMarkStale,
+		MarkID: mark.ID.String(), MarkObservedAt: mark.ObservedAt, MarkRecordedAt: mark.RecordedAt, MarkScale: mark.MarkScale,
+		PriceScale: spec.PriceScale, EvaluatedAt: now, OracleMaxAgeMS: spec.OracleMaxAge.Milliseconds(),
+		PolicyVersion: s.policy.Version, RefusalCode: string(errs.CodeStaleMarketData), RefusalStatement: statement,
+	}}); err != nil {
+		return Outcome{}, err
+	}
+	detail := fmt.Sprintf("mark %s observed at %s is not fresh at %s (oracle max age %s); %s",
+		mark.ID, mark.ObservedAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), spec.OracleMaxAge, statement)
+	out, err := s.refuse(ctx, tx, in, errs.CodeStaleMarketData, detail, []string{ReasonMarkStale}, nil)
+	if ref, ok := AsRefusal(err); ok {
+		ref.err = ref.err.WithField("mark_id", mark.ID.String()).WithField("mark_observed_at", mark.ObservedAt).
+			WithField("oracle_max_age_ms", spec.OracleMaxAge.Milliseconds())
+	}
+	return out, err
 }
 
 // alignIndex expresses an index (mantissa at scale) as a price on the

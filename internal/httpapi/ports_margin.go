@@ -8,6 +8,7 @@ import (
 	"github.com/nodal/controlplane/internal/assets"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/gates"
+	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/money"
 )
@@ -58,6 +59,76 @@ type MarginPort interface {
 	// AllCalls pages margin calls across every account; an empty status lists
 	// every status.
 	AllCalls(ctx context.Context, status margin.CallStatus, cursor string, limit int) (MarginCallPage, error)
+
+	// Deficit reads an account's latest liquidation case, the deficit the
+	// insurance fund covered and what was repaid of it. NOT_FOUND when the
+	// account has no margin account.
+	Deficit(ctx context.Context, account accounts.AccountID) (MarginDeficitStatusView, error)
+	// RepayDeficit repays a covered deficit to the insurance fund
+	// (margin.Service.RepayDeficit); the owner's own write.
+	RepayDeficit(ctx context.Context, r margin.DeficitRepaymentRequest) (MarginDeficitRepaymentView, error)
+	// Reviews lists the cases in MANUAL_REVIEW, the longest waiting first,
+	// with every resolution of each.
+	Reviews(ctx context.Context, limit int) ([]MarginReviewView, error)
+	// ProposeResolution and DecideResolution are the two operators of a
+	// MANUAL_REVIEW exit (margin.Service.ProposeCaseResolution and
+	// DecideCaseResolution).
+	ProposeResolution(ctx context.Context, r margin.ProposeResolutionRequest) (margin.Resolution, error)
+	DecideResolution(ctx context.Context, r margin.DecideResolutionRequest) (MarginResolutionDecisionView, error)
+}
+
+// MarginDeficitStatusView is an account's latest liquidation case and the
+// deficit repayments made against it. Margin and Facts are nil when the
+// account has no margin account, Case when it never had a case; Covered is
+// nil unless that case is BANKRUPT with a deficit the insurance fund covered
+// -- the only deficit margin.Service.RepayDeficit accepts a repayment of.
+type MarginDeficitStatusView struct {
+	AccountID  accounts.AccountID
+	Margin     *margin.Account
+	Facts      *MarginFacts
+	Case       *MarginCaseView
+	Covered    *MarginCoveredDeficit
+	Repayments []MarginDeficitRepaymentRecord
+}
+
+// MarginCoveredDeficit is a covered deficit, what was repaid of it and what
+// is still owed, in base units of the numeraire.
+type MarginCoveredDeficit struct {
+	Deficit     money.Quantity
+	Repaid      money.Quantity
+	Outstanding money.Quantity
+}
+
+// MarginDeficitRepaymentRecord is one margin_deficit_repayments row.
+type MarginDeficitRepaymentRecord struct {
+	ID                   margin.RepaymentID
+	Amount               money.Quantity
+	JournalTransactionID ledger.TransactionID
+	EffectID             econ.EffectID
+	IntentID             econ.IntentID
+	RepaidAt             time.Time
+}
+
+// MarginDeficitRepaymentView is one repayment with the account facts its
+// quantities are read in.
+type MarginDeficitRepaymentView struct {
+	Result margin.DeficitRepaymentResult
+	Facts  MarginFacts
+}
+
+// MarginReviewView is a case in MANUAL_REVIEW: the transition that put it
+// in the review it is in now and every resolution proposed for it.
+type MarginReviewView struct {
+	Case                      MarginCaseView
+	CurrentReviewTransitionID string
+	EnteredReviewAt           time.Time
+	Resolutions               []margin.Resolution
+}
+
+// MarginResolutionDecisionView is a decided resolution and the case after it.
+type MarginResolutionDecisionView struct {
+	Result margin.ResolutionResult
+	Case   MarginCaseView
 }
 
 // MarginFacts are the account facts a margin record needs to be read: whose

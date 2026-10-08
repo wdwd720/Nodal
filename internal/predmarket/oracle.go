@@ -12,7 +12,6 @@ import (
 	"io"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -220,25 +219,21 @@ func DecodeOracleReport(b []byte) (OracleReport, error) {
 	return r, nil
 }
 
-// SandboxOracle is the deterministic sandbox oracle. Its Ed25519 key is
-// derived from a seed, so a test or a sandbox deployment can rebuild the same
-// oracle, and its reports -- the outcome it was told it observed, signed --
-// are byte-for-byte reproducible. It holds no package-level state.
+// SandboxOracle is the deterministic sandbox oracle's signing key. Its
+// Ed25519 key is derived from a seed, so a test or a sandbox deployment can
+// rebuild the same oracle, and its reports are byte-for-byte reproducible.
+//
+// It keeps nothing: what the sandbox oracle observed is recorded by an
+// operator through Service.RecordObservation, which signs the observation
+// with this key and stores it in prediction_oracle_observations in the
+// caller's transaction, so observations survive restarts, are shared by every
+// replica and are audited; Service.FetchReport reads the latest stored one
+// back and verifies it against the market's key. It holds no package-level
+// state and no mutable state at all.
 type SandboxOracle struct {
 	source string
 	key    ed25519.PrivateKey
-
-	mu           sync.Mutex
-	observations map[MarketID]sandboxObservation
 }
-
-type sandboxObservation struct {
-	outcome    string
-	observedAt time.Time
-	evidence   []byte
-}
-
-var _ PredictionOracleProvider = (*SandboxOracle)(nil)
 
 // NewSandboxOracle builds a sandbox oracle named source whose key derives
 // from a 32-byte seed.
@@ -249,11 +244,7 @@ func NewSandboxOracle(source string, seed []byte) (*SandboxOracle, error) {
 	if len(seed) != ed25519.SeedSize {
 		return nil, errs.New(errs.CodeValidationFailed, "predmarket: a sandbox oracle seed is 32 bytes")
 	}
-	return &SandboxOracle{
-		source:       source,
-		key:          ed25519.NewKeyFromSeed(seed),
-		observations: make(map[MarketID]sandboxObservation),
-	}, nil
+	return &SandboxOracle{source: source, key: ed25519.NewKeyFromSeed(seed)}, nil
 }
 
 // Source returns the oracle's source name.
@@ -265,43 +256,10 @@ func (o *SandboxOracle) PublicKey() ed25519.PublicKey {
 	return append(ed25519.PublicKey(nil), pub...)
 }
 
-// Observe records what the sandbox oracle saw for a market. A later
-// observation replaces an earlier one, which is how a sandbox models an
-// oracle correcting itself.
-func (o *SandboxOracle) Observe(marketID MarketID, outcome string, observedAt time.Time, evidence []byte) error {
-	probe := OracleReport{
-		MarketID: marketID, Outcome: outcome, Source: o.source, ObservedAt: observedAt.UTC(),
-		Evidence: evidence, Signature: make([]byte, ed25519.SignatureSize),
-	}
-	if err := probe.validateShape(); err != nil {
-		return err
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.observations[marketID] = sandboxObservation{
-		outcome: outcome, observedAt: observedAt.UTC(), evidence: append([]byte(nil), evidence...),
-	}
-	return nil
-}
-
-// Report implements PredictionOracleProvider: the signed report of the
-// market's latest observation, or NOT_FOUND while the oracle has observed
-// nothing for it.
-func (o *SandboxOracle) Report(ctx context.Context, marketID MarketID) (OracleReport, error) {
-	if err := ctx.Err(); err != nil {
-		return OracleReport{}, err
-	}
-	o.mu.Lock()
-	obs, ok := o.observations[marketID]
-	o.mu.Unlock()
-	if !ok {
-		return OracleReport{}, errs.New(errs.CodeNotFound, "predmarket: the oracle has no observation for this market yet").
-			WithField("market_id", marketID.String())
-	}
-	return o.Sign(OracleReport{
-		MarketID: marketID, Outcome: obs.outcome, Source: o.source, ObservedAt: obs.observedAt,
-		Evidence: append([]byte(nil), obs.evidence...),
-	})
+// signsFor reports whether a market registered this oracle: its source and
+// its public key.
+func (o *SandboxOracle) signsFor(m Market) bool {
+	return o != nil && m.OracleSource == o.source && bytes.Equal(m.OraclePublicKey, o.PublicKey())
 }
 
 // Sign returns r with Source set to this oracle and a fresh signature by its

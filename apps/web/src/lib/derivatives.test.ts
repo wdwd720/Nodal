@@ -15,6 +15,7 @@ import {
   checkContract,
   checkPosition,
   checkPositionPage,
+  checkSettlementCommand,
   checkTradeResult,
   derivativeAnalyticsSpec,
   derivativeClearingReportSpec,
@@ -29,10 +30,13 @@ import {
   formatRateE8,
   instantOf,
   latestEndedIntervalStart,
+  mantissaDecimal,
   parseBpsInput,
   parseContractsInput,
   parseDecimalInput,
   parseInstantInput,
+  parseReasonInput,
+  parseSha256Input,
   refusedIntentId,
 } from "./derivatives.ts";
 
@@ -426,4 +430,130 @@ test("flows, runs, analytics and reconciliation are exact strings in the simulat
   };
   assert.doesNotThrow(() => validated(report, derivativeClearingReportSpec, "/x"));
   refuses(() => validated(broken(report, (r) => (r["difference"] = "0.0")), derivativeClearingReportSpec, "/x"), /^\/x\.difference$/);
+});
+
+/* --------------------------------------------------------------------------
+ * The settlement rule and its dual-controlled override
+ * ------------------------------------------------------------------------ */
+
+test("a confirmed price is the preview's mantissa with its point moved, never computed", () => {
+  assert.equal(mantissaDecimal("6600000", 2), "66000.00");
+  assert.equal(mantissaDecimal("5", 2), "0.05");
+  assert.equal(mantissaDecimal("6600000", 0), "6600000");
+  assert.equal(mantissaDecimal("-1", 2), undefined);
+  assert.equal(mantissaDecimal("66000.00", 2), undefined);
+  assert.equal(mantissaDecimal("1", -1), undefined);
+});
+
+test("an override's evidence digest and reason are taken as the API takes them", () => {
+  const digest = "AB".repeat(32);
+  assert.deepEqual(parseSha256Input(` ${digest} `), { ok: true, value: "ab".repeat(32), error: "" });
+  assert.equal(parseSha256Input("ab").ok, false);
+  assert.equal(parseSha256Input("zz".repeat(32)).ok, false);
+  assert.equal(parseSha256Input("").ok, false);
+  assert.deepEqual(parseReasonInput("  stalled feed  ", 1000), { ok: true, value: "stalled feed", error: "" });
+  assert.equal(parseReasonInput("   ", 1000).ok, false);
+  assert.equal(parseReasonInput("x".repeat(11), 10).ok, false);
+});
+
+const override = {
+  value_domain: "SIMULATED",
+  id: INTENT,
+  instrument_id: INSTRUMENT,
+  status: "PROPOSED",
+  price_mantissa: "6700000",
+  price_scale: 2,
+  reference_mark_id: MARK,
+  reference_mantissa: "6600000",
+  max_deviation_bps: 1000,
+  deviation_bps: 152,
+  reason: "the feed stalled before expiry",
+  evidence_ref: "s3://sandbox-evidence/bulletin.pdf",
+  evidence_sha256: "ab".repeat(32),
+  proposed_by: { actor_type: "OPERATOR", actor_id: "op-alice" },
+  proposed_at: NOW,
+};
+
+const settlementResult = {
+  value_domain: "SIMULATED",
+  settlement_id: POSITION,
+  instrument_id: INSTRUMENT,
+  kind: "FUTURE",
+  replay: false,
+  price_mantissa: "6700000",
+  price_scale: 2,
+  price_rule: "OPERATOR_OVERRIDE",
+  price_source: `override:${INTENT}`,
+  mark_id: MARK,
+  override_id: INTENT,
+  positions: 2,
+  exercise_ids: [],
+  settlement_asset: asset,
+  journal_transaction_ids: [],
+};
+
+test("a settlement command answers with exactly what its method produced", () => {
+  const rule = { value_domain: "SIMULATED", method: "RULE", settlement: { ...settlementResult, price_rule: "EXPIRY_MARK" } };
+  assert.doesNotThrow(() => checkSettlementCommand(rule, "/s"));
+  refuses(() => checkSettlementCommand(broken(rule, (r) => delete r["settlement"]), "/s"), /^\/s\.settlement$/);
+  refuses(() => checkSettlementCommand(broken(rule, (r) => (r["override"] = override)), "/s"), /^\/s\.override$/);
+
+  const proposed = { value_domain: "SIMULATED", method: "PROPOSE_OVERRIDE", override };
+  assert.doesNotThrow(() => checkSettlementCommand(proposed, "/s"));
+  refuses(() => checkSettlementCommand(broken(proposed, (r) => (r["settlement"] = settlementResult)), "/s"), /^\/s\.settlement$/);
+  refuses(
+    () => checkSettlementCommand(broken(proposed, (r) => ((r["override"] as Record<string, unknown>)["status"] = "MAYBE")), "/s"),
+    /^\/s\.override\.status$/,
+  );
+
+  const approved = {
+    value_domain: "SIMULATED",
+    method: "APPROVE_OVERRIDE",
+    settlement: settlementResult,
+    override: {
+      ...override,
+      status: "APPROVED",
+      settlement_id: POSITION,
+      decision: { decision: "APPROVED", reason: "checked", decided_by: { actor_type: "OPERATOR", actor_id: "op-bob" }, decided_at: NOW },
+    },
+  };
+  assert.doesNotThrow(() => checkSettlementCommand(approved, "/s"));
+  refuses(() => checkSettlementCommand(broken(approved, (r) => delete r["override"]), "/s"), /^\/s\.override$/);
+  refuses(
+    () => checkSettlementCommand(broken(approved, (r) => ((r["settlement"] as Record<string, unknown>)["price_rule"] = "CALLER")), "/s"),
+    /^\/s\.settlement\.price_rule$/,
+  );
+  refuses(() => checkSettlementCommand(broken(approved, (r) => (r["method"] = "CHOOSE")), "/s"), /^\/s\.method$/);
+});
+
+test("a dated contract's preview carries the reference it says it has", () => {
+  const dated = {
+    ...contract,
+    kind: "FUTURE",
+    settlement_preview: {
+      expiry: NOW,
+      expired: true,
+      settled: false,
+      price_scale: 2,
+      has_reference: true,
+      reference_mark: mark,
+      reference_price_mantissa: "6600000",
+      price_source: `mark:${MARK}`,
+      settleable: false,
+      override_min_price_mantissa: "5940000",
+      override_max_price_mantissa: "7260000",
+      max_deviation_bps: 1000,
+      rule_statement: "EXPIRY_MARK v1: ...",
+    },
+    settlement_overrides: [override],
+  };
+  assert.doesNotThrow(() => checkContract(dated, "/c"));
+  refuses(
+    () => checkContract(broken(dated, (c) => delete (c["settlement_preview"] as Record<string, unknown>)["reference_price_mantissa"]), "/c"),
+    /^\/c\.settlement_preview\.reference_price_mantissa$/,
+  );
+  refuses(
+    () => checkContract(broken(dated, (c) => (((c["settlement_overrides"] as unknown[])[0] as Record<string, unknown>)["price_mantissa"] = "67000.00")), "/c"),
+    /^\/c\.settlement_overrides\[0\]\.price_mantissa$/,
+  );
 });

@@ -1,8 +1,8 @@
 /**
  * ONE PREDICTION MARKET: its definition, its lifecycle, its outcomes, every
- * resolution and dispute, its settlement record, its escrow books, the
- * account's shares, the complete-set forms and, for an operator, the actions
- * its status admits.
+ * resolution and dispute, every void proposal, its settlement record, its
+ * escrow books, the account's shares and held payout, the complete-set forms
+ * and, for an operator, the actions its status admits.
  *
  * Every figure is a base-unit string the backend computed, shown as the
  * decimal it denotes with the asset it is counted in. The escrow books are
@@ -21,6 +21,7 @@ import {
   type PredictionMarketDetail,
   type PredictionPositionList,
   type PredictionSettlement,
+  type PredictionVoidProposal,
 } from "../../../api/advanced/predmarket.ts";
 import { LinkButton } from "../../../components/Button.tsx";
 import { AsyncPanel, EmptyState } from "../../../components/DataState.tsx";
@@ -34,6 +35,7 @@ import {
   RESOLUTION_MEANING,
   ROUNDING_MEANING,
   STATUS_MEANING,
+  VOID_DUAL_CONTROL_NOTE,
   lifecycleSteps,
   statusTone,
   type LifecycleStep,
@@ -43,6 +45,7 @@ import { useSession } from "../../../session.tsx";
 import { advancedHref, useAdvancedAccount } from "../area.ts";
 import { Codes, ModePill, NoAccount, ScrollTable } from "../shared.tsx";
 import { OperatorActionsPanel } from "./OperatorActions.tsx";
+import { HeldPayoutSection } from "./HeldPayout.tsx";
 import { ActorLine } from "./parts.tsx";
 import { marketsHref } from "./paths.ts";
 import { CompleteSetsPanel } from "./SetForms.tsx";
@@ -82,13 +85,16 @@ function MarketPanels(props: { readonly detail: PredictionMarketDetail }): React
       <LifecyclePanel detail={detail} />
       <OutcomesPanel market={market} />
       <ResolutionsPanel detail={detail} />
+      <VoidProposalsPanel proposals={detail.void_proposals} />
       <SettlementPanel market={market} settlement={detail.settlement} />
       <BooksPanel market={market} />
       <PositionsPanel market={market} />
       {/* Keyed by market: a command and its answer belong to one market and
           must not carry over when the route moves to another. */}
       <CompleteSetsPanel key={`sets-${market.id}`} market={market} />
-      {operator && <OperatorActionsPanel key={`operator-${market.id}`} market={market} />}
+      {operator && (
+        <OperatorActionsPanel key={`operator-${market.id}`} market={market} proposals={detail.void_proposals} />
+      )}
     </>
   );
 }
@@ -127,7 +133,7 @@ function DefinitionPanel(props: { readonly market: PredictionMarket }): ReactNod
         <Field label="Oracle key" note="Only a report this Ed25519 key signed can resolve the market.">
           <Identifier value={market.oracle_public_key} />
         </Field>
-        <Field label="Defined by" note="The operator who defined it can never resolve or void it.">
+        <Field label="Defined by" note="The operator who defined it can never resolve it or take part in voiding it.">
           <ActorLine actor={market.created_by} />
         </Field>
         <Field label="Definition hash">
@@ -308,6 +314,55 @@ function ResolutionsPanel(props: { readonly detail: PredictionMarketDetail }): R
   );
 }
 
+function VoidProposalsPanel(props: { readonly proposals: readonly PredictionVoidProposal[] }): ReactNode {
+  const { proposals } = props;
+  return (
+    <Panel title="Void proposals" description={VOID_DUAL_CONTROL_NOTE}>
+      {proposals.length === 0 ? (
+        <EmptyState
+          title="No void proposal"
+          body="No operator has proposed to void this market. A void happens only when a second operator approves a proposal."
+        />
+      ) : (
+        <ScrollTable caption="Void proposals" headers={["Proposed", "Proposed by", "Reason", "Against", "Approval"]}>
+          {proposals.map((proposal) => (
+            <tr key={proposal.id}>
+              <td>{formatInstant(proposal.proposed_at)}</td>
+              <td>
+                <ActorLine actor={proposal.proposed_by} />
+              </td>
+              <td className="cell-prose">
+                {proposal.reason}
+                <span className="cell-note">
+                  evidence <Identifier value={proposal.evidence_ref} />
+                </span>
+              </td>
+              <td>
+                <Pill tone={statusTone(proposal.market_status)}>{proposal.market_status}</Pill>
+                {proposal.resolution_id !== undefined && (
+                  <span className="cell-note">
+                    resolution <code className="mono-small">{proposal.resolution_id}</code>
+                  </span>
+                )}
+              </td>
+              <td>
+                {proposal.approval === undefined ? (
+                  <span className="absent">awaiting a second operator</span>
+                ) : (
+                  <>
+                    <Pill tone="bad">APPROVED</Pill> <ActorLine actor={proposal.approval.approved_by} />
+                    <span className="cell-note">{formatInstant(proposal.approval.approved_at)}</span>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </ScrollTable>
+      )}
+    </Panel>
+  );
+}
+
 function SettlementPanel(props: {
   readonly market: PredictionMarket;
   readonly settlement: PredictionSettlement | undefined;
@@ -319,7 +374,7 @@ function SettlementPanel(props: {
   return (
     <Panel
       title="Settlement"
-      description="The one record of how the market paid out its escrow, or refunded it when voided. Escrow before = paid + residual, checked by the backend from the books."
+      description="The one record of how the market paid out its escrow, or refunded it when voided. Escrow before = paid + residual, checked by the backend from the books; of what was paid, what could not be delivered is held in the escrow for its holder."
     >
       {settlement === undefined ? (
         <EmptyState
@@ -340,7 +395,12 @@ function SettlementPanel(props: {
             </Field>
           )}
           <Field label="Escrow before">{collateral(settlement.escrow_before)}</Field>
-          <Field label="Paid to holders">{collateral(settlement.total_paid)}</Field>
+          <Field label="Paid to holders" note="Delivered, or held for the holder.">
+            {collateral(settlement.total_paid)}
+          </Field>
+          <Field label="Held for holders" note="Not delivered: kept in the escrow until each holder claims it.">
+            {collateral(settlement.total_held)}
+          </Field>
           <Field label="Residual kept by the escrow">{collateral(settlement.residual)}</Field>
           <Field label="Holders">{String(settlement.holder_count)}</Field>
           <Field label="Rounding" note={ROUNDING_MEANING[settlement.rounding_policy]}>
@@ -367,7 +427,7 @@ function BooksPanel(props: { readonly market: PredictionMarket }): ReactNode {
   return (
     <Panel
       title="Escrow books"
-      description="The market's segregated escrow, read in one snapshot. The identity the backend checks: escrow = collateral = shares outstanding of each outcome + residual, and every share issued is outstanding and held by a customer."
+      description="The market's segregated escrow, read in one snapshot. The identity the backend checks: escrow = collateral = shares outstanding of each outcome + residual + payouts held for their holders, and every share issued is outstanding and held by a customer."
     >
       <AsyncPanel query={books} loadingLabel="Reading the escrow books…">
         {(data: PredictionEscrowBooks) => (
@@ -389,6 +449,9 @@ function BooksPanel(props: { readonly market: PredictionMarket }): ReactNode {
               </Field>
               <Field label="Disclosed residual" note="Zero unless a void refunded the market.">
                 <Qty value={data.residual} decimals={data.collateral_decimals} symbol={data.collateral_symbol} />
+              </Field>
+              <Field label="Held for holders" note="Payouts not yet claimed by the holders they are held for.">
+                <Qty value={data.held} decimals={data.collateral_decimals} symbol={data.collateral_symbol} />
               </Field>
             </FieldGrid>
             <ScrollTable
@@ -418,7 +481,7 @@ function BooksPanel(props: { readonly market: PredictionMarket }): ReactNode {
 }
 
 function PositionsPanel(props: { readonly market: PredictionMarket }): ReactNode {
-  const { accountId } = useAdvancedAccount();
+  const { accountId, ownAccountId } = useAdvancedAccount();
   const positions = usePredictionPositions(accountId, props.market.id);
   return (
     <Panel
@@ -432,31 +495,48 @@ function PositionsPanel(props: { readonly market: PredictionMarket }): ReactNode
           query={positions}
           loadingLabel="Reading the account's shares…"
           empty={{
-            isEmpty: (list: PredictionPositionList) => list.items.length === 0,
+            isEmpty: (list: PredictionPositionList) => list.items.length === 0 && list.held_payout === undefined,
             title: "No shares held",
-            body: "The backend reports no share of this market for the account. That is a statement about holdings, not a balance of zero standing in for one.",
+            body: "The backend reports no share of this market for the account, and no payout held for it. That is a statement about holdings, not a balance of zero standing in for one.",
           }}
         >
           {(list: PredictionPositionList) => (
             <>
-              <ScrollTable caption="Shares held, by outcome" headers={["Outcome", "Shares", "Base units", "As of"]}>
-                {list.items.map((position) => (
-                  <tr key={position.outcome_index}>
-                    <th scope="row">{position.outcome_symbol}</th>
-                    <td>
-                      <Qty value={position.quantity} decimals={list.share_decimals} />
-                    </td>
-                    <td>
-                      <BaseUnits value={position.quantity} />
-                    </td>
-                    <td>
-                      {formatInstant(position.as_of)}
-                      <span className="cell-note">{exactInstant(position.as_of)}</span>
-                    </td>
-                  </tr>
-                ))}
-              </ScrollTable>
-              <AsOf at={list.items[0]?.as_of} label="Balances as of" />
+              {list.held_payout !== undefined && (
+                <HeldPayoutSection
+                  market={props.market}
+                  held={list.held_payout}
+                  accountId={list.account_id}
+                  ownAccountId={ownAccountId}
+                />
+              )}
+              {list.items.length === 0 ? (
+                <p className="note">
+                  The backend reports no share of this market for the account: its shares were retired when the
+                  market settled or was voided.
+                </p>
+              ) : (
+                <>
+                  <ScrollTable caption="Shares held, by outcome" headers={["Outcome", "Shares", "Base units", "As of"]}>
+                    {list.items.map((position) => (
+                      <tr key={position.outcome_index}>
+                        <th scope="row">{position.outcome_symbol}</th>
+                        <td>
+                          <Qty value={position.quantity} decimals={list.share_decimals} />
+                        </td>
+                        <td>
+                          <BaseUnits value={position.quantity} />
+                        </td>
+                        <td>
+                          {formatInstant(position.as_of)}
+                          <span className="cell-note">{exactInstant(position.as_of)}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </ScrollTable>
+                  <AsOf at={list.items[0]?.as_of} label="Balances as of" />
+                </>
+              )}
             </>
           )}
         </AsyncPanel>

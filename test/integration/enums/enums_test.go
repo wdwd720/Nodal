@@ -40,6 +40,7 @@ import (
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
+	"github.com/nodal/controlplane/internal/delegation"
 	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
@@ -243,6 +244,47 @@ func registry() []pair {
 		{table: "performance_fee_period_transitions", constraint: "performance_fee_period_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_flows", constraint: "performance_fee_flows_recorded_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_lines", constraint: "performance_fee_lines_kind_check", source: "feeledger.AllLineKinds()", values: str(feeledger.AllLineKinds())},
+		// 00758 transfer reversals under dual control.
+		{table: "transfer_reversal_decisions", constraint: "transfer_reversal_decisions_decision_check", source: "transfers.AllReversalDecisions()", values: str(transfers.AllReversalDecisions())},
+		// 00755 derivatives hardening: the settlement price rule, two-operator overrides.
+		{table: "derivative_settlements", constraint: "derivative_settlements_price_rule_check", source: "derivatives.AllSettlementPriceRules()", values: str(derivatives.AllSettlementPriceRules())},
+		{table: "derivative_settlement_override_decisions", constraint: "derivative_settlement_override_decisions_decision_check", source: "derivatives.AllOverrideDecisions()", values: str(derivatives.AllOverrideDecisions())},
+		// 00756 prediction-market hardening: two-operator voids, held payouts.
+		{table: "prediction_void_proposals", constraint: "prediction_void_proposals_market_status_check", source: "predmarket.VoidableStatuses()", values: str(predmarket.VoidableStatuses())},
+		{table: "prediction_held_payouts", constraint: "prediction_held_payouts_kind_check", source: "predmarket.AllSettlementKinds()", values: str(predmarket.AllSettlementKinds())},
+		{table: "prediction_held_payout_claims", constraint: "prediction_held_payout_claims_claimed_by_actor_type_check", source: "predmarket.ClaimActorTypes()", values: str(predmarket.ClaimActorTypes())},
+		// 00752 delegated signing and 00753 delegated withdrawals. The array
+		// CHECKs (<@ ARRAY[...]) on delegated_capabilities are paired by the
+		// package's own TestIntegration_EveryDelegationEnumMatchesItsCheck.
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_environment_check", source: "delegation.Environments()", values: str(delegation.Environments())},
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_mode_check", source: "delegation.SupportedModes()", values: str(delegation.SupportedModes())},
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_status_check", source: "delegation.AllCapabilityStatuses()", values: str(delegation.AllCapabilityStatuses())},
+		{table: "delegated_capabilities", constraint: "delegated_capabilities_revoked_by_actor_type_check", source: "delegation.RevokerActorTypes()", values: str(delegation.RevokerActorTypes())},
+		{table: "delegated_signer_keys", constraint: "delegated_signer_keys_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegation_venues", constraint: "delegation_venues_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegation_venues", constraint: "delegation_venues_created_by_actor_type_check", source: "delegation.VenueCreatorActorTypes()", values: str(delegation.VenueCreatorActorTypes())},
+		{table: "delegated_capability_usage", constraint: "delegated_capability_usage_subject_kind_check", source: "delegation.AllSubjectKinds()", values: str(delegation.AllSubjectKinds())},
+		{table: "delegated_capability_usage", constraint: "delegated_capability_usage_action_class_check", source: "delegation.AllActionClasses()", values: str(delegation.AllActionClasses())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_mode_check", source: "delegation.SupportedModes()", values: str(delegation.SupportedModes())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_action_class_check", source: "delegation.SwapActionClasses()", values: str(delegation.SwapActionClasses())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_status_check", source: "delegation.AllSwapStatuses()", values: str(delegation.AllSwapStatuses())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_signed_has_tx", source: "delegation.SwapStatusesBeforeSigning()", values: str(delegation.SwapStatusesBeforeSigning())},
+		{table: "delegated_swaps", constraint: "delegated_swaps_failure_code", source: "delegation.SwapStatusesWithFailureCode()", values: str(delegation.SwapStatusesWithFailureCode())},
+		{table: "delegated_swap_approvals", constraint: "delegated_swap_approvals_decision_check", source: "delegation.AllDecisions()", values: str(delegation.AllDecisions())},
+		{table: "delegated_signing_decisions", constraint: "delegated_signing_decisions_verdict_check", source: "delegation.AllVerdicts()", values: str(delegation.AllVerdicts())},
+		{table: "delegated_withdrawal_destinations", constraint: "delegated_withdrawal_destinations_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegated_withdrawal_destinations", constraint: "delegated_withdrawal_destinations_status_check", source: "delegation.AllDestinationStatuses()", values: str(delegation.AllDestinationStatuses())},
+		{table: "delegated_withdrawal_destinations", constraint: "delegated_withdrawal_destinations_removed_by_actor_type_check", source: "delegation.RevokerActorTypes()", values: str(delegation.RevokerActorTypes())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_environment_check", source: "delegation.Environments()", values: str(delegation.Environments())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_mode_check", source: "delegation.SupportedModes()", values: str(delegation.SupportedModes())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_chain_id_check", source: "delegation.Chains()", values: str(delegation.Chains())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_evaluation_outcome_check", source: "delegation.StoredEvaluationOutcomes()", values: str(delegation.StoredEvaluationOutcomes())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_status_check", source: "delegation.AllWithdrawalStatuses()", values: str(delegation.AllWithdrawalStatuses())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_signed_has_tx", source: "delegation.WithdrawalStatusesBeforeSigning()", values: str(delegation.WithdrawalStatusesBeforeSigning())},
+		{table: "delegated_withdrawals", constraint: "delegated_withdrawals_failure_code", source: "delegation.WithdrawalStatusesWithFailureCode()", values: str(delegation.WithdrawalStatusesWithFailureCode())},
+		{table: "delegated_withdrawal_approvals", constraint: "delegated_withdrawal_approvals_decision_check", source: "delegation.AllDecisions()", values: str(delegation.AllDecisions())},
+		{table: "delegated_withdrawal_approvals", constraint: "delegated_withdrawal_approvals_approver_actor_type_check", source: "delegation.WithdrawalApproverActorTypes()", values: str(delegation.WithdrawalApproverActorTypes())},
 
 		// Migration 00749 (prediction markets).
 		{table: "prediction_markets", constraint: "prediction_markets_status_check", source: "predmarket.AllMarketStatuses()", values: str(predmarket.AllMarketStatuses())},
@@ -420,6 +462,10 @@ func TestTheThreeModeListsAgreeWithEachOther(t *testing.T) {
 // shape is not a flat list of values.
 var bespoke = []string{
 	"agents.agents_check3",
+	// A rule: AUTO_APPROVE only in a test environment. Its Go statement is
+	// delegation.TestEnvironments() plus OutcomeAutoApprove, compared by
+	// internal/delegation's TestIntegration_EveryDelegationEnumMatchesItsCheck.
+	"delegated_withdrawals.delegated_withdrawals_auto_only_in_test",
 	// Not a list of values but a rule: the house book and every facility hold
 	// SIMULATED value only. internal/econ's
 	// TestIntegration_HouseAndFacilityBooksCannotHoldRealValue drives it.

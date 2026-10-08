@@ -99,9 +99,12 @@ export const STATUS_MEANING: Readonly<Record<MarketStatus, string>> = {
   RESOLVING: "An oracle report has been requested and is awaited.",
   RESOLVED:
     "A verified oracle report named the winning outcome. It settles once its dispute window has passed, unless disputed.",
-  DISPUTED: "The resolution was disputed. Nothing settles until an operator rules on the dispute or voids the market.",
-  SETTLED: "Paid out from the escrow: each winning share paid one collateral unit and every share was retired.",
-  VOIDED: "Voided: every share was refunded at the disclosed rate and the residual stayed in the escrow.",
+  DISPUTED:
+    "The resolution was disputed. Nothing settles until an independent operator rules on the dispute, or two operators void the market.",
+  SETTLED:
+    "Paid out from the escrow: each winning share paid one collateral unit and every share was retired. A payout that could not be delivered is held in the escrow until its holder claims it.",
+  VOIDED:
+    "Voided by two operators: every share was refunded at the disclosed rate and the residual stayed in the escrow. A refund that could not be delivered is held there until its holder claims it.",
 };
 
 export function statusTone(status: string): Tone {
@@ -134,13 +137,14 @@ export const ROUNDING_MEANING: Readonly<Record<(typeof ROUNDING_POLICIES)[number
 };
 
 /**
- * The service's own explanation of the order book: outcome shares are
- * instruments an internal order book can trade, and that book is not part of
- * this build yet.
+ * How outcome shares trade: each outcome is an instrument of the internal
+ * order book, whose books an operator opens, and the market cancels every
+ * working order on them when it closes, is voided or settles.
  */
 export const ORDER_BOOK_NOTE =
-  "Each outcome has its own instrument for the internal order book. Trading opens when the internal order book " +
-  "lands; until then shares are only issued and redeemed here, as complete sets, against the escrow.";
+  "Each outcome has its own instrument, and its shares trade on the internal order book once an operator opens " +
+  "a book for it. Complete sets are issued and redeemed here, against the escrow. Working orders on an outcome's " +
+  "book are cancelled when the market closes, is voided or settles.";
 
 /** Why a complete set is the unit here. */
 export const COMPLETE_SET_NOTE =
@@ -282,6 +286,41 @@ export function localInputToInstant(value: string): string | undefined {
   if (value.trim() === "") return undefined;
   const parsed = new Date(value);
   return isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+/* --------------------------------------------------------------------------
+ * Voids and held payouts
+ * ------------------------------------------------------------------------ */
+
+/** How a void works, in the service's terms. */
+export const VOID_DUAL_CONTROL_NOTE =
+  "A void needs two operators: one proposes it with a reason and evidence, a different one approves it, and only " +
+  "the approval refunds. Neither may be the market's creator or the author of its resolution in force, and a " +
+  "resolved market inside its dispute window is disputed, not voided.";
+
+/** What a held payout is. */
+export const HELD_PAYOUT_NOTE =
+  "When a market settled or was voided, this account's payout could not be delivered (the reasons are the risk " +
+  "kernel's codes). Its shares were retired like everyone else's and the amount is held in the market's escrow " +
+  "for this account. Once the account is eligible, claim it; the claim is checked again and happens once.";
+
+/**
+ * The void proposals still waiting for a second operator: not approved, on a
+ * market that has not settled or been voided. A proposal made against another
+ * resolution than the one now in force is still listed; the backend refuses
+ * its approval and says why.
+ */
+export function pendingVoidProposals<P extends { readonly id: string; readonly approval?: unknown }>(
+  proposals: readonly P[],
+  marketStatus: string,
+): P[] {
+  if (marketStatus === "SETTLED" || marketStatus === "VOIDED") return [];
+  return proposals.filter((proposal) => proposal.approval === undefined || proposal.approval === null);
+}
+
+/** Whether the account can ask for its held payout now: there is one, and it has not been claimed. */
+export function claimable(held: { readonly claimed: boolean } | undefined): boolean {
+  return held !== undefined && !held.claimed;
 }
 
 /** A reason the service accepts: 8 to 2000 characters once trimmed. */

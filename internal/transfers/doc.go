@@ -46,17 +46,38 @@
 //
 // A refusal after step 6 is a recorded decision: transfer and intent
 // REJECTED with a stable code, risk decision and evidence written, nothing
-// posted. Reverse is an operator correction: a COMPENSATION journal with
-// reversal_of and a reason code, refused when the recipient no longer holds
-// the funds.
+// posted.
+//
+// # Reversal, under dual control (migration 00758)
+//
+// A COMPLETED transfer is reversed by two operators, never one. An OPERATOR
+// holding ledger:post_correction, with a recent strong authentication,
+// proposes the reversal with a stable reason code and a reason
+// (ProposeReversal); nothing moves. A second, different operator with the same
+// permission and a recent strong authentication approves it
+// (ApproveReversal), and the approval executes the correction in the same
+// transaction: a COMPENSATION journal with reversal_of and the proposal's
+// reason code, the effect COMPENSATED, the transfer REVERSED naming the
+// proposal. Anyone with the permission may reject a proposal instead
+// (RejectReversal), the proposer withdrawing it included. At most one proposal
+// of a transfer is open at a time and a proposal is decided once, so an
+// approved proposal is consumed and a rejected one never executes. The
+// reversal is refused when the recipient no longer holds the funds, and the
+// proposal stays open. The database holds the same line: PT006 (self
+// approval), PT007 (a reversal without an approved two-operator proposal, or
+// an approval that did not reverse), PT008 (a proposal for a transfer that is
+// not COMPLETED, or while another is open).
 //
 // # What this package must never do
 //
 //   - Move anything but SIMULATED value, or post anything but the §5
 //     P2P_TRANSFER template and its exact COMPENSATION mirror.
 //   - Let an agent send, reverse or configure a transfer, or let anyone but
-//     the sender account's owner send one or anyone but an operator holding
-//     ledger:post_correction reverse one.
+//     the sender account's owner send one or anyone but operators holding
+//     ledger:post_correction propose, approve or reject a reversal.
+//   - Let one operator reverse a transfer alone: reverse without an approved
+//     proposal by two distinct operators, let a proposer approve their own
+//     proposal, or execute a rejected or an already approved proposal.
 //   - Edit history: a reversal is a new journal; transfer rows change only
 //     along PENDING -> COMPLETED | REJECTED and COMPLETED -> REVERSED, each
 //     with a transition row (the database refuses anything else).

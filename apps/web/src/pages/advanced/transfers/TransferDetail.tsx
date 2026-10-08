@@ -10,17 +10,18 @@
  * id exists.
  *
  * An operator is offered the one correction a transfer has: reversal, a new
- * compensating journal. Whether it is allowed (the operator's permissions, a
- * recent strong sign-in, the recipient still holding the funds) is the
- * backend's decision, and its refusal is shown with its code.
+ * compensating journal, under dual control -- one operator proposes it and a
+ * second, different operator approves it (./reversals.tsx). Whether either
+ * may (the operator's permissions, a recent strong sign-in, the recipient
+ * still holding the funds) is the backend's decision, and its refusal is
+ * shown with its code.
  */
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { newIdempotencyKey } from "@controlplane/generated-client";
 
-import { useReverseTransfer, useTransfer, type AdvancedTransfer } from "../../../api/advanced/transfers.ts";
-import { Button, LinkButton } from "../../../components/Button.tsx";
-import { AsyncPanel, Explanation } from "../../../components/DataState.tsx";
+import { useTransfer, type AdvancedTransfer } from "../../../api/advanced/transfers.ts";
+import { LinkButton } from "../../../components/Button.tsx";
+import { AsyncPanel } from "../../../components/DataState.tsx";
 import { Field, FieldGrid, Identifier, Page, Panel, Pill } from "../../../components/Layout.tsx";
 import { BaseUnits, Qty, Usd } from "../../../components/Money.tsx";
 import { SimulatedNotice } from "../../../components/SimulatedNotice.tsx";
@@ -28,16 +29,13 @@ import { ADVANCED_MODE_DESCRIPTIONS } from "../../../lib/honesty.ts";
 import { exactInstant, formatInstant } from "../../../lib/time.ts";
 import {
   TRANSFER_STATUS_MEANING,
-  checkRequired,
-  confirmationKey,
-  notReversibleReason,
-  reversible,
   transferSide,
   transferStatusTone,
   type TransferSide,
 } from "../../../lib/transfers.ts";
 import { advancedHref, useAdvancedAccount } from "../area.ts";
 import { Codes, ModePill, ValueDomainPill } from "../shared.tsx";
+import { ReversalPanel } from "./reversals.tsx";
 
 export function TransferDetail(): ReactNode {
   const { transferId } = useParams();
@@ -216,121 +214,15 @@ function EvidencePanel(props: { readonly transfer: AdvancedTransfer; readonly si
                   reason <code className="mono-small">{transfer.reversal_reason_code}</code>
                 </span>
               )}
+              {transfer.reversal_proposal_id !== undefined && (
+                <span className="cell-note" data-field="reversal-proposal">
+                  approved proposal <code className="mono-small">{transfer.reversal_proposal_id}</code>
+                </span>
+              )}
             </>
           )}
         </Field>
       </FieldGrid>
-    </Panel>
-  );
-}
-
-/** The operator correction: a compensating journal with a stable reason code and a reason. */
-function ReversalPanel(props: { readonly transfer: AdvancedTransfer }): ReactNode {
-  const { transfer } = props;
-  const reverse = useReverseTransfer();
-  const [reasonCode, setReasonCode] = useState("");
-  const [reason, setReason] = useState("");
-  const [attemptKey, setAttemptKey] = useState<string | undefined>(undefined);
-  const code = checkRequired(reasonCode, "a reason code, such as DISPUTE_UPHELD");
-  const why = checkRequired(reason, "the reason for the reversal");
-
-  const confirm = (): void => {
-    if (!code.ok || !why.ok) return;
-    const key = confirmationKey(attemptKey, newIdempotencyKey);
-    setAttemptKey(key);
-    reverse.mutate({ transferId: transfer.id, reasonCode: code.value, reason: why.value, idempotencyKey: key });
-  };
-  const changed = (): void => {
-    setAttemptKey(undefined);
-    reverse.reset();
-  };
-
-  return (
-    <Panel
-      title="Operator correction"
-      description="Reversal returns a COMPLETED transfer's value to its sender with a new compensating journal; the original posting is never edited. The backend requires the operator permissions and a recent strong sign-in, and refuses when the recipient no longer holds the funds."
-    >
-      {reverse.isSuccess ? (
-        <p className="callout" role="status" data-reversed={reverse.data.id}>
-          The backend recorded the transfer as <Pill tone={transferStatusTone(reverse.data.status)}>{reverse.data.status}</Pill>
-          {reverse.data.reversal_journal_transaction_id !== undefined && (
-            <>
-              {" "}
-              with compensating journal <code className="mono-small">{reverse.data.reversal_journal_transaction_id}</code>
-            </>
-          )}
-          .
-        </p>
-      ) : !reversible(transfer.status) ? (
-        <div className="form-actions">
-          <Button variant="danger" disabledReason={notReversibleReason(transfer.status)}>
-            Reverse this transfer
-          </Button>
-        </div>
-      ) : (
-        <form
-          className="form"
-          aria-label="Reverse this transfer"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            confirm();
-          }}
-        >
-          <div className="form-row">
-            <label htmlFor="reversal-code">Reason code</label>
-            <input
-              id="reversal-code"
-              className="input"
-              value={reasonCode}
-              autoComplete="off"
-              spellCheck={false}
-              aria-describedby="reversal-code-note"
-              onChange={(event) => {
-                setReasonCode(event.target.value);
-                changed();
-              }}
-            />
-            <p id="reversal-code-note" className="field-note">
-              A stable code in capitals, such as DISPUTE_UPHELD. It becomes the compensating journal's reason code.
-            </p>
-          </div>
-          <div className="form-row">
-            <label htmlFor="reversal-reason">Reason</label>
-            <textarea
-              id="reversal-reason"
-              className="input"
-              rows={2}
-              value={reason}
-              aria-describedby="reversal-reason-note"
-              onChange={(event) => {
-                setReason(event.target.value);
-                changed();
-              }}
-            />
-            <p id="reversal-reason-note" className="field-note">
-              Recorded with the reversal's evidence and its audit record.
-            </p>
-          </div>
-          <div className="form-actions">
-            {code.ok && why.ok ? (
-              <Button variant="danger" submit busy={reverse.isPending} busyLabel="Reversing…">
-                Reverse this transfer
-              </Button>
-            ) : (
-              <Button variant="danger" disabledReason={!code.ok ? code.error : why.error}>
-                Reverse this transfer
-              </Button>
-            )}
-          </div>
-          {attemptKey !== undefined && (
-            <p className="mono-small" data-idempotency-key={attemptKey}>
-              idempotency key {attemptKey} — created at confirmation; a retry reuses it
-            </p>
-          )}
-          {reverse.isError && <Explanation error={reverse.error} onRetry={confirm} retryLabel="Try again with the same key" />}
-        </form>
-      )}
     </Panel>
   );
 }

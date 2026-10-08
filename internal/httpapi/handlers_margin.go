@@ -701,6 +701,179 @@ func (s *Server) GetAdvancedMarginOpsCalls(ctx context.Context, request api.GetA
 	return api.GetAdvancedMarginOpsCalls200JSONResponse(toAPIMarginCallPage(page)), nil
 }
 
+// --- covered deficits ---------------------------------------------------------------
+
+// GetAdvancedMarginDeficit reads an account's latest liquidation case, the
+// deficit the insurance fund covered and what was repaid of it.
+func (s *Server) GetAdvancedMarginDeficit(ctx context.Context, request api.GetAdvancedMarginDeficitRequestObject) (api.GetAdvancedMarginDeficitResponseObject, error) {
+	if s.opts.Ports.Margin == nil {
+		return nil, errNotWired(marginFeature)
+	}
+	account, err := accountScope(ctx, request.Params.AccountId)
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.opts.Ports.Margin.Deficit(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAdvancedMarginDeficit200JSONResponse(toAPIMarginDeficitStatus(v)), nil
+}
+
+// PostAdvancedMarginDeficitRepayments repays part or all of the caller's
+// covered deficit to the insurance fund; the margin service decides.
+func (s *Server) PostAdvancedMarginDeficitRepayments(ctx context.Context, request api.PostAdvancedMarginDeficitRepaymentsRequestObject) (api.PostAdvancedMarginDeficitRepaymentsResponseObject, error) {
+	if s.opts.Ports.Margin == nil {
+		return nil, errNotWired(marginFeature)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	account, err := accountScopeWrite(ctx, request.Body.AccountId)
+	if err != nil {
+		return nil, err
+	}
+	amount, err := money.ParseQuantity(request.Body.Amount)
+	if err != nil {
+		return nil, validationError("amount", "amount must be an integer string of numeraire base units")
+	}
+	requester, err := marginRequester(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req := margin.DeficitRepaymentRequest{AccountID: account, Amount: amount, IdempotencyKey: request.Params.IdempotencyKey,
+		Requester: requester, CorrelationID: observability.CorrelationID(ctx)}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.MarginDeficitRepaymentResult, commandMeta, error) {
+			v, rerr := s.opts.Ports.Margin.RepayDeficit(ctx, req)
+			if rerr != nil {
+				return api.MarginDeficitRepaymentResult{}, commandMeta{}, rerr
+			}
+			return toAPIMarginDeficitRepayment(v), commandMeta{
+				Status: http.StatusOK, ResourceType: "margin_deficit_repayment", ResourceID: v.Result.RepaymentID.String(),
+			}, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedMarginDeficitRepayments200JSONResponse(res.Value), nil
+}
+
+// --- MANUAL_REVIEW under dual control -------------------------------------------------
+
+// GetAdvancedMarginOpsReviews lists the cases in MANUAL_REVIEW, the longest
+// waiting first, each with its resolutions.
+func (s *Server) GetAdvancedMarginOpsReviews(ctx context.Context, request api.GetAdvancedMarginOpsReviewsRequestObject) (api.GetAdvancedMarginOpsReviewsResponseObject, error) {
+	if s.opts.Ports.Margin == nil {
+		return nil, errNotWired(marginFeature)
+	}
+	items, err := s.opts.Ports.Margin.Reviews(ctx, pageLimit(request.Params.Limit, defaultPageLimit, maxPageLimit))
+	if err != nil {
+		return nil, err
+	}
+	out := api.MarginReviewQueue{ValueDomain: api.SIMULATED, Items: make([]api.MarginReviewItem, 0, len(items))}
+	for _, r := range items {
+		rid, perr := marginUUID(r.CurrentReviewTransitionID)
+		if perr != nil {
+			return nil, perr
+		}
+		item := api.MarginReviewItem{
+			Case: toAPIMarginCase(r.Case), CurrentReviewTransitionId: rid, EnteredReviewAt: r.EnteredReviewAt.UTC(),
+			Resolutions: make([]api.MarginCaseResolution, 0, len(r.Resolutions)),
+		}
+		for _, res := range r.Resolutions {
+			v, cerr := toAPIMarginCaseResolution(res)
+			if cerr != nil {
+				return nil, cerr
+			}
+			item.Resolutions = append(item.Resolutions, v)
+		}
+		out.Items = append(out.Items, item)
+	}
+	return api.GetAdvancedMarginOpsReviews200JSONResponse(out), nil
+}
+
+// PostAdvancedMarginOpsCasesMarginCaseIdResolutions records one operator's
+// proposal for ending a case's MANUAL_REVIEW. Nothing moves.
+func (s *Server) PostAdvancedMarginOpsCasesMarginCaseIdResolutions(ctx context.Context, request api.PostAdvancedMarginOpsCasesMarginCaseIdResolutionsRequestObject) (api.PostAdvancedMarginOpsCasesMarginCaseIdResolutionsResponseObject, error) {
+	if s.opts.Ports.Margin == nil {
+		return nil, errNotWired(marginFeature)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	cid, err := margin.ParseCaseID(request.MarginCaseId.String())
+	if err != nil || cid.IsZero() {
+		return nil, validationError("marginCaseId", "marginCaseId must be a canonical UUID")
+	}
+	outcome := margin.ResolutionOutcome(request.Body.Outcome)
+	if !outcome.Valid() {
+		return nil, validationError("outcome", "outcome must be RESUME or DECLARE_BANKRUPT")
+	}
+	actor, err := marginActor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req := margin.ProposeResolutionRequest{CaseID: cid, Outcome: outcome, Reason: request.Body.Reason, Proposer: actor}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.MarginCaseResolution, commandMeta, error) {
+			r, perr := s.opts.Ports.Margin.ProposeResolution(ctx, req)
+			if perr != nil {
+				return api.MarginCaseResolution{}, commandMeta{}, perr
+			}
+			out, cerr := toAPIMarginCaseResolution(r)
+			if cerr != nil {
+				return api.MarginCaseResolution{}, commandMeta{}, cerr
+			}
+			return out, commandMeta{Status: http.StatusOK, ResourceType: "margin_case_resolution", ResourceID: r.ID.String()}, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedMarginOpsCasesMarginCaseIdResolutions200JSONResponse(res.Value), nil
+}
+
+// PostAdvancedMarginOpsResolutionsMarginResolutionIdDecision approves (a
+// second, distinct operator; the outcome applies at once) or rejects a
+// proposed resolution.
+func (s *Server) PostAdvancedMarginOpsResolutionsMarginResolutionIdDecision(ctx context.Context, request api.PostAdvancedMarginOpsResolutionsMarginResolutionIdDecisionRequestObject) (api.PostAdvancedMarginOpsResolutionsMarginResolutionIdDecisionResponseObject, error) {
+	if s.opts.Ports.Margin == nil {
+		return nil, errNotWired(marginFeature)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	rid, err := margin.ParseResolutionID(request.MarginResolutionId.String())
+	if err != nil || rid.IsZero() {
+		return nil, validationError("marginResolutionId", "marginResolutionId must be a canonical UUID")
+	}
+	decision := margin.ResolutionDecision(request.Body.Decision)
+	if decision != margin.ResolutionApproved && decision != margin.ResolutionRejected {
+		return nil, validationError("decision", "decision must be APPROVED or REJECTED")
+	}
+	actor, err := marginActor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req := margin.DecideResolutionRequest{ResolutionID: rid, Decision: decision, Reason: request.Body.Reason, Decider: actor}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.MarginResolutionDecisionResult, commandMeta, error) {
+			v, derr := s.opts.Ports.Margin.DecideResolution(ctx, req)
+			if derr != nil {
+				return api.MarginResolutionDecisionResult{}, commandMeta{}, derr
+			}
+			out, cerr := toAPIMarginResolutionDecision(v)
+			if cerr != nil {
+				return api.MarginResolutionDecisionResult{}, commandMeta{}, cerr
+			}
+			return out, commandMeta{Status: http.StatusOK, ResourceType: "margin_case_resolution", ResourceID: rid.String()}, nil
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedMarginOpsResolutionsMarginResolutionIdDecision200JSONResponse(res.Value), nil
+}
+
 // --- request helpers ---------------------------------------------------------------
 
 func marginCursorParam(c *api.Cursor) string {
@@ -1222,6 +1395,89 @@ func toAPIMarginLiquidation(v MarginLiquidationView) (api.MarginLiquidationResul
 			return api.MarginLiquidationResult{}, err
 		}
 		out.Plan = &p
+	}
+	return out, nil
+}
+
+func toAPIMarginDeficitStatus(v MarginDeficitStatusView) api.MarginDeficitStatus {
+	out := api.MarginDeficitStatus{
+		ValueDomain: api.SIMULATED, AccountId: toUUID(v.AccountID),
+		Repayments: make([]api.MarginDeficitRepayment, 0, len(v.Repayments)),
+	}
+	if v.Margin != nil {
+		out.MarginAccountId = uuidPtr(v.Margin.ID)
+	}
+	if v.Facts != nil {
+		out.NumeraireAssetId = uuidPtr(v.Facts.NumeraireAssetID)
+		decimals := int(v.Facts.NumeraireDecimals)
+		out.NumeraireDecimals = &decimals
+	}
+	if v.Case != nil {
+		c := toAPIMarginCase(*v.Case)
+		out.Case = &c
+	}
+	if v.Covered != nil {
+		deficit, repaid, outstanding := v.Covered.Deficit.String(), v.Covered.Repaid.String(), v.Covered.Outstanding.String()
+		out.Deficit, out.Repaid, out.Outstanding = &deficit, &repaid, &outstanding
+	}
+	for _, r := range v.Repayments {
+		out.Repayments = append(out.Repayments, api.MarginDeficitRepayment{
+			Id: toUUID(r.ID), Amount: r.Amount.String(), JournalTransactionId: toUUID(r.JournalTransactionID),
+			EffectId: toUUID(r.EffectID), IntentId: toUUID(r.IntentID), RepaidAt: r.RepaidAt.UTC(),
+		})
+	}
+	return out
+}
+
+func toAPIMarginDeficitRepayment(v MarginDeficitRepaymentView) api.MarginDeficitRepaymentResult {
+	r := v.Result
+	return api.MarginDeficitRepaymentResult{
+		ValueDomain: api.SIMULATED, MarginAccountId: toUUID(r.MarginAccountID), AccountId: toUUID(v.Facts.AccountID),
+		CaseId: toUUID(r.CaseID), RepaymentId: toUUID(r.RepaymentID), IntentId: toUUID(r.IntentID),
+		JournalTransactionId: toUUID(r.JournalTransactionID), EffectId: toUUID(r.EffectID), Repaid: r.Repaid.String(),
+		Outstanding: r.Outstanding.String(), NumeraireAssetId: toUUID(v.Facts.NumeraireAssetID),
+		NumeraireDecimals: int(v.Facts.NumeraireDecimals), Replayed: r.Replayed,
+	}
+}
+
+func toAPIMarginCaseResolution(r margin.Resolution) (api.MarginCaseResolution, error) {
+	review, err := marginUUID(r.ReviewTransitionID)
+	if err != nil {
+		return api.MarginCaseResolution{}, err
+	}
+	if !r.Outcome.Valid() {
+		return api.MarginCaseResolution{}, errs.Newf(errs.CodeInternal, "a stored resolution has the unknown outcome %q", r.Outcome)
+	}
+	out := api.MarginCaseResolution{
+		Id: toUUID(r.ID), CaseId: toUUID(r.CaseID), ReviewTransitionId: review, Outcome: api.MarginResolutionOutcome(r.Outcome),
+		Reason: r.Reason, ProposedBy: r.ProposedBy.ID, ProposedAt: r.ProposedAt.UTC(), Pending: r.Decision == nil,
+		DecidedAt: timePtr(r.DecidedAt), DecisionReason: strPtr(r.DecisionReason),
+	}
+	if r.Decision != nil {
+		d := api.MarginResolutionDecision(*r.Decision)
+		out.Decision = &d
+	}
+	if r.DecidedBy != nil {
+		out.DecidedBy = strPtr(r.DecidedBy.ID)
+	}
+	return out, nil
+}
+
+func toAPIMarginResolutionDecision(v MarginResolutionDecisionView) (api.MarginResolutionDecisionResult, error) {
+	res, err := toAPIMarginCaseResolution(v.Result.Resolution)
+	if err != nil {
+		return api.MarginResolutionDecisionResult{}, err
+	}
+	out := api.MarginResolutionDecisionResult{
+		ValueDomain: api.SIMULATED, Resolution: res, Case: toAPIMarginCase(v.Case),
+		AccountStatus: api.MarginAccountStatus(v.Result.AccountStatus), Replayed: v.Result.Replayed,
+		Waived: make([]api.MarginWaivedAccrual, 0, len(v.Result.Waived)),
+	}
+	for _, w := range v.Result.Waived {
+		out.Waived = append(out.Waived, api.MarginWaivedAccrual{
+			LotId: toUUID(w.LotID), PeriodStart: w.Period.Start.UTC(), PeriodEnd: w.Period.End.UTC(), Amount: w.Amount.String(),
+			Waived: w.Waived,
+		})
 	}
 	return out, nil
 }

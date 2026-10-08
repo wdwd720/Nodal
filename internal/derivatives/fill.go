@@ -2,14 +2,17 @@ package derivatives
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
+	"github.com/nodal/controlplane/internal/capital"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
+	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
@@ -32,7 +35,9 @@ const (
 
 // Fill is a trade to apply to a position: a paper fill priced by this
 // package, or a fill matched in an internal order book. Both go through
-// ApplyFill, the only path that changes a position by trading.
+// executeFill, the only path that changes a position by trading. Nothing
+// outside this package applies a fill: OpenPosition and ClosePosition are its
+// callers, and a matched book would be connected through this package too.
 type Fill struct {
 	// Key is deterministic per fill ("intent:<intent id>" for a paper fill,
 	// the match id and side for a book fill). Applying the same key twice is a
@@ -53,11 +58,19 @@ type Fill struct {
 	SlippageBPS money.BPS
 	Direction   FillDirection
 	IntentID    *econ.IntentID
-	// DecisionID is the recorded Risk V2 decision that allowed the trade. The
-	// database refuses a trade without one.
+	// DecisionID is the recorded Risk V2 decision that allowed the trade: an
+	// ALLOW for this account, this intent (none for a book fill that has no
+	// economic intent) and this instrument, under the derivatives capability,
+	// evaluated no later than the fill and backing no other trade. Anything
+	// else is refused, here and by the database (DV006).
 	DecisionID    risk.DecisionID
 	OccurredAt    time.Time
 	CorrelationID string
+	// reservation is the caller's reservation of an opening fill's initial
+	// margin and premium (OpenPosition reserves before it applies the fill,
+	// so a shortfall is a recorded refusal). Without one an opening fill
+	// reserves for itself.
+	reservation *capital.Reservation
 }
 
 func (f Fill) validate() error {
@@ -101,7 +114,7 @@ func (f Fill) validate() error {
 	return nil
 }
 
-// FillResult is what ApplyFill did.
+// FillResult is what a fill did.
 type FillResult struct {
 	Fill     FillRecord
 	Position Position
@@ -113,16 +126,19 @@ type FillResult struct {
 	Journals    []ledger.TransactionID
 }
 
-// ApplyFill applies one trade to the account's position on the instrument:
+// executeFill applies one trade to the account's position on the instrument:
 // it opens, adds to or reduces the position, posts the trade's cash flows
 // through the clearing house (premium, margin, realized PnL), registers them,
 // archives the evidence and applies every effect -- exactly once per fill key.
 //
 // It enforces the invariants of a trade, not the decision to make it: the
-// caller (OpenPosition, ClosePosition, or the order book) evaluated Risk V2
-// and names the decision. A fill that would take a position through zero is
-// refused; trading ends at expiry.
-func (s *Service) ApplyFill(ctx context.Context, tx pgx.Tx, f Fill) (FillResult, error) {
+// caller (OpenPosition, ClosePosition) evaluated Risk V2 and names the
+// decision, and the decision must allow exactly this trade (authorizeTrade).
+// What an opening fill takes from the wallet is reserved; what a reducing
+// fill collects comes only from available funds and the position's margin. A
+// fill that would take a position through zero is refused; trading ends at
+// expiry.
+func (s *Service) executeFill(ctx context.Context, tx pgx.Tx, f Fill) (FillResult, error) {
 	if err := f.validate(); err != nil {
 		return FillResult{}, err
 	}
@@ -134,7 +150,7 @@ func (s *Service) ApplyFill(ctx context.Context, tx pgx.Tx, f Fill) (FillResult,
 	} else if ok {
 		return s.replayFill(ctx, tx, f, existing)
 	}
-	spec, err := loadSpec(ctx, tx, s.instruments, f.InstrumentID)
+	spec, err := lockSpec(ctx, tx, s.instruments, f.InstrumentID)
 	if err != nil {
 		return FillResult{}, err
 	}
@@ -156,6 +172,9 @@ func (s *Service) ApplyFill(ctx context.Context, tx pgx.Tx, f Fill) (FillResult,
 		return FillResult{}, errs.New(errs.CodeInvalidStateTransition, "derivatives: this contract has been finally settled").
 			WithField("instrument_id", f.InstrumentID.String())
 	}
+	if err := authorizeTrade(ctx, tx, f); err != nil {
+		return FillResult{}, err
+	}
 	if err := spec.CheckQuantity(f.Quantity); err != nil {
 		return FillResult{}, err
 	}
@@ -167,7 +186,11 @@ func (s *Service) ApplyFill(ctx context.Context, tx pgx.Tx, f Fill) (FillResult,
 	if err != nil {
 		return FillResult{}, err
 	}
-	ch, err := s.ClearingHouse(ctx, tx)
+	if !markPriceable(spec, mark) {
+		return FillResult{}, errs.New(errs.CodeStaleMarketData, "derivatives: the fill's mark was recorded under terms the contract no longer has").
+			WithField("mark_id", mark.ID.String())
+	}
+	ch, err := s.clearingHouse(ctx, tx)
 	if err != nil {
 		return FillResult{}, err
 	}
@@ -205,6 +228,60 @@ func (s *Service) ApplyFill(ctx context.Context, tx pgx.Tx, f Fill) (FillResult,
 		WithField("fill_key", f.Key)
 }
 
+// authorizeTrade checks that the risk decision a trade names allows exactly
+// this trade: an ALLOW, for the fill's own account, intent and instrument,
+// under the derivatives capability, evaluated no later than the fill, and not
+// already the decision of another trade. The database checks the same thing
+// (cp_derivative_fill_authorized, DV006).
+func authorizeTrade(ctx context.Context, tx pgx.Tx, f Fill) error {
+	var verdict, account, intent, instrument, capability string
+	var evaluated time.Time
+	var used bool
+	err := tx.QueryRow(ctx, `SELECT verdict, coalesce(account_id::text, ''), coalesce(intent_id::text, ''),
+		coalesce(input #>> '{intent,instrument_id}', ''), coalesce(input #>> '{intent,capability}', ''), evaluated_at,
+		EXISTS (SELECT 1 FROM derivative_fills WHERE risk_decision_id = d.id AND source IN ('PAPER','BOOK'))
+		FROM advanced_risk_decisions d WHERE id = $1`, f.DecisionID).
+		Scan(&verdict, &account, &intent, &instrument, &capability, &evaluated, &used)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errs.New(errs.CodeForbidden, "derivatives: the risk decision this trade names does not exist").
+			WithField("risk_decision_id", f.DecisionID.String())
+	}
+	if err != nil {
+		return dbErr("read the trade's risk decision", err)
+	}
+	var problems []string
+	if verdict != string(risk.Allow) {
+		problems = append(problems, "the decision is "+verdict+", not ALLOW")
+	}
+	if account != f.AccountID.String() {
+		problems = append(problems, "the decision is about another account")
+	}
+	want := ""
+	if f.IntentID != nil {
+		want = f.IntentID.String()
+	}
+	if intent != want {
+		problems = append(problems, "the decision is about another intent")
+	}
+	if instrument != f.InstrumentID.String() {
+		problems = append(problems, "the decision is about another instrument")
+	}
+	if capability != string(gates.Derivatives) {
+		problems = append(problems, "the decision was not made for the derivatives capability")
+	}
+	if evaluated.After(f.OccurredAt) {
+		problems = append(problems, "the decision was made after the trade")
+	}
+	if used {
+		problems = append(problems, "the decision already allowed another trade")
+	}
+	if len(problems) > 0 {
+		return errs.New(errs.CodeForbidden, "derivatives: the risk decision this trade names does not allow it").
+			WithField("risk_decision_id", f.DecisionID.String()).WithField("problems", problems)
+	}
+	return nil
+}
+
 // applyToPosition applies the fill to pos. done is false when pos was new and
 // a concurrent transaction created the open position first.
 func (s *Service) applyToPosition(ctx context.Context, tx pgx.Tx, ch econ.Facility, spec Spec, mark Mark, f Fill,
@@ -228,7 +305,7 @@ func (s *Service) applyToPosition(ctx context.Context, tx pgx.Tx, ch econ.Facili
 		ID: fillID, Key: f.Key, PositionID: pos.ID, AccountID: f.AccountID, InstrumentID: f.InstrumentID, Source: f.Source,
 		Side: f.Side, Quantity: d, PriceMantissa: f.Price, PriceScale: spec.PriceScale, Value: eff.Value,
 		RealizedPnL: eff.RealizedPnL, CashSettled: eff.Cash, MarkID: &mid, SlippageBPS: f.SlippageBPS,
-		RiskDecisionID: f.DecisionID.String(), OccurredAt: f.OccurredAt.UTC(),
+		IntentID: "", RiskDecisionID: f.DecisionID.String(), OccurredAt: f.OccurredAt.UTC(),
 	}
 	if f.IntentID != nil {
 		rec.IntentID = f.IntentID.String()
@@ -237,6 +314,7 @@ func (s *Service) applyToPosition(ctx context.Context, tx pgx.Tx, ch econ.Facili
 	prefix := "deriv:fill:" + f.Key
 	var legs []leg
 	var im, premiumPaid money.Quantity
+	var reservation *capital.Reservation
 	after := pos
 	if eff.Increase {
 		if im, err = initialMarginForFill(s.policy, spec, f.Side, f.Quantity, markInputOf(mark), f.OccurredAt); err != nil {
@@ -244,29 +322,45 @@ func (s *Service) applyToPosition(ctx context.Context, tx pgx.Tx, ch econ.Facili
 		}
 		after.Quantity, after.CostValue, after.SettledValue = eff.After.Quantity, eff.After.CostValue, eff.After.SettledValue
 		after.MarginPosted = eff.After.MarginPosted.Add(im)
+		if spec.IsOption() && f.Side == Buy {
+			premiumPaid = eff.Value.Abs()
+		}
+		if reservation, err = s.openingReservation(ctx, tx, f, spec, im.Add(premiumPaid)); err != nil {
+			return FillResult{}, false, err
+		}
+		var reservedBy *capital.ReservationID
+		if reservation != nil {
+			rid := reservation.ID
+			reservedBy = &rid
+		}
 		acct := f.AccountID
 		if spec.IsOption() {
 			premium := eff.Value.Abs()
 			var entries []ledger.Entry
 			if f.Side == Buy {
-				entries, premiumPaid = premiumPaidEntries(acct, ch, spec.SettlementAssetID, premium), premium
+				entries = premiumPaidEntries(acct, ch, spec.SettlementAssetID, premium)
 			} else {
 				entries = premiumReceivedEntries(acct, ch, spec.SettlementAssetID, premium)
 			}
-			legs = append(legs, leg{
+			l := leg{
 				name: "option premium", key: prefix + ":premium", effectKind: EffectPremium, kind: ledger.KindOptionPremium,
 				account: &acct, intent: f.IntentID, reference: ref, entries: entries,
 				flow: s.flowFor(pos, spec, FlowOptionPremium, eff.Cash, money.Quantity{}, prefix+":premium", ref),
-			})
+			}
+			if f.Side == Buy {
+				l.reservedBy = reservedBy
+			}
+			legs = append(legs, l)
 		}
 		legs = append(legs, leg{
 			name: "initial margin", key: prefix + ":margin-post", effectKind: EffectMarginPost, kind: ledger.KindDerivativeMarginMove,
 			account: &acct, intent: f.IntentID, reference: ref, entries: marginMoveEntries(acct, spec.SettlementAssetID, im, true),
+			reservedBy: reservedBy,
 		})
 	} else {
 		red, err := s.planReduction(ctx, tx, ch, spec, pos, eff, reductionKeys{
 			prefix: prefix, reference: ref, intent: f.IntentID, cashKind: tradeCashKind(spec), cashJournal: tradeJournal(spec),
-			cashEffect: tradeEffect(spec),
+			cashEffect: tradeEffect(spec), ownIntent: true,
 		})
 		if err != nil {
 			return FillResult{}, false, err
@@ -293,7 +387,43 @@ func (s *Service) applyToPosition(ctx context.Context, tx pgx.Tx, ch econ.Facili
 	if err != nil {
 		return FillResult{}, false, err
 	}
+	if reservation != nil {
+		// Exactly what the fill took from the wallet: its margin and the
+		// premium it paid, which is what was reserved.
+		if _, err := s.capital.Consume(ctx, tx, reservation.ID, im.Add(premiumPaid), 0, ""); err != nil {
+			return FillResult{}, false, err
+		}
+	}
 	return FillResult{Fill: rec, Position: saved, InitialMargin: im, PremiumPaid: premiumPaid, Journals: journals(posted)}, true, nil
+}
+
+// openingReservation is the reservation of what an opening fill takes from
+// the wallet (its initial margin and any premium it pays): the caller's, which
+// must be for exactly that amount, or one the fill makes for itself.
+func (s *Service) openingReservation(ctx context.Context, tx pgx.Tx, f Fill, spec Spec, need money.Quantity) (*capital.Reservation, error) {
+	if r := f.reservation; r != nil {
+		if !r.Quantity.Equal(need) || r.AccountID != f.AccountID || r.AssetID != spec.SettlementAssetID {
+			return nil, errs.New(errs.CodeInternal, "derivatives: the fill takes a different margin and premium than was reserved").
+				WithField("reserved", r.Quantity.String()).WithField("needed", need.String())
+		}
+		return r, nil
+	}
+	if !need.IsPositive() {
+		return nil, nil
+	}
+	req := capital.ReserveRequest{
+		AccountID: f.AccountID.String(), AssetID: spec.SettlementAssetID, Quantity: need,
+		ActorType: s.actor.Type, ActorID: s.actor.ID, IdempotencyKey: "derivatives:reserve:fill:" + f.Key,
+		TTL: s.reservationTTL, Reason: "derivative initial margin and premium",
+	}
+	if f.IntentID != nil {
+		req.EconomicIntentID = f.IntentID.String()
+	}
+	r, err := s.capital.Reserve(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // fillEvidence is the archived document of one fill.
@@ -316,7 +446,7 @@ func (s *Service) replayFill(ctx context.Context, tx pgx.Tx, f Fill, existing Fi
 		d = d.Neg()
 	}
 	if existing.AccountID != f.AccountID || existing.InstrumentID != f.InstrumentID || existing.Source != f.Source ||
-		!existing.Quantity.Equal(d) || !existing.PriceMantissa.Equal(f.Price) {
+		!existing.Quantity.Equal(d) || !existing.PriceMantissa.Equal(f.Price) || existing.RiskDecisionID != f.DecisionID.String() {
 		return FillResult{}, errs.New(errs.CodeInvalidIdempotencyReuse, "derivatives: this fill key was already used for a different fill").
 			WithField("fill_key", f.Key)
 	}
@@ -368,6 +498,11 @@ type reductionKeys struct {
 	cashKind    CashFlowKind
 	cashJournal ledger.Kind
 	cashEffect  string
+	// ownIntent is set when intent is the reduced position's own account's
+	// (a fill): only then does the collection's reservation name it. An
+	// assigned writer or a settlement payer pays for an operation that is not
+	// its own intent.
+	ownIntent bool
 }
 
 // reduction is the plan for closing contracts of one position.
@@ -383,11 +518,16 @@ type reduction struct {
 func (r reduction) payer() bool { return r.cash.IsNegative() }
 
 // planReduction plans the legs of closing eff.Closed contracts of pos: the
-// released share of margin first, then the cash. A payment is an obligation:
-// it is taken from the wallet (which now holds the released margin), then from
-// the margin the position keeps; what neither covers is a shortfall the
-// clearing house absorbs and both the register and the position record. An
-// option's cash leg also recognizes the closed contracts' premium.
+// release of the closed contracts' share of margin and the cash. A payment is
+// an obligation, met in the order of splitPayment: from the margin the
+// reduction frees (it is paid out of DERIVATIVES_MARGIN before it ever reaches
+// the wallet), from the customer's available wallet funds (reserved here and
+// consumed when the leg posts: never funds reserved or held for anything
+// else), then from the margin the position keeps; what none of them covers is
+// a shortfall the clearing house absorbs and both the register and the
+// position record. Whatever of the freed margin the payment does not take is
+// released to the wallet. An option's cash leg also recognizes the closed
+// contracts' premium.
 func (s *Service) planReduction(ctx context.Context, tx pgx.Tx, ch econ.Facility, spec Spec, pos Position, eff fillEffect, k reductionKeys) (reduction, error) {
 	acct := pos.AccountID
 	asset := spec.SettlementAssetID
@@ -396,25 +536,33 @@ func (s *Service) planReduction(ctx context.Context, tx pgx.Tx, ch econ.Facility
 	after.MarginPosted = eff.After.MarginPosted
 	after.RealizedPnL = pos.RealizedPnL.Add(eff.RealizedPnL)
 	r := reduction{cash: eff.Cash}
-	if eff.MarginRelease.IsPositive() {
-		r.legs = append(r.legs, leg{
-			name: "margin release", key: k.prefix + ":margin-release", effectKind: EffectMarginRelease,
-			kind: ledger.KindDerivativeMarginMove, account: &acct, intent: k.intent, reference: k.reference,
-			entries: marginMoveEntries(acct, asset, eff.MarginRelease, false),
-		})
-	}
 	var amount money.Quantity
+	var col *collection
 	if eff.Cash.IsNegative() {
-		wallet, err := s.ledger.Balance(ctx, tx, ledger.CustomerAccount(acct, ledger.CodeWallet, asset))
-		if err != nil {
+		due := eff.Cash.Neg()
+		fromRelease := due.Min(eff.MarginRelease)
+		var serves *econ.IntentID
+		if k.ownIntent {
+			serves = k.intent
+		}
+		var err error
+		if col, err = s.reserveCollection(ctx, tx, acct, asset, due.Sub(fromRelease), k.prefix+":cash", serves,
+			"derivatives: "+strings.ToLower(string(k.cashKind))+" collected"); err != nil {
 			return reduction{}, err
 		}
-		r.pay = splitPayment(eff.Cash.Neg(), wallet.Add(eff.MarginRelease), after.MarginPosted)
+		r.pay = splitPayment(due, eff.MarginRelease, col.taken(), after.MarginPosted)
 		after.MarginPosted = after.MarginPosted.Sub(r.pay.FromMargin)
 		after.Shortfall = pos.Shortfall.Add(r.pay.Shortfall)
 		amount = r.pay.collected().Neg()
 	} else {
 		amount = eff.Cash
+	}
+	if release := eff.MarginRelease.Sub(r.pay.FromRelease); release.IsPositive() {
+		r.legs = append(r.legs, leg{
+			name: "margin release", key: k.prefix + ":margin-release", effectKind: EffectMarginRelease,
+			kind: ledger.KindDerivativeMarginMove, account: &acct, intent: k.intent, reference: k.reference,
+			entries: marginMoveEntries(acct, asset, release, false),
+		})
 	}
 	entries := cashEntries(acct, ch, asset, eff.Cash, r.pay)
 	if spec.IsOption() {
@@ -424,7 +572,8 @@ func (s *Service) planReduction(ctx context.Context, tx pgx.Tx, ch econ.Facility
 		r.legs = append(r.legs, leg{
 			name: strings.ToLower(string(k.cashKind)), key: k.prefix + ":cash", effectKind: k.cashEffect, kind: k.cashJournal,
 			account: &acct, intent: k.intent, reference: k.reference, entries: entries,
-			flow: s.flowFor(pos, spec, k.cashKind, amount, r.pay.Shortfall, k.prefix+":cash", k.reference),
+			flow:    s.flowFor(pos, spec, k.cashKind, amount, r.pay.Shortfall, k.prefix+":cash", k.reference),
+			collect: col,
 		})
 	}
 	r.after = after

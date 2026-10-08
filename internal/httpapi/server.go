@@ -78,14 +78,22 @@ type Ports struct {
 	Derivatives DerivativesPort
 
 	// >>> advanced:equities port
+	// Equities serves paper and sandbox equities and ETFs. A nil port answers
+	// UNSUPPORTED (it is never wired outside LOCAL, TEST and DEV).
+	Equities AdvancedEquitiesPort
 
 	// >>> advanced:orders port
+	// Books serves the internal order book. A nil port answers UNSUPPORTED.
+	Books AdvancedBooksPort
 
 	// >>> advanced:transfers port
 	// Transfers serves customer-to-customer transfers of simulated value, and
 	// SandboxFaucet the sandbox faucet. A nil port answers UNSUPPORTED.
 	Transfers     AdvancedTransfersPort
 	SandboxFaucet SandboxFaucetPort
+	// TransferReversals serves the two-operator reversal of a transfer. A nil
+	// port answers UNSUPPORTED: no route reverses a transfer any other way.
+	TransferReversals TransferReversalsPort
 
 	// >>> advanced:treasury port
 	// Treasury serves the house book (internal/treasury) and Fees the fee
@@ -95,8 +103,15 @@ type Ports struct {
 	Fees     FeesPort
 
 	// >>> advanced:stable port
+	// Stable serves the sandbox stable asset (internal/stableasset); every
+	// figure is value domain SIMULATED. A nil port -- no sandbox chain is
+	// configured -- answers UNSUPPORTED.
+	Stable StableAssetPort
 
 	// >>> advanced:bridge port
+	// Bridge serves cross-chain capital (internal/bridge) and the simulated
+	// chain host both subsystems run on. A nil port answers UNSUPPORTED.
+	Bridge BridgePort
 
 	// >>> advanced:predmarket port
 	// PredictionMarkets serves prediction markets (internal/predmarket);
@@ -111,6 +126,9 @@ type Ports struct {
 	// >>> advanced:delegation port
 
 	// >>> advanced:operator port
+	// Operator serves the operator console: the overview, sandbox reference
+	// marks and the simulated chains' tips. A nil port answers UNSUPPORTED.
+	Operator OperatorPort
 
 	Health      HealthPort
 	Idempotency IdempotencyPort

@@ -208,6 +208,18 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedMarginOpsCasesMarginCaseIdCoverDeficit": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 	"PostAdvancedMarginOpsStressRuns":                    {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
 	"GetAdvancedMarginOpsCalls":                          {AnyOf: perms(security.PermSandboxOperate)},
+	// A covered deficit is read and repaid by the account's owner (repaying
+	// it is the customer's own write and is not new risk). A MANUAL_REVIEW
+	// ends only by dual control: one operator proposes, a second, distinct
+	// operator approves -- which the margin service enforces -- and both
+	// steps, and a rejection, need a recent step-up.
+	"GetAdvancedMarginDeficit":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedMarginDeficitRepayments":               {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"GetAdvancedMarginOpsReviews":                       {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedMarginOpsCasesMarginCaseIdResolutions": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedMarginOpsResolutionsMarginResolutionIdDecision": {
+		AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true,
+	},
 
 	// >>> advanced:derivatives operations
 	//
@@ -246,8 +258,59 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedDerivativesClearingHouseReconciliations": {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
 
 	// >>> advanced:equities operations
+	//
+	// Paper and sandbox equities. Listings, the calendar and corporate actions
+	// are reference data, read under the instrument catalogue's permissions;
+	// an account's orders, fills, settlements and corporate-action
+	// applications are tenant-scoped per request, and an order by id answers
+	// NOT_FOUND to anyone but its owner. Submitting and cancelling are the
+	// customer's own writes (ownership-only scoping). Every operator command
+	// -- listing, holidays, corporate actions, and the venue and settlement
+	// workers' steps, which move value -- needs a recent step-up.
+	"GetAdvancedEquitiesListings":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesListingsInstrumentId":            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCalendar":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCorporateActions":                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCorporateActionsActionId":        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesOrders":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesOrdersOrderId":                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesFills":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesSettlements":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedEquitiesCorporateActionApplications":     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedEquitiesOrders":                         {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedEquitiesOrdersOrderIdCancel":            {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedEquitiesListings":                       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCalendarHolidays":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCorporateActions":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCorporateActionsActionIdCancel": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesCorporateActionsActionIdApply":  {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesSettlementRuns":                 {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedEquitiesVenueRuns":                      {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:orders operations
+	//
+	// The internal order book. Books and their depth are reference data, read
+	// under the instrument catalogue's permissions; an account's orders and
+	// fills are tenant-scoped per request; an order by id and a trade's audit
+	// proof answer NOT_FOUND to anyone but a party (or account:read_any).
+	// Submitting, cancelling and replacing are the customer's own writes
+	// (ownership-only scoping). Opening a book and halting or closing it are
+	// operator commands with step-up; verifying a book's journal reads only.
+	// House orders and the crossing rule have no route here: they go through
+	// the treasury service, which enforces the house book's limits.
+	"GetAdvancedBooks":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksInstrumentId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksInstrumentIdDepth":               {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksOrders":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksOrdersOrderId":                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksTrades":                          {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBooksInstrumentIdTradesTradeSeqProof": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedBooksInstrumentIdOrders":             {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedBooksOrdersOrderIdCancel":            {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedBooksOrdersOrderIdReplace":           {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedBooks":                               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBooksInstrumentIdStatus":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedBooksInstrumentIdJournalVerification": {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
 
 	// >>> advanced:transfers operations
 	//
@@ -255,18 +318,37 @@ var operationPolicies = map[string]operationPolicy{
 	// (ownership-only scoping per request); the transfer service judges
 	// step-up above its own threshold, so the route does not demand it. The
 	// faucet is a separate exposure with its own permission. Reversal is an
-	// operator correction that moves value back, hence step-up; the service
-	// additionally requires ledger:post_correction. Reconciliation reads only.
-	"PostAdvancedTransfers":                  {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
-	"GetAdvancedTransfers":                   {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"GetAdvancedTransfersTransferId":         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"PostAdvancedTransfersHandles":           {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
-	"PostAdvancedTransfersRecipientRules":    {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
-	"PostAdvancedTransfersSenderMode":        {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
-	"PostAdvancedTransfersFaucetGrants":      {AnyOf: perms(security.PermSandboxFund), Mutating: true},
-	"GetAdvancedTransfersFaucetAllowance":    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"PostAdvancedTransfersTransferIdReverse": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
-	"GetAdvancedTransfersReconciliation":     {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
+	// operator correction under dual control (review finding F3): one
+	// operator proposes, a second, distinct operator approves, which executes
+	// it; each step and a rejection need a recent step-up. The route admits
+	// the sandbox operators and the holders of ledger:post_correction (Finance,
+	// who own corrections); the service then requires ledger:post_correction
+	// of every step and refuses a proposer's own approval (in Go and in SQL).
+	// Reading the proposals is an operator read. Reconciliation reads only.
+	"PostAdvancedTransfers":               {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"GetAdvancedTransfers":                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedTransfersTransferId":      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedTransfersHandles":        {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"PostAdvancedTransfersRecipientRules": {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"PostAdvancedTransfersSenderMode":     {AnyOf: perms(security.PermSandboxTransfer), Mutating: true},
+	"PostAdvancedTransfersFaucetGrants":   {AnyOf: perms(security.PermSandboxFund), Mutating: true},
+	"GetAdvancedTransfersFaucetAllowance": {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedTransfersTransferIdReversalProposals": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermLedgerPostCorrection), StepUp: true, Mutating: true,
+	},
+	"GetAdvancedTransfersReversalProposals": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermLedgerPostCorrection),
+	},
+	"GetAdvancedTransfersReversalProposalsProposalId": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermLedgerPostCorrection),
+	},
+	"PostAdvancedTransfersReversalProposalsProposalIdApprove": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermLedgerPostCorrection), StepUp: true, Mutating: true,
+	},
+	"PostAdvancedTransfersReversalProposalsProposalIdReject": {
+		AnyOf: perms(security.PermSandboxOperate, security.PermLedgerPostCorrection), StepUp: true, Mutating: true,
+	},
+	"GetAdvancedTransfersReconciliation": {AnyOf: perms(security.PermSandboxOperate, security.PermReconciliationRead)},
 
 	// >>> advanced:treasury operations
 	//
@@ -337,39 +419,107 @@ var operationPolicies = map[string]operationPolicy{
 	"PostAdvancedFeesPeriodsFeePeriodIdReverse":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:stable operations
+	//
+	// The sandbox stable asset (internal/stableasset), simulated value only.
+	// Its registry, reserve ledger and signed reserve snapshots are reference
+	// data, read under the catalogue's permissions (snapshots are published
+	// for anyone to verify). An account's holdings and requests are
+	// tenant-scoped per request; a request read by its own id is scoped by its
+	// own account and answers NOT_FOUND otherwise. Issuing and redeeming are
+	// the owner's sandbox:stable, ownership-only. Operator actions need
+	// sandbox:operate; registering, pausing, resuming, paying queued
+	// redemptions and settling unknown submissions (which post) need a recent
+	// step-up. The peg monitor, the supply reconciliation and a snapshot move
+	// no value; the first two may trip the asset's circuit breaker, which is
+	// the service's decision, not the operator's.
+	"GetAdvancedStableAssets":                                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsStableAssetId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsStableAssetIdReserve":             {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsStableAssetIdSnapshots":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsHoldings":                         {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsIssuances":                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsIssuancesStableIssuanceId":        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsRedemptions":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedStableAssetsRedemptionsStableRedemptionId":    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedStableAssetsStableAssetIdIssuances":          {AnyOf: perms(security.PermSandboxStable), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdRedemptions":        {AnyOf: perms(security.PermSandboxStable), Mutating: true},
+	"PostAdvancedStableAssets":                                {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdPause":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdResume":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdMonitorRuns":        {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdReconciliations":    {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdSnapshots":          {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedStableAssetsStableAssetIdRedemptionQueueRun": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedStableAssetsOpsResolveUnknown":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:bridge operations
+	//
+	// Cross-chain capital (internal/bridge) and the simulated chain host.
+	// Routes and the chains' status are reference data. An account's legs and
+	// its holdings by chain are tenant-scoped per request; a leg read by its
+	// own id is scoped by its own account and answers NOT_FOUND otherwise.
+	// Bridging is the owner's sandbox:bridge, ownership-only. Operator actions
+	// need sandbox:operate; opening, pausing and resuming a route, driving a
+	// leg (it may post, relay and produce blocks), producing blocks and
+	// injecting a fault (LOCAL, TEST and DEV only) need a recent step-up. The
+	// route reconciliation moves no value.
+	"GetAdvancedBridgeRoutes":                              {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeRoutesBridgeRouteId":                 {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeChains":                              {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeLegs":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeLegsBridgeLegId":                     {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedBridgeHoldings":                            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedBridgeLegs":                               {AnyOf: perms(security.PermSandboxBridge), Mutating: true},
+	"PostAdvancedBridgeRoutes":                             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeRoutesBridgeRouteIdPause":           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeRoutesBridgeRouteIdResume":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeRoutesBridgeRouteIdReconciliations": {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedBridgeLegsBridgeLegIdReconcile":           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeChainsBridgeChainIdBlocks":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeChainsBridgeChainIdFaults":          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	// A leg in MANUAL_REVIEW waits for an operator: relaying it again,
+	// resolving it as reconciled after a re-check, or refunding it on its
+	// source chain. Each moves (or decides) value, hence a recent step-up; the
+	// bridge service decides which a leg admits.
+	"PostAdvancedBridgeLegsBridgeLegIdResumeRelay":   {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeLegsBridgeLegIdResolveReview": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedBridgeLegsBridgeLegIdRefund":        {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
 
 	// >>> advanced:predmarket operations
 	//
 	// Markets, their escrow books and the oracle a deployment resolves from
 	// are reference data, read like the instrument catalogue. An account's
 	// shares are tenant-scoped per request. Issuing and redeeming complete
-	// sets is the customer's sandbox:trade on their own account. Defining,
-	// opening and closing a market, running its escrow reconciliation and
-	// recording what the sandbox oracle saw are sandbox:operate; requesting
-	// resolution, resolving, disputing, ruling, voiding and settling decide
-	// how a market pays and are sandbox:resolve, held by different roles.
-	// Every operator action that changes a market needs a recent step-up; the
-	// reconciliation only compares the books and records what it found.
-	"GetAdvancedPredictionMarkets":                            {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"GetAdvancedPredictionMarketsOracle":                      {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"GetAdvancedPredictionMarketsMarketId":                    {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"GetAdvancedPredictionMarketsMarketIdBooks":               {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"GetAdvancedPredictionMarketsMarketIdPositions":           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
-	"PostAdvancedPredictionMarketsMarketIdIssuances":          {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdRedemptions":        {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
-	"PostAdvancedPredictionMarkets":                           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdOpen":               {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdClose":              {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdOracleObservations": {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdReconcile":          {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdRequestResolution":  {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdResolve":            {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdDispute":            {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdUphold":             {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdVoid":               {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
-	"PostAdvancedPredictionMarketsMarketIdSettle":             {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	// sets, and claiming a payout a settlement held for the account, are the
+	// customer's sandbox:trade on their own account. Defining, opening and
+	// closing a market, running its escrow reconciliation and recording what
+	// the sandbox oracle saw are sandbox:operate; requesting resolution,
+	// resolving, disputing, ruling, proposing and approving a void (two
+	// different operators, which the service and the database enforce) and
+	// settling decide how a market pays and are sandbox:resolve, held by
+	// different roles. Every operator action that changes a market needs a
+	// recent step-up; the reconciliation only compares the books and records
+	// what it found.
+	"GetAdvancedPredictionMarkets":                                        {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsOracle":                                  {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsMarketId":                                {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsMarketIdBooks":                           {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"GetAdvancedPredictionMarketsMarketIdPositions":                       {AnyOf: perms(security.PermAccountRead, security.PermAccountReadAny)},
+	"PostAdvancedPredictionMarketsMarketIdIssuances":                      {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdRedemptions":                    {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdHeldPayoutsClaim":               {AnyOf: perms(security.PermSandboxTrade), Mutating: true},
+	"PostAdvancedPredictionMarkets":                                       {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdOpen":                           {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdClose":                          {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdOracleObservations":             {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdReconcile":                      {AnyOf: perms(security.PermSandboxOperate), Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdRequestResolution":              {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdResolve":                        {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdDispute":                        {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdUphold":                         {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdVoidProposals":                  {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdVoidProposalsProposalIdApprove": {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
+	"PostAdvancedPredictionMarketsMarketIdSettle":                         {AnyOf: perms(security.PermSandboxResolve), StepUp: true, Mutating: true},
 
 	// >>> advanced:marketplace operations
 	//
@@ -420,6 +570,15 @@ var operationPolicies = map[string]operationPolicy{
 	// >>> advanced:delegation operations
 
 	// >>> advanced:operator operations
+	//
+	// The operator console reads across every account and subsystem, so it
+	// is sandbox:operate only. Recording a sandbox reference mark changes what
+	// margin collateral, prediction-market shares, the stable asset's peg
+	// monitor and bridged twins are valued at, hence a recent step-up.
+	"GetAdvancedOpsOverview": {AnyOf: perms(security.PermSandboxOperate)},
+	"GetAdvancedOpsMarks":    {AnyOf: perms(security.PermSandboxOperate)},
+	"PostAdvancedOpsMarks":   {AnyOf: perms(security.PermSandboxOperate), StepUp: true, Mutating: true},
+	"GetAdvancedOpsChains":   {AnyOf: perms(security.PermSandboxOperate)},
 
 	// --- trading ----------------------------------------------------------
 	"PostQuotesPreview":         {AnyOf: perms(security.PermTradeRead)},

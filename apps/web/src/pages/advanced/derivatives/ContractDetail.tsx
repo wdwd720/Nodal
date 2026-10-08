@@ -17,20 +17,22 @@ import {
   useDerivativePolicy,
   type DerivativeContract,
   type DerivativeMark,
+  type DerivativeSettlementOverride,
+  type DerivativeSettlementPreview,
 } from "../../../api/advanced/derivatives.ts";
 import type { CursorPage } from "../../../api/advanced/core.ts";
 import { LinkButton } from "../../../components/Button.tsx";
 import { AsyncPanel, EmptyState } from "../../../components/DataState.tsx";
 import { Field, FieldGrid, Identifier, Page, Panel, Pill } from "../../../components/Layout.tsx";
-import { BaseUnits } from "../../../components/Money.tsx";
+import { BaseUnits, Bps } from "../../../components/Money.tsx";
 import { SimulatedNotice } from "../../../components/SimulatedNotice.tsx";
 import { FIRST_PAGE, back, forward, formatMillis, settlementStyleLabel, type CursorTrail } from "../../../lib/advanced.ts";
-import { KIND_LABEL } from "../../../lib/derivatives.ts";
+import { KIND_LABEL, OVERRIDE_STATUS_MEANING, PRICE_RULE_LABEL } from "../../../lib/derivatives.ts";
 import { exactInstant, formatInstant } from "../../../lib/time.ts";
 import { advancedHref, useAdvancedAccount } from "../area.ts";
 import { CursorPager, ScrollTable } from "../shared.tsx";
 import { AnalyticsPanel } from "./Analytics.tsx";
-import { OpenPositionForm, RecordMarkForm, RunForm, SettleForm } from "./forms.tsx";
+import { DecideOverrideForm, OpenPositionForm, ProposeOverrideForm, RecordMarkForm, RunForm, SettleForm } from "./forms.tsx";
 import { DerivativesNav, MarkFields, Price, derivativesHref } from "./parts.tsx";
 
 export function ContractDetailPage(): ReactNode {
@@ -163,6 +165,13 @@ function ContractPanels(props: { readonly contract: DerivativeContract }): React
             <Field label="Settled at" note={contract.settlement.kind === "OPTION" ? "The underlying's price." : "The future's final price."}>
               <Price mantissa={contract.settlement.price_mantissa} scale={contract.settlement.price_scale} />
             </Field>
+            <Field label="What decided the price">
+              {contract.settlement.price_rule === undefined ? (
+                <span className="absent">recorded before settlements named their rule</span>
+              ) : (
+                PRICE_RULE_LABEL[contract.settlement.price_rule]
+              )}
+            </Field>
             <Field label="Price source">
               <code className="mono-small">{contract.settlement.price_source}</code>
             </Field>
@@ -171,6 +180,9 @@ function ContractPanels(props: { readonly contract: DerivativeContract }): React
           </FieldGrid>
         )}
       </Panel>
+
+      {contract.settlement_preview !== undefined && <SettlementRulePanel contract={contract} preview={contract.settlement_preview} />}
+      {contract.settlement_overrides !== undefined && <OverridesPanel overrides={contract.settlement_overrides} />}
 
       <MarksPanel key={`marks-${contract.id}`} instrumentId={contract.id} />
 
@@ -189,6 +201,129 @@ function ContractPanels(props: { readonly contract: DerivativeContract }): React
 
       {canInspect && <OperatorPanels contract={contract} variationMarginMs={policy.data?.variation_margin_interval_ms} />}
     </>
+  );
+}
+
+/**
+ * What the backend's settlement rule says about this contract now: the mark
+ * it reads at expiry, the price it derives, whether that mark was fresh — and
+ * so whether the rule settles it — and the range an override may propose.
+ */
+function SettlementRulePanel(props: { readonly contract: DerivativeContract; readonly preview: DerivativeSettlementPreview }): ReactNode {
+  const { preview } = props;
+  return (
+    <Panel title="Settlement rule" description="How the backend prices this contract's final settlement. Nobody chooses the price.">
+      <p className="note">{preview.rule_statement}</p>
+      <FieldGrid columns={3}>
+        <Field label="Expiry">
+          {formatInstant(preview.expiry)}
+          <span className="cell-note">{exactInstant(preview.expiry)}</span>
+        </Field>
+        <Field label="State">
+          {preview.settled ? (
+            <Pill tone="info">settled</Pill>
+          ) : !preview.expired ? (
+            <Pill tone="neutral">not expired</Pill>
+          ) : preview.settleable ? (
+            <Pill tone="good">settles by the rule</Pill>
+          ) : (
+            <Pill tone="warn">waits for an override</Pill>
+          )}
+        </Field>
+        <Field label="Reference mark" note="The last mark observed and recorded by expiry.">
+          {preview.reference_mark === undefined ? (
+            <span className="absent">{preview.expired ? "none recorded by expiry" : "read at expiry"}</span>
+          ) : (
+            <>
+              <Price mantissa={preview.reference_mark.mark_mantissa} scale={preview.reference_mark.price_scale} />
+              <span className="cell-note">observed {exactInstant(preview.reference_mark.observed_at)}</span>
+            </>
+          )}
+        </Field>
+        <Field label="The rule's price" note={props.contract.kind === "OPTION" ? "The underlying's price, from the mark's index." : "The future's final price."}>
+          {preview.reference_price_mantissa === undefined ? (
+            <span className="absent">none</span>
+          ) : (
+            <Price mantissa={preview.reference_price_mantissa} scale={preview.price_scale} />
+          )}
+        </Field>
+        <Field label="An override may propose" note="On the tick grid, within this bound of the rule's price.">
+          {preview.override_min_price_mantissa === undefined || preview.override_max_price_mantissa === undefined ? (
+            <span className="absent">no reference to bound it by</span>
+          ) : (
+            <>
+              <Price mantissa={preview.override_min_price_mantissa} scale={preview.price_scale} /> to{" "}
+              <Price mantissa={preview.override_max_price_mantissa} scale={preview.price_scale} />
+            </>
+          )}
+        </Field>
+        <Field label="Override bound">
+          <Bps value={preview.max_deviation_bps} />
+        </Field>
+      </FieldGrid>
+    </Panel>
+  );
+}
+
+/** Every override proposal for this contract's settlement, newest first, with its decision. */
+function OverridesPanel(props: { readonly overrides: readonly DerivativeSettlementOverride[] }): ReactNode {
+  return (
+    <Panel
+      title="Settlement overrides"
+      description="Proposed by one operator within the policy's bound, approved or rejected by a second."
+    >
+      {props.overrides.length === 0 ? (
+        <EmptyState title="No overrides" body="No operator has proposed an override of this contract's settlement price." />
+      ) : (
+        <ScrollTable
+          caption="Override proposals"
+          headers={["Proposed", "Status", "Price", "Rule's price", "Deviation", "Reason and evidence", "Decision"]}
+        >
+          {props.overrides.map((o) => (
+            <tr key={o.id}>
+              <th scope="row">
+                {formatInstant(o.proposed_at)}
+                <span className="cell-note">by {o.proposed_by.actor_id}</span>
+              </th>
+              <td>
+                <Pill tone={o.status === "APPROVED" ? "good" : o.status === "REJECTED" ? "neutral" : "warn"}>{o.status}</Pill>
+                <span className="cell-note">{OVERRIDE_STATUS_MEANING[o.status]}</span>
+              </td>
+              <td>
+                <Price mantissa={o.price_mantissa} scale={o.price_scale} />
+              </td>
+              <td>
+                <Price mantissa={o.reference_mantissa} scale={o.price_scale} />
+              </td>
+              <td>
+                <Bps value={o.deviation_bps} />
+                <span className="cell-note">
+                  bound <Bps value={o.max_deviation_bps} />
+                </span>
+              </td>
+              <td>
+                {o.reason}
+                <span className="cell-note">
+                  <code className="mono-small">{o.evidence_ref}</code> · sha256 <code className="mono-small">{o.evidence_sha256}</code>
+                </span>
+              </td>
+              <td>
+                {o.decision === undefined ? (
+                  <span className="absent">waiting for a second operator</span>
+                ) : (
+                  <>
+                    {o.decision.decision} by {o.decision.decided_by.actor_id}
+                    <span className="cell-note">
+                      {o.decision.reason} · {formatInstant(o.decision.decided_at)}
+                    </span>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </ScrollTable>
+      )}
+    </Panel>
   );
 }
 
@@ -283,11 +418,30 @@ function OperatorPanels(props: { readonly contract: DerivativeContract; readonly
       {expires && (
         <Panel
           title="Operator: final settlement"
-          description="Settles the expired contract once and for all. Needs a recent strong sign-in."
+          description="Settles the expired contract once and for all, at the rule's price. Needs a recent strong sign-in."
         >
           <SettleForm contract={contract} />
         </Panel>
       )}
+      {expires && !contract.settled && (
+        <Panel
+          title="Operator: propose a settlement override"
+          description="When the rule cannot settle the contract. A second operator decides. Needs a recent strong sign-in."
+        >
+          <ProposeOverrideForm contract={contract} />
+        </Panel>
+      )}
+      {(contract.settlement_overrides ?? [])
+        .filter((o) => o.status === "PROPOSED" && !contract.settled)
+        .map((o) => (
+          <Panel
+            key={o.id}
+            title={`Operator: decide override ${o.id}`}
+            description="Approving settles the contract at the proposal's price; the proposer cannot approve it. Needs a recent strong sign-in."
+          >
+            <DecideOverrideForm contract={contract} override={o} />
+          </Panel>
+        ))}
     </>
   );
 }

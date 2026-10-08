@@ -50,8 +50,13 @@ type AdvancedDeps struct {
 	Derivatives DerivativesDeps
 
 	// >>> advanced:equities deps
+	// Equities holds the equities service; nil leaves its routes UNSUPPORTED.
+	Equities EquitiesDeps
 
 	// >>> advanced:orders deps
+	// Orders holds the internal order book and its pipeline; either nil
+	// leaves the book routes UNSUPPORTED.
+	Orders OrdersDeps
 
 	// >>> advanced:transfers deps
 	// Transfers holds the transfer service and the sandbox faucet; each that is
@@ -64,8 +69,14 @@ type AdvancedDeps struct {
 	Treasury TreasuryDeps
 
 	// >>> advanced:stable deps
+	// Stable serves /advanced/stable-assets (see StableDeps). Its zero value
+	// -- no sandbox chain configured -- leaves those routes UNSUPPORTED.
+	Stable StableDeps
 
 	// >>> advanced:bridge deps
+	// Bridge serves /advanced/bridge (see BridgeDeps). Its zero value leaves
+	// those routes UNSUPPORTED.
+	Bridge BridgeDeps
 
 	// >>> advanced:predmarket deps
 	// PredictionMarkets runs prediction markets. Nil leaves their routes
@@ -86,6 +97,10 @@ type AdvancedDeps struct {
 	// >>> advanced:delegation deps
 
 	// >>> advanced:operator deps
+	// Operator serves the operator console (/advanced/ops): the overview, the
+	// sandbox reference marks and the simulated chains. Incomplete leaves those
+	// routes UNSUPPORTED.
+	Operator OperatorDeps
 }
 
 func (d AdvancedDeps) complete() bool {
@@ -109,8 +124,10 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireDerivatives(p, d)
 
 	// >>> advanced:equities wire
+	wireEquities(p, d)
 
 	// >>> advanced:orders wire
+	wireOrders(p, d)
 
 	// >>> advanced:transfers wire
 	wireTransfers(p, d)
@@ -119,8 +136,10 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	wireTreasury(p, d)
 
 	// >>> advanced:stable wire
+	wireStable(p, d)
 
 	// >>> advanced:bridge wire
+	wireBridge(p, d)
 
 	// >>> advanced:predmarket wire
 	if d.Advanced.PredictionMarkets != nil {
@@ -133,6 +152,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:delegation wire
 
 	// >>> advanced:operator wire
+	wireOperator(p, d)
 }
 
 type advancedCoreAdapter struct {

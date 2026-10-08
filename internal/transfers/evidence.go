@@ -120,7 +120,9 @@ func (s *Service) evidence(st *sendState, outcome Status, codes []string) decisi
 	return doc
 }
 
-// reversalEvidence is the canonical evidence of one reversal.
+// reversalEvidence is the canonical evidence of one reversal: the transfer,
+// both journals, and the dual control that licensed it -- the proposal, who
+// proposed it and who approved it (schema v2, migration 00758).
 type reversalEvidence struct {
 	Schema                   string         `json:"schema"`
 	TransferID               string         `json:"transfer_id"`
@@ -128,9 +130,14 @@ type reversalEvidence struct {
 	OriginalJournal          string         `json:"original_journal_transaction_id"`
 	ReversalJournal          string         `json:"reversal_journal_transaction_id"`
 	EffectID                 string         `json:"effect_id"`
+	ProposalID               string         `json:"proposal_id"`
+	ProposalSeq              int            `json:"proposal_seq"`
 	ReasonCode               string         `json:"reason_code"`
 	Reason                   string         `json:"reason"`
-	Operator                 string         `json:"operator"`
+	ProposedBy               string         `json:"proposed_by"`
+	ProposedAt               time.Time      `json:"proposed_at"`
+	ApprovedBy               string         `json:"approved_by"`
+	DecisionReason           string         `json:"decision_reason"`
 	Sender                   string         `json:"sender_account_id"`
 	Recipient                string         `json:"recipient_account_id"`
 	Asset                    string         `json:"asset_id"`
