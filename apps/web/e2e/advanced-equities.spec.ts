@@ -18,10 +18,15 @@
  *     operator-only — the worker runs included), and an order the backend
  *     refuses is shown with the very code it sent, linked to the order it
  *     recorded.
+ *
+ * The LOCAL seed lists no equity and a customer cannot list one, so where the
+ * paper venue runs and nothing is listed, the tests that need a listing list
+ * one through the API, as the operator ("admin", signed in with a strong
+ * sign-in in a context of its own) would.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 
 const NOTICE = "Simulated value — sandbox only";
 
@@ -141,6 +146,67 @@ async function listings(page: Page): Promise<{ readonly items: Listing[]; readon
   return list;
 }
 
+/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
+async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto("/v1/auth/login");
+  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
+  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
+  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  return { context, page };
+}
+
+/** A setup command through the API, same-origin, with its own idempotency key. */
+async function setup(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
+  const response = await page.request.post(`/v1${path}`, {
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "Sec-Fetch-Site": "same-origin" },
+    data: JSON.stringify(body),
+  });
+  return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
+}
+
+/**
+ * Lists a simulated equity through the API, as an operator does, and records
+ * a reference mark for its share so the paper venue has a price to fill at.
+ * The customer's faucet grant creates the sandbox dollar the listing settles
+ * in (it must exist before anything is listed in it) and funds the order.
+ */
+async function listAnEquity(page: Page, browser: Browser): Promise<string> {
+  const grant = await setup(page, "/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "100" });
+  expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
+  const operator = await signIn(browser, "admin", true);
+  try {
+    const symbol = `E2E${randomBytes(2).toString("hex").toUpperCase()}`;
+    const listed = await setup(operator.page, "/advanced/equities/listings", {
+      kind: "EQUITY",
+      symbol,
+      name: `${symbol} end-to-end equity`,
+      exchange_mic: "XNYS",
+      share_decimals: 3,
+      price_scale: 2,
+      tick_size: "1",
+      lot_size: "1",
+      min_quantity: "1000",
+      oracle_max_age_ms: 300_000,
+      oracle_sources: ["e2e-equities"],
+      risk_class: "STANDARD",
+    });
+    expect(listed.status, `the operator lists an equity: ${JSON.stringify(listed.body)}`).toBe(201);
+    const listing = listed.body as { instrument_id: string; share_asset_id: string };
+    const mark = await setup(operator.page, "/advanced/ops/marks", {
+      asset_id: listing.share_asset_id,
+      price: "25.5",
+      source: "e2e-equities",
+    });
+    expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
+    return listing.instrument_id;
+  } finally {
+    await operator.context.close();
+  }
+}
+
 test.describe("the equities section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
@@ -166,7 +232,10 @@ test.describe("the equities section", () => {
   });
 });
 
-test("listings and the session are simulated and drawn as the backend sent them", async ({ page }) => {
+test("listings and the session are simulated and drawn as the backend sent them", async ({ page, browser }) => {
+  // With nothing listed the table is only its empty state, so the operator
+  // lists an equity first and the rows are checked as well.
+  if ((await listings(page))?.items.length === 0) await listAnEquity(page, browser);
   const list = await listings(page);
   await page.goto("/advanced/equities");
   await settle(page);
@@ -283,10 +352,13 @@ test("commands are refused with their stable codes, the operator's worker runs i
   }
 });
 
-test("an order is confirmed once, and the page shows exactly what the backend answered", async ({ page }) => {
-  const list = await listings(page);
-  const listing = list?.items[0];
-  test.skip(listing === undefined, "this deployment lists no equity to order");
+test("an order is confirmed once, and the page shows exactly what the backend answered", async ({ page, browser }) => {
+  test.skip((await listings(page)) === undefined, "this deployment runs no paper venue");
+  // An equity of this test's own, freshly marked, rather than one another
+  // spec or an earlier test left behind.
+  const instrument = await listAnEquity(page, browser);
+  const listing = (await listings(page))?.items.find((item) => item.instrument_id === instrument);
+  expect(listing, "the equity the operator listed is listed").toBeTruthy();
   const l = listing as Listing;
 
   await page.goto(`/advanced/equities/listings/${l.instrument_id}`);

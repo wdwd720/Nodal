@@ -19,10 +19,14 @@
  *     operator-only), no route of this API changes the crossing rule or
  *     places a house order, and an order the backend refuses is shown with
  *     the very code it sent, linked to the order it recorded.
+ *
+ * The LOCAL seed opens no book and a customer cannot open one, so the order
+ * test opens its own through the API, as the operator ("admin", signed in with
+ * a strong sign-in in a context of its own) would.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 
 const NOTICE = "Simulated value — sandbox only";
 
@@ -140,6 +144,93 @@ async function listBooks(page: Page): Promise<BookRow[]> {
   return body.items;
 }
 
+/** Signs a development identity in, in a fresh context, through the real OIDC flow. */
+async function signIn(browser: Browser, identity: string, mfa: boolean): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto("/v1/auth/login");
+  await expect(page.getByRole("heading", { name: "Choose an identity" })).toBeVisible();
+  const row = page.locator("li", { has: page.locator("code", { hasText: new RegExp(`^${identity}$`) }) });
+  await row.getByRole("link", { name: mfa ? "sign in with MFA" : "sign in", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  return { context, page };
+}
+
+/** A setup command through the API, same-origin, with its own idempotency key. */
+async function setup(page: Page, path: string, body: unknown): Promise<{ readonly status: number; readonly body: unknown }> {
+  const response = await page.request.post(`/v1${path}`, {
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "Sec-Fetch-Site": "same-origin" },
+    data: JSON.stringify(body),
+  });
+  return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
+}
+
+/**
+ * Opens an internal book through the API, as an operator does. The
+ * instrument is one outcome of a fresh SANDBOX prediction market: a 24x7
+ * instrument whose shares trade against the sandbox dollar, which is the only
+ * kind of quote asset a book accepts. The customer's faucet grant creates the
+ * sandbox dollar (the market's collateral) and gives the customer something to
+ * reserve against; the operator defines the market, opens it and opens the
+ * book of its first outcome.
+ */
+async function openABook(page: Page, browser: Browser): Promise<BookRow> {
+  const grant = await setup(page, "/advanced/transfers/faucet/grants", { account_id: await accountId(page), amount: "100" });
+  expect([201, 429], `the faucet runs in this deployment: ${JSON.stringify(grant.body)}`).toContain(grant.status);
+  const operator = await signIn(browser, "admin", true);
+  let instrument: string;
+  try {
+    const now = Date.now();
+    const created = await setup(operator.page, "/advanced/prediction-markets", {
+      symbol: `E2E-BOOK-${randomBytes(3).toString("hex").toUpperCase()}`,
+      question: "Does the order-book suite place an order on a book an operator opened?",
+      outcomes: ["YES", "NO"],
+      mode: "SANDBOX",
+      open_at: new Date(now - 60_000).toISOString(),
+      close_at: new Date(now + 24 * 60 * 60_000).toISOString(),
+      dispute_window_ms: 0,
+      oracle_source: "e2e",
+      oracle_public_key: "ab".repeat(32),
+    });
+    expect(created.status, `the operator defines a market: ${JSON.stringify(created.body)}`).toBe(201);
+    const market = created.body as {
+      id: string;
+      collateral_asset_id: string;
+      collateral_decimals: number;
+      outcomes: Array<{ instrument_id: string; share_asset_id: string }>;
+    };
+    const opened = await setup(operator.page, `/advanced/prediction-markets/${market.id}/open`, {});
+    expect(opened.status, `the operator opens it: ${JSON.stringify(opened.body)}`).toBe(200);
+    instrument = market.outcomes[0]?.instrument_id ?? "";
+    // Risk Kernel V2 values an order at the share's reference mark and refuses
+    // one it cannot value (RISK_ORACLE_UNAVAILABLE); the operator records it.
+    const mark = await setup(operator.page, "/advanced/ops/marks", {
+      asset_id: market.outcomes[0]?.share_asset_id ?? "",
+      price: "0.5",
+      source: "e2e-order-book",
+    });
+    expect(mark.status, `the operator marks the share: ${JSON.stringify(mark.body)}`).toBe(201);
+    const schedule = (side: string, bps: number): unknown => ({
+      version: `e2e-${side}-${randomBytes(3).toString("hex")}`,
+      quote_asset_id: market.collateral_asset_id,
+      quote_decimals: market.collateral_decimals,
+      percentage_fee_bps: bps,
+    });
+    const book = await setup(operator.page, "/advanced/books", {
+      instrument_id: instrument,
+      mode: "SANDBOX",
+      maker_fee: schedule("maker", 10),
+      taker_fee: schedule("taker", 20),
+    });
+    expect(book.status, `the operator opens the outcome's book: ${JSON.stringify(book.body)}`).toBe(201);
+  } finally {
+    await operator.context.close();
+  }
+  const listed = (await listBooks(page)).find((row) => row.instrument_id === instrument);
+  expect(listed?.status, "the book the operator opened is listed, OPEN").toBe("OPEN");
+  return listed as BookRow;
+}
+
 test.describe("the order-book section", () => {
   for (const { path, heading } of PAGES) {
     test(`${heading} renders under the simulated-value notice`, async ({ page }) => {
@@ -165,7 +256,10 @@ test.describe("the order-book section", () => {
   });
 });
 
-test("books are simulated internal books that disclose their fees and crossing rule, drawn as sent", async ({ page }) => {
+test("books are simulated internal books that disclose their fees and crossing rule, drawn as sent", async ({ page, browser }) => {
+  // With no book listed there is nothing to draw but the empty state, so the
+  // operator opens one first and the book's own page is checked as well.
+  if ((await listBooks(page)).length === 0) await openABook(page, browser);
   const books = await listBooks(page);
   for (const book of books) {
     expect(book.value_domain).toBe("SIMULATED");
@@ -282,11 +376,10 @@ test("commands are refused with their stable codes, and none changes the crossin
   }
 });
 
-test("an order is confirmed once, and the page shows exactly what the backend answered", async ({ page }) => {
-  const books = await listBooks(page);
-  const open = books.find((book) => book.status === "OPEN");
-  test.skip(open === undefined, "the seed holds no OPEN internal book to place an order on");
-  const book = open as BookRow;
+test("an order is confirmed once, and the page shows exactly what the backend answered", async ({ page, browser }) => {
+  // A book of this spec's own, so the order lands on a book it knows is OPEN
+  // and was not left behind by another spec.
+  const book = await openABook(page, browser);
 
   await page.goto(`/advanced/order-books/books/${book.instrument_id}`);
   await settle(page);

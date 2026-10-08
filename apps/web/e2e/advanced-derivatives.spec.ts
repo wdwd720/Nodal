@@ -274,7 +274,16 @@ test("an open is confirmed once, and the page shows exactly what the backend ans
     items: ContractRow[];
   };
   const tradable = list.items.find((item) => !item.settled);
-  test.skip(tradable === undefined, "the seed lists no unsettled derivative contract to open a position in");
+  // What is missing is not in this suite's reach: no route of the API lists a
+  // derivative contract (openapi.yaml has no POST under
+  // /advanced/derivatives/contracts; contracts are created in-process only,
+  // through instruments.CreateAdvanced, as scripts/advanceddemo does on a
+  // database of its own) and no LOCAL seed creates one. So on a seeded
+  // database there is no contract to open a position in.
+  test.skip(
+    tradable === undefined,
+    "no unsettled derivative contract exists: neither the LOCAL seeds nor any API route create one",
+  );
   const contract = tradable as ContractRow;
 
   await page.goto(`/advanced/derivatives/contracts/${contract.id}`);
