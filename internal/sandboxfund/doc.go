@@ -40,7 +40,8 @@
 //   - Grant an asset whose supply a controller owns: a platform stable asset
 //     exists only as its issuer mints it against reserve, a bridged twin only
 //     as its bridge releases it against a lock. Fund refuses both by name
-//     (RefusalSupplyControlled, with the controller), and the ledger refuses
+//     through the shared check, econ.RefuseSupplyControlled (ASSET_RESTRICTED,
+//     refusal econ.RefusalSupplyControlled, with the controller), and the ledger refuses
 //     any journal of a kind their controllers and customer movements do not
 //     use, and any that creates or destroys a unit outside an issuance
 //     (SU001, SU002, migration 00763).

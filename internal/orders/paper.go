@@ -281,6 +281,9 @@ func (v *PaperVenue) market(ctx context.Context, q db.Querier, instrumentID inst
 			return paperMarket{}, errs.Newf(errs.CodeForbidden, "orders: asset %s is not SIMULATED; the paper venue moves only simulated value", a.ID)
 		}
 	}
+	if err := refuseSupplyControlledPaper(ctx, q, m.base.ID, m.quote.ID); err != nil {
+		return paperMarket{}, err
+	}
 	m.scheduleKey = v.ScheduleKey(inst.ID)
 	pub, err := v.feeLedger.EffectiveSchedule(ctx, q, m.scheduleKey, at)
 	if feeledger.ReasonOf(err) == feeledger.ReasonScheduleNotFound {

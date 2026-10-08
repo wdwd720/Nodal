@@ -200,6 +200,10 @@ func (s *Service) AnnounceCorporateAction(ctx context.Context, tx pgx.Tx, spec C
 	if err != nil {
 		return CorporateAction{}, err
 	}
+	// Refused before the action is recorded (supply.go).
+	if err := refuseSupplyControlledListing(ctx, tx, l, "a corporate action"); err != nil {
+		return CorporateAction{}, err
+	}
 	cal, err := s.Calendar(ctx, tx, l.Terms.Terms.TradingCalendar)
 	if err != nil {
 		return CorporateAction{}, err

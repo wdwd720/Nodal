@@ -131,6 +131,10 @@ func (s *Service) SubmitOrderIntent(ctx context.Context, tx pgx.Tx, req OrderReq
 	if err != nil {
 		return econ.Intent{}, err
 	}
+	// Refused before the intent is written (supply.go).
+	if err := refuseSupplyControlledListing(ctx, tx, l, "an order"); err != nil {
+		return econ.Intent{}, err
+	}
 	terms, err := json.Marshal(orderTerms{Side: req.Side, OrderType: req.Type, LimitPrice: req.LimitPrice, ExtendedHours: req.ExtendedHours})
 	if err != nil {
 		return econ.Intent{}, errs.Wrap(err, errs.CodeInternal, "equities: encode order terms")

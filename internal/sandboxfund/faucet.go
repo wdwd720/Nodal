@@ -131,8 +131,10 @@ type Grant struct {
 // Allowed permits, for any asset that is not SIMULATED, for a prediction
 // market's outcome share and for any asset whose supply a controller owns (a
 // platform stable asset, a bridged twin), for an account that is not an
-// ACTIVE customer account, and beyond the policy's rolling cap. It is
-// idempotent on (account, idempotency key).
+// ACTIVE customer account, and beyond the policy's rolling cap. A
+// supply-controlled asset is refused through econ.RefuseSupplyControlled
+// (ASSET_RESTRICTED, refusal SUPPLY_CONTROLLED_ASSET). It is idempotent on
+// (account, idempotency key).
 func (f *Faucet) Fund(ctx context.Context, tx pgx.Tx, p security.Principal, accountID accounts.AccountID, assetID assets.AssetID, quantity money.Quantity, idempotencyKey string) (Grant, error) {
 	if tx == nil {
 		return Grant{}, errs.New(errs.CodeInternal, "sandboxfund: Fund requires a transaction")
@@ -217,14 +219,17 @@ func (f *Faucet) Fund(ctx context.Context, tx pgx.Tx, p security.Principal, acco
 				"in complete sets against collateral").
 			WithField("asset_id", asset.ID.String()).WithField("refusal", RefusalPredictionShare)
 	}
-	if controller, err := supplyController(ctx, tx, asset.ID); err != nil {
+	// One granted unit of a supply-controlled asset would be a unit no
+	// issuance backs: the stable asset's holdings would exceed what its
+	// issuer issued and its supply reconciliation would pause issuance, a
+	// twin's would exceed what its bridge locked. The database refuses the
+	// grant's journal anyway (SU001, migration 00763); the shared check names
+	// the reason before anything is written.
+	if err := econ.RefuseSupplyControlled(ctx, tx, asset.ID, "sandboxfund: a faucet grant",
+		"a granted unit would be one no issuance backs, and the database refuses a SANDBOX_FUNDING journal for such an "+
+			"asset (SU001, migration 00763); it reaches a customer only through its controller (a mint, a bridge release) "+
+			"or from another holder"); err != nil {
 		return Grant{}, err
-	} else if controller != "" {
-		return Grant{}, errs.New(errs.CodeForbidden,
-			"the sandbox faucet never grants an asset whose supply a controller owns: a platform stable asset exists only as "+
-				"its issuer mints it against reserve, a bridged twin only as its bridge releases it against a lock").
-			WithField("asset_id", asset.ID.String()).WithField("refusal", RefusalSupplyControlled).
-			WithField("controller", controller)
 	}
 
 	now := f.clk.Now().UTC()
@@ -338,45 +343,6 @@ func isPredictionShare(ctx context.Context, q db.Querier, asset assets.AssetID) 
 		return false, dbErr("check prediction shares", err)
 	}
 	return share, nil
-}
-
-// RefusalSupplyControlled names the faucet's refusal of an asset whose supply
-// a controller owns (the refusal field of the error; its controller field is
-// one of the Controller* values).
-const RefusalSupplyControlled = "SUPPLY_CONTROLLED_ASSET"
-
-// The controllers whose assets the faucet never grants.
-const (
-	// ControllerStableIssuer: a platform stable asset (internal/stableasset's
-	// registry, stable_assets), minted only by its STABLE_ISSUER facility
-	// against reserve.
-	ControllerStableIssuer = "STABLE_ISSUER"
-	// ControllerBridge: a bridged twin (internal/bridge's routes, the
-	// destination asset of bridge_routes), minted only by its route's
-	// attested release against a lock on the source chain.
-	ControllerBridge = "BRIDGE"
-)
-
-// supplyController names the controller that owns an asset's supply, or ""
-// when no controller does. One granted unit of such an asset would be a unit
-// no issuance backs: the stable asset's holdings would exceed what its issuer
-// issued and its supply reconciliation would pause issuance, a twin's would
-// exceed what its bridge locked. The database refuses the grant's journal
-// anyway (SU001, migration 00763); this check names the reason before
-// anything is written.
-func supplyController(ctx context.Context, q db.Querier, asset assets.AssetID) (string, error) {
-	var stable, twin bool
-	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM stable_assets WHERE asset_id = $1),
-		EXISTS (SELECT 1 FROM bridge_routes WHERE destination_asset_id = $1)`, asset).Scan(&stable, &twin); err != nil {
-		return "", dbErr("check supply controllers", err)
-	}
-	switch {
-	case stable:
-		return ControllerStableIssuer, nil
-	case twin:
-		return ControllerBridge, nil
-	}
-	return "", nil
 }
 
 // UsedInWindow is what an account was granted of an asset after since.

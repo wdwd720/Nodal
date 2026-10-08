@@ -160,6 +160,13 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 	if err != nil {
 		return SwapTicket{}, err
 	}
+	intentKey := "delegation:swap:" + c.ID.String() + ":" + strconv.FormatUint(req.Nonce, 10)
+	// A venue that holds none of a supply-controlled receive asset could
+	// deliver it only after funding the database refuses (supply.go):
+	// refused before anything is written.
+	if err := s.refuseUnfundableDelivery(ctx, tx, req.AccountID, intentKey, venue, recv.ID); err != nil {
+		return SwapTicket{}, err
+	}
 	wallet, err := s.signer.EnsureKey(ctx, tx, req.AccountID, venue.Chain)
 	if err != nil {
 		return SwapTicket{}, err
@@ -187,7 +194,7 @@ func (s *Service) RequestSwap(ctx context.Context, tx pgx.Tx, req SwapRequest) (
 		AccountID: req.AccountID, Kind: kind, Mode: c.Terms.Mode, Capability: gates.AgentSigning,
 		ActorType: security.ActorAgent, ActorID: agent.ID, AgentID: agent.ID, StrategyRef: c.Terms.StrategyID,
 		DelegationID: c.ID.String(), AssetID: &pay.ID, Quantity: &amountIn, Terms: terms,
-		IdempotencyKey: "delegation:swap:" + c.ID.String() + ":" + strconv.FormatUint(req.Nonce, 10), CorrelationID: req.CorrelationID,
+		IdempotencyKey: intentKey, CorrelationID: req.CorrelationID,
 	})
 	if err != nil {
 		return SwapTicket{}, err
@@ -411,31 +418,43 @@ func devnetMints(chain devnet.ChainID, pay, recv assets.Asset) (devnet.PublicKey
 // against one venue are serialized by a transaction-scoped advisory lock, so
 // two admissions cannot promise the same inventory.
 func (s *Service) venueCovers(ctx context.Context, tx pgx.Tx, v Venue, asset assets.AssetID, amountOut money.Quantity) (bool, error) {
+	spare, active, err := s.venueSpare(ctx, tx, v, asset)
+	if err != nil || !active {
+		return false, err
+	}
+	return spare.Cmp(amountOut) >= 0, nil
+}
+
+// venueSpare is what the venue's house book holds of an asset beyond what
+// its open swaps have already promised, under the venue's admission lock;
+// active is false when the house book is not ACTIVE (and spare is then
+// meaningless).
+func (s *Service) venueSpare(ctx context.Context, tx pgx.Tx, v Venue, asset assets.AssetID) (spare money.Quantity, active bool, err error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "delegation/venue/"+v.ID.String()); err != nil {
-		return false, dbErr("lock venue", err)
+		return money.Quantity{}, false, dbErr("lock venue", err)
 	}
 	house, err := econ.NewRegistry().HouseAccount(ctx, tx, v.HouseAccountID)
 	if err != nil {
-		return false, err
+		return money.Quantity{}, false, err
 	}
 	if house.Status != econ.HouseActive {
-		return false, nil
+		return money.Quantity{}, false, nil
 	}
 	held, err := s.ledger.Balance(ctx, tx, house.Account(ledger.CodeHouseInventory, asset))
 	if err != nil {
-		return false, err
+		return money.Quantity{}, false, err
 	}
 	var promised string
 	if err := tx.QueryRow(ctx, `SELECT coalesce(sum(amount_out), 0)::text FROM delegated_swaps
 		WHERE venue_id = $1 AND receive_asset_id = $2 AND status IN ('ADMITTED','AWAITING_APPROVAL','APPROVED','SIGNED','SUBMITTED','UNKNOWN')`,
 		v.ID, asset).Scan(&promised); err != nil {
-		return false, dbErr("sum venue promises", err)
+		return money.Quantity{}, false, dbErr("sum venue promises", err)
 	}
 	open, err := money.ScanQuantity(promised)
 	if err != nil {
-		return false, errs.Wrap(err, errs.CodeInternal, "delegation: venue promises")
+		return money.Quantity{}, false, errs.Wrap(err, errs.CodeInternal, "delegation: venue promises")
 	}
-	return held.Sub(open).Cmp(amountOut) >= 0, nil
+	return held.Sub(open), true, nil
 }
 
 // evaluateSwapRisk runs Risk V2 with every section a swap requires (account,

@@ -60,6 +60,10 @@ func (s *Service) Fund(ctx context.Context, tx pgx.Tx, r FundRequest) (Funding, 
 	if mode == "" {
 		mode = gates.ModePaper
 	}
+	// Refused before the book is locked (supply.go).
+	if err := refuseSupplyControlledFunding(ctx, tx, r.Asset); err != nil {
+		return Funding{}, err
+	}
 	book, err := s.lockBook(ctx, tx, r.HouseAccountID)
 	if err != nil {
 		return Funding{}, err

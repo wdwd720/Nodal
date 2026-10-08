@@ -275,6 +275,12 @@ func (s *Service) ProposeWithdrawal(ctx context.Context, tx pgx.Tx, req Proposal
 	if err != nil {
 		return WithdrawalTicket{}, err
 	}
+	// SANDBOX_WITHDRAWAL is refused for a supply-controlled asset (supply.go):
+	// refused before anything is written, so the chain never moves units the
+	// books could not record leaving.
+	if err := refuseSupplyControlledWithdrawal(ctx, tx, asset.ID); err != nil {
+		return WithdrawalTicket{}, err
+	}
 	policy, found, err := latestPolicy(ctx, tx, req.AccountID)
 	if err != nil {
 		return WithdrawalTicket{}, err

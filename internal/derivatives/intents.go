@@ -160,6 +160,11 @@ func (s *Service) OpenPosition(ctx context.Context, tx pgx.Tx, r OpenRequest) (O
 	if err := spec.CheckQuantity(r.Quantity); err != nil {
 		return Outcome{}, err
 	}
+	// A position settled in a supply-controlled asset could never settle
+	// (supply.go): refused before the intent is written.
+	if err := refuseSupplyControlledSettlement(ctx, tx, spec); err != nil {
+		return Outcome{}, err
+	}
 	qty := r.Quantity
 	in, early, err := s.begin(ctx, tx, r.IntentRequest, econ.KindOpenPosition, spec, &qty, map[string]string{"side": string(r.Side)})
 	if early != nil || err != nil {

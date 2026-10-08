@@ -83,6 +83,12 @@ func (s *Service) OpenLeveragedSpot(ctx context.Context, tx pgx.Tx, r SpotReques
 	if r.AssetID == a.NumeraireAssetID {
 		return SpotResult{}, errs.New(errs.CodeValidationFailed, "margin: the numeraire is not a position")
 	}
+	// The paper buy and the liquidation of what it buys are both refused for
+	// a supply-controlled asset (supply.go): refused before the intent is
+	// written.
+	if err := econ.RefuseSupplyControlled(ctx, tx, r.AssetID, "margin: buying it on margin", whySupplyPosition); err != nil {
+		return SpotResult{}, err
+	}
 	sp := intentSpec{
 		kind: econ.KindAcquireExposure, capability: gates.Leverage, account: a, requester: r.Requester, key: r.IdempotencyKey,
 		asset: r.AssetID, quantity: r.Quantity, corr: r.CorrelationID,
