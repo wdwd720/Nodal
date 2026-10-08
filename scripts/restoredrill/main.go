@@ -2,19 +2,23 @@
 // dry-run required by PART 141/219 ("a backup that was never restored is not a
 // proven backup") against the LOCAL docker-compose Postgres.
 //
-//	go run ./scripts/restoredrill [-container cp-postgres] [-keep] [-out dist/restore-drill.json]
+//	go run ./scripts/restoredrill [-container cp-postgres | -pg-bin dir] [-keep] [-out dist/restore-drill.json]
 //
 // Steps:
-//  1. provision a fresh, fully migrated source database and seed a small,
-//     balanced ledger fixture as the application role;
-//  2. back it up with pg_dump (custom format) through `docker exec`, hashing
-//     the archive;
+//  1. provision a fresh, fully migrated source database and seed it as the
+//     application role: a small, balanced ledger fixture, then through the
+//     real services the internal (Domain A) economy (domaina.go) and the
+//     advanced books (advanced.go);
+//  2. back it up with pg_dump (custom format) through `docker exec`, or from
+//     -pg-bin, hashing the archive;
 //  3. restore the archive into a new empty database with pg_restore;
 //  4. "boot": verify migration checksums on the restored database and that
 //     its version equals the source's;
 //  5. dry-run reconciliation: recompute ledger balances from journal entries
 //     on the restored copy, compare row counts of every table with the source,
-//     and re-hash the journal transactions on both sides;
+//     re-hash the journal transactions on both sides, and report every
+//     advanced area's rows on both sides (areas.go), failing an area the seed
+//     writes that the source holds no row in;
 //  6. write a JSON report and exit non-zero on any mismatch.
 //
 // The production procedure (RDS snapshot/PITR restore, application pointed at
@@ -56,6 +60,8 @@ type report struct {
 	VerifyOK         bool              `json:"migration_verify_ok"`
 	RowCountsMatch   bool              `json:"row_counts_match"`
 	RowCountDiffs    map[string][2]int `json:"row_count_diffs,omitempty"`
+	AdvancedAreas    []areaReport      `json:"advanced_areas"`
+	AdvancedAreasOK  bool              `json:"advanced_areas_ok"`
 	BalancesMatch    bool              `json:"ledger_balances_recomputed_match"`
 	JournalHashMatch bool              `json:"journal_hash_match"`
 	SourceJournal    string            `json:"source_journal_hash"`
@@ -111,7 +117,14 @@ func run() int {
 	if err := seedDomainA(ctx, src.AppDSN); err != nil {
 		return fail(fmt.Errorf("seed domain a: %w", err))
 	}
+	// The advanced books, through the real services, for the same reason:
+	// without them every advanced table restored EMPTY as well.
+	economy, err := seedAdvanced(ctx, src.AppDSN)
+	if err != nil {
+		return fail(fmt.Errorf("seed advanced books: %w", err))
+	}
 	step("provisioned and seeded %s", src.Name)
+	step("advanced books seeded: %s", economy)
 
 	// 2. Backup.
 	tools := pgTools{container: *container, bin: *pgBin, admin: *admin}
@@ -186,8 +199,11 @@ func run() int {
 	rep.JournalHashMatch = rep.SourceJournal == rep.RestoredJournal
 	step("reconciliation dry-run: tables=%d rowcounts_match=%v balance_drift_accounts=%d journal_hash_match=%v",
 		len(srcCounts), rep.RowCountsMatch, drift, rep.JournalHashMatch)
+	rep.AdvancedAreas, rep.AdvancedAreasOK = compareAreas(srcCounts, dstCounts)
+	printAreas(rep.AdvancedAreas)
+	step("%s", areaSummary(rep.AdvancedAreas, rep.AdvancedAreasOK))
 
-	rep.OK = rep.VerifyOK && rep.RowCountsMatch && rep.BalancesMatch && rep.JournalHashMatch
+	rep.OK = rep.VerifyOK && rep.RowCountsMatch && rep.BalancesMatch && rep.JournalHashMatch && rep.AdvancedAreasOK
 	rep.FinishedAt = time.Now().UTC()
 	writeReport(*out, rep)
 	if !rep.OK {
