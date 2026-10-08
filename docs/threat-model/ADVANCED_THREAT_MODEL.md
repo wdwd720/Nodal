@@ -135,9 +135,11 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   reduce-only and the smallest sale that restores the account is chosen first; every step's slippage is capped
   and the cap and step budget are database constraints; a step is executed once (expected-step replay); a kill
   switch stops new risk but never liquidation; deficit cover by the insurance fund is exactly once.
-- **Residual risk:** review findings F1 (a step budget reached before bankruptcy could leave a case in manual
-  review with no exit) and F6 (a step-1 request after a finished case replayed the old case) are being fixed in
-  the margin hardening work (migration 00754); until then an operator can be needed to unwedge a case.
+- **Residual risk:** review-1 findings F1 (a step budget reached before bankruptcy could leave a case in manual
+  review with no exit) and F6 (a step-1 request after a finished case replayed the old case) are fixed (`d91ead2`,
+  00754): terminal accounting is decided before the step budget, a case in manual review leaves it only by one
+  operator's proposal and another's approval (MG007, MG009, MG010), and a step replays only within the account's
+  open case. One sandbox source per mark remains (threat 5).
 - **Tests:** `TestProp_LiquidationIsDeterministicReduceOnlyAndTerminates`,
   `TestIntegration_StalePriceLiquidationIsRefused`, `TestIntegration_PartialLiquidationRestoresTheAccount`,
   `TestPlan_SlippageIsCapped`, `TestApplySale_IsReduceOnly`, `TestIntegration_KillSwitchStopsNewRiskButNeverLiquidation`,
@@ -216,10 +218,12 @@ packages named; `go run ./scripts/inttest -pkg '^\./internal/<pkg>$'` runs a pac
   idempotent on (sender account, key) with the request content-hashed, so a different request under the same
   key is `INVALID_IDEMPOTENCY_REUSE`; the economic effect's key is unique and a replay returns the first
   outcome; the ledger posting has its own idempotency key; the reservation is keyed by the transfer.
-- **Residual risk:** review finding F3 — one operator can reverse a completed transfer without a second
-  approver or a recent step-up — is open and tracked; reversal is a compensation, never an edit of history.
+- **Residual risk:** none known. Review-1 finding F3 (one operator could reverse a completed transfer alone) is
+  fixed (`a8f439f`, 00758): a reversal is proposed by one operator and approved by a different one, bound in SQL
+  (PT006-PT008), and it is a compensation, never an edit of history.
 - **Tests:** `TestIntegration_ADuplicateTransferIsIdempotent`, `TestIntegration_ConcurrentTransfersCannotDoubleSpend`,
-  `TestIntegration_TransfersAndOtherSpendersShareOneBudget`, `TestIntegration_AReversalCompensatesAndNeverEditsHistory`
+  `TestIntegration_TransfersAndOtherSpendersShareOneBudget`, `TestIntegration_AReversalCompensatesAndNeverEditsHistory`,
+  `TestIntegration_AProposerCannotApproveTheirOwnReversal`, `TestIntegration_TwoOperatorsReverseExactlyOnceUnderConcurrency`
   (`internal/transfers`); `TestIntegration_EffectIsClaimedExactlyOnceUnderConcurrency`,
   `TestIntegration_SameKeyDifferentRequestIsRefused` (`internal/econ`).
 
