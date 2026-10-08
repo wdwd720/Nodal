@@ -1,8 +1,9 @@
 /**
  * OPERATOR CONSOLE: one page for an operator of the advanced (sandbox) area.
  *
- * What needs a second operator now -- transfer reversals and margin case
- * resolutions proposed by one operator, decided here by another -- the
+ * What needs an operator now -- transfer reversals and margin case
+ * resolutions proposed by one operator, decided here by another, and bridge
+ * legs in manual review -- the
  * sandbox reference marks every SIMULATED valuation depends on, the circuit
  * breakers, the capability gates, the liquidation queue, the reconciliation
  * mismatches, the stable assets' reserve results, the freshness of the marks
@@ -47,6 +48,7 @@ import { CommandFlow, caseHref, type Prepared } from "../margin/parts.tsx";
 import { DecideResolutionForm } from "../margin/Reviews.tsx";
 import { CursorPager, ScrollTable } from "../shared.tsx";
 import { ProposalCard } from "../transfers/reversals.tsx";
+import { BridgeLegsInReview } from "./BridgeLegs.tsx";
 import {
   CapabilityGatesPanel,
   CircuitBreakersPanel,
@@ -138,8 +140,8 @@ function DualControlPanel(props: { readonly overview: ReturnType<typeof useOpsOv
   const reviews = useMarginReviews();
   return (
     <Panel
-      title="Awaiting a second operator"
-      description="Dual-control items one operator proposed and a second, different operator must decide. The operator who proposed an item can never approve it."
+      title="Awaiting an operator"
+      description="Dual-control items one operator proposed and a second, different operator must decide (the operator who proposed an item can never approve it), and bridge legs a person owns in manual review."
     >
       <AsyncPanel query={props.overview} loadingLabel="Loading the overview…">
         {(overview: OpsOverview) => (
@@ -221,6 +223,8 @@ function DualControlPanel(props: { readonly overview: ReturnType<typeof useOpsOv
           </div>
         )}
       </AsyncPanel>
+      <h3>Bridge legs in manual review</h3>
+      <BridgeLegsInReview overview={props.overview} />
     </Panel>
   );
 }

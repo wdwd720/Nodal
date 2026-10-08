@@ -18,14 +18,17 @@ import { idempotent, type Schemas } from "@controlplane/generated-client";
 
 import { VALUE_DOMAIN_SIMULATED } from "../../lib/advanced.ts";
 import type { ConfirmedAttempt } from "../../lib/margin.ts";
+import type { BridgeLegAction } from "../../lib/operator.ts";
 import { api } from "../client.ts";
 import { oneOf, validated, type Spec } from "../contract.ts";
+import { bridgeLegResultSpec, bridgeLegSpec, type BridgeLeg, type BridgeLegResult } from "./bridge.ts";
 import { advancedKeys, retryTransient } from "./core.ts";
 
 export type OpsOverview = Schemas["AdvancedOpsOverview"];
 export type OpsKillSwitch = Schemas["AdvancedOpsKillSwitch"];
 export type OpsStableAsset = Schemas["AdvancedOpsStableAsset"];
 export type OpsBridgeRoute = Schemas["AdvancedOpsBridgeRoute"];
+export type OpsBridgeLeg = Schemas["AdvancedOpsBridgeLeg"];
 export type OpsReconciliationKind = Schemas["AdvancedOpsReconciliationKind"];
 export type OpsReconciliationRecord = Schemas["AdvancedOpsReconciliationRecord"];
 export type OpsOracleAsset = Schemas["AdvancedOpsOracleAsset"];
@@ -157,6 +160,23 @@ export const opsOverviewSpec: Spec = {
         objects: { open_reconciliation: { spec: reconciliationRecordSpec } },
       },
     },
+    bridge_legs_in_review: {
+      required: true,
+      spec: {
+        required: {
+          id: "uuid",
+          route_id: "uuid",
+          route_name: "string",
+          account_id: "uuid",
+          quantity: "quantity",
+          decimals: "integer",
+          source_symbol: "string",
+          released: "boolean",
+          refund_requested: "boolean",
+        },
+        optional: { entered_review_at: "timestamp", review_reason: "string" },
+      },
+    },
     reconciliation: {
       required: true,
       spec: {
@@ -276,6 +296,64 @@ export function useRecordReferenceMark(): UseMutationResult<ReferenceMarkRecorde
         },
       });
       return validated<ReferenceMarkRecorded>(data, referenceMarkRecordedSpec, "/advanced/ops/marks");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: advancedKeys.all });
+    },
+  });
+}
+
+/** One operator action on a bridge leg in MANUAL_REVIEW, exactly as confirmed. */
+export interface BridgeLegActionRequest {
+  readonly legId: string;
+  readonly action: BridgeLegAction;
+  /** Why, in the operator's words: recorded with the leg's transition. */
+  readonly reason: string;
+}
+
+/** What one action answered: the leg after it, and for a refund whether it is final. */
+export interface BridgeLegActionOutcome {
+  readonly action: BridgeLegAction;
+  readonly leg: BridgeLeg;
+  /** A refund only: true when the leg is final (FAILED with REFUNDED); false while the refund is not final yet. */
+  readonly settled: boolean | undefined;
+  /** A refund only: the key named a refund already recorded, and nothing was submitted again. */
+  readonly replay: boolean | undefined;
+}
+
+/**
+ * Relays a leg in review again, resolves a released one, or refunds an
+ * unreleased one (sandbox:operate, recent step-up). Every refusal -- an
+ * action the leg's state rules out, a release that can still land, a stable
+ * asset's own units, chains that still disagree -- reaches the page with its
+ * code. A leg action moves value between chains and accounts, so every
+ * advanced read is refetched whatever the answer was.
+ */
+export function useBridgeLegAction(): UseMutationResult<BridgeLegActionOutcome, unknown, ConfirmedAttempt<BridgeLegActionRequest>> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ request, idempotencyKey }: ConfirmedAttempt<BridgeLegActionRequest>): Promise<BridgeLegActionOutcome> => {
+      const options = {
+        ...idempotent(idempotencyKey, { path: { bridgeLegId: request.legId } }),
+        body: { reason: request.reason },
+      };
+      switch (request.action) {
+        case "resume-relay": {
+          const { data } = await api.POST("/advanced/bridge/legs/{bridgeLegId}/resume-relay", options);
+          const leg = validated<BridgeLeg>(data, bridgeLegSpec, "/advanced/bridge/legs/{id}/resume-relay");
+          return { action: request.action, leg, settled: undefined, replay: undefined };
+        }
+        case "resolve-review": {
+          const { data } = await api.POST("/advanced/bridge/legs/{bridgeLegId}/resolve-review", options);
+          const leg = validated<BridgeLeg>(data, bridgeLegSpec, "/advanced/bridge/legs/{id}/resolve-review");
+          return { action: request.action, leg, settled: undefined, replay: undefined };
+        }
+        case "refund": {
+          const { data } = await api.POST("/advanced/bridge/legs/{bridgeLegId}/refund", options);
+          const result = validated<BridgeLegResult>(data, bridgeLegResultSpec, "/advanced/bridge/legs/{id}/refund");
+          return { action: request.action, leg: result.leg, settled: result.settled, replay: result.replay };
+        }
+      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: advancedKeys.all });

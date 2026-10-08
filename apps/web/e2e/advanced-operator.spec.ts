@@ -48,6 +48,7 @@ interface Overview {
   readonly oracle: ReadonlyArray<{ readonly asset_id: string; readonly stale: boolean }>;
   readonly stable_assets: ReadonlyArray<{ readonly id: string }>;
   readonly bridge_routes: ReadonlyArray<{ readonly id: string }>;
+  readonly bridge_legs_in_review: ReadonlyArray<{ readonly id: string; readonly released: boolean; readonly refund_requested: boolean }>;
   readonly kill_switches: ReadonlyArray<{ readonly kind: string }>;
   readonly chains_configured: boolean;
 }
@@ -166,7 +167,7 @@ test.describe("the operator console", () => {
 
     await page.goto(CONSOLE);
     await settle(page);
-    await expectCode(page.getByRole("region", { name: "Awaiting a second operator", exact: true }), problem.code);
+    await expectCode(page.getByRole("region", { name: "Awaiting an operator", exact: true }), problem.code);
     await expectCode(page.getByRole("region", { name: "Circuit breakers", exact: true }), problem.code);
     await expectCode(page.getByRole("region", { name: "Reconciliation mismatches", exact: true }), problem.code);
     await expectCode(page.getByRole("region", { name: "Oracle freshness", exact: true }), problem.code);
@@ -181,7 +182,7 @@ test.describe("the operator console", () => {
     await admin.page.goto(CONSOLE);
     await settle(admin.page);
 
-    const awaiting = admin.page.getByRole("region", { name: "Awaiting a second operator", exact: true });
+    const awaiting = admin.page.getByRole("region", { name: "Awaiting an operator", exact: true });
     // Counts move only when an operator acts; none acts between the read and the page here.
     await expect(awaiting.locator('[data-field="transfer-reversals-pending"]')).toHaveText(
       String(overview.dual_control.transfer_reversals_pending),
@@ -189,6 +190,20 @@ test.describe("the operator console", () => {
     await expect(awaiting.locator('[data-field="margin-cases-in-review"]')).toHaveText(
       String(overview.dual_control.margin_cases_in_review),
     );
+    // Every bridge leg in review is listed with the actions its state allows.
+    if (overview.bridge_legs_in_review.length === 0) {
+      await expect(awaiting).toContainText("No bridge leg awaits an operator");
+    }
+    for (const leg of overview.bridge_legs_in_review) {
+      const card = awaiting.locator(`[data-bridge-leg="${leg.id}"]`);
+      await expect(card).toHaveAttribute("data-released", String(leg.released));
+      await expect(card).toHaveAttribute("data-refund-requested", String(leg.refund_requested));
+      if (leg.released) {
+        await expect(card.locator('[data-leg-action="refund"]')).toContainText("count its value twice");
+      } else {
+        await expect(card.locator('[data-leg-action="resolve-review"]')).toContainText("nothing to reconcile");
+      }
+    }
 
     const reconciliation = admin.page.getByRole("region", { name: "Reconciliation mismatches", exact: true });
     for (const entry of overview.reconciliation) {
@@ -315,6 +330,34 @@ test.describe("the operator console", () => {
     expect((refused.body as Problem).code).toBe("FORBIDDEN");
     const unknown = await command(admin.page, MARKS_PATH, { asset_id: randomUUID(), price: "1.25", source: "e2e" });
     expect(unknown.status, "an asset the registry does not hold").toBe(404);
+    await admin.context.close();
+  });
+
+  test("the bridge leg actions are refused to a customer, and an unknown leg is the backend's to name", async ({
+    page,
+    browser,
+  }) => {
+    const unknown = randomUUID();
+    const actions = ["resume-relay", "resolve-review", "refund"] as const;
+    for (const action of actions) {
+      const refused = await command(page, `/v1/advanced/bridge/legs/${unknown}/${action}`, { reason: "a customer may not act on a leg" });
+      expect(refused.status, `${action}: a customer holds no sandbox:operate`).toBe(403);
+      expect((refused.body as Problem).code).toBe("FORBIDDEN");
+    }
+    const admin = await signIn(browser, "admin", true);
+    for (const action of actions) {
+      const answer = await command(admin.page, `/v1/advanced/bridge/legs/${unknown}/${action}`, {
+        reason: "end-to-end check of an unknown leg",
+      });
+      // Where the bridge is wired the leg is unknown; where it is not, the
+      // deployment says the bridge is UNSUPPORTED. Either is the backend's
+      // answer, and nothing else is.
+      expect([404, 422], `${action}: ${String(answer.status)}`).toContain(answer.status);
+      expect((answer.body as Problem).code).toBe(answer.status === 404 ? "NOT_FOUND" : "UNSUPPORTED");
+    }
+    // A reason is required: an empty one never reaches the service.
+    const reasonless = await command(admin.page, `/v1/advanced/bridge/legs/${unknown}/refund`, { reason: "" });
+    expect([400, 422]).toContain(reasonless.status);
     await admin.context.close();
   });
 

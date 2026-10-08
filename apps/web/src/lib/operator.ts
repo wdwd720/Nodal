@@ -69,6 +69,18 @@ export function checkMarkPrice(raw: string): PriceCheck {
   return { ok: true, value, error: "" };
 }
 
+/**
+ * An operator's stated reason for an action on another subsystem's record (a
+ * bridge leg in review): required, at most 1000 characters. Only presence and
+ * length are judged here; the backend records it with the record's transition.
+ */
+export function checkOperatorReason(raw: string): PriceCheck {
+  const value = raw.trim();
+  if (value === "") return { ok: false, value: "", error: "State the reason for the action; it is recorded with it." };
+  if ([...value].length > 1000) return { ok: false, value: "", error: "Keep the reason to 1000 characters." };
+  return { ok: true, value, error: "" };
+}
+
 /** A source label: what observed the price. Non-empty, at most 100 characters, no surrounding whitespace. */
 export function checkMarkSource(raw: string): PriceCheck {
   const value = raw.trim();
@@ -226,6 +238,69 @@ export const RECONCILIATION_KIND_MEANING: Readonly<Record<(typeof ADVANCED_RECON
 export function reconciliationKindMeaning(kind: string): string {
   const known = ADVANCED_RECONCILIATION_KINDS.find((value) => value === kind);
   return known === undefined ? "A reconciliation kind this interface has no description for." : RECONCILIATION_KIND_MEANING[known];
+}
+
+/* --------------------------------------------------------------------------
+ * A bridge leg in MANUAL_REVIEW: which operator actions the console offers
+ * ------------------------------------------------------------------------ */
+
+/** The three operator actions on a bridge leg in review, as their routes name them. */
+export const BRIDGE_LEG_ACTIONS = ["resume-relay", "refund", "resolve-review"] as const;
+export type BridgeLegAction = (typeof BRIDGE_LEG_ACTIONS)[number];
+
+export interface BridgeLegOffer {
+  readonly action: BridgeLegAction;
+  /** The control's label. */
+  readonly label: string;
+  /** Why the console does not offer the action for this leg; undefined when it does. */
+  readonly blocked: string | undefined;
+  /** What an offered action does here, said next to it. */
+  readonly note: string;
+}
+
+/**
+ * Which actions the console offers for a leg in review, and why not the
+ * others. The backend decides every one of them and refuses what it will not
+ * do; this only declines to offer a control the leg's own state rules out:
+ *
+ *   - a leg whose destination released can only be resolved (re-checked
+ *     against both chains); relaying it again or refunding it would count
+ *     its value twice;
+ *   - a leg whose destination never released can be relayed again or
+ *     refunded, and cannot be resolved: there is nothing to reconcile yet;
+ *   - once a refund is requested the leg never relays again, and asking for
+ *     the refund again only observes it: a refund is never sent twice.
+ */
+export function bridgeLegOffers(leg: { readonly released: boolean; readonly refund_requested: boolean }): BridgeLegOffer[] {
+  const relay: BridgeLegOffer = {
+    action: "resume-relay",
+    label: "Relay it again",
+    blocked: leg.released
+      ? "The destination released this leg, so relaying it again would count its value twice; resolve the review instead."
+      : leg.refund_requested
+        ? "A refund of this leg was requested, and a leg whose refund was requested never relays again."
+        : undefined,
+    note: "Returns the leg to MESSAGE_IN_FLIGHT with a fresh round of release attempts; reconciling the leg then relays it.",
+  };
+  const refund: BridgeLegOffer = {
+    action: "refund",
+    label: leg.refund_requested ? "Observe the refund" : "Refund it on the source chain",
+    blocked: leg.released
+      ? "The destination released this leg; refunding it too would count its value twice."
+      : undefined,
+    note: leg.refund_requested
+      ? "A refund is already on its way. Asking again only observes it: a refund is never sent twice, and the leg ends FAILED with REFUNDED once it is final."
+      : "Returns the value on the source chain. The backend refuses while any release can still land, and never refunds a stable asset's own units.",
+  };
+  const resolve: BridgeLegOffer = {
+    action: "resolve-review",
+    label: "Resolve the review",
+    blocked: leg.released
+      ? undefined
+      : "The destination never released this leg, so there is nothing to reconcile yet; relay it again or refund it.",
+    note: "Re-checks the lock, the release and both postings on the chains: the leg is RECONCILED when they agree, and stays in review with the problem named when they do not.",
+  };
+  return [relay, refund, resolve];
 }
 
 /* --------------------------------------------------------------------------

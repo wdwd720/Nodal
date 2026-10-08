@@ -21,11 +21,14 @@ import {
 import { ContractViolation, validated, type Spec } from "../api/contract.ts";
 import {
   ADVANCED_RECONCILIATION_KINDS,
+  BRIDGE_LEG_ACTIONS,
   MARK_MAX_FRACTION_DIGITS,
   alertTone,
   awaitingSecondOperator,
+  bridgeLegOffers,
   bridgeStatusTone,
   checkMarkPrice,
+  checkOperatorReason,
   checkMarkSource,
   checkObservedAt,
   formatAge,
@@ -292,6 +295,22 @@ const OVERVIEW = {
   bridge_routes: [
     { id: MARK, name: "sol-to-eth", source_chain: "sbx-solana", destination_chain: "sbx-ethereum", status: "ACTIVE" },
   ],
+  bridge_legs_in_review: [
+    {
+      id: STABLE,
+      route_id: MARK,
+      route_name: "sol-to-eth",
+      account_id: ASSET,
+      quantity: "2500000",
+      decimals: 6,
+      source_symbol: "SBX-USD",
+      released: false,
+      refund_requested: false,
+      entered_review_at: "2026-10-08T11:00:00Z",
+      review_reason: "every release attempt was refused",
+    },
+    { id: MARK, route_id: MARK, route_name: "sol-to-eth", account_id: ASSET, quantity: "1", decimals: 6, source_symbol: "SBX-USD", released: true, refund_requested: false },
+  ],
   reconciliation: [
     { kind: "STABLE_RESERVE", unresolved: 1, material: 1, blocks_new_risk: 1, oldest_opened_at: "2026-10-08T11:31:00Z", oldest_age_ms: 1740000 },
     { kind: "BRIDGE", unresolved: 0, material: 0, blocks_new_risk: 0 },
@@ -313,6 +332,7 @@ test("the overview is accepted unchanged, and a malformed part of it is refused 
         c["kill_switches"] = [];
         c["stable_assets"] = [];
         c["bridge_routes"] = [];
+        c["bridge_legs_in_review"] = [];
         c["oracle"] = [];
       }),
       opsOverviewSpec,
@@ -339,6 +359,71 @@ test("the overview is accepted unchanged, and a malformed part of it is refused 
   );
   refuses(broken(OVERVIEW, (c) => (c["value_domain"] = "REAL")), opsOverviewSpec, /\.value_domain$/);
   refuses(broken(OVERVIEW, (c) => delete c["chains_configured"]), opsOverviewSpec, /\.chains_configured$/);
+  refuses(broken(OVERVIEW, (c) => delete c["bridge_legs_in_review"]), opsOverviewSpec, /\.bridge_legs_in_review$/);
+  const leg = OVERVIEW.bridge_legs_in_review[0];
+  refuses(
+    broken(OVERVIEW, (c) => (c["bridge_legs_in_review"] = [{ ...leg, quantity: "2.5" }])),
+    opsOverviewSpec,
+    /\.bridge_legs_in_review\[0\]\.quantity$/,
+  );
+  refuses(
+    broken(OVERVIEW, (c) => (c["bridge_legs_in_review"] = [{ ...leg, released: "no" }])),
+    opsOverviewSpec,
+    /\.bridge_legs_in_review\[0\]\.released$/,
+  );
+  refuses(
+    broken(OVERVIEW, (c) => {
+      const { refund_requested: _dropped, ...rest } = leg;
+      c["bridge_legs_in_review"] = [rest];
+    }),
+    opsOverviewSpec,
+    /\.bridge_legs_in_review\[0\]\.refund_requested$/,
+  );
+});
+
+test("a released leg in review is offered only its resolution", () => {
+  const offers = bridgeLegOffers({ released: true, refund_requested: false });
+  assert.deepEqual(
+    offers.map((offer) => offer.action),
+    [...BRIDGE_LEG_ACTIONS],
+    "every action is listed, offered or not, so the console says why one is not",
+  );
+  const byAction = new Map(offers.map((offer) => [offer.action, offer]));
+  assert.equal(byAction.get("resolve-review")?.blocked, undefined);
+  assert.match(byAction.get("resume-relay")?.blocked ?? "", /count its value twice/);
+  assert.match(byAction.get("refund")?.blocked ?? "", /count its value twice/);
+});
+
+test("a leg that never released is offered a relay or a refund, never a resolution", () => {
+  const byAction = new Map(bridgeLegOffers({ released: false, refund_requested: false }).map((offer) => [offer.action, offer]));
+  assert.equal(byAction.get("resume-relay")?.blocked, undefined);
+  assert.equal(byAction.get("refund")?.blocked, undefined);
+  assert.equal(byAction.get("refund")?.label, "Refund it on the source chain");
+  assert.match(byAction.get("resolve-review")?.blocked ?? "", /nothing to reconcile/);
+});
+
+test("once a refund is requested the leg never relays, and asking again only observes the refund", () => {
+  const byAction = new Map(bridgeLegOffers({ released: false, refund_requested: true }).map((offer) => [offer.action, offer]));
+  assert.match(byAction.get("resume-relay")?.blocked ?? "", /never relays again/);
+  const refund = byAction.get("refund");
+  assert.equal(refund?.blocked, undefined, "still callable, to observe the refund");
+  assert.equal(refund?.label, "Observe the refund");
+  assert.match(refund?.note ?? "", /never sent twice/);
+  assert.match(byAction.get("resolve-review")?.blocked ?? "", /nothing to reconcile/);
+  for (const offer of bridgeLegOffers({ released: true, refund_requested: true })) {
+    assert.equal(offer.blocked === undefined, offer.action === "resolve-review", offer.action);
+  }
+});
+
+test("an operator's reason is required and bounded", () => {
+  assert.deepEqual(checkOperatorReason("  the destination mint was unfrozen  "), {
+    ok: true,
+    value: "the destination mint was unfrozen",
+    error: "",
+  });
+  assert.equal(checkOperatorReason("   ").ok, false);
+  assert.equal(checkOperatorReason("x".repeat(1000)).ok, true);
+  assert.equal(checkOperatorReason("x".repeat(1001)).ok, false);
 });
 
 test("the chain tips are whole numbers in the simulated domain", () => {
