@@ -59,6 +59,7 @@ var inScope = []string{
 	// capability row claims is proven by a test it names.
 	"docs/threat-model/ADVANCED_THREAT_MODEL.md",
 	"docs/build/ADVANCED_CAPABILITIES_MATRIX.md",
+	"docs/reviews/ADVANCED_SYSTEMS_REVIEW.md",
 }
 
 var (
