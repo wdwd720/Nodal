@@ -2315,6 +2315,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/margin/deficit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The covered deficit of an account's bankrupt margin case, what was repaid of it and what is still owed
+         * @description deficit is absent when the account's latest liquidation case left no deficit the insurance fund covered, and margin_account_id with the numeraire when the account has no margin account: in both cases there is nothing to repay.
+         */
+        get: {
+            parameters: {
+                query: {
+                    account_id: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The deficit and its repayments (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginDeficitStatus"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/deficit/repayments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Repay part or all of a covered deficit to the insurance fund that covered it (REPAY, posted as MARGIN_REPAY)
+         * @description amount is in base units of the numeraire. An economic intent decided by Risk Kernel V2 (balance) and posted exactly once; the repayments of a case never exceed its deficit (VALIDATION_FAILED beyond what is still owed), and an account with no covered deficit is INVALID_STATE_TRANSITION.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginAmountRequest"];
+                };
+            };
+            responses: {
+                /** @description The repayment and what is still owed after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginDeficitRepaymentResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/margin/leveraged-buys": {
         parameters: {
             query?: never;
@@ -2443,6 +2536,58 @@ export interface paths {
                 404: components["responses"]["Problem"];
                 409: components["responses"]["Problem"];
                 422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/cases/{marginCaseId}/resolutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — propose how a case in MANUAL_REVIEW ends (first of two operators; step-up)
+         * @description RESUME returns the case to IN_PROGRESS with a fresh budget of trading steps; DECLARE_BANKRUPT records the loans as the case's deficit once nothing is left to sell, apply or sweep. Nothing moves until a second operator approves.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marginCaseId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginResolutionProposalRequest"];
+                };
+            };
+            responses: {
+                /** @description The proposed resolution */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginCaseResolution"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -2677,6 +2822,101 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/advanced/margin/ops/resolutions/{marginResolutionId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Operator — approve (a second, distinct operator; applies the outcome) or reject a proposed resolution (step-up)
+         * @description An approval by the operator who proposed the resolution is FORBIDDEN. A decision is final: the same decision by the same operator again returns it (replayed), any other decision on a decided resolution is a CONFLICT. The interest of the review is waived up to the decision.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    marginResolutionId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MarginResolutionDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The decided resolution and the case after it */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginResolutionDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/margin/ops/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — liquidation cases in MANUAL_REVIEW, oldest first, each with its proposed resolutions
+         * @description A case leaves MANUAL_REVIEW only by a resolution one operator proposes and a second, distinct operator approves, for the review the case is in now (current_review_transition_id). A resolution without a decision awaits that second operator.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The review queue (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MarginReviewQueue"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/advanced/margin/ops/stress-runs": {
         parameters: {
             query?: never;
@@ -2873,6 +3113,176 @@ export interface paths {
                     };
                 };
                 404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/ops/chains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — the tip of each simulated chain the devnet host runs
+         * @description UNSUPPORTED when this deployment configures no devnet host. The tip is the chain's canonical head as the host replays it from the persisted history; last_block_produced_at is when the host last produced (or reorganised) blocks on that chain.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The chain tips */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedOpsChains"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/ops/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — the latest reference marks of an asset in the sandbox dollar, newest first, with their age
+         * @description Observations of the asset quoted in the sandbox dollar, by observation time. stale is past the deployment's maximum mark age; future is an observation stamped after this read, which every reader ignores.
+         */
+        get: {
+            parameters: {
+                query: {
+                    asset_id: components["schemas"]["UUID"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The marks (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedReferenceMarkList"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * Operator — record a sandbox reference mark of a SIMULATED asset in the sandbox dollar (step-up)
+         * @description Refused: an asset that is not SIMULATED (FORBIDDEN), the sandbox dollar itself, a quote other than the sandbox dollar, a price that is not positive (VALIDATION_FAILED), a price with more than 18 fractional digits (PRECISION_LOSS), and an observed_at in the future or older than the maximum mark age (VALIDATION_FAILED). Idempotent on (asset, quote, source, observed_at): the same observation again answers 200 with duplicate set; a different price for it is a CONFLICT. Every recorded mark writes an audit event.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedReferenceMarkRequest"];
+                };
+            };
+            responses: {
+                /** @description The same observation was already recorded; nothing new was written */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedReferenceMarkRecorded"];
+                    };
+                };
+                /** @description Recorded */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedReferenceMarkRecorded"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/ops/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Operator — one read of what needs an operator now
+         * @description Active kill switches; every stable asset's status (PAUSED includes a peg breaker's pause) with its latest peg alert and latest supply reconciliation; every bridge route's status; unresolved reconciliation records of the advanced kinds; the dual-control items awaiting a second operator; the age of the latest reference mark of every SIMULATED asset someone holds; and whether a simulated chain host is configured. Lists are bounded (at most 100 entries each). Capability gates and the liquidation queue have their own reads (/advanced/capabilities, /advanced/margin/ops/queue).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The overview (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedOpsOverview"];
+                    };
+                };
+                403: components["responses"]["Problem"];
             };
         };
         put?: never;
@@ -4923,7 +5333,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/advanced/transfers/{transferId}/reverse": {
+    "/advanced/transfers/{transferId}/reversal-proposals": {
         parameters: {
             query?: never;
             header?: never;
@@ -4933,8 +5343,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reverse a COMPLETED transfer with a compensating journal (operator correction; requires step-up)
-         * @description History is never edited: the reversal is a new COMPENSATION journal naming the original. It is refused (CONFLICT, rejection_code TRANSFER_REVERSAL_FUNDS_UNAVAILABLE) when the recipient no longer holds the funds, and reversing a REVERSED transfer returns it unchanged. The service also requires ledger:post_correction of the operator.
+         * Propose reversing a COMPLETED transfer (operator correction, first of two operators; requires step-up)
+         * @description A reversal takes two distinct operators. This records one operator's proposal -- a stable reason code and a reason -- and moves nothing. A second operator approves it, which executes the reversal exactly once in the approval's own transaction, or anyone holding the permission rejects it. At most one proposal of a transfer is pending at a time: proposing again on the same terms while it is pending returns it (200), on other terms is a CONFLICT. A transfer that is not COMPLETED is INVALID_STATE_TRANSITION. The service also requires ledger:post_correction and a recent step-up of the operator.
          */
         post: {
             parameters: {
@@ -4950,17 +5360,26 @@ export interface paths {
             };
             requestBody: {
                 content: {
-                    "application/json": components["schemas"]["AdvancedTransferReverseRequest"];
+                    "application/json": components["schemas"]["AdvancedTransferReversalProposalRequest"];
                 };
             };
             responses: {
-                /** @description The transfer, REVERSED */
+                /** @description The pending proposal this request repeats; nothing new was written */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["AdvancedTransfer"];
+                        "application/json": components["schemas"]["AdvancedTransferReversalProposal"];
+                    };
+                };
+                /** @description The proposal, PENDING */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferReversalProposal"];
                     };
                 };
                 400: components["responses"]["Problem"];
@@ -5219,6 +5638,197 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/reversal-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transfer reversal proposals, newest first (operator)
+         * @description status is derived from the proposal's decision: PENDING has none yet, APPROVED was executed in its approval's transaction, REJECTED moved nothing. Each proposal carries the transfer as it is now.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["AdvancedTransferReversalStatus"];
+                    transfer_id?: components["schemas"]["UUID"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Page of reversal proposals (value domain SIMULATED) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferReversalProposalPage"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/reversal-proposals/{proposalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One transfer reversal proposal with its transfer (operator) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    proposalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The proposal */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferReversalProposal"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/reversal-proposals/{proposalId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a reversal proposal and execute the reversal (a second, distinct operator; requires step-up)
+         * @description The approval and the reversal are one transaction: a COMPENSATION journal naming the original, the economic effect COMPENSATED, the transfer REVERSED and bound to this proposal. The proposer can never approve (FORBIDDEN, rejection_code TRANSFER_REVERSAL_SELF_APPROVAL). It is refused, and nothing is recorded, when the recipient no longer holds the funds (CONFLICT, rejection_code TRANSFER_REVERSAL_FUNDS_UNAVAILABLE); the proposal stays PENDING. The same approval by the same operator again returns the outcome; any other decision on a decided proposal is a CONFLICT.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    proposalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferReversalDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The proposal, APPROVED, and its transfer, REVERSED */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferReversalDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/advanced/transfers/reversal-proposals/{proposalId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a reversal proposal (any operator holding the permission, the proposer included; requires step-up)
+         * @description A rejection states its reason and moves nothing; a rejected proposal can never be executed.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Same key + same body replays the original result; same key + different body → 409 INVALID_IDEMPOTENCY_REUSE. The key is opaque to the server but constrained to an unambiguous charset: it becomes part of a primary key, is echoed in responses, and is written to logs and audit records, so control characters and quoting metacharacters are refused at the edge rather than escaped correctly at every one of those sinks forever. Every legitimate key already satisfies this — newIdempotencyKey() returns a UUID. */
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    proposalId: components["schemas"]["UUID"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AdvancedTransferReversalDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description The proposal, REJECTED, and its transfer, unchanged */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdvancedTransferReversalDecisionResult"];
+                    };
+                };
+                400: components["responses"]["Problem"];
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -7405,6 +8015,178 @@ export interface components {
             mode: components["schemas"]["AdvancedMode"];
             reasons: string[];
         };
+        AdvancedOpsBridgeRoute: {
+            destination_chain: string;
+            id: components["schemas"]["UUID"];
+            name: string;
+            open_reconciliation?: components["schemas"]["AdvancedOpsReconciliationRecord"];
+            source_chain: string;
+            /** @description ACTIVE, PAUSED or CLOSED */
+            status: string;
+        };
+        AdvancedOpsChains: {
+            items: components["schemas"]["AdvancedOpsChainTip"][];
+            network: string;
+            observed_at: components["schemas"]["Timestamp"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedOpsChainTip: {
+            chain_id: string;
+            final: boolean;
+            /** Format: int64 */
+            finalized_height: number;
+            /** @description The tip block's hash, as the simulated chain encodes it (base58) */
+            hash: string;
+            /** Format: int64 */
+            height: number;
+            last_block_produced_at?: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            slot: number;
+        };
+        AdvancedOpsDualControl: {
+            /** Format: int64 */
+            margin_cases_in_review: number;
+            /**
+             * Format: int64
+             * @description Resolutions of the review a case is in now, awaiting a second operator
+             */
+            margin_resolutions_pending: number;
+            /**
+             * Format: int64
+             * @description Transfer reversal proposals awaiting a second operator
+             */
+            transfer_reversals_pending: number;
+        };
+        AdvancedOpsKillSwitch: {
+            activated_at?: components["schemas"]["Timestamp"];
+            activated_by?: string;
+            kind: string;
+            reason?: string;
+            scope_id: string;
+            severity: string;
+        };
+        AdvancedOpsOracleAsset: {
+            /** Format: int64 */
+            age_ms?: number;
+            asset_id: components["schemas"]["UUID"];
+            observed_at?: components["schemas"]["Timestamp"];
+            source?: string;
+            /** @description No mark at all, or the latest is older than the maximum mark age */
+            stale: boolean;
+            symbol: string;
+        };
+        AdvancedOpsOverview: {
+            bridge_routes: components["schemas"]["AdvancedOpsBridgeRoute"][];
+            /** @description Whether this deployment runs a devnet host (/advanced/ops/chains) */
+            chains_configured: boolean;
+            dual_control: components["schemas"]["AdvancedOpsDualControl"];
+            environment: string;
+            generated_at: components["schemas"]["Timestamp"];
+            /** @description Active ones only */
+            kill_switches: components["schemas"]["AdvancedOpsKillSwitch"][];
+            /** Format: int64 */
+            max_mark_age_ms: number;
+            /** @description SIMULATED assets other than the sandbox dollar that someone holds */
+            oracle: components["schemas"]["AdvancedOpsOracleAsset"][];
+            /** @description One entry per advanced reconciliation kind */
+            reconciliation: components["schemas"]["AdvancedOpsReconciliationKind"][];
+            stable_assets: components["schemas"]["AdvancedOpsStableAsset"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedOpsPegAlert: {
+            breaker_tripped: boolean;
+            kind: string;
+            observed_at: components["schemas"]["Timestamp"];
+            severity: string;
+        };
+        AdvancedOpsReconciliationKind: {
+            /** Format: int64 */
+            blocks_new_risk: number;
+            kind: string;
+            /** Format: int64 */
+            material: number;
+            /** Format: int64 */
+            oldest_age_ms?: number;
+            oldest_opened_at?: components["schemas"]["Timestamp"];
+            /** Format: int64 */
+            unresolved: number;
+        };
+        AdvancedOpsReconciliationRecord: {
+            blocks_new_risk: boolean;
+            id: components["schemas"]["UUID"];
+            kind: string;
+            material: boolean;
+            opened_at: components["schemas"]["Timestamp"];
+            resolved_at?: components["schemas"]["Timestamp"];
+            status: string;
+        };
+        AdvancedOpsStableAsset: {
+            asset_id: components["schemas"]["UUID"];
+            chain_id: string;
+            id: components["schemas"]["UUID"];
+            latest_alert?: components["schemas"]["AdvancedOpsPegAlert"];
+            latest_supply_reconciliation?: components["schemas"]["AdvancedOpsReconciliationRecord"];
+            name: string;
+            /** @description ACTIVE, PAUSED (by an operator or the peg breaker) or RETIRED */
+            status: string;
+        };
+        AdvancedReferenceMark: {
+            /**
+             * Format: int64
+             * @description Milliseconds from observed_at to the time of the read; negative for a future observation
+             */
+            age_ms: number;
+            asset_id: components["schemas"]["UUID"];
+            /** @description Observed after the time of the read; every reader ignores it */
+            future: boolean;
+            id: components["schemas"]["UUID"];
+            mantissa: components["schemas"]["Quantity"];
+            observed_at: components["schemas"]["Timestamp"];
+            /** @description mantissa × 10^-scale, rendered exactly */
+            price: string;
+            quote_asset_id: components["schemas"]["UUID"];
+            received_at: components["schemas"]["Timestamp"];
+            scale: number;
+            source: string;
+            /** @description Older than the maximum mark age */
+            stale: boolean;
+        };
+        AdvancedReferenceMarkList: {
+            as_of: components["schemas"]["Timestamp"];
+            asset_id: components["schemas"]["UUID"];
+            asset_kind: string;
+            asset_symbol: string;
+            items: components["schemas"]["AdvancedReferenceMark"][];
+            /** Format: int64 */
+            max_age_ms: number;
+            quote_asset_id: components["schemas"]["UUID"];
+            quote_asset_symbol: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedReferenceMarkRecorded: {
+            asset_symbol: string;
+            /** @description The same observation was already recorded */
+            duplicate: boolean;
+            mark: components["schemas"]["AdvancedReferenceMark"];
+            /** Format: int64 */
+            max_age_ms: number;
+            quote_asset_symbol: string;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedReferenceMarkRequest: {
+            asset_id: components["schemas"]["UUID"];
+            /** @description When the price was observed; the time of the request when absent */
+            observed_at?: components["schemas"]["Timestamp"];
+            /**
+             * @description Sandbox dollars per one whole unit of the asset, written out exactly; positive, at most 18 fractional digits
+             * @example 2500.125
+             */
+            price: string;
+            /** @description Must be the sandbox dollar when given; the sandbox dollar when absent */
+            quote_asset_id?: components["schemas"]["UUID"];
+            /** @description Who or what observed the price; a stable asset's peg monitor counts only its own oracle source */
+            source: string;
+        };
         AdvancedRiskDecision: {
             decision_hash: string;
             evaluated_at: components["schemas"]["Timestamp"];
@@ -7451,6 +8233,8 @@ export interface components {
             /** @description The primary stable code of a REJECTED transfer */
             rejection_code?: string;
             reversal_journal_transaction_id?: components["schemas"]["UUID"];
+            /** @description The two-operator proposal the reversal executed (absent for a reversal recorded before dual control) */
+            reversal_proposal_id?: components["schemas"]["UUID"];
             reversal_reason_code?: string;
             reversed_at?: components["schemas"]["Timestamp"];
             risk_decision_id?: components["schemas"]["UUID"];
@@ -7516,11 +8300,49 @@ export interface components {
             transfers: number;
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
-        AdvancedTransferReverseRequest: {
+        AdvancedTransferReversalDecisionRequest: {
+            /** @description Optional for an approval; required for a rejection */
+            reason?: string;
+        };
+        AdvancedTransferReversalDecisionResult: {
+            proposal: components["schemas"]["AdvancedTransferReversalProposal"];
+            /** @description The same decision by the same operator had already been recorded; nothing new was written */
+            replayed: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description One operator's proposal to reverse one transfer, and its decision once a second operator approved it or anyone rejected it. transfer is the transfer as it is now, as an operator sees it. */
+        AdvancedTransferReversalProposal: {
+            decided_at?: components["schemas"]["Timestamp"];
+            /** @description The deciding operator's user id */
+            decided_by?: string;
+            decision_reason?: string;
+            id: components["schemas"]["UUID"];
+            proposed_at: components["schemas"]["Timestamp"];
+            /** @description The proposing operator's user id */
+            proposed_by: string;
+            reason: string;
+            reason_code: string;
+            /** @description The proposal's number among the transfer's proposals */
+            seq: number;
+            status: components["schemas"]["AdvancedTransferReversalStatus"];
+            transfer: components["schemas"]["AdvancedTransfer"];
+            transfer_id: components["schemas"]["UUID"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedTransferReversalProposalPage: components["schemas"]["Page"] & {
+            items: components["schemas"]["AdvancedTransferReversalProposal"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        AdvancedTransferReversalProposalRequest: {
             reason: string;
             /** @example FRAUD_CONFIRMED */
             reason_code: string;
         };
+        /**
+         * @description Derived from the proposal's one decision, never stored: PENDING has none; APPROVED was executed in the approval's own transaction (an approved proposal is consumed); REJECTED moved nothing.
+         * @enum {string}
+         */
+        AdvancedTransferReversalStatus: "PENDING" | "APPROVED" | "REJECTED";
         /** @enum {string} */
         AdvancedTransferSenderMode: "OPEN" | "ALLOWLIST_ONLY";
         AdvancedTransferSenderModeRequest: {
@@ -8641,6 +9463,24 @@ export interface components {
             items: components["schemas"]["MarginCase"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        /** @description One operator's proposal for ending a MANUAL_REVIEW, and its decision once made. pending is true while no decision exists. */
+        MarginCaseResolution: {
+            case_id: components["schemas"]["UUID"];
+            decided_at?: components["schemas"]["Timestamp"];
+            /** @description The deciding operator's user id */
+            decided_by?: string;
+            decision?: components["schemas"]["MarginResolutionDecision"];
+            decision_reason?: string;
+            id: components["schemas"]["UUID"];
+            outcome: components["schemas"]["MarginResolutionOutcome"];
+            pending: boolean;
+            proposed_at: components["schemas"]["Timestamp"];
+            /** @description The proposing operator's user id */
+            proposed_by: string;
+            reason: string;
+            /** @description The transition that put the case in the review this resolution answers */
+            review_transition_id: components["schemas"]["UUID"];
+        };
         /** @enum {string} */
         MarginCaseStatus: "AWAITING_PRICE" | "AWAITING_VENUE" | "IN_PROGRESS" | "COMPLETED" | "BANKRUPT" | "MANUAL_REVIEW";
         MarginCollateralRequest: {
@@ -8661,12 +9501,50 @@ export interface components {
             status: components["schemas"]["MarginAccountStatus"];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        MarginDeficitRepayment: {
+            amount: components["schemas"]["Quantity"];
+            effect_id: components["schemas"]["UUID"];
+            id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            repaid_at: components["schemas"]["Timestamp"];
+        };
+        MarginDeficitRepaymentResult: {
+            account_id: components["schemas"]["UUID"];
+            case_id: components["schemas"]["UUID"];
+            effect_id: components["schemas"]["UUID"];
+            intent_id: components["schemas"]["UUID"];
+            journal_transaction_id: components["schemas"]["UUID"];
+            margin_account_id: components["schemas"]["UUID"];
+            numeraire_asset_id: components["schemas"]["UUID"];
+            numeraire_decimals: number;
+            /** @description What the case still owes the fund after this repayment */
+            outstanding: components["schemas"]["Quantity"];
+            repaid: components["schemas"]["Quantity"];
+            repayment_id: components["schemas"]["UUID"];
+            replayed: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
         MarginDeficitResult: {
             case: components["schemas"]["MarginCase"];
             case_id: components["schemas"]["UUID"];
             deficit: components["schemas"]["Quantity"];
             journal_transaction_id: components["schemas"]["UUID"];
             replayed: boolean;
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
+        /** @description Quantities are base units of the numeraire. margin_account_id and the numeraire are absent when the account has no margin account; deficit, repaid and outstanding are present only when the latest case's deficit was covered by the insurance fund. */
+        MarginDeficitStatus: {
+            account_id: components["schemas"]["UUID"];
+            case?: components["schemas"]["MarginCase"];
+            deficit?: components["schemas"]["Quantity"];
+            margin_account_id?: components["schemas"]["UUID"];
+            numeraire_asset_id?: components["schemas"]["UUID"];
+            numeraire_decimals?: number;
+            outstanding?: components["schemas"]["Quantity"];
+            repaid?: components["schemas"]["Quantity"];
+            /** @description Oldest first */
+            repayments: components["schemas"]["MarginDeficitRepayment"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
         MarginEvaluated: {
@@ -8951,6 +9829,41 @@ export interface components {
             results: components["schemas"]["MarginLiquidationResult"][];
             value_domain: components["schemas"]["ValueDomainSimulated"];
         };
+        /** @enum {string} */
+        MarginResolutionDecision: "APPROVED" | "REJECTED";
+        MarginResolutionDecisionRequest: {
+            decision: components["schemas"]["MarginResolutionDecision"];
+            reason: string;
+        };
+        MarginResolutionDecisionResult: {
+            account_status: components["schemas"]["MarginAccountStatus"];
+            case: components["schemas"]["MarginCase"];
+            replayed: boolean;
+            resolution: components["schemas"]["MarginCaseResolution"];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+            /** @description The interest periods of the review, recorded at zero */
+            waived: components["schemas"]["MarginWaivedAccrual"][];
+        };
+        /**
+         * @description RESUME returns the case to IN_PROGRESS with a fresh budget of trading steps; DECLARE_BANKRUPT records the loans as its deficit.
+         * @enum {string}
+         */
+        MarginResolutionOutcome: "RESUME" | "DECLARE_BANKRUPT";
+        MarginResolutionProposalRequest: {
+            outcome: components["schemas"]["MarginResolutionOutcome"];
+            reason: string;
+        };
+        MarginReviewItem: {
+            case: components["schemas"]["MarginCase"];
+            current_review_transition_id: components["schemas"]["UUID"];
+            entered_review_at: components["schemas"]["Timestamp"];
+            /** @description Every resolution of the case, oldest first */
+            resolutions: components["schemas"]["MarginCaseResolution"][];
+        };
+        MarginReviewQueue: {
+            items: components["schemas"]["MarginReviewItem"][];
+            value_domain: components["schemas"]["ValueDomainSimulated"];
+        };
         MarginSeedRequest: {
             fund_amount: components["schemas"]["Quantity"];
             pool_amount: components["schemas"]["Quantity"];
@@ -8996,6 +9909,14 @@ export interface components {
         };
         /** @enum {string} */
         MarginStressScenario: "GAP_DOWN_5" | "GAP_DOWN_10" | "GAP_DOWN_25" | "GAP_DOWN_50" | "GAP_UP_5" | "GAP_UP_10" | "GAP_UP_25" | "GAP_UP_50" | "ORACLE_UNAVAILABLE" | "VENUE_UNAVAILABLE" | "PARTIAL_FILL" | "EXTREME_SPREAD" | "BRIDGE_DELAYED" | "COLLATERAL_DEPEG";
+        MarginWaivedAccrual: {
+            /** @description Interest charged for the period: zero for a waived one */
+            amount: components["schemas"]["Quantity"];
+            lot_id: components["schemas"]["UUID"];
+            period_end: components["schemas"]["Timestamp"];
+            period_start: components["schemas"]["Timestamp"];
+            waived: boolean;
+        };
         NativeAsset: {
             activated_at?: components["schemas"]["Timestamp"];
             asset_id: components["schemas"]["UUID"];

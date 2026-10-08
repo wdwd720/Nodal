@@ -865,3 +865,175 @@ func marginReadSavepoint(ctx context.Context, tx pgx.Tx, fn func(sp pgx.Tx) erro
 	defer func() { _ = sp.Rollback(ctx) }()
 	return fn(sp)
 }
+
+// --- covered deficits and MANUAL_REVIEW resolutions -------------------------------
+
+func (a marginAdapter) Deficit(ctx context.Context, acct accounts.AccountID) (MarginDeficitStatusView, error) {
+	var out MarginDeficitStatusView
+	err := a.snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		v := MarginDeficitStatusView{AccountID: acct, Repayments: []MarginDeficitRepaymentRecord{}}
+		m, err := a.svc.Account(ctx, tx, acct)
+		if errs.HasCode(err, errs.CodeNotFound) {
+			// No margin account: no case, nothing owed.
+			out = v
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		facts, err := marginFactsOf(ctx, tx, m.ID)
+		if err != nil {
+			return err
+		}
+		v.Margin, v.Facts = &m, &facts
+		if v.Case, err = marginLatestCase(ctx, tx, m.ID); err != nil {
+			return err
+		}
+		if v.Case != nil {
+			if v.Repayments, err = marginDeficitRepayments(ctx, tx, v.Case.Case.ID); err != nil {
+				return err
+			}
+			c := v.Case.Case
+			// The only deficit RepayDeficit accepts a repayment of: a BANKRUPT
+			// case whose deficit the insurance fund covered.
+			if c.Status == margin.CaseBankrupt && c.DeficitUnits != nil && c.CoverageJournalID != nil {
+				repaid := money.QuantityFromInt64(0)
+				for _, r := range v.Repayments {
+					repaid = repaid.Add(r.Amount)
+				}
+				v.Covered = &MarginCoveredDeficit{Deficit: *c.DeficitUnits, Repaid: repaid, Outstanding: c.DeficitUnits.Sub(repaid)}
+			}
+		}
+		out = v
+		return nil
+	})
+	return out, err
+}
+
+func (a marginAdapter) RepayDeficit(ctx context.Context, r margin.DeficitRepaymentRequest) (MarginDeficitRepaymentView, error) {
+	var out MarginDeficitRepaymentView
+	err := a.command(ctx, &marginIntentKey{account: r.AccountID, key: r.IdempotencyKey}, func(ctx context.Context, tx pgx.Tx) error {
+		res, err := a.svc.RepayDeficit(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		facts, err := marginFactsOf(ctx, tx, res.MarginAccountID)
+		if err != nil {
+			return err
+		}
+		out = MarginDeficitRepaymentView{Result: res, Facts: facts}
+		return nil
+	})
+	return out, err
+}
+
+func (a marginAdapter) Reviews(ctx context.Context, limit int) ([]MarginReviewView, error) {
+	limit = clampLimit(limit)
+	var out []MarginReviewView
+	err := a.snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, marginReviewsSQL, limit)
+		if err != nil {
+			return err
+		}
+		type entry struct {
+			caseID  margin.CaseID
+			review  string
+			entered time.Time
+		}
+		var entries []entry
+		for rows.Next() {
+			var e entry
+			if err := rows.Scan(&e.caseID, &e.review, &e.entered); err != nil {
+				rows.Close()
+				return err
+			}
+			entries = append(entries, e)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		views := make([]MarginReviewView, 0, len(entries))
+		for _, e := range entries {
+			c, err := scanMarginCase(tx.QueryRow(ctx, marginCaseByIDSQL, e.caseID))
+			if err != nil {
+				return err
+			}
+			res, err := a.svc.Resolutions(ctx, tx, e.caseID)
+			if err != nil {
+				return err
+			}
+			views = append(views, MarginReviewView{Case: c, CurrentReviewTransitionID: e.review, EnteredReviewAt: e.entered.UTC(), Resolutions: res})
+		}
+		out = views
+		return nil
+	})
+	return out, err
+}
+
+func (a marginAdapter) ProposeResolution(ctx context.Context, r margin.ProposeResolutionRequest) (margin.Resolution, error) {
+	var out margin.Resolution
+	err := a.command(ctx, nil, func(ctx context.Context, tx pgx.Tx) error {
+		res, err := a.svc.ProposeCaseResolution(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		out = res
+		return nil
+	})
+	return out, err
+}
+
+func (a marginAdapter) DecideResolution(ctx context.Context, r margin.DecideResolutionRequest) (MarginResolutionDecisionView, error) {
+	var out MarginResolutionDecisionView
+	err := a.command(ctx, nil, func(ctx context.Context, tx pgx.Tx) error {
+		res, err := a.svc.DecideCaseResolution(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		// The case as the decision left it, with the account facts it is read in.
+		c, err := scanMarginCase(tx.QueryRow(ctx, marginCaseByIDSQL, res.Resolution.CaseID))
+		if err != nil {
+			return err
+		}
+		out = MarginResolutionDecisionView{Result: res, Case: c}
+		return nil
+	})
+	return out, err
+}
+
+// marginReviewsSQL lists the cases in MANUAL_REVIEW with the transition that
+// put each in the review it is in now (the latest entry no resolution has
+// left, 00754's cp_margin_review_left), the longest waiting first.
+const marginReviewsSQL = `SELECT k.id, r.id::text, r.occurred_at
+	FROM margin_liquidation_cases k
+	JOIN LATERAL (SELECT t.id, t.occurred_at FROM margin_liquidation_case_transitions t
+		WHERE t.case_id = k.id AND t.to_status = 'MANUAL_REVIEW' AND NOT cp_margin_review_left(t.id)
+		ORDER BY t.occurred_at DESC, t.id DESC LIMIT 1) r ON true
+	WHERE k.status = 'MANUAL_REVIEW'
+	ORDER BY r.occurred_at, k.id LIMIT $1`
+
+const marginDeficitRepaymentsSQL = `SELECT id, amount::text, journal_transaction_id, effect_id, intent_id, repaid_at
+	FROM margin_deficit_repayments WHERE case_id = $1 ORDER BY repaid_at, id`
+
+func marginDeficitRepayments(ctx context.Context, q db.Querier, cid margin.CaseID) ([]MarginDeficitRepaymentRecord, error) {
+	rows, err := q.Query(ctx, marginDeficitRepaymentsSQL, cid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []MarginDeficitRepaymentRecord{}
+	for rows.Next() {
+		var r MarginDeficitRepaymentRecord
+		var amount string
+		if err := rows.Scan(&r.ID, &amount, &r.JournalTransactionID, &r.EffectID, &r.IntentID, &r.RepaidAt); err != nil {
+			return nil, err
+		}
+		if err := marginScanQuantities(marginQty{&r.Amount, amount}); err != nil {
+			return nil, err
+		}
+		r.RepaidAt = r.RepaidAt.UTC()
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

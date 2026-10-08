@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/nodal/controlplane/internal/accounts"
@@ -36,7 +37,9 @@ type TransfersDeps struct {
 func wireTransfers(p *Ports, d WireDeps) {
 	t := d.Advanced.Transfers
 	if t.Service != nil {
-		p.Transfers = transfersAdapter{svc: t.Service, db: d.DB, assets: assets.NewRepository()}
+		base := transfersAdapter{svc: t.Service, db: d.DB, assets: assets.NewRepository()}
+		p.Transfers = base
+		p.TransferReversals = transferReversalsAdapter{transfersAdapter: base}
 	}
 	if t.Faucet != nil {
 		p.SandboxFaucet = sandboxFaucetAdapter{faucet: t.Faucet, db: d.DB, clk: d.Clock, env: d.Env, enabled: t.FaucetEnabled}
@@ -214,25 +217,6 @@ func (a transfersAdapter) Get(ctx context.Context, id transfers.TransferID) (Tra
 	return out, err
 }
 
-func (a transfersAdapter) Reverse(ctx context.Context, r TransferReversal) (TransferView, error) {
-	p, err := transfersCaller(ctx)
-	if err != nil {
-		return TransferView{}, err
-	}
-	var out TransferView
-	err = transfersWriteTx(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
-		t, rerr := a.svc.Reverse(ctx, tx, p, transfers.ReverseRequest{
-			TransferID: r.TransferID, ReasonCode: r.ReasonCode, Reason: r.Reason, CorrelationID: r.CorrelationID,
-		})
-		if rerr != nil {
-			return rerr
-		}
-		out, rerr = a.view(ctx, tx, t, nil)
-		return rerr
-	})
-	return out, err
-}
-
 func (a transfersAdapter) Reconcile(ctx context.Context, asset *assets.AssetID) (transfers.ReconcileReport, error) {
 	var scope []assets.AssetID
 	if asset != nil {
@@ -309,6 +293,175 @@ func (a transfersAdapter) view(ctx context.Context, q db.Querier, t transfers.Tr
 		}
 	}
 	return TransferView{Transfer: t, AssetSymbol: asset.Symbol, AssetDecimals: asset.Decimals}, nil
+}
+
+// --- reversal under dual control ----------------------------------------------
+
+// transferReversalsAdapter serves TransferReversalsPort over the transfer
+// service. Each command is one service call in its own transaction; the
+// service decides every rule (operator, ledger:post_correction, step-up,
+// proposer != approver, one pending proposal per transfer) and the database
+// holds the same line (migration 00758). A refusal rolls everything back.
+type transferReversalsAdapter struct {
+	transfersAdapter
+}
+
+var _ TransferReversalsPort = transferReversalsAdapter{}
+
+func (a transferReversalsAdapter) Propose(ctx context.Context, r TransferReversalPropose) (TransferReversalOutcome, error) {
+	p, err := transfersCaller(ctx)
+	if err != nil {
+		return TransferReversalOutcome{}, err
+	}
+	var out TransferReversalOutcome
+	err = transfersWriteTx(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
+		res, perr := a.svc.ProposeReversal(ctx, tx, p, transfers.ProposeReversalRequest{
+			TransferID: r.TransferID, ReasonCode: r.ReasonCode, Reason: r.Reason, CorrelationID: r.CorrelationID,
+		})
+		if perr != nil {
+			return perr
+		}
+		t, gerr := a.svc.Get(ctx, tx, p, res.Proposal.TransferID)
+		if gerr != nil {
+			return gerr
+		}
+		v, verr := a.proposalView(ctx, tx, res.Proposal, t, nil)
+		if verr != nil {
+			return verr
+		}
+		out = TransferReversalOutcome{View: v, Replayed: res.Replayed}
+		return nil
+	})
+	return out, err
+}
+
+func (a transferReversalsAdapter) Approve(ctx context.Context, r TransferReversalDecide) (TransferReversalOutcome, error) {
+	p, err := transfersCaller(ctx)
+	if err != nil {
+		return TransferReversalOutcome{}, err
+	}
+	pid, err := transfers.ParseReversalProposalID(r.ProposalID.String())
+	if err != nil {
+		return TransferReversalOutcome{}, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	var out TransferReversalOutcome
+	err = transfersWriteTx(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
+		res, aerr := a.svc.ApproveReversal(ctx, tx, p, transfers.DecideReversalRequest{
+			ProposalID: pid, Reason: r.Reason, CorrelationID: r.CorrelationID,
+		})
+		if aerr != nil {
+			return aerr
+		}
+		v, verr := a.proposalView(ctx, tx, res.Proposal, res.Transfer, nil)
+		if verr != nil {
+			return verr
+		}
+		out = TransferReversalOutcome{View: v, Replayed: res.Replayed}
+		return nil
+	})
+	return out, err
+}
+
+func (a transferReversalsAdapter) Reject(ctx context.Context, r TransferReversalDecide) (TransferReversalOutcome, error) {
+	p, err := transfersCaller(ctx)
+	if err != nil {
+		return TransferReversalOutcome{}, err
+	}
+	pid, err := transfers.ParseReversalProposalID(r.ProposalID.String())
+	if err != nil {
+		return TransferReversalOutcome{}, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	var out TransferReversalOutcome
+	err = transfersWriteTx(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
+		res, rerr := a.svc.RejectReversal(ctx, tx, p, transfers.DecideReversalRequest{
+			ProposalID: pid, Reason: r.Reason, CorrelationID: r.CorrelationID,
+		})
+		if rerr != nil {
+			return rerr
+		}
+		v, verr := a.proposalView(ctx, tx, res.Proposal, res.Transfer, nil)
+		if verr != nil {
+			return verr
+		}
+		out = TransferReversalOutcome{View: v, Replayed: res.Replayed}
+		return nil
+	})
+	return out, err
+}
+
+func (a transferReversalsAdapter) List(ctx context.Context, status string, transfer *transfers.TransferID, cursor string, limit int) (TransferReversalProposalPage, error) {
+	p, err := transfersCaller(ctx)
+	if err != nil {
+		return TransferReversalProposalPage{}, err
+	}
+	var out TransferReversalProposalPage
+	err = transfersSnapshot(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
+		items, next, lerr := a.svc.ListReversalProposals(ctx, tx, p, transfers.ReversalProposalFilter{
+			Status: transfers.ReversalProposalStatus(status), TransferID: transfer, Cursor: cursor, Limit: limit,
+		})
+		if lerr != nil {
+			return lerr
+		}
+		seen := map[assets.AssetID]assets.Asset{}
+		page := TransferReversalProposalPage{Items: make([]TransferReversalProposalView, 0, len(items)), NextCursor: next}
+		for _, prop := range items {
+			t, gerr := a.svc.Get(ctx, tx, p, prop.TransferID)
+			if gerr != nil {
+				return gerr
+			}
+			v, verr := a.proposalView(ctx, tx, prop, t, seen)
+			if verr != nil {
+				return verr
+			}
+			page.Items = append(page.Items, v)
+		}
+		out = page
+		return nil
+	})
+	return out, err
+}
+
+func (a transferReversalsAdapter) Get(ctx context.Context, id uuid.UUID) (TransferReversalProposalView, error) {
+	p, err := transfersCaller(ctx)
+	if err != nil {
+		return TransferReversalProposalView{}, err
+	}
+	pid, err := transfers.ParseReversalProposalID(id.String())
+	if err != nil {
+		return TransferReversalProposalView{}, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	var out TransferReversalProposalView
+	err = transfersSnapshot(ctx, a.db, func(ctx context.Context, tx pgx.Tx) error {
+		prop, gerr := a.svc.ReversalProposal(ctx, tx, p, pid)
+		if gerr != nil {
+			return gerr
+		}
+		t, gerr := a.svc.Get(ctx, tx, p, prop.TransferID)
+		if gerr != nil {
+			return gerr
+		}
+		out, gerr = a.proposalView(ctx, tx, prop, t, nil)
+		return gerr
+	})
+	return out, err
+}
+
+// proposalView is a proposal with its transfer, in the port's shape.
+func (a transferReversalsAdapter) proposalView(ctx context.Context, q db.Querier, prop transfers.ReversalProposal, t transfers.Transfer,
+	seen map[assets.AssetID]assets.Asset) (TransferReversalProposalView, error) {
+	tv, err := a.view(ctx, q, t, seen)
+	if err != nil {
+		return TransferReversalProposalView{}, err
+	}
+	v := TransferReversalProposalView{
+		ID: uuid.UUID(prop.ID.Bytes()), TransferID: prop.TransferID, Seq: prop.Seq, Status: string(prop.Status()),
+		ReasonCode: prop.ReasonCode, Reason: prop.Reason, ProposedBy: prop.ProposedBy.ID, ProposedAt: prop.ProposedAt.UTC(),
+		DecidedAt: prop.DecidedAt, DecisionReason: prop.DecisionReason, Transfer: tv,
+	}
+	if prop.DecidedBy != nil {
+		v.DecidedBy = prop.DecidedBy.ID
+	}
+	return v, nil
 }
 
 // --- the sandbox faucet -----------------------------------------------------

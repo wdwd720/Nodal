@@ -133,11 +133,20 @@ func (s *Server) GetAdvancedTransfersTransferId(ctx context.Context, request api
 	return api.GetAdvancedTransfersTransferId200JSONResponse(toAPIAdvancedTransfer(v, aud)), nil
 }
 
-// PostAdvancedTransfersTransferIdReverse is the operator correction of a
-// COMPLETED transfer: a compensating journal, never an edit.
-func (s *Server) PostAdvancedTransfersTransferIdReverse(ctx context.Context, request api.PostAdvancedTransfersTransferIdReverseRequestObject) (api.PostAdvancedTransfersTransferIdReverseResponseObject, error) {
-	if s.opts.Ports.Transfers == nil {
-		return nil, errNotWired("advanced transfers")
+// --- reversal under dual control ------------------------------------------------
+//
+// A COMPLETED transfer is reversed by two distinct operators (review finding
+// F3). These handlers carry each step to the transfer service, which decides
+// who may take it; the single-operator reversal no longer exists anywhere.
+
+const transferReversalsFeature = "transfer reversals"
+
+// PostAdvancedTransfersTransferIdReversalProposals records one operator's
+// proposal to reverse a COMPLETED transfer. Nothing moves.
+func (s *Server) PostAdvancedTransfersTransferIdReversalProposals(ctx context.Context, request api.PostAdvancedTransfersTransferIdReversalProposalsRequestObject) (api.PostAdvancedTransfersTransferIdReversalProposalsResponseObject, error) {
+	port := s.opts.Ports.TransferReversals
+	if port == nil {
+		return nil, errNotWired(transferReversalsFeature)
 	}
 	if request.Body == nil {
 		return nil, validationError("body", "a request body is required")
@@ -146,26 +155,204 @@ func (s *Server) PostAdvancedTransfersTransferIdReverse(ctx context.Context, req
 	if err != nil || tid.IsZero() {
 		return nil, validationError("transferId", "transferId must be a canonical UUID")
 	}
-	cmd := TransferReversal{
+	cmd := TransferReversalPropose{
 		TransferID: tid, ReasonCode: request.Body.ReasonCode, Reason: request.Body.Reason,
 		CorrelationID: observability.CorrelationID(ctx),
 	}
 	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
-		func(ctx context.Context) (api.AdvancedTransfer, commandMeta, error) {
-			v, rerr := s.opts.Ports.Transfers.Reverse(ctx, cmd)
-			if rerr != nil {
-				return api.AdvancedTransfer{}, commandMeta{}, rerr
+		func(ctx context.Context) (api.AdvancedTransferReversalProposal, commandMeta, error) {
+			out, perr := port.Propose(ctx, cmd)
+			if perr != nil {
+				return api.AdvancedTransferReversalProposal{}, commandMeta{}, perr
 			}
-			// Only an operator the service accepted gets here; the correction's
-			// author sees the whole record.
-			return toAPIAdvancedTransfer(v, transferOperatorAudience), commandMeta{
-				Status: http.StatusOK, ResourceType: "internal_transfer", ResourceID: tid.String(),
-			}, nil
+			v, cerr := toAPITransferReversalProposal(ctx, out.View)
+			if cerr != nil {
+				return api.AdvancedTransferReversalProposal{}, commandMeta{}, cerr
+			}
+			status := http.StatusCreated
+			if out.Replayed {
+				// The same proposal was already pending: nothing new exists.
+				status = http.StatusOK
+			}
+			return v, commandMeta{Status: status, ResourceType: "transfer_reversal_proposal", ResourceID: out.View.ID.String()}, nil
 		})
 	if err != nil {
 		return nil, err
 	}
-	return api.PostAdvancedTransfersTransferIdReverse200JSONResponse(res.Value), nil
+	if res.Replayed || res.Meta.Status == http.StatusOK {
+		return api.PostAdvancedTransfersTransferIdReversalProposals200JSONResponse(res.Value), nil
+	}
+	return api.PostAdvancedTransfersTransferIdReversalProposals201JSONResponse(res.Value), nil
+}
+
+// GetAdvancedTransfersReversalProposals pages reversal proposals for
+// operators, newest first.
+func (s *Server) GetAdvancedTransfersReversalProposals(ctx context.Context, request api.GetAdvancedTransfersReversalProposalsRequestObject) (api.GetAdvancedTransfersReversalProposalsResponseObject, error) {
+	port := s.opts.Ports.TransferReversals
+	if port == nil {
+		return nil, errNotWired(transferReversalsFeature)
+	}
+	status := ""
+	if request.Params.Status != nil {
+		switch st := *request.Params.Status; st {
+		case api.TransferReversalPending, api.TransferReversalApproved, api.TransferReversalRejected:
+			status = string(st)
+		default:
+			return nil, validationError("status", "status must be PENDING, APPROVED or REJECTED")
+		}
+	}
+	var transfer *transfers.TransferID
+	if request.Params.TransferId != nil {
+		tid, err := transfers.ParseTransferID(request.Params.TransferId.String())
+		if err != nil || tid.IsZero() {
+			return nil, validationError("transfer_id", "transfer_id must be a canonical UUID")
+		}
+		transfer = &tid
+	}
+	page, err := port.List(ctx, status, transfer, deref(request.Params.Cursor),
+		pageLimit(request.Params.Limit, defaultPageLimit, maxPageLimit))
+	if err != nil {
+		return nil, err
+	}
+	out := api.AdvancedTransferReversalProposalPage{
+		Items:       make([]api.AdvancedTransferReversalProposal, 0, len(page.Items)),
+		NextCursor:  nextCursor(page.NextCursor),
+		ValueDomain: api.SIMULATED,
+	}
+	for _, v := range page.Items {
+		item, cerr := toAPITransferReversalProposal(ctx, v)
+		if errs.HasCode(cerr, errs.CodeNotFound) {
+			// A transfer this principal may not read is not listed; the
+			// cursor still advances past it.
+			continue
+		}
+		if cerr != nil {
+			return nil, cerr
+		}
+		out.Items = append(out.Items, item)
+	}
+	return api.GetAdvancedTransfersReversalProposals200JSONResponse(out), nil
+}
+
+// GetAdvancedTransfersReversalProposalsProposalId returns one proposal with
+// its transfer.
+func (s *Server) GetAdvancedTransfersReversalProposalsProposalId(ctx context.Context, request api.GetAdvancedTransfersReversalProposalsProposalIdRequestObject) (api.GetAdvancedTransfersReversalProposalsProposalIdResponseObject, error) {
+	port := s.opts.Ports.TransferReversals
+	if port == nil {
+		return nil, errNotWired(transferReversalsFeature)
+	}
+	pid := request.ProposalId
+	if pid == uuid.Nil {
+		return nil, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	v, err := port.Get(ctx, pid)
+	if errs.HasCode(err, errs.CodeNotFound) {
+		return nil, transferReversalNotFound(pid)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out, err := toAPITransferReversalProposal(ctx, v)
+	if errs.HasCode(err, errs.CodeNotFound) {
+		return nil, transferReversalNotFound(pid)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAdvancedTransfersReversalProposalsProposalId200JSONResponse(out), nil
+}
+
+// PostAdvancedTransfersReversalProposalsProposalIdApprove is the second,
+// distinct operator's approval, which executes the reversal in the same
+// transaction.
+func (s *Server) PostAdvancedTransfersReversalProposalsProposalIdApprove(ctx context.Context, request api.PostAdvancedTransfersReversalProposalsProposalIdApproveRequestObject) (api.PostAdvancedTransfersReversalProposalsProposalIdApproveResponseObject, error) {
+	port := s.opts.Ports.TransferReversals
+	if port == nil {
+		return nil, errNotWired(transferReversalsFeature)
+	}
+	if request.ProposalId == uuid.Nil {
+		return nil, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	cmd := TransferReversalDecide{ProposalID: request.ProposalId, CorrelationID: observability.CorrelationID(ctx)}
+	if request.Body != nil {
+		cmd.Reason = deref(request.Body.Reason)
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.AdvancedTransferReversalDecisionResult, commandMeta, error) {
+			return transferReversalDecision(ctx, port.Approve, cmd)
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedTransfersReversalProposalsProposalIdApprove200JSONResponse(res.Value), nil
+}
+
+// PostAdvancedTransfersReversalProposalsProposalIdReject rejects a proposal:
+// it moves nothing and can never be executed afterwards.
+func (s *Server) PostAdvancedTransfersReversalProposalsProposalIdReject(ctx context.Context, request api.PostAdvancedTransfersReversalProposalsProposalIdRejectRequestObject) (api.PostAdvancedTransfersReversalProposalsProposalIdRejectResponseObject, error) {
+	port := s.opts.Ports.TransferReversals
+	if port == nil {
+		return nil, errNotWired(transferReversalsFeature)
+	}
+	if request.Body == nil {
+		return nil, validationError("body", "a request body is required")
+	}
+	if request.ProposalId == uuid.Nil {
+		return nil, validationError("proposalId", "proposalId must be a canonical UUID")
+	}
+	cmd := TransferReversalDecide{
+		ProposalID: request.ProposalId, Reason: deref(request.Body.Reason), CorrelationID: observability.CorrelationID(ctx),
+	}
+	res, err := runCommand(ctx, s, request.Params.IdempotencyKey,
+		func(ctx context.Context) (api.AdvancedTransferReversalDecisionResult, commandMeta, error) {
+			return transferReversalDecision(ctx, port.Reject, cmd)
+		})
+	if err != nil {
+		return nil, err
+	}
+	return api.PostAdvancedTransfersReversalProposalsProposalIdReject200JSONResponse(res.Value), nil
+}
+
+// transferReversalDecision runs one decision through the port and renders it.
+func transferReversalDecision(ctx context.Context, decide func(context.Context, TransferReversalDecide) (TransferReversalOutcome, error),
+	cmd TransferReversalDecide) (api.AdvancedTransferReversalDecisionResult, commandMeta, error) {
+	out, err := decide(ctx, cmd)
+	if err != nil {
+		return api.AdvancedTransferReversalDecisionResult{}, commandMeta{}, err
+	}
+	v, err := toAPITransferReversalProposal(ctx, out.View)
+	if err != nil {
+		return api.AdvancedTransferReversalDecisionResult{}, commandMeta{}, err
+	}
+	return api.AdvancedTransferReversalDecisionResult{Proposal: v, Replayed: out.Replayed, ValueDomain: api.SIMULATED},
+		commandMeta{Status: http.StatusOK, ResourceType: "transfer_reversal_proposal", ResourceID: out.View.ID.String()}, nil
+}
+
+// transferReversalNotFound is the one answer for a proposal that does not
+// exist and one this principal may not read.
+func transferReversalNotFound(pid uuid.UUID) error {
+	return errs.New(errs.CodeNotFound, "reversal proposal not found").WithField("proposal_id", pid.String())
+}
+
+// toAPITransferReversalProposal renders a proposal. The transfer is shown
+// as the principal in ctx may see it; a principal who may not see it is
+// told the proposal does not exist (NOT_FOUND).
+func toAPITransferReversalProposal(ctx context.Context, v TransferReversalProposalView) (api.AdvancedTransferReversalProposal, error) {
+	status := api.AdvancedTransferReversalStatus(v.Status)
+	switch status {
+	case api.TransferReversalPending, api.TransferReversalApproved, api.TransferReversalRejected:
+	default:
+		return api.AdvancedTransferReversalProposal{}, errs.Newf(errs.CodeInternal, "a reversal proposal reported the unknown status %q", v.Status)
+	}
+	aud := transferAudienceOf(ctx, v.Transfer.Transfer)
+	if !aud.visible || v.Transfer.Transfer.ID != v.TransferID {
+		return api.AdvancedTransferReversalProposal{}, transferReversalNotFound(v.ID)
+	}
+	return api.AdvancedTransferReversalProposal{
+		Id: v.ID, TransferId: toUUID(v.TransferID), Seq: v.Seq, Status: status, ReasonCode: v.ReasonCode, Reason: v.Reason,
+		ProposedBy: v.ProposedBy, ProposedAt: v.ProposedAt.UTC(), DecidedBy: strPtr(v.DecidedBy), DecidedAt: timePtr(v.DecidedAt),
+		DecisionReason: strPtr(v.DecisionReason), Transfer: toAPIAdvancedTransfer(v.Transfer, aud), ValueDomain: api.SIMULATED,
+	}, nil
 }
 
 // PostAdvancedTransfersHandles registers the handle other customers pay one of
@@ -498,6 +685,9 @@ func toAPIAdvancedTransfer(v TransferView, aud transferAudience) api.AdvancedTra
 			out.EvidenceSha256 = &h
 		}
 		out.ReversalReasonCode = strPtr(t.ReversalReasonCode)
+		if t.ReversalProposalID != nil {
+			out.ReversalProposalId = uuidPtr(*t.ReversalProposalID)
+		}
 	}
 	return out
 }
