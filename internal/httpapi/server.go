@@ -99,6 +99,9 @@ type Ports struct {
 	PredictionMarkets PredictionMarketsPort
 
 	// >>> advanced:marketplace port
+	// Marketplace serves the strategy marketplace and the sandboxed runs
+	// behind it. A nil port answers UNSUPPORTED.
+	Marketplace MarketplacePort
 
 	// >>> advanced:delegation port
 

@@ -75,6 +75,10 @@ type AdvancedDeps struct {
 	PredictionOracle *PredictionSandboxOracle
 
 	// >>> advanced:marketplace deps
+	// Marketplace holds the strategy marketplace and the sandbox runtime
+	// behind it; leaving either nil leaves only the /advanced/strategies
+	// routes UNSUPPORTED.
+	Marketplace MarketplaceDeps
 
 	// >>> advanced:delegation deps
 
@@ -120,6 +124,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	}
 
 	// >>> advanced:marketplace wire
+	wireMarketplace(p, d)
 
 	// >>> advanced:delegation wire
 
