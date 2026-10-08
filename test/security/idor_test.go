@@ -249,14 +249,17 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		"/v1/advanced/intents", "/v1/advanced/effects", "/v1/advanced/risk/decisions",
 
 		// >>> advanced:margin account-scoped list routes
+		"/v1/advanced/margin/calls", "/v1/advanced/margin/cases", "/v1/advanced/margin/stress-runs",
 
 		// >>> advanced:derivatives account-scoped list routes
+		"/v1/advanced/derivatives/positions", "/v1/advanced/derivatives/flows", "/v1/advanced/derivatives/funding-accruals",
 
 		// >>> advanced:equities account-scoped list routes
 
 		// >>> advanced:orders account-scoped list routes
 
 		// >>> advanced:transfers account-scoped list routes
+		"/v1/advanced/transfers", "/v1/advanced/transfers/faucet/allowance",
 
 		// >>> advanced:treasury account-scoped list routes
 
@@ -265,6 +268,23 @@ func TestIDOR_QueryParameterSmuggling(t *testing.T) {
 		// >>> advanced:bridge account-scoped list routes
 
 		// >>> advanced:predmarket account-scoped list routes
+		// An account's shares in one market. The route reads a market, so the
+		// seeded admin defines one first (a DRAFT far in the future is enough:
+		// positions are read in any state) and the probe runs against it.
+		func() string {
+			r := postAs(t, tn.admin.Token, "/v1/advanced/prediction-markets", key("idor-predmarket"), fmt.Sprintf(
+				`{"symbol":"IDOR-%s","question":"Whose shares may the IDOR probe read?","outcomes":["YES","NO"],`+
+					`"mode":"SANDBOX","open_at":"2099-01-01T00:00:00Z","close_at":"2099-01-02T00:00:00Z",`+
+					`"dispute_window_ms":0,"oracle_source":"idor-probe-oracle","oracle_public_key":%q}`,
+				runToken, strings.Repeat("ab", 32)))
+			require.Contains(t, []int{http.StatusCreated, http.StatusOK}, r.Status, "the admin defines a market: %s", r.text())
+			var m struct {
+				ID string `json:"id"`
+			}
+			require.NoError(t, json.Unmarshal(r.Body, &m))
+			require.NotEmpty(t, m.ID)
+			return "/v1/advanced/prediction-markets/" + m.ID + "/positions"
+		}(),
 
 		// >>> advanced:marketplace account-scoped list routes
 		"/v1/advanced/strategies/listings", "/v1/advanced/strategies/installs",

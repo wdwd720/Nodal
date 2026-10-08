@@ -35,12 +35,15 @@ import (
 	"github.com/nodal/controlplane/internal/admin"
 	"github.com/nodal/controlplane/internal/agent"
 	"github.com/nodal/controlplane/internal/assets"
+	"github.com/nodal/controlplane/internal/bridge"
 	"github.com/nodal/controlplane/internal/commerce"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
 	"github.com/nodal/controlplane/internal/db/migrate"
 	"github.com/nodal/controlplane/internal/derivatives"
+	"github.com/nodal/controlplane/internal/devnethost"
 	"github.com/nodal/controlplane/internal/econ"
+	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/execution"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
@@ -51,6 +54,7 @@ import (
 	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/marketplace"
 	"github.com/nodal/controlplane/internal/notification"
+	"github.com/nodal/controlplane/internal/orders"
 	"github.com/nodal/controlplane/internal/prediction"
 	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/reconciliation"
@@ -58,6 +62,7 @@ import (
 	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/security"
+	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/transfers"
 )
 
@@ -204,6 +209,10 @@ func registry() []pair {
 		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_status_check", source: "margin.AllCaseStatuses()", values: str(margin.AllCaseStatuses())},
 		{table: "margin_liquidation_cases", constraint: "margin_liquidation_cases_target_check", source: "margin.AllLiquidationTargets()", values: str(margin.AllLiquidationTargets())},
 		{table: "margin_liquidation_steps", constraint: "margin_liquidation_steps_action_check", source: "margin.AllStepActions()", values: str(margin.AllStepActions())},
+		// 00754: a MANUAL_REVIEW case leaves only through a resolution one
+		// operator proposes and a second approves.
+		{table: "margin_case_resolutions", constraint: "margin_case_resolutions_outcome_check", source: "margin.AllResolutionOutcomes()", values: str(margin.AllResolutionOutcomes())},
+		{table: "margin_case_resolution_decisions", constraint: "margin_case_resolution_decisions_decision_check", source: "margin.AllResolutionDecisions()", values: str(margin.AllResolutionDecisions())},
 
 		// Migration 00749 (prediction markets).
 		{table: "prediction_markets", constraint: "prediction_markets_status_check", source: "predmarket.AllMarketStatuses()", values: str(predmarket.AllMarketStatuses())},
@@ -223,6 +232,72 @@ func registry() []pair {
 		{table: "derivative_settlements", constraint: "derivative_settlements_kind_check", source: "derivatives.AllSettlementKinds()", values: str(derivatives.AllSettlementKinds())},
 		{table: "funding_accruals", constraint: "funding_accruals_direction_check", source: "derivatives.AllFundingDirections()", values: str(derivatives.AllFundingDirections())},
 		{table: "option_exercises", constraint: "option_exercises_kind_check", source: "derivatives.AllExerciseKinds()", values: str(derivatives.AllExerciseKinds())},
+
+		// Migration 00742 (the persistent internal order book).
+		{table: "book_states", constraint: "book_states_mode_check", source: "orders.AllBookModes()", values: str(orders.AllBookModes())},
+		{table: "book_states", constraint: "book_states_status_check", source: "orders.AllBookStatuses()", values: str(orders.AllBookStatuses())},
+		{table: "book_states", constraint: "book_states_instrument_kind_check", source: "orders.AllBookInstrumentKinds()", values: str(orders.AllBookInstrumentKinds())},
+		{table: "book_states", constraint: "book_states_terms_source_check", source: "orders.AllTermsSources()", values: str(orders.AllTermsSources())},
+		{table: "book_states", constraint: "book_states_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_state_transitions", constraint: "book_state_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_orders", constraint: "book_orders_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_orders", constraint: "book_orders_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+		{table: "book_orders", constraint: "book_orders_order_type_check", source: "orders.AllOrderTypes()", values: str(orders.AllOrderTypes())},
+		{table: "book_orders", constraint: "book_orders_time_in_force_check", source: "orders.AllTimesInForce()", values: str(orders.AllTimesInForce())},
+		{table: "book_orders", constraint: "book_orders_stp_mode_check", source: "orders.AllSTPModes()", values: str(orders.AllSTPModes())},
+		{table: "book_orders", constraint: "book_orders_liquidity_intent_check", source: "orders.AllLiquidityIntents()", values: str(orders.AllLiquidityIntents())},
+		{table: "book_orders", constraint: "book_orders_mode_check", source: "orders.AllBookModes()", values: str(orders.AllBookModes())},
+		{table: "book_orders", constraint: "book_orders_status_check", source: "orders.AllStatuses()", values: str(orders.AllStatuses())},
+		{table: "book_order_transitions", constraint: "book_order_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_commands", constraint: "book_commands_kind_check", source: "orders.AllCommandKinds()", values: str(orders.AllCommandKinds())},
+		{table: "book_commands", constraint: "book_commands_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_events", constraint: "book_events_event_type_check", source: "orders.AllEventTypes()", values: str(orders.AllEventTypes())},
+		{table: "book_trades", constraint: "book_trades_maker_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_trades", constraint: "book_trades_taker_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_trades", constraint: "book_trades_aggressor_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+		{table: "book_crossing_rules", constraint: "book_crossing_rules_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "book_crossing_decisions", constraint: "book_crossing_decisions_command_kind_check", source: "orders.AllCrossingCommandKinds()", values: str(orders.AllCrossingCommandKinds())},
+		{table: "book_crossing_decisions", constraint: "book_crossing_decisions_taker_owner_type_check", source: "orders.AllOwnerTypes()", values: str(orders.AllOwnerTypes())},
+		{table: "book_house_reservations", constraint: "book_house_reservations_status_check", source: "orders.AllHouseReservationStatuses()", values: str(orders.AllHouseReservationStatuses())},
+		{table: "book_house_reservation_transitions", constraint: "book_house_reservation_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "paper_fills", constraint: "paper_fills_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+
+		// Migration 00743 (paper and sandbox equities).
+		{table: "corporate_action_applications", constraint: "corporate_action_applications_rounding_policy_check", source: "equities.AllCorporateRoundings()", values: str(equities.AllCorporateRoundings())},
+		{table: "equity_calendar_holidays", constraint: "equity_calendar_holidays_created_by_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_corporate_action_transitions", constraint: "equity_corporate_action_transitions_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_action_type_check", source: "equities.AllCorporateActionTypes()", values: str(equities.AllCorporateActionTypes())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_announced_by_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_rounding_policy_check", source: "equities.AllCorporateRoundings()", values: str(equities.AllCorporateRoundings())},
+		{table: "equity_corporate_actions", constraint: "equity_corporate_actions_status_check", source: "equities.AllCorporateActionStatuses()", values: str(equities.AllCorporateActionStatuses())},
+		{table: "equity_fills", constraint: "equity_fills_side_check", source: "equities.AllSides()", values: str(equities.AllSides())},
+		{table: "equity_order_transitions", constraint: "equity_order_transitions_actor_type_check", source: "equities.AllTransitionActorTypes()", values: str(equities.AllTransitionActorTypes())},
+		{table: "equity_orders", constraint: "equity_orders_actor_type_check", source: "security.AllActorTypes()", values: str(security.AllActorTypes())},
+		{table: "equity_orders", constraint: "equity_orders_mode_check", source: "equities.AllOrderModes()", values: str(equities.AllOrderModes())},
+		{table: "equity_orders", constraint: "equity_orders_order_type_check", source: "equities.AllOrderTypes()", values: str(equities.AllOrderTypes())},
+		{table: "equity_orders", constraint: "equity_orders_rejection_code_check", source: "equities.AllRejectionCodes()", values: str(equities.AllRejectionCodes())},
+		{table: "equity_orders", constraint: "equity_orders_session_check", source: "equities.AllSessions()", values: str(equities.AllSessions())},
+		{table: "equity_orders", constraint: "equity_orders_side_check", source: "equities.AllSides()", values: str(equities.AllSides())},
+		{table: "equity_orders", constraint: "equity_orders_status_check", source: "equities.AllOrderStatuses()", values: str(equities.AllOrderStatuses())},
+
+		// Migrations 00747 and 00748 (devnet host, stable assets, bridges).
+		{table: "devnet_events", constraint: "devnet_events_kind_check", source: "devnethost.AllEventKinds()", values: str(devnethost.AllEventKinds())},
+		{table: "devnet_events", constraint: "devnet_events_outcome_check", source: "devnethost.AllOutcomes()", values: str(devnethost.AllOutcomes())},
+		{table: "stable_assets", constraint: "stable_assets_status_check", source: "stableasset.AllStatuses()", values: str(stableasset.AllStatuses())},
+		{table: "stable_assets", constraint: "stable_assets_redemption_mode_check", source: "stableasset.AllRedemptionModes()", values: str(stableasset.AllRedemptionModes())},
+		{table: "stable_assets", constraint: "stable_assets_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "stable_reserve_assets", constraint: "stable_reserve_assets_reserve_kind_check", source: "stableasset.AllReserveKinds()", values: str(stableasset.AllReserveKinds())},
+		{table: "stable_mint_requests", constraint: "stable_mint_requests_mode_check", source: "stableasset.RequestModes()", values: str(stableasset.RequestModes())},
+		{table: "stable_mint_requests", constraint: "stable_mint_requests_status_check", source: "stableasset.AllMintStatuses()", values: str(stableasset.AllMintStatuses())},
+		{table: "stable_burn_requests", constraint: "stable_burn_requests_mode_check", source: "stableasset.RequestModes()", values: str(stableasset.RequestModes())},
+		{table: "stable_burn_requests", constraint: "stable_burn_requests_status_check", source: "stableasset.AllBurnStatuses()", values: str(stableasset.AllBurnStatuses())},
+		{table: "stable_peg_alerts", constraint: "stable_peg_alerts_kind_check", source: "stableasset.AllAlertKinds()", values: str(stableasset.AllAlertKinds())},
+		{table: "stable_peg_alerts", constraint: "stable_peg_alerts_severity_check", source: "stableasset.AllSeverities()", values: str(stableasset.AllSeverities())},
+		{table: "bridge_routes", constraint: "bridge_routes_status_check", source: "bridge.AllRouteStatuses()", values: str(bridge.AllRouteStatuses())},
+		{table: "bridge_routes", constraint: "bridge_routes_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "bridge_legs", constraint: "bridge_legs_mode_check", source: "bridge.LegModes()", values: str(bridge.LegModes())},
+		{table: "bridge_legs", constraint: "bridge_legs_status_check", source: "bridge.AllStates()", values: str(bridge.AllStates())},
+		{table: "bridge_release_attempts", constraint: "bridge_release_attempts_kind_check", source: "bridge.AllAttemptKinds()", values: str(bridge.AllAttemptKinds())},
 
 		// Migrations 00750 and 00751 (strategy marketplace, sandboxed runs).
 		{table: "marketplace_evaluations", constraint: "marketplace_evaluations_actor_type_check", source: "marketplace.TransitionActorTypes()", values: str(marketplace.TransitionActorTypes())},
@@ -323,6 +398,26 @@ var bespoke = []string{
 	// exactly when its status is terminal. internal/margin's
 	// TestIntegration_DatabaseRefusesInvalidMarginStates drives it.
 	"margin_liquidation_cases.margin_liquidation_cases_closed",
+	// Rules, not lists of values: a MARKET order is IOC or FOK, and an
+	// order's quantity is conserved across fills, cancels and its remainder.
+	// internal/orders' TestIntegration_TheDatabaseRefusesOverfillAndIllegalOrderStates
+	// drives both.
+	"book_orders.book_orders_market_tif",
+	"book_orders.book_orders_quantity_conserved",
+	// Not a list of values but a rule: a leg past RESERVED carries the lock
+	// transaction it was requested with. internal/bridge's
+	// TestIntegration_ARequestedLegCarriesItsLock drives it.
+	"bridge_legs.bridge_legs_requested_has_lock",
+	// Not a list of values but a rule: a SUBMIT event's outcome is ACCEPTED or
+	// TIMEOUT and no other kind has one of those. internal/devnethost's
+	// TestIntegration_TheDatabaseRefusesAGapInTheHistory drives it.
+	"devnet_events.devnet_events_submit_outcome",
+	// Rules, not lists of values: a corporate action carries only its own
+	// type's fields (a ratio for splits, cash in lieu for splits).
+	// internal/equities' TestIntegration_DatabaseGuardsTheEquitiesRegisters
+	// drives both.
+	"equity_corporate_actions.equity_corporate_actions_cash_in_lieu_for_splits",
+	"equity_corporate_actions.equity_corporate_actions_ratio_shape",
 }
 
 var (

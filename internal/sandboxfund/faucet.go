@@ -60,6 +60,10 @@ type Deps struct {
 	// STAGING and PROD; in LOCAL, TEST and DEV the faucet always runs.
 	Enabled bool
 	Policy  Policy
+	// KillSwitches stops the faucet with the global new-risk kill switch:
+	// minting play money is new value, and the operator who pulled the
+	// switch meant all of it. Required.
+	KillSwitches econ.KillSwitchReader
 }
 
 // Faucet grants SIMULATED value to customer accounts.
@@ -69,6 +73,7 @@ type Faucet struct {
 	effects    *econ.EffectStore
 	env        config.Environment
 	enabled    bool
+	kills      econ.KillSwitchReader
 	policy     Policy
 	policyHash string
 	accounts   *accounts.Repository
@@ -77,8 +82,8 @@ type Faucet struct {
 
 // New wires a Faucet.
 func New(d Deps) (*Faucet, error) {
-	if d.Clock == nil || d.Ledger == nil || d.Effects == nil {
-		return nil, errs.New(errs.CodeValidationFailed, "sandboxfund: a clock, a ledger and an effect store are required")
+	if d.Clock == nil || d.Ledger == nil || d.Effects == nil || d.KillSwitches == nil {
+		return nil, errs.New(errs.CodeValidationFailed, "sandboxfund: a clock, a ledger, an effect store and a kill-switch reader are required")
 	}
 	if !d.Environment.IsValid() {
 		return nil, errs.Newf(errs.CodeValidationFailed, "sandboxfund: unknown environment %q", d.Environment)
@@ -91,7 +96,7 @@ func New(d Deps) (*Faucet, error) {
 		return nil, err
 	}
 	return &Faucet{
-		clk: d.Clock, ledger: d.Ledger, effects: d.Effects, env: d.Environment, enabled: d.Enabled,
+		clk: d.Clock, ledger: d.Ledger, effects: d.Effects, env: d.Environment, enabled: d.Enabled, kills: d.KillSwitches,
 		policy: d.Policy, policyHash: hash, accounts: accounts.NewRepository(), assets: assets.NewRepository(),
 	}, nil
 }
@@ -136,6 +141,13 @@ func (f *Faucet) Fund(ctx context.Context, tx pgx.Tx, p security.Principal, acco
 	}
 	if err := f.authorize(ctx, p, accountID); err != nil {
 		return Grant{}, err
+	}
+	snap, err := f.kills.Snapshot(ctx, tx)
+	if err != nil {
+		return Grant{}, err
+	}
+	if snap.Global() {
+		return Grant{}, errs.New(errs.CodeKillSwitchActive, "the global new-risk kill switch stops the sandbox faucet")
 	}
 	if !quantity.IsPositive() {
 		return Grant{}, errs.New(errs.CodeValidationFailed, "a grant is a positive quantity of base units")
@@ -261,7 +273,8 @@ func (f *Faucet) Fund(ctx context.Context, tx pgx.Tx, p security.Principal, acco
 }
 
 // authorize decides who may ask: never an agent or an operator; a user only
-// for an account they own; a service or the system for any account.
+// for an account they own; a service only when it holds sandbox:fund; the
+// system (internal background work, unreachable from HTTP) for any account.
 func (f *Faucet) authorize(ctx context.Context, p security.Principal, accountID accounts.AccountID) error {
 	if err := p.Validate(); err != nil {
 		return errs.Wrap(err, errs.CodeForbidden, "invalid principal")
@@ -275,7 +288,13 @@ func (f *Faucet) authorize(ctx context.Context, p security.Principal, accountID 
 			return errs.Wrap(err, errs.CodeForbidden, "a customer funds only an account they own")
 		}
 		return nil
-	case security.ActorService, security.ActorSystem:
+	case security.ActorService:
+		if !p.Has(security.PermSandboxFund, f.clk.Now()) {
+			return errs.New(errs.CodeForbidden, "a service funds an account only when it holds sandbox:fund").
+				WithField("actor_type", string(p.ActorType))
+		}
+		return nil
+	case security.ActorSystem:
 		return nil
 	}
 	return errs.Newf(errs.CodeForbidden, "a %s does not use the sandbox faucet", p.ActorType).

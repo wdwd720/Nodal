@@ -35,6 +35,7 @@ import (
 	"github.com/nodal/controlplane/internal/config"
 	"github.com/nodal/controlplane/internal/credit"
 	"github.com/nodal/controlplane/internal/db"
+	"github.com/nodal/controlplane/internal/derivatives"
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/event"
 	"github.com/nodal/controlplane/internal/execution"
@@ -48,19 +49,24 @@ import (
 	"github.com/nodal/controlplane/internal/killswitch"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/legalrouter"
+	"github.com/nodal/controlplane/internal/margin"
 	"github.com/nodal/controlplane/internal/marketplace"
 	"github.com/nodal/controlplane/internal/nativeasset"
 	"github.com/nodal/controlplane/internal/nativemarket"
+	"github.com/nodal/controlplane/internal/notification"
 	"github.com/nodal/controlplane/internal/observability"
 	"github.com/nodal/controlplane/internal/payout"
 	"github.com/nodal/controlplane/internal/positions"
+	"github.com/nodal/controlplane/internal/predmarket"
 	"github.com/nodal/controlplane/internal/provider"
 	"github.com/nodal/controlplane/internal/provider/stripe"
 	"github.com/nodal/controlplane/internal/ratelimit"
 	"github.com/nodal/controlplane/internal/reconciliation"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/sandboxfund"
 	"github.com/nodal/controlplane/internal/sandboxrt"
 	"github.com/nodal/controlplane/internal/stream"
+	"github.com/nodal/controlplane/internal/transfers"
 	"github.com/nodal/controlplane/internal/valuation"
 	"github.com/nodal/controlplane/internal/withdrawal"
 )
@@ -313,14 +319,146 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// unrepresentable in the schema, and in STAGING and PROD even a simulated
 	// mode needs its gate ACTIVE (gates.DecideMode).
 	// >>> advanced:margin services
+	//
+	// Margin, leverage, borrowing and liquidation (internal/margin), with the
+	// production identity reader (D-055: an ACTIVE owner with a verified email
+	// address, or a VERIFIED unexpired compliance profile; fail closed), the
+	// reference-price paper venue and no derivatives book connected. Its legal router is the determination the rest of the API
+	// applies: CONSERVATIVE unless CP_API_LEGAL_POLICY chose otherwise where
+	// that is allowed. The numeraire is the sandbox dollar, which the margin
+	// routes resolve per request; nothing here creates an asset.
+	marginRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if marginRouter == nil {
+		if marginRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("margin legal router: %w", err)
+		}
+	}
+	marginSvc, err := margin.NewService(margin.Config{
+		Policy:            margin.DefaultPolicy(),
+		RiskPolicy:        risk.DefaultAdvancedPolicy(),
+		LendingPoolName:   "Margin lending pool (sandbox)",
+		InsuranceFundName: "Margin insurance fund (sandbox)",
+	}, margin.Dependencies{
+		Clock:      clk,
+		Ledger:     ledgerSvc,
+		Effects:    econ.NewEffectStore(clk, outbox, auditWriter),
+		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker),
+		Registry:   econ.NewRegistry(),
+		Risk:       risk.NewStore(),
+		Capital:    capitalSvc,
+		Prices:     priceStore,
+		Router:     marginRouter,
+		Identity:   compliance.NewAccountVerification(clk),
+		KillSwitch: killChecker,
+		Venue:      margin.PaperVenue{},
+		Audit:      auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("margin service: %w", err)
+	}
 
 	// >>> advanced:derivatives services
+	//
+	// Futures, perpetuals and options in PAPER and SANDBOX mode, cleared
+	// through one CLEARING_HOUSE facility. The service decides every rule
+	// itself (route, gate, kill switches, Risk Kernel V2, reservation, fill,
+	// runs, settlement); this block hands it the collaborators already built
+	// above and the defaults its package documents. Its settlement compiler
+	// judges each intent against the deployment's configured legal policy,
+	// defaulting -- as the native economy's does -- to the conservative one,
+	// which permits simulation and nothing that is not (httpapi's
+	// TestDerivatives_TheDeploymentLegalPoliciesRouteEveryDerivativeIntent).
+	derivativesRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if derivativesRouter == nil {
+		if derivativesRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("derivatives legal router: %w", err)
+		}
+	}
+	derivativesSvc, err := derivatives.NewService(derivatives.Config{
+		Clock: clk, Intents: econ.NewIntentStore(clk, outbox, auditWriter), Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), Registry: econ.NewRegistry(), Ledger: ledgerSvc,
+		Capital: capitalSvc, RiskStore: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Policy: derivatives.DefaultPolicy(), Prices: priceStore, Instruments: instrumentRepo, Router: derivativesRouter,
+		KillSwitches: killChecker, Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
+		// Margin snapshots and books are valued in the sandbox dollar.
+		USDAssetID: econ.SandboxDollarID(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("derivatives service: %w", err)
+	}
 
 	// >>> advanced:equities services
 
 	// >>> advanced:orders services
 
 	// >>> advanced:transfers services
+	//
+	// Customer-to-customer transfers of simulated value, and the sandbox
+	// faucet. The transfer service decides every rule itself (eligibility, the
+	// P2P_TRANSFERS gate, step-up, policy limits, Risk Kernel V2, the screen,
+	// the reservation); this block hands it its collaborators and the defaults
+	// its package documents.
+	//
+	// The settlement compiler judges each transfer against the deployment's
+	// configured legal policy, defaulting -- as the native economy's does -- to
+	// the conservative one when none is configured. Both permit simulation and
+	// nothing that is not.
+	transfersRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if transfersRouter == nil {
+		if transfersRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("transfers legal router: %w", err)
+		}
+	}
+	// The package's default screen: deterministic, versioned, and named in
+	// every decision's evidence. No sanctions list is configured for this
+	// deployment, so it blocks no party; a configured list replaces the nil.
+	transfersScreen, err := transfers.NewListScreen("transfers-list-screen-v1", nil)
+	if err != nil {
+		return nil, fmt.Errorf("transfers compliance screen: %w", err)
+	}
+	transfersSvc, err := transfers.NewService(transfers.Deps{
+		Clock: clk, Ledger: ledgerSvc, Capital: capitalSvc,
+		Intents:    econ.NewIntentStore(clk, outbox, auditWriter),
+		Effects:    econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer: econ.NewAuthorizer(gateChecker, killChecker), KillSwitches: killChecker,
+		Router: transfersRouter, Risk: risk.NewStore(), RiskPolicy: risk.DefaultAdvancedPolicy(),
+		Policy: transfers.DefaultPolicy(),
+		// Par for the sandbox dollar and any other registry-declared paper
+		// dollar; anything else at a mark in the sandbox dollar no older than
+		// the one buying power V2 accepts. No mark, no transfer.
+		Valuer: transfers.RegistryValuer{
+			Prices: priceStore, Assets: assetRepo, QuoteAssetID: econ.SandboxDollarID(), MaxMarkAge: 5 * time.Minute,
+		},
+		Screen:   transfersScreen,
+		Notifier: transfers.NewNotificationNotifier(notification.NewRepository()),
+		Audit:    auditWriter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("transfers service: %w", err)
+	}
+	// The faucet always runs in LOCAL, TEST and DEV. No configuration setting
+	// enables it in STAGING or PROD, so it stays off there: handing play money
+	// to the users of a deployed system is a decision someone has to own. The
+	// global new-risk kill switch stops it too: minting play money is new value.
+	const sandboxFaucetEnabled = false
+	sandboxFaucet, err := sandboxfund.New(sandboxfund.Deps{
+		Clock: clk, Ledger: ledgerSvc, Effects: econ.NewEffectStore(clk, outbox, auditWriter),
+		Environment: cfg.Env, Enabled: sandboxFaucetEnabled, Policy: sandboxfund.DefaultPolicy(),
+		KillSwitches: killChecker,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandbox faucet: %w", err)
+	}
 
 	// >>> advanced:treasury services
 
@@ -329,6 +467,63 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 	// >>> advanced:bridge services
 
 	// >>> advanced:predmarket services
+	//
+	// Prediction markets (internal/predmarket). The service is built from the
+	// ledger, capital service, asset and instrument repositories, gate checker,
+	// kill switches and audit writer constructed above; the econ stores, risk
+	// store and reconciliation repository it takes are stateless wrappers over
+	// the same clock, outbox and audit writer as their siblings below.
+	//
+	// The oracle: the deterministic sandbox oracle, whose Ed25519 key derives
+	// from a fixed seed anyone can read, exists only where fake providers are
+	// allowed (LOCAL, TEST, DEV). Everywhere else no oracle is configured, so
+	// resolution answers PROVIDER_UNAVAILABLE instead of trusting a key whose
+	// private half is in the source tree.
+	var predmarketOracle *predmarket.SandboxOracle
+	if cfg.Env.AllowsFakeProviders() {
+		predmarketOracle, err = predmarket.NewSandboxOracle("nodal-sandbox-oracle", []byte("nodal.predmarket.sandbox-oracle!"))
+		if err != nil {
+			return nil, fmt.Errorf("prediction market sandbox oracle: %w", err)
+		}
+	}
+	// The same legal policy the rest of the API routes against; the
+	// conservative one (which permits simulation) when none is selected, since
+	// the service needs a router rather than a nil meaning "conservative".
+	predmarketRouter, err := legalRouterFor(cfg.Env, in.cfg.API.LegalPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if predmarketRouter == nil {
+		if predmarketRouter, err = legalrouter.New(legalrouter.ConservativePolicy()); err != nil {
+			return nil, fmt.Errorf("prediction market legal router: %w", err)
+		}
+	}
+	predmarketConfig := predmarket.Config{
+		Clock:          clk,
+		Intents:        econ.NewIntentStore(clk, outbox, auditWriter),
+		Effects:        econ.NewEffectStore(clk, outbox, auditWriter),
+		Authorizer:     econ.NewAuthorizer(gateChecker, killChecker),
+		Registry:       econ.NewRegistry(),
+		KillSwitches:   killChecker,
+		Ledger:         ledgerSvc,
+		Capital:        capitalSvc,
+		Risk:           risk.NewStore(),
+		RiskPolicy:     risk.DefaultAdvancedPolicy(),
+		Router:         predmarketRouter,
+		Instruments:    instrumentRepo,
+		Assets:         assetRepo,
+		Reconciliation: reconciliation.NewRepository(clk, outbox, auditWriter),
+		Audit:          auditWriter,
+	}
+	if predmarketOracle != nil {
+		// Only a real oracle: a nil *SandboxOracle in the interface field
+		// would not compare equal to nil and would be called.
+		predmarketConfig.Oracle = predmarketOracle
+	}
+	predmarketSvc, err := predmarket.NewService(predmarketConfig)
+	if err != nil {
+		return nil, fmt.Errorf("prediction markets: %w", err)
+	}
 
 	// >>> advanced:marketplace services
 	//
@@ -423,14 +618,31 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		MaxPriceAge: 5 * time.Minute,
 
 		// >>> advanced:margin deps
+		// Buying power V2 reads each customer's margin state from the engines'
+		// own evaluations, so neither can disagree with it. The margin and
+		// derivatives books are margined separately (D-054): the combined
+		// reader sums their requirements, takes the stricter rate, and fails
+		// the read if either part fails.
+		Margin:        buyingpower.CombinedMarginReader{marginSvc.BuyingPowerReader(), derivativesSvc.MarginReader()},
+		MarginService: marginSvc,
 
 		// >>> advanced:derivatives deps
+		// ValuationAssetID is the USDAssetID the service was built with. The
+		// route facts come from the deployment's own resolvers: the
+		// verification Nodal establishes itself, and no jurisdiction
+		// determination (UNKNOWN), exactly as for the native economy below.
+		Derivatives: httpapi.DerivativesDeps{
+			Service: derivativesSvc, ValuationAssetID: econ.SandboxDollarID(), Verification: verificationResolver,
+		},
 
 		// >>> advanced:equities deps
 
 		// >>> advanced:orders deps
 
 		// >>> advanced:transfers deps
+		Transfers: httpapi.TransfersDeps{
+			Service: transfersSvc, Faucet: sandboxFaucet, FaucetEnabled: sandboxFaucetEnabled,
+		},
 
 		// >>> advanced:treasury deps
 
@@ -439,6 +651,8 @@ func build(ctx context.Context, in buildInput) (*httpapi.Server, error) {
 		// >>> advanced:bridge deps
 
 		// >>> advanced:predmarket deps
+		PredictionMarkets: predmarketSvc,
+		PredictionOracle:  predmarketOracle,
 
 		// >>> advanced:marketplace deps
 		Marketplace: httpapi.MarketplaceDeps{Service: strategyMarketplace, Sandbox: strategySandbox},

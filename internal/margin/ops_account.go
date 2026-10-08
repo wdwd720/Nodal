@@ -173,6 +173,9 @@ func (s *Service) SeedFacilities(ctx context.Context, tx pgx.Tx, r SeedRequest) 
 	if err != nil {
 		return Facilities{}, err
 	}
+	if err := lockFacilityRows(ctx, tx, pool.ID, fund.ID, poolBooks|fundBooks); err != nil {
+		return Facilities{}, err
+	}
 	for _, f := range []struct {
 		fac econ.Facility
 		amt money.Quantity
@@ -181,7 +184,7 @@ func (s *Service) SeedFacilities(ctx context.Context, tx pgx.Tx, r SeedRequest) 
 			continue
 		}
 		key := "margin:facility-funding:" + f.fac.ID.String() + ":" + keyHash(r.Key)
-		m := s.meta("margin_facility_funding", f.fac.ID.String(), "simulated facility funding")
+		m := s.meta(refFacilityFunding, f.fac.ID.String(), "simulated facility funding")
 		p, err := FacilityFundingPosting(m, f.fac, r.Asset, f.amt)
 		if err != nil {
 			return Facilities{}, err

@@ -10,7 +10,10 @@ import (
 // PlanInput is what the planner needs for one step of a liquidation case.
 type PlanInput struct {
 	State AccountState `json:"state"`
-	// StepsTaken is how many steps the case has already executed.
+	// StepsTaken is how many TRADING steps (sales) the case has executed in
+	// its current budget window. Applying collateral and sweeping the wallet
+	// are terminal accounting and do not count: the budget bounds trading,
+	// never the bookkeeping that ends a case.
 	StepsTaken int `json:"steps_taken"`
 	// VenueAvailable is false when the paper venue cannot execute.
 	VenueAvailable bool `json:"venue_available"`
@@ -18,6 +21,11 @@ type PlanInput struct {
 	// extreme-spread condition); otherwise each asset takes its liquidity
 	// class's slippage, capped.
 	SlippageAtCap bool `json:"slippage_at_cap"`
+	// FreeNumeraire is the customer's free numeraire cash outside the margin
+	// account (the wallet balance neither reserved nor held), which repays
+	// the loans before the account can be declared bankrupt. Zero when the
+	// customer account cannot reserve it.
+	FreeNumeraire money.Quantity `json:"free_numeraire"`
 }
 
 // LiquidationOrder is one reduce-only instruction: sell part or all of a
@@ -33,9 +41,10 @@ type LiquidationOrder struct {
 	ExecutionPrice *money.Price `json:"execution_price,omitempty"`
 	SlippageBPS    money.BPS    `json:"slippage_bps"`
 	// Proceeds is quantity × execution price, rounded down; Fee is
-	// ceil(proceeds × fee BPS) and goes to the insurance fund; Repay is what
+	// ceil(proceeds × fee BPS) and is platform fee revenue; Repay is what
 	// repays the loans; Excess stays in the account as numeraire collateral.
-	// Proceeds = Fee + Repay + Excess.
+	// Proceeds = Fee + Repay + Excess. A sweep's proceeds are the swept
+	// balance, all of it repaying.
 	Proceeds    money.Quantity   `json:"proceeds"`
 	Fee         money.Quantity   `json:"fee"`
 	Repay       money.Quantity   `json:"repay"`
@@ -59,7 +68,9 @@ type Plan struct {
 	After *Evaluation `json:"after,omitempty"`
 	// DeficitUnits is what remains owed once nothing is left (BANKRUPT).
 	DeficitUnits money.Quantity `json:"deficit_units"`
-	Hash         string         `json:"hash"`
+	// FreeNumeraire is the free wallet cash the plan could sweep.
+	FreeNumeraire money.Quantity `json:"free_numeraire"`
+	Hash          string         `json:"hash"`
 }
 
 // ComputeHash returns the hash a plan with these fields carries.
@@ -136,6 +147,21 @@ func applyCollateral(s *AccountState, amount money.Quantity) (LiquidationOrder, 
 	}, nil
 }
 
+// applySweep repays the loans from the customer's free numeraire cash
+// outside the account. The account's holdings do not change: that cash was
+// never collateral.
+func applySweep(s *AccountState, amount money.Quantity) (LiquidationOrder, error) {
+	if !amount.IsPositive() || amount.Cmp(s.LoanTotal()) > 0 {
+		return LiquidationOrder{}, errs.New(errs.CodeValidationFailed, "margin: cannot sweep that much of the free balance into the loans")
+	}
+	loans, allocs, _ := allocateRepay(s.Loans, amount)
+	s.Loans = loans
+	return LiquidationOrder{
+		Action: ActionSweepWallet, AssetID: s.NumeraireAssetID, Quantity: amount,
+		Proceeds: amount, Fee: money.Quantity{}, Repay: amount, Excess: money.Quantity{}, Allocations: nonNilAllocs(allocs),
+	}, nil
+}
+
 func nonNilAllocs(a []LoanAllocation) []LoanAllocation {
 	if a == nil {
 		return []LoanAllocation{}
@@ -154,13 +180,16 @@ type candidate struct {
 //
 //  1. COMPLETE when the account owes nothing or its equity is at or above
 //     the target (initial margin, or maintenance plus the warning buffer).
-//  2. MANUAL_REVIEW when the case has used its step budget: a case never
-//     loops.
-//  3. AWAIT_PRICE when any risky holding has a stale or missing mark. No
+//  2. With no risky holding left -- terminal accounting, which the trading
+//     budget never preempts: APPLY_COLLATERAL while numeraire collateral and
+//     loans remain; MANUAL_REVIEW while derivative exposure remains (the
+//     derivatives lane closes it); SWEEP_WALLET while loans remain and the
+//     customer has free numeraire cash outside the account; BANKRUPT when
+//     only liabilities remain.
+//  3. MANUAL_REVIEW when the case has used its budget of trading steps: a
+//     case never loops.
+//  4. AWAIT_PRICE when any risky holding has a stale or missing mark. No
 //     liquidation runs on a price nobody can vouch for.
-//  4. With no risky holding left: APPLY_COLLATERAL while numeraire collateral
-//     and loans remain; MANUAL_REVIEW while derivative exposure remains (the
-//     derivatives lane closes it); BANKRUPT when only liabilities remain.
 //  5. AWAIT_VENUE when the venue cannot execute.
 //  6. SELL: the smallest set of reductions that restores the target. Risky
 //     holdings are taken in priority order -- largest haircut first, then
@@ -171,9 +200,12 @@ type candidate struct {
 //  7. SELL_ALL when even selling everything does not restore the target.
 //
 // Every sale is reduce-only and executes at mark × (1 − slippage) with the
-// slippage capped by the policy; the fee goes to the insurance fund and the
-// rest repays the loans.
+// slippage capped by the policy; the fee is platform fee revenue and the rest
+// repays the loans.
 func PlanLiquidation(p Policy, in PlanInput) (Plan, error) {
+	if in.StepsTaken < 0 || in.FreeNumeraire.IsNegative() {
+		return Plan{}, errs.New(errs.CodeValidationFailed, "margin: steps taken and the free balance cannot be negative")
+	}
 	policyHash := p.Hash()
 	before, err := evaluateCore(p, policyHash, in.State)
 	if err != nil {
@@ -183,6 +215,7 @@ func PlanLiquidation(p Policy, in PlanInput) (Plan, error) {
 	pl := Plan{
 		Target: p.PartialTarget, StepsTaken: in.StepsTaken, Before: before,
 		TargetUnits: before.Target(p), Orders: []LiquidationOrder{}, DeficitUnits: money.Quantity{},
+		FreeNumeraire: in.FreeNumeraire,
 	}
 	finish := func(d PlanDecision, reason string) (Plan, error) {
 		pl.Decision, pl.Reason = d, reason
@@ -191,12 +224,6 @@ func PlanLiquidation(p Policy, in PlanInput) (Plan, error) {
 	}
 	if before.Restored(p) {
 		return finish(DecisionComplete, "equity is at or above the target, or nothing is owed")
-	}
-	if in.StepsTaken >= p.MaxLiquidationSteps {
-		return finish(DecisionManualReview, "the case has used its step budget")
-	}
-	if !before.PricesFresh {
-		return finish(DecisionAwaitPrice, "a risky holding has a stale or missing mark")
 	}
 
 	var cands []candidate
@@ -208,6 +235,9 @@ func PlanLiquidation(p Policy, in PlanInput) (Plan, error) {
 		cands = append(cands, candidate{assetID: v.AssetID, haircut: v.Haircut.TotalBPS, rank: h.Profile.Volatility.Rank()})
 	}
 	if len(cands) == 0 {
+		// Terminal accounting. Nothing is left to trade, so the trading
+		// budget does not apply: a case that has sold everything always
+		// reaches its applying, sweeping or bankruptcy.
 		st := in.State.Clone()
 		loans := st.LoanTotal()
 		numeraire := money.Quantity{}
@@ -228,12 +258,29 @@ func PlanLiquidation(p Policy, in PlanInput) (Plan, error) {
 			return finish(DecisionApplyCollateral, "nothing risky is left; numeraire collateral repays the loans")
 		case len(in.State.Derivatives) > 0:
 			return finish(DecisionManualReview, "the remaining exposure is derivative; the derivatives lane closes it")
+		case loans.IsPositive() && in.FreeNumeraire.IsPositive():
+			o, err := applySweep(&st, minQ(in.FreeNumeraire, loans))
+			if err != nil {
+				return Plan{}, err
+			}
+			after, err := Evaluate(p, st)
+			if err != nil {
+				return Plan{}, err
+			}
+			pl.Orders, pl.After = []LiquidationOrder{o}, &after
+			return finish(DecisionSweepWallet, "nothing is left in the account; the customer's free balance repays the loans before any bankruptcy")
 		case before.Equity.IsNegative():
 			pl.DeficitUnits = before.Equity.Neg()
-			return finish(DecisionBankrupt, "nothing is left to sell or apply and liabilities remain")
+			return finish(DecisionBankrupt, "nothing is left to sell, apply or sweep and liabilities remain")
 		default:
 			return finish(DecisionManualReview, "the remaining shortfall is not something a liquidation can reduce")
 		}
+	}
+	if in.StepsTaken >= p.MaxLiquidationSteps {
+		return finish(DecisionManualReview, "the case has used its budget of trading steps")
+	}
+	if !before.PricesFresh {
+		return finish(DecisionAwaitPrice, "a risky holding has a stale or missing mark")
 	}
 	if !in.VenueAvailable {
 		return finish(DecisionAwaitVenue, "the venue cannot execute a liquidation")
@@ -355,13 +402,15 @@ func FillQuantity(qty money.Quantity, fillBPS money.BPS) money.Quantity {
 	return f
 }
 
-// ExecuteFirst executes the first order of a SELL, SELL_ALL or
-// APPLY_COLLATERAL plan on the state at a fill fraction (10_000 = in full)
-// and returns the new state and the order as executed. A sale executes at
-// the plan's execution price; a partial fill sells less and repays less.
+// ExecuteFirst executes the first order of a SELL, SELL_ALL,
+// APPLY_COLLATERAL or SWEEP_WALLET plan on the state at a fill fraction
+// (10_000 = in full) and returns the new state and the order as executed. A
+// sale executes at the plan's execution price; a partial fill sells less and
+// repays less. Applying collateral and sweeping the wallet are bookkeeping,
+// not fills: they always execute in full.
 func ExecuteFirst(p Policy, s AccountState, pl Plan, fillBPS money.BPS) (AccountState, LiquidationOrder, error) {
 	switch pl.Decision {
-	case DecisionSell, DecisionSellAll, DecisionApplyCollateral:
+	case DecisionSell, DecisionSellAll, DecisionApplyCollateral, DecisionSweepWallet:
 	default:
 		return AccountState{}, LiquidationOrder{}, errs.Newf(errs.CodeInvalidStateTransition, "margin: a %s plan has nothing to execute", pl.Decision)
 	}
@@ -373,8 +422,12 @@ func ExecuteFirst(p Policy, s AccountState, pl Plan, fillBPS money.BPS) (Account
 	}
 	o := pl.Orders[0]
 	out := s.Clone()
-	if o.Action == ActionApplyCollateral {
+	switch o.Action {
+	case ActionApplyCollateral:
 		done, err := applyCollateral(&out, o.Quantity)
+		return out, done, err
+	case ActionSweepWallet:
+		done, err := applySweep(&out, o.Quantity)
 		return out, done, err
 	}
 	done, err := applySale(p, &out, o.AssetID, FillQuantity(o.Quantity, fillBPS), *o.ExecutionPrice, o.SlippageBPS)

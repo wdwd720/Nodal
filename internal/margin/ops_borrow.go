@@ -73,7 +73,7 @@ func (s *Service) Borrow(ctx context.Context, tx pgx.Tx, r LoanRequest) (LoanRes
 		return LoanResult{}, err
 	}
 	if a.MarginMode == ModeCash {
-		return LoanResult{}, errs.New(errs.CodeUnsupported, "margin: a CASH margin account does not borrow")
+		return LoanResult{}, errs.New(errs.CodeUnsupported, "margin: a fully paid margin account does not borrow")
 	}
 	sp := intentSpec{
 		kind: econ.KindBorrow, capability: gates.Leverage, account: a, requester: r.Requester, key: r.IdempotencyKey,
@@ -125,6 +125,9 @@ func (s *Service) borrow(ctx context.Context, tx pgx.Tx, a Account, in *econ.Int
 	if err := pool.RequireActive(); err != nil {
 		return LoanResult{}, err
 	}
+	if err := s.lockFacilities(ctx, tx, a, poolBooks); err != nil {
+		return LoanResult{}, err
+	}
 	now := s.now()
 	state, _, err := s.loadState(ctx, tx, a, now)
 	if err != nil {
@@ -163,13 +166,13 @@ func (s *Service) borrow(ctx context.Context, tx pgx.Tx, a Account, in *econ.Int
 		return LoanResult{}, err
 	}
 	if poolCash.Cmp(r.Amount) < 0 {
-		return LoanResult{}, errs.New(errs.CodeInsufficientBuyingPower, "margin: the lending pool does not hold that much cash").
-			WithField("pool_cash", poolCash.String()).WithField("requested", r.Amount.String())
+		return LoanResult{}, errs.New(errs.CodeInsufficientBuyingPower, "margin: the lending pool does not hold that much to lend").
+			WithField("pool_balance", poolCash.String()).WithField("requested", r.Amount.String())
 	}
 	if err := s.moveIntent(ctx, tx, in, econ.StatusExecuting, "borrowing", ""); err != nil {
 		return LoanResult{}, err
 	}
-	m := s.meta("margin_borrow_lot", lotID.String(), "margin borrow")
+	m := s.meta(refBorrowLot, lotID.String(), "margin borrow")
 	p, err := BorrowPosting(m, a.AccountID, pool, a.NumeraireAssetID, r.Amount)
 	if err != nil {
 		return LoanResult{}, err
@@ -254,6 +257,9 @@ func (s *Service) repay(ctx context.Context, tx pgx.Tx, a Account, in *econ.Inte
 	if err != nil {
 		return LoanResult{}, err
 	}
+	if err := s.lockFacilities(ctx, tx, a, poolBooks); err != nil {
+		return LoanResult{}, err
+	}
 	now := s.now()
 	if _, err := s.accrue(ctx, tx, a, pool, now, true); err != nil {
 		return LoanResult{}, err
@@ -299,7 +305,7 @@ func (s *Service) repay(ctx context.Context, tx pgx.Tx, a Account, in *econ.Inte
 	if err := s.moveIntent(ctx, tx, in, econ.StatusExecuting, "repaying", ""); err != nil {
 		return LoanResult{}, err
 	}
-	m := s.meta("margin_repayment", in.ID.String(), "margin repayment")
+	m := s.meta(refRepayment, in.ID.String(), "margin repayment")
 	p, err := RepayPosting(m, a.AccountID, pool, a.NumeraireAssetID, r.Amount)
 	if err != nil {
 		return LoanResult{}, err
@@ -348,11 +354,14 @@ func (s *Service) applyAllocations(ctx context.Context, tx pgx.Tx, lots []Lot, a
 	return nil
 }
 
-// Accrual is one interest period charged to a lot.
+// Accrual is one interest period charged to a lot. A waived period (the case
+// was in MANUAL_REVIEW, or the account BANKRUPT) is recorded with a zero
+// amount and no journal.
 type Accrual struct {
 	LotID                LotID
 	Period               Period
 	Amount               money.Quantity
+	Waived               bool
 	JournalTransactionID *ledger.TransactionID
 }
 
@@ -361,8 +370,10 @@ type Accrual struct {
 // into the loan). Each lot and period is charged exactly once: the period is
 // part of the effect key, the database refuses a second accrual of the same
 // period and refuses one that does not start where the last ended, so a
-// replay charges nothing. A bankrupt account's loss is crystallized and
-// accrues no more.
+// replay charges nothing. No interest runs while a person holds the account's
+// case in MANUAL_REVIEW, and a bankrupt account's loss is crystallized and
+// accrues no more: those periods are waived, never charged later (the
+// database refuses a charge in either state, MG007).
 func (s *Service) AccrueInterest(ctx context.Context, tx pgx.Tx, acct accounts.AccountID) ([]Accrual, error) {
 	a, err := s.lockAccount(ctx, tx, acct)
 	if err != nil {
@@ -371,11 +382,23 @@ func (s *Service) AccrueInterest(ctx context.Context, tx pgx.Tx, acct accounts.A
 	if a.Status == StatusBankrupt || a.Status == StatusClosed {
 		return []Accrual{}, nil
 	}
+	review, err := s.st.inReview(ctx, tx, a.ID)
+	if err != nil {
+		return nil, err
+	}
+	if review {
+		// The period is recorded as waived when the review ends (or when a
+		// repayment needs the lots accrued to the instant).
+		return []Accrual{}, nil
+	}
 	if err := s.authorize(ctx, tx, a.Mode, true, gates.Margin); err != nil {
 		return nil, err
 	}
 	pool, _, err := s.accountFacilities(ctx, tx, a)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.lockFacilities(ctx, tx, a, poolBooks); err != nil {
 		return nil, err
 	}
 	out, err := s.accrue(ctx, tx, a, pool, s.now(), false)
@@ -389,8 +412,19 @@ func (s *Service) AccrueInterest(ctx context.Context, tx pgx.Tx, acct accounts.A
 }
 
 // accrue charges the open lots of an account up to until: complete UTC days
-// only, or with stub also the partial day up to the instant.
+// only, or with stub also the partial day up to the instant. While the
+// account's case is in MANUAL_REVIEW, or the account is BANKRUPT, the periods
+// are waived: recorded with a zero amount, so the lots' horizon advances and
+// the period can never be charged afterwards.
 func (s *Service) accrue(ctx context.Context, tx pgx.Tx, a Account, pool econ.Facility, until time.Time, stub bool) ([]Accrual, error) {
+	waive := a.Status == StatusBankrupt
+	if !waive {
+		review, err := s.st.inReview(ctx, tx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		waive = review
+	}
 	lots, err := s.st.openLots(ctx, tx, a.ID, true)
 	if err != nil {
 		return nil, err
@@ -398,16 +432,18 @@ func (s *Service) accrue(ctx context.Context, tx pgx.Tx, a Account, pool econ.Fa
 	out := []Accrual{}
 	for _, l := range lots {
 		for _, period := range DayPeriods(l.AccruedThrough, until, stub, maxPeriodsPerLot) {
-			amount, err := InterestFor(l.OutstandingPrincipal, l.RateBPS, period.Start, period.End)
-			if err != nil {
-				return nil, err
+			amount := money.Quantity{}
+			if !waive {
+				if amount, err = InterestFor(l.OutstandingPrincipal, l.RateBPS, period.Start, period.End); err != nil {
+					return nil, err
+				}
 			}
-			acc := Accrual{LotID: l.ID, Period: period, Amount: amount}
+			acc := Accrual{LotID: l.ID, Period: period, Amount: amount, Waived: waive}
 			var journal *ledger.TransactionID
 			var effect *econ.EffectID
 			if amount.IsPositive() {
 				key := "margin:interest:" + l.ID.String() + ":" + strconv.FormatInt(period.Start.UnixMicro(), 10)
-				m := s.meta("margin_interest_accrual", l.ID.String(), "margin interest")
+				m := s.meta(refInterestAccrual, l.ID.String(), "margin interest")
 				m.At = period.End
 				p, err := InterestPosting(m, a.AccountID, pool, l.AssetID, amount)
 				if err != nil {

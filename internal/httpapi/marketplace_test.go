@@ -42,12 +42,12 @@ var (
 	testMktInstall     = mktID[marketplace.InstallID]("0193b2e0-0000-7000-8000-00000000c001")
 	testMktFollow      = mktID[marketplace.FollowRunID]("0193b2e0-0000-7000-8000-00000000d001")
 	testMktEvaluation  = mktID[marketplace.EvaluationID]("0193b2e0-0000-7000-8000-00000000e001")
-	testMktRun         = mustRunID("0193b2e0-0000-7000-8000-00000000f001")
+	testMktRun         = mktRunID("0193b2e0-0000-7000-8000-00000000f001")
 	testMktInstrument  = "0193b2e0-0000-7000-8000-0000000000a1"
 	testMktCreatorUser = "0193b2e0-0000-7000-8000-0000000000c1"
 )
 
-func mustRunID(s string) sandboxrt.RunID {
+func mktRunID(s string) sandboxrt.RunID {
 	r, err := sandboxrt.ParseRunID(s)
 	if err != nil {
 		panic(err)
@@ -447,7 +447,7 @@ func newMarketplaceHarness(t *testing.T) (*harness, *fakeMarketplace) {
 	return h, fm
 }
 
-func strangerPrincipal() security.Principal {
+func marketplaceStranger() security.Principal {
 	p := customerPrincipal()
 	p.SubjectID = accounts.NewUserID().String()
 	p.AccountIDs = []string{testOtherAcct.String()}
@@ -500,7 +500,7 @@ func TestMarketplace_CatalogIsReadableByAnyCustomerAndNamesTheCreatorsAccountToI
 	require.NoError(t, err)
 	assert.Equal(t, "cursor-2", next)
 
-	stranger := strangerPrincipal()
+	stranger := marketplaceStranger()
 	h.as(&stranger)
 	res = h.do(http.MethodGet, "/v1/advanced/strategies/catalog", nil)
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
@@ -553,7 +553,7 @@ func TestMarketplace_ListingDetailShowsAStrangerOnlyItsPublicVersions(t *testing
 	require.Len(t, owner.Versions[1].Reviews, 1)
 	require.NotNil(t, owner.Versions[1].Reviews[0].ReviewerActorId)
 
-	stranger := strangerPrincipal()
+	stranger := marketplaceStranger()
 	h.as(&stranger)
 	res = h.do(http.MethodGet, path, nil)
 	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
@@ -617,7 +617,7 @@ func TestMarketplace_WritesOnAnotherAccountsRecordsAreNotFound(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h, fm := newMarketplaceHarness(t)
-			stranger := strangerPrincipal()
+			stranger := marketplaceStranger()
 			h.as(&stranger)
 			res := h.do(http.MethodPost, tc.path, tc.body, "Idempotency-Key", "stranger-key-0001")
 			require.Equal(t, http.StatusNotFound, res.Code, "body=%s", res.Body.String())
@@ -632,7 +632,7 @@ func TestMarketplace_WritesOnAnotherAccountsRecordsAreNotFound(t *testing.T) {
 func TestMarketplace_APublicVersionCanBeForkedAndInstalledByAnotherCustomer(t *testing.T) {
 	t.Parallel()
 	h, fm := newMarketplaceHarness(t)
-	stranger := strangerPrincipal()
+	stranger := marketplaceStranger()
 	h.as(&stranger)
 	res := h.do(http.MethodPost, "/v1/advanced/strategies/versions/"+testMktApproved.String()+"/forks",
 		map[string]any{"account_id": testOtherAcct.String(), "title": "My fork", "version": map[string]any{

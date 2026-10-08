@@ -68,14 +68,24 @@ type Ports struct {
 	Advanced AdvancedCorePort
 
 	// >>> advanced:margin port
+	// Margin serves margin, leverage, borrowing and liquidation of simulated
+	// positions (internal/margin); every figure is value domain SIMULATED.
+	Margin MarginPort
 
 	// >>> advanced:derivatives port
+	// Derivatives serves futures, perpetuals and options in PAPER and SANDBOX
+	// mode (internal/derivatives). A nil port answers UNSUPPORTED.
+	Derivatives DerivativesPort
 
 	// >>> advanced:equities port
 
 	// >>> advanced:orders port
 
 	// >>> advanced:transfers port
+	// Transfers serves customer-to-customer transfers of simulated value, and
+	// SandboxFaucet the sandbox faucet. A nil port answers UNSUPPORTED.
+	Transfers     AdvancedTransfersPort
+	SandboxFaucet SandboxFaucetPort
 
 	// >>> advanced:treasury port
 
@@ -84,6 +94,9 @@ type Ports struct {
 	// >>> advanced:bridge port
 
 	// >>> advanced:predmarket port
+	// PredictionMarkets serves prediction markets (internal/predmarket);
+	// every figure it returns is value domain SIMULATED.
+	PredictionMarkets PredictionMarketsPort
 
 	// >>> advanced:marketplace port
 	// Marketplace serves the strategy marketplace and the sandboxed runs

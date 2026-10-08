@@ -15,6 +15,7 @@ import (
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/money"
 	"github.com/nodal/controlplane/internal/risk"
+	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/settlement"
 )
 
@@ -77,24 +78,6 @@ func cents(st AccountState, h Holding, qty money.Quantity, mode money.RoundingMo
 	return unitsToUSD(v, st.NumeraireDecimals, mode)
 }
 
-// replayedEffect reports whether an effect key was already applied with the
-// same request. A different request under the key is refused; an effect
-// that is not APPLIED is never retried.
-func (s *Service) replayedEffect(ctx context.Context, tx pgx.Tx, key, kind string, acct accounts.AccountID, request any) (econ.Effect, bool, error) {
-	if _, found, err := s.d.Effects.GetByKey(ctx, tx, key); err != nil || !found {
-		return econ.Effect{}, false, err
-	}
-	e, _, err := s.d.Effects.Begin(ctx, tx, econ.BeginRequest{Key: key, Subsystem: econ.SubsystemMargin, Kind: kind,
-		AccountID: acct.String(), Request: request, PostsLedger: true, Actor: s.actor})
-	if err != nil {
-		return econ.Effect{}, false, err
-	}
-	if e.Status != econ.EffectApplied {
-		return econ.Effect{}, false, errs.Newf(errs.CodeSubmissionStateUnknown, "margin: effect %s is %s and is not retried", e.ID, e.Status)
-	}
-	return e, true, nil
-}
-
 func (s *Service) checkCollateralAsset(ctx context.Context, tx pgx.Tx, a Account, aid assets.AssetID) error {
 	info, err := s.assetInfo(ctx, tx, aid)
 	if err != nil {
@@ -118,31 +101,69 @@ func (s *Service) checkCollateralAsset(ctx context.Context, tx pgx.Tx, a Account
 }
 
 // PostCollateral moves collateral from the customer's wallet into the margin
-// account (MARGIN_COLLATERAL_MOVE: Dr MARGIN_COLLATERAL / Cr WALLET). The
-// wallet quantity is reserved through capital first, so it cannot be spent
-// twice; the move is exactly once per idempotency key. Posting collateral
-// reduces risk, so it is allowed while a margin call or a liquidation is
-// open and is never stopped by a kill switch.
+// account (MARGIN_COLLATERAL_MOVE: Dr MARGIN_COLLATERAL / Cr WALLET). It is
+// the economic intent TRANSFER_VALUE from the owner's wallet to the owner's
+// own margin account -- the mirror of ReleaseCollateral -- so it is recorded,
+// routed through the settlement compiler, authorized and decided by Risk
+// Kernel V2 (balance, velocity, destination) like every other margin
+// operation. The wallet quantity is reserved through capital against the
+// intent before it moves, so it cannot be spent twice, and the move is
+// exactly once per intent.
+//
+// An agent is refused outright: moving value between books is something an
+// agent may only propose, never ask a service to apply (and the compiler
+// forbids TRANSFER_VALUE to agents at every authority level besides).
+//
+// Posting collateral reduces risk, so it is allowed while a margin call or a
+// liquidation is open and is never stopped by a kill switch.
 func (s *Service) PostCollateral(ctx context.Context, tx pgx.Tx, r CollateralRequest) (CollateralResult, error) {
 	if err := r.validate(); err != nil {
 		return CollateralResult{}, err
+	}
+	if r.Requester.Type == security.ActorAgent {
+		return CollateralResult{}, errs.New(errs.CodeForbidden, "margin: an agent proposes intents; it never moves value into a margin account")
 	}
 	a, err := s.lockAccount(ctx, tx, r.AccountID)
 	if err != nil {
 		return CollateralResult{}, err
 	}
-	key := "margin:collateral-post:" + a.ID.String() + ":" + keyHash(r.IdempotencyKey)
-	req := map[string]string{"margin_account_id": a.ID.String(), "asset_id": r.AssetID.String(), "quantity": r.Quantity.String(),
-		"direction": string(MovePost), "idempotency_key": r.IdempotencyKey}
-	if e, done, err := s.replayedEffect(ctx, tx, key, "COLLATERAL_POST", a.AccountID, req); err != nil {
+	sp := intentSpec{
+		kind: econ.KindTransferValue, capability: gates.Margin, account: a, requester: r.Requester, key: r.IdempotencyKey,
+		asset: r.AssetID, quantity: r.Quantity, corr: r.CorrelationID,
+		terms:   map[string]string{"margin_account_id": a.ID.String(), "direction": string(MovePost), "source": "OWN_WALLET"},
+		subject: settlement.Subject{Type: settlement.SubjectAccount, ID: a.AccountID.String(), AssetID: r.AssetID.String()},
+	}
+	in, existing, err := s.submitIntent(ctx, tx, sp)
+	if err != nil {
 		return CollateralResult{}, err
-	} else if done {
+	}
+	key := "margin:collateral-post:" + in.ID.String()
+	if existing {
+		if err := replayIntent(in); err != nil {
+			return CollateralResult{}, err
+		}
+		e, found, err := s.d.Effects.GetByKey(ctx, tx, key)
+		if err != nil || !found {
+			return CollateralResult{}, errs.New(errs.CodeInternal, "margin: a completed collateral post has no effect")
+		}
 		mv, err := s.st.moveByEffect(ctx, tx, e.ID)
 		if err != nil {
 			return CollateralResult{}, err
 		}
-		return CollateralResult{MarginAccountID: a.ID, MoveID: mv, JournalTransactionID: *e.JournalTransactionID, EffectID: e.ID,
-			ReservationID: e.ReservationID, Replayed: true, Status: a.Status}, nil
+		iid := in.ID
+		return CollateralResult{MarginAccountID: a.ID, MoveID: mv, IntentID: &iid, JournalTransactionID: *e.JournalTransactionID,
+			EffectID: e.ID, ReservationID: e.ReservationID, Replayed: true, Status: a.Status}, nil
+	}
+	res, err := s.post(ctx, tx, a, &in, sp, key, r)
+	if err != nil {
+		return CollateralResult{}, s.abandon(ctx, tx, &in, err)
+	}
+	return res, nil
+}
+
+func (s *Service) post(ctx context.Context, tx pgx.Tx, a Account, in *econ.Intent, sp intentSpec, key string, r CollateralRequest) (CollateralResult, error) {
+	if err := s.route(ctx, tx, in, sp); err != nil {
+		return CollateralResult{}, err
 	}
 	if !a.Status.AllowsRiskReduction() {
 		return CollateralResult{}, errs.Newf(errs.CodeInvalidStateTransition, "margin: a %s account takes no collateral", a.Status)
@@ -154,46 +175,84 @@ func (s *Service) PostCollateral(ctx context.Context, tx pgx.Tx, r CollateralReq
 		return CollateralResult{}, err
 	}
 	now := s.now()
+	state, _, err := s.loadState(ctx, tx, a, now)
+	if err != nil {
+		return CollateralResult{}, err
+	}
+	template, _, err := s.holdingFor(ctx, tx, a, r.AssetID, money.Quantity{}, now)
+	if err != nil {
+		return CollateralResult{}, err
+	}
+	avail, err := s.d.Capital.Availability(ctx, tx, a.AccountID.String(), r.AssetID, s.d.Clock.Now())
+	if err != nil {
+		return CollateralResult{}, err
+	}
+	// Both sides round the same way, so a post of exactly what is available
+	// is never refused by a rounding; the quantity itself is enforced
+	// exactly by the capital reservation below.
+	value, err := cents(state, template, r.Quantity, money.RoundFloor)
+	if err != nil {
+		return CollateralResult{}, err
+	}
+	available, err := cents(state, template, avail.Available, money.RoundFloor)
+	if err != nil {
+		return CollateralResult{}, err
+	}
+	count, window, err := s.st.moveVelocity(ctx, tx, a.ID, MovePost, now.Add(-velocityWindow))
+	if err != nil {
+		return CollateralResult{}, err
+	}
+	ai := risk.AdvancedIntent{Kind: string(econ.KindTransferValue), RiskIncreasing: false, NotionalUSD: value}
+	if _, err := s.decide(ctx, tx, in, a, ai, func(input *risk.AdvancedInput) {
+		input.Balance = &risk.BalanceSnapshot{Available: available, Required: value}
+		input.Velocity = &risk.VelocitySnapshot{CountInWindow: count, NotionalInWindow: window}
+		input.Destination = &risk.DestinationSnapshot{Allowlisted: true, AddedAt: a.OpenedAt}
+	}); err != nil {
+		return CollateralResult{}, err
+	}
 	res, err := s.d.Capital.Reserve(ctx, tx, capital.ReserveRequest{
-		AccountID: a.AccountID.String(), AssetID: r.AssetID, Quantity: r.Quantity, ActorType: r.Requester.Type,
-		ActorID: r.Requester.ID, IdempotencyKey: key + ":reserve", TTL: reservationTTL, Reason: "margin collateral post",
+		AccountID: a.AccountID.String(), AssetID: r.AssetID, Quantity: r.Quantity, EconomicIntentID: in.ID.String(),
+		ActorType: r.Requester.Type, ActorID: r.Requester.ID, IdempotencyKey: key + ":reserve", TTL: reservationTTL,
+		Reason: "margin collateral post",
 	})
 	if err != nil {
 		return CollateralResult{}, err
 	}
-	m := s.meta("margin_collateral_move", a.ID.String(), "margin collateral posted")
+	if err := s.moveIntent(ctx, tx, in, econ.StatusReserved, "collateral reserved", ""); err != nil {
+		return CollateralResult{}, err
+	}
+	if err := s.moveIntent(ctx, tx, in, econ.StatusExecuting, "posting collateral", ""); err != nil {
+		return CollateralResult{}, err
+	}
+	m := s.meta(refCollateralMove, a.ID.String(), "margin collateral posted")
 	p, err := CollateralMovePosting(m, a.AccountID, r.AssetID, r.Quantity, MovePost)
 	if err != nil {
 		return CollateralResult{}, err
 	}
-	out, err := s.postOnce(ctx, tx, postSpec{key: key, kind: "COLLATERAL_POST", account: a.AccountID, request: req, posting: p,
-		evidence: req, reserve: res.ID.String(), corr: r.CorrelationID})
+	req := map[string]string{"margin_account_id": a.ID.String(), "intent_id": in.ID.String(), "asset_id": r.AssetID.String(),
+		"quantity": r.Quantity.String(), "direction": string(MovePost)}
+	iid := in.ID
+	out, err := s.postOnce(ctx, tx, postSpec{key: key, kind: "COLLATERAL_POST", intent: &iid, account: a.AccountID, request: req,
+		posting: p, evidence: req, reserve: res.ID.String(), corr: r.CorrelationID})
 	if err != nil {
 		return CollateralResult{}, err
 	}
 	if _, err := s.d.Capital.ConsumeFinal(ctx, tx, res.ID, r.Quantity, 0, ""); err != nil {
 		return CollateralResult{}, err
 	}
-	state, _, err := s.loadState(ctx, tx, a, now)
+	mv, err := s.st.insertMove(ctx, tx, a.ID, r.AssetID, MovePost, r.Quantity, value.Minor(), out.Journal, out.Effect.ID, &iid, now)
 	if err != nil {
 		return CollateralResult{}, err
 	}
-	value := money.USD{}
-	if i := state.holding(r.AssetID.String()); i >= 0 {
-		if value, err = cents(state, state.Holdings[i], r.Quantity, money.RoundFloor); err != nil {
-			return CollateralResult{}, err
-		}
-	}
-	mv, err := s.st.insertMove(ctx, tx, a.ID, r.AssetID, MovePost, r.Quantity, value.Minor(), out.Journal, out.Effect.ID, nil, now)
-	if err != nil {
+	if err := s.moveIntent(ctx, tx, in, econ.StatusCompleted, "collateral posted", ""); err != nil {
 		return CollateralResult{}, err
 	}
 	ev, _, err := s.refreshHealth(ctx, tx, &a, "collateral posted")
 	if err != nil {
 		return CollateralResult{}, err
 	}
-	return CollateralResult{MarginAccountID: a.ID, MoveID: mv, JournalTransactionID: out.Journal, EffectID: out.Effect.ID,
-		ReservationID: res.ID.String(), Status: a.Status, Evaluation: ev}, nil
+	return CollateralResult{MarginAccountID: a.ID, MoveID: mv, IntentID: &iid, JournalTransactionID: out.Journal,
+		EffectID: out.Effect.ID, ReservationID: res.ID.String(), Status: a.Status, Evaluation: ev}, nil
 }
 
 // ReleaseCollateral moves collateral out of the margin account to the
@@ -287,7 +346,7 @@ func (s *Service) release(ctx context.Context, tx pgx.Tx, a Account, in *econ.In
 	if err != nil {
 		return CollateralResult{}, err
 	}
-	count, window, err := s.st.releaseVelocity(ctx, tx, a.ID, now.Add(-velocityWindow))
+	count, window, err := s.st.moveVelocity(ctx, tx, a.ID, MoveRelease, now.Add(-velocityWindow))
 	if err != nil {
 		return CollateralResult{}, err
 	}
@@ -303,7 +362,7 @@ func (s *Service) release(ctx context.Context, tx pgx.Tx, a Account, in *econ.In
 	if err := s.moveIntent(ctx, tx, in, econ.StatusExecuting, "releasing collateral", ""); err != nil {
 		return CollateralResult{}, err
 	}
-	m := s.meta("margin_collateral_move", a.ID.String(), "margin collateral released")
+	m := s.meta(refCollateralMove, a.ID.String(), "margin collateral released")
 	p, err := CollateralMovePosting(m, a.AccountID, r.AssetID, r.Quantity, MoveRelease)
 	if err != nil {
 		return CollateralResult{}, err

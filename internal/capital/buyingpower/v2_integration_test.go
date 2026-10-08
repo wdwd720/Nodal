@@ -4,6 +4,7 @@ package buyingpower_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,4 +145,80 @@ func TestIntegration_V2ComposesEverySimulatedComponentAndIgnoresRealCapital(t *t
 	bp, err = loader.Compute(ctx, d.Pool(), "CUSTOMER", acct.String())
 	require.NoError(t, err)
 	assert.Equal(t, money.USDFromMinor(2_500_00), bp.EligibleCollateral, "stale BTC and unpriced bridge leg contribute nothing")
+}
+
+// TestIntegration_V2CountsWhatIsOwedAgainstTheOwner: liabilities round up
+// and holdings round down, so a sub-cent never shows as buying power, and a
+// deficit left by a bankrupt margin account is a liability that blocks new
+// risk and withdrawals until it is repaid.
+func TestIntegration_V2CountsWhatIsOwedAgainstTheOwner(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+	clk := clock.NewFake(time.Now().UTC())
+	svc := ledger.NewService(clk, "itest")
+	acct := seedAccount(t, d)
+	usd := simAssetV2(t, d, "SBXOWED", 6, assets.RiskSettlement)
+	cust := func(code ledger.Code) ledger.AccountRef { return ledger.CustomerAccount(acct, code, usd.ID) }
+
+	reg := econ.NewRegistry()
+	var pool, fund econ.Facility
+	require.NoError(t, d.InTx(ctx, db.TxOptions{}, func(ctx context.Context, tx pgx.Tx) error {
+		by := econ.Actor{Type: security.ActorSystem, ID: "itest"}
+		var err error
+		if pool, err = reg.EnsureFacility(ctx, tx, ledger.FacilityLendingPool, "owed pool "+uuid.NewString(), by); err != nil {
+			return err
+		}
+		fund, err = reg.EnsureFacility(ctx, tx, ledger.FacilityInsuranceFund, "owed fund "+uuid.NewString(), by)
+		return err
+	}))
+	postV2(t, d, svc, ledger.KindSandboxFunding, []ledger.Entry{
+		{Account: cust(ledger.CodeWallet), Side: ledger.Debit, Quantity: q6(1_000_000_000)},
+		{Account: cust(ledger.CodeCapital), Side: ledger.Credit, Quantity: q6(1_000_000_000)},
+	})
+	for _, f := range []struct {
+		facility econ.Facility
+		cash     ledger.Code
+		capital  ledger.Code
+	}{{pool, ledger.CodePoolCash, ledger.CodePoolCapital}, {fund, ledger.CodeInsuranceFundCash, ledger.CodeInsuranceFundCapital}} {
+		postV2(t, d, svc, ledger.KindFacilityFunding, []ledger.Entry{
+			{Account: f.facility.Account(f.cash, usd.ID), Side: ledger.Debit, Quantity: q6(10_000_000_000)},
+			{Account: f.facility.Account(f.capital, usd.ID), Side: ledger.Credit, Quantity: q6(10_000_000_000)},
+		})
+	}
+	// Borrow 500.000001: one base unit past a cent.
+	postV2(t, d, svc, ledger.KindMarginBorrow, []ledger.Entry{
+		{Account: cust(ledger.CodeWallet), Side: ledger.Debit, Quantity: q6(500_000_001)},
+		{Account: cust(ledger.CodeMarginLoan), Side: ledger.Credit, Quantity: q6(500_000_001)},
+		{Account: pool.Account(ledger.CodeLoanReceivable, usd.ID), Side: ledger.Debit, Quantity: q6(500_000_001)},
+		{Account: pool.Account(ledger.CodePoolCash, usd.ID), Side: ledger.Credit, Quantity: q6(500_000_001)},
+	})
+	loader, err := buyingpower.NewV2Loader(buyingpower.V2LoaderConfig{Clock: clk, Prices: valuation.NewPriceStore(clk),
+		QuoteAssetID: usd.ID, MaxPriceAge: time.Hour})
+	require.NoError(t, err)
+	bp, err := loader.Compute(ctx, d, "CUSTOMER", acct.String())
+	require.NoError(t, err)
+	assert.Equal(t, "500.01", bp.BorrowLiabilities.String(), "what is owed rounds up")
+	assert.Equal(t, "999.99", bp.GrossEquity.String(), "1500.000001 held rounds down to 1500.00, less 500.01 owed")
+
+	// The insurance fund covers 100 of the loan; the customer now owes it.
+	postV2(t, d, svc, ledger.KindDeficitCoverage, []ledger.Entry{
+		{Account: cust(ledger.CodeMarginLoan), Side: ledger.Debit, Quantity: q6(100_000_000)},
+		{Account: cust(ledger.CodeDeficit), Side: ledger.Credit, Quantity: q6(100_000_000)},
+		{Account: pool.Account(ledger.CodePoolCash, usd.ID), Side: ledger.Debit, Quantity: q6(100_000_000)},
+		{Account: pool.Account(ledger.CodeLoanReceivable, usd.ID), Side: ledger.Credit, Quantity: q6(100_000_000)},
+		{Account: fund.Account(ledger.CodeDeficitReceivable, usd.ID), Side: ledger.Debit, Quantity: q6(100_000_000)},
+		{Account: fund.Account(ledger.CodeInsuranceFundCash, usd.ID), Side: ledger.Credit, Quantity: q6(100_000_000)},
+	})
+	bp, err = loader.Compute(ctx, d, "CUSTOMER", acct.String())
+	require.NoError(t, err)
+	assert.Equal(t, "500.01", bp.BorrowLiabilities.String(), "loan 400.000001 rounds to 400.01, plus the 100 deficit")
+	assert.True(t, bp.Withdrawable.IsZero(), "nothing is withdrawable while a deficit is outstanding")
+	assert.True(t, bp.RiskIncreasingBuyingPower.IsZero(), "no new risk while a deficit is outstanding")
+	found := false
+	for _, r := range bp.Reasons {
+		if r.Code == buyingpower.V2ReasonBlocked && strings.HasPrefix(r.Detail, "DEFICIT_OUTSTANDING") {
+			found = true
+		}
+	}
+	assert.True(t, found, "the block names the deficit: %+v", bp.Reasons)
 }

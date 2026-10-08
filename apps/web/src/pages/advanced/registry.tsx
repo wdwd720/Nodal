@@ -26,14 +26,17 @@ import { InstrumentsSection } from "./core/Instruments.tsx";
 import { Overview } from "./core/Overview.tsx";
 
 // >>> advanced:margin import
+import { MarginSection } from "./margin/MarginSection.tsx";
 
 // >>> advanced:derivatives import
+import { DerivativesSection } from "./derivatives/DerivativesSection.tsx";
 
 // >>> advanced:equities import
 
 // >>> advanced:orders import
 
 // >>> advanced:transfers import
+import { TransfersSection } from "./transfers/Transfers.tsx";
 
 // >>> advanced:treasury import
 
@@ -42,6 +45,7 @@ import { Overview } from "./core/Overview.tsx";
 // >>> advanced:bridge import
 
 // >>> advanced:predmarket import
+import { PredictionMarketsSection } from "./predmarket/PredictionMarkets.tsx";
 
 // >>> advanced:marketplace import
 import { StrategiesSection } from "./marketplace/StrategiesSection.tsx";
@@ -95,14 +99,35 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   },
 
   // >>> advanced:margin section
+  {
+    path: "margin",
+    title: "Margin",
+    description:
+      "The account's margin account as the margin engine evaluates it — collateral and haircuts, equity, margin, leverage, loans, calls and liquidation cases — its commands, and the operator's liquidation queue.",
+    element: <MarginSection />,
+  },
 
   // >>> advanced:derivatives section
+  {
+    path: "derivatives",
+    title: "Derivatives",
+    description:
+      "Futures, perpetuals and options in paper and sandbox mode: contracts and marks, positions valued by the backend, the clearing-house flow register, funding, and reference option analytics.",
+    element: <DerivativesSection />,
+  },
 
   // >>> advanced:equities section
 
   // >>> advanced:orders section
 
   // >>> advanced:transfers section
+  {
+    path: "transfers",
+    title: "Transfers",
+    description:
+      "Simulated value sent between customers by handle, every transfer the account sent or received with its status and evidence, and sandbox dollars from the faucet.",
+    element: <TransfersSection />,
+  },
 
   // >>> advanced:treasury section
 
@@ -111,6 +136,13 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:bridge section
 
   // >>> advanced:predmarket section
+  {
+    path: "prediction-markets",
+    title: "Prediction markets",
+    description:
+      "Markets on the outcome of an event: complete sets against the sandbox dollar, resolved by a verified oracle report and settled from each market's own escrow.",
+    element: <PredictionMarketsSection />,
+  },
 
   // >>> advanced:marketplace section
   {

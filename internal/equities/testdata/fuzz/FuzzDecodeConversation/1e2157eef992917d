@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"kind\":\"equities.broker_conversation.v1\",\"Broker\":\"0\",\"provider_mode\":\"sandbox\"}")

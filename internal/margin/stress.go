@@ -196,9 +196,9 @@ func runStressCase(p Policy, s AccountState, c stressCase) (StressResult, error)
 	deficit := money.Quantity{}
 	if ev.LiquidationEligible {
 		cur := shocked
-		steps := 0
+		steps, trading := 0, 0
 		for {
-			pl, err := PlanLiquidation(p, PlanInput{State: cur, StepsTaken: steps, VenueAvailable: c.venue, SlippageAtCap: c.atCap})
+			pl, err := PlanLiquidation(p, PlanInput{State: cur, StepsTaken: trading, VenueAvailable: c.venue, SlippageAtCap: c.atCap})
 			if err != nil {
 				return StressResult{}, err
 			}
@@ -220,13 +220,19 @@ func runStressCase(p Policy, s AccountState, c stressCase) (StressResult, error)
 				}
 				break
 			}
-			if steps > p.MaxLiquidationSteps {
+			// The budget bounds sales; at most one application of collateral
+			// follows them (the stress state has no wallet to sweep).
+			if trading > p.MaxLiquidationSteps || steps > p.MaxLiquidationSteps+1 {
 				return StressResult{}, errs.New(errs.CodeInternal, "margin: the planner did not stop at its step budget")
 			}
-			if cur, _, err = ExecuteFirst(p, cur, pl, c.fill); err != nil {
+			var done LiquidationOrder
+			if cur, done, err = ExecuteFirst(p, cur, pl, c.fill); err != nil {
 				return StressResult{}, err
 			}
 			steps++
+			if done.Action.Trading() {
+				trading++
+			}
 		}
 		r.StepsSimulated = steps
 	}
