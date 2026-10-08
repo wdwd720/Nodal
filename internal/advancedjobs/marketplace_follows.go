@@ -28,6 +28,17 @@ import (
 // reported Deferred -- the job neither waits for nor works around a switch.
 // A run is keyed by (install, instant): a repeat of the same instant replays
 // the recorded run.
+//
+// The marketplace builds a scheduled run's input through its SnapshotSource,
+// and this build has no production SnapshotSource (cmd/api wires the
+// marketplace without one, and the worker wires it exactly as cmd/api does).
+// FollowScheduled then refuses every due install with UNSUPPORTED, which is
+// reported Deferred, not as a failure: nothing the worker or an operator does
+// at runtime changes it, and a job that is red forever teaches people to
+// ignore red.
+//
+// DueInstalls does not filter by mode, and a scheduled follow is a paper
+// follow, so a non-PAPER install it returns is not this job's and is skipped.
 type MarketplaceFollows struct {
 	db   *db.DB
 	svc  *marketplace.Service
@@ -77,9 +88,10 @@ func (j *MarketplaceFollows) Run(ctx context.Context) (Report, error) {
 			if !run.Replayed {
 				rep.Changed++
 			}
-		case errs.CodeCapabilityNotApproved, errs.CodeKillSwitchActive, errs.CodeRateLimited:
-			// The marketplace said not now: its gate, a kill switch, or the
-			// manifest's frequency. Nothing to fix here.
+		case errs.CodeCapabilityNotApproved, errs.CodeKillSwitchActive, errs.CodeRateLimited, errs.CodeUnsupported:
+			// The marketplace said not now: its gate, a kill switch, the
+			// manifest's frequency, or no snapshot source in this build.
+			// Nothing to fix here.
 			rep.Deferred++
 		default:
 			rep.fail(in.ID.String(), err)
