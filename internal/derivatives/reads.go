@@ -3,9 +3,7 @@ package derivatives
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,33 +54,16 @@ func listLimit(limit int) (int, error) {
 	return limit, nil
 }
 
-// listing builds a newest-first keyset query clause by clause.
-type listing struct {
-	where []string
-	args  []any
-}
+// sqlParams numbers the bound parameters of a statement assembled clause by
+// clause. Every clause is constant text and every value a request supplies
+// travels as a parameter, which test/security's constant-derivation scan
+// proves of each statement below.
+type sqlParams struct{ list []any }
 
-func (l *listing) arg(v any) string {
-	l.args = append(l.args, v)
-	return "$" + strconv.Itoa(len(l.args))
-}
-
-func (l *listing) cond(format string, v any) {
-	l.where = append(l.where, fmt.Sprintf(format, l.arg(v)))
-}
-
-func (l *listing) after(timeCol, idCol string, k *Keyset) {
-	if k == nil {
-		return
-	}
-	at := l.arg(k.At.UTC())
-	ref := l.arg(k.ID)
-	l.where = append(l.where, fmt.Sprintf("(%s, %s) < (%s, %s::uuid)", timeCol, idCol, at, ref))
-}
-
-func (l *listing) sql(selectFrom, timeCol, idCol string, limit int) string {
-	return selectFrom + " WHERE " + strings.Join(l.where, " AND ") +
-		fmt.Sprintf(" ORDER BY %s DESC, %s DESC LIMIT %d", timeCol, idCol, limit)
+// bind adds a parameter and returns its placeholder.
+func (p *sqlParams) bind(v any) string {
+	p.list = append(p.list, v)
+	return "$" + strconv.Itoa(len(p.list))
 }
 
 // ListMarks pages an instrument's marks, newest observation first.
@@ -94,10 +75,13 @@ func ListMarks(ctx context.Context, q db.Querier, iid instruments.InstrumentID, 
 	if err := after.validate(); err != nil {
 		return nil, err
 	}
-	var l listing
-	l.cond("instrument_id = %s", iid)
-	l.after("observed_at", "id", after)
-	rows, err := q.Query(ctx, l.sql(`SELECT `+markColumns+` FROM derivative_marks`, "observed_at", "id", n), l.args...)
+	var p sqlParams
+	sql := `SELECT ` + markColumns + ` FROM derivative_marks WHERE instrument_id = ` + p.bind(iid)
+	if after != nil {
+		sql += ` AND (observed_at, id) < (` + p.bind(after.At.UTC()) + `, ` + p.bind(after.ID) + `::uuid)`
+	}
+	sql += ` ORDER BY observed_at DESC, id DESC LIMIT ` + strconv.Itoa(n)
+	rows, err := q.Query(ctx, sql, p.list...)
 	if err != nil {
 		return nil, dbErr("list marks", err)
 	}
@@ -134,13 +118,16 @@ func ListPositions(ctx context.Context, q db.Querier, pq PositionQuery) ([]Posit
 	if pq.AccountID.IsZero() {
 		return nil, errs.New(errs.CodeValidationFailed, "derivatives: positions are listed per account")
 	}
-	var l listing
-	l.cond("account_id = %s", pq.AccountID)
+	var p sqlParams
+	sql := `SELECT ` + positionColumns + ` FROM derivative_positions WHERE account_id = ` + p.bind(pq.AccountID)
 	if pq.Status != "" {
-		l.cond("status = %s", string(pq.Status))
+		sql += ` AND status = ` + p.bind(string(pq.Status))
 	}
-	l.after("opened_at", "id", pq.After)
-	out, err := listPositions(ctx, q, l.sql(`SELECT `+positionColumns+` FROM derivative_positions`, "opened_at", "id", n), l.args...)
+	if pq.After != nil {
+		sql += ` AND (opened_at, id) < (` + p.bind(pq.After.At.UTC()) + `, ` + p.bind(pq.After.ID) + `::uuid)`
+	}
+	sql += ` ORDER BY opened_at DESC, id DESC LIMIT ` + strconv.Itoa(n)
+	out, err := listPositions(ctx, q, sql, p.list...)
 	if out == nil && err == nil {
 		out = []Position{}
 	}
@@ -183,16 +170,19 @@ func ListCashFlows(ctx context.Context, q db.Querier, cq CashFlowQuery) ([]CashF
 	if cq.AccountID.IsZero() {
 		return nil, errs.New(errs.CodeValidationFailed, "derivatives: cash flows are listed per account")
 	}
-	var l listing
-	l.cond("account_id = %s", cq.AccountID)
+	var p sqlParams
+	sql := `SELECT ` + cashFlowColumns + ` FROM derivative_cash_flows WHERE account_id = ` + p.bind(cq.AccountID)
 	if cq.PositionID != nil {
-		l.cond("position_id = %s", *cq.PositionID)
+		sql += ` AND position_id = ` + p.bind(*cq.PositionID)
 	}
 	if cq.Kind != "" {
-		l.cond("kind = %s", string(cq.Kind))
+		sql += ` AND kind = ` + p.bind(string(cq.Kind))
 	}
-	l.after("occurred_at", "id", cq.After)
-	rows, err := q.Query(ctx, l.sql(`SELECT `+cashFlowColumns+` FROM derivative_cash_flows`, "occurred_at", "id", n), l.args...)
+	if cq.After != nil {
+		sql += ` AND (occurred_at, id) < (` + p.bind(cq.After.At.UTC()) + `, ` + p.bind(cq.After.ID) + `::uuid)`
+	}
+	sql += ` ORDER BY occurred_at DESC, id DESC LIMIT ` + strconv.Itoa(n)
+	rows, err := q.Query(ctx, sql, p.list...)
 	if err != nil {
 		return nil, dbErr("list cash flows", err)
 	}
@@ -252,19 +242,23 @@ func ListFundingAccruals(ctx context.Context, q db.Querier, aq AccrualQuery) ([]
 	if aq.AccountID.IsZero() {
 		return nil, errs.New(errs.CodeValidationFailed, "derivatives: funding accruals are listed per account")
 	}
-	var l listing
-	l.cond("p.account_id = %s", aq.AccountID)
-	if aq.PositionID != nil {
-		l.cond("fa.position_id = %s", *aq.PositionID)
-	}
-	l.after("fa.interval_start", "fa.id", aq.After)
-	rows, err := q.Query(ctx, l.sql(`SELECT fa.id, fa.funding_rate_id, fa.position_id, p.instrument_id, p.settlement_asset_id,
+	var p sqlParams
+	sql := `SELECT fa.id, fa.funding_rate_id, fa.position_id, p.instrument_id, p.settlement_asset_id,
 		fa.interval_start, fr.interval_end, fa.quantity, fa.direction, fa.amount, fr.rate_e8, fr.premium_index_e8, fr.clamped,
 		fr.per_contract_amount, fr.mark_mantissa, dm.mark_scale, fa.cash_flow_id
 		FROM funding_accruals fa
 		JOIN funding_rates fr ON fr.id = fa.funding_rate_id
 		JOIN derivative_marks dm ON dm.id = fr.mark_id
-		JOIN derivative_positions p ON p.id = fa.position_id`, "fa.interval_start", "fa.id", n), l.args...)
+		JOIN derivative_positions p ON p.id = fa.position_id
+		WHERE p.account_id = ` + p.bind(aq.AccountID)
+	if aq.PositionID != nil {
+		sql += ` AND fa.position_id = ` + p.bind(*aq.PositionID)
+	}
+	if aq.After != nil {
+		sql += ` AND (fa.interval_start, fa.id) < (` + p.bind(aq.After.At.UTC()) + `, ` + p.bind(aq.After.ID) + `::uuid)`
+	}
+	sql += ` ORDER BY fa.interval_start DESC, fa.id DESC LIMIT ` + strconv.Itoa(n)
+	rows, err := q.Query(ctx, sql, p.list...)
 	if err != nil {
 		return nil, dbErr("list funding accruals", err)
 	}
