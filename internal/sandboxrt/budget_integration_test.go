@@ -271,6 +271,35 @@ func TestIntegration_AnAdmittedCallKeepsItsRoom(t *testing.T) {
 	assert.NotEqual(t, calls[0].RunID, calls[1].RunID)
 }
 
+// TestIntegration_AnAdmittedCallIsTakenUpExactlyWhateverTheCallersIsolation:
+// which of its reservations a call has used is read on the budget's own
+// connection, from what is committed -- so a caller in REPEATABLE READ, whose
+// snapshot never sees its own runs' charges, still takes up one reservation
+// per run and ends holding none, and nothing is counted twice.
+func TestIntegration_AnAdmittedCallIsTakenUpExactlyWhateverTheCallersIsolation(t *testing.T) {
+	f := newSvcFixture(t)
+	f.withBudget(smallBudget()) // three runs per window, two per call
+	digest := f.artifact("momentum")
+	err := testDB.InTx(f.ctx, db.TxOptions{Isolation: pgx.RepeatableRead}, func(ctx context.Context, tx pgx.Tx) error {
+		require.NoError(t, f.svc.Admit(ctx, tx, f.account, 2, testLimits()))
+		var tags []uint32
+		for i := 0; i < 2; i++ {
+			e, err := f.svc.Execute(ctx, tx, f.request(digest, testInput()))
+			require.NoError(t, err, "run %d of the admitted call", i+1)
+			tags = append(tags, runTag(e.RunID))
+			u := f.usage()
+			assert.Equal(t, i+1, u.Runs)
+			assert.Equal(t, 1-i, u.InFlightRuns, "each run takes up one reservation, once")
+		}
+		assert.NotEqual(t, tags[0], tags[1], "two runs, two reservations")
+		return nil
+	})
+	require.NoError(t, err)
+	u := f.usage()
+	assert.Equal(t, 2, u.Runs)
+	assert.Zero(t, u.InFlightRuns)
+}
+
 // TestIntegration_AContendedBudgetIsRateLimitedNeverInternal: a caller that
 // cannot get the account's budget -- its lock held by another charge, or no
 // budget connection free -- for longer than the budget waits is refused

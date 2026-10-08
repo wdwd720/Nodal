@@ -332,12 +332,12 @@ func runIDWithTag(tag uint32) (RunID, error) {
 
 // heldReservationsSQL selects an account's reservations not yet charged: $1
 // the hold key, $2 holdClass, $3 the largest grant, $4 the account, $5 the
-// window's start, $6 whether to read only this connection's own.
+// window's start, $6 the backend whose own to read (0: every backend's).
 const heldReservationsSQL = `WITH l AS MATERIALIZED (
 	SELECT pid, classid::bigint AS c, objid::bigint AS o, objsubid FROM pg_locks
 	 WHERE locktype = 'advisory' AND granted
 	   AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-	   AND (NOT $6::boolean OR pid = pg_backend_pid())),
+	   AND ($6::int = 0 OR pid = $6::int)),
 held AS (
 	SELECT DISTINCT b.pid, b.c - $2::bigint AS cpu_ms, b.o AS tag
 	  FROM l a JOIN l b ON b.pid = a.pid AND b.objsubid = 2 AND b.c BETWEEN $2::bigint AND $2::bigint + $3::bigint
@@ -352,10 +352,10 @@ type reservation struct {
 	tag   uint32
 }
 
-// heldReservations reads an account's reservations not yet charged through
-// q: every transaction's, or only q's own.
-func heldReservations(ctx context.Context, q db.Querier, account accounts.AccountID, windowStart time.Time, own bool) ([]reservation, error) {
-	rows, err := q.Query(ctx, heldReservationsSQL, holdKey(account), holdClass, int64(maxWallTimeMS), account, windowStart, own)
+// heldReservations reads an account's reservations not yet charged, through
+// q: every transaction's (pid 0), or only those of the backend pid.
+func heldReservations(ctx context.Context, q db.Querier, account accounts.AccountID, windowStart time.Time, pid int32) ([]reservation, error) {
+	rows, err := q.Query(ctx, heldReservationsSQL, holdKey(account), holdClass, int64(maxWallTimeMS), account, windowStart, pid)
 	if err != nil {
 		return nil, dbErr("read sandbox reservations", err)
 	}
@@ -408,12 +408,24 @@ func reserveIn(ctx context.Context, tx pgx.Tx, account accounts.AccountID, cpu i
 	return nil
 }
 
-// claim returns the id of a run of account granted cpu: one that takes up a
-// reservation the caller's transaction tx already holds and has not used --
-// one Admit took for the call, or one a run of tx left uncharged -- with
-// reserved true, or a fresh id with reserved false.
-func claim(ctx context.Context, tx pgx.Tx, account accounts.AccountID, cpu int64, windowStart time.Time) (RunID, bool, error) {
-	held, err := heldReservations(ctx, tx, account, windowStart, true)
+// backendPID is the server process of the caller's transaction tx: the
+// holder of every reservation tx takes.
+func backendPID(ctx context.Context, tx pgx.Tx) (int32, error) {
+	var pid int32
+	if err := tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
+		return 0, dbErr("read the caller's backend", err)
+	}
+	return pid, nil
+}
+
+// claim reads, in the budget transaction btx, whether the caller's
+// transaction -- the one on backend pid -- holds a reservation of account
+// granted cpu that it has not used (one Admit took for the call, or one a run
+// of the caller's left uncharged), and returns a run id that takes it up. It
+// reads on the budget's connection, so what counts as charged is what is
+// committed, whatever the caller's isolation level.
+func claim(ctx context.Context, btx pgx.Tx, pid int32, account accounts.AccountID, cpu int64, windowStart time.Time) (RunID, bool, error) {
+	held, err := heldReservations(ctx, btx, account, windowStart, pid)
 	if err != nil {
 		return RunID{}, false, err
 	}
@@ -423,7 +435,7 @@ func claim(ctx context.Context, tx pgx.Tx, account accounts.AccountID, cpu int64
 			return run, err == nil, err
 		}
 	}
-	return NewRunID(), false, nil
+	return RunID{}, false, nil
 }
 
 // distinctTags draws n distinct random tags.
@@ -458,7 +470,7 @@ func usageWithReservations(ctx context.Context, q db.Querier, account accounts.A
 	if err != nil {
 		return BudgetUsage{}, err
 	}
-	held, err := heldReservations(ctx, q, account, now.Add(-window), false)
+	held, err := heldReservations(ctx, q, account, now.Add(-window), 0)
 	if err != nil {
 		return BudgetUsage{}, err
 	}

@@ -272,11 +272,14 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (E
 		}
 		killed = true
 	}
-	runID, reserved, err := claim(ctx, tx, req.AccountID, req.Limits.WallTimeMS, s.clk.Now().UTC().Add(-s.budget.Window))
+	pid, err := backendPID(ctx, tx)
 	if err != nil {
 		return Execution{}, err
 	}
-	exec := Execution{RunID: runID, ManifestHash: manifestHash}
+	// A fresh id, unless the run takes up a reservation the caller already
+	// holds (reserve, recordKilled); drawn once, so a retried budget
+	// transaction reserves the same run.
+	exec := Execution{RunID: NewRunID(), ManifestHash: manifestHash}
 
 	if killed {
 		res, err := Interpret(RawRun{
@@ -287,13 +290,13 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (E
 			return Execution{}, err
 		}
 		exec.Result = res
-		if err := s.recordKilled(ctx, req, &exec, reserved); err != nil {
+		if err := s.recordKilled(ctx, pid, req, &exec); err != nil {
 			return Execution{}, err
 		}
 		return exec, nil
 	}
 
-	wasm, err := s.reserve(ctx, tx, req, &exec, reserved)
+	wasm, err := s.reserve(ctx, tx, pid, req, &exec)
 	if err != nil {
 		return Execution{}, err
 	}
@@ -324,11 +327,13 @@ func (s *Service) Execute(ctx context.Context, tx pgx.Tx, req ExecuteRequest) (E
 }
 
 // reserve loads the artifact a run executes -- as committed: the run's record
-// will reference it -- and, unless the run took up a reservation tx already
-// held, admits the run against the account's window and reserves it in tx,
-// all in one short budget transaction. It stamps the run's start.
-func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req ExecuteRequest, exec *Execution, reserved bool) ([]byte, error) {
+// will reference it -- and either takes up a reservation the caller's
+// transaction tx (on backend pid) already holds, or admits the run against the
+// account's window and reserves it in tx, all in one short budget
+// transaction. It stamps the run's start.
+func (s *Service) reserve(ctx context.Context, tx pgx.Tx, pid int32, req ExecuteRequest, exec *Execution) ([]byte, error) {
 	var wasm []byte
+	fresh := exec.RunID
 	err := s.budgetTx(ctx, s.wait, func(ctx context.Context, btx pgx.Tx) error {
 		err := btx.QueryRow(ctx, `SELECT wasm FROM strategy_artifacts WHERE artifact_digest = $1`, req.ArtifactDigest).Scan(&wasm)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -337,10 +342,17 @@ func (s *Service) reserve(ctx context.Context, tx pgx.Tx, req ExecuteRequest, ex
 		if err != nil {
 			return dbErr("load artifact bytes", err)
 		}
-		exec.StartedAt = s.clk.Now().UTC()
-		if reserved {
+		now := s.clk.Now().UTC()
+		exec.StartedAt = now
+		claimed, ok, err := claim(ctx, btx, pid, req.AccountID, req.Limits.WallTimeMS, now.Add(-s.budget.Window))
+		if err != nil {
+			return err
+		}
+		if ok {
+			exec.RunID = claimed
 			return nil
 		}
+		exec.RunID = fresh
 		if err := lockBudget(ctx, btx, req.AccountID); err != nil {
 			return err
 		}
@@ -375,21 +387,30 @@ func (s *Service) finalize(ctx context.Context, req ExecuteRequest, e Execution)
 
 // recordKilled records a run the kill switch stopped before it started -- one
 // run and no CPU -- in one short budget transaction, admitted against the
-// account's window like any run unless it takes up a reservation tx already
-// held.
-func (s *Service) recordKilled(ctx context.Context, req ExecuteRequest, exec *Execution, reserved bool) error {
+// account's window like any run unless it takes up a reservation the
+// caller's transaction (on backend pid) already holds.
+func (s *Service) recordKilled(ctx context.Context, pid int32, req ExecuteRequest, exec *Execution) error {
+	fresh := exec.RunID
 	return s.budgetTx(ctx, s.wait, func(ctx context.Context, btx pgx.Tx) error {
 		if _, err := s.Artifact(ctx, btx, req.ArtifactDigest); err != nil {
 			return err
 		}
-		exec.StartedAt = s.clk.Now().UTC()
-		if !reserved {
-			if err := lockBudget(ctx, btx, req.AccountID); err != nil {
-				return err
-			}
-			if err := s.fitsWindow(ctx, btx, req.AccountID, 1, 0); err != nil {
-				return err
-			}
+		now := s.clk.Now().UTC()
+		exec.StartedAt = now
+		claimed, reserved, err := claim(ctx, btx, pid, req.AccountID, req.Limits.WallTimeMS, now.Add(-s.budget.Window))
+		if err != nil {
+			return err
+		}
+		if reserved {
+			exec.RunID = claimed
+			return s.record(ctx, btx, req, *exec)
+		}
+		exec.RunID = fresh
+		if err := lockBudget(ctx, btx, req.AccountID); err != nil {
+			return err
+		}
+		if err := s.fitsWindow(ctx, btx, req.AccountID, 1, 0); err != nil {
+			return err
 		}
 		return s.record(ctx, btx, req, *exec)
 	})
