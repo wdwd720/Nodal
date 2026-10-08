@@ -42,6 +42,9 @@ var reachedThroughDriver = map[string]string{
 	"internal/bridge.ReconcileLeg":      "Service.Advance",
 	"internal/bridge.PrepareRelease":    "Service.Advance",
 	"internal/bridge.SettleDestination": "Service.Advance",
+	// A refund is recorded, submitted once between transactions, and settled
+	// when it is final on the source chain.
+	"internal/bridge.SettleRefund": "Service.Refund",
 }
 
 func TestReachability_EveryDriverClaimIsTrue(t *testing.T) {

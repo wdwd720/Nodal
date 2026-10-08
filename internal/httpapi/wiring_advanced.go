@@ -94,6 +94,10 @@ type AdvancedDeps struct {
 	// >>> advanced:delegation deps
 
 	// >>> advanced:operator deps
+	// Operator serves the operator console (/advanced/ops): the overview, the
+	// sandbox reference marks and the simulated chains. Incomplete leaves those
+	// routes UNSUPPORTED.
+	Operator OperatorDeps
 }
 
 func (d AdvancedDeps) complete() bool {
@@ -144,6 +148,7 @@ func wireAdvanced(p *Ports, d WireDeps) {
 	// >>> advanced:delegation wire
 
 	// >>> advanced:operator wire
+	wireOperator(p, d)
 }
 
 type advancedCoreAdapter struct {

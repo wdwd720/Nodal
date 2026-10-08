@@ -54,6 +54,15 @@ type BridgePort interface {
 	ReconcileLeg(ctx context.Context, id bridge.LegID) (BridgeLegOutcome, error)
 	ProduceBlocks(ctx context.Context, chain devnet.ChainID, n uint64) (BridgeChainView, error)
 	InjectFault(ctx context.Context, chain devnet.ChainID, f BridgeFault) (BridgeChainView, error)
+
+	// ResumeRelay, ResolveReview and Refund are an operator's three ways out
+	// of a leg's MANUAL_REVIEW (bridge.Service.ResumeRelay, ResolveReview and
+	// Refund); the service decides which one a leg admits. Refund runs the
+	// service's own workflow, which owns its transactions and submits the
+	// refund once.
+	ResumeRelay(ctx context.Context, id bridge.LegID, by econ.Actor, reason string) (BridgeLegView, error)
+	ResolveReview(ctx context.Context, id bridge.LegID, by econ.Actor, reason string) (BridgeLegView, error)
+	Refund(ctx context.Context, id bridge.LegID, by econ.Actor, reason string) (BridgeLegOutcome, error)
 }
 
 // BridgeFaultKind names a submission fault of the simulated chain host.

@@ -71,6 +71,7 @@ var financialPackages = []string{
 	"internal/sandboxrt",
 	"internal/stableasset",
 	"internal/derivatives",
+	"internal/bridge",
 }
 
 // reachableFrom are the trees a deployment can actually run. A caller in

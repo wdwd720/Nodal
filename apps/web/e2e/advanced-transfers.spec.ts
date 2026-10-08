@@ -14,7 +14,7 @@
  * operator sign in here through the same development identity provider, in
  * contexts of their own.
  */
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page, type Response } from "@playwright/test";
 
@@ -22,6 +22,7 @@ import { expect, test, type Browser, type BrowserContext, type Locator, type Pag
 const NOTICE = "Simulated value — sandbox only";
 const SECTION = "/advanced/transfers";
 const SEND_PATH = "/v1/advanced/transfers";
+const REVERSALS_PATH = "/v1/advanced/transfers/reversal-proposals";
 
 interface Problem {
   readonly code: string;
@@ -36,6 +37,15 @@ interface Transfer {
   readonly recipient_account_id?: string;
   readonly memo?: string;
   readonly risk_decision_id?: string;
+  readonly reversal_proposal_id?: string;
+}
+
+/** A reversal proposal as the API answers it. */
+interface Proposal {
+  readonly id: string;
+  readonly status: string;
+  readonly value_domain: string;
+  readonly transfer: Transfer;
 }
 
 interface Allowance {
@@ -86,6 +96,27 @@ async function answerTo(page: Page, path: string, act: () => Promise<void>): Pro
     act(),
   ]);
   return response;
+}
+
+/**
+ * A command as the browser would send it: same-origin, JSON, with an
+ * idempotency key -- a fresh one unless a test replays a key on purpose.
+ */
+async function command(
+  page: Page,
+  path: string,
+  body: unknown,
+  key?: string,
+): Promise<{ readonly status: number; readonly body: unknown }> {
+  const response = await page.request.post(path, {
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": key ?? `e2e-${hex(12)}`,
+      "Sec-Fetch-Site": "same-origin",
+    },
+    data: JSON.stringify(body),
+  });
+  return { status: response.status(), body: (await response.json().catch(() => undefined)) as unknown };
 }
 
 /** A refusal is on screen with the backend's own code. */
@@ -363,7 +394,7 @@ test.describe("the transfers section", () => {
     await b.context.close();
   });
 
-  test("an operator is offered reversal only of a COMPLETED transfer, and the backend decides it", async ({
+  test("a reversal takes two operators: one proposes, the proposer can never approve, and the backend decides", async ({
     page,
     browser,
   }) => {
@@ -372,50 +403,175 @@ test.describe("the transfers section", () => {
     await fundThroughTheFaucet(page, "3");
     const send = page.getByRole("region", { name: "Send", exact: true });
     await reviewSend(send, b.recipient, "1", `e2e reversal ${hex(6)}`);
-    const response = await answerTo(page, SEND_PATH, () =>
+    const sent = await answerTo(page, SEND_PATH, () =>
       send.getByRole("button", { name: "Confirm and send", exact: true }).click(),
     );
-    const transferId = transferIdOf(await response.json()) as string;
+    const transferId = transferIdOf(await sent.json()) as string;
     expect(transferId).toBeTruthy();
+    const proposalsPath = `${SEND_PATH}/${transferId}/reversal-proposals`;
+    const terms = { reason_code: "DISPUTE_UPHELD", reason: "end-to-end check of the reversal under dual control" };
 
-    const operator = await signIn(browser, "admin", true);
-    await operator.page.goto(`${SECTION}/${transferId}`);
-    await settle(operator.page);
-    const status = ((await (await operator.page.request.get(`/v1/advanced/transfers/${transferId}`)).json()) as Transfer).status;
-    await expect(operator.page.locator('[data-field="transfer-status"]')).toContainText(status);
-    const correction = operator.page.getByRole("region", { name: "Operator correction", exact: true });
+    const admin = await signIn(browser, "admin", true);
+    await admin.page.goto(`${SECTION}/${transferId}`);
+    await settle(admin.page);
+    const status = ((await (await admin.page.request.get(`/v1/advanced/transfers/${transferId}`)).json()) as Transfer).status;
+    await expect(admin.page.locator('[data-field="transfer-status"]')).toContainText(status);
+    const panel = admin.page.getByRole("region", { name: "Reversal under dual control", exact: true });
 
-    if (status === "COMPLETED") {
-      await correction.getByLabel("Reason code", { exact: true }).fill("DISPUTE_UPHELD");
-      await correction.getByLabel("Reason", { exact: true }).fill("end-to-end check of the operator correction");
-      const reversal = await answerTo(operator.page, `${SEND_PATH}/${transferId}/reverse`, () =>
-        correction.getByRole("button", { name: "Reverse this transfer", exact: true }).click(),
+    if (status !== "COMPLETED") {
+      // Nothing moved, so nothing can be reversed: the proposal is not
+      // offered, and the backend refuses it all the same.
+      await expect(panel.getByRole("button", { name: "Propose the reversal", exact: true })).toBeDisabled();
+      await expect(panel).toContainText("nothing to reverse");
+      const refused = await command(admin.page, proposalsPath, terms);
+      expect(refused.status).toBe(409);
+      expect((refused.body as Problem).code).toBe("INVALID_STATE_TRANSITION");
+      await admin.context.close();
+      return;
+    }
+
+    // One operator proposes, through the page. Nothing moves.
+    const form = panel.getByRole("form", { name: "Propose a reversal" });
+    await form.getByLabel("Reason code", { exact: true }).fill(terms.reason_code);
+    await form.getByLabel("Reason", { exact: true }).fill(terms.reason);
+    const proposed = await answerTo(admin.page, proposalsPath, () =>
+      form.getByRole("button", { name: "Propose the reversal", exact: true }).click(),
+    );
+    expect(proposed.status(), "the proposal is recorded").toBe(201);
+    const proposal = (await proposed.json()) as Proposal;
+    expect(proposal.status).toBe("PENDING");
+    expect(proposal.value_domain).toBe("SIMULATED");
+    expect(proposal.transfer.status, "a proposal moves nothing").toBe("COMPLETED");
+    const card = panel.locator(`[data-proposal-id="${proposal.id}"]`);
+    await expect(card).toHaveAttribute("data-proposal-status", "PENDING");
+
+    // The proposer is never offered the approval, and the backend refuses it.
+    await expect(card.getByRole("button", { name: "Approve and reverse", exact: true })).toBeDisabled();
+    await expect(card).toContainText("can never approve");
+    const self = await command(admin.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {});
+    expect(self.status, "a proposer approving their own proposal is refused").toBe(403);
+    const selfProblem = self.body as Problem;
+    expect(selfProblem.code).toBe("FORBIDDEN");
+    expect(selfProblem.fields?.["rejection_code"]).toBe("TRANSFER_REVERSAL_SELF_APPROVAL");
+
+    // Proposing again on the same terms while it is pending returns it; on
+    // other terms it is a conflict. Either way there is one pending proposal.
+    const again = await command(admin.page, proposalsPath, terms);
+    expect(again.status).toBe(200);
+    expect((again.body as Proposal).id).toBe(proposal.id);
+    const other = await command(admin.page, proposalsPath, { ...terms, reason: "a different account of the same dispute" });
+    expect(other.status).toBe(409);
+    expect((other.body as Problem).code).toBe("CONFLICT");
+
+    // A second, different operator decides: Finance, who holds the correction
+    // authority (ledger:post_correction) the routes admit and the service
+    // requires. Whether the approval executes -- its recent strong sign-in,
+    // the recipient still holding the funds -- is the backend's answer, and
+    // the page shows it.
+    const second = await signIn(browser, "finance", true);
+    await second.page.goto(`${SECTION}/${transferId}`);
+    await settle(second.page);
+    const secondPanel = second.page.getByRole("region", { name: "Reversal under dual control", exact: true });
+    const listed = await second.page.request.get(`${REVERSALS_PATH}?transfer_id=${transferId}`);
+    let approved = false;
+    if (listed.ok()) {
+      const secondCard = secondPanel.locator(`[data-proposal-id="${proposal.id}"]`);
+      await secondCard.getByRole("button", { name: "Approve and reverse", exact: true }).click();
+      const keys: string[] = [];
+      second.page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/approve")) {
+          keys.push(request.headers()["idempotency-key"] ?? "");
+        }
+      });
+      const decision = await answerTo(second.page, `${REVERSALS_PATH}/${proposal.id}/approve`, () =>
+        secondCard.getByRole("button", { name: "Confirm: approve and reverse", exact: true }).click(),
       );
-      if (reversal.ok()) {
-        await expect(correction.locator(`[data-reversed="${transferId}"]`)).toContainText("REVERSED");
+      if (decision.ok()) {
+        approved = true;
+        const result = (await decision.json()) as { proposal: Proposal; replayed: boolean };
+        expect(result.proposal.status).toBe("APPROVED");
+        expect(result.proposal.transfer.status).toBe("REVERSED");
+        // The proposals are read again after a decision: the card now carries the backend's status.
+        await expect(secondPanel.locator(`[data-proposal-id="${proposal.id}"]`)).toHaveAttribute("data-proposal-status", "APPROVED");
+        // The same decision with the same key is the same answer, never a second reversal.
+        const replay = await command(second.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {}, keys[0]);
+        expect(replay.status).toBe(200);
+        expect((replay.body as { proposal: Proposal }).proposal.id).toBe(proposal.id);
       } else {
-        // The backend may refuse (a recent strong sign-in, the operator's
-        // permissions, funds no longer held); the refusal is on screen with its code.
-        await expectCode(correction, ((await reversal.json()) as Problem).code);
+        await expectCode(secondPanel, ((await decision.json()) as Problem).code);
       }
     } else {
-      // Nothing moved, so nothing can be reversed: the action says why instead
-      // of being offered, and the backend refuses it all the same.
-      const button = correction.getByRole("button", { name: "Reverse this transfer", exact: true });
-      await expect(button).toBeDisabled();
-      await expect(correction).toContainText("nothing to reverse");
-      const refused = await operator.page.request.post(`${SEND_PATH}/${transferId}/reverse`, {
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": `e2e-reversal-${hex(8)}`,
-          "Sec-Fetch-Site": "same-origin",
-        },
-        data: JSON.stringify({ reason_code: "DISPUTE_UPHELD", reason: "end-to-end check of a refused correction" }),
-      });
-      expect(refused.status()).toBe(409);
-      expect(((await refused.json()) as Problem).code).toBe("INVALID_STATE_TRANSITION");
+      // This operator may not read the proposals at all: the panel shows the refusal.
+      await expectCode(secondPanel, ((await listed.json()) as Problem).code);
+      const attempt = await command(second.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {});
+      expect(attempt.status).toBe(listed.status());
     }
-    await operator.context.close();
+
+    const after = (await (await admin.page.request.get(`/v1/advanced/transfers/${transferId}`)).json()) as Transfer;
+    if (approved) {
+      // Executed exactly once, bound to the proposal; a consumed proposal executes nothing again.
+      expect(after.status).toBe("REVERSED");
+      expect(after.reversal_proposal_id).toBe(proposal.id);
+      await admin.page.goto(`${SECTION}/${transferId}`);
+      await settle(admin.page);
+      await expect(admin.page.locator('[data-field="transfer-status"]')).toContainText("REVERSED");
+      await expect(admin.page.locator('[data-field="reversal-proposal"]')).toContainText(proposal.id);
+      const reapproved = await command(admin.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {});
+      expect(reapproved.status).toBe(409);
+      const reproposed = await command(admin.page, proposalsPath, terms);
+      expect(reproposed.status).toBe(409);
+      expect((reproposed.body as Problem).code).toBe("INVALID_STATE_TRANSITION");
+    } else {
+      expect(after.status, "a refused approval moved nothing").toBe("COMPLETED");
+      // Anyone holding the permission may reject, the proposer included: through the page.
+      await admin.page.goto(`${SECTION}/${transferId}`);
+      await settle(admin.page);
+      const adminCard = panel.locator(`[data-proposal-id="${proposal.id}"]`);
+      await adminCard.getByLabel("Decision reason", { exact: true }).fill("withdrawn after review");
+      await adminCard.getByRole("button", { name: "Reject the proposal", exact: true }).click();
+      const rejected = await answerTo(admin.page, `${REVERSALS_PATH}/${proposal.id}/reject`, () =>
+        adminCard.getByRole("button", { name: "Confirm: reject", exact: true }).click(),
+      );
+      expect(rejected.status()).toBe(200);
+      const result = (await rejected.json()) as { proposal: Proposal };
+      expect(result.proposal.status).toBe("REJECTED");
+      expect(result.proposal.transfer.status, "a rejected proposal executes nothing").toBe("COMPLETED");
+      await expect(panel.locator(`[data-proposal-id="${proposal.id}"]`)).toHaveAttribute("data-proposal-status", "REJECTED");
+      // A rejected proposal can never be executed.
+      const late = await command(second.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {});
+      expect([403, 409]).toContain(late.status);
+      const lateAdmin = await command(admin.page, `${REVERSALS_PATH}/${proposal.id}/approve`, {});
+      expect(lateAdmin.status, "a decided proposal takes no other decision").toBe(409);
+      expect((lateAdmin.body as Problem).code).toBe("CONFLICT");
+      // The same decision by the same operator again is the decision already recorded.
+      const repeated = await command(admin.page, `${REVERSALS_PATH}/${proposal.id}/reject`, { reason: "withdrawn after review" });
+      expect(repeated.status).toBe(200);
+      expect((repeated.body as { replayed: boolean }).replayed).toBe(true);
+      const still = (await (await admin.page.request.get(`/v1/advanced/transfers/${transferId}`)).json()) as Transfer;
+      expect(still.status).toBe("COMPLETED");
+    }
+    await second.context.close();
+    await admin.context.close();
+  });
+
+  test("a customer is refused every reversal route", async ({ page }) => {
+    const unknown = `${randomUUID().slice(0, 14)}7${randomUUID().slice(15)}`;
+    const list = await page.request.get(REVERSALS_PATH);
+    expect(list.status()).toBe(403);
+    const propose = await command(page, `${SEND_PATH}/${unknown}/reversal-proposals`, {
+      reason_code: "DISPUTE_UPHELD",
+      reason: "a customer may not propose",
+    });
+    expect(propose.status).toBe(403);
+    for (const action of ["approve", "reject"]) {
+      const decided = await command(page, `${REVERSALS_PATH}/${unknown}/${action}`, { reason: "no" });
+      expect(decided.status, action).toBe(403);
+    }
+    const gone = await command(page, `${SEND_PATH}/${unknown}/reverse`, {
+      reason_code: "DISPUTE_UPHELD",
+      reason: "the single-operator route is gone",
+    });
+    expect(gone.status, "the single-operator reversal route no longer exists").toBe(404);
   });
 
   test("no dead controls, and no money-shaped figure the API did not send", async ({ page }) => {

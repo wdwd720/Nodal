@@ -169,8 +169,9 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{productId}":    testOrderID.String(),
 
 		// >>> advanced:margin path parameters
-		"{marginCaseId}":      testOrderID.String(),
-		"{marginStressRunId}": testDepositID.String(),
+		"{marginCaseId}":       testOrderID.String(),
+		"{marginStressRunId}":  testDepositID.String(),
+		"{marginResolutionId}": testIntentID.String(),
 
 		// >>> advanced:derivatives path parameters
 		"{positionId}": testSessionID,
@@ -182,6 +183,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 
 		// >>> advanced:transfers path parameters
 		"{transferId}": testSessionID,
+		"{proposalId}": testOrderID.String(),
 
 		// >>> advanced:treasury path parameters
 
@@ -196,8 +198,9 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"{bridgeChainId}": "sbx-solana",
 
 		// >>> advanced:predmarket path parameters
-		// {marketId} is mapped above (the native markets declared it first).
-		"{proposalId}": testOrderID.String(),
+		// {marketId} is mapped above (the native markets declared it first),
+		// and {proposalId} -- shared with the transfer reversal proposals --
+		// in the transfers block.
 
 		// >>> advanced:marketplace path parameters
 		"{listingId}": testSessionID,
@@ -227,6 +230,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		"/v1/advanced/margin/calls":       "account_id=" + testAccountID.String(),
 		"/v1/advanced/margin/cases":       "account_id=" + testAccountID.String(),
 		"/v1/advanced/margin/stress-runs": "account_id=" + testAccountID.String(),
+		"/v1/advanced/margin/deficit":     "account_id=" + testAccountID.String(),
 
 		// >>> advanced:derivatives required query
 		"/v1/advanced/derivatives/positions":                          "account_id=" + testAccountID.String(),
@@ -272,6 +276,7 @@ func mountedRoutes(t *testing.T, s *Server) []routeProbe {
 		// >>> advanced:delegation required query
 
 		// >>> advanced:operator required query
+		"/v1/advanced/ops/marks": "asset_id=" + testInstrument.String(),
 	}
 
 	var out []routeProbe

@@ -69,6 +69,7 @@ import {
   caseHref,
   type Prepared,
 } from "./parts.tsx";
+import { DeficitPanel } from "./Deficit.tsx";
 
 export function MarginAccountPage(): ReactNode {
   const { accountId } = useAdvancedAccount();
@@ -154,6 +155,7 @@ function MarginAccountView(props: { readonly accountId: string }): ReactNode {
       </Panel>
       <BorrowingPanel detail={detail} unit={unit} />
       <LiquidationPanel detail={detail} unit={unit} />
+      <DeficitPanel accountId={props.accountId} unit={unit} canAct={canAct} />
       {canAct ? (
         <ActionsPanel detail={detail} assets={registry} unit={unit} />
       ) : (

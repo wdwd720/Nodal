@@ -61,6 +61,8 @@ type fakeBridgePort struct {
 	lastChain   devnet.ChainID
 	lastBlocks  uint64
 	lastFault   BridgeFault
+
+	lastReviewLeg bridge.LegID
 }
 
 func (f *fakeBridgePort) called(name string) {
@@ -167,6 +169,37 @@ func (f *fakeBridgePort) InjectFault(_ context.Context, chain devnet.ChainID, fa
 	f.lastChain, f.lastFault = chain, fault
 	f.mu.Unlock()
 	return f.chains.Chains[1], f.fail()
+}
+
+// The ways out of a leg's manual review record the leg, the operator and the
+// reason, and answer the fake's leg.
+func (f *fakeBridgePort) review(name string, lid bridge.LegID, by econ.Actor, reason string) error {
+	f.called(name)
+	f.mu.Lock()
+	f.lastReviewLeg, f.lastActor, f.lastReason = lid, by, reason
+	f.mu.Unlock()
+	return f.fail()
+}
+
+func (f *fakeBridgePort) ResumeRelay(_ context.Context, lid bridge.LegID, by econ.Actor, reason string) (BridgeLegView, error) {
+	if err := f.review("ResumeRelay", lid, by, reason); err != nil {
+		return BridgeLegView{}, err
+	}
+	return f.outcome.View, nil
+}
+
+func (f *fakeBridgePort) ResolveReview(_ context.Context, lid bridge.LegID, by econ.Actor, reason string) (BridgeLegView, error) {
+	if err := f.review("ResolveReview", lid, by, reason); err != nil {
+		return BridgeLegView{}, err
+	}
+	return f.outcome.View, nil
+}
+
+func (f *fakeBridgePort) Refund(_ context.Context, lid bridge.LegID, by econ.Actor, reason string) (BridgeLegOutcome, error) {
+	if err := f.review("Refund", lid, by, reason); err != nil {
+		return BridgeLegOutcome{}, err
+	}
+	return f.outcome, nil
 }
 
 // newFakeBridgePort holds a route from the stable asset on sbx-solana to its

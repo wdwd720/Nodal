@@ -225,8 +225,13 @@ func TestIntegration_AnAgentNeverTransfersAndTheCompilerAgrees(t *testing.T) {
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM internal_transfers WHERE sender_account_id = $1`, alice.account))
 	assert.Equal(t, 0, f.count(`SELECT count(*) FROM economic_intents WHERE account_id = $1`, alice.account))
 
-	// Nor does an agent reverse or configure anything.
-	_, err = f.reverse(agent, ReverseRequest{TransferID: NewTransferID(), ReasonCode: "FRAUD", Reason: "x"})
+	// Nor does an agent propose, approve or reject a reversal, or configure
+	// anything.
+	_, err = f.propose(agent, NewTransferID(), "FRAUD_CONFIRMED", "x")
+	requireCode(t, err, errs.CodeForbidden)
+	_, err = f.approve(agent, NewReversalProposalID())
+	requireCode(t, err, errs.CodeForbidden)
+	_, err = f.reject(agent, NewReversalProposalID(), "x")
 	requireCode(t, err, errs.CodeForbidden)
 	err = f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		return f.svc.SetSenderMode(ctx, tx, agent, alice.account, SenderAllowlistOnly)

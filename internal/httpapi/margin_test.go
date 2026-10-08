@@ -15,6 +15,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/errs"
 	"github.com/nodal/controlplane/internal/gates"
+	"github.com/nodal/controlplane/internal/gen/api"
 	"github.com/nodal/controlplane/internal/id"
 	"github.com/nodal/controlplane/internal/ledger"
 	"github.com/nodal/controlplane/internal/margin"
@@ -156,6 +157,16 @@ type fakeMargin struct {
 	liq        MarginLiquidationView
 	deficit    MarginDeficitView
 	next       string
+
+	// The covered deficit and the MANUAL_REVIEW dual control.
+	deficitStatus MarginDeficitStatusView
+	repayment     MarginDeficitRepaymentView
+	reviews       []MarginReviewView
+	resolution    margin.Resolution
+	decided       MarginResolutionDecisionView
+	lastRepay     margin.DeficitRepaymentRequest
+	lastPropose   margin.ProposeResolutionRequest
+	lastDecide    margin.DecideResolutionRequest
 }
 
 func (f *fakeMargin) hit(name string) {
@@ -330,6 +341,55 @@ func (f *fakeMargin) AllCalls(_ context.Context, status margin.CallStatus, curso
 	f.lastStatus, f.lastCursor, f.lastLimit = status, cursor, limit
 	f.mu.Unlock()
 	return MarginCallPage{Items: []MarginCallView{f.call}, NextCursor: f.next}, f.fail()
+}
+
+func (f *fakeMargin) Deficit(_ context.Context, acct accounts.AccountID) (MarginDeficitStatusView, error) {
+	f.hit("Deficit")
+	f.mu.Lock()
+	f.lastAcct = acct
+	f.mu.Unlock()
+	return f.deficitStatus, f.fail()
+}
+
+func (f *fakeMargin) RepayDeficit(_ context.Context, r margin.DeficitRepaymentRequest) (MarginDeficitRepaymentView, error) {
+	f.hit("RepayDeficit")
+	f.mu.Lock()
+	f.lastRepay = r
+	f.mu.Unlock()
+	if err := f.fail(); err != nil {
+		return MarginDeficitRepaymentView{}, err
+	}
+	return f.repayment, nil
+}
+
+func (f *fakeMargin) Reviews(_ context.Context, limit int) ([]MarginReviewView, error) {
+	f.hit("Reviews")
+	f.mu.Lock()
+	f.lastLimit = limit
+	f.mu.Unlock()
+	return f.reviews, f.fail()
+}
+
+func (f *fakeMargin) ProposeResolution(_ context.Context, r margin.ProposeResolutionRequest) (margin.Resolution, error) {
+	f.hit("ProposeResolution")
+	f.mu.Lock()
+	f.lastPropose = r
+	f.mu.Unlock()
+	if err := f.fail(); err != nil {
+		return margin.Resolution{}, err
+	}
+	return f.resolution, nil
+}
+
+func (f *fakeMargin) DecideResolution(_ context.Context, r margin.DecideResolutionRequest) (MarginResolutionDecisionView, error) {
+	f.hit("DecideResolution")
+	f.mu.Lock()
+	f.lastDecide = r
+	f.mu.Unlock()
+	if err := f.fail(); err != nil {
+		return MarginResolutionDecisionView{}, err
+	}
+	return f.decided, nil
 }
 
 // newFakeMargin holds realistic values for testAccountID: the engine's own
@@ -1073,4 +1133,327 @@ func TestMarginPages_CarryTheCursor(t *testing.T) {
 	assert.Contains(t, raw, "next_cursor")
 	assert.Nil(t, raw["next_cursor"])
 	assert.Equal(t, defaultPageLimit, fm.lastLimit)
+}
+
+// --- covered deficits and MANUAL_REVIEW under dual control ---------------------------
+
+var (
+	testMarginResolution = id.MustParse[id.Any]("0193b2e0-0000-7000-8000-00000000ac08")
+	testMarginRepayment  = id.MustParse[id.Any]("0193b2e0-0000-7000-8000-00000000ac09")
+	testMarginReview     = "0193b2e0-0000-7000-8000-00000000ac0a"
+	// testMarginApprover is a second operator, distinct from testUserID.
+	testMarginApprover = "0193b2e0-0000-7000-8000-00000000ac0b"
+)
+
+func mResolutionID() margin.ResolutionID {
+	var v margin.ResolutionID
+	parseInto(&v, testMarginResolution)
+	return v
+}
+
+func mRepaymentID() margin.RepaymentID {
+	var v margin.RepaymentID
+	parseInto(&v, testMarginRepayment)
+	return v
+}
+
+// newMarginDualControlHarness extends the margin fake with a covered deficit
+// of 211.981234 sandbox dollars of which 11.981234 is repaid, and a case in
+// MANUAL_REVIEW with one pending resolution.
+func newMarginDualControlHarness(t *testing.T) (*harness, *fakeMargin) {
+	t.Helper()
+	h, fm := newMarginHarness(t)
+	facts := fm.caseView.Facts
+	kase := fm.caseView.Case
+	repaidAt := testNow.Add(3 * time.Hour)
+	marginAcct := fm.account
+	fm.deficitStatus = MarginDeficitStatusView{
+		AccountID: testAccountID, Margin: &marginAcct, Facts: &facts, Case: &MarginCaseView{Case: kase, Facts: facts},
+		Covered: &MarginCoveredDeficit{Deficit: q(211_981_234), Repaid: q(11_981_234), Outstanding: q(200_000_000)},
+		Repayments: []MarginDeficitRepaymentRecord{{ID: mRepaymentID(), Amount: q(11_981_234), JournalTransactionID: testMarginJrnl3,
+			EffectID: econ.NewEffectID(), IntentID: econ.NewIntentID(), RepaidAt: repaidAt}},
+	}
+	fm.repayment = MarginDeficitRepaymentView{Facts: facts, Result: margin.DeficitRepaymentResult{
+		MarginAccountID: fm.account.ID, CaseID: kase.ID, RepaymentID: mRepaymentID(), IntentID: econ.NewIntentID(),
+		JournalTransactionID: testMarginJrnl3, EffectID: econ.NewEffectID(), Repaid: q(100_000_000), Outstanding: q(100_000_000),
+	}}
+	review := kase
+	review.Status, review.DeficitUnits, review.CoverageJournalID, review.CoveredAt, review.ClosedAt = margin.CaseManualReview, nil, nil, nil, nil
+	fm.resolution = margin.Resolution{
+		ID: mResolutionID(), CaseID: kase.ID, ReviewTransitionID: testMarginReview, Outcome: margin.ResolveResume,
+		Reason: "the venue is back; finish the liquidation", ProposedBy: econ.Actor{Type: security.ActorOperator, ID: testUserID.String()},
+		ProposedAt: testNow,
+	}
+	fm.reviews = []MarginReviewView{{Case: MarginCaseView{Case: review, Facts: facts}, CurrentReviewTransitionID: testMarginReview,
+		EnteredReviewAt: testNow.Add(-time.Hour), Resolutions: []margin.Resolution{fm.resolution}}}
+	approved := fm.resolution
+	decision := margin.ResolutionApproved
+	decidedAt := testNow.Add(time.Minute)
+	approved.Decision, approved.DecidedBy = &decision, &econ.Actor{Type: security.ActorOperator, ID: testMarginApprover}
+	approved.DecidedAt, approved.DecisionReason = &decidedAt, "agreed"
+	resumed := review
+	resumed.Status = margin.CaseInProgress
+	fm.decided = MarginResolutionDecisionView{Case: MarginCaseView{Case: resumed, Facts: facts}, Result: margin.ResolutionResult{
+		Resolution: approved, Case: resumed, AccountStatus: margin.StatusLiquidating,
+		Waived: []margin.Accrual{{LotID: mLotID(), Period: margin.Period{Start: testNow.Add(-24 * time.Hour), End: testNow}, Amount: q(0), Waived: true}},
+	}}
+	return h, fm
+}
+
+func TestMarginDeficit_TheReadIsScopedAndExact(t *testing.T) {
+	t.Parallel()
+	path := "/v1/advanced/margin/deficit?account_id=" + testAccountID.String()
+	h, fm := newMarginDualControlHarness(t)
+	res := h.do(http.MethodGet, path, nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, testAccountID, fm.lastAcct)
+	raw := res.raw()
+	assert.Equal(t, "SIMULATED", raw["value_domain"])
+	assert.Equal(t, "211981234", raw["deficit"], "exact base units of the numeraire")
+	assert.Equal(t, "11981234", raw["repaid"])
+	assert.Equal(t, "200000000", raw["outstanding"])
+	assert.EqualValues(t, 6, raw["numeraire_decimals"])
+	repayments, ok := raw["repayments"].([]any)
+	require.True(t, ok)
+	require.Len(t, repayments, 1)
+	assert.Equal(t, "11981234", repayments[0].(map[string]any)["amount"])
+
+	// No covered deficit: the case is shown, the deficit figures are absent.
+	fm.deficitStatus.Covered = nil
+	res = h.do(http.MethodGet, path, nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	raw = res.raw()
+	assert.NotContains(t, raw, "outstanding")
+	assert.NotContains(t, raw, "repaid")
+
+	stranger := strangerPrincipal()
+	h.as(&stranger)
+	res = h.do(http.MethodGet, path, nil)
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, 2, fm.count("Deficit"), "a foreign account never reaches the service")
+
+	op := operatorPrincipal()
+	h.as(&op)
+	res = h.do(http.MethodGet, path, nil)
+	require.Equal(t, http.StatusOK, res.Code, "an operator reads any account; body=%s", res.Body.String())
+
+	// No margin account: nothing is owed, and nothing about a margin account is invented.
+	fm.deficitStatus = MarginDeficitStatusView{AccountID: testAccountID, Repayments: []MarginDeficitRepaymentRecord{}}
+	res = h.do(http.MethodGet, path, nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	raw = res.raw()
+	assert.Equal(t, testAccountID.String(), raw["account_id"])
+	for _, absent := range []string{"margin_account_id", "numeraire_asset_id", "numeraire_decimals", "case", "deficit"} {
+		assert.NotContains(t, raw, absent)
+	}
+}
+
+func TestMarginDeficit_RepaymentIsTheOwnersExactAndReplayed(t *testing.T) {
+	t.Parallel()
+	h, fm := newMarginDualControlHarness(t)
+	body := map[string]any{"account_id": testAccountID.String(), "amount": "100000000"}
+	res := h.do(http.MethodPost, "/v1/advanced/margin/deficit/repayments", body, "Idempotency-Key", "deficit-key-00001")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	require.Equal(t, 1, fm.count("RepayDeficit"))
+	assert.Equal(t, testAccountID, fm.lastRepay.AccountID)
+	assert.Equal(t, "100000000", fm.lastRepay.Amount.String())
+	assert.Equal(t, "deficit-key-00001", fm.lastRepay.IdempotencyKey, "the service's own replay key is the client's key")
+	assert.Equal(t, security.ActorUser, fm.lastRepay.Requester.Type)
+	assert.Equal(t, testUserID.String(), fm.lastRepay.Requester.ID)
+	raw := res.raw()
+	assert.Equal(t, "100000000", raw["repaid"])
+	assert.Equal(t, "100000000", raw["outstanding"])
+	assert.Equal(t, mRepaymentID().String(), raw["repayment_id"])
+	assert.Equal(t, "SIMULATED", raw["value_domain"])
+
+	again := h.do(http.MethodPost, "/v1/advanced/margin/deficit/repayments", body, "Idempotency-Key", "deficit-key-00001")
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.JSONEq(t, res.Body.String(), again.Body.String())
+	assert.Equal(t, 1, fm.count("RepayDeficit"), "a replay must not reach the service")
+
+	body["amount"] = "100000001"
+	res = h.do(http.MethodPost, "/v1/advanced/margin/deficit/repayments", body, "Idempotency-Key", "deficit-key-00001")
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, res.problem().Code)
+
+	for name, amount := range map[string]any{"decimal": "1.5", "float": "1e6", "negative sign only": "-"} {
+		bad := map[string]any{"account_id": testAccountID.String(), "amount": amount}
+		res = h.do(http.MethodPost, "/v1/advanced/margin/deficit/repayments", bad, "Idempotency-Key", "deficit-bad-"+name[:3])
+		require.Equal(t, http.StatusBadRequest, res.Code, "%s body=%s", name, res.Body.String())
+	}
+	assert.Equal(t, 1, fm.count("RepayDeficit"))
+
+	// Ownership only: neither a stranger nor an operator repays for an account.
+	for name, p := range map[string]security.Principal{"stranger": strangerPrincipal(), "operator": operatorPrincipal()} {
+		h.as(&p)
+		res = h.do(http.MethodPost, "/v1/advanced/margin/deficit/repayments",
+			map[string]any{"account_id": testAccountID.String(), "amount": "1"}, "Idempotency-Key", "deficit-own-"+name)
+		require.Equal(t, http.StatusForbidden, res.Code, "%s body=%s", name, res.Body.String())
+	}
+	assert.Equal(t, 1, fm.count("RepayDeficit"))
+
+	// The service's refusals keep their codes.
+	customer := customerPrincipal()
+	h.as(&customer)
+	fm.err = errs.New(errs.CodeInvalidStateTransition, "margin: the account has no covered deficit to repay")
+	res = h.do(http.MethodPost, "/v1/advanced/margin/deficit/repayments",
+		map[string]any{"account_id": testAccountID.String(), "amount": "1"}, "Idempotency-Key", "deficit-key-00002")
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidStateTransition, res.problem().Code)
+}
+
+func TestMarginReviews_TheQueueIsAnOperatorRead(t *testing.T) {
+	t.Parallel()
+	h, fm := newMarginDualControlHarness(t)
+	res := h.do(http.MethodGet, "/v1/advanced/margin/ops/reviews", nil)
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+	assert.Zero(t, fm.count("Reviews"))
+
+	op := operatorPrincipal()
+	h.as(&op)
+	res = h.do(http.MethodGet, "/v1/advanced/margin/ops/reviews?limit=5", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, 5, fm.lastLimit)
+	var out api.MarginReviewQueue
+	res.json(&out)
+	assert.Equal(t, api.SIMULATED, out.ValueDomain)
+	require.Len(t, out.Items, 1)
+	item := out.Items[0]
+	assert.Equal(t, api.MarginCaseStatus("MANUAL_REVIEW"), item.Case.Status)
+	assert.Equal(t, testMarginReview, item.CurrentReviewTransitionId.String())
+	require.Len(t, item.Resolutions, 1)
+	assert.True(t, item.Resolutions[0].Pending, "no decision yet: it awaits a second operator")
+	assert.Equal(t, api.MarginResolutionResume, item.Resolutions[0].Outcome)
+	assert.Nil(t, item.Resolutions[0].Decision)
+}
+
+func TestMarginResolutions_EachStepIsAnOperatorsUnderStepUp(t *testing.T) {
+	t.Parallel()
+	propose := "/v1/advanced/margin/ops/cases/" + mCaseID().String() + "/resolutions"
+	decide := "/v1/advanced/margin/ops/resolutions/" + mResolutionID().String() + "/decision"
+	for name, call := range map[string]struct {
+		path string
+		body map[string]any
+	}{
+		"propose": {propose, map[string]any{"outcome": "RESUME", "reason": "the venue is back"}},
+		"decide":  {decide, map[string]any{"decision": "APPROVED", "reason": "agreed"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h, fm := newMarginDualControlHarness(t)
+			res := h.do(http.MethodPost, call.path, call.body, "Idempotency-Key", "resolution-key-"+name)
+			require.Equal(t, http.StatusForbidden, res.Code, "a customer; body=%s", res.Body.String())
+			stale := operatorPrincipal()
+			stale.AuthTime = testNow.Add(-2 * stepUpMaxAge)
+			h.as(&stale)
+			res = h.do(http.MethodPost, call.path, call.body, "Idempotency-Key", "resolution-key-"+name+"-2")
+			require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, errs.CodeStepUpRequired, res.problem().Code)
+			assert.Zero(t, fm.count("ProposeResolution")+fm.count("DecideResolution"))
+		})
+	}
+}
+
+func TestMarginResolutions_AProposalNamesItsOperatorAndIsReplayed(t *testing.T) {
+	t.Parallel()
+	h, fm := newMarginDualControlHarness(t)
+	op := operatorPrincipal()
+	h.as(&op)
+	path := "/v1/advanced/margin/ops/cases/" + mCaseID().String() + "/resolutions"
+	body := map[string]any{"outcome": "RESUME", "reason": "the venue is back; finish the liquidation"}
+	res := h.do(http.MethodPost, path, body, "Idempotency-Key", "propose-res-00001")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	require.Equal(t, 1, fm.count("ProposeResolution"))
+	assert.Equal(t, mCaseID(), fm.lastPropose.CaseID)
+	assert.Equal(t, margin.ResolveResume, fm.lastPropose.Outcome)
+	assert.Equal(t, "the venue is back; finish the liquidation", fm.lastPropose.Reason)
+	assert.Equal(t, econ.Actor{Type: security.ActorOperator, ID: testUserID.String()}, fm.lastPropose.Proposer)
+	raw := res.raw()
+	assert.Equal(t, true, raw["pending"])
+	assert.Equal(t, "RESUME", raw["outcome"])
+	assert.Equal(t, testMarginReview, raw["review_transition_id"])
+
+	again := h.do(http.MethodPost, path, body, "Idempotency-Key", "propose-res-00001")
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.JSONEq(t, res.Body.String(), again.Body.String())
+	assert.Equal(t, 1, fm.count("ProposeResolution"), "a replay must not reach the service")
+
+	res = h.do(http.MethodPost, path, map[string]any{"outcome": "FORGIVE", "reason": "x"}, "Idempotency-Key", "propose-res-00002")
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+	res = h.do(http.MethodPost, "/v1/advanced/margin/ops/cases/not-a-uuid/resolutions", body, "Idempotency-Key", "propose-res-00003")
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, 1, fm.count("ProposeResolution"))
+
+	fm.err = errs.New(errs.CodeInvalidStateTransition, "margin: only a case in MANUAL_REVIEW is resolved")
+	res = h.do(http.MethodPost, path, body, "Idempotency-Key", "propose-res-00004")
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidStateTransition, res.problem().Code)
+}
+
+func TestMarginResolutions_ADecisionCarriesTheCaseAfterItAndRefusalsKeepTheirCodes(t *testing.T) {
+	t.Parallel()
+	h, fm := newMarginDualControlHarness(t)
+	approver := operatorPrincipal()
+	approver.SubjectID = testMarginApprover
+	h.as(&approver)
+	path := "/v1/advanced/margin/ops/resolutions/" + mResolutionID().String() + "/decision"
+	res := h.do(http.MethodPost, path, map[string]any{"decision": "APPROVED", "reason": "agreed"}, "Idempotency-Key", "decide-res-00001")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, mResolutionID(), fm.lastDecide.ResolutionID)
+	assert.Equal(t, margin.ResolutionApproved, fm.lastDecide.Decision)
+	assert.Equal(t, econ.Actor{Type: security.ActorOperator, ID: testMarginApprover}, fm.lastDecide.Decider)
+	var out api.MarginResolutionDecisionResult
+	res.json(&out)
+	assert.Equal(t, api.SIMULATED, out.ValueDomain)
+	assert.False(t, out.Resolution.Pending)
+	require.NotNil(t, out.Resolution.Decision)
+	assert.Equal(t, api.MarginResolutionApproved, *out.Resolution.Decision)
+	require.NotNil(t, out.Resolution.DecidedBy)
+	assert.Equal(t, testMarginApprover, *out.Resolution.DecidedBy)
+	assert.Equal(t, api.MarginCaseStatus("IN_PROGRESS"), out.Case.Status)
+	assert.Equal(t, api.MarginAccountStatus("LIQUIDATING"), out.AccountStatus)
+	require.Len(t, out.Waived, 1)
+	assert.Equal(t, "0", out.Waived[0].Amount, "a waived period charges nothing")
+	assert.True(t, out.Waived[0].Waived)
+
+	again := h.do(http.MethodPost, path, map[string]any{"decision": "APPROVED", "reason": "agreed"}, "Idempotency-Key", "decide-res-00001")
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.Equal(t, 1, fm.count("DecideResolution"), "a replay must not reach the service")
+
+	res = h.do(http.MethodPost, path, map[string]any{"decision": "MAYBE", "reason": "x"}, "Idempotency-Key", "decide-res-00002")
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+
+	for name, refusal := range map[string]error{
+		"self approval":   errs.Wrap(security.ErrSelfApproval, errs.CodeForbidden, "margin: the operator who proposed a resolution cannot approve it"),
+		"already decided": errs.New(errs.CodeConflict, "margin: resolution was already REJECTED"),
+		"unknown":         errs.New(errs.CodeNotFound, "case resolution not found"),
+	} {
+		fm.err = refusal
+		res = h.do(http.MethodPost, path, map[string]any{"decision": "APPROVED", "reason": "agreed"}, "Idempotency-Key", "decide-ref-"+name[:4])
+		require.Equal(t, errs.HTTPStatus(errs.CodeOf(refusal)), res.Code, "%s body=%s", name, res.Body.String())
+		assert.Equal(t, errs.CodeOf(refusal), res.problem().Code, name)
+	}
+}
+
+func TestMarginDualControl_UnwiredMarginIsUnsupported(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	op := operatorPrincipal()
+	customer := customerPrincipal()
+	for _, c := range []struct {
+		method, path string
+		body         any
+		as           *security.Principal
+	}{
+		{http.MethodGet, "/v1/advanced/margin/deficit?account_id=" + testAccountID.String(), nil, &customer},
+		{http.MethodPost, "/v1/advanced/margin/deficit/repayments", map[string]any{"account_id": testAccountID.String(), "amount": "1"}, &customer},
+		{http.MethodGet, "/v1/advanced/margin/ops/reviews", nil, &op},
+		{http.MethodPost, "/v1/advanced/margin/ops/cases/" + mCaseID().String() + "/resolutions", map[string]any{"outcome": "RESUME", "reason": "x"}, &op},
+		{http.MethodPost, "/v1/advanced/margin/ops/resolutions/" + mResolutionID().String() + "/decision", map[string]any{"decision": "REJECTED", "reason": "x"}, &op},
+	} {
+		h.as(c.as)
+		res := h.do(c.method, c.path, c.body, "Idempotency-Key", "unwired-margin-0001")
+		require.Equal(t, http.StatusUnprocessableEntity, res.Code, "%s %s body=%s", c.method, c.path, res.Body.String())
+		assert.Equal(t, errs.CodeUnsupported, res.problem().Code)
+	}
 }

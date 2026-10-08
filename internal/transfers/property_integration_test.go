@@ -15,8 +15,8 @@ import (
 )
 
 // TestProp_TransfersAndReversalsConserveCustomerWallets drives random
-// sequences of transfers and reversals among 2..4 customers through the real
-// service and database, and after every step checks:
+// sequences of transfers and dual-control reversals among 2..4 customers
+// through the real service and database, and after every step checks:
 //
 //   - Σ WALLET over the customers equals Σ funding (constant: a transfer or a
 //     reversal changes ownership, never the total);
@@ -26,6 +26,7 @@ import (
 // and at the end that Reconcile finds nothing.
 func TestProp_TransfersAndReversalsConserveCustomerWallets(t *testing.T) {
 	f := newFixture(t)
+	proposer, approver := f.op(), f.op()
 	rapid.Check(t, func(rt *rapid.T) {
 		n := rapid.IntRange(2, 4).Draw(rt, "customers")
 		cs := make([]customer, n)
@@ -45,7 +46,10 @@ func TestProp_TransfersAndReversalsConserveCustomerWallets(t *testing.T) {
 		for range steps {
 			if len(completed) > 0 && rapid.Bool().Draw(rt, "reverse") {
 				i := rapid.IntRange(0, len(completed)-1).Draw(rt, "which")
-				_, err := f.reverse(operator(), ReverseRequest{TransferID: completed[i].ID, ReasonCode: "PROPERTY_TEST", Reason: "random reversal"})
+				// Proposed by one operator, approved by another; a proposal
+				// left open by a refused approval is the same proposer's, for
+				// the same reason, so a later attempt reuses it.
+				_, err := f.reverse(proposer, approver, completed[i].ID, "PROPERTY_TEST", "random reversal")
 				switch {
 				case err == nil:
 					completed = append(completed[:i], completed[i+1:]...)

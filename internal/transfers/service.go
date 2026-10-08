@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -774,78 +773,31 @@ func notFound(err error, detail string) error {
 	return dbErr("load", err)
 }
 
-// ReverseRequest asks an operator to reverse a COMPLETED transfer.
-type ReverseRequest struct {
-	TransferID TransferID
-	// ReasonCode is a stable code (e.g. FRAUD_CONFIRMED); it becomes the
-	// compensation journal's reason_code.
-	ReasonCode    string
-	Reason        string
-	CorrelationID string
-}
-
-// Reverse returns a COMPLETED transfer's value to its sender with a
-// COMPENSATION journal (reversal_of = the original journal, the reason code
-// in its metadata): sender Dr WALLET / Cr TRANSFER_OUT, recipient
-// Dr TRANSFER_IN / Cr WALLET. History is never edited. Only an OPERATOR
-// holding ledger:post_correction may reverse.
+// executeReversal returns a COMPLETED transfer's value to its sender with a
+// COMPENSATION journal (reversal_of = the original journal, the proposal's
+// reason code in its metadata): sender Dr WALLET / Cr TRANSFER_OUT, recipient
+// Dr TRANSFER_IN / Cr WALLET. History is never edited. It is the body of an
+// approval and nothing else calls it: a reversal always executes an approved
+// proposal of a second operator (ApproveReversal), which the database checks
+// again at COMMIT (PT007).
+//
+// The caller holds the recipient's transfer lock and the transfer row, has
+// written the APPROVED decision and its audit record (which takes the
+// sender's audit stream before any ledger row, the order every transaction
+// touching this transfer uses), and passes the approving operator as actor.
 //
 // It fails closed: if the recipient no longer holds the funds (they are
-// spent, reserved or held) it is refused with CONFLICT and nothing changes;
-// a balance never goes negative to make a reversal fit. Reversing a REVERSED
-// transfer returns it unchanged. A kill switch stops new transfers, never
-// the correction of an old one, so Reverse does not consult the capability
-// gate.
-func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, p security.Principal, req ReverseRequest) (Transfer, error) {
-	if tx == nil {
-		return Transfer{}, errs.New(errs.CodeInternal, "transfers: Reverse requires a transaction")
-	}
-	if p.IsAgent() || p.ActorType != security.ActorOperator {
-		return Transfer{}, errs.New(errs.CodeForbidden, "only an operator reverses a transfer").WithField("actor_type", string(p.ActorType))
-	}
-	ctx = security.WithPrincipal(ctx, p)
-	if err := security.RequireAt(ctx, security.PermLedgerPostCorrection, s.clk.Now); err != nil {
-		return Transfer{}, securityErr(err)
-	}
-	if !validReasonCode(req.ReasonCode) {
-		return Transfer{}, errs.New(errs.CodeValidationFailed, "a reversal needs a stable reason code (^[A-Z][A-Z0-9_]{2,63}$)")
-	}
-	if r := strings.TrimSpace(req.Reason); r == "" || len(r) > 500 {
-		return Transfer{}, errs.New(errs.CodeValidationFailed, "a reversal needs a reason of 1..500 bytes")
-	}
-	now := s.clk.Now().UTC()
-	actor := econ.Actor{Type: security.ActorOperator, ID: p.SubjectID}
-
-	peek, err := getTransfer(ctx, tx, req.TransferID, false)
-	if err != nil {
-		return Transfer{}, err
-	}
-	// The reversal debits the recipient, so it takes the recipient's transfer
-	// lock: it cannot interleave with a transfer the recipient is sending.
-	if err := lockAccount(ctx, tx, peek.RecipientAccountID); err != nil {
-		return Transfer{}, err
-	}
-	t, err := getTransfer(ctx, tx, req.TransferID, true)
-	if err != nil {
-		return Transfer{}, err
-	}
-	switch t.Status {
-	case StatusReversed:
-		return t, nil
-	case StatusCompleted:
-	default:
+// spent, reserved or held) it is refused with CONFLICT and the caller rolls
+// back, so the proposal stays undecided; a balance never goes negative to make
+// a reversal fit. A kill switch stops new transfers, never the correction of
+// an old one, so the capability gate is not consulted.
+func (s *Service) executeReversal(ctx context.Context, tx pgx.Tx, actor econ.Actor, t Transfer, prop ReversalProposal, decisionReason, correlationID string, now time.Time) (Transfer, error) {
+	if t.Status != StatusCompleted {
 		return Transfer{}, errs.Newf(errs.CodeInvalidStateTransition, "a %s transfer cannot be reversed", t.Status).
 			WithField("transfer_id", t.ID.String())
 	}
 	if t.JournalTransactionID == nil || t.EffectID == nil {
 		return Transfer{}, errs.New(errs.CodeInternal, "a COMPLETED transfer without its journal or effect").WithField("transfer_id", t.ID.String())
-	}
-	// Recorded first, which also takes the sender's audit stream before any
-	// ledger row: every transaction touching this transfer takes them in the
-	// same order.
-	if err := s.auditTransfer(ctx, tx, t, "transfers.transfer.reversal_requested", actor, req.Reason, "",
-		map[string]string{"transfer_id": t.ID.String(), "reason_code": req.ReasonCode}, now); err != nil {
-		return Transfer{}, err
 	}
 	avail, err := s.capital.Availability(ctx, tx, t.RecipientAccountID.String(), t.AssetID, now)
 	if err != nil {
@@ -853,7 +805,7 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, p security.Principal, 
 	}
 	rsv, err := s.capital.Reserve(ctx, tx, capital.ReserveRequest{
 		AccountID: t.RecipientAccountID.String(), AssetID: t.AssetID, Quantity: t.Quantity,
-		ActorType: security.ActorOperator, ActorID: p.SubjectID, IdempotencyKey: "p2p-reversal:" + t.ID.String(),
+		ActorType: security.ActorOperator, ActorID: actor.ID, IdempotencyKey: "p2p-reversal:" + t.ID.String(),
 		TTL: ReservationTTL, Reason: "reversal of simulated transfer " + t.ID.String(),
 	})
 	if err != nil {
@@ -861,13 +813,14 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, p security.Principal, 
 			return Transfer{}, errs.Wrap(err, errs.CodeConflict,
 				"the recipient no longer holds the transferred funds; the reversal is refused and nothing changed").
 				WithField("transfer_id", t.ID.String()).
+				WithField("proposal_id", prop.ID.String()).
 				WithField("rejection_code", "TRANSFER_REVERSAL_FUNDS_UNAVAILABLE").
 				WithField("recipient_available", avail.Available.String()).
 				WithField("required", t.Quantity.String())
 		}
 		return Transfer{}, err
 	}
-	post, err := s.ledger.Post(ctx, tx, reversalPosting(t, req.ReasonCode, req.CorrelationID, now))
+	post, err := s.ledger.Post(ctx, tx, reversalPosting(t, prop.ReasonCode, correlationID, now))
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -875,19 +828,22 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, p security.Principal, 
 		return Transfer{}, err
 	}
 	ref, err := econ.RecordEvidence(ctx, tx, econ.Evidence{Key: "p2p/" + t.ID.String() + "/reversal", Document: reversalEvidence{
-		Schema: "nodal.transfers.reversal/v1", TransferID: t.ID.String(), IntentID: t.IntentID.String(),
+		Schema: "nodal.transfers.reversal/v2", TransferID: t.ID.String(), IntentID: t.IntentID.String(),
 		OriginalJournal: t.JournalTransactionID.String(), ReversalJournal: post.TransactionID.String(),
-		EffectID: t.EffectID.String(), ReasonCode: req.ReasonCode, Reason: req.Reason, Operator: p.SubjectID,
+		EffectID: t.EffectID.String(), ProposalID: prop.ID.String(), ProposalSeq: prop.Seq,
+		ReasonCode: prop.ReasonCode, Reason: prop.Reason, ProposedBy: prop.ProposedBy.ID, ProposedAt: prop.ProposedAt,
+		ApprovedBy: actor.ID, DecisionReason: decisionReason,
 		Sender: t.SenderAccountID.String(), Recipient: t.RecipientAccountID.String(), Asset: t.AssetID.String(),
 		Quantity: t.Quantity, RecipientAvailableBefore: avail.Available, ReservationID: rsv.ID.String(), ReversedAt: now,
 	}})
 	if err != nil {
 		return Transfer{}, err
 	}
-	if _, err := s.effects.Compensate(ctx, tx, *t.EffectID, &post.TransactionID, actor, req.ReasonCode+": "+req.Reason); err != nil {
+	if _, err := s.effects.Compensate(ctx, tx, *t.EffectID, &post.TransactionID, actor, prop.ReasonCode+": "+prop.Reason); err != nil {
 		return Transfer{}, err
 	}
-	out, err := s.markReversed(ctx, tx, t, post.TransactionID, req.ReasonCode, actor, req.Reason, ref, now)
+	reason := "reversal proposal " + prop.ID.String() + " (" + prop.ReasonCode + ") approved: " + prop.Reason
+	out, err := s.markReversed(ctx, tx, t, post.TransactionID, prop, actor, reason, ref, now)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -902,7 +858,7 @@ func (s *Service) Reverse(ctx context.Context, tx pgx.Tx, p security.Principal, 
 	if err := s.notifier.TransferReversed(ctx, tx, Notice{
 		TransferID: t.ID, RecipientAccountID: recipient.ID, RecipientUserID: recipient.OwnerUserID,
 		AssetID: asset.ID, AssetSymbol: asset.Symbol, AssetDecimals: asset.Decimals, Quantity: t.Quantity,
-		CorrelationID: req.CorrelationID,
+		CorrelationID: correlationID,
 	}); err != nil {
 		return Transfer{}, err
 	}

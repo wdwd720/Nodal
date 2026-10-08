@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,17 +43,16 @@ type fakeTransfersPort struct {
 	report   transfers.ReconcileReport
 	handle   transfers.Handle
 
-	sends, reversals, handles, rules, modes int
+	sends, handles, rules, modes int
 
-	lastSend    TransferSend
-	lastReverse TransferReversal
-	lastRule    TransferRecipientRule
-	lastMode    transfers.SenderMode
-	lastAcct    accounts.AccountID
-	lastCursor  string
-	lastLimit   int
-	lastScope   *assets.AssetID
-	lastHandle  string
+	lastSend   TransferSend
+	lastRule   TransferRecipientRule
+	lastMode   transfers.SenderMode
+	lastAcct   accounts.AccountID
+	lastCursor string
+	lastLimit  int
+	lastScope  *assets.AssetID
+	lastHandle string
 }
 
 func (f *fakeTransfersPort) Send(_ context.Context, r TransferSend) (TransferSent, error) {
@@ -73,17 +74,6 @@ func (f *fakeTransfersPort) List(_ context.Context, acct accounts.AccountID, cur
 }
 
 func (f *fakeTransfersPort) Get(context.Context, transfers.TransferID) (TransferView, error) {
-	if err := f.fail(); err != nil {
-		return TransferView{}, err
-	}
-	return f.view, nil
-}
-
-func (f *fakeTransfersPort) Reverse(_ context.Context, r TransferReversal) (TransferView, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.reversals++
-	f.lastReverse = r
 	if err := f.fail(); err != nil {
 		return TransferView{}, err
 	}
@@ -568,65 +558,6 @@ func TestTransfers_AudienceIsDecidedPerReader(t *testing.T) {
 	assert.Equal(t, transferAudience{}, transferAudienceOf(context.Background(), byAccount), "no principal, nothing")
 }
 
-func TestTransfers_ReverseIsAnOperatorCorrectionUnderStepUp(t *testing.T) {
-	t.Parallel()
-	h, ft, _ := newTransfersHarness(t)
-	reversed := sampleTransferRecord("bob")
-	jid := ledger.NewTransactionID()
-	at := testNow
-	reversed.Status, reversed.ReversalJournalTransactionID, reversed.ReversalReasonCode = transfers.StatusReversed, &jid, "FRAUD_CONFIRMED"
-	reversed.ReversedByActorID, reversed.ReversedAt = testUserID.String(), &at
-	ft.view = transferViewOf(reversed)
-	path := "/v1/advanced/transfers/" + testP2PTransferID.String() + "/reverse"
-	body := map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "sender reported account takeover"}
-
-	// A customer cannot reach it at all.
-	res := h.do(http.MethodPost, path, body, "Idempotency-Key", "reverse-key-00001")
-	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
-	assert.Equal(t, errs.CodeForbidden, res.problem().Code)
-
-	// An operator whose strong authentication is stale must step up.
-	stale := operatorPrincipal()
-	stale.AuthTime = testNow.Add(-2 * stepUpMaxAge)
-	h.as(&stale)
-	res = h.do(http.MethodPost, path, body, "Idempotency-Key", "reverse-key-00002")
-	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
-	assert.Equal(t, errs.CodeStepUpRequired, res.problem().Code)
-	assert.Zero(t, ft.reversals)
-
-	op := operatorPrincipal()
-	h.as(&op)
-	res = h.do(http.MethodPost, path, body, "Idempotency-Key", "reverse-key-00003")
-	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
-	raw := res.raw()
-	assert.Equal(t, "REVERSED", raw["status"])
-	assert.Equal(t, "FRAUD_CONFIRMED", raw["reversal_reason_code"])
-	assert.Equal(t, jid.String(), raw["reversal_journal_transaction_id"])
-	assert.Equal(t, testOtherAcct.String(), raw["recipient_account_id"], "the operator sees the whole record")
-	assert.Equal(t, "SIMULATED", raw["value_domain"])
-	require.Equal(t, 1, ft.reversals)
-	assert.Equal(t, testP2PTransferID, ft.lastReverse.TransferID)
-	assert.Equal(t, "FRAUD_CONFIRMED", ft.lastReverse.ReasonCode)
-	assert.Equal(t, "sender reported account takeover", ft.lastReverse.Reason)
-
-	again := h.do(http.MethodPost, path, body, "Idempotency-Key", "reverse-key-00003")
-	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
-	assert.JSONEq(t, res.Body.String(), again.Body.String())
-	assert.Equal(t, 1, ft.reversals, "a replay must not reach the service")
-
-	body["reason"] = "a different story"
-	res = h.do(http.MethodPost, path, body, "Idempotency-Key", "reverse-key-00003")
-	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
-	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, res.problem().Code)
-
-	// The service's refusal keeps its code.
-	ft.err = errs.New(errs.CodeConflict, "the recipient no longer holds the transferred funds").
-		WithField("rejection_code", "TRANSFER_REVERSAL_FUNDS_UNAVAILABLE")
-	res = h.do(http.MethodPost, path, body, "Idempotency-Key", "reverse-key-00004")
-	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
-	assert.Equal(t, "TRANSFER_REVERSAL_FUNDS_UNAVAILABLE", res.problem().Fields["rejection_code"])
-}
-
 func TestTransfers_HandleRegistrationIsOwnedAndIdempotent(t *testing.T) {
 	t.Parallel()
 	h, ft, _ := newTransfersHarness(t)
@@ -865,7 +796,11 @@ func TestTransfers_UnwiredPortsAreUnsupported(t *testing.T) {
 		{http.MethodPost, "/v1/advanced/transfers", transferSendBody(), nil},
 		{http.MethodGet, "/v1/advanced/transfers?account_id=" + testAccountID.String(), nil, nil},
 		{http.MethodGet, transfer, nil, nil},
-		{http.MethodPost, transfer + "/reverse", map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "x"}, &op},
+		{http.MethodPost, transfer + "/reversal-proposals", map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "x"}, &op},
+		{http.MethodGet, "/v1/advanced/transfers/reversal-proposals", nil, &op},
+		{http.MethodGet, "/v1/advanced/transfers/reversal-proposals/" + testReversalProposalID.String(), nil, &op},
+		{http.MethodPost, "/v1/advanced/transfers/reversal-proposals/" + testReversalProposalID.String() + "/approve", map[string]any{}, &op},
+		{http.MethodPost, "/v1/advanced/transfers/reversal-proposals/" + testReversalProposalID.String() + "/reject", map[string]any{"reason": "x"}, &op},
 		{http.MethodPost, "/v1/advanced/transfers/handles", map[string]any{"account_id": testAccountID.String(), "handle": "alice"}, nil},
 		{http.MethodPost, "/v1/advanced/transfers/recipient-rules", map[string]any{"account_id": testAccountID.String(), "rule": "BLOCK", "recipient_handle": "bob"}, nil},
 		{http.MethodPost, "/v1/advanced/transfers/sender-mode", map[string]any{"account_id": testAccountID.String(), "mode": "OPEN"}, nil},
@@ -909,4 +844,418 @@ func TestTransfers_ARefusalNeverResolvesAHandle(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, res.Code, "body=%s", res.Body.String())
 	assert.Equal(t, errs.CodeAccountFrozen, res.problem().Code)
 	assert.NotContains(t, res.Body.String(), testOtherAcct.String())
+}
+
+// --- reversal under dual control -------------------------------------------------
+
+var (
+	testReversalProposalID = uuid.MustParse("0193b2e0-0000-7000-8000-0000000000f1")
+	// testReversalApprover is a second operator, distinct from testUserID.
+	testReversalApprover = "0193b2e0-0000-7000-8000-0000000000f2"
+)
+
+// fakeTransferReversalsPort is the reversals port. It records every call so
+// a test can prove what reached the service and that a replay did not.
+type fakeTransferReversalsPort struct {
+	stubErr
+	mu       sync.Mutex
+	view     TransferReversalProposalView
+	page     TransferReversalProposalPage
+	replayed bool
+
+	proposes, approvals, rejections int
+
+	lastPropose  TransferReversalPropose
+	lastDecide   TransferReversalDecide
+	lastStatus   string
+	lastTransfer *transfers.TransferID
+	lastCursor   string
+	lastLimit    int
+	lastGet      uuid.UUID
+}
+
+func (f *fakeTransferReversalsPort) Propose(_ context.Context, r TransferReversalPropose) (TransferReversalOutcome, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.proposes++
+	f.lastPropose = r
+	if err := f.fail(); err != nil {
+		return TransferReversalOutcome{}, err
+	}
+	return TransferReversalOutcome{View: f.view, Replayed: f.replayed}, nil
+}
+
+func (f *fakeTransferReversalsPort) Approve(_ context.Context, r TransferReversalDecide) (TransferReversalOutcome, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.approvals++
+	f.lastDecide = r
+	if err := f.fail(); err != nil {
+		return TransferReversalOutcome{}, err
+	}
+	return TransferReversalOutcome{View: f.view, Replayed: f.replayed}, nil
+}
+
+func (f *fakeTransferReversalsPort) Reject(_ context.Context, r TransferReversalDecide) (TransferReversalOutcome, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rejections++
+	f.lastDecide = r
+	if err := f.fail(); err != nil {
+		return TransferReversalOutcome{}, err
+	}
+	return TransferReversalOutcome{View: f.view, Replayed: f.replayed}, nil
+}
+
+func (f *fakeTransferReversalsPort) List(_ context.Context, status string, transfer *transfers.TransferID, cursor string, limit int) (TransferReversalProposalPage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lastStatus, f.lastTransfer, f.lastCursor, f.lastLimit = status, transfer, cursor, limit
+	return f.page, f.fail()
+}
+
+func (f *fakeTransferReversalsPort) Get(_ context.Context, id uuid.UUID) (TransferReversalProposalView, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lastGet = id
+	if err := f.fail(); err != nil {
+		return TransferReversalProposalView{}, err
+	}
+	return f.view, nil
+}
+
+// sampleReversalProposal is a proposal by testUserID to reverse the sample
+// transfer, in the given derived status.
+func sampleReversalProposal(status string) TransferReversalProposalView {
+	tr := sampleTransferRecord("bob")
+	v := TransferReversalProposalView{
+		ID: testReversalProposalID, TransferID: tr.ID, Seq: 1, Status: status, ReasonCode: "FRAUD_CONFIRMED",
+		Reason: "sender reported account takeover", ProposedBy: testUserID.String(), ProposedAt: testNow,
+	}
+	if status != "PENDING" {
+		decided := testNow.Add(time.Minute)
+		v.DecidedBy, v.DecidedAt = testReversalApprover, &decided
+	}
+	switch status {
+	case "APPROVED":
+		jid := ledger.NewTransactionID()
+		at := testNow.Add(time.Minute)
+		tr.Status, tr.ReversalJournalTransactionID, tr.ReversalReasonCode = transfers.StatusReversed, &jid, "FRAUD_CONFIRMED"
+		tr.ReversedByActorID, tr.ReversedAt = testReversalApprover, &at
+	case "REJECTED":
+		v.DecisionReason = "the sender withdrew the claim"
+	}
+	v.Transfer = transferViewOf(tr)
+	return v
+}
+
+func newTransferReversalsHarness(t *testing.T) (*harness, *fakeTransferReversalsPort) {
+	t.Helper()
+	h := newHarness(t)
+	fr := &fakeTransferReversalsPort{view: sampleReversalProposal("PENDING")}
+	ports := h.ports.ports()
+	ports.TransferReversals = fr
+	h.server.opts.Ports = ports
+	op := operatorPrincipal()
+	h.as(&op)
+	return h, fr
+}
+
+func reversalProposalPath() string {
+	return "/v1/advanced/transfers/" + testP2PTransferID.String() + "/reversal-proposals"
+}
+
+func reversalDecisionPath(verb string) string {
+	return "/v1/advanced/transfers/reversal-proposals/" + testReversalProposalID.String() + "/" + verb
+}
+
+// Each step of a reversal is an operator's, under a recent step-up: a
+// customer never reaches it and an operator whose strong authentication is
+// stale is told to step up, before anything reaches the service.
+func TestTransferReversals_EveryStepIsAnOperatorsUnderStepUp(t *testing.T) {
+	t.Parallel()
+	proposal := map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "sender reported account takeover"}
+	for name, call := range map[string]struct {
+		path string
+		body map[string]any
+	}{
+		"propose": {reversalProposalPath(), proposal},
+		"approve": {reversalDecisionPath("approve"), map[string]any{}},
+		"reject":  {reversalDecisionPath("reject"), map[string]any{"reason": "the sender withdrew the claim"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h, fr := newTransferReversalsHarness(t)
+			customer := customerPrincipal()
+			h.as(&customer)
+			res := h.do(http.MethodPost, call.path, call.body, "Idempotency-Key", "reversal-key-"+name+"-01")
+			require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, errs.CodeForbidden, res.problem().Code)
+
+			stale := operatorPrincipal()
+			stale.AuthTime = testNow.Add(-2 * stepUpMaxAge)
+			h.as(&stale)
+			res = h.do(http.MethodPost, call.path, call.body, "Idempotency-Key", "reversal-key-"+name+"-02")
+			require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+			assert.Equal(t, errs.CodeStepUpRequired, res.problem().Code)
+			assert.Zero(t, fr.proposes+fr.approvals+fr.rejections, "nothing reaches the service")
+		})
+	}
+}
+
+// Finance holds ledger:post_correction, the authority the service requires of
+// every step, without sandbox:operate: the routes admit it, so the two
+// operators of a reversal can be any two holders of the correction authority.
+func TestTransferReversals_TheCorrectionAuthorityReachesEveryStep(t *testing.T) {
+	t.Parallel()
+	h, fr := newTransferReversalsHarness(t)
+	finance := operatorPrincipal()
+	finance.Roles = []security.Role{security.RoleFinance}
+	h.as(&finance)
+	res := h.do(http.MethodPost, reversalProposalPath(), map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "x"},
+		"Idempotency-Key", "finance-key-00001")
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	res = h.do(http.MethodPost, reversalDecisionPath("approve"), map[string]any{}, "Idempotency-Key", "finance-key-00002")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	res = h.do(http.MethodPost, reversalDecisionPath("reject"), map[string]any{"reason": "x"}, "Idempotency-Key", "finance-key-00003")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, 1, fr.proposes)
+	assert.Equal(t, 1, fr.approvals)
+	assert.Equal(t, 1, fr.rejections)
+
+	// Support reads but holds neither authority.
+	support := transferSupportPrincipal()
+	h.as(&support)
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals", nil)
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+}
+
+func TestTransferReversals_AProposalCarriesTheOperatorsWordsAndIsReplayedNotReExecuted(t *testing.T) {
+	t.Parallel()
+	h, fr := newTransferReversalsHarness(t)
+	body := map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "sender reported account takeover"}
+	res := h.do(http.MethodPost, reversalProposalPath(), body, "Idempotency-Key", "propose-key-00001")
+	require.Equal(t, http.StatusCreated, res.Code, "body=%s", res.Body.String())
+	require.Equal(t, 1, fr.proposes)
+	assert.Equal(t, testP2PTransferID, fr.lastPropose.TransferID)
+	assert.Equal(t, "FRAUD_CONFIRMED", fr.lastPropose.ReasonCode)
+	assert.Equal(t, "sender reported account takeover", fr.lastPropose.Reason)
+
+	raw := res.raw()
+	assert.Equal(t, testReversalProposalID.String(), raw["id"])
+	assert.Equal(t, "PENDING", raw["status"])
+	assert.EqualValues(t, 1, raw["seq"])
+	assert.Equal(t, testUserID.String(), raw["proposed_by"])
+	assert.NotContains(t, raw, "decided_by")
+	assert.Equal(t, "SIMULATED", raw["value_domain"])
+	tr, ok := raw["transfer"].(map[string]any)
+	require.True(t, ok, "the proposal carries its transfer")
+	assert.Equal(t, "COMPLETED", tr["status"])
+	assert.Equal(t, "12345678", tr["quantity"], "exact base units")
+	assert.Equal(t, testOtherAcct.String(), tr["recipient_account_id"], "an operator sees the whole record")
+
+	again := h.do(http.MethodPost, reversalProposalPath(), body, "Idempotency-Key", "propose-key-00001")
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.JSONEq(t, res.Body.String(), again.Body.String())
+	assert.Equal(t, 1, fr.proposes, "a replay must not reach the service")
+
+	body["reason"] = "a different story"
+	res = h.do(http.MethodPost, reversalProposalPath(), body, "Idempotency-Key", "propose-key-00001")
+	require.Equal(t, http.StatusConflict, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, errs.CodeInvalidIdempotencyReuse, res.problem().Code)
+	assert.Equal(t, 1, fr.proposes)
+
+	// The service's own replay (the same proposal already pending) creates nothing.
+	fr.replayed = true
+	res = h.do(http.MethodPost, reversalProposalPath(), body, "Idempotency-Key", "propose-key-00002")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+}
+
+func TestTransferReversals_AProposalIsValidatedBeforeTheService(t *testing.T) {
+	t.Parallel()
+	h, fr := newTransferReversalsHarness(t)
+	res := h.do(http.MethodPost, reversalProposalPath(), nil, "Idempotency-Key", "propose-key-bad01")
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+	res = h.do(http.MethodPost, "/v1/advanced/transfers/not-a-uuid/reversal-proposals",
+		map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "x"}, "Idempotency-Key", "propose-key-bad02")
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+	res = h.do(http.MethodPost, reversalDecisionPath("reject"), nil, "Idempotency-Key", "reject-key-bad001")
+	require.Equal(t, http.StatusBadRequest, res.Code, "body=%s", res.Body.String())
+	assert.Zero(t, fr.proposes+fr.rejections, "a malformed request never reaches the service")
+}
+
+// The service's refusals keep their codes: a state the transfer cannot be
+// reversed from, a second pending proposal, the proposer's own approval and
+// a recipient who no longer holds the funds.
+func TestTransferReversals_TheServicesRefusalsKeepTheirCodes(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, path string
+		body       map[string]any
+		err        error
+		status     int
+		rejection  string
+	}{
+		{"not completed", reversalProposalPath(), map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "x"},
+			errs.New(errs.CodeInvalidStateTransition, "a REVERSED transfer cannot be reversed"), http.StatusConflict, ""},
+		{"pending elsewhere", reversalProposalPath(), map[string]any{"reason_code": "FRAUD_CONFIRMED", "reason": "x"},
+			errs.New(errs.CodeConflict, "a proposal is pending").WithField("proposal_id", testReversalProposalID.String()), http.StatusConflict, ""},
+		{"self approval", reversalDecisionPath("approve"), map[string]any{},
+			errs.New(errs.CodeForbidden, "the proposer cannot approve").WithField("rejection_code", "TRANSFER_REVERSAL_SELF_APPROVAL"),
+			http.StatusForbidden, "TRANSFER_REVERSAL_SELF_APPROVAL"},
+		{"funds gone", reversalDecisionPath("approve"), map[string]any{"reason": "confirmed"},
+			errs.New(errs.CodeConflict, "the recipient no longer holds the funds").WithField("rejection_code", "TRANSFER_REVERSAL_FUNDS_UNAVAILABLE"),
+			http.StatusConflict, "TRANSFER_REVERSAL_FUNDS_UNAVAILABLE"},
+		{"already decided", reversalDecisionPath("reject"), map[string]any{"reason": "x"},
+			errs.New(errs.CodeConflict, "already APPROVED").WithField("decision", "APPROVED"), http.StatusConflict, ""},
+		{"unknown proposal", reversalDecisionPath("approve"), map[string]any{},
+			errs.New(errs.CodeNotFound, "reversal proposal not found"), http.StatusNotFound, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, fr := newTransferReversalsHarness(t)
+			fr.err = c.err
+			for i := 0; i < 2; i++ {
+				res := h.do(http.MethodPost, c.path, c.body, "Idempotency-Key", "refusal-key-0001")
+				require.Equal(t, c.status, res.Code, "body=%s", res.Body.String())
+				p := res.problem()
+				assert.Equal(t, errs.CodeOf(c.err), p.Code)
+				if c.rejection != "" {
+					assert.Equal(t, c.rejection, p.Fields["rejection_code"])
+				}
+			}
+			assert.Equal(t, 1, fr.proposes+fr.approvals+fr.rejections, "a recorded refusal is replayed, not re-decided")
+		})
+	}
+}
+
+func TestTransferReversals_AnApprovalExecutesOnceAndRendersTheReversedTransfer(t *testing.T) {
+	t.Parallel()
+	h, fr := newTransferReversalsHarness(t)
+	fr.view = sampleReversalProposal("APPROVED")
+	approver := operatorPrincipal()
+	approver.SubjectID = testReversalApprover
+	h.as(&approver)
+	res := h.do(http.MethodPost, reversalDecisionPath("approve"), map[string]any{"reason": "evidence reviewed"},
+		"Idempotency-Key", "approve-key-00001")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	require.Equal(t, 1, fr.approvals)
+	assert.Equal(t, testReversalProposalID, fr.lastDecide.ProposalID)
+	assert.Equal(t, "evidence reviewed", fr.lastDecide.Reason)
+
+	var out api.AdvancedTransferReversalDecisionResult
+	res.json(&out)
+	assert.False(t, out.Replayed)
+	assert.Equal(t, api.SIMULATED, out.ValueDomain)
+	assert.Equal(t, api.TransferReversalApproved, out.Proposal.Status)
+	require.NotNil(t, out.Proposal.DecidedBy)
+	assert.Equal(t, testReversalApprover, *out.Proposal.DecidedBy)
+	assert.Equal(t, api.TransferStatusReversed, out.Proposal.Transfer.Status)
+	require.NotNil(t, out.Proposal.Transfer.ReversalReasonCode)
+	assert.Equal(t, "FRAUD_CONFIRMED", *out.Proposal.Transfer.ReversalReasonCode)
+	require.NotNil(t, out.Proposal.Transfer.ReversalJournalTransactionId)
+
+	again := h.do(http.MethodPost, reversalDecisionPath("approve"), map[string]any{"reason": "evidence reviewed"},
+		"Idempotency-Key", "approve-key-00001")
+	require.Equal(t, http.StatusOK, again.Code, "body=%s", again.Body.String())
+	assert.JSONEq(t, res.Body.String(), again.Body.String())
+	assert.Equal(t, 1, fr.approvals, "a replay must not reach the service")
+
+	// An approval without a body is an approval without a note.
+	res = h.do(http.MethodPost, reversalDecisionPath("approve"), nil, "Idempotency-Key", "approve-key-00002")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Empty(t, fr.lastDecide.Reason)
+
+	// The service's own replay of the same decision is reported as such.
+	fr.replayed = true
+	res = h.do(http.MethodPost, reversalDecisionPath("approve"), map[string]any{}, "Idempotency-Key", "approve-key-00003")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, true, res.raw()["replayed"])
+}
+
+func TestTransferReversals_ARejectionCarriesItsReasonAndMovesNothing(t *testing.T) {
+	t.Parallel()
+	h, fr := newTransferReversalsHarness(t)
+	fr.view = sampleReversalProposal("REJECTED")
+	res := h.do(http.MethodPost, reversalDecisionPath("reject"), map[string]any{"reason": "the sender withdrew the claim"},
+		"Idempotency-Key", "reject-key-000001")
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	require.Equal(t, 1, fr.rejections)
+	assert.Zero(t, fr.approvals)
+	assert.Equal(t, "the sender withdrew the claim", fr.lastDecide.Reason)
+	var out api.AdvancedTransferReversalDecisionResult
+	res.json(&out)
+	assert.Equal(t, api.TransferReversalRejected, out.Proposal.Status)
+	assert.Equal(t, api.TransferStatusCompleted, out.Proposal.Transfer.Status, "a rejection reverses nothing")
+	require.NotNil(t, out.Proposal.DecisionReason)
+	assert.Equal(t, "the sender withdrew the claim", *out.Proposal.DecisionReason)
+}
+
+func TestTransferReversals_ProposalsAreAnOperatorRead(t *testing.T) {
+	t.Parallel()
+	h, fr := newTransferReversalsHarness(t)
+	fr.page = TransferReversalProposalPage{
+		Items: []TransferReversalProposalView{sampleReversalProposal("PENDING"), sampleReversalProposal("REJECTED")}, NextCursor: "next-1",
+	}
+	customer := customerPrincipal()
+	h.as(&customer)
+	res := h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals", nil)
+	require.Equal(t, http.StatusForbidden, res.Code, "body=%s", res.Body.String())
+
+	op := operatorPrincipal()
+	h.as(&op)
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals?status=PENDING&transfer_id="+
+		testP2PTransferID.String()+"&cursor=c-1&limit=7", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, "PENDING", fr.lastStatus)
+	require.NotNil(t, fr.lastTransfer)
+	assert.Equal(t, testP2PTransferID, *fr.lastTransfer)
+	assert.Equal(t, "c-1", fr.lastCursor)
+	assert.Equal(t, 7, fr.lastLimit)
+	var page api.AdvancedTransferReversalProposalPage
+	res.json(&page)
+	require.Len(t, page.Items, 2)
+	assert.Equal(t, api.SIMULATED, page.ValueDomain)
+	next, err := page.NextCursor.Get()
+	require.NoError(t, err)
+	assert.Equal(t, "next-1", next)
+
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals", nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Empty(t, fr.lastStatus, "no status lists every status")
+	assert.Nil(t, fr.lastTransfer)
+
+	for _, q := range []string{"status=EXECUTED", "transfer_id=not-a-uuid"} {
+		res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals?"+q, nil)
+		require.Equal(t, http.StatusBadRequest, res.Code, "%s body=%s", q, res.Body.String())
+	}
+
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals/"+testReversalProposalID.String(), nil)
+	require.Equal(t, http.StatusOK, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, testReversalProposalID, fr.lastGet)
+
+	// Absent and not-readable answer the same.
+	fr.err = errs.New(errs.CodeNotFound, "reversal proposal not found")
+	res = h.do(http.MethodGet, "/v1/advanced/transfers/reversal-proposals/"+testReversalProposalID.String(), nil)
+	require.Equal(t, http.StatusNotFound, res.Code, "body=%s", res.Body.String())
+	assert.Equal(t, testReversalProposalID.String(), res.problem().Fields["proposal_id"])
+}
+
+// A status the API does not declare is a fault of the adapter, never
+// rendered as one it does; a principal who may not see the transfer is told
+// the proposal does not exist.
+func TestTransferReversals_AnUndeclaredStatusIsNeverRendered(t *testing.T) {
+	t.Parallel()
+	ctx := security.WithPrincipal(context.Background(), operatorPrincipal())
+	v := sampleReversalProposal("PENDING")
+	v.Status = "EXECUTED"
+	_, err := toAPITransferReversalProposal(ctx, v)
+	assert.Equal(t, errs.CodeInternal, errs.CodeOf(err))
+
+	stranger := security.WithPrincipal(context.Background(), transferStrangerPrincipal())
+	_, err = toAPITransferReversalProposal(stranger, sampleReversalProposal("PENDING"))
+	assert.Equal(t, errs.CodeNotFound, errs.CodeOf(err))
 }

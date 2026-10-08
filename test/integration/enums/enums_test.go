@@ -244,6 +244,8 @@ func registry() []pair {
 		{table: "performance_fee_period_transitions", constraint: "performance_fee_period_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_flows", constraint: "performance_fee_flows_recorded_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
 		{table: "performance_fee_lines", constraint: "performance_fee_lines_kind_check", source: "feeledger.AllLineKinds()", values: str(feeledger.AllLineKinds())},
+		// 00758 transfer reversals under dual control.
+		{table: "transfer_reversal_decisions", constraint: "transfer_reversal_decisions_decision_check", source: "transfers.AllReversalDecisions()", values: str(transfers.AllReversalDecisions())},
 		// 00755 derivatives hardening: the settlement price rule, two-operator overrides.
 		{table: "derivative_settlements", constraint: "derivative_settlements_price_rule_check", source: "derivatives.AllSettlementPriceRules()", values: str(derivatives.AllSettlementPriceRules())},
 		{table: "derivative_settlement_override_decisions", constraint: "derivative_settlement_override_decisions_decision_check", source: "derivatives.AllOverrideDecisions()", values: str(derivatives.AllOverrideDecisions())},

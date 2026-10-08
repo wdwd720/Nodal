@@ -51,17 +51,21 @@ func TestIntegration_EveryTransferEnumMatchesItsCheck(t *testing.T) {
 		{"internal_transfers", "internal_transfers_mode_check", sortedStrings(SupportedModes())},
 		{"transfer_recipient_rules", "transfer_recipient_rules_rule_check", sortedStrings(AllRuleKinds())},
 		{"transfer_sender_modes", "transfer_sender_modes_mode_check", sortedStrings(AllSenderModes())},
+		// Migration 00758 (reversal under dual control).
+		{"transfer_reversal_decisions", "transfer_reversal_decisions_decision_check", sortedStrings(AllReversalDecisions())},
 	} {
 		assert.Equal(t, p.values, checkValues(t, p.table, p.constraint), p.constraint)
 	}
 
-	// The IN-list CHECKs on migration 00744's tables are exactly the six that
-	// have a Go twin (four above, two in internal/sandboxfund): nothing for
-	// test/integration/enums to find unregistered.
+	// The IN-list CHECKs on the tables of migrations 00744 and 00758 are
+	// exactly the seven that have a Go twin (five above, two in
+	// internal/sandboxfund): nothing for test/integration/enums to find
+	// unregistered.
 	rows, err := testDB.Query(context.Background(), `SELECT conrelid::regclass::text || '.' || conname FROM pg_constraint
 		WHERE contype = 'c' AND connamespace = 'public'::regnamespace
 		  AND conrelid::regclass::text IN ('internal_transfers','internal_transfer_transitions','transfer_handles',
-		                                   'transfer_recipient_rules','transfer_sender_modes','sandbox_fundings')
+		                                   'transfer_recipient_rules','transfer_sender_modes','sandbox_fundings',
+		                                   'transfer_reversal_proposals','transfer_reversal_decisions')
 		  AND pg_get_constraintdef(oid) LIKE '%= ANY (ARRAY[%' ORDER BY 1`)
 	require.NoError(t, err)
 	defer rows.Close()
@@ -78,6 +82,7 @@ func TestIntegration_EveryTransferEnumMatchesItsCheck(t *testing.T) {
 		"sandbox_fundings.sandbox_fundings_actor_type_check",
 		"sandbox_fundings.sandbox_fundings_environment_check",
 		"transfer_recipient_rules.transfer_recipient_rules_rule_check",
+		"transfer_reversal_decisions.transfer_reversal_decisions_decision_check",
 		"transfer_sender_modes.transfer_sender_modes_mode_check",
 	}, lists)
 }

@@ -57,6 +57,7 @@ import { StrategiesSection } from "./marketplace/StrategiesSection.tsx";
 // >>> advanced:delegation import
 
 // >>> advanced:operator import
+import { OperatorConsole } from "./operator/OperatorConsole.tsx";
 
 /** One section of the advanced area. A registry entry is a single object literal of this type. */
 export interface AdvancedSection {
@@ -188,4 +189,11 @@ export const ADVANCED_SECTIONS: readonly AdvancedSection[] = [
   // >>> advanced:delegation section
 
   // >>> advanced:operator section
+  {
+    path: "operator",
+    title: "Operator console",
+    description:
+      "For operators: the dual-control items awaiting a second operator, the sandbox reference marks and their freshness, circuit breakers, capability gates, the liquidation queue, reconciliation and reserve results, the simulated chains, and each subsystem's operator page.",
+    element: <OperatorConsole />,
+  },
 ];

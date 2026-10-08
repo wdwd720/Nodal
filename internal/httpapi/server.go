@@ -91,6 +91,9 @@ type Ports struct {
 	// SandboxFaucet the sandbox faucet. A nil port answers UNSUPPORTED.
 	Transfers     AdvancedTransfersPort
 	SandboxFaucet SandboxFaucetPort
+	// TransferReversals serves the two-operator reversal of a transfer. A nil
+	// port answers UNSUPPORTED: no route reverses a transfer any other way.
+	TransferReversals TransferReversalsPort
 
 	// >>> advanced:treasury port
 
@@ -118,6 +121,9 @@ type Ports struct {
 	// >>> advanced:delegation port
 
 	// >>> advanced:operator port
+	// Operator serves the operator console: the overview, sandbox reference
+	// marks and the simulated chains' tips. A nil port answers UNSUPPORTED.
+	Operator OperatorPort
 
 	Health      HealthPort
 	Idempotency IdempotencyPort
