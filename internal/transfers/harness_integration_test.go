@@ -274,14 +274,68 @@ func (f *fixture) send(p security.Principal, req SendRequest) (Result, error) {
 	return res, sendErr
 }
 
-func (f *fixture) reverse(p security.Principal, req ReverseRequest) (Transfer, error) {
-	var out Transfer
+// op is a distinct OPERATOR holding ledger:post_correction (FINANCE) who
+// authenticated with MFA at the fixture clock's current time: what a reversal
+// proposal or decision needs.
+func (f *fixture) op() security.Principal {
+	p := operator()
+	p.AuthTime = f.clk.Now()
+	return p
+}
+
+// propose runs ProposeReversal in its own transaction.
+func (f *fixture) propose(p security.Principal, tid TransferID, code, reason string) (ReversalProposalResult, error) {
+	var out ReversalProposalResult
 	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
 		var err error
-		out, err = f.svc.Reverse(ctx, tx, p, req)
+		out, err = f.svc.ProposeReversal(ctx, tx, p, ProposeReversalRequest{
+			TransferID: tid, ReasonCode: code, Reason: reason, CorrelationID: "corr-" + uuid.NewString(),
+		})
 		return err
 	})
 	return out, err
+}
+
+// approve runs ApproveReversal in its own transaction; an error rolls
+// everything back.
+func (f *fixture) approve(p security.Principal, pid ReversalProposalID) (ReversalDecisionResult, error) {
+	var out ReversalDecisionResult
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = f.svc.ApproveReversal(ctx, tx, p, DecideReversalRequest{ProposalID: pid, CorrelationID: "corr-" + uuid.NewString()})
+		return err
+	})
+	return out, err
+}
+
+// reject runs RejectReversal in its own transaction.
+func (f *fixture) reject(p security.Principal, pid ReversalProposalID, reason string) (ReversalDecisionResult, error) {
+	var out ReversalDecisionResult
+	err := f.inTx(func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		out, err = f.svc.RejectReversal(ctx, tx, p, DecideReversalRequest{ProposalID: pid, Reason: reason})
+		return err
+	})
+	return out, err
+}
+
+// reverse is the whole correction: proposer proposes, approver approves. A
+// proposal the same proposer already has open for the same reason is reused.
+func (f *fixture) reverse(proposer, approver security.Principal, tid TransferID, code, reason string) (Transfer, error) {
+	prop, err := f.propose(proposer, tid, code, reason)
+	if err != nil {
+		return Transfer{}, err
+	}
+	res, err := f.approve(approver, prop.Proposal.ID)
+	if err != nil {
+		return Transfer{}, err
+	}
+	return res.Transfer, nil
+}
+
+// reversalJournals counts the COMPENSATION journals of a transfer journal.
+func (f *fixture) reversalJournals(original ledger.TransactionID) int {
+	return f.count(`SELECT count(*) FROM journal_transactions WHERE reversal_of = $1`, original)
 }
 
 func (f *fixture) balance(acct accounts.AccountID, code ledger.Code) money.Quantity {

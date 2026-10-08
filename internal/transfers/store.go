@@ -25,7 +25,7 @@ const transferColumns = `id, intent_id, sender_account_id, sender_user_id, recip
 	policy_hash, status, coalesce(rejection_code,''), reason_codes, risk_decision_id, effect_id, journal_transaction_id,
 	coalesce(reservation_id::text,''), coalesce(evidence_ref,''), evidence_sha256, decided_at,
 	reversal_journal_transaction_id, coalesce(reversal_reason_code,''), coalesce(reversed_by_actor_id,''),
-	coalesce(reversal_evidence_ref,''), reversed_at, coalesce(correlation_id,''), created_at, updated_at`
+	coalesce(reversal_evidence_ref,''), reversed_at, reversal_proposal_id, coalesce(correlation_id,''), created_at, updated_at`
 
 func scanTransfer(row pgx.Row) (Transfer, error) {
 	var t Transfer
@@ -36,7 +36,7 @@ func scanTransfer(row pgx.Row) (Transfer, error) {
 		&t.PolicyHash, &t.Status, &t.RejectionCode, &t.ReasonCodes, &t.RiskDecisionID, &t.EffectID, &t.JournalTransactionID,
 		&t.ReservationID, &t.EvidenceRef, &t.EvidenceSHA256, &t.DecidedAt,
 		&t.ReversalJournalTransactionID, &t.ReversalReasonCode, &t.ReversedByActorID,
-		&t.ReversalEvidenceRef, &t.ReversedAt, &t.CorrelationID, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		&t.ReversalEvidenceRef, &t.ReversedAt, &t.ReversalProposalID, &t.CorrelationID, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return Transfer{}, err
 	}
 	q, err := money.ScanQuantity(qty)
@@ -160,8 +160,9 @@ func (s *Service) decide(ctx context.Context, tx pgx.Tx, t Transfer, to Status, 
 	return out, nil
 }
 
-// markReversed moves a COMPLETED transfer to REVERSED.
-func (s *Service) markReversed(ctx context.Context, tx pgx.Tx, t Transfer, journal ledger.TransactionID, reasonCode string, actor econ.Actor, reason string, evidence econ.EvidenceRef, now time.Time) (Transfer, error) {
+// markReversed moves a COMPLETED transfer to REVERSED on the approved
+// proposal it executes. actor is the approving operator.
+func (s *Service) markReversed(ctx context.Context, tx pgx.Tx, t Transfer, journal ledger.TransactionID, proposal ReversalProposal, actor econ.Actor, reason string, evidence econ.EvidenceRef, now time.Time) (Transfer, error) {
 	if t.Status != StatusCompleted {
 		return Transfer{}, errs.Newf(errs.CodeInvalidStateTransition, "transfer %s cannot move %s -> %s", t.ID, t.Status, StatusReversed)
 	}
@@ -170,9 +171,9 @@ func (s *Service) markReversed(ctx context.Context, tx pgx.Tx, t Transfer, journ
 	}
 	out, err := scanTransfer(tx.QueryRow(ctx, `UPDATE internal_transfers
 		SET status = 'REVERSED', reversal_journal_transaction_id = $2, reversal_reason_code = $3,
-		    reversed_by_actor_id = $4, reversal_evidence_ref = $5, reversed_at = $6
+		    reversed_by_actor_id = $4, reversal_evidence_ref = $5, reversed_at = $6, reversal_proposal_id = $7
 		WHERE id = $1 AND status = 'COMPLETED' RETURNING `+transferColumns,
-		t.ID, journal, reasonCode, actor.ID, evidence.URI, now))
+		t.ID, journal, proposal.ReasonCode, actor.ID, evidence.URI, now, proposal.ID))
 	if err != nil {
 		return Transfer{}, dbErr("reverse transfer", err)
 	}
@@ -210,10 +211,26 @@ func (s *Service) announce(ctx context.Context, tx pgx.Tx, t Transfer, from, to 
 	return s.auditTransfer(ctx, tx, t, "transfers.transfer."+strings.ToLower(string(to)), actor, reason, evidenceRef, ev, now)
 }
 
-// auditTransfer appends one audit record to the sender account's stream.
-// Every transfer record goes to the SENDER's stream, so a transfer never
-// takes the audit lock of a second account.
+// auditTransfer appends one audit record about a transfer to the sender
+// account's stream. Every transfer record goes to the SENDER's stream, so a
+// transfer never takes the audit lock of a second account.
 func (s *Service) auditTransfer(ctx context.Context, tx pgx.Tx, t Transfer, action string, actor econ.Actor, reason, evidenceRef string, payload any, now time.Time) error {
+	return s.appendAudit(ctx, tx, t, auditSubject{resourceType: "internal_transfer", resourceID: t.ID.String(), correlationID: t.CorrelationID},
+		action, actor, reason, evidenceRef, payload, now)
+}
+
+// auditSubject is the resource an audit record is about, and the correlation
+// id it carries.
+type auditSubject struct {
+	resourceType  string
+	resourceID    string
+	correlationID string
+}
+
+// appendAudit appends one audit record to the stream of t's sender account,
+// whatever resource of the transfer it is about (the transfer itself, or a
+// proposal to reverse it).
+func (s *Service) appendAudit(ctx context.Context, tx pgx.Tx, t Transfer, subject auditSubject, action string, actor econ.Actor, reason, evidenceRef string, payload any, now time.Time) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return errs.Wrap(err, errs.CodeInternal, "transfers: encode audit payload")
@@ -223,8 +240,8 @@ func (s *Service) auditTransfer(ctx context.Context, tx pgx.Tx, t Transfer, acti
 	}
 	_, err = s.audit.Append(ctx, tx, audit.Event{
 		Stream: audit.AccountStream(t.SenderAccountID.String()), ActorType: string(actor.Type), ActorID: actor.ID,
-		Action: action, ResourceType: "internal_transfer", ResourceID: t.ID.String(),
-		CorrelationID: t.CorrelationID, PolicyVersion: t.PolicyVersion, Reason: reason, EvidenceRef: evidenceRef,
+		Action: action, ResourceType: subject.resourceType, ResourceID: subject.resourceID,
+		CorrelationID: subject.correlationID, PolicyVersion: t.PolicyVersion, Reason: reason, EvidenceRef: evidenceRef,
 		Payload: body, OccurredAt: now,
 	})
 	if err != nil {
