@@ -45,6 +45,7 @@ import (
 	"github.com/nodal/controlplane/internal/econ"
 	"github.com/nodal/controlplane/internal/equities"
 	"github.com/nodal/controlplane/internal/execution"
+	"github.com/nodal/controlplane/internal/feeledger"
 	"github.com/nodal/controlplane/internal/funding"
 	"github.com/nodal/controlplane/internal/gates"
 	"github.com/nodal/controlplane/internal/instruments"
@@ -64,6 +65,7 @@ import (
 	"github.com/nodal/controlplane/internal/security"
 	"github.com/nodal/controlplane/internal/stableasset"
 	"github.com/nodal/controlplane/internal/transfers"
+	"github.com/nodal/controlplane/internal/treasury"
 )
 
 var (
@@ -213,6 +215,34 @@ func registry() []pair {
 		// operator proposes and a second approves.
 		{table: "margin_case_resolutions", constraint: "margin_case_resolutions_outcome_check", source: "margin.AllResolutionOutcomes()", values: str(margin.AllResolutionOutcomes())},
 		{table: "margin_case_resolution_decisions", constraint: "margin_case_resolution_decisions_decision_check", source: "margin.AllResolutionDecisions()", values: str(margin.AllResolutionDecisions())},
+		// 00745 treasury and 00746 fee ledger.
+		{table: "treasury_books", constraint: "treasury_books_class_check", source: "treasury.AllClasses()", values: str(treasury.AllClasses())},
+		{table: "treasury_risk_decisions", constraint: "treasury_risk_decisions_intent_kind_check", source: "treasury.AllEvaluatedIntentKinds()", values: str(treasury.AllEvaluatedIntentKinds())},
+		{table: "treasury_risk_decisions", constraint: "treasury_risk_decisions_stage_check", source: "risk.AllStages()", values: str(risk.AllStages())},
+		{table: "treasury_risk_decisions", constraint: "treasury_risk_decisions_verdict_check", source: "risk.AllVerdicts()", values: str(risk.AllVerdicts())},
+		{table: "treasury_paper_fills", constraint: "treasury_paper_fills_activity_check", source: "treasury.AllActivities()", values: str(treasury.AllActivities())},
+		{table: "treasury_paper_fills", constraint: "treasury_paper_fills_side_check", source: "orders.AllSides()", values: str(orders.AllSides())},
+		{table: "treasury_position_events", constraint: "treasury_position_events_kind_check", source: "treasury.AllPositionEventKinds()", values: str(treasury.AllPositionEventKinds())},
+		{table: "treasury_position_events", constraint: "treasury_position_events_direction_check", source: "treasury.AllDirections()", values: str(treasury.AllDirections())},
+		{table: "treasury_actions", constraint: "treasury_actions_kind_check", source: "treasury.AllActionKinds()", values: str(treasury.AllActionKinds())},
+		{table: "treasury_actions", constraint: "treasury_actions_activity_check", source: "treasury.AllActivities()", values: str(treasury.AllActivities())},
+		{table: "treasury_actions", constraint: "treasury_actions_outcome_check", source: "treasury.AllOutcomes()", values: str(treasury.AllOutcomes())},
+		{table: "treasury_actions", constraint: "treasury_actions_actor_type_check", source: "treasury.AuthorizedActorTypes()", values: str(treasury.AuthorizedActorTypes())},
+		{table: "fee_schedules", constraint: "fee_schedules_created_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "fee_quote_disclosures", constraint: "fee_quote_disclosures_subsystem_check", source: "econ.AllSubsystems()", values: str(econ.AllSubsystems())},
+		{table: "fee_quote_disclosures", constraint: "fee_quote_disclosures_side_check", source: "feeledger.AllSides()", values: str(feeledger.AllSides())},
+		{table: "fee_bookings", constraint: "fee_bookings_mode_check", source: "feeledger.SupportedModes()", values: str(feeledger.SupportedModes())},
+		{table: "fee_bookings", constraint: "fee_bookings_booking_mode_check", source: "feeledger.AllBookingModes()", values: str(feeledger.AllBookingModes())},
+		{table: "fee_bookings", constraint: "fee_bookings_journal_kind_check", source: "feeledger.AllBookingKinds()", values: str(feeledger.AllBookingKinds())},
+		{table: "fee_bookings", constraint: "fee_bookings_status_check", source: "feeledger.AllBookingStatuses()", values: str(feeledger.AllBookingStatuses())},
+		{table: "fee_bookings", constraint: "fee_bookings_reversed_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "fee_booking_transitions", constraint: "fee_booking_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_periods", constraint: "performance_fee_periods_mode_check", source: "feeledger.SupportedModes()", values: str(feeledger.SupportedModes())},
+		{table: "performance_fee_periods", constraint: "performance_fee_periods_status_check", source: "feeledger.AllPeriodStatuses()", values: str(feeledger.AllPeriodStatuses())},
+		{table: "performance_fee_periods", constraint: "performance_fee_periods_opened_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_period_transitions", constraint: "performance_fee_period_transitions_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_flows", constraint: "performance_fee_flows_recorded_by_actor_type_check", source: "econ.CreatorActorTypes()", values: str(econ.CreatorActorTypes())},
+		{table: "performance_fee_lines", constraint: "performance_fee_lines_kind_check", source: "feeledger.AllLineKinds()", values: str(feeledger.AllLineKinds())},
 
 		// Migration 00749 (prediction markets).
 		{table: "prediction_markets", constraint: "prediction_markets_status_check", source: "predmarket.AllMarketStatuses()", values: str(predmarket.AllMarketStatuses())},
