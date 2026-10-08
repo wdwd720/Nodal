@@ -110,8 +110,8 @@ Every posting of a simulated-only kind **balances per party**: for each `(owner_
 | `MARGIN_COLLATERAL_MOVE` | C: Dr MARGIN_COLLATERAL / Cr WALLET (post); reverse to release |
 | `MARGIN_BORROW` | C: Dr WALLET / Cr MARGIN_LOAN; F(pool): Dr LOAN_RECEIVABLE / Cr POOL_CASH |
 | `MARGIN_INTEREST` | C: Dr INTEREST_EXPENSE / Cr MARGIN_LOAN; F(pool): Dr LOAN_RECEIVABLE / Cr INTEREST_INCOME |
-| `MARGIN_REPAY` | C: Dr MARGIN_LOAN / Cr WALLET; F(pool): Dr POOL_CASH / Cr LOAN_RECEIVABLE |
-| `LIQUIDATION` | the forced reduce-only trade, posted like SIM_TRADE, kind LIQUIDATION |
+| `MARGIN_REPAY` | C: Dr MARGIN_LOAN / Cr WALLET; F(pool): Dr POOL_CASH / Cr LOAN_RECEIVABLE. A deficit repayment (00754, MG011) is the same kind: C: Dr DEFICIT / Cr WALLET; F(insurance): Dr INSURANCE_FUND_CASH / Cr DEFICIT_RECEIVABLE, never more than the deficit in total |
+| `LIQUIDATION` | the forced reduce-only trade, posted like SIM_TRADE, kind LIQUIDATION; its liquidation fee is the explicit-fee pair (C: Dr FEES_PLATFORM / Cr WALLET; platform: Dr PLATFORM_FEE_RECEIVABLE / Cr PLATFORM_FEE_REVENUE), never insurance-fund income. A SWEEP_WALLET step (00754) repays the loans from the customer's free wallet before bankruptcy, posted as MARGIN_REPAY |
 | `DEFICIT_COVERAGE` | C: Dr MARGIN_LOAN / Cr DEFICIT; F(pool): Dr POOL_CASH / Cr LOAN_RECEIVABLE; F(insurance): Dr DEFICIT_RECEIVABLE / Cr INSURANCE_FUND_CASH |
 | `DERIVATIVE_MARGIN_MOVE` | C: Dr DERIVATIVES_MARGIN / Cr WALLET (post); reverse to release |
 | `VARIATION_MARGIN`, `FUNDING_PAYMENT`, `FUTURE_SETTLEMENT` | payer C: Dr REALIZED_PNL / Cr WALLET (or Cr DERIVATIVES_MARGIN); F(clearing): Dr CLEARING_CASH / Cr CLEARING_RESULT. Receiver mirrored. Internally matched books net CLEARING_RESULT to zero |

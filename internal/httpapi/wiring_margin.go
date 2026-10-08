@@ -455,12 +455,15 @@ func (a marginAdapter) Queue(ctx context.Context, limit int) ([]MarginQueueEntry
 }
 
 func (a marginAdapter) RunQueue(ctx context.Context, limit int) (MarginQueueRunView, error) {
+	// The queue owns its transactions: every account's step commits on its
+	// own, so one account's refusal never rolls back another's. The facts
+	// shown are read afterwards, in one transaction of their own.
+	res, err := a.svc.ProcessLiquidationQueue(ctx, a.db, limit)
+	if err != nil {
+		return MarginQueueRunView{}, err
+	}
 	var out MarginQueueRunView
-	err := a.command(ctx, nil, func(ctx context.Context, tx pgx.Tx) error {
-		res, err := a.svc.ProcessLiquidationQueue(ctx, tx, limit)
-		if err != nil {
-			return err
-		}
+	err = a.command(ctx, nil, func(ctx context.Context, tx pgx.Tx) error {
 		v := MarginQueueRunView{Failures: res.Failures}
 		for _, r := range res.Results {
 			facts, err := marginFactsOf(ctx, tx, r.MarginAccountID)
